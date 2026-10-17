@@ -17,7 +17,9 @@
  * claude does, `last_assistant_message`.
  * Follow-up prompts arrive as stdin lines (`hive ctl send` types text + Enter).
  * Lines starting with "[hive]" are control-plane deliveries (reports, approvals):
- * echoed, never executed.
+ * a turn that echoes them, never executes them.
+ * With FAKE_GATE set it first shows that text, as an agent shows a startup screen
+ * before it takes anything, and the first line it reads only clears it.
  *
  * Invoked through thin shims named `claude` / `droid` on PATH:
  *   exec node fake-agent.cjs claude "$@"
@@ -29,7 +31,9 @@ const readline = require("node:readline");
 
 const [, , provider, ...args] = process.argv;
 const tile = process.env.HIVEMIND_TILE || "no-tile";
-const sessionId = `fake-${provider}-${process.pid}`;
+// The session hivemind binds (`--session-id`), as claude takes it; else one of its own.
+const bound = args.includes("--session-id") ? args[args.indexOf("--session-id") + 1] : "";
+const sessionId = bound || `fake-${provider}-${process.pid}`;
 // The session a restore or a `--resume` asked for, for a turn to echo back.
 process.env.FAKE_RESUMED = args.includes("--resume") ? args[args.indexOf("--resume") + 1] || "" : "";
 
@@ -64,13 +68,30 @@ function fire(event, payload) {
   spawnSync("bash", ["-c", cmd], { input: JSON.stringify(payload), stdio: ["pipe", "ignore", "ignore"], env: process.env, timeout: 10_000 });
   return true;
 }
+/** Ask the hook for `event` whose matcher takes `name`, as claude picks one, and give back what it
+ *  printed: how a PreToolUse hook answers. */
+function ask(event, name, payload) {
+  const entry = (HOOKS[event] || []).find((e) => !e.matcher || e.matcher === "*" || new RegExp(`^(?:${e.matcher})$`).test(name));
+  const cmd = entry?.hooks?.[0]?.command;
+  if (!cmd) return `(no hook: ${Object.keys(HOOKS).join(",")})`;
+  const r = spawnSync("bash", ["-c", cmd], { input: JSON.stringify(payload), encoding: "utf8", env: process.env, timeout: 600_000 });
+  return (r.stdout || "").trim() || "(nothing)";
+}
 
-// ── transcript (inside the isolated test profile, derived from the socket path
-// hivemind injects: <userData>/hcp.sock) — droid's plugin reads its reply from here.
+// ── transcript: claude's where claude keeps it, under $HOME/.claude/projects/<its folder>; any
+// other's inside the isolated test profile, derived from the socket path hivemind injects
+// (<userData>/hcp.sock), where droid's plugin reads its reply.
 const userData = path.dirname(process.env.HIVE_HCP_SOCK || path.join(require("node:os").tmpdir(), "x"));
-const transcriptDir = path.join(userData, "droid-home", "fake-transcripts");
+const transcriptDir = provider === "claude"
+  ? path.join(require("node:os").homedir(), ".claude", "projects", process.cwd().replace(/[^A-Za-z0-9]/g, "-"))
+  : path.join(userData, "droid-home", "fake-transcripts");
 fs.mkdirSync(transcriptDir, { recursive: true });
 const transcriptPath = path.join(transcriptDir, `${sessionId}.jsonl`);
+let said = 0;
+/** One record of the transcript, in claude's shape. */
+const record = (type, content) => fs.appendFileSync(transcriptPath, JSON.stringify({
+  type, uuid: `${sessionId}-${++said}`, timestamp: new Date().toISOString(), cwd: process.cwd(), message: { role: type, content },
+}) + "\n");
 
 // ── the initial prompt ────────────────────────────────────────────────────────
 const VALUE_FLAGS = new Set(["--settings", "--session-id", "--permission-mode", "--model", "--resume", "-r", "--auto"]);
@@ -85,31 +106,74 @@ function positionalPrompt() {
 }
 
 // ── one turn ──────────────────────────────────────────────────────────────────
+// A prompt "ASK:<question>" stops at a picker, as claude's AskUserQuestion does: the
+// PermissionRequest hook fires and the next stdin line is the answer.
+let picker = null;
 function turn(prompt) {
+  // `TOOL <name> <input json>`: a tool use, asked of its PreToolUse hook as claude asks it; what the
+  // hook answers is the reply, and is written to $FAKE_TOOL_LOG.
+  const tool = /^TOOL (\S+) (.*)$/.exec(prompt);
+  if (tool) {
+    fire("UserPromptSubmit", { session_id: sessionId, prompt });
+    const answer = ask("PreToolUse", tool[1], { session_id: sessionId, hook_event_name: "PreToolUse", tool_name: tool[1], tool_input: JSON.parse(tool[2]) });
+    if (process.env.FAKE_TOOL_LOG) fs.appendFileSync(process.env.FAKE_TOOL_LOG, `${tool[1]} ${answer}\n`);
+    process.stdout.write(`${answer}\n`);
+    fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: answer });
+    process.stdout.write(`${provider}> `);
+    return;
+  }
   process.stdout.write(`\n[${provider}] ▶ ${prompt}\n`);
   // Like claude: the window title says what the turn is doing, behind a status glyph.
   process.stdout.write(`\x1b]0;✳ ${prompt}\x07`);
   fire("UserPromptSubmit", { session_id: sessionId, prompt });
+  if (prompt.startsWith("ASK:")) {
+    process.stdout.write(`${prompt.slice(4)}\n ❯ 1. yes\n   2. no\n Enter to select\n`);
+    picker = (answer) => {
+      fire("PostToolUse", { session_id: sessionId, tool_name: "AskUserQuestion" });
+      reply(`answered: ${answer}`);
+    };
+    fire("PermissionRequest", { session_id: sessionId, tool_name: "AskUserQuestion", tool_input: { questions: [{ question: prompt.slice(4) }] } });
+    return;
+  }
   const r = spawnSync("bash", ["-c", prompt], { encoding: "utf8", env: process.env, timeout: 60_000 });
-  const reply = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
-  fs.appendFileSync(
-    transcriptPath,
-    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: reply }] } }) + "\n",
-  );
-  process.stdout.write(`${reply}\n`);
-  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: reply });
+  const text = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
+  record("user", prompt);
+  reply(text);
+}
+
+function reply(text) {
+  record("assistant", [{ type: "text", text }]);
+  process.stdout.write(`${text}\n`);
+  fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: text });
   process.stdout.write(`${provider}> `);
 }
 
 const first = positionalPrompt();
-process.stdout.write(`fake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
+let gated = !!process.env.FAKE_GATE;
+if (gated) process.stdout.write(`${process.env.FAKE_GATE}\n`);
+else process.stdout.write(`fake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
 if (first) turn(first);
 
 const rl = readline.createInterface({ input: process.stdin, terminal: false });
 rl.on("line", (line) => {
+  if (gated) {
+    // Past the startup screen: it is gone, and the prompt is up.
+    gated = false;
+    process.stdout.write(`\x1b[2J\x1b[Hfake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
+    return;
+  }
   const text = line.trim();
   if (!text) { process.stdout.write(`${provider}> `); return; }
-  if (text.startsWith("[hive]")) { process.stdout.write(`(delivered) ${text}\n${provider}> `); return; }
+  // A delivery is a prompt like any other, a turn with its hooks, as claude takes it: the
+  // control plane holds the next delivery until that turn ends.
+  if (text.startsWith("[hive]")) {
+    fire("UserPromptSubmit", { session_id: sessionId, prompt: text });
+    process.stdout.write(`(delivered) ${text}\n`);
+    fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: "(delivered)" });
+    process.stdout.write(`${provider}> `);
+    return;
+  }
+  if (picker) { const answer = picker; picker = null; answer(text); return; }
   turn(text);
 });
 rl.on("close", () => process.exit(0));

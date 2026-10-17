@@ -76,8 +76,8 @@ test("a catalog agent whose CLI is on this machine is added, and says so", async
   await expect(page.getByText(/Added Continue — found on this machine/)).toBeVisible({ timeout: INSTALL_WAIT });
   expect(installed()).toBe(true);
   await page.locator('[aria-label="settings"]').click();
-  await page.locator('[data-settings-page="agents"]').click();
-  await expect(page.locator(`[data-agent-card="${CONTINUE}"]`)).toHaveAttribute("data-state", "on");
+  await page.locator('[data-settings-page="plugins"]').click();
+  await expect(page.locator(`[data-plugin-row="agent:${CONTINUE}"]`)).toHaveAttribute("data-state", "on");
 });
 
 test("an agent with a disclosure is added too, and the notice says what it can do", async () => {
@@ -90,7 +90,7 @@ test("an agent with a disclosure is added too, and the notice says what it can d
   await expect(page.getByText(/Added .*Recall — found on this machine/)).toBeVisible({ timeout: INSTALL_WAIT });
   await expect(page.getByText(/reads \S+ to find a session to resume/)).toBeVisible();
   expect(fs.existsSync(path.join(xdg, "hivemind", "agents", DISCLOSED, "agent.yaml"))).toBe(true);
-  // Removing straight from the notice: same uninstall + decline path as Settings ▸ Agents.
+  // Removing straight from the notice: same uninstall + decline path as Settings ▸ Plugins.
   // Declined is recorded AFTER the dir is gone, so poll the settings for it, not the dir.
   await page.getByRole("button", { name: "Remove Recall" }).click();
   await expect.poll(() => {
@@ -110,7 +110,7 @@ test("an agent you remove is not added back on the next start", async () => {
   const settings = page.locator(".settings-dialog");
   await settings.getByRole("button", { name: "Remove Continue" }).click();
   await settings.getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(page.locator(`[data-agent-card="${CONTINUE}"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-plugin-row="agent:${CONTINUE}"]`)).toHaveCount(0);
   expect(installed()).toBe(false);
   await app!.close(); app = undefined;
   await launch();

@@ -1,12 +1,12 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { trackOpenSession } from "./machines/open-sessions";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { registerFileLinks } from "./terminal-file-links";
+import { followsLink, linkHint, registerFileLinks } from "./terminal-file-links";
 import { installCrispDpr } from "./terminal-dpr";
-import { nextPtySize, type PtySize } from "./pty-size-sync";
+import { drawnSize, nextPtySize, resizeBurst, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
@@ -17,16 +17,18 @@ import { agentById } from "@hivemind/agents";
 import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
 import { peekWork, claimWork } from "./work-queue";
 import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, type TileStatusKind } from "./agent-status-bus";
-import { mayDismiss, newDismissState } from "./dismiss-startup";
-import { keyBytes, KEY_GAP_MS } from "../../shared/keys";
-import { SUBMIT_DELAY_MS, SPAWN_SUBMIT_RETRY_MS, deliversPromptViaArgv } from "../../shared/agent-io";
-import { Pencil, GripVertical } from "lucide-react";
+import { typeKeys } from "@hivemind/agent-host/keys";
+import { SUBMIT_DELAY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
+import { AgentStart, START_TICK_MS } from "@hivemind/agent-host/agent-start";
+import { Pencil, GripVertical, Moon } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Skeleton } from "./components/ui/skeleton";
 import { acquireBoot, bootPosition, cancelBoot, isRestored, subscribeBoot } from "./boot-queue";
-import { isRemote } from "../../shared/remote-uri";
+import { isRemote } from "@hivemind/core/remote-uri";
+import { toPtyId } from "@hivemind/workspace-api/tile-id";
 import { webUrlForInternalBrowser } from "./browser-open";
+import { TILE_KEYBOARD } from "./workspace/workspace-view";
 import { useThemeField, useSurfacePolicy, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
 import { terminalThemeFor } from "@hivemind/core/settings-schema";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
@@ -35,22 +37,8 @@ import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
 import { statusColor } from "./workspace/tile-status-bucket";
 import { defaultAgent } from "@hivemind/agents";
 import { useAgentsScanned } from "./agent-plugins";
-
-/** Open a terminal link in the OS browser. window.open is intercepted by main's
- *  setWindowOpenHandler → shell.openExternal (and the in-app navigation denied),
- *  so no popup window appears. Only http(s) — never file:/ javascript: etc. */
-function openExternalLink(uri: string, openInBrowser?: (url: string) => void): void {
-  try {
-    const u = new URL(uri);
-    if (u.protocol === "http:" || u.protocol === "https:") {
-      if (openInBrowser) {
-        openInBrowser(uri);
-        return;
-      }
-      window.open(uri, "_blank", "noopener,noreferrer");
-    }
-  } catch { /* not a parseable URL — ignore */ }
-}
+import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
+import { useShown } from "./multiplayer/shown";
 
 // Default terminal font size. Each tile remembers its OWN size (useTileFont keyed
 // by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
@@ -86,13 +74,35 @@ const BOOT_MIN_MS = 8000;
 const BOOT_CAP_MS = 12_000;
 /** How long a terminal no view shows keeps its stream before it stops receiving bytes. */
 const INTEREST_HIDE_MS = 1000;
+/** Lines of scrollback a terminal keeps. */
+const SCROLLBACK = 5000;
+/** Lines of scrollback a terminal is sent when it opens; scrolled to the top of them, it asks for
+ *  the rest. */
+const FIRST_HISTORY = 1000;
+/** What starts a screen the host sends in place of what a terminal shows. */
+const SCREEN_RESET = "\x1bc";
 
 // The terminal palette comes from settings.appearance.terminal (the ubuntu
 // preset is the historical Ubuntu / GNOME Terminal palette, byte-identical —
 // golden-tested in hive-core). `allowTransparency` must be set at construction,
 // so it follows the user's glass setting, not the per-view gate.
-/** Mounted tiles per session id: a persistent id is shared by a tile and its remount. */
+/** Mounted tiles per session id: a tile shares its id with its remount. */
 const liveMounts = new Map<string, number>();
+/** Each mounted terminal's "your tile is closing", by tile id. */
+const closing = new Map<string, Set<() => void>>();
+
+/**
+ * A tile is closing, however it is closed: end what runs in it. A mounted terminal kills its
+ * session as it unmounts, and kills what a spawn still in flight attaches to; with none mounted
+ * (a restored tile no view has shown yet) it is killed here. A session the tile adopted (`hive
+ * run`, another device) is someone else's job, and is only let go. Unmounting alone means
+ * nothing: a project switch unmounts every tile, and the daemon keeps their sessions.
+ */
+export function endTileSession(tileId: string, adopted: boolean): void {
+  const mounts = closing.get(tileId);
+  if (mounts?.size) for (const close of mounts) close();
+  else if (!adopted) window.hive.ptyKill(toPtyId(tileId));
+}
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 const termThemeFor = (t: ThemeState) => withScrollbar(terminalThemeFor(t.terminal));
@@ -151,11 +161,15 @@ interface Props {
    *  this tile's header next to close — no floating chip. */
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
+  /** Put its agent to sleep; absent where it cannot sleep (a shell, a session started elsewhere). */
+  onSleep?: () => Promise<void>;
+  /** Its session sleeps, as an exit or an open says: the tile shows it asleep. */
+  onAsleep?: () => void;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin, onSleep, onAsleep }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
-  // Persists via onRename → Canvas tileNames → LAYOUT_KEY localStorage.
+  // Persists via onRename → Canvas tileNames → the workspace store (canvas-persistence.ts).
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name ?? "");
   // Crisp fit-to-screen overlay. When on, the LIVE .xterm DOM node is re-parented
@@ -175,15 +189,20 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // so the pty is kept in step from here after every fit — see pty-size-sync.ts.
   const sentSizeRef = useRef<PtySize | null>(null);
   const syncSizeRef = useRef<(() => void) | null>(null);
-  const fitRef = useRef<FitAddon | null>(null);
+  /** Fits the terminal to its tile (or draws it at the size another gave the session). */
+  const fitRef = useRef<{ fit(): void; draw(): void } | null>(null);
   const webglRef = useRef<WebglAddon | null>(null);
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const openInBrowserRef = useRef(onOpenInBrowser);
   openInBrowserRef.current = onOpenInBrowser;
+  /** An http(s) link opens where the workspace opens addresses; any other kind not at all. */
+  const openLink = (uri: string) => { const web = webUrlForInternalBrowser(uri); if (web) openInBrowserRef.current?.(web); };
   const openInEditorRef = useRef(onOpenInEditor);
   openInEditorRef.current = onOpenInEditor;
+  const asleepRef = useRef(onAsleep);
+  asleepRef.current = onAsleep;
   // Live cwd so the terminal file-link provider resolves relative paths against
   // the tile's CURRENT cwd even after a frame rebind.
   const cwdRef = useRef(cwd);
@@ -209,35 +228,29 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     if (!term) return;
     term.options.theme = { ...withScrollbar(terminalThemeFor(termPalette)), background: termBg };
   }, [termBg, termPalette]);
-  // Unique PTY identity per MOUNT (not per prop). Fixes React.StrictMode
-  // double-mount race: the first mount's awaited ptySpawn could resolve AFTER
-  // its cleanup ran, killing the second mount's PTY (same tileId in the
-  // pty-host map → SIGHUP, terminal shows "exited code=0 signal=1").
-  // With useId(), each mount lifecycle gets its own ptyId — cleanup only ever
-  // kills its own PTY.
-  const reactId = useId();
-  // Persistence mode (HIVEMIND_PTY_DAEMON=1): use a STABLE session id so the
-  // same tile reattaches to its surviving daemon session across restarts, and
-  // DETACH (not kill) on unmount. The StrictMode double-mount race the per-mount
-  // id guarded against dissolves here — detach is harmless and attach is
-  // idempotent (the daemon replays the buffer). Non-persistent: keep the
-  // per-mount unique id + kill-on-unmount (unchanged legacy behavior).
-  //
-  // ID is tileId-only, NOT keyed on cwd. tileIds are already unique
-  // (timestamp-derived). Earlier `hm:${cwd}:${tileId}` orphaned a session
-  // whenever the containing frame's workspacePath rebound, because mkTile
-  // re-threads the new zoneRepo into the cwd prop → ptyId mutates →
-  // daemon's stored session becomes unreachable → fresh spawn at new cwd
-  // (and the old session leaks until idle GC). Session identity should
-  // follow the TILE/FRAME, not the path. The original spawn cwd is still
-  // preserved inside the daemon's frozen spec, so claude resumes at the
-  // path where its history lives — which is the correct semantics for
-  // claude (its session JSONL is tied to that repo).
-  const persistent = window.hive.persistentPty === true;
-  const ptyId = session ?? (persistent ? `hm:${tileId}` : `${tileId}-${reactId}`);
+  // One session per tile, its id the tile's: the same tile reattaches to its session in the daemon
+  // across restarts, a remount (StrictMode, a view move) shares it, and an unmount lets go of it
+  // (only a close kills it). Not keyed on cwd: a frame rebinding its folder keeps the session, which
+  // the daemon keeps at the folder it began in, where an agent's history is.
+  const ptyId = session ?? toPtyId(tileId);
   useEffect(() => trackOpenSession(ptyId), [ptyId]);
-  // True only when the user clicks × (explicit close) — then we KILL even in
-  // persistent mode. App-close / view-cull unmounts leave it false → detach.
+  // One keyboard per terminal (M2): who has it, whether this window's keys reach the session, and
+  // the size the session was given. Heard before the session is opened, which tells it both.
+  const kb = useTerminalKeyboard(ptyId, cwd);
+  const kbRef = useRef<TerminalKeyboard>(kb);
+  kbRef.current = kb;
+  // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
+  const ownSizeRef = useRef<PtySize | null>(null);
+  // The session has a size another screen gave it (a phone fitted it), not this window's.
+  const [sizedElsewhere, setSizedElsewhere] = useState(false);
+  const askedRef = useRef<PtySize[]>([]);
+  // In a workspace joined from elsewhere: whether the session is shown from its host now, and how
+  // to show it again once the connection to the host is back (the host let go of it as it went).
+  const { shared } = useShown();
+  const attachedRef = useRef(false);
+  const reattachRef = useRef<(() => void) | null>(null);
+  // True once the tile is closing (endTileSession): then the unmount kills its session. App-close
+  // and project-switch unmounts leave it false: they let go of it.
   const killOnUnmountRef = useRef(false);
 
   // Agent/terminal status — driven by PTY activity, mutated imperatively via
@@ -312,7 +325,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
     /** What the tile itself knows: a shell's activity, and how any process exited — the code
      *  and detail let the awareness layer tell a crash from a clean close. */
-    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; detail?: string }) => {
+    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; detail?: string }) => {
       paint(s, extra);
       if (s === "exited") publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
     };
@@ -323,13 +336,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
 
     // The viewport as text, for tests (a WebGL terminal renders none into the DOM).
-    // Startup screens the manifest says the launch flags already answered (see dismiss-startup).
-    const dismissState = newDismissState(Date.now());
+    // The agent's first seconds: a startup screen its launch flags answered, its first task.
+    const starting = new AgentStart(agent ? agentById(agent) : undefined, Date.now());
     const readScreen = (): string => {
       const buf = term.buffer.active;
       const out: string[] = [];
       for (let y = 0; y < term.rows; y++) {
-        const line = buf.getLine(buf.baseY + y);
+        const line = buf.getLine(buf.viewportY + y);
         out.push(line ? line.translateToString(true) : "");
       }
       return out.join("\n");
@@ -352,7 +365,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // the canvas never feels fully still/crisp (perpetual GPU compositing
       // across all tiles). Cursor stays solid + visible; zero idle repaint.
       cursorBlink: false,
-      scrollback: 5000,
+      scrollback: SCROLLBACK,
       allowProposedApi: true,
       // Render perf + UX tuning
       fastScrollSensitivity: 5,           // Alt-wheel jumps 5x faster
@@ -362,10 +375,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       minimumContrastRatio: 4.5,          // auto-adjust low-contrast cells to WCAG AA
                                           // (color only — doesn't affect sharpness)
       letterSpacing: 0,
-      // OSC 8 hyperlinks (claude emits these) → prefer the in-app browser tile.
-      // If no canvas callback exists, fall back to the OS browser.
+      // OSC 8 hyperlinks (claude emits these), on Ctrl/⌘+click.
       linkHandler: {
-        activate: (_e, uri) => openExternalLink(uri, openInBrowserRef.current),
+        activate: (e, uri) => { if (followsLink(e)) openLink(uri); },
+        ...linkHint(() => term.element),
       },
       // Rescale glyphs that overflow their cell (powerline, wide Unicode,
       // ligature-ish forms) instead of letting them clip/smear — sharper edges.
@@ -375,15 +388,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // Atlas (glyph cache) — "dynamic" is the default; be explicit.
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });
-    // Make plain http(s) URLs in terminal output clickable (claude, build logs,
-    // etc.) — single click opens in the in-app browser when available.
-    term.loadAddon(new WebLinksAddon((_e, uri) => {
-      const web = webUrlForInternalBrowser(uri);
-      if (web && openInBrowserRef.current) openInBrowserRef.current(web);
-      else openExternalLink(uri);
-    }));
-    // Make file PATHS clickable too (open in the OS default app) — WebLinksAddon
-    // only handles http(s) URLs. Disposed with the terminal on unmount.
+    // http(s) URLs in terminal output (claude, build logs, etc.), on Ctrl/⌘+click.
+    term.loadAddon(new WebLinksAddon((e, uri) => { if (followsLink(e)) openLink(uri); }, linkHint(() => term.element)));
+    // File PATHS too (open in the OS default app): WebLinksAddon only handles http(s) URLs.
+    // Disposed with the terminal on unmount.
     registerFileLinks(
       term,
       () => cwdRef.current,
@@ -391,18 +399,42 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       (path) => openInEditorRef.current?.(path),
     );
     const fit = new FitAddon();
-    fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host);
     // The screen as text for tests: a WebGL terminal renders none into the DOM.
     (host as HTMLElement & { __hmScreen?: () => string }).__hmScreen = readScreen;
-    fit.fit();
+    if (term.element) term.element.style.transformOrigin = "0 0";
+    /** Fit the grid to the tile; or, while the session has a size someone else gave it, draw it
+     *  at that size: letterboxed, or scaled down to fit when it is the larger. */
+    const fitTerm = (): void => {
+      const own = fit.proposeDimensions();
+      if (!own) return;
+      ownSizeRef.current = own;
+      drawTerm();
+    };
+    /** Draw at the size last measured: this window's, or the one the session was given. Measuring
+     *  again here would take a size a resize burst is still holding back. */
+    const drawTerm = (): void => {
+      const own = ownSizeRef.current;
+      if (!own) return;
+      const drawn = drawnSize(own, askedRef.current, kbRef.current.size);
+      setSizedElsewhere(drawn.cols !== own.cols || drawn.rows !== own.rows);
+      if (term.cols !== drawn.cols || term.rows !== drawn.rows) term.resize(drawn.cols, drawn.rows);
+      const scale = scaleToFit(own, drawn);
+      if (term.element) term.element.style.transform = scale < 1 ? `scale(${scale})` : "";
+    };
+    fitRef.current = { fit: fitTerm, draw: drawTerm };
+    fitTerm();
     termRef.current = term;
-    /** Push the grid's size to the pty when the pty does not already have it. */
+    /** Ask the session to take this tile's size, when it has not been asked already. Only while
+     *  this window's keys reach it: the keyboard's holder sizes a session (R4). */
     const syncPtySize = (): void => {
-      const next = nextPtySize(sentSizeRef.current, term.cols, term.rows);
+      const own = ownSizeRef.current;
+      if (!own || !kbRef.current.mayType) return;
+      const next = nextPtySize(sentSizeRef.current, own.cols, own.rows);
       if (!next) return;
       sentSizeRef.current = next;
+      askedRef.current = [...askedRef.current.slice(-2), next];
       window.hive.ptyResize(ptyId, next.cols, next.rows);
     };
     syncSizeRef.current = syncPtySize;
@@ -448,6 +480,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // registerWebglSlotClient() synchronously calls acquireWebgl, which reads it.
     let cancelled = false;
     liveMounts.set(ptyId, (liveMounts.get(ptyId) ?? 0) + 1);
+    const markClosing = () => { killOnUnmountRef.current = true; };
+    const closers = closing.get(tileId) ?? new Set<() => void>();
+    closers.add(markClosing);
+    closing.set(tileId, closers);
     let webgl: WebglAddon | undefined;
     let disposeDpr: (() => void) | undefined;
     // WebGL context-loss back-off (opencove pattern). The packaged app's GPU
@@ -488,10 +524,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
     // Restore keyboard focus after an operation that recreates the renderer canvas
     // (acquire/release/context-loss) — a focused selected terminal must not silently
-    // lose input. Deferred a frame so it runs after the DOM swap settles.
+    // lose input. Deferred a frame so it runs after the DOM swap settles. Only focus the
+    // swap dropped: focus put elsewhere since (a menu, a field) stays there.
     const restoreFocusIfSelected = () => {
       if (!selectedRef.current) return;
       requestAnimationFrame(() => {
+        const at = document.activeElement;
+        if (at && at !== document.body && !termRef.current?.element?.contains(at)) return;
         try { if (selectedRef.current) termRef.current?.focus(); } catch { /* torn down */ }
       });
     };
@@ -584,6 +623,33 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
     // A remount (a view switch) picks the stream back up if main had stopped sending it.
     window.hive.ptyInterest(ptyId, true);
+    // Opened with the newest FIRST_HISTORY lines of scrollback. Scrolled to the top of them, it asks
+    // for all of it, and keeps the line it was reading in place when that screen arrives.
+    let history: number | undefined = FIRST_HISTORY;
+    let keepPlace: number | undefined;
+    /** Every spawn and attach of this tile's session: its size now, and the history it holds. */
+    const spawn = (more: Partial<Parameters<typeof window.hive.ptySpawn>[0]> = {}) => window.hive.ptySpawn({
+      tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows,
+      ...(history === undefined ? {} : { history }), ...more,
+    });
+    term.onScroll(() => {
+      const buf = term.buffer.active;
+      if (history === undefined || buf.viewportY > 0 || buf.baseY < history) return;
+      history = undefined;
+      keepPlace = buf.baseY;
+      window.hive.ptyHistory(ptyId, SCROLLBACK);
+    });
+    // Back in touch with the host of a workspace joined from elsewhere: show its session again,
+    // from the host's screen, at this window's size if its keys reach it.
+    reattachRef.current = () => {
+      attachedRef.current = true;
+      exited = false;
+      spawn({ attachOnly: true })
+        .then(({ pid }) => { if (pid === -1) attachedRef.current = false; }, () => { attachedRef.current = false; });
+      if (interested) window.hive.ptyInterest(ptyId, true);
+      sentSizeRef.current = null;
+      syncPtySize();
+    };
     const io = new IntersectionObserver(
       (entries) => {
         const v = !!entries[entries.length - 1]?.isIntersecting;
@@ -597,23 +663,22 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const onAdopted = () => {
       parked = false;
       reconcileInterest();
-      // No explicit refit: the park freezes the surface at its last slot size,
-      // so adopting into a different-size slot fires the ResizeObserver below
-      // (one fit per tile), and adopting into a same-size slot needs none. A
-      // second fit here doubled the cost of every switch — a WebGL fit is an
-      // atlas rebuild, and ResizeObserver notifications land AFTER rAF in the
-      // same frame, so the two never coalesced.
+      // The park freezes the surface at its last slot size, so adopting into a
+      // different-size slot fires the ResizeObserver below (one fit per tile),
+      // and adopting into a same-size slot needs none, unless it was parked at
+      // another size than it was drawn at: then it fits once shown.
       reconcileWebglSlots();
+      if (pendingFitRef.current) fitWhenShown();
     };
     const onParked = (e: Event) => {
       parked = true;
       reconcileInterest();
       reconcileWebglSlots();
-      // Parked at a size other than the slot we just left (a dock pane hands
-      // the tile back at its arranging view's size): fit NOW, hidden, so the
-      // switch back finds it at size — paid while nothing is painting, not
-      // during the switch back.
-      if ((e as CustomEvent<{ resized?: boolean }>).detail?.resized) scheduleFitRef.current?.();
+      // Parked at a size other than the slot we just left (a slot overlay hands
+      // the tile back at its arranging view's size): fit when it is shown again,
+      // not now. Hidden, a fit would resize the program for a size nobody sees,
+      // and resize it back when it is shown where it was.
+      if ((e as CustomEvent<{ resized?: boolean }>).detail?.resized) pendingFitRef.current = true;
     };
     surfaceEl?.addEventListener(SURFACE_ADOPTED, onAdopted);
     surfaceEl?.addEventListener(SURFACE_PARKED, onParked);
@@ -651,7 +716,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         .then(() => {
           if (cancelled) return;
           try {
-            fit.fit();
+            fitTerm();
             syncPtySize();
             webgl?.clearTextureAtlas();
             term.refresh(0, term.rows - 1);
@@ -693,13 +758,26 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         flowPending -= d.length;
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
       });
+      if (keepPlace !== undefined && d.startsWith(SCREEN_RESET)) {
+        const had = keepPlace;
+        keepPlace = undefined;
+        term.write("", () => term.scrollToLine(Math.max(0, term.buffer.active.baseY - had)));
+      }
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
       // An agent tile's status comes from the host; a plain shell uses the cheap heuristic.
       if (agent) agentDirty = true;
       else markActivity();
     });
-    unsubExit = window.hive.onPtyExit(ptyId, ({ code, signal }) => {
+    unsubExit = window.hive.onPtyExit(ptyId, ({ code, signal, slept }) => {
       releaseBoot();
+      if (slept) {
+        // Not ended: it waits for Resume, which the sleeping tile shows.
+        exited = true;
+        if (idleTimer.current) clearTimeout(idleTimer.current);
+        if (agentPoll) { clearInterval(agentPoll); agentPoll = undefined; }
+        asleepRef.current?.();
+        return;
+      }
       term.writeln(
         `\r\n\x1b[2m[hivemind] exited code=${code} signal=${signal ?? ""} — press Enter to restart\x1b[0m`,
       );
@@ -711,9 +789,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // close, and show the code in the body. (signal here is the numeric value
       // sent by node-pty; name it generically — a non-null signal implies kill.)
       const detail = signal !== undefined && signal !== null ? `killed by signal ${signal}` : undefined;
-      setStatus("exited", { exitCode: code, detail });
+      setStatus("exited", { exitCode: code, ...(signal != null ? { signal } : {}), detail });
     });
     term.onData((d) => {
+      // Someone else has the keyboard: this window's keys (and its terminal's replies) are not the
+      // session's. The pill says who has it.
+      if (!kbRef.current.mayType) return;
       if (exited) {
         // After exit, swallow chars except Enter (which respawns). Avoids
         // confusing dead-term input.
@@ -724,7 +805,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         }
         return;
       }
-      dismissState.touched = true; // the person is driving now: nothing is sent for them
+      starting.touch(); // the person is driving now: nothing is sent for them
       window.hive.ptyWrite(ptyId, d);
     });
     term.onResize(() => syncPtySize());
@@ -756,6 +837,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         return false;
       }
       if (!(e.ctrlKey || e.metaKey)) return true;
+      // Ctrl/⌘⇧K: the host takes back the keyboard a guest has. Here, not among the app's keys:
+      // an editor keeps it for deleting a line.
+      if (e.shiftKey && !e.altKey && e.key.toLowerCase() === "k" && kbRef.current.mayTake) {
+        window.hive.keyboardTake(ptyId);
+        e.preventDefault();
+        return false;
+      }
       // Font zoom: Ctrl/Cmd +/−/0 adjusts THIS tile's font (per-tile). The apply
       // effect below pushes the new size into xterm.
       if (handleFontKey(e, fontCtlRef.current)) {
@@ -814,40 +902,46 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         // agents run on another machine and never queue here.
         let attachedPid: number | undefined;
         if (agent && !session && isRestored(tileId) && !isRemote(cwd)) {
-          if (persistent) {
-            // liveOnly: a session saved before a reboot restores on attach, which is the
-            // start this queue is for; it must wait its turn like any other.
-            const probe = await window.hive.ptySpawn({ tileId: ptyId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true });
-            if (probe.pid !== -1) attachedPid = probe.pid;
-          }
+          // liveOnly: a session saved before a reboot restores on attach, which is the
+          // start this queue is for; it must wait its turn like any other.
+          const probe = await spawn({ attachOnly: true, liveOnly: true });
+          if (probe.asleep) { asleepRef.current?.(); return; }
+          if (probe.pid !== -1) attachedPid = probe.pid;
           if (attachedPid === undefined && !cancelled) {
             bootRelease = await acquireBoot(tileId);
             if (cancelled) { releaseBoot(); return; }
           }
         }
-        const { pid } = attachedPid !== undefined ? { pid: attachedPid } : await window.hive.ptySpawn({
-          tileId: ptyId,
-          cwd,
-          cmd,
-          args: args ?? [],
-          cols: term.cols,
-          rows: term.rows,
+        attachedRef.current = true;
+        const { pid, joined, asleep } = attachedPid !== undefined ? { pid: attachedPid, joined: false, asleep: undefined } : await spawn({
           ...(initialPrompt ? { initialPrompt } : {}),
           ...(session ? { attachOnly: true } : {}),
         });
         if (cancelled) {
           // An adopted session is someone's running job: an abandoned mount only lets go of it.
-          // Otherwise a persistent id is shared with the remount (StrictMode, a view move) that
+          // Otherwise the id is shared with the remount (StrictMode, a view move) that
           // now owns the session; only an explicit close may kill it. With no remount,
           // let go of the attach this spawn made after the unmount already detached.
           if (session) window.hive.ptyDetach(ptyId);
-          else if (!persistent || killOnUnmountRef.current) window.hive.ptyKill(ptyId);
+          else if (killOnUnmountRef.current) window.hive.ptyKill(ptyId);
           else if (!liveMounts.get(ptyId)) window.hive.ptyDetach(ptyId);
           return;
         }
+        if (asleep) {
+          attachedRef.current = false;
+          asleepRef.current?.();
+          return;
+        }
+        // Another window started this session and gave it its task: this one only shows it.
+        if (joined) claimWork(tileId);
         // -1 is "no such session"; other negative pids are remote ones, negated on purpose.
-        if (session && pid === -1) {
-          term.writeln(`\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`);
+        if (pid === -1) {
+          // An adopted session that is gone; or, in a workspace joined from elsewhere, one its host
+          // is not running.
+          term.writeln(session
+            ? `\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`
+            : "\x1b[2m[hivemind] this terminal is not running on the machine it belongs to\x1b[0m");
+          attachedRef.current = false;
           exited = true;
           setStatus("exited");
           return;
@@ -860,7 +954,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         // / oversized inside the actual tile, and the replayed snapshot wraps at
         // the stale width — "text looks bigger after restart". Pushing our dims
         // explicitly every spawn reflows claude (SIGWINCH) to the true tile size.
-        try { fit.fit(); } catch { /* torn down */ }
+        try { fitTerm(); } catch { /* torn down */ }
         syncPtySize();
         term.writeln(`\x1b[2m[hivemind] spawned ${cmd} (pid ${pid})\x1b[0m`);
         if (bootRelease) { bootAt = Date.now(); bootCap = setTimeout(releaseBoot, BOOT_CAP_MS); }
@@ -868,19 +962,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         if (agent && !agentPoll) {
           // Queued-prompt ("Work on this" / workflow) delivery: deliver EXACTLY
           // ONCE, when the agent's screen has SETTLED (boot/splash output stopped
-          // = it's at a ready input prompt), then consume it. Delivering on the
-          // first scrape-"idle" raced droid's ~6s boot (its splash scrapes as idle
-          // the WHOLE time, before the input is interactive); re-delivering on each
-          // idle poll caused DUPLICATE submissions (droid buffers them all). The
-          // "settled" signal = N consecutive QUIET ticks (no new pty output) —
-          // robust for any agent (claude/codex/droid/…), not tied to scrape status.
-          let workQuietTicks = 0;
-          let workTicks = 0;
-          const WORK_SETTLE_TICKS = 2; // ~2.4s of quiet after boot → ready prompt
-          // An agent that never goes quiet — one that keeps a tip, a clock or a spinner
-          // ticking in its composer — would hold the task for ever. Deliver anyway once it
-          // has had this long to boot, as long as it is not waiting on the user.
-          const WORK_DEADLINE_TICKS = 8;
+          // = it's at a ready input prompt), then consume it (agent-start.ts).
+          // Delivering on the first scrape-"idle" raced droid's ~6s boot (its splash
+          // scrapes as idle the WHOLE time, before the input is interactive);
+          // re-delivering on each idle poll caused DUPLICATE submissions (droid
+          // buffers them all).
           void window.hive.diagLog?.(`[work-poll] start tile=${tileId} agent=${agent} peek=${!!peekWork(tileId)}`);
           agentPoll = setInterval(() => {
             // One-shot delivery — runs BEFORE the agentDirty early-return so it can
@@ -888,45 +974,25 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             // consumes, so the prompt can never be submitted twice.
             // A screen this agent opens before it will take anything, which our own launch
             // flags already answered: skip it once so the tile reaches its prompt.
-            const toDismiss = agentById(agent)?.dismiss;
-            if (toDismiss?.length && mayDismiss(dismissState, Date.now())) {
-              const screen = readScreen();
-              const hit = toDismiss.find((d) => d.match(screen));
-              if (hit) {
-                dismissState.left--;
-                hit.keys.forEach((k, i) => setTimeout(() => window.hive.ptyWrite(ptyId, keyBytes(k)), KEY_GAP_MS * i));
-              }
-            }
-            if (agent && peekWork(tileId)) {
-              // Quiet alone is not ready: a first run can open a trust or update chooser and
-              // sit there, and a task typed into a chooser picks an option instead. Only a
-              // screen that WAITS holds the task back — a booting agent has no status yet, and
-              // its own splash can read as working; neither means a chooser is up.
-              const st = statusOf(tileId);
-              const waiting = st === "blocked" || st === "permission" || st === "question";
-              workTicks++;
-              if (agentDirty || waiting) workQuietTicks = 0; else workQuietTicks++;
-              if (!waiting && (workQuietTicks >= WORK_SETTLE_TICKS || workTicks >= WORK_DEADLINE_TICKS)) {
-                const work = claimWork(tileId);
-                if (work) {
-                  window.hive.ptyWrite(ptyId, work, true); // a prompt is pasted, not typed
-                  setTimeout(() => window.hive.ptyWrite(ptyId, "\r"), SUBMIT_DELAY_MS);
-                  // Backstop: a fresh claude TUI can drop that first Enter, leaving
-                  // the prompt typed-but-unsubmitted (the "I had to press Enter"
-                  // bug). Re-send Enter ONCE, but only if the agent is STILL idle —
-                  // i.e. it never submitted. If the first Enter landed, the agent is
-                  // "working" by now and this no-ops (no stray empty submit).
-                  setTimeout(() => {
-                    if (statusOf(tileId) === "idle") window.hive.ptyWrite(ptyId, "\r");
-                  }, SPAWN_SUBMIT_RETRY_MS);
-                  void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
-                }
+            const now = Date.now();
+            const keys = starting.mayDismiss(now) ? starting.dismiss(readScreen(), now) : null;
+            if (keys) typeKeys((bytes) => window.hive.ptyWrite(ptyId, bytes), keys);
+            // Quiet alone is not ready: a first run can open a trust or update chooser and
+            // sit there, and a task typed into a chooser picks an option instead. Only a
+            // screen that WAITS holds the task back — a booting agent has no status yet, and
+            // its own splash can read as working; neither means a chooser is up.
+            if (agent && peekWork(tileId) && starting.settled(agentDirty, statusOf(tileId), readScreen())) {
+              const work = claimWork(tileId);
+              if (work) {
+                starting.typeTask((data, paste) => window.hive.ptyWrite(ptyId, data, paste), work, async () => ({ status: statusOf(tileId), screen: readScreen() }));
+                void window.hive.diagLog?.(`[work-deliver] tile=${tileId} agent=${agent} settled`);
               }
             }
             agentDirty = false;
-          }, 1200);
+          }, START_TICK_MS);
         }
       } catch (e) {
+        attachedRef.current = false;
         releaseBoot();
         term.writeln(`\x1b[31m[hivemind] spawn failed: ${(e as Error).message}\x1b[0m`);
         exited = true;
@@ -941,18 +1007,41 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // to display-refresh rate and stops the resize handle from jittering.
     let fitRaf = 0;
     const doFit = () => {
+      // Put off to a frame or a burst's end, it may be hidden by then: it fits once shown.
+      if (parked || !hostShown()) { pendingFitRef.current = true; return; }
       try {
-        fit.fit();
+        const buf = term.buffer.active;
+        const atBottom = buf.viewportY >= buf.baseY;
+        const before = `${term.cols}x${term.rows}`;
+        fitTerm();
         syncPtySize();
-        // Anchor to the bottom after a resize so the LATEST output + prompt
-        // stay visible. xterm's reflow can otherwise leave the viewport
-        // scrolled up — shrinking a tile "cropped" the live prompt off the
-        // bottom and showed stale lines instead.
-        term.scrollToBottom();
+        // At the bottom it stays there, with the latest output and the prompt (a reflow can
+        // leave it scrolled up); scrolled up to read, it stays put.
+        if (atBottom) term.scrollToBottom();
+        // A new grid is drawn whole: rows the reflow did not touch keep no glyphs of the old one.
+        if (`${term.cols}x${term.rows}` !== before) term.refresh(0, term.rows - 1);
       } catch {
         /* ignore */
       }
     };
+    // Coming back to the window (focus, or shown again) the GPU may have dropped what it drew:
+    // rebuild the glyphs and draw it whole, at most every 120 ms.
+    let lastRecovery = 0;
+    const recover = () => {
+      if (document.hidden || parked || !hostShown()) return;
+      const now = Date.now();
+      if (now - lastRecovery < 120) return;
+      lastRecovery = now;
+      try {
+        webgl?.clearTextureAtlas();
+        fitTerm();
+        syncPtySize();
+        term.refresh(0, term.rows - 1);
+      } catch { /* torn down */ }
+    };
+    const onVisible = () => { if (!document.hidden) recover(); };
+    window.addEventListener("focus", recover);
+    document.addEventListener("visibilitychange", onVisible);
     const scheduleFit = () => {
       if (fitRaf) return;
       fitRaf = requestAnimationFrame(() => { fitRaf = 0; doFit(); });
@@ -967,6 +1056,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // shown tile be the only one that resizes. On the way back the deferred
     // tiles are at their old size again, so their fit is a no-op.
     const fitKey = {};
+    // Grid and program resize together, in one step per burst (see resizeBurst).
+    const burst = resizeBurst();
     const ro = new ResizeObserver(() => {
       if (parked) return; // a parked surface holds its size; adoption refits
       queueFit(fitKey, {
@@ -974,23 +1065,29 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         fit: () => {
           pendingFitRef.current = false;
           if (fitRaf) { cancelAnimationFrame(fitRaf); fitRaf = 0; }
-          doFit();
-          // Ranked while xyflow still had the node hidden; now shown, it can take a WebGL slot.
-          if (!webgl) reconcileWebglSlots();
+          burst.run(() => {
+            doFit();
+            // Ranked while xyflow still had the node hidden; now shown, it can take a WebGL slot.
+            if (!webgl) reconcileWebglSlots();
+          });
         },
         hidden: () => {
           pendingFitRef.current = true;
-          // Hidden for a frame only? xyflow mounts a node `visibility:hidden`
-          // until it has measured it, so a freshly (re)mounted canvas node is
-          // hidden exactly when the ResizeObserver fires. Re-check two frames on;
-          // a tab that stays hidden waits for its selection instead.
-          requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (pendingFitRef.current && hostShown()) { pendingFitRef.current = false; scheduleFit(); }
-          }));
+          fitWhenShown();
         },
       });
     });
     scheduleFitRef.current = () => { pendingFitRef.current = false; scheduleFit(); };
+    /** A fit put off while hidden: now if it is shown, else two frames on. Hidden for a frame only?
+     *  xyflow mounts a node `visibility:hidden` until it has measured it, so a freshly (re)mounted
+     *  canvas node is hidden exactly when it is laid out. A tab that stays hidden waits for its
+     *  selection instead. */
+    function fitWhenShown(): void {
+      if (!parked && hostShown()) { scheduleFitRef.current?.(); return; }
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (pendingFitRef.current && !parked && hostShown()) scheduleFitRef.current?.();
+      }));
+    }
     ro.observe(host);
 
     return () => {
@@ -1000,6 +1097,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       fitQueue.delete(fitKey);
       const left = (liveMounts.get(ptyId) ?? 1) - 1;
       if (left > 0) liveMounts.set(ptyId, left); else liveMounts.delete(ptyId);
+      closers.delete(markClosing);
+      if (closers.size === 0) closing.delete(tileId);
       if (fitRaf) cancelAnimationFrame(fitRaf);
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) clearInterval(agentPoll);
@@ -1014,6 +1113,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // tile is still open. Closing one drops it (Workspace.closeTile).
       ro.disconnect();
       io.disconnect();
+      burst.cancel();
+      window.removeEventListener("focus", recover);
+      document.removeEventListener("visibilitychange", onVisible);
       if (loseInterest) clearTimeout(loseInterest);
       surfaceEl?.removeEventListener(SURFACE_ADOPTED, onAdopted);
       surfaceEl?.removeEventListener(SURFACE_PARKED, onParked);
@@ -1025,10 +1127,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // this. (term.dispose() below drops the write callbacks that would have.)
       releaseFlowPause();
       try {
-        // Persistent + not an explicit close → detach (keep the session alive
-        // in the daemon). Otherwise kill.
+        // Not an explicit close → detach (keep the session alive in the daemon). Otherwise kill.
         // An adopted session is someone's job (`hive run`, another device): closing the tile only lets go.
-        if (session || (persistent && !killOnUnmountRef.current)) window.hive.ptyDetach(ptyId);
+        if (session || !killOnUnmountRef.current) window.hive.ptyDetach(ptyId);
         else window.hive.ptyKill(ptyId);
       } catch {
         /* ignore */
@@ -1046,15 +1147,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // a PTY respawn on every parent re-render. We freeze args on first mount.
     // (For real argv changes, change the cmd or destroy/recreate the tile.)
     //
-    // `cwd` is excluded too in PERSISTENT mode: ptyId is now keyed on tileId
-    // only (frame-stable across workspace rebinding), and the daemon owns the
-    // original spawn cwd inside the frozen spec. A cwd-only prop change with
-    // a live session would otherwise tear down → re-attach silently (daemon
-    // ignores new cwd on re-attach), looking like "nothing happened" with no
-    // visible signal that the rebind didn't apply. Keep cwd in deps for the
-    // non-persistent path where a fresh PTY at the new cwd IS the right thing.
+    // `cwd` is excluded too: ptyId is keyed on the tile only (frame-stable across workspace
+    // rebinding), and the daemon keeps the original spawn cwd. A cwd-only prop change with a live
+    // session would otherwise tear down and re-attach silently (the daemon ignores a new cwd on
+    // re-attach), looking like nothing happened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, persistent ? [ptyId, cmd, agentsScanned] : [ptyId, cwd, cmd, agentsScanned]);
+  }, [ptyId, cmd, agentsScanned]);
 
   // Gate keyboard on selection. pointer-events:none (tile-locked) blocks the
   // mouse but NOT the keyboard — a focused xterm keeps eating keystrokes after
@@ -1104,6 +1202,32 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     } catch { /* torn down */ }
   }, [font.size]);
 
+  // A workspace joined from elsewhere: once the connection to its host is back, the session is
+  // shown again (the host let go of it as the connection went); until then it is not.
+  const joined = !!shared;
+  const connected = shared?.state === "connected";
+  useEffect(() => {
+    if (!joined) return;
+    if (!connected) attachedRef.current = false;
+    else if (!attachedRef.current) reattachRef.current?.();
+  }, [joined, connected]);
+
+  // The session was given a size: draw it again, at this window's size or at the one given.
+  useEffect(() => {
+    try { fitRef.current?.draw(); } catch { /* torn down */ }
+  }, [kb.size?.cols, kb.size?.rows]);
+  // The keyboard moved. Keys reaching the session again (it was given to this window, or came
+  // back to its host): this window asks for its size again, to be the session's. Keys no longer
+  // reaching it: the sizes it asked for are not the session's any more.
+  const typedBefore = useRef(kb.mayType);
+  useEffect(() => {
+    if (typedBefore.current === kb.mayType) return;
+    typedBefore.current = kb.mayType;
+    if (kb.mayType) sentSizeRef.current = null;
+    else askedRef.current = [];
+    try { fitRef.current?.fit(); syncSizeRef.current?.(); } catch { /* torn down */ }
+  }, [kb.mayType]);
+
   // ── CRISP FIT-TO-SCREEN OVERLAY ───────────────────────────────────────────
   // Move the LIVE .xterm node into the fullscreen glass panel and back, WITHOUT
   // recreating the terminal: the xterm buffer + PTY are independent of the DOM
@@ -1139,14 +1263,20 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
   }, []);
 
+  useEffect(() => {
+    const onKeyboard = (e: Event) => { if ((e as CustomEvent<string>).detail === tileId && selectedRef.current) termRef.current?.focus(); };
+    window.addEventListener(TILE_KEYBOARD, onKeyboard);
+    return () => window.removeEventListener(TILE_KEYBOARD, onKeyboard);
+  }, [tileId]);
+
   return (
-    <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" data-term-bg={termBg}>
+    <div className="hm-term-root flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]" data-term-bg={termBg}>
       {/* Entire header is the drag handle. Previously only the ⋮⋮ icon (~5px
           wide) carried `.tile-drag-handle` — invisible target, users
           clicked the wide header bar expecting drag and nothing happened
           (verified via playwright element-from-point probe). */}
-      <div className="group tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
+      <div data-tile-titlebar className="group tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
+        <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
         {editing ? (
           <Input
             autoFocus
@@ -1185,7 +1315,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
               aria-label="rename tile"
               title="Rename tile"
             >
-              <Pencil aria-hidden />
+              <Pencil />
             </Button>
           </>
         )}
@@ -1203,6 +1333,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             </>
           );
         })()}
+        <KeyboardChip tile={ptyId} name={name?.trim() || "Terminal"} kb={kb} />
         {/* Font / scale / fullscreen controls — revealed only on header hover
             (group-hover). Two SEPARATE controls: font size (A−/A+, density only)
             and whole-tile scale (−/+, grows the node box + font in proportion). */}
@@ -1240,7 +1371,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         </span>
         <span
           ref={statusWrapRef}
-          className="inline-flex items-center gap-1.5 text-[10px]"
+          className="inline-flex items-center gap-1.5 text-chip"
           title="agent status — working / blocked / exited (idle is not shown)"
         >
           <span
@@ -1253,6 +1384,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             starting
           </span>
         </span>
+        {onSleep && (
+          <Button variant="ghost" size="icon-micro" className="nodrag" aria-label="put agent to sleep" title="Sleep: end its process, keep its screen and conversation" onClick={() => void onSleep().catch(() => {})}>
+            <Moon />
+          </Button>
+        )}
         {/* Pin toggle — docked in the header next to close (not a floating chip). */}
         <HeaderPinButton tileId={tileId} pinned={pinned} onToggle={onTogglePin} />
         {/* nodrag — react-flow ignores drag from elements with this class so
@@ -1262,11 +1398,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           size="icon-micro"
           className="nodrag"
           aria-label="close tile"
-          onClick={() => {
-            // Explicit close kills the session even in persistent mode.
-            killOnUnmountRef.current = true;
-            onClose?.();
-          }}
+          onClick={() => onClose?.()}
           title="close tile"
         >
           ×
@@ -1283,12 +1415,25 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           rows scale) on resize down AND up instead of being clipped. */}
       <div className="hm-term-host relative flex-1 min-h-0 min-w-0 overflow-hidden bg-[var(--color-terminal-bg)] p-1.5">
         <div ref={hostRef} className="w-full h-full overflow-hidden" />
+        {selected && <KeyboardPill tile={ptyId} kb={kb} />}
+        {sizedElsewhere && kb.mayType && (
+          <div className="nodrag pointer-events-auto absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-[var(--color-line)] bg-[var(--color-bg2)] px-3 py-1 text-label shadow-md" role="status" data-sized-elsewhere={ptyId}>
+            <span>Sized for another screen</span>
+            <Button size="sm" variant="secondary" onClick={() => {
+              const own = ownSizeRef.current;
+              if (!own) return;
+              sentSizeRef.current = own;
+              askedRef.current = [...askedRef.current.slice(-2), own];
+              window.hive.ptyFit(ptyId, own.cols, own.rows);
+            }}>Use this window's size</Button>
+          </div>
+        )}
         {bootWait !== null && (
           <div role="status" aria-label="Waiting to start" className="absolute inset-1.5 z-10 flex flex-col gap-2 bg-[var(--color-terminal-bg)] p-2">
             <Skeleton className="h-2.5 w-7/12" />
             <Skeleton className="h-2.5 w-9/12" />
             <Skeleton className="h-2.5 w-5/12" />
-            <span className="mt-auto text-[11px] text-[var(--color-fg3)]">
+            <span className="mt-auto text-count text-[var(--color-fg3)]">
               Starting soon{bootWait > 0 ? ` · ${bootWait} ahead` : ""}
             </span>
           </div>

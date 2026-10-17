@@ -24,9 +24,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal, ChevronUp, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Maximize2, X } from "lucide-react";
+import { GripVertical, Play, RefreshCw, Search, SlidersHorizontal, ChevronUp, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Maximize, X } from "./components/icons";
 import { ReviewPopover, CommentBox, ActionToolbar, ReviewAnnotation, composerAnchor } from "./review-ui";
 import { Button } from "./components/ui/button";
+import { Loading } from "./components/ui/loading";
 import { MenuItem } from "./components/ui/menu-item";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell } from "./tile-fullscreen";
@@ -71,10 +72,17 @@ interface Props {
   repoPath: string;
   initialMode?: Mode;
   initialBase?: string;
+  /** What branch mode compares with the base until another is picked: the checkout's HEAD, or a
+   *  branch (one handed off, M4). */
+  initialHead?: string;
   onClose?: () => void;
   /** Pin state + toggle (injected via node data) — docked in the header. */
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
+  /** Inside another tile: no grip, title, pin or close of its own. */
+  embedded?: boolean;
+  /** Opening a file hands it to an editor instead of showing it read-only here. */
+  onEditFile?: (file: string) => void;
 }
 
 type Mode = "working" | "branch" | "unpushed";
@@ -111,7 +119,7 @@ function fileForLineEl(lineEl: HTMLElement | null, container: HTMLElement | null
   return file;
 }
 
-export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", onClose, pinned, onTogglePin }: Props) {
+export function DiffTile({ repoPath, initialMode = "working", initialBase = "origin/main", initialHead, onClose, pinned, onTogglePin, embedded, onEditFile }: Props) {
   // Per-tile font size (A−/A+ + Ctrl/Cmd +/−/0) — overrides --diffs-font-size.
   const font = useTileFont(`diff:${repoPath}`, 13);
   // Fullscreen: the Pierre CodeView is React-rendered (not an imperative node), so
@@ -338,8 +346,8 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   // ── build CodeView items per mode ───────────────────────────────────────
   const workingItems = useWorkingItems(repoPath, mode === "working" ? status?.files ?? [] : [], staged);
   const branchScope: DiffScope = useMemo(
-    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead, ignoreWhitespace }),
-    [branchBase, branchHead, initialBase, ignoreWhitespace],
+    () => ({ kind: "branch", base: branchBase ?? initialBase, head: branchHead ?? initialHead, ignoreWhitespace }),
+    [branchBase, branchHead, initialBase, initialHead, ignoreWhitespace],
   );
   const branch = useBranchItems(repoPath, branchScope, mode === "branch");
   // Branch inventory for the base/head pickers — only fetched in branch mode.
@@ -596,7 +604,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             if (entry?.staged) unstage({ repoPath, files: [file] });
             else stage({ repoPath, files: [file] });
           }}
-          onOpen={() => setActiveFile(file)}
+          onOpen={() => (onEditFile ? onEditFile(file) : setActiveFile(file))}
           onDiscard={() => {
             if (mode === "working" && confirm(`discard changes to ${file}?`))
               discard({ repoPath, files: [file] });
@@ -692,7 +700,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     disabled?: boolean;
   }[] = [
     { id: "working", label: "working", title: "uncommitted working-tree changes" },
-    { id: "branch", label: "branch", title: `compare ${branchBase ?? initialBase} … ${branchHead ?? "HEAD"}` },
+    { id: "branch", label: "branch", title: `compare ${branchBase ?? initialBase} … ${branchHead ?? initialHead ?? "HEAD"}` },
     {
       id: "unpushed",
       label: "unpushed",
@@ -723,11 +731,13 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
       }}
     >
       {/* tile chrome */}
-      <div className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
-        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
-        <span className="font-semibold text-[var(--color-fg)]">Diff</span>
-        <span aria-hidden className="text-[var(--color-line2)]">·</span>
-        <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
+      <div className={`${embedded ? "" : "tile-drag-handle cursor-grab active:cursor-grabbing "}h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)]`}>
+        {!embedded && <>
+          <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
+          <span className="font-semibold text-[var(--color-fg)]">Diff</span>
+          <span aria-hidden className="text-[var(--color-line2)]">·</span>
+          <span className="text-[var(--color-fg2)]">{repoPath.split("/").slice(-1)[0]}</span>
+        </>}
 
         <div className="nodrag ml-2.5 inline-flex rounded-md overflow-hidden bg-[var(--color-bg)] border border-[var(--color-line2)]">
           {modeTabs.map((t) => (
@@ -741,7 +751,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             >
               {t.label}
               {t.badge != null && (
-                <span className="px-1 rounded-full bg-[var(--color-brand)] text-white text-[8.5px] leading-none py-0.5 tabular-nums">
+                <span className="text-count leading-none tabular-nums text-[var(--color-fg2)]">
                   {t.badge}
                 </span>
               )}
@@ -766,7 +776,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               value={branchHead}
               onChange={setBranchHead}
               branches={branchesQ.data}
-              autoLabel="HEAD (checkout)"
+              autoLabel={initialHead ?? "HEAD (checkout)"}
             />
           </div>
         )}
@@ -808,7 +818,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             <Button variant="ghost" size="icon-micro" onClick={() => gotoChange(changeIdx - 1)} title="previous change (p)" aria-label="previous change">
               <ChevronUp />
             </Button>
-            <span className="text-[9.5px] font-mono tabular-nums text-[var(--color-fg3)] min-w-[30px] text-center">
+            <span className="text-chip font-mono tabular-nums text-[var(--color-fg3)] min-w-[30px] text-center">
               {changeIdx >= 0 ? `${changeIdx + 1}/${changes.length}` : `${changes.length}`}
             </span>
             <Button variant="ghost" size="icon-micro" onClick={() => gotoChange(changeIdx + 1)} title="next change (n)" aria-label="next change">
@@ -821,10 +831,10 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             Line-level matches, scroll + highlight, ↑/↓ nav. */}
         {searchOpen || search.trim() ? (
           <div className="nodrag ml-1.5 inline-flex items-center gap-1 bg-[var(--color-bg)] border border-[var(--color-line2)] rounded px-1.5 py-0.5">
-            <Search size={11} aria-hidden className="text-[var(--color-fg3)] shrink-0" />
+            <Search size={11} className="text-[var(--color-fg3)] shrink-0" />
             <input
               autoFocus
-              className="w-28 bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
+              className="w-28 bg-transparent text-chip font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
               placeholder="search diff…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -837,7 +847,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               }}
             />
             {search.trim() && (
-              <span className="text-[9.5px] font-mono tabular-nums text-[var(--color-fg3)] min-w-[34px] text-center">
+              <span className="text-chip font-mono tabular-nums text-[var(--color-fg3)] min-w-[34px] text-center">
                 {matches.length ? `${matchIdx + 1}/${matches.length}` : "0/0"}
               </span>
             )}
@@ -878,7 +888,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             aria-label="search diff"
             title="Search diff"
           >
-            <Search aria-hidden />
+            <Search />
           </Button>
         )}
 
@@ -892,14 +902,14 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             onClick={() => setViewMenuOpen((o) => !o)}
             title="View options"
           >
-            <SlidersHorizontal aria-hidden />
+            <SlidersHorizontal />
             view
           </Button>
           {viewMenuOpen && (
-            <div className="nodrag absolute z-50 right-0 top-full mt-1 w-44 flex flex-col gap-2 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl p-2 text-[10px] font-mono">
+            <div className="nodrag absolute z-50 right-0 top-full mt-1 w-44 flex flex-col gap-2 bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl p-2 text-chip font-mono">
               {/* header — label + explicit close (outside-click & Esc also close) */}
               <div className="flex items-center justify-between -mb-0.5">
-                <span className="uppercase tracking-wider text-[9px] font-semibold text-[var(--color-fg3)]">View</span>
+                <span className="text-count font-medium text-[var(--color-fg2)]">View</span>
                 <Button
                   variant="ghost"
                   size="icon-micro"
@@ -960,7 +970,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
                   aria-label="refresh diff"
                   title="Refresh diff (re-read files + diffs)"
                 >
-                  <RefreshCw aria-hidden />
+                  <RefreshCw />
                 </Button>
               </div>
             </div>
@@ -991,7 +1001,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           >
             review
             {comments.some((c) => !c.resolved) && (
-              <span className="px-1 rounded-full bg-[var(--color-warn)] text-[9px] text-black font-semibold leading-none py-0.5">
+              <span className="px-1 rounded-full bg-[var(--color-warn)] text-chip text-black font-semibold leading-none py-0.5">
                 {comments.filter((c) => !c.resolved).length}
               </span>
             )}
@@ -1004,19 +1014,21 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             aria-label="fullscreen diff"
             title="Fullscreen · Esc to exit"
           >
-            <Maximize2 />
+            <Maximize />
           </Button>
-          <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
-          <Button
-            variant="ghost"
-            size="icon-micro"
-            className="nodrag"
-            aria-label="close tile"
-            title="close"
-            onClick={onClose}
-          >
-            <X />
-          </Button>
+          {!embedded && <>
+            <HeaderPinButton pinned={pinned} onToggle={onTogglePin} />
+            <Button
+              variant="ghost"
+              size="icon-micro"
+              className="nodrag"
+              aria-label="close tile"
+              title="close"
+              onClick={onClose}
+            >
+              <X />
+            </Button>
+          </>}
         </div>
       </div>
 
@@ -1058,7 +1070,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               "--trees-theme-row-decoration-bg": "transparent",
             } as React.CSSProperties}
           >
-            <div className="h-7 shrink-0 flex items-center gap-1.5 px-2.5 border-b border-[var(--color-line2)] text-[10px] uppercase tracking-wider font-semibold text-[var(--color-fg3)]">
+            <div className="h-7 shrink-0 flex items-center gap-1.5 px-2.5 border-b border-[var(--color-line2)] text-count font-medium text-[var(--color-fg2)]">
               Files
               <span className="ml-auto font-mono tabular-nums text-[var(--color-fg3)]">{viewed.size}/{fileRows.length}</span>
             </div>
@@ -1094,9 +1106,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           </div>
         )}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden" data-pierre-tile>
-          {statusLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading git status…</div>}
+          {statusLoading && <Loading label="Reading git status" />}
           {statusError && (
-            <div className="p-3 text-[11px] font-mono text-[var(--color-err)]">
+            <div className="p-3 text-count font-mono text-[var(--color-err)]">
               <div className="font-semibold mb-1">git status failed</div>
               <div className="text-[var(--color-fg3)]">{(statusError as Error).message}</div>
               <div className="text-[var(--color-fg3)] mt-1">repo: {repoPath}</div>
@@ -1106,7 +1118,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           {hasConflicts && (
             <div className="shrink-0 border-b border-[var(--color-line)] overflow-auto max-h-[50%]">
               <div
-                className="px-3 py-2 text-[var(--color-fg)] text-[11px] font-mono flex items-center gap-2"
+                className="px-3 py-2 text-[var(--color-fg)] text-count font-mono flex items-center gap-2"
                 style={{ background: "color-mix(in srgb, var(--color-err) 12%, transparent)" }}
               >
                 <span className="text-[var(--color-err)]">⚠ {conflicted.length} conflict{conflicted.length > 1 ? "s" : ""}</span>
@@ -1125,18 +1137,18 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
           )}
 
           {!activeFile && modeError && (
-            <div className="p-3 text-[11px] font-mono text-[var(--color-err)]">
+            <div className="p-3 text-count font-mono text-[var(--color-err)]">
               <div className="font-semibold mb-1">diff failed</div>
               <div className="text-[var(--color-fg3)]">{(modeError as Error).message}</div>
             </div>
           )}
 
           {!activeFile && !modeError && loading && (
-            <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading diff…</div>
+            <div className="p-3 text-count text-[var(--color-fg3)]">loading diff…</div>
           )}
 
           {!activeFile && !modeError && !loading && items.length === 0 && (
-            <div className="p-4 text-[11px] text-[var(--color-fg3)] text-center font-mono">
+            <div className="p-4 text-count text-[var(--color-fg3)] text-center font-mono">
               {mode === "working"
                 ? "✓ working tree clean"
                 : mode === "unpushed"
@@ -1197,7 +1209,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             travel into the fullscreen panel too, instead of being stranded behind
             the overlay — you can review + "Send to Claude" + commit while full. */}
         {!activeFile && comments.length > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-line)] bg-[var(--color-bg3)] text-[11px]">
+          <div className="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-line)] bg-[var(--color-bg3)] text-count">
             <span className="text-[var(--color-warn)] font-medium">
               {comments.length} review comment{comments.length > 1 ? "s" : ""}
             </span>
@@ -1205,9 +1217,9 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
               size="xs"
               className="ml-auto"
               onClick={sendReview}
-              title="Send all review comments to claude (spawns one if none is running)"
+              title="Send all review comments to an agent (starts one if none is running)"
             >
-              <Play fill="currentColor" strokeWidth={0} aria-hidden />
+              <Play fill="currentColor" strokeWidth={0} />
               Send review to Claude
             </Button>
             <Button

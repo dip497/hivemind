@@ -2,13 +2,14 @@
 // agent status indicator, perf motion-aware compositing, MiniMap opt-in, and
 // the CommandDialog a11y fix. Launches against a throwaway git repo fixture so
 // diff content is deterministic (real changes + a branch base).
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import { execSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 let repo: string;
 const consoleErrors: string[] = [];
@@ -32,11 +33,8 @@ test.beforeAll(async () => {
   writeFileSync(path.join(repo, "src/app.ts"), Array.from({ length: 120 }, (_, i) => `export const fn${i} = () => ${i === 3 ? 999 : i % 4 === 0 ? i + 1000 : i};`).join("\n") + "\n");
   writeFileSync(path.join(repo, "src/new.ts"), "export const fresh = true;\n");
 
-  app = await electron.launch({
-    args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`],
-    cwd: repo,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: repo, args: [`--user-data-dir=/tmp/hm-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`] });
+  page = app.page;
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text().slice(0, 200)); });
   page.on("pageerror", (e) => consoleErrors.push("PAGEERROR: " + e.message));
   await page.waitForLoadState("domcontentloaded");
@@ -50,9 +48,12 @@ test.afterAll(async () => {
 });
 
 async function openDiff() {
-  if ((await page.locator(".react-flow__node-diff").count()) === 0) {
-    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "diff" })));
-    await page.waitForSelector(".react-flow__node-diff", { timeout: 6_000 });
+  if ((await page.locator(".react-flow__node-workbench").count()) === 0) {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "editor" })));
+    await page.waitForSelector(".react-flow__node-workbench", { timeout: 6_000 });
+    const id = await page.locator(".react-flow__node-workbench").getAttribute("data-id");
+    await page.evaluate((t) => window.dispatchEvent(new CustomEvent("hivemind:focus-tile", { detail: t })), id);
+    await page.locator(".react-flow__node-workbench").getByRole("button", { name: "Changes (source control)" }).click();
   }
   // Poll for actual diff content — git status + per-file content fetch + parse
   // + CodeView render takes a beat (longer under xvfb than a fixed sleep covers).
@@ -74,7 +75,7 @@ test("diff tile renders per-file headers with +/- counts and review controls", a
   expect(await page.getByRole("button", { name: "search diff" }).count()).toBeGreaterThan(0);
   // both changed files counted in the tile chrome (CodeView virtualizes the
   // off-screen file out of the DOM, so assert the count chip, not its header).
-  const chrome = await page.evaluate(() => document.querySelector(".react-flow__node-diff")?.textContent || "");
+  const chrome = await page.evaluate(() => document.querySelector(".react-flow__node-workbench")?.textContent || "");
   expect(chrome).toMatch(/2f/);
 });
 
@@ -129,11 +130,11 @@ test("commit bar stages and commits from the diff", async () => {
   await commitBtn.click();
   // after commit the working tree is clean (no changed files) -> empty state
   await page.waitForFunction(
-    () => (document.querySelector(".react-flow__node-diff")?.textContent || "").includes("working tree clean"),
+    () => (document.querySelector(".react-flow__node-workbench")?.textContent || "").includes("working tree clean"),
     undefined,
     { timeout: 8_000 },
   );
-  expect(await page.evaluate(() => (document.querySelector(".react-flow__node-diff")?.textContent || "").includes("working tree clean"))).toBe(true);
+  expect(await page.evaluate(() => (document.querySelector(".react-flow__node-workbench")?.textContent || "").includes("working tree clean"))).toBe(true);
 });
 
 test("branch mode renders against origin/main", async () => {
@@ -195,9 +196,12 @@ test("motion-aware class toggles during canvas pan", async () => {
 });
 
 test("Issues tile opens on the canvas", async () => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
-  await page.waitForSelector(".react-flow__node-issues", { timeout: 6_000 });
-  const txt = await page.evaluate(() => document.querySelector(".react-flow__node-issues")?.textContent || "");
+  // The Issues plugin registers its tile a moment after the window loads: ask until it is there.
+  await expect.poll(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
+    return page.locator('[data-tool-plugin="hivemind/issues"]').count();
+  }, { timeout: 15_000 }).toBeGreaterThan(0);
+  const txt = await page.evaluate(() => document.querySelector('[data-tool-plugin="hivemind/issues"]')?.textContent || "");
   expect(txt).toContain("Issues"); // header renders (fixture has no .hivemind → shows empty/no-workspace body)
 });
 
@@ -212,7 +216,7 @@ test("switching diff modes survives comments arriving after the first render", a
     // Clicked in-page: the tile can sit outside the canvas viewport, and this
     // test is about what re-rendering does, not about hit-testing.
     const hit = await page.evaluate((label) => {
-      const node = document.querySelector(".react-flow__node-diff");
+      const node = document.querySelector(".react-flow__node-workbench");
       const b = [...(node?.querySelectorAll("button") ?? [])].find((x) => x.textContent?.trim() === label);
       b?.click();
       return !!b;

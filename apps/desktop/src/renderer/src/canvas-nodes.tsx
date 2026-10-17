@@ -17,16 +17,18 @@
  * reparent limit). See TileShell + FloatingPinnedPanel below.
  */
 import {
-  memo, useCallback, useContext, useEffect, useRef, useState,
+  memo, useCallback, useContext, useEffect, useMemo, useRef, useState,
   createContext, type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { NodeResizer, useReactFlow, type NodeTypes } from "@xyflow/react";
-import { Pin, X } from "lucide-react";
+import { Handle, NodeResizer, Position, useReactFlow, type NodeTypes } from "@xyflow/react";
+import { Pin, X } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { clampAnchor } from "./pin-anchor";
 import { FrameNode, type FrameNodeData } from "./FrameNode";
 import { TileSlot } from "./workspace/tile-host";
+import { tilePlugin, tileSurfaces, useTilesVersion } from "./tiles";
+import { boardNodeTypes } from "./board-objects/BoardNodes";
 import type { PinRect } from "./workspace/tile-surfaces";
 
 export type { PinRect };
@@ -62,7 +64,7 @@ const RESIZER_PROPS = {
   handleStyle: {
     width: 12,
     height: 12,
-    borderRadius: 3,
+    borderRadius: 4,
     zIndex: 20,
     pointerEvents: "all" as const,
     border: "2px solid var(--color-bg)",
@@ -349,6 +351,11 @@ function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, hea
   );
 }
 
+// Agent pipes and spawn wires (canvas-pipe-edge.tsx) are react-flow edges, and react-flow draws
+// an edge only between nodes with a handle of each kind, whatever the edge does with it. These
+// are a tile's: hidden and inert, as the edges find their own ends on the tiles' borders.
+const LINK_ANCHOR = { visibility: "hidden" } as const;
+
 /** Shared shell for every tile node. Unpinned: renders the tile inline with the
  *  pin badge + NodeResizer. Pinned: portals the SAME content into the fixed
  *  pinned layer as a screen-fixed floating panel, and renders nothing in-canvas
@@ -398,6 +405,8 @@ function TileShell({
         minHeight={minHeight ?? RESIZER_PROPS.minHeight}
         onResizeEnd={(_e, p) => onResize(id, p.width, p.height, p.x, p.y)}
       />
+      <Handle type="source" position={Position.Right} isConnectable={false} style={LINK_ANCHOR} />
+      <Handle type="target" position={Position.Left} isConnectable={false} style={LINK_ANCHOR} />
       {children}
     </div>
   );
@@ -531,103 +540,23 @@ function useTileWheelZoom(selected: boolean): React.RefObject<HTMLDivElement | n
   return ref;
 }
 
-const TerminalNode = memo(function TerminalNode({
+/** Every tile's node: its shell and the slot its body is adopted into. The
+ *  smallest size it resizes to is its plugin's. */
+const TileNode = memo(function TileNode({
   id,
+  type,
   data,
   selected,
 }: {
   id: string;
+  type: string;
   data: CanvasTileNodeData;
   selected: boolean;
 }) {
   const wheelRef = useTileWheelZoom(selected);
+  const min = tilePlugin(type)?.minSize;
   return (
-    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} wheelRef={wheelRef}>
-      <TileSlot tileId={id} />
-    </TileShell>
-  );
-});
-
-const DiffNode = memo(function DiffNode({
-  id,
-  data,
-  selected,
-}: {
-  id: string;
-  data: CanvasTileNodeData;
-  selected: boolean;
-}) {
-  const wheelRef = useTileWheelZoom(selected);
-  return (
-    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={400} minHeight={240} wheelRef={wheelRef}>
-      <TileSlot tileId={id} />
-    </TileShell>
-  );
-});
-
-const WorkbenchNode = memo(function WorkbenchNode({
-  id,
-  data,
-  selected,
-}: {
-  id: string;
-  data: CanvasTileNodeData;
-  selected: boolean;
-}) {
-  const wheelRef = useTileWheelZoom(selected);
-  return (
-    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={520} minHeight={360} wheelRef={wheelRef}>
-      <TileSlot tileId={id} />
-    </TileShell>
-  );
-});
-
-const BrowserNode = memo(function BrowserNode({
-  id,
-  data,
-  selected,
-}: {
-  id: string;
-  data: CanvasTileNodeData;
-  selected: boolean;
-}) {
-  const wheelRef = useTileWheelZoom(selected);
-  return (
-    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={420} minHeight={280} wheelRef={wheelRef}>
-      <TileSlot tileId={id} />
-    </TileShell>
-  );
-});
-
-const IssuesNode = memo(function IssuesNode({
-  id,
-  data,
-  selected,
-}: {
-  id: string;
-  data: CanvasTileNodeData;
-  selected: boolean;
-}) {
-  const wheelRef = useTileWheelZoom(selected);
-  return (
-    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={280} wheelRef={wheelRef}>
-      <TileSlot tileId={id} />
-    </TileShell>
-  );
-});
-
-const PlanReviewNode = memo(function PlanReviewNode({
-  id,
-  data,
-  selected,
-}: {
-  id: string;
-  data: CanvasTileNodeData;
-  selected: boolean;
-}) {
-  const wheelRef = useTileWheelZoom(selected);
-  return (
-    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={420} minHeight={300} wheelRef={wheelRef}>
+    <TileShell id={id} selected={selected} pin={data} onClose={data.onClose} onResize={data.onResize} minWidth={min?.width} minHeight={min?.height} wheelRef={wheelRef}>
       <TileSlot tileId={id} />
     </TileShell>
   );
@@ -645,12 +574,18 @@ const FrameNodeWrapper = memo(function FrameNodeWrapper({
   return <FrameNode id={id} data={data} selected={!!selected} />;
 });
 
-export const nodeTypes: NodeTypes = {
-  terminal: TerminalNode as unknown as NodeTypes[string],
-  diff: DiffNode as unknown as NodeTypes[string],
-  workbench: WorkbenchNode as unknown as NodeTypes[string],
-  issues: IssuesNode as unknown as NodeTypes[string],
-  browser: BrowserNode as unknown as NodeTypes[string],
-  planReview: PlanReviewNode as unknown as NodeTypes[string],
+const staticNodeTypes: NodeTypes = {
   frame: FrameNodeWrapper as unknown as NodeTypes[string],
+  ...boardNodeTypes,
 };
+
+/** The node types for every installed tile plugin's surface, plus frames and board objects.
+ *  A new object only when a plugin registers, as react-flow requires. */
+export function useNodeTypes(): NodeTypes {
+  const version = useTilesVersion();
+  return useMemo(() => {
+    const out: NodeTypes = { ...staticNodeTypes };
+    for (const surface of tileSurfaces()) out[surface] = TileNode as unknown as NodeTypes[string];
+    return out;
+  }, [version]);
+}

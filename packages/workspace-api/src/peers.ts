@@ -1,0 +1,406 @@
+/**
+ * The workspace API between devices (M1; spec/workspace-api.md, "Peers"): over a channel of text
+ * frames (a `hive/ws/1` connection's `api` stream), a call is `{id, method, params}`, its answer
+ * `{id, result}` or `{id, error}`, a notice has no `id`, and events are `{event, params}`. The
+ * events of one moment go as one frame, a list of them: ten terminals' output is one frame, not
+ * ten; and while events stream, a peer is sent a frame at most every 25 ms (M2's load gate), the
+ * first after a quiet spell at once, so a keystroke's echo is not held. An answer goes after the
+ * events before it.
+ *
+ * `servePeer` is the host's side: each call is checked against the peer's role (`roles.ts`) before
+ * the host answers it, the workspace named by its id is read as its repo here, a tile outside the
+ * workspace is refused, and the peer is sent only the events about the workspace's tiles.
+ * `peerTransport` is the other side, a `ClientTransport` over the channel.
+ */
+import type { Actor } from "@hivemind/workspace-host/intents";
+import { parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
+import { realpath } from "node:fs/promises";
+import path from "node:path";
+import type { ClientTransport } from "./client.js";
+import { mayCall } from "./roles.js";
+import type { Answer, EventMessage } from "./protocol.js";
+import type { Links } from "./agents.js";
+import type { Connection, WorkspaceServer } from "./server.js";
+
+/** Text frames, both ways, until it closes. */
+export interface TextChannel {
+  send(text: string): void;
+  on(listener: (text: string) => void): () => void;
+  readonly closed: Promise<unknown>;
+}
+
+/** How a workspace is named to peers: by its id, never by where it is on the host. */
+export const workspaceUrl = (workspaceId: string): string => `hive://${workspaceId}`;
+
+export interface PeerOf {
+  actor: Extract<Actor, { kind: "peer" }>;
+  /** The workspace's id, and its repo here. */
+  workspace: string;
+  repo: string;
+  /** How the peer names the workspace: by its id (`hive://<id>`) unless given. A program on this
+   *  machine names it by its folder, and is told the host's paths as they are. */
+  url?: string;
+  /** Whether a tile is in the workspace. */
+  holds(tile: string): boolean;
+  /** The folders of the workspace besides its repo: its frames' worktrees, wherever git put them.
+   *  None: the repo alone. */
+  places?(): string[];
+  /** What this peer may ask at all, whatever its role: a phone watches and types into the
+   *  workspace's terminals and answers and messages its agents, and does nothing else there (M5).
+   *  None: what its role allows. */
+  allows?(method: string, params: unknown[]): boolean;
+  /** Which events it is sent (none: every one): a guest's window hears its terminals' alone, and
+   *  the guest's app the rest, once for all its windows. */
+  hears?(event: string): boolean;
+}
+
+const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
+
+/** Methods and notices whose first param names a tile. */
+const BY_TILE = /^(terminal\.(saved|write|show|resize|flow|ack|fit|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation|tool|rename|keys|read|output)|link\.(connect|disconnect)|tile\.focus)$/;
+/** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
+const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since|sessions)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start|places|folders|sleep|wake)|tool\.open)$/;
+/** Methods that act on a whole workspace: a folder in it, which may be another workspace, is not it. */
+const WHOLE_WORKSPACE = /^agent\.(sleep|wake)$/;
+/** Methods whose second param names the workspace, after what they open there (a view, P8). */
+const BY_WORKSPACE_SECOND = /^view\.open$/;
+/** The workspace a call names, if it names one. A desktop's view listing and files name it
+ *  optionally (first and third), so repo-shipped views are found. */
+function placeOf(method: string, params: unknown[]): unknown {
+  if (BY_WORKSPACE.test(method)) return params[0];
+  if (BY_WORKSPACE_SECOND.test(method)) return params[1];
+  if (method === "view.list") return params[0] ?? null;
+  if (method === "view.file") return params[2] ?? null;
+  return null;
+}
+
+/** Whether `place`, as the host reads a param, is the workspace's repo `repo` or inside it: a
+ *  peer names the workspace by its id, and nothing else on the host, no other folder and no other
+ *  workspace or machine (`..` included). */
+function inWorkspace(repo: string, place: string): boolean {
+  if (place === repo) return true;
+  if (place.split(/[\\/]/).includes("..")) return false;
+  const sep = repo.endsWith("/") || repo.endsWith("\\") ? "" : "/";
+  return place.startsWith(`${repo}${sep}`) || (sep !== "" && place.startsWith(`${repo}\\`));
+}
+
+/** A remote cwd may be checked here only by its URI: the filesystem belongs to that machine. */
+function remoteCwdIn(repo: string, cwd: string): boolean {
+  const folder = (value: string): boolean =>
+    value.startsWith("/") && !value.includes("\\") && !value.split("/").includes("..") && path.posix.normalize(value) === value;
+  let rootPath: string;
+  let cwdPath: string;
+  if (repo.startsWith("machine://") && cwd.startsWith("machine://")) {
+    const root = parseMachineUri(repo);
+    const at = parseMachineUri(cwd);
+    if (!root || !at || root.machineId !== at.machineId) return false;
+    rootPath = root.path;
+    cwdPath = at.path;
+  } else if (repo.startsWith("ssh://") && cwd.startsWith("ssh://")) {
+    try {
+      const root = parseRemote(repo);
+      const at = parseRemote(cwd);
+      if (root.hostId !== at.hostId) return false;
+      rootPath = root.path;
+      cwdPath = at.path;
+    } catch {
+      return false;
+    }
+  } else return false;
+  if (!folder(rootPath) || !folder(cwdPath)) return false;
+  const relative = path.posix.relative(rootPath, cwdPath);
+  return relative === "" || (relative !== ".." && !relative.startsWith("../") && !path.posix.isAbsolute(relative));
+}
+
+/** The tiles an event concerns: it goes to a peer only when each is in its workspace. */
+function tilesOf(event: EventMessage): string[] | null {
+  const [p] = event.params as [Record<string, unknown> | string | undefined];
+  switch (event.event) {
+    case "terminal.data":
+    case "agent.said":
+    case "terminal.exit":
+    case "terminal.keyboard":
+    case "terminal.keyboard.asked":
+    case "terminal.size":
+    case "terminal.typing":
+      return [String(p)];
+    case "status.changed":
+      return [String((p as Record<string, unknown>)?.tileId)];
+    // A removal names only one side (dst or parent null): it is judged by that side.
+    case "link.pipe":
+      return [String((p as Record<string, unknown>)?.src), ...[(p as Record<string, unknown>)?.dst].filter((t) => t !== null).map(String)];
+    case "link.spawn":
+      return [String((p as Record<string, unknown>)?.child), ...[(p as Record<string, unknown>)?.parent].filter((t) => t !== null).map(String)];
+    case "tile.opened":
+      return [String((p as Record<string, unknown>)?.tileId)];
+    default:
+      return null;
+  }
+}
+
+/** While events stream to a peer, a frame at most this often. */
+export const PEER_FRAME_MS = 25;
+/** A frame of events to a peer holds at most this many bytes; an event larger goes alone. */
+export const PEER_FRAME_BYTES = 256 * 1024;
+
+/** The peers with a frame waiting for the next tick of the one clock they all keep: a moment's
+ *  frames to every peer go out together, in one write to the network daemon. */
+const waiting = new Set<() => void>();
+let ticking: ReturnType<typeof setTimeout> | null = null;
+function atNextTick(flush: () => void): void {
+  waiting.add(flush);
+  ticking ??= setTimeout(() => {
+    ticking = null;
+    const due = [...waiting];
+    waiting.clear();
+    for (const f of due) f();
+  }, PEER_FRAME_MS - (Date.now() % PEER_FRAME_MS));
+}
+
+/** Each event as JSON, once for however many peers it goes to. */
+const encoded = new WeakMap<EventMessage, string>();
+function json(event: EventMessage): string {
+  let text = encoded.get(event);
+  if (text === undefined) encoded.set(event, (text = JSON.stringify(event)));
+  return text;
+}
+
+/** Serve the workspace API to a peer over `channel`, from `server`. */
+export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "notice">, channel: TextChannel, peer: PeerOf): void {
+  const url = peer.url ?? workspaceUrl(peer.workspace);
+  const inbound = (v: unknown): unknown => {
+    if (v === url) return peer.repo;
+    if (typeof v === "string" && v.startsWith(`${url}/`)) return peer.repo + v.slice(url.length);
+    if (v && typeof v === "object" && !Array.isArray(v) && typeof (v as { cwd?: unknown }).cwd === "string") {
+      return { ...(v as object), cwd: inbound((v as { cwd: string }).cwd) };
+    }
+    return v;
+  };
+  // What leaves for a peer names the workspace by its id: the host's folder never reaches it, in
+  // an answer, an error or an event; what a terminal prints is shared as printed.
+  const hostPath = new RegExp(`${peer.repo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[\\/'"\\s:])`, "g");
+  // The person's own devices are the owner, and keep the host's paths; so does a program here.
+  const egress = (v: unknown): unknown => {
+    if (peer.actor.access === "owner" || url === peer.repo) return v;
+    if (typeof v === "string") return v.includes(peer.repo) ? v.replace(hostPath, url) : v;
+    if (Array.isArray(v)) return v.map(egress);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, egress(x)]));
+    return v;
+  };
+  const outbound = (event: EventMessage): EventMessage | null => {
+    const out = routed(event);
+    return out && out.event !== "terminal.data" && out.event !== "agent.said" ? { event: out.event, params: egress(out.params) as unknown[] } : out;
+  };
+  const routed = (event: EventMessage): EventMessage | null => {
+    if (event.event === "store.changed") return null; // the document reaches peers by its own sync
+    if (event.event === "file.changed" || event.event === "widget.runner" || event.event === "widget.pressed" || event.event === "presence.changed" || event.event === "widget.drawn" || event.event === "agent.changed" || event.event === "agent.event" || event.event === "people.asked" || event.event === "people.answered") {
+      return event.params[0] === peer.repo ? { event: event.event, params: [url, ...event.params.slice(1)] } : null;
+    }
+    // A peer knows the workspace by its id, not the host's folder.
+    if (event.event === "tile.opened") {
+      const opened = event.params[0] as { repo?: unknown } | undefined;
+      return opened?.repo === peer.repo && tilesOf(event)!.every((t) => peer.holds(t)) ? { event: event.event, params: [{ ...opened, repo: url }] } : null;
+    }
+    if (event.event === "terminal.activity") {
+      const levels = Object.fromEntries(Object.entries((event.params[0] ?? {}) as Record<string, unknown>).filter(([tile]) => peer.holds(tile)));
+      return { event: event.event, params: [levels] };
+    }
+    const tiles = tilesOf(event);
+    if (tiles && !tiles.every((t) => peer.holds(t))) return null;
+    return event;
+  };
+  const gone = new AbortController();
+  let queued: EventMessage[] = [];
+  let sentAt = -Infinity;
+  let due = false;
+  const flush = (): void => {
+    due = false;
+    if (queued.length === 0) return;
+    sentAt = Date.now();
+    const events = queued.map(json);
+    queued = [];
+    let frame: string[] = [];
+    let bytes = 0;
+    const send = (): void => {
+      channel.send(frame.length === 1 ? frame[0]! : `[${frame.join(",")}]`);
+      [frame, bytes] = [[], 0];
+    };
+    for (const event of events) {
+      if (frame.length > 0 && bytes + event.length > PEER_FRAME_BYTES) send();
+      frame.push(event);
+      bytes += event.length + 1;
+    }
+    send();
+  };
+  const connection: Connection = {
+    actor: peer.actor,
+    // What a view it opens may do is what the peer may (P8): its role, and what its device asks.
+    may: (method) => (!peer.allows || peer.allows(method, [])) && mayCall(peer.actor, method),
+    send: (event) => {
+      if (peer.hears && !peer.hears(event.event)) return;
+      const out = outbound(event);
+      if (!out) return;
+      queued.push(out);
+      if (due) return;
+      due = true;
+      // With whatever else this moment brings: at once after a quiet spell, else at the next tick.
+      if (Date.now() - sentAt >= PEER_FRAME_MS) queueMicrotask(flush);
+      else atNextTick(flush);
+    },
+    closed: gone.signal,
+  };
+  server.connect(connection);
+  void channel.closed.then(() => gone.abort());
+
+  /** The folders this workspace is: its repo, then its worktrees. */
+  const roots = (): string[] => [peer.repo, ...(peer.places?.() ?? [])];
+  const check = (method: unknown, params: unknown[]): string | null => {
+    // Showing a terminal that is running already is watching it; starting one is not.
+    const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
+    if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
+    if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return "that tile is not of this workspace";
+    if (typeof method !== "string" || !(attaching || mayCall(peer.actor, method))) return `${String(method)} is not open to your role on this workspace`;
+    if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;
+    // A guest names this workspace, by its id, and nothing else on the host. The person's own
+    // devices are the owner, there as here.
+    const place = placeOf(method, params);
+    if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && roots().some((r) => inWorkspace(r, place)))) {
+      return "name this workspace by its id: nothing else of the host's is open to you";
+    }
+    if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return "name this workspace by its id: nothing else of the host's is open to you";
+    if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return "a tile there is not of this workspace";
+    if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return `${String(params[1])} is not a tile of this workspace`;
+    return null;
+  };
+
+  /** Check a local path against the workspace on disk (its repo or one of its worktrees),
+   *  including symlinked ancestors. A missing path may still be named by a read, so check its
+   *  nearest existing ancestor in that case. */
+  const realPlace = async (place: string, mayBeMissing: boolean): Promise<boolean> => {
+    try {
+      let root: string;
+      try {
+        root = await realpath(peer.repo);
+      } catch (e) {
+        // A missing workspace has no files to expose; the handler keeps its existing result.
+        return mayBeMissing && (e as NodeJS.ErrnoException).code === "ENOENT";
+      }
+      const others = (await Promise.all((peer.places?.() ?? []).map((p) => realpath(p).catch(() => null)))).filter((p): p is string => p !== null);
+      let at = place;
+      let target: string;
+      for (;;) {
+        try {
+          target = await realpath(at);
+          break;
+        } catch (e) {
+          if (!mayBeMissing || (e as NodeJS.ErrnoException).code !== "ENOENT") return false;
+          const parent = path.dirname(at);
+          if (parent === at) return false;
+          at = parent;
+        }
+      }
+      return [root, ...others].some((r) => {
+        const relative = path.relative(r, target);
+        return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+      });
+    } catch {
+      return false;
+    }
+  };
+
+  /** What the host answers of every agent it runs, narrowed to those of this workspace: a peer
+   *  learns nothing of another workspace's agents, their statuses, titles or links. */
+  const scoped = (method: unknown, answer: Answer): Answer => {
+    if ("error" in answer) return { error: { ...answer.error, message: egress(answer.error.message) as string } };
+    if ("result" in answer) answer = { result: egress(answer.result) };
+    if (method === "status.all") return { result: (answer.result as Array<{ tileId: string }>).filter((s) => peer.holds(s.tileId)) };
+    if (method !== "link.list") return answer;
+    const { pipes, spawns } = answer.result as Links;
+    return { result: { pipes: pipes.filter((p) => peer.holds(p.src) && peer.holds(p.dst)), spawns: spawns.filter((s) => peer.holds(s.parent) && peer.holds(s.child)) } };
+  };
+
+  // The peer's calls and notices are taken in the order it sent them, though checking one may
+  // read the disk; a call's answer may still come after a later one's.
+  let taken: Promise<unknown> = Promise.resolve();
+  channel.on((text) => {
+    let m: { id?: unknown; method?: unknown; params?: unknown };
+    try {
+      m = JSON.parse(text) as typeof m;
+    } catch {
+      return;
+    }
+    const params = Array.isArray(m.params) ? m.params.map(inbound) : [];
+    const why = check(m.method, params);
+    const cwd = (params[0] as { cwd?: unknown; attachOnly?: unknown } | null)?.cwd;
+    const place = placeOf(String(m.method), params);
+    const checked = async (): Promise<string | null> => {
+      if (why) return why;
+      if (m.method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly !== true) {
+        return typeof cwd === "string" && (path.isAbsolute(peer.repo)
+          ? path.isAbsolute(cwd) && await realPlace(cwd, false)
+          : remoteCwdIn(peer.repo, cwd))
+          ? null : "that working directory is not of this workspace";
+      }
+      if (peer.actor.access !== "owner" && typeof place === "string" && path.isAbsolute(peer.repo)) {
+        return await realPlace(place, true) ? null : "name this workspace by its id: nothing else of the host's is open to you";
+      }
+      return null;
+    };
+    const inTurn = taken.then(checked);
+    taken = inTurn.catch(() => {});
+    if (typeof m.id !== "number") {
+      void inTurn.then((denied) => { if (!denied && !connection.closed.aborted) server.notice(m.method, params, connection); });
+      return;
+    }
+    const id = m.id;
+    void inTurn.then((cwdWhy) => cwdWhy || connection.closed.aborted
+      ? refused(cwdWhy ?? "connection closed") : server.answer(m.method, params, connection)).then((answer) => {
+      flush();
+      channel.send(JSON.stringify({ id, ...scoped(m.method, answer) }));
+    });
+  });
+}
+
+/** The workspace API of the host at the other end of `channel`. A call still waiting when the
+ *  channel closes fails. */
+export function peerTransport(channel: TextChannel): ClientTransport {
+  let next = 1;
+  const waiting = new Map<number, (answer: Answer) => void>();
+  const listeners = new Set<(message: EventMessage) => void>();
+  const take = (m: Record<string, unknown>): void => {
+    if (typeof m.id === "number") {
+      const done = waiting.get(m.id);
+      waiting.delete(m.id);
+      done?.("error" in m ? { error: m.error as { code: "FAILED"; message: string } } : { result: m.result });
+    } else if (typeof m.event === "string" && Array.isArray(m.params)) {
+      for (const l of listeners) l({ event: m.event, params: m.params });
+    }
+  };
+  channel.on((text) => {
+    let m: unknown;
+    try {
+      m = JSON.parse(text);
+    } catch {
+      return;
+    }
+    // One moment's events come as a list.
+    for (const one of Array.isArray(m) ? m : [m]) if (one && typeof one === "object") take(one as Record<string, unknown>);
+  });
+  let gone: string | null = null;
+  const goneAnswer = (): Answer => ({ error: { code: "FAILED", message: `the host is gone (${gone})` } });
+  void channel.closed.then((why) => {
+    gone = String(why);
+    for (const done of waiting.values()) done(goneAnswer());
+    waiting.clear();
+  });
+  return {
+    call: (method, params) => new Promise((resolve) => {
+      if (gone !== null) return resolve(goneAnswer());
+      const id = next++;
+      waiting.set(id, resolve);
+      channel.send(JSON.stringify({ id, method, params }));
+    }),
+    notice: (method, params) => channel.send(JSON.stringify({ method, params })),
+    events: (listener) => { listeners.add(listener); },
+  };
+}

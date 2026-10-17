@@ -4,6 +4,9 @@
  * module) by plugin authors' own builds. Pure: no filesystem here.
  */
 import { PROTOCOL_VERSION, VIEW_PERMISSIONS, type ViewPermission } from "./protocol.js";
+import { checkSettingFields, type SettingField } from "./settings.js";
+import { parseCategory, type PluginCategory } from "./category.js";
+import { parsePluginCommands, type PluginCommand } from "./commands.js";
 
 export const MANIFEST_FILE = "hivemind-view.json";
 
@@ -23,6 +26,10 @@ export interface ViewManifest {
   /** What the plugin may ask for beyond the base (projection, status, selection,
    *  reveal, surfaces). Unknown names are refused at install AND at load. */
   permissions: ViewPermission[];
+  /** What it is for (`other` when the manifest says nothing). */
+  category: PluginCategory;
+  /** What an agent may ask it to do while it runs (`hm.onCommand`); none when it declares none. */
+  commands: PluginCommand[];
   /** Optional relative dir served alongside the entry (default: the whole package dir). */
   assets?: string;
   /** Who wrote it, where it came from, and under what terms — shown wherever the user is
@@ -35,7 +42,25 @@ export interface ViewManifest {
    *  paints an opaque scene of its own sets it to false: nothing would show through, and the
    *  wallpaper's animation and blur would still cost every frame. */
   wallpaper?: boolean;
+  /** Where the app's toolbar sits over the view: "top", "bottom" (the default), "hidden" behind a
+   *  handle, or "off" for a view that offers what the toolbar does itself or not at all. */
+  toolbar?: ViewToolbar;
+  /** It lays itself out for a phone (`hello.device.compact`, protocol 1.5): only a view that says
+   *  so is offered on the person's phone. */
+  phone?: boolean;
+  /** The app draws its Layers rail (frames, their tiles and every frame action) beside the view,
+   *  so a view that arranges tiles need not draw one of its own. */
+  layers?: boolean;
+  /** Where what it saves (`setLayout`) is kept: "shared", the default, in the workspace, the same
+   *  for everyone in it; "personal", on this device, each person's own. */
+  layout?: "shared" | "personal";
+  /** What the person can set it to, drawn by the app in its Settings; the view reads the values
+   *  as `hm.settings` and hears each change (protocol 1.7). */
+  settings?: SettingField[];
 }
+
+export type ViewToolbar = "top" | "bottom" | "hidden" | "off";
+const TOOLBARS: readonly ViewToolbar[] = ["top", "bottom", "hidden", "off"];
 
 // A bare name is built in or installed from a folder; `@owner/name` came from HiveHub. `--` is
 // refused because the scoped form becomes a hostname by turning `@owner/name` into `owner--name`,
@@ -94,6 +119,10 @@ export function validateViewManifest(raw: unknown): ManifestResult {
       else if (!permissions.includes(p as ViewPermission)) permissions.push(p as ViewPermission);
     }
   }
+  const cat = parseCategory(m.category);
+  if ("error" in cat) errors.push(cat.error);
+  const cmds = parsePluginCommands(m.commands);
+  if ("error" in cmds) errors.push(cmds.error);
   let author: string | undefined;
   if (m.author !== undefined) {
     if (typeof m.author !== "string" || m.author.trim().length === 0 || m.author.length > 80) errors.push(`"author" must be a non-empty string of at most 80 characters`);
@@ -115,13 +144,43 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.wallpaper !== "boolean") errors.push(`"wallpaper" must be true or false`);
     else wallpaper = m.wallpaper;
   }
+  let toolbar: ViewToolbar | undefined;
+  if (m.toolbar !== undefined) {
+    if (!TOOLBARS.includes(m.toolbar as ViewToolbar)) errors.push(`"toolbar" must be "top", "bottom", "hidden" or "off"`);
+    else toolbar = m.toolbar as ViewToolbar;
+  }
+  let phone: boolean | undefined;
+  if (m.phone !== undefined) {
+    if (typeof m.phone !== "boolean") errors.push(`"phone" must be true or false`);
+    else phone = m.phone;
+  }
+  let layers: boolean | undefined;
+  if (m.layers !== undefined) {
+    if (typeof m.layers !== "boolean") errors.push(`"layers" must be true or false`);
+    else layers = m.layers;
+  }
+  let layout: "shared" | "personal" | undefined;
+  if (m.layout !== undefined) {
+    if (m.layout !== "shared" && m.layout !== "personal") errors.push(`"layout" must be "shared" or "personal"`);
+    else layout = m.layout;
+  }
+  let settings: SettingField[] | undefined;
+  if (m.settings !== undefined) {
+    if (!Array.isArray(m.settings)) errors.push(`"settings" must be an array`);
+    else {
+      // A field the app cannot draw is the author's mistake: say which, rather than drop it.
+      const checked = checkSettingFields(m.settings);
+      settings = checked.fields;
+      for (const i of checked.refused) errors.push(`settings[${i}] is not a field: an id, a type of boolean, number, text or choice, and a default that fits it`);
+    }
+  }
   let assets: string | undefined;
   if (m.assets !== undefined) {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "author", "homepage", "license"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }),
-    ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}) } };
+  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}),
+    ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
 }

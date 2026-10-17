@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The mark in one colour for the status bar, which tints it: ic_launcher_monochrome's, cropped. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="44"
+    android:viewportHeight="44">
+    <group
+        android:translateX="-32"
+        android:translateY="-32">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M54,33.1 L63.96,38.85 L63.96,50.35 L54,56.1 L44.04,50.35 L44.04,38.85 Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.6"
+            android:pathData="M43.18,51.85 L53.14,57.6 L53.14,69.1 L43.18,74.85 L33.22,69.1 L33.22,57.6 Z M64.82,51.85 L74.78,57.6 L74.78,69.1 L64.82,74.85 L54.86,69.1 L54.86,57.6 Z" />
+    </group>
+</vector>

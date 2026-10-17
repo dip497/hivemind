@@ -39,6 +39,41 @@ spawn:
   label: 'claude #{n}'
   titles:
   - Claude Code
+# Answering its permission prompt from another of your devices (a phone's Allow / Deny), read
+# from claude 2.1.287: its chooser takes a digit as that option, and the first is always "Yes";
+# Esc is "No, and tell Claude what to do differently".
+answer:
+  permission:
+    allow:
+    - '1'
+    deny:
+    - escape
+  # Its trust prompt, read from claude 2.1.296: "No, exit" is selected first and digits do
+  # nothing, so Down then Enter trusts the folder; Esc exits.
+  trust:
+    allow:
+    - down
+    - enter
+    deny:
+    - escape
+  # A settings file it cannot read, from claude 2.1.296: "3. Continue without these settings";
+  # Esc exits.
+  settings:
+    allow:
+    - '3'
+    deny:
+    - escape
+# An option of its AskUserQuestion chooser, read from claude 2.1.296: a digit chooses that option
+# and sends it, for one question with one choice.
+choose:
+- '{n}'
+# The key that interrupts its turn, typed from your phone's Stop: claude 2.1.287 says "esc to
+# interrupt" while it works.
+interrupt:
+- escape
+# A message typed while it works is queued and read at its next step: claude 2.1.289 shows
+# "Press up to edit queued messages".
+steer: true
 options:
 - id: mode
   label: Permission mode
@@ -61,6 +96,18 @@ detect:
     kind: tail
     n: 20
   rules:
+  - when:
+      all:
+      - contains: Yes, I trust this folder
+      - contains: Enter to confirm
+    then: permission
+    says: trust
+  - when:
+      all:
+      - containsCS: Settings Error
+      - contains: Continue without these settings
+    then: permission
+    says: settings
   - when:
       seq:
       - run: space
@@ -85,6 +132,19 @@ detect:
       - containsCS: "\u2191/\u2193 to navigate"
       - contains: Esc to cancel
       - contains: "[use arrows"
+      # Its chooser's selected option, its footer cut (a viewer's repaint shrinks the screen a
+      # row): above it, the person's last message starts with the prompt's mark too.
+      - seq:
+        - run: "❯"
+          min: 1
+          max: 1
+        - run: space
+          min: 1
+          max: 1
+        - run: digit
+          min: 1
+        - lit: "."
+        at: start
     then: question
   - when:
       contains: esc to interrupt
@@ -226,6 +286,41 @@ session:
     fallback:
     - --continue
     exists: '{home}/.claude/projects/*/{id}.jsonl'
+  # The session file, read as the conversation your phone shows: one record a line; the person's
+  # prompts, what Claude says, the tools it uses and what they gave back. Its side threads
+  # (sidechains) and the meta records it writes for itself say nothing.
+  transcript:
+    id: uuid
+    at: timestamp
+    skipWhen: { isSidechain: true, isMeta: true }
+    said:
+    - require: { type: user }
+      text: message.content
+      who: person
+    - require: { type: user }
+      each: message.content
+      item: { type: text }
+      text: text
+      who: person
+    - require: { type: user }
+      each: message.content
+      item: { type: tool_result }
+      result: { of: tool_use_id, text: content, error: is_error }
+    - require: { type: assistant }
+      each: message.content
+      item: { type: text }
+      text: text
+      who: agent
+    - require: { type: assistant }
+      each: message.content
+      item: { type: tool_use }
+      tool:
+        id: id
+        name: name
+        about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
+        input: input
+        # AskUserQuestion's: its questions, each with the options to choose from.
+        asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
 hooks:
   arg: --settings
   template: '{"hooks":{events}}'
@@ -252,10 +347,21 @@ hooks:
       outcome: failed
       matcher: overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown
       timeout: 10
+    # Its hook carries the answer from your other devices, read from claude 2.1.296: it races the
+    # chooser, which is drawn 0.2 s after the hook starts; the first to answer wins. Held up to an hour.
     PermissionRequest:
       emit: input.requested
       kind: permission
-      timeout: 10
+      timeout: 3600
+      answer:
+        allow: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow}}}
+        deny: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: deny, message: '{message}'}}}
+        # AskUserQuestion's chooser fires it too: the answers go in its input, by question text.
+        choose: {hookSpecificOutput: {hookEventName: PermissionRequest, decision: {behavior: allow, updatedInput: '{input}'}}}
+        asks: {list: questions, question: question, options: options, label: label, description: description, many: multiSelect}
+        chosen: answers
+        # A plan is reviewed by its own hook.
+        leave: [ExitPlanMode]
     Elicitation:
       emit: input.requested
       kind: question

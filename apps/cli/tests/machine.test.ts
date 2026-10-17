@@ -24,7 +24,7 @@ beforeAll(() => {
 for a; do target_prev="$last"; last="$a"; done
 case "$target_prev" in
   down) echo "ssh: connect to host down port 22: Connection refused" >&2; exit 255 ;;
-  good) printf 'motd noise\\nHIVEPROBE-UNAME Linux aarch64\\nHIVEPROBE-PATH /home/u/.local/bin/hive\\nHIVEPROBE-VERSION 1.17.0\\nHIVEPROBE-DAEMON yes\\n' ;;
+  good) printf 'motd noise\\nHIVEPROBE-UNAME Linux aarch64\\nHIVEPROBE-KIND virtual-machine\\nHIVEPROBE-PATH /home/u/.local/bin/hive\\nHIVEPROBE-VERSION 1.17.0\\nHIVEPROBE-DAEMON yes\\n' ;;
   arm) case "$last" in
     *releases/download*) printf '%s' "$last" > "${path.join(tmp, "installed")}"; echo /home/u/.local/bin/hive ;;
     *) printf 'HIVEPROBE-UNAME Linux aarch64\\n'; if [ -f "${path.join(tmp, "installed")}" ]; then printf 'HIVEPROBE-PATH /home/u/.local/bin/hive\\nHIVEPROBE-DAEMON yes\\n'; fi ;;
@@ -40,12 +40,13 @@ esac
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 describe("hive machine", () => {
-  test("add probes, records the absolute hive path and platform", () => {
+  test("add probes, records the absolute hive path, platform and kind of computer", () => {
     const r = run("machine", "add", "good", "--label", "gpu", "--json");
     expect(r.code).toBe(0);
-    expect(data(r)).toMatchObject({ label: "gpu", target: "good", enabled: true, hivePath: "/home/u/.local/bin/hive", platform: "linux-arm64", hiveVersion: "1.17.0", installed: false });
+    expect(data(r)).toMatchObject({ label: "gpu", target: "good", enabled: true, hivePath: "/home/u/.local/bin/hive", platform: "linux-arm64", kind: "virtual-machine", hiveVersion: "1.17.0", installed: false });
     const saved = JSON.parse(fs.readFileSync(path.join(tmp, "xdg", "hivemind", "machines.json"), "utf8"));
     expect(saved.machines).toHaveLength(1);
+    expect(saved.machines[0].kind).toBe("virtual-machine");
     expect(fs.statSync(path.join(tmp, "xdg", "hivemind", "machines.json")).mode & 0o777).toBe(0o600);
   });
 
@@ -111,6 +112,10 @@ describe("hive machine", () => {
 describe("remote helpers", () => {
   test("parseProbe ignores noise and rejects unsupported platforms", () => {
     expect(parseProbe("hi\nHIVEPROBE-UNAME Darwin arm64\n")).toEqual({ platform: "darwin-arm64" });
+    expect(parseProbe("HIVEPROBE-UNAME Darwin arm64\nHIVEPROBE-KIND laptop\n")).toEqual({ platform: "darwin-arm64", kind: "laptop" });
+    // A machine that does not say, or says something else, has no kind.
+    expect(parseProbe("HIVEPROBE-UNAME Linux x86_64\nHIVEPROBE-KIND \n")).toEqual({ platform: "linux-x86_64" });
+    expect(parseProbe("HIVEPROBE-UNAME Linux x86_64\nHIVEPROBE-KIND toaster\n")).toEqual({ platform: "linux-x86_64" });
     expect(() => parseProbe("HIVEPROBE-UNAME FreeBSD amd64\n")).toThrow(/unsupported/);
     expect(() => parseProbe("nothing\n")).toThrow(/did not answer/);
     expect(() => parseProbe("HIVEPROBE-UNAME Linux x86_64\nHIVEPROBE-PATH bin/hive\n")).toThrow(/relative/);

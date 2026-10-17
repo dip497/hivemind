@@ -1,41 +1,47 @@
 /**
  * Machines — every saved ssh machine with its live state, adding one, and choosing where a
- * frame runs (machine → folder). The list is the same one `hive machine` edits.
+ * frame runs (machine → folder, or one of your devices → one of its folders, M3). The list is the
+ * same one `hive machine` edits. In someone else's workspace the only place a frame of yours may
+ * run is this computer (M4): there, choosing where it runs is choosing a folder here.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Folder, History, Loader2, Plus, RefreshCw, Server } from "lucide-react";
+import { ArrowLeft, ChevronRight, Folder, History, Laptop, Spinner, Plus, RefreshCw, Server } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Switch } from "../components/ui/switch";
-import type { MachineInfo, RemoteDirEntry } from "../../../shared/ipc";
-import { machineUri, posixJoin } from "../../../shared/remote-uri";
+import type { DeviceWorkspace, MachineInfo, PairedDeviceSummary, RemoteDirEntry } from "../../../shared/ipc";
+import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
-import { AttentionNote, MachineDot, statusWords } from "./status";
+import { joinedId, useShown } from "../multiplayer/shown";
+import { AttentionNote, MachineDot, MachineIcon, machineFacts, statusWords } from "./status";
+import { tellRecentFolders } from "../recent-folders";
 
-type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo };
+type View = { kind: "list" } | { kind: "add" } | { kind: "edit"; machine: MachineInfo } | { kind: "browse"; machine: MachineInfo } | { kind: "device"; device: PairedDeviceSummary };
 
 const CHECK_AFTER_MS = 60_000;
 const CHECK_PARALLEL = 4;
 
 /** What a machine is used by on this canvas: frames bound to a folder on it, and their terminals. */
-export type MachineUsage = (hostId: string) => { frames: number; terminals: number };
+/** What a saved machine is in use by here: the frames on it, and the terminals in them. */
+export type MachineUsage = (machineId: string) => { frames: number; terminals: number };
 
-export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEndTerminals }: {
+export function MachinesHub({ request, onClose, onPick, usageOf, onEndTerminals }: {
   request: MachinesRequest | null;
-  /** A machine's address changed: move the frames that ran on `oldHostId` to `target`. */
-  onRepoint: (oldHostId: string, target: string) => void;
   onClose: () => void;
   usageOf: MachineUsage;
   /** Kill the terminals running on a machine and close their tiles. */
-  onEndTerminals: (hostId: string) => void;
+  onEndTerminals: (machineId: string) => void;
   /** A folder was chosen — for `request.frameId`, or for a new frame when nothing asked. */
   onPick: (frameId: string | null, uri: string) => void;
 }) {
   const snap = useMachines();
   const [view, setView] = useState<View>({ kind: "list" });
   const picking = request?.kind === "pick" ? request : null;
+  const { repo, shared } = useShown();
+  // Someone else's workspace: a frame of yours runs on this computer, or nowhere.
+  const guest = !!joinedId(repo) && shared?.access !== "owner";
 
   // Which view this request opens on. Only the request moves it: a machine added or checked
   // mid-flow must not throw the user back to the list.
@@ -68,7 +74,7 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
     for (let i = 0; i < CHECK_PARALLEL; i++) void next();
   }, [request, snap]);
 
-  const title = view.kind === "add" ? "Add a machine" : view.kind === "edit" ? `Edit ${view.machine.label}` : view.kind === "browse" ? view.machine.label : picking ? "Run this frame on…" : "Machines";
+  const title = view.kind === "add" ? "Add a machine" : view.kind === "edit" ? `Edit ${view.machine.label}` : view.kind === "browse" ? view.machine.label : view.kind === "device" ? view.device.name : picking && guest ? "Run this frame on this computer" : picking ? "Run this frame on…" : "Machines";
 
   return (
     <Dialog open={!!request} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -80,16 +86,20 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
       >
         <header className="flex items-center gap-1.5 pl-4 pr-14 pt-4 pb-2">
           {view.kind !== "list" && !(picking?.machineId && view.kind === "browse") && (
-            <Button variant="ghost" size="icon-sm" onClick={() => setView({ kind: "list" })} aria-label="back" className="-ml-1"><ArrowLeft /></Button>
+            <Button variant="ghost" size="icon" onClick={() => setView({ kind: "list" })} aria-label="back" className="-ml-1"><ArrowLeft /></Button>
           )}
           <DialogTitle className="h-7 flex items-center">{title}</DialogTitle>
         </header>
-        {view.kind === "list" && (
+        {picking && guest && (
+          <ThisComputer self={snap.self} onPick={(uri) => { onPick(picking.frameId ?? null, uri); onClose(); }} />
+        )}
+        {view.kind === "list" && !(picking && guest) && (
           <MachineList
             usageOf={usageOf}
             onEndTerminals={onEndTerminals}
             picking={!!picking}
             onChoose={(m) => setView({ kind: "browse", machine: m })}
+            onChooseDevice={(device) => setView({ kind: "device", device })}
             onEdit={(m) => setView({ kind: "edit", machine: m })}
             onAdd={() => setView({ kind: "add" })}
           />
@@ -106,7 +116,6 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
             editing={view.machine}
             onCancel={() => setView({ kind: "list" })}
             onAdded={() => setView({ kind: "list" })}
-            onRepoint={onRepoint}
           />
         )}
         {view.kind === "browse" && (
@@ -116,14 +125,17 @@ export function MachinesHub({ request, onClose, onPick, onRepoint, usageOf, onEn
             actionLabel="Open here"
           />
         )}
+        {view.kind === "device" && (
+          <DeviceFolders device={view.device} onPick={(uri) => { onPick(picking?.frameId ?? null, uri); onClose(); }} />
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals }: {
-  picking: boolean; onChoose: (m: MachineInfo) => void; onEdit: (m: MachineInfo) => void; onAdd: () => void;
-  usageOf: MachineUsage; onEndTerminals: (hostId: string) => void;
+function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf, onEndTerminals }: {
+  picking: boolean; onChoose: (m: MachineInfo) => void; onChooseDevice: (d: PairedDeviceSummary) => void; onEdit: (m: MachineInfo) => void; onAdd: () => void;
+  usageOf: MachineUsage; onEndTerminals: (machineId: string) => void;
 }) {
   const snap = useMachines();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -143,12 +155,15 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
     setBusy(({ [m.id]: _drop, ...rest }) => rest);
   };
 
-  if (snap.machines.length === 0) {
+  // Your computers and hosts are places a frame can run (M3): listed when choosing one. A phone
+  // runs nothing.
+  const devices = picking ? (snap.devices ?? []).filter((d) => d.kind !== "phone") : [];
+  if (snap.machines.length === 0 && devices.length === 0) {
     return (
       <div className="px-6 py-12 grid gap-3 place-items-center text-center">
-        {snap.catalogError && <p className="text-[11.5px] text-[var(--color-err)]">machines.json could not be read: {snap.catalogError}</p>}
+        {snap.catalogError && <p className="text-label text-[var(--color-err)]">machines.json could not be read: {snap.catalogError}</p>}
         <Server size={24} className="text-[var(--color-fg3)]" />
-        <p className="text-[13px] text-[var(--color-fg2)] max-w-[420px] leading-relaxed">
+        <p className="text-body text-[var(--color-fg2)] max-w-[420px] leading-relaxed">
           Add a computer you can reach with <span className="font-mono">ssh</span>. Your keys, agent and <span className="font-mono">~/.ssh/config</span> are used as they are;
           terminals there keep running when the connection drops or this app closes.
         </p>
@@ -161,6 +176,27 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
   return (
     <div className="grid grid-cols-[260px_minmax(0,1fr)] h-[520px] border-t border-[var(--color-line)]">
       <aside className="flex flex-col min-h-0 border-r border-[var(--color-line)] bg-[var(--color-bg2)]">
+        {devices.length > 0 && (
+          <ul className="p-2 pb-0 grid grid-cols-[minmax(0,1fr)] content-start gap-0.5" aria-label="your devices">
+            <li className="px-2.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Your devices</li>
+            {devices.map((d) => (
+              <li key={d.device}>
+                <button
+                  onClick={() => onChooseDevice(d)}
+                  data-pick-device={d.device}
+                  className="w-full min-w-0 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors hover:bg-[var(--color-bg3)]"
+                  title={`Open a folder on ${d.name}`}
+                >
+                  {d.kind === "host" ? <Server size={14} className="shrink-0 text-[var(--color-fg3)]" /> : <Laptop size={14} className="shrink-0 text-[var(--color-fg3)]" />}
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-body font-medium text-[var(--color-fg)] truncate">{d.name}</span>
+                    <span className="block text-count text-[var(--color-fg3)] truncate">{d.kind === "host" ? "always on" : "your computer"}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <ul className="flex-1 overflow-y-auto overflow-x-hidden p-2 grid grid-cols-[minmax(0,1fr)] content-start gap-0.5" aria-label="machines">
           {snap.machines.map((m) => {
             const s = statusOf(snap, m.hostId);
@@ -173,13 +209,13 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
                   className={`w-full min-w-0 flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left cursor-pointer transition-colors ${sel ? "bg-[var(--surface-4)]" : "hover:bg-[var(--color-bg3)]"}`}
                   title={picking ? `Open a folder on ${m.label}` : m.target}
                 >
-                  <MachineDot status={s} enabled={m.enabled} size={8} />
+                  <span aria-hidden className="shrink-0 text-[var(--color-fg2)]"><MachineIcon kind={m.kind} size={16} /></span>
                   <span className="flex-1 min-w-0">
-                    <span className="block text-[13px] font-medium text-[var(--color-fg)] truncate">{m.label}</span>
-                    <span className="block text-[11px] font-mono text-[var(--color-fg3)] truncate">{m.target}</span>
+                    <span className="block text-body font-medium text-[var(--color-fg)] truncate">{m.label}</span>
+                    <span className="block text-count font-mono text-[var(--color-fg3)] truncate">{m.target}</span>
                   </span>
-                  <span className="shrink-0 text-[10.5px] tabular-nums text-[var(--color-fg2)]">
-                    {busy[m.id] ? <Loader2 size={11} className="animate-spin" /> : statusWords(s, m.enabled)}
+                  <span className="shrink-0 flex items-center gap-1.5 text-count tabular-nums text-[var(--color-fg2)]">
+                    {busy[m.id] ? <Spinner size={11} className="animate-spin" /> : <><MachineDot status={s} enabled={m.enabled} size={6} />{statusWords(s, m.enabled)}</>}
                   </span>
                 </button>
               </li>
@@ -187,32 +223,32 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
           })}
         </ul>
         <footer className="p-2 border-t border-[var(--color-line)]">
-          <Button size="sm" variant="secondary" onClick={onAdd} className="w-full"><Plus /> Add a machine</Button>
-          <p className="mt-1.5 px-1 text-[10.5px] text-[var(--color-fg3)]">Same list as <span className="font-mono">hive machine</span>.</p>
+          <Button variant="secondary" onClick={onAdd} className="w-full"><Plus /> Add a machine</Button>
+          <p className="mt-1.5 px-1 text-count text-[var(--color-fg3)]">Same list as <span className="font-mono">hive machine</span>.</p>
         </footer>
       </aside>
       {picking ? (
-        <div className="grid place-items-center p-8 text-center text-[12.5px] text-[var(--color-fg2)]">Pick the machine this frame runs on.</div>
+        <div className="grid place-items-center p-8 text-center text-body text-[var(--color-fg2)]">Pick the machine this frame runs on.</div>
       ) : selected && (() => {
         const m = selected;
         const s = statusOf(snap, m.hostId);
-        const u = usageOf(m.hostId);
+        const u = usageOf(m.id);
         const doing = busy[m.id];
         return (
           <section className="min-w-0 overflow-y-auto overflow-x-hidden p-5 grid grid-cols-[minmax(0,1fr)] content-start gap-4" aria-label={`${m.label} details`} data-machine-detail={m.label}>
             <header className="flex items-start gap-3">
               <MachineDot status={s} enabled={m.enabled} size={10} />
               <div className="flex-1 min-w-0">
-                <h3 className="text-[16px] font-semibold text-[var(--color-fg)] truncate">{m.label}</h3>
-                <p className="font-mono text-[12px] text-[var(--color-fg3)] truncate">{m.target}{m.platform ? ` · ${m.platform}` : ""}</p>
+                <h3 className="text-title font-semibold text-[var(--color-fg)] truncate">{m.label}</h3>
+                <p className="font-mono text-label text-[var(--color-fg3)] truncate">{[m.target, machineFacts(m.kind, m.platform)].filter(Boolean).join(" · ")}</p>
               </div>
-              <Button size="sm" className="shrink-0" onClick={() => onChoose(m)} disabled={!m.enabled}><Folder /> Open folder…</Button>
+              <Button className="shrink-0" onClick={() => onChoose(m)} disabled={!m.enabled}><Folder /> Open folder…</Button>
             </header>
 
-            <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-[12px]">
+            <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-y-1.5 text-label">
               <dt className="text-[var(--color-fg3)]">Connection</dt>
               <dd className="min-w-0 text-[var(--color-fg)] flex items-center gap-1.5 whitespace-nowrap">
-                {doing ? <><Loader2 size={11} className="animate-spin" />{doing}…</> : statusWords(s, m.enabled)}
+                {doing ? <><Spinner size={11} className="animate-spin" />{doing}…</> : statusWords(s, m.enabled)}
                 {s.detail && s.state !== "online" && s.state !== "attention" && <span className="min-w-0 text-[var(--color-fg3)] truncate" title={s.detail}>— {s.detail}</span>}
               </dd>
               <dt className="text-[var(--color-fg3)]">hive</dt>
@@ -225,19 +261,19 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
               <AttentionNote target={m.target} detail={s.detail} needsPassword={s.needsPassword} onSetPassword={() => setAskPassword(m.id)} />
             )}
             {m.enabled && s.state === "no-hive" && (
-              <div className="flex items-center gap-2 rounded-lg bg-[var(--color-bg2)] border border-[var(--color-line2)] px-3 py-2 text-[12px] text-[var(--color-fg2)]">
+              <div className="flex items-center gap-2 rounded-lg bg-[var(--color-bg2)] border border-[var(--color-line2)] px-3 py-2 text-label text-[var(--color-fg2)]">
                 <span className="min-w-0 flex-1">Without hive there, terminals stop when the connection drops.</span>
                 <Button size="xs" className="shrink-0" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Install hive</Button>
               </div>
             )}
 
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={() => run(m, "checking", () => window.hive.machineCheck(m.id))}><RefreshCw /> Check now</Button>
-              <Button variant="secondary" size="sm" onClick={() => onEdit(m)}>Edit…</Button>
-              <Button variant="secondary" size="sm" onClick={() => setAskPassword(askPassword === m.id ? null : m.id)}>Set password…</Button>
-              {s.state !== "no-hive" && <Button variant="secondary" size="sm" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Update hive</Button>}
-              <Button variant="secondary" size="sm" onClick={() => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))}>{m.enabled ? "Turn off" : "Turn on"}</Button>
-              <Button variant="destructive" size="sm" className="ml-auto" onClick={() => setRemoving({ id: m.id, end: false })}>Remove…</Button>
+              <Button variant="secondary" onClick={() => run(m, "checking", () => window.hive.machineCheck(m.id))}><RefreshCw /> Check now</Button>
+              <Button variant="secondary" onClick={() => onEdit(m)}>Edit…</Button>
+              <Button variant="secondary" onClick={() => setAskPassword(askPassword === m.id ? null : m.id)}>Set password…</Button>
+              {s.state !== "no-hive" && <Button variant="secondary" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Update hive</Button>}
+              <Button variant="secondary" onClick={() => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))}>{m.enabled ? "Pause" : "Resume"}</Button>
+              <Button variant="destructive" className="ml-auto" onClick={() => setRemoving({ id: m.id, end: false })}>Remove…</Button>
             </div>
 
             {askPassword === m.id && (
@@ -254,14 +290,14 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
                   });
                 }}
               >
-                <Input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} className="h-8" onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
-                <Button type="submit" size="sm">Save</Button>
+                <Input name="pw" type="password" autoFocus data-escape-local="" aria-label={`password for ${m.label}`} placeholder={`password for ${m.target}`} onKeyDown={(e) => { if (e.key === "Escape") setAskPassword(null); }} />
+                <Button type="submit">Save</Button>
               </form>
             )}
 
             {removing?.id === m.id && (
               <div role="alertdialog" aria-label={`remove ${m.label}`} data-remove-machine={m.id}
-                className="grid gap-2 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg2)] px-3.5 py-3 text-[12.5px] text-[var(--color-fg)]"
+                className="grid gap-2 rounded-lg border border-[var(--color-line2)] bg-[var(--color-bg2)] px-3.5 py-3 text-body text-[var(--color-fg)]"
                 onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setRemoving(null); } }}>
                 <p>
                   Remove <span className="font-semibold">{m.label}</span>?{" "}
@@ -270,30 +306,30 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
                     : <span data-usage>Nothing on this canvas uses it.</span>}
                 </p>
                 {u.frames > 0 && (
-                  <p className="text-[12px] text-[var(--color-fg2)]">
+                  <p className="text-label text-[var(--color-fg2)]">
                     Its frames keep their tiles{u.terminals > 0 && !removing.end ? " and its terminals keep running" : ""}. Add it again to connect them.
                   </p>
                 )}
                 {u.terminals > 0 && (
-                  <label className="flex items-center gap-2 text-[12px] text-[var(--color-fg2)] cursor-pointer">
+                  <label className="flex items-center gap-2 text-label text-[var(--color-fg2)] cursor-pointer">
                     <input type="checkbox" checked={removing.end} onChange={(e) => setRemoving({ id: m.id, end: e.target.checked })} />
                     Also end its {plural(u.terminals, "terminal")} on {m.label}
                   </label>
                 )}
                 <div className="flex justify-end gap-2">
-                  <Button autoFocus variant="ghost" size="sm" onClick={() => setRemoving(null)}>Cancel</Button>
-                  <Button variant="destructive" size="sm" onClick={() => {
+                  <Button autoFocus variant="ghost" onClick={() => setRemoving(null)}>Cancel</Button>
+                  <Button variant="destructive" onClick={() => {
                     const end = removing.end;
                     setRemoving(null);
                     setSelectedId(null);
-                    if (end) onEndTerminals(m.hostId);
+                    if (end) onEndTerminals(m.id);
                     void run(m, "removing", () => window.hive.machineRemove(m.id));
                   }}>Remove</Button>
                 </div>
               </div>
             )}
-            {notes[m.id] && <p className="text-[12px] text-[var(--color-fg2)]">{notes[m.id]}</p>}
-            {errors[m.id] && errors[m.id] !== s.detail && <p className="text-[12px] text-[var(--color-err)] break-words">{errors[m.id]}</p>}
+            {notes[m.id] && <p className="text-label text-[var(--color-fg2)]">{notes[m.id]}</p>}
+            {errors[m.id] && errors[m.id] !== s.detail && <p className="text-label text-[var(--color-err)] break-words">{errors[m.id]}</p>}
           </section>
         );
       })()}
@@ -301,13 +337,12 @@ function MachineList({ picking, onChoose, onEdit, onAdd, usageOf, onEndTerminals
   );
 }
 
-function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
+function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
   initialTarget?: string;
-  /** Edit this machine instead of adding one. */
+  /** Edit this machine instead of adding one. The frames on it follow: they name the machine. */
   editing?: MachineInfo;
   onCancel: () => void;
   onAdded: (m: MachineInfo) => void;
-  onRepoint?: (oldHostId: string, target: string) => void;
 }) {
   const [target, setTarget] = useState(editing?.target ?? initialTarget ?? "");
   const [label, setLabel] = useState(editing?.label ?? "");
@@ -327,7 +362,6 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
     try {
       if (editing) {
         const r = await window.hive.machineEdit(editing.id, { target: target.trim(), label: label.trim() || undefined, password: usePassword && password ? password : undefined });
-        if (r.machine.hostId !== r.oldHostId) onRepoint?.(r.oldHostId, r.machine.target);
         onAdded(r.machine);
         return;
       }
@@ -345,7 +379,7 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
   if (warn) {
     return (
       <div className="p-4 grid gap-3">
-        <p className="text-[12.5px] text-[var(--color-fg2)] leading-relaxed">
+        <p className="text-body text-[var(--color-fg2)] leading-relaxed">
           <span className="text-[var(--color-fg)]">{warn.label} is saved and connected</span>, but this computer has no OS keychain available,
           so its password is kept only until the app closes. Next time, open Machines and use “Set password…”, or set up an ssh key instead.
         </p>
@@ -367,21 +401,21 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded, onRepoint }: {
         <div className="grid gap-2">
           <Label htmlFor="machine-password">Password</Label>
           <Input id="machine-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
-          <p className="text-[11px] text-muted-foreground">Stored in your OS keychain.</p>
+          <p className="text-count text-muted-foreground">Stored in your OS keychain.</p>
         </div>
       ) : (
         <Button type="button" variant="link" size="xs" onClick={() => setUsePassword(true)} className="-mt-2 justify-self-start ">Use a password instead</Button>
       )}
-      {editing && <p className="-mt-1 text-[11px] text-muted-foreground">A new address is reached before it is saved. Frames on {editing.label} move with it; terminals already open keep their session.</p>}
+      {editing && <p className="-mt-1 text-count text-muted-foreground">A new address is reached before it is saved. Frames on {editing.label} move with it; terminals already open keep their session.</p>}
       {!editing && <div className="flex items-center justify-between gap-4">
         <Label htmlFor="machine-install" className="cursor-pointer">Install <span className="font-mono">hive</span> if missing</Label>
         <Switch id="machine-install" checked={install} onCheckedChange={setInstall} />
       </div>}
       {error && (error.attention
         ? <AttentionNote target={target.trim()} detail={error.text} />
-        : <p className="text-[11.5px] text-destructive break-words">{error.text}</p>)}
+        : <p className="text-label text-destructive break-words">{error.text}</p>)}
       <div className="flex items-center justify-end gap-2">
-        {busy && <span className="mr-auto flex items-center gap-1.5 text-[11.5px] text-muted-foreground"><Loader2 size={12} className="animate-spin" />Connecting…</span>}
+        {busy && <span className="mr-auto flex items-center gap-1.5 text-label text-muted-foreground"><Spinner size={12} className="animate-spin" />Connecting…</span>}
         <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button type="submit" disabled={busy || !target.trim()}>{editing ? "Save" : "Add"}</Button>
       </div>
@@ -396,11 +430,102 @@ function readRecent(m: MachineInfo): string[] {
 }
 function pushRecent(m: MachineInfo, dir: string): void {
   try { localStorage.setItem(recentKey(m), JSON.stringify([dir, ...readRecent(m).filter((d) => d !== dir)].slice(0, RECENT_MAX))); } catch { /* private mode */ }
+  tellRecentFolders();
 }
 const parentOf = (d: string) => (d === "/" ? "/" : d.replace(/\/[^/]+\/?$/, "") || "/");
 
+/** A folder on this computer for a frame of yours in someone else's workspace (M4): what you put in
+ *  it runs here, as you put it, and nowhere else. */
+function ThisComputer({ self, onPick }: { self: string | null | undefined; onPick: (uri: string) => void }) {
+  const [typed, setTyped] = useState("");
+  const open = (folder: string) => { if (self && folder.startsWith("/")) onPick(machineUri(self, folder)); };
+  return (
+    <form
+      className="grid gap-3 px-4 pb-4"
+      data-this-computer=""
+      onSubmit={(e) => { e.preventDefault(); open(typed.trim()); }}
+    >
+      <p className="text-label leading-relaxed text-[var(--color-fg2)]">
+        Its terminals and agents run on this computer, with your logins, in a folder of yours. Everyone in the workspace sees them; nobody else starts anything here.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label="a folder on this computer"
+          placeholder="/path/to/a/folder"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          data-escape-local=""
+          data-this-computer-folder=""
+          font="mono"
+          spellCheck={false}
+          className="flex-1"
+        />
+        {window.hive.pickProjectFolder && <Button type="button" variant="ghost" onClick={() => void window.hive.pickProjectFolder?.().then((f) => { if (f) open(f); })}>Choose…</Button>}
+        <Button type="submit" disabled={!self || !typed.trim().startsWith("/")} data-this-computer-go="">Run it here</Button>
+      </div>
+    </form>
+  );
+}
+
+/** The folders of one of your devices a frame can run in (M3): those its workspaces are in, or one
+ *  named by its path. */
+function DeviceFolders({ device, onPick }: { device: PairedDeviceSummary; onPick: (uri: string) => void }) {
+  const [folders, setFolders] = useState<DeviceWorkspace[] | null | "offline">(null);
+  const [typed, setTyped] = useState("");
+  useEffect(() => {
+    let live = true;
+    window.hive.deviceWorkspaces().then((all) => {
+      const at = all.find((x) => x.device === device.device);
+      if (live) setFolders(at?.workspaces ?? "offline");
+    }).catch(() => { if (live) setFolders("offline"); });
+    return () => { live = false; };
+  }, [device.device]);
+  const open = (path: string) => onPick(machineUri(device.device, path));
+  return (
+    <div className="flex flex-col" data-device-folders={device.device}>
+      <div className="h-[300px] overflow-y-auto p-1.5" role="listbox" aria-label="folders">
+        {folders === null ? (
+          <div className="px-3 py-8 text-center text-label text-[var(--color-fg3)]">Asking {device.name}…</div>
+        ) : folders === "offline" ? (
+          <p className="px-3 py-4 text-label text-[var(--color-fg2)]">{device.name} does not answer: is it on, with hivemind (or `hive host`) running?</p>
+        ) : folders.length === 0 ? (
+          <p className="px-3 py-4 text-label text-[var(--color-fg2)]">No workspaces on {device.name} yet: name a folder there below.</p>
+        ) : folders.map((w) => (
+          <button
+            key={w.workspace}
+            onClick={() => open(w.repo)}
+            data-device-folder={w.repo}
+            title={`Run this frame in ${w.repo} on ${device.name}`}
+            className="w-full flex items-center gap-2 px-2 h-8 rounded-md text-left text-body text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer"
+          >
+            <Folder size={14} className="shrink-0 text-[var(--color-fg3)]" />
+            <span className="truncate flex-1">{w.name}</span>
+            <span className="truncate max-w-[50%] font-mono text-count text-[var(--color-fg3)]">{w.repo}</span>
+          </button>
+        ))}
+      </div>
+      <form
+        className="flex items-center gap-2 px-3 py-2.5 border-t border-[var(--color-line2)]"
+        onSubmit={(e) => { e.preventDefault(); if (typed.trim().startsWith("/")) open(typed.trim()); }}
+      >
+        <Input
+          aria-label={`a folder on ${device.name}`}
+          placeholder={`/path/to/a/folder on ${device.name}`}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          data-escape-local=""
+          font="mono"
+          spellCheck={false}
+          className="flex-1"
+        />
+        <Button type="submit" disabled={!typed.trim().startsWith("/")}>Open here</Button>
+      </form>
+    </div>
+  );
+}
+
 function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; onPick: (uri: string) => void; actionLabel: string }) {
-  const base = useMemo(() => machineUri(machine.target), [machine.target]);
+  const base = useMemo(() => machineUri(machine.id), [machine.id]);
   const [dir, setDir] = useState("");
   const [home, setHome] = useState("");
   const [entries, setEntries] = useState<RemoteDirEntry[]>([]);
@@ -434,7 +559,7 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
   }
   useEffect(() => { void list(""); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [base]);
 
-  const open = (d: string) => { pushRecent(machine, d); onPick(machineUri(machine.target, d)); };
+  const open = (d: string) => { pushRecent(machine, d); onPick(machineUri(machine.id, d)); };
   const expand = (p: string) => (p === "~" ? home : p.startsWith("~/") && home ? posixJoin(home, p.slice(2)) : p);
   const q = filter.trim().toLowerCase();
   const shown = entries.filter((e) => (q.startsWith(".") || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)));
@@ -454,7 +579,7 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center gap-1 px-2 h-9 border-b border-[var(--color-line2)] text-[11.5px]">
+      <div className="flex items-center gap-1 px-2 h-9 border-b border-[var(--color-line2)] text-label">
         <Button variant="ghost" size="icon-2xs" onClick={() => list(parentOf(dir))} disabled={!dir || dir === "/"} aria-label="up" title="Up (←)"><ArrowLeft /></Button>
         {editingPath !== null ? (
           <Input
@@ -470,7 +595,8 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
             onBlur={() => setEditingPath(null)}
             font="mono"
             spellCheck={false}
-            className="h-7 flex-1"
+            size="sm"
+            className="flex-1"
           />
         ) : (
           <div className="flex-1 min-w-0 flex items-center overflow-x-auto font-mono text-[var(--color-fg2)]" onDoubleClick={() => setEditingPath(dir)}>
@@ -499,15 +625,14 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
           value={filter}
           onChange={(e) => { setFilter(e.target.value); setCursor(0); }}
           onKeyDown={onKey}
-          className="h-8"
         />
       </div>
       <div ref={listRef} className="h-[300px] overflow-y-auto p-1.5" role="listbox" aria-label="folders">
         {showRecent && (
           <div className="mb-1.5 pb-1.5 border-b border-[var(--color-line)]">
-            <div className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg3)]">Recent</div>
+            <div className="px-2 pb-1 text-count font-medium text-[var(--color-fg2)]">Recent</div>
             {recent.map((d) => (
-              <button key={d} onClick={() => open(d)} title={`Open ${d}`} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[12px] text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer">
+              <button key={d} onClick={() => open(d)} title={`Open ${d}`} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-label text-[var(--color-fg2)] hover:bg-[var(--color-bg3)] hover:text-[var(--color-fg)] cursor-pointer">
                 <History size={13} className="shrink-0 text-[var(--color-fg3)]" />
                 <span className="truncate flex-1 font-mono">{home && d.startsWith(home + "/") ? "~" + d.slice(home.length) : d}</span>
               </button>
@@ -515,9 +640,9 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
           </div>
         )}
         {error ? (
-          <p className="px-3 py-4 text-[11.5px] text-[var(--color-err)] break-words">{error}</p>
+          <p className="px-3 py-4 text-label text-[var(--color-err)] break-words">{error}</p>
         ) : shown.length === 0 ? (
-          <div className="px-3 py-8 text-center text-[11.5px] text-[var(--color-fg3)]">{busy ? "Loading…" : q ? `No folder matches “${filter}”.` : "No folders here — open this one, or go up."}</div>
+          <div className="px-3 py-8 text-center text-label text-[var(--color-fg3)]">{busy ? "Loading…" : q ? `No folder matches “${filter}”.` : "No folders here — open this one, or go up."}</div>
         ) : (
           shown.map((e, i) => (
             <div
@@ -528,7 +653,7 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
               onMouseEnter={() => setCursor(i)}
               onClick={() => list(posixJoin(dir, e.name))}
               onDoubleClick={() => open(posixJoin(dir, e.name))}
-              className={`group/row flex items-center gap-2 px-2 h-8 rounded-md text-[12.5px] cursor-pointer ${i === cursor ? "bg-[var(--color-bg3)] text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}
+              className={`group/row flex items-center gap-2 px-2 h-8 rounded-md text-body cursor-pointer ${i === cursor ? "bg-[var(--color-bg3)] text-[var(--color-fg)]" : "text-[var(--color-fg2)]"}`}
             >
               <Folder size={14} className="shrink-0 text-[var(--color-fg3)]" />
               <span className="truncate flex-1">{e.name}</span>
@@ -544,8 +669,8 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
         )}
       </div>
       <footer className="flex items-center gap-2 px-3 py-2.5 border-t border-[var(--color-line2)]">
-        <span className="flex-1 min-w-0 text-[11px] text-[var(--color-fg3)] font-mono truncate" title={dir}>{machine.label}:{dir}</span>
-        <Button onClick={() => open(dir)} disabled={!dir || busy} size="sm">{actionLabel}</Button>
+        <span className="flex-1 min-w-0 text-count text-[var(--color-fg3)] font-mono truncate" title={dir}>{machine.label}:{dir}</span>
+        <Button onClick={() => open(dir)} disabled={!dir || busy}>{actionLabel}</Button>
       </footer>
     </div>
   );

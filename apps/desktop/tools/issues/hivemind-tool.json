@@ -1,0 +1,29 @@
+{
+  "id": "hivemind/issues",
+  "name": "Issues",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "productivity",
+  "description": "The workspace's issues: a board and a list, each issue in full, and New issue.",
+  "entry": "issues.js",
+  "permissions": [
+    "workspace:issues",
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
+  "tools": [
+    {
+      "key": "issues",
+      "label": "Issues",
+      "description": "The workspace's issue list.",
+      "tileKind": "issues",
+      "size": {
+        "width": 680,
+        "height": 460
+      },
+      "singleton": true,
+      "glyph": "◔",
+      "icon": "icon.svg"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { QUEUE_DIR, dockViaQueue, queueReady } from "./helpers/queue-view";
 import { seedAgents } from "./helpers/agents";
+import { pick } from "./helpers/select";
 
 test.use({ trace: "off" });
 
@@ -53,7 +54,7 @@ test.beforeAll(async () => {
   const userData = path.join(XDG, "hivemind-dev");
   const sock = path.join(userData, "hcp.sock"), tokenFile = path.join(userData, "hcp.token");
   await expect.poll(() => fs.existsSync(sock) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
-  hcpEnv = { HIVE_HCP_SOCK: sock, HCP_TOKEN: fs.readFileSync(tokenFile, "utf8").trim() };
+  hcpEnv = { HIVEMIND_APP_DATA: userData };
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
@@ -71,7 +72,8 @@ test("a preset picked in Settings repaints the shell and every terminal, and lan
   await toView("canvas");
   expect(await preset()).toBe("signal");
   await openSettings("appearance");
-  await page.locator('[data-preset-select]').selectOption('dracula');
+  await page.locator('[data-preset-select]').click();
+  await page.locator('[data-preset-option="dracula"]').click();
   expect(await preset()).toBe("dracula");
   await closeSettings();
   // The terminal palette is derived from the same appearance object.
@@ -107,7 +109,7 @@ test("pluginSurfaces: an installed view shows the wallpaper behind it, and 'opaq
 
   // "opaque" is the opt-out: the same dock has no wallpaper and no glass.
   await openSettings("appearance");
-  await page.getByLabel("Tools in scene views").selectOption("opaque");
+  await pick(page.getByLabel("Tools in scene views"), "Opaque");
   await closeSettings();
   await dock();
   expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(false);

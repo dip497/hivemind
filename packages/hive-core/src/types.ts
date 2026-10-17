@@ -115,21 +115,41 @@ export interface IssueSummary
   path: string;
 }
 
+export const AcceptanceItemZ = z.object({ done: z.boolean(), text: z.string() });
+
 /** Partial update to an issue. The SINGLE source of truth for this shape — both
  *  core's updateIssue and the desktop IPC contract import it from here (it lives
  *  in types.ts, which is node-free, so the web bundle can use it without pulling
- *  storage.ts's node:fs deps). */
-export type IssuePatch = Partial<{
-  title: string;
-  state: IssueSummary["state"];
-  parent: string | null;
-  labels: string[];
-  assignee: Issue["assignee"];
-  github: number | null;
-  description: string;
-  acceptanceCriteria: Issue["sections"]["acceptanceCriteria"];
-  extra: string;
-}>;
+ *  storage.ts's node:fs deps). Each field as the issue's file holds it
+ *  (`IssueFrontmatterZ`), so a caller's patch is refused before an issue is read
+ *  rather than when it is written; parsing drops a field it does not name. */
+export const IssuePatchZ = z
+  .object({
+    title: z.string().min(1),
+    state: IssueStateZ,
+    parent: z.string().nullable(),
+    labels: z.array(z.string()),
+    assignee: AssigneeZ.nullable(),
+    github: z.number().int().positive().nullable(),
+    description: z.string(),
+    acceptanceCriteria: z.array(AcceptanceItemZ),
+    extra: z.string(),
+  })
+  .partial();
+export type IssuePatch = z.infer<typeof IssuePatchZ>;
+
+/** A new issue as a caller asks for it (core's `createIssue` names who created it). */
+export const NewIssueZ = z.object({
+  title: z.string(),
+  state: IssueStateZ.optional(),
+  parent: IssueIdZ.optional(),
+  labels: z.array(z.string()).optional(),
+  assignee: AssigneeZ.nullable().optional(),
+  description: z.string().optional(),
+  acceptanceCriteria: z.array(AcceptanceItemZ).optional(),
+  github: z.number().int().positive().nullable().optional(),
+});
+export type NewIssue = z.infer<typeof NewIssueZ>;
 
 export const ConfigZ = z.object({
   prefix: z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/, "prefix must be UPPERCASE 2-10 chars"),

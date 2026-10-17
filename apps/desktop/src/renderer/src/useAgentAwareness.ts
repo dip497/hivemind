@@ -37,7 +37,7 @@ export interface Toast {
    *  (nothing sets this yet): the first real use is a supervised-worker approval —
    *  push a `needs` toast with actions `[{label:"Approve", primary:true, run: () =>
    *  approve(reqId,"allow")}, {label:"Deny", run: () => approve(reqId,
-   *  "deny")}]` (agent.approve over HCP) so the human answers from the toast instead of tabbing to the tile.
+   *  "deny")}]` (agent.answer) so the human answers from the toast instead of tabbing to the tile.
    *  `run` returns the toast id to dismiss (or void to keep it open, e.g. pending). */
   actions?: ToastAction[];
 }
@@ -205,7 +205,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       // so the OS-surface pref is honored even when the in-app one is off.
       if (needsHuman || finished || crashed) {
         try {
-          window.hive.notifyAgent({
+          window.hive.notifyAgent?.({
             tileId: e.tileId,
             label: e.label,
             kind,

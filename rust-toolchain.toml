@@ -1,0 +1,7 @@
+# One Rust for every crate here, on every machine and in CI: a cached build stays valid until this
+# changes, and the phone page builds to the same bytes anywhere (its hash, crates/hive-web/build.sh,
+# is what the desktop compares with what a server serves).
+[toolchain]
+channel = "1.93.1"
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

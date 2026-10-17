@@ -4,8 +4,35 @@ import { HiveError } from "./storage.js";
 /** The remote shell sees exactly one word. */
 export const shq = (s: string): string => `'${s.replace(/'/g, `'\\''`)}'`;
 
+/** What kind of computer a machine is, as the machine itself reports it. */
+export const MACHINE_KINDS = ["laptop", "desktop", "server", "virtual-machine", "container"] as const;
+export type MachineKind = (typeof MACHINE_KINDS)[number];
+export const isMachineKind = (v: unknown): v is MachineKind => (MACHINE_KINDS as readonly unknown[]).includes(v);
+
+/** Prints `HIVEPROBE-KIND <kind>`, empty when the machine does not say: a Mac with a battery is a
+ *  laptop; on Linux a container or a virtual machine first, then the chassis its firmware reports. */
+export const KIND_SCRIPT = [
+  `k=`,
+  `if [ "$(uname -s)" = Darwin ]; then if pmset -g batt 2>/dev/null | grep -q InternalBattery; then k=laptop; else k=desktop; fi`,
+  `else`,
+  `  if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then k=container; else`,
+  `    case "$(systemd-detect-virt 2>/dev/null)" in ""|none) ;; docker|podman|lxc|lxc-libvirt|systemd-nspawn|openvz|rkt|wsl|proot|pouch|container-other) k=container ;; *) k=virtual-machine ;; esac`,
+  `  fi`,
+  `  if [ -z "$k" ]; then case "$(cat /sys/class/dmi/id/chassis_type 2>/dev/null)" in`,
+  `    8|9|10|14|30|31|32) k=laptop ;; 3|4|5|6|7|13|15|16|24|35|36) k=desktop ;; 17|23|25|28|29) k=server ;; esac; fi`,
+  `fi`,
+  `printf 'HIVEPROBE-KIND %s\\n' "$k"`,
+].join("\n");
+
+/** The kind in a probe's output, if it named one. */
+export function kindIn(out: string): MachineKind | undefined {
+  const k = out.split("\n").find((l) => l.startsWith("HIVEPROBE-KIND "))?.slice("HIVEPROBE-KIND ".length).trim();
+  return isMachineKind(k) ? k : undefined;
+}
+
 export interface ProbeResult {
   platform: string;
+  kind?: MachineKind;
   hivePath?: string;
   hiveVersion?: string;
   /** Its `hive` can run the terminal daemon the desktop bridges to (older ones cannot). */
@@ -31,6 +58,7 @@ export function shScript(script: string, ...args: string[]): string {
 // Tagged lines, so a noisy remote shell profile cannot confuse the parser.
 export const PROBE = shScript([
   `printf 'HIVEPROBE-UNAME %s %s\\n' "$(uname -s)" "$(uname -m)"`,
+  KIND_SCRIPT,
   `for p in "$HOME/.local/bin/hive" /usr/local/bin/hive /opt/homebrew/bin/hive "$(command -v hive 2>/dev/null)"; do`,
   `  if [ -n "$p" ] && [ -x "$p" ]; then printf 'HIVEPROBE-PATH %s\\n' "$p"; printf 'HIVEPROBE-VERSION %s\\n' "$("$p" --version 2>/dev/null | head -n1)";`,
   `    if "$p" daemon --help 2>&1 | grep -q bridge; then printf 'HIVEPROBE-DAEMON yes\\n'; fi; break; fi`,
@@ -45,7 +73,8 @@ export function parseProbe(out: string): ProbeResult {
   const platform = platformOf(os, arch);
   if (!platform) throw new HiveError("machine_unsupported", `unsupported remote platform '${uname}' — Linux or macOS on x86_64/arm64 only`);
   const hivePath = line("PATH");
-  const res: ProbeResult = { platform };
+  const kind = kindIn(out);
+  const res: ProbeResult = { platform, ...(kind ? { kind } : {}) };
   if (hivePath) {
     if (!hivePath.startsWith("/")) throw new HiveError("machine_probe_failed", `remote reported a relative hive path '${hivePath}'`);
     res.hivePath = hivePath;

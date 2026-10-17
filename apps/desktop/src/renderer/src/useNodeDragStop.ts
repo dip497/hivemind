@@ -1,14 +1,15 @@
 /**
  * useNodeDragStop — the react-flow onNodeDragStop handler, lifted from Canvas.
  * Persists a dropped node's final ABSOLUTE position (converting react-flow's
- * parent-relative coords), carries a dragged frame's body (member tiles +
- * worktree child frames), detaches a worktree child dragged out of its parent,
- * and re-derives a tile's explicit frame membership from its drop location.
+ * parent-relative coords), carries a dragged frame's body (member tiles, board
+ * boxes + worktree child frames), detaches a worktree child dragged out of its
+ * parent, and re-derives a tile's or box's frame membership from its drop location.
  */
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { Node } from "@xyflow/react";
 import { defaultSizeForKind, defaultTileSize } from "./canvas-sizing";
 import type { FrameState, TileInstance } from "./canvas-persistence";
+import { isBoxType } from "./board-objects/board-model";
 
 export interface NodeDragStopCtx {
   framesRef: MutableRefObject<FrameState[]>;
@@ -23,12 +24,16 @@ export interface NodeDragStopCtx {
   moveFrame: (id: string, x: number, y: number) => void;
   commitPosition: (id: string, x: number, y: number) => void;
   clearDragging: () => void;
+  /** A board box dropped at x, y on the canvas (the board decides its frame). */
+  moveBox: (id: string, x: number, y: number) => void;
+  /** Move the boxes in these frames with them. */
+  shiftBoxes: (shifts: ReadonlyMap<string, { dx: number; dy: number }>) => void;
 }
 
 export function useNodeDragStop(ctx: NodeDragStopCtx) {
   const {
     framesRef, frameOfRef, sizesRef, tilesRef, lastActiveFrameRef,
-    setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging,
+    setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging, moveBox, shiftBoxes,
   } = ctx;
 
   return useCallback((_e: unknown, node: Node) => {
@@ -78,6 +83,7 @@ export function useNodeDragStop(ctx: NodeDragStopCtx) {
             return next;
           });
         }
+        shiftBoxes(new Map([...movedFrames].map((id) => [id, { dx, dy }])));
         lastActiveFrameRef.current = node.id;
         setFrames((fs) =>
           fs.map((f) => {
@@ -108,6 +114,7 @@ export function useNodeDragStop(ctx: NodeDragStopCtx) {
         ay = parent.y + node.position.y;
       }
     }
+    if (isBoxType(node.type)) { moveBox(node.id, ax, ay); return; }
     commitPosition(node.id, ax, ay);
     // Update EXPLICIT membership from the drop location: the tile joins whichever
     // frame contains its CENTER (topmost), or becomes loose if dropped outside.
@@ -126,6 +133,6 @@ export function useNodeDragStop(ctx: NodeDragStopCtx) {
     });
   }, [
     framesRef, frameOfRef, sizesRef, tilesRef, lastActiveFrameRef,
-    setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging,
+    setPositions, setFrames, setFrameOf, parentFrameOf, moveFrame, commitPosition, clearDragging, moveBox, shiftBoxes,
   ]);
 }

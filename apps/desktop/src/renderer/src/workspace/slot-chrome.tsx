@@ -10,10 +10,10 @@
  * listener per mounted bar; the most recently mounted wins.
  */
 import { useEffect, useState } from "react";
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight, X } from "../components/icons";
 import { Button } from "../components/ui/button";
 import type { TileStatusKind } from "../agent-status-bus";
-import { bucketTileStatus, type TileStatusBucket } from "./tile-status-bucket";
+import { bucketTileStatus, type TileStatusBucket } from "@hivemind/view-host/status";
 import { setViewMode } from "./view-mode-store";
 import type { WorkspaceCommands } from "./workspace-view";
 
@@ -55,13 +55,13 @@ export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas
   return (
     <div
       tabIndex={-1}
-      className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-bg2)] px-2 text-[12px] text-[var(--color-fg)] outline-none select-none"
+      className="flex shrink-0 items-center gap-2 border-b border-[var(--color-line)] bg-[var(--color-bg2)] px-2 text-label text-[var(--color-fg)] outline-none select-none"
       style={{ height: SLOT_BAR_HEIGHT }}
       data-slot-bar={tileId}
     >
       <span className={`size-2 shrink-0 rounded-full ${DOT[bucket]}`} title={status ?? "idle"} data-slot-status={bucket} aria-hidden />
       <span className="min-w-0 flex-1 truncate">{name}</span>
-      <kbd className="font-mono text-[9.5px] text-[var(--color-fg3)]">⇧Esc</kbd>
+      <kbd className="font-mono text-chip text-[var(--color-fg3)]">⇧Esc</kbd>
       <Button variant="ghost" size="icon-xs" onClick={popOut} aria-label="Pop out to canvas" title="Pop out: show this tile on the canvas">
         <ArrowUpRight />
       </Button>

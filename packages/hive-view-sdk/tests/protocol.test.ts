@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
-  customDataProblem, customNameMatches, isCustomEventName, isDay, parseHostMessage, parsePluginMessage, promptProblem,
+  ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, MAX_SURFACE_RADIUS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
+  customDataProblem, customNameMatches, isCustomEventName, isDay, parseHostMessage, parsePluginMessage, promptProblem, refusal,
+  type HostScope, type PluginMessage,
 } from "../src/protocol.js";
 import { validateViewManifest, viewHost } from "../src/manifest.js";
 
@@ -13,7 +14,7 @@ describe("parsePluginMessage", () => {
       { type: "command", name: "selectTile", args: [null] },
       { type: "command", name: "focusTile", args: ["t1", { exact: true }] },
       { type: "command", name: "spawnTile", args: ["shell", null] },
-      { type: "command", name: "spawnVis", args: ["diff"] },
+      { type: "command", name: "spawnVis", args: ["tree"] },
       { type: "command", name: "addFrame" },
       { type: "command", name: "spawnAgent", args: [null, null] },
       { type: "command", name: "spawnAgent", args: ["codex", "f1", { prompt: "fix the build", name: "fixer" }] },
@@ -24,6 +25,8 @@ describe("parsePluginMessage", () => {
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4 }] },
       { type: "surfaceRects", rects: [] },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, chrome: "none" }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: 14 }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, inert: true }] },
       { type: "revealed", requestId: 3, rect: null },
       { type: "revealed", requestId: 3, rect: { x: 0, y: 0, w: 1, h: 1 } },
       { type: "framesDrawn", count: 0 },
@@ -42,6 +45,7 @@ describe("parsePluginMessage", () => {
       { type: "command", name: "selectTile", args: ["a", "b"] },
       { type: "command", name: "spawnTile", args: ["shell"] },
       { type: "command", name: "spawnVis", args: ["browser"] },
+      { type: "command", name: "spawnVis", args: ["diff"] }, // the Code tile's Changes replaced it
       { type: "command", name: "spawnAgent", args: [null] },
       { type: "command", name: "spawnAgent", args: [null, null, null] },
       { type: "command", name: "spawnAgent", args: [null, null, { prompt: 5 }] },
@@ -57,6 +61,10 @@ describe("parsePluginMessage", () => {
       { type: "surfaceRects", rects: [{ tileId: "t", x: 0, y: 0, w: 1, h: 1 }, { tileId: "t", x: 0, y: 0, w: 1, h: 1 }] },
       { type: "surfaceRects", rects: Array.from({ length: MAX_SURFACE_RECTS + 1 }, (_, i) => ({ tileId: `t${i}`, x: 0, y: 0, w: 1, h: 1 })) },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, chrome: "sidebar" }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: MAX_SURFACE_RADIUS + 1 }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: -1 }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: "8" }] },
+      { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, inert: false }] },
       { type: "revealed", requestId: "3", rect: null },
       { type: "framesDrawn", count: -1 },
       { type: "layout", data: "x".repeat(LAYOUT_MAX_BYTES + 1) },
@@ -169,7 +177,7 @@ describe("validateViewManifest", () => {
   const good = { id: "orbit", name: "Orbit", version: "0.1.0", entry: "index.html", permissions: [] };
   test("accepts a minimal manifest and fills defaults", () => {
     const r = validateViewManifest(good);
-    expect(r.ok && r.manifest).toEqual({ id: "orbit", name: "Orbit", version: "0.1.0", entry: "index.html", protocol: 1, permissions: [] });
+    expect(r.ok && r.manifest).toEqual({ id: "orbit", name: "Orbit", version: "0.1.0", entry: "index.html", protocol: 1, permissions: [], category: "other", commands: [] });
   });
   test("an id is a name, or @owner/name from the registry, and never passes for one it is not", () => {
     const ok = (id: string) => validateViewManifest({ ...good, id }).ok;
@@ -244,5 +252,57 @@ describe("protocol 1.4", () => {
   test("manifests may ask for the 1.4 permissions", () => {
     const m = { id: "board", name: "Board", version: "1.0.0", entry: "main.js", protocol: 1, permissions: ["workspace:prompt", "workspace:sessions"] };
     expect(validateViewManifest(m).ok).toBe(true);
+  });
+});
+
+describe("protocol 1.5", () => {
+  // A host that has tile t1 and frame f1, and announced t1 and "closed" (which has gone since).
+  const host = (more: Partial<HostScope> = {}): HostScope => ({
+    capabilities: [], features: [], hasTile: (id) => id === "t1", hasFrame: (id) => id === "f1", announced: (id) => id === "t1" || id === "closed", ...more,
+  });
+  const command = (name: string, ...args: unknown[]) => ({ type: "command", name, args }) as PluginMessage;
+  const rect = (tileId: string) => ({ tileId, x: 0, y: 0, w: 10, h: 10 });
+
+  const why = (m: PluginMessage, scope: HostScope) => refusal(m, scope)?.why ?? null;
+
+  test("a host refuses a command without its permission, and one naming a tile or frame that is not there", () => {
+    const refused = (m: PluginMessage, caps: HostScope["capabilities"] = []) => why(m, host({ capabilities: caps }));
+    expect(refused(command("selectTile", "t1"))).toBeNull();
+    expect(refused(command("selectTile", null))).toBeNull();
+    expect(refused(command("selectTile", "t9"))).toBe("selectTile: unknown tile t9");
+    expect(refused(command("focusTile", "t9"))).toBe("focusTile: unknown tile t9");
+    expect(refused(command("selectFrame", "f9"))).toBe("selectFrame: unknown frame f9");
+    expect(refused(command("closeTile", "t1"))).toBe('closeTile needs permission "workspace:close"');
+    expect(refused(command("closeTile", "t9"), ["workspace:close"])).toBe("closeTile: unknown tile t9");
+    expect(refused(command("spawnTile", "shell", "f9"), ["workspace:spawn"])).toBe("spawnTile: unknown frame f9");
+    expect(refused(command("spawnAgent", null, "f9"), ["workspace:spawn"])).toBe("spawnAgent: unknown frame f9");
+    expect(refused(command("spawnAgent", null, "f1", { prompt: "go" }), ["workspace:spawn"])).toBe('spawnAgent with a prompt needs permission "workspace:prompt"');
+    expect(refused(command("spawnAgent", null, "f1", { resume: "s1" }), ["workspace:spawn"])).toBe('spawnAgent with resume needs permission "workspace:sessions"');
+    expect(refused(command("renameTile", "t9", "x"), ["workspace:edit"])).toBe("renameTile: unknown tile t9");
+    expect(refused(command("openFolder", "f9"), ["workspace:edit"])).toBe("openFolder: unknown frame f9");
+  });
+
+  test("a host refuses a subscription to what it did not wire, a status or watch of no tile, and a rect for a tile it never announced, taking the rest of those", () => {
+    for (const [type, feature] of [["subscribeEvents", "events"], ["subscribePresence", "presence"], ["subscribeParticipants", "participants"]] as const) {
+      const m = (type === "subscribeEvents" ? { type, kinds: ["turn"] } : { type }) as PluginMessage;
+      expect(refusal(m, host())).toEqual({ why: `${type}: not supported`, partly: false });
+      expect(refusal(m, host({ features: [feature] }))).toBeNull();
+    }
+    expect(refusal({ type: "watchActivity", tileIds: ["t1"] }, host())).toEqual({ why: "watchActivity: not supported", partly: false });
+    expect(refusal({ type: "watchActivity", tileIds: ["t1", "t9"] }, host({ features: ["activity"] }))).toEqual({ why: "watchActivity: unknown tile", partly: true });
+    expect(refusal({ type: "subscribeStatus", tileId: "t9" }, host())).toEqual({ why: "subscribeStatus: unknown tile t9", partly: false });
+    // A rect for a tile closed since the view last heard is the view not having heard yet.
+    expect(refusal({ type: "surfaceRects", rects: [rect("t1"), rect("closed")] }, host())).toBeNull();
+    expect(refusal({ type: "surfaceRects", rects: [rect("t1"), rect("never")] }, host())).toEqual({ why: "surfaceRects: unknown tile", partly: true });
+  });
+
+  test("participants: what a view is told of them parses, and what is not a participant is refused", () => {
+    const priya = { id: "c1", person: "p1", name: "Priya", color: "#ec4899", cursor: { tileId: "t1" }, selection: ["t1", "f1"] };
+    expect(parseHostMessage({ type: "participants", participants: [priya, { ...priya, id: "c2", cursor: null, selection: [] }] }).ok).toBe(true);
+    for (const bad of [{ ...priya, id: "" }, { ...priya, cursor: { x: 1, y: 2 } }, { ...priya, selection: [7] }, { ...priya, name: undefined }]) {
+      expect(parseHostMessage({ type: "participants", participants: [bad] }).ok, JSON.stringify(bad)).toBe(false);
+    }
+    expect(parseHostMessage({ type: "participants" }).ok).toBe(false);
+    for (const type of ["subscribeParticipants", "unsubscribeParticipants"]) expect(parsePluginMessage({ type }).ok).toBe(true);
   });
 });

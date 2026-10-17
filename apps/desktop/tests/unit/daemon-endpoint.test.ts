@@ -11,11 +11,14 @@ after(() => fs.rmSync(dir, { recursive: true, force: true }));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const until = async (f: () => boolean, ms = 3000) => { for (let t = 0; t < ms && !f(); t += 10) await wait(10); return f(); };
 
-/** A daemon stand-in: replays "SCREEN" on attach, echoes writes, and records what it was sent. */
-function fakeDaemon(sock: string, delta = false) {
+/** A daemon stand-in: replays "SCREEN" on attach, echoes writes, and records what it was sent.
+ *  It takes a control plane's claim, or refuses it with `controlError`. */
+function fakeDaemon(sock: string, delta = false, controlError?: string) {
   const got: ClientMsg[] = [];
   const conns = new Set<net.Socket>();
   const server = net.createServer((c) => {
+    // As the daemon does: an endpoint that drops its transport mid-write resets this side.
+    c.on("error", () => {});
     conns.add(c);
     c.on("close", () => conns.delete(c));
     c.on("data", makeLineDecoder((line) => {
@@ -27,11 +30,13 @@ function fakeDaemon(sock: string, delta = false) {
       // A screen answered between two data frames, in one write: the reader must switch exactly there.
       if (m.t === "screen") c.write(frame({ t: "data", id: m.id, data: "older" }) + frame({ t: "screen", reqId: m.reqId, id: m.id, replay: "NOW" }) + frame({ t: "data", id: m.id, data: "newer" }));
       if (m.t === "hello" && m.caps.includes("events")) c.write(frame({ t: "event", topic: "status", data: { tileId: "t1", state: "idle" } }));
+      if (m.t === "control") c.write(frame({ t: "control", reqId: m.reqId, ...(controlError ? { error: controlError } : {}) }));
     }));
   });
   return {
     got, server,
-    listen: () => new Promise<void>((r) => server.listen(sock, r)),
+    // Unref'd: a test that fails before closing it does not hold the run open.
+    listen: () => new Promise<void>((r) => server.listen(sock, () => { server.unref(); r(); })),
     dropAll: () => { for (const c of conns) c.destroy(); },
     close: () => new Promise<void>((r) => { for (const c of conns) c.destroy(); server.close(() => r()); }),
   };
@@ -44,7 +49,7 @@ test("spawn streams, a dropped transport re-attaches with a reset replay, close 
   let connects = 0;
   const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { connects++; const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), retryInitialMs: 20 });
   let out = "";
-  const r = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: (x) => { out += x; }, onExit: () => {} });
+  const r = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24, lines: 5 }, { onData: (x) => { out += x; }, onExit: () => {} });
   assert.equal(r.pid, 42);
   assert.equal(out, "SCREEN", "first attach replay is not reset");
   ep.write("t1", "ls");
@@ -54,6 +59,8 @@ test("spawn streams, a dropped transport re-attaches with a reset replay, close 
   assert.ok(await until(() => out.endsWith(REATTACH_RESET + "SCREEN")), "re-attach replays onto a reset screen");
   assert.equal(connects, 2);
   assert.equal(d.got.filter((m) => m.t === "attach").length, 2);
+  // Its first replay is as much scrollback as it asked for; a reset one, all of it.
+  assert.deepEqual(d.got.filter((m) => m.t === "attach").map((m) => m.t === "attach" && m.lines), [5, undefined]);
 
   ep.detach("t1");
   assert.ok(await until(() => d.got.some((m) => m.t === "detach")));
@@ -126,6 +133,7 @@ test("a tile that exited is never started again by a re-attach; one gone while a
   const got: ClientMsg[] = [];
   const conns = new Set<net.Socket>();
   const server = net.createServer((c) => {
+    c.on("error", () => {});
     conns.add(c);
     c.on("data", makeLineDecoder((line) => {
       const m = JSON.parse(line) as ClientMsg;
@@ -159,6 +167,7 @@ test("status follows the transport, ping measures the round trip, sessions lists
   const sock = path.join(dir, "s.sock");
   const conns = new Set<net.Socket>();
   const server = net.createServer((c) => {
+    c.on("error", () => {});
     conns.add(c);
     c.on("data", makeLineDecoder((line) => {
       const m = JSON.parse(line) as ClientMsg;
@@ -202,6 +211,7 @@ test("status follows the transport, ping measures the round trip, sessions lists
 test("a login failure stops the retries until asked; retries stay 'reconnecting' without flicker", async () => {
   const sock = path.join(dir, "f.sock");
   const mk = () => net.createServer((c) => {
+    c.on("error", () => {});
     c.on("data", makeLineDecoder((line) => {
       const msg = JSON.parse(line) as ClientMsg;
       if (msg.t === "attach") c.write(frame({ t: "attached", reqId: msg.reqId, id: msg.id, pid: 42, isNew: true, replay: "", seq: 0, epoch: "E" }));
@@ -300,4 +310,61 @@ test("screen answers in order with the data around it: every byte after the call
   assert.deepEqual(seen.slice(1), ["hidden:older", "shown:newer"]);
   ep.close();
   await d.close();
+});
+
+test("a control plane claims the daemon's socket on its connection and on each one after, which it keeps up with no tile", async () => {
+  const sock = path.join(dir, "ctl.sock");
+  const d = fakeDaemon(sock);
+  await d.listen();
+  let connects = 0;
+  const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { connects++; const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), retryInitialMs: 20 });
+  const claims = () => d.got.flatMap((m) => (m.t === "control" ? [m.sock] : []));
+  try {
+    await ep.control("/run/plane.sock");
+    assert.deepEqual(claims(), ["/run/plane.sock"]);
+    d.dropAll();
+    assert.ok(await until(() => claims().length === 2), "claimed again on the next connection, with no tile to bring it back");
+    assert.deepEqual(claims(), ["/run/plane.sock", "/run/plane.sock"]);
+    assert.equal(connects, 2);
+  } finally {
+    ep.close();
+    await d.close();
+  }
+});
+
+test("a daemon that serves no control-plane socket refuses the claim, which is not made again", async () => {
+  const sock = path.join(dir, "ctl-refused.sock");
+  const d = fakeDaemon(sock, false, "the app serves this machine's control plane");
+  await d.listen();
+  let connects = 0;
+  const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { connects++; const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), retryInitialMs: 20 });
+  try {
+    await assert.rejects(ep.control("/run/plane.sock"), /the app serves this machine's control plane/);
+    d.dropAll();
+    await wait(200);
+    assert.equal(connects, 1, "nothing to keep up: no tile, no claim");
+    assert.equal(d.got.filter((m) => m.t === "control").length, 1);
+  } finally {
+    ep.close();
+    await d.close();
+  }
+});
+
+test("an attach that may start a session carries the environment as it is now, and one that only shows a session carries none", async () => {
+  const sock = path.join(dir, "env.sock");
+  const d = fakeDaemon(sock);
+  await d.listen();
+  let probe = "first";
+  const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), env: () => ({ HM_PROBE: probe }) });
+  try {
+    await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
+    probe = "later";
+    await ep.spawn({ tileId: "t2", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
+    await ep.spawn({ tileId: "t3", cwd: "/", cmd: "sh", cols: 80, rows: 24, noSpawn: true }, { onData: () => {}, onExit: () => {} });
+    const attaches = d.got.filter((m): m is Extract<ClientMsg, { t: "attach" }> => m.t === "attach");
+    assert.deepEqual(attaches.map((m) => [m.id, m.base?.HM_PROBE]), [["t1", "first"], ["t2", "later"], ["t3", undefined]]);
+  } finally {
+    ep.close();
+    await d.close();
+  }
 });

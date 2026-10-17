@@ -11,6 +11,7 @@
  * `<TileSlot>` the shared TileHost fills, so react-flow may mount/unmount nodes
  * freely without touching a live session.
  */
+import { isRemote } from "@hivemind/core/remote-uri";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
@@ -25,20 +26,24 @@ import {
   type NodeChange,
   type Edge,
 } from "@xyflow/react";
-import { Eye, EyeOff, LayoutGrid } from "lucide-react";
+import { Eye, EyeOff, LayoutGrid } from "../../components/icons";
 import { Button } from "../../components/ui/button";
 import { LayersPanel } from "../../LayersPanel";
 import { ZoomIsland } from "../../canvas-islands";
 import { setChromeSuppressed } from "../chrome-store";
 import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
-import { nodeTypes, PinnedLayerContext } from "../../canvas-nodes";
+import { useNodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { pipeEdgeTypes } from "../../canvas-pipe-edge";
-import { useOnViewportChange } from "@xyflow/react";
-import { snapViewportCrisp, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } from "../../canvas-camera";
+import { ArrowDraft, BoardArrows, BoardPointer } from "../../board-objects/Arrows";
+import { PresenceLayer, followPerson, onHost, useFollowing, usePeopleHere } from "../../multiplayer/presence";
+import { BoardContext } from "../../board-objects/board-context";
+import { isBoxType } from "../../board-objects/board-model";
+import { useOnViewportChange, useReactFlow, useStore } from "@xyflow/react";
+import { snapViewportCrisp, CameraMoves, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } from "../../canvas-camera";
 import { buildBaseNodes, reuseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
 import { useCanvasRuntime } from "./canvas-runtime";
-import { AGENT_TILE_KIND } from "../../tile-kinds";
+import { tileKind, useTilesVersion } from "../../tiles";
 import { agentById, useAgents } from "../../agents";
 import { notReady, useAgentPresence } from "../../agent-plugins";
 
@@ -61,7 +66,29 @@ const PRO_OPTIONS = { hideAttribution: true };
 function ViewportMirror({ target }: { target: { current: { x: number; y: number; zoom: number } } }) {
   // Stable: the hook writes these into react-flow's store whenever they change.
   const mirror = useCallback((vp: { x: number; y: number; zoom: number }) => { target.current = vp; }, [target]);
-  useOnViewportChange({ onChange: mirror, onEnd: mirror });
+  // onStart too: a wheel pan's first notch reaches only the start, so a one-notch pan has no change.
+  // Not onEnd: a scroll's end carries the viewport from before it, and the crisp snap would stand down.
+  useOnViewportChange({ onStart: mirror, onChange: mirror });
+  return null;
+}
+
+function FollowCamera({ repo }: { repo: string }) {
+  const person = useFollowing(repo);
+  const people = usePeopleHere(repo);
+  const flow = useReactFlow();
+  const viewport = person ? people.find((p) => p.person === person && onHost(p))?.viewport : null;
+  const dom = useStore((s) => s.domNode);
+  useEffect(() => {
+    if (viewport) void flow.setViewport(viewport, { duration: 80 });
+  }, [flow, viewport?.x, viewport?.y, viewport?.zoom]);
+  // The guest's own pan or zoom on the canvas ends following; a wheel over a tile scrolls the tile.
+  useEffect(() => {
+    if (!person || !dom) return;
+    const stop = (e: Event) => { if (!(e.target as Element | null)?.closest?.(".react-flow__node")) followPerson(repo, null); };
+    dom.addEventListener("wheel", stop, { capture: true, passive: true });
+    dom.addEventListener("pointerdown", stop, { capture: true });
+    return () => { dom.removeEventListener("wheel", stop, { capture: true }); dom.removeEventListener("pointerdown", stop, { capture: true }); };
+  }, [dom, person, repo]);
   return null;
 }
 
@@ -84,6 +111,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   useEffect(() => {
     const active = document.activeElement as HTMLElement | null;
     if (!active || active === document.body) return;
+    // A board object is written in by double-click, not by selection: its focus is its own.
+    if (active.closest("[data-board-object], [data-arrow-label]")) return;
     const node = active.closest(".react-flow__node");
     if (!node) return;
     if (!selectedTileId || node.getAttribute("data-id") !== selectedTileId) active.blur();
@@ -111,7 +140,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     // tiles (terminal/shell/diff/editor) snap to 100% with the content-corner
     // clamp; the rest get the framed focus. Mirrors the onNodeClick decision.
     const kind = tiles.find((x) => x.id === id)?.kind;
-    const exact = kind === AGENT_TILE_KIND || kind === "shell" || kind === "diff" || kind === "editor";
+    const exact = !!kind && !!tileKind(kind).pixelExact;
     focusTile(id, { exact });
   }, [selectTile, focusTile, tiles]);
   const focusFrameFromPanel = useCallback((id: string) => {
@@ -125,27 +154,26 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // below shallow-clones only the selected node so a click doesn't churn
   // React.memo on the heavy wrappers. Pure — see canvas-node-build.ts.
   const lastBuiltRef = useRef<ReadonlyMap<string, Node>>(new Map());
+  const nodeTypes = useNodeTypes();
+  const tilesVersion = useTilesVersion();
   const baseNodes: Node[] = useMemo(() => {
     const built = reuseNodes(lastBuiltRef.current, buildBaseNodes({
-    repoPath, tiles, frames, frameOf, pinnedIds: rt.pinnedIds, sizes: rt.sizes, positions: rt.positions,
-    frameTiles: rt.frameTiles,
-    updateFrameTitle: rt.updateFrameTitle, updateFrameColor: rt.updateFrameColor, deleteFrame: rt.deleteFrame,
-    arrangeFrame: rt.arrangeFrame, bringFrameToFront: rt.bringFrameToFront,
-    onAttachWorktree: rt.onAttachWorktree, onCreateWorktree: rt.onCreateWorktree, unbindBranch: rt.unbindBranch,
-    bindWorkspace: rt.bindWorkspace, unbindWorkspace: rt.unbindWorkspace,
+    repoPath, tiles, frames, frameOf, pins: rt.pins, sizes: rt.sizes, positions: rt.positions,
+    objects: rt.board.objects, frameTiles: rt.frameTiles,
+    updateFrameTitle: rt.updateFrameTitle, bringFrameToFront: rt.bringFrameToFront, frameActions: model.frameActions,
     closeTile, onNodeResizeCommit: rt.onNodeResizeCommit, onTogglePin: rt.togglePin, onPinChange: rt.onPinChange,
     }));
     lastBuiltRef.current = new Map(built.map((n) => [n.id, n]));
     return built;
   }, [
-    repoPath, tiles, frames, frameOf, rt.pinnedIds, rt.sizes, rt.positions, rt.frameTiles,
-    rt.updateFrameTitle, rt.updateFrameColor, rt.deleteFrame, rt.arrangeFrame, rt.bringFrameToFront,
-    rt.onAttachWorktree, rt.onCreateWorktree, rt.unbindBranch, rt.bindWorkspace, rt.unbindWorkspace,
-    closeTile, rt.onNodeResizeCommit, rt.togglePin, rt.onPinChange,
+    repoPath, tiles, frames, frameOf, rt.pins, rt.sizes, rt.positions, rt.board.objects, rt.frameTiles,
+    rt.updateFrameTitle, rt.bringFrameToFront, model.frameActions,
+    closeTile, rt.onNodeResizeCommit, rt.togglePin, rt.onPinChange, tilesVersion,
   ]);
   // Derive selection-aware nodes from baseNodes. Shallow-clones ONLY the
   // currently-selected tile so other nodes keep their object identity →
   // React.memo skips them. Frames keep their own z stacking.
+  const selectedObjectId = rt.board.selectedId;
   const nodes: Node[] = useMemo(() => {
     // No selection (the common case): baseNodes already carries every node's
     // zIndex (tiles 100 via mkTile, frames their own), so return it VERBATIM —
@@ -153,12 +181,12 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     // NO special node treatment here: their content is portaled out to the fixed
     // pinned layer by the node wrapper, so the in-canvas node is just an inert,
     // empty bookkeeping node at its normal position.
-    if (!selectedTileId) return baseNodes;
+    if (!selectedTileId && !selectedObjectId) return baseNodes;
     return baseNodes.map((n) => {
-      if (n.type === "frame" || n.id !== selectedTileId) return n;
+      if (n.type === "frame" || (n.id !== selectedTileId && n.id !== selectedObjectId)) return n;
       return { ...n, selected: true, style: { ...(n.style ?? {}), zIndex: 1000 } };
     });
-  }, [baseNodes, selectedTileId]);
+  }, [baseNodes, selectedTileId, selectedObjectId]);
   // The committed layout is `nodes`. While a tile is dragged or resized, xyflow's
   // per-move changes land in this local copy, so the tile follows the pointer and
   // only that node re-renders; the drop / resize-end commit rebuilds `nodes`, which
@@ -222,10 +250,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
 
   const isEmpty = nodes.length === 0;
 
-  // Motion-aware compositing: while the viewport pans/zooms we add a class that
-  // (a) kills tile pointer-events (no hit-test churn) and (b) clips each tile's
-  // paint via `contain` so the browser composites fewer/cheaper layers. Restored
-  // shortly after motion stops. See styles.css `.canvas-moving`.
+  // While the viewport pans/zooms, a class stops heavy tiles taking the pointer, so a
+  // wheel pan is not caught by a tile sliding under the cursor. See styles.css `.canvas-moving`.
   const flowWrapRef = useRef<HTMLDivElement>(null);
   const moveEndTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // Pan momentum: react-flow's pan stops DEAD on release, which reads as
@@ -236,16 +262,20 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   const inMomentumRef = useRef(false);
   const momentumNonce = useRef(0);
   const [momentumReq, setMomentumReq] = useState<{ vx: number; vy: number; n: number } | null>(null);
-  // Bumped to snap the LIVE viewport crisp (ViewportSnap child applies it): on
-  // pan/zoom settle, on fling settle, and on tile select — the moments a tile is
-  // promoted to its own layer and a fractional transform would blur it.
-  const [snapReq, setSnapReq] = useState(0);
-  const bumpSnap = useCallback(() => setSnapReq((n) => n + 1), []);
-  const { currentViewportRef, setViewport } = rt;
   // Bumped by every move start. A camera flight (focus, fit) interrupted by the next one
   // still emits its move-end; settling work checks this so it never acts on a move that
   // has already been superseded.
   const moveSeqRef = useRef(0);
+  // The count when the move now under way began: a move that ends with the count past it was
+  // overtaken (a flight is counted when it is asked for, before it begins).
+  const moveStartSeqRef = useRef(0);
+  // Bumped to snap the LIVE viewport crisp (ViewportSnap child applies it): on
+  // pan/zoom settle, on fling settle, and on tile select — the moments a tile is
+  // promoted to its own layer and a fractional transform would blur it. It names the
+  // move it was asked after, so a flight started before it is applied is left alone.
+  // Filled in by ViewportSnap, which keeps the ask itself: a snap re-renders it alone, not the canvas.
+  const askSnapRef = useRef<() => void>(() => {});
+  const { currentViewportRef, setViewport } = rt;
   // Text is sharp only on whole pixels. The camera can rest on a half pixel (an odd-sized pane,
   // a zoom step), so once it is still at 100% each terminal is nudged by its own remainder —
   // a style on the tile, never a camera move, so no flight or fit can be cut short by it.
@@ -255,19 +285,26 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     alignTimerRef.current = setTimeout(() => {
       const exact = currentViewportRef.current.zoom === 1;
       const dpr = window.devicePixelRatio || 1;
-      for (const el of flowWrapRef.current?.querySelectorAll<HTMLElement>(".react-flow__node .xterm") ?? []) {
-        el.style.translate = "";
-        if (!exact) continue;
+      const terminals = [...(flowWrapRef.current?.querySelectorAll<HTMLElement>(".react-flow__node .xterm") ?? [])];
+      // Every place is read before any nudge is written: one layout, not one per terminal.
+      const nudges = terminals.map((el) => {
+        if (!exact) return "";
+        const [nx = 0, ny = 0] = el.style.translate.split(" ").map((v) => Number.parseFloat(v) || 0);
         const r = el.getBoundingClientRect();
-        const dx = Math.round(r.x * dpr) / dpr - r.x;
-        const dy = Math.round(r.y * dpr) / dpr - r.y;
-        if (dx || dy) el.style.translate = `${dx}px ${dy}px`;
-      }
+        const x = r.x - nx;
+        const y = r.y - ny;
+        const dx = Math.round(x * dpr) / dpr - x;
+        const dy = Math.round(y * dpr) / dpr - y;
+        return dx || dy ? `${dx}px ${dy}px` : "";
+      });
+      terminals.forEach((el, i) => { if (el.style.translate !== nudges[i]) el.style.translate = nudges[i]!; });
     }, 120);
   }, [currentViewportRef]);
   useEffect(() => () => { if (alignTimerRef.current) clearTimeout(alignTimerRef.current); }, []);
-  // A tile added, moved or resized, or the camera snapped, can shift a terminal without a move.
-  useEffect(() => { alignText(); }, [liveNodes, snapReq, alignText]);
+  // A tile added, moved or resized can shift a terminal without a move.
+  useEffect(() => { alignText(); }, [liveNodes, alignText]);
+  // The camera snapped can too.
+  const bumpSnap = useCallback(() => { askSnapRef.current(); alignText(); }, [alignText]);
   const onMove = useCallback((e: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
     alignText();
@@ -278,7 +315,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
     if (s.length > 6) s.shift();
   }, [currentViewportRef, alignText]);
   const onMoveStart = useCallback(() => {
-    moveSeqRef.current++;
+    moveStartSeqRef.current = ++moveSeqRef.current;
     // Ignore move-starts emitted by our OWN momentum setViewport calls — only a
     // real user grab should re-add the motion class + cancel the fling.
     if (inMomentumRef.current) return;
@@ -293,6 +330,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
       flowWrapRef.current?.classList.remove("canvas-moving");
     }, 120);
     if (inMomentumRef.current) return;
+    if (moveSeqRef.current !== moveStartSeqRef.current) { panSamplesRef.current = []; return; }
     // Velocity (px/ms) from the last two recent samples; fling only on a real flick.
     const s = panSamplesRef.current;
     let flung = false;
@@ -374,9 +412,15 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   // that travelled >4px (a header drag) are ignored, like nodeClickDistance.
   // Stable handlers: CanvasView re-renders on every drag frame, and a new handler
   // re-renders every node wrapper and re-runs react-flow's selection effect.
+  // Handlers read the board through a ref: it changes as you type, and they must not.
+  const boardRef = useRef(rt.board);
+  boardRef.current = rt.board;
   const onNodeClick = useCallback<NodeMouseHandler>((_e, node) => {
-    if (node.type === "frame") {
+    if (isBoxType(node.type)) {
+      boardRef.current.select(node.id);
+    } else if (node.type === "frame") {
       selectTile(null);
+      boardRef.current.select(null);
     } else {
       // Re-frame only when selecting a DIFFERENT tile — re-clicking the
       // already-selected tile (e.g. to type) must NOT yank the viewport.
@@ -396,12 +440,8 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
         // only rasterizes crisply at 1:1. Snap all of them to 100% AND
         // frame the tile in one move (exact focus recentres on the tile,
         // anchoring the content corner when it's bigger than the viewport).
-        if (
-          node.type === "terminal" ||
-          node.type === "diff" ||
-          node.type === "editor" ||
-          node.type === "workbench"
-        ) {
+        const kind = tiles.find((x) => x.id === node.id)?.kind;
+        if (kind && tileKind(kind).pixelExact) {
           focusTile(node.id, { exact: true });
         }
       }
@@ -409,8 +449,10 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   }, [selectTile, focusTile, rt, bumpSnap]);
   const onPaneClick = useCallback(() => {
     selectTile(null);
+    boardRef.current.select(null);
     rt.selectedTileIdsRef.current = new Set();
   }, [selectTile, rt]);
+
   const onSelectionChange = useCallback<OnSelectionChangeFunc>(({ nodes: sel }) => {
     // Track which frame (if any) is the user's current single
     // selection. Drives F2-rename + future bulk frame ops. We only
@@ -521,21 +563,29 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           canvas (not an overlay), so the canvas sits BESIDE it and is never
           occluded. Collapses to a narrow icon rail; both keep the canvas clear. */}
       <div className="flex-1 min-h-0 flex flex-row">
-        {!zen && layerTiles.length > 0 && (
+        {/* Always there, empty workspace too: it is where an agent, a project or a machine starts. */}
+        {!zen && (
           <LayersPanel
             frames={layerFrames}
             tiles={layerTiles}
             selectedTileId={selectedTileId}
+            layoutKey={model.layoutKey}
+            canvas
+            folder={model.repoPath && !isRemote(model.repoPath) ? model.repoPath : null}
+          onResume={(agent, frameId, session) => { commands.spawnAgent(agent, frameId, { resume: session }); }}
             onFocusTile={focusTileFromPanel}
             onFocusFrame={focusFrameFromPanel}
             frameActions={frameActions}
             tileActions={{ onClose: closeTile, onRename: commands.renameTile }}
+            sleepActions={model.sleepActions}
           />
         )}
         {/* The native contextmenu listener above suppresses the menu so RIGHT-
             mouse drag pans (panOnDrag=[1,2]) instead of popping a menu that
             aborts the drag — native, so it also covers portaled tile bodies. */}
         <div ref={flowWrapRef} className="relative flex-1 min-h-0">
+        <BoardContext.Provider value={rt.board}>
+        <CameraMoves.Provider value={moveSeqRef}>
         <ReactFlow
           nodes={liveNodes}
           onNodesChange={onNodesChange}
@@ -590,12 +640,17 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           edgesFocusable={false}
           proOptions={PRO_OPTIONS}
         >
-          <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="rgba(155,161,173,0.10)" />
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-grid-dot)" />
           <FocusOnTile req={focusReq} />
           <FocusMode req={focusModeReq} />
           <PanMomentum req={momentumReq} activeRef={inMomentumRef} onSettle={bumpSnap} />
-          <ViewportSnap req={snapReq} activeRef={inMomentumRef} />
+          <ViewportSnap ask={askSnapRef} moveSeq={moveSeqRef} activeRef={inMomentumRef} />
           <ViewportMirror target={currentViewportRef} />
+          {repoPath && <FollowCamera repo={repoPath} />}
+          <BoardPointer target={rt.canvasPointRef} pane={flowWrapRef} />
+          {repoPath && <PresenceLayer repo={repoPath} pane={flowWrapRef} />}
+          <BoardArrows />
+          <ArrowDraft />
 
           {/* The tool island is host chrome now (workspace/host-chrome.tsx),
               drawn by the runtime over every view; zen suppresses it through
@@ -626,7 +681,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
               </Button>
               {!zen && (
                 <ZoomIsland
-                  tileCount={nodes.length}
+                  tileCount={tiles.length}
                   minimapOn={minimapOn}
                   onToggleMinimap={() => setMinimapOn((v) => !v)}
                   onReset={rt.resetCanvas}
@@ -644,24 +699,25 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
               pannable
               zoomable
               className="!bg-[var(--color-bg3)] !border !border-[var(--color-line2)] !rounded-lg"
-              maskColor="rgba(0,0,0,0.55)"
+              maskColor="var(--color-scrim)"
               nodeColor="var(--color-line2)"
             />
           )}
         </ReactFlow>
+        </CameraMoves.Provider>
+        </BoardContext.Provider>
         {isEmpty && (
           <CanvasEmptyState
             repoPath={repoPath}
             onShowTree={() => spawnVis("tree")}
             onShowShell={() => spawnVis("shell")}
-            onShowDiff={() => spawnVis("diff")}
+            agentId={anyAgentReady ? agentById(rt.agentSel)?.id ?? null : null}
             agentLabel={anyAgentReady ? agentById(rt.agentSel)?.label ?? null : null}
             onSpawnAgent={() => {
               const a = anyAgentReady ? agentById(rt.agentSel) : undefined;
               if (a) rt.spawnAgent(a);
               else window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "agents" } }));
             }}
-            onInitWorkspace={rt.onInitWorkspace}
           />
         )}
         </div>

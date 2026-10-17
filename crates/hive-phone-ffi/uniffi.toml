@@ -1,0 +1,4 @@
+[bindings.kotlin]
+package_name = "com.hivemind.phone.core"
+cdylib_name = "hive_phone_ffi"
+android = true

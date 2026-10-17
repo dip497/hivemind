@@ -1,12 +1,9 @@
 /**
- * HCP client for `hive ctl` — one short-lived JSON-RPC connection per request
- * to the running desktop app's control-plane socket, plus a subscription helper
- * for `agent.stream`.
+ * HCP client for the `hive ctl` verbs of the agent channel — one short-lived JSON-RPC
+ * connection per request to the running app's control-plane socket.
  *
  * Socket + token come from env (HIVE_HCP_SOCK / HCP_TOKEN — injected into every
- * agent hivemind spawns) else the well-known userData location: on Windows a
- * named pipe + token file derived from %APPDATA%\hivemind (what the packaged
- * app listens on — see ipcPath), elsewhere <config>/hivemind/hcp.{sock,token}.
+ * agent hivemind spawns) else the app's data folder (app-data.ts).
  *
  * Errors are structured: `HcpCliError { code, message, exit }` so every ctl
  * subcommand prints `{ ok:false, code, message }` and exits with a meaningful
@@ -14,15 +11,14 @@
  */
 import net from "node:net";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { ipcPath } from "@hivemind/core";
+import { appData, appSocket, envGet, type Where } from "./app-data.js";
 
 /** Exit codes — stable, documented in the hivemind skill. */
 export const EXIT = {
   ok: 0,
-  /** Unexpected failure / server INTERNAL. */
+  /** Unexpected failure / server FAILED. */
   error: 1,
   /** Bad arguments (client-side) or BAD_REQUEST / UNKNOWN_METHOD from the server. */
   usage: 2,
@@ -30,14 +26,16 @@ export const EXIT = {
   unavailable: 3,
   /** The wait (read / open-review / workflow) ran out of time. */
   timeout: 4,
-  /** TILE_NOT_FOUND (or an issue/workspace that does not exist). */
+  /** NOT_FOUND: a tile, frame, issue or workspace that is not there. */
   notFound: 5,
-  /** UNAUTHORIZED — bad/missing HCP token. */
+  /** FORBIDDEN — a bad or missing token, or a call the caller may not make. */
   unauthorized: 6,
   /** RATE_LIMITED / DEPTH_EXCEEDED — the control plane refused for now — or
    *  UNSUPPORTED: the provider lacks the capability (no turn signal, no
    *  permission system) so the verb cannot succeed for it. */
   refused: 7,
+  /** The agent stopped to wait on an answer (a question, a permission): `read` says on what. */
+  waiting: 8,
 } as const;
 
 export class HcpCliError extends Error {
@@ -51,64 +49,28 @@ export class HcpCliError extends Error {
 export function exitCodeFor(code: string): number {
   switch (code) {
     case "BAD_REQUEST": case "UNKNOWN_METHOD": case "USAGE": return EXIT.usage;
-    case "APP_NO_RENDERER": case "UNAVAILABLE": return EXIT.unavailable;
+    case "UNAVAILABLE": return EXIT.unavailable;
     case "TIMEOUT": return EXIT.timeout;
-    case "TILE_NOT_FOUND": case "NOT_FOUND": return EXIT.notFound;
-    case "UNAUTHORIZED": return EXIT.unauthorized;
+    case "NOT_FOUND": return EXIT.notFound;
+    case "FORBIDDEN": return EXIT.unauthorized;
     case "RATE_LIMITED": case "DEPTH_EXCEEDED": case "UNSUPPORTED": return EXIT.refused;
     default: return EXIT.error;
   }
 }
 
-export function configDir(env: NodeJS.ProcessEnv = process.env): string {
-  return env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+/** The app's control plane: `HIVE_HCP_SOCK`, given every agent, else the app's own. */
+export function sockPath(where: Where = {}): string {
+  return appSocket("hcp.sock", "HIVE_HCP_SOCK", where);
 }
 
-/** Case-insensitive env read; on Windows a process.env spread carries `Path`,
- *  not `PATH`, and system variables keep whatever casing the creator used. */
-function envGet(env: NodeJS.ProcessEnv, name: string): string | undefined {
-  if (name in env) return env[name];
-  const key = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase());
-  return key === undefined ? undefined : env[key];
-}
-
-/** The packaged app's userData directory on Windows: Electron puts it at
- *  %APPDATA%\hivemind (see app.setName("hivemind") in desktop main), and the
- *  app's pipes + token are derived from that directory — so the CLI must
- *  re-derive the SAME path. Null when APPDATA is missing from the env. */
-export function win32UserDataDir(env: NodeJS.ProcessEnv = process.env): string | null {
-  const appData = envGet(env, "APPDATA");
-  if (!appData) return null;
-  return path.join(appData, "hivemind");
-}
-
-interface EndpointOpts { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv; }
-
-export function sockPath(opts: EndpointOpts = {}): string {
-  const { platform = process.platform, env = process.env } = opts;
-  const override = envGet(env, "HIVE_HCP_SOCK");
-  if (override) return override;
-  if (platform === "win32") {
-    const ud = win32UserDataDir(env);
-    if (ud) return ipcPath(ud, "hcp.sock", platform);
-  }
-  return path.join(configDir(env), "hivemind", "hcp.sock");
-}
-
-function tokenPath(opts: EndpointOpts = {}): string {
-  const { platform = process.platform, env = process.env } = opts;
-  if (platform === "win32") {
-    const ud = win32UserDataDir(env);
-    if (ud) return path.join(ud, "hcp.token");
-  }
-  return path.join(configDir(env), "hivemind", "hcp.token");
-}
-export function token(opts: { platform?: NodeJS.Platform; env?: NodeJS.ProcessEnv } = {}): string {
-  const { platform = process.platform, env = process.env } = opts;
-  const override = envGet(env, "HCP_TOKEN");
-  if (override) return override;
+/** Who this is to the app: `HCP_TOKEN`, an agent's own; `HIVE_DRIVE_TOKEN`, a program's grant (a
+ *  plugin's service is given one); else the install's, the person's. */
+export function token(where: Where = {}): string {
+  const { env = process.env } = where;
+  const given = envGet(env, "HCP_TOKEN") || envGet(env, "HIVE_DRIVE_TOKEN");
+  if (given) return given;
   try {
-    return fs.readFileSync(tokenPath({ platform, env }), "utf8").trim();
+    return fs.readFileSync(path.join(appData(where), "hcp.token"), "utf8").trim();
   } catch {
     return "";
   }
@@ -128,7 +90,7 @@ function unavailable(msg: string): HcpCliError {
 }
 
 function rpcError(m: ServerMsg): HcpCliError {
-  const code = m.error?.data?.code || (m.error?.code === -32601 ? "UNKNOWN_METHOD" : "INTERNAL");
+  const code = m.error?.data?.code || (m.error?.code === -32601 ? "UNKNOWN_METHOD" : "FAILED");
   return new HcpCliError(code, m.error?.message || code, exitCodeFor(code));
 }
 
@@ -157,6 +119,15 @@ function open(first: { id: string; method: string; params: unknown }, onMessage:
   return c;
 }
 
+/** A call names the tile it comes from when it runs in one: the app records that tile as who
+ *  asked. A call that names a tile itself (`report --tile`) keeps it. */
+function fromOwnTile(params: unknown): unknown {
+  const tile = ownTile();
+  if (!tile || !params || typeof params !== "object" || Array.isArray(params)) return params;
+  const named = params as { callerTile?: unknown };
+  return { ...named, callerTile: named.callerTile ?? tile };
+}
+
 /** One request. `timeoutMs` is the WIRE ceiling for this single round trip —
  *  keep it short and loop (see `read`), never one long request: the caller's
  *  own tool timeout (Claude Code's Bash tool: 120 s) is usually the tighter
@@ -170,56 +141,10 @@ export function hcpCall(method: string, params: unknown, timeoutMs = 30_000): Pr
     const timer = setTimeout(() => fail(new HcpCliError("TIMEOUT", `HCP request timed out after ${timeoutMs} ms`, EXIT.timeout)), timeoutMs);
     function ok(v: unknown) { if (settled) return; settled = true; clearTimeout(timer); try { c.end(); } catch { /* */ } resolve(v); }
     function fail(e: Error) { if (settled) return; settled = true; clearTimeout(timer); try { c.destroy(); } catch { /* */ } reject(e); }
-    const c = open({ id, method, params }, (m) => {
+    const c = open({ id, method, params: fromOwnTile(params) }, (m) => {
       if (m.id !== id) return;
       if (m.error) fail(rpcError(m)); else ok(m.result);
     }, (e) => fail(e ?? unavailable("HCP connection closed")));
     c.on("close", () => fail(unavailable("HCP connection closed before a reply")));
-  });
-}
-
-export interface StreamEvent { seq: number; chunk: string; offset?: number; replay?: boolean }
-
-/** Subscribe to a tile's live output. Resolves when the stream ends (server
- *  closed, `stop()` called, or `timeoutMs` elapsed). */
-export function hcpStream(
-  params: { tileId: string; since?: number; lines?: number },
-  onEvent: (ev: StreamEvent) => void,
-  opts: { timeoutMs?: number; signal?: { stop: () => void } } = {},
-): Promise<{ offset: number }> {
-  const sock = sockPath();
-  if (!fs.existsSync(sock)) return Promise.reject(unavailable(`hivemind app not running (no socket at ${sock})`));
-  return new Promise((resolve, reject) => {
-    const reqId = randomUUID();
-    let subscriptionId: string | undefined;
-    let lastOffset = params.since ?? 0;
-    let done = false;
-    const c = open({ id: reqId, method: "agent.stream/subscribe", params }, (m) => {
-      if (m.id === reqId) {
-        if (m.error) return finish(rpcError(m));
-        const r = (m.result ?? {}) as { subscriptionId?: string; offset?: number };
-        subscriptionId = r.subscriptionId;
-        if (typeof r.offset === "number") lastOffset = r.offset;
-        return;
-      }
-      if (m.method !== "agent.stream") return;
-      const ev = (m.params ?? {}) as StreamEvent & { subscriptionId?: string };
-      if (ev.subscriptionId !== subscriptionId) return;
-      if (typeof ev.offset === "number") lastOffset = ev.offset;
-      onEvent(ev);
-    }, (e) => finish(e));
-    const stop = () => {
-      try { c.write(JSON.stringify({ jsonrpc: "2.0", id: "unsub", method: "agent.stream/unsubscribe", params: { subscriptionId } }) + "\n"); } catch { /* */ }
-      finish();
-    };
-    if (opts.signal) opts.signal.stop = stop;
-    const timer = opts.timeoutMs ? setTimeout(stop, opts.timeoutMs) : undefined;
-    function finish(err?: Error) {
-      if (done) return; done = true;
-      if (timer) clearTimeout(timer);
-      try { c.end(); } catch { /* */ }
-      if (err) reject(err); else resolve({ offset: lastOffset });
-    }
-    c.on("close", () => finish());
   });
 }

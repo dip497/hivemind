@@ -7,7 +7,7 @@
  * and patches through IPC; the CLI edits the file and calls `settings.reload`
  * over HCP.
  */
-import { ipcMain, type BrowserWindow } from "electron";
+import { answer, handle, handleEffect } from "./app-ipc.js";
 import { readFileSync } from "node:fs";
 import { mergeSettings, type Settings } from "@hivemind/core/settings-schema";
 import { patchSettingsFile, readSettings, settingsPath, updateSettings } from "@hivemind/core/settings";
@@ -75,11 +75,41 @@ export async function patchSettingsPath(dotted: string, value: unknown): Promise
   return patchSettings([{ path: dotted, value }]);
 }
 
+/** Settings reads or writes still running. */
+export function settingsBusy(): boolean {
+  return coordinator.depth() > 0;
+}
+
+/**
+ * Settles once no settings read or write is running, or after `capMs`. The app waits for it
+ * before exiting: a write cut off by the exit loses the change it carried, and can leave
+ * settings.json's lock behind. The cap keeps a stuck writer from holding the quit.
+ */
+export async function settingsSettled(capMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const capped = new Promise<true>((r) => { timer = setTimeout(() => r(true), capMs); });
+  try {
+    // Operations queued while waiting (the window's last edit, sent as it closed) are waited for too.
+    while (settingsBusy()) {
+      if (await Promise.race([coordinator.idle().then(() => false as const), capped])) return;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Re-read the file (edited by the CLI) and broadcast. Queued behind any write
  *  or reload already in flight, so the value main ends up holding is the one
  *  read last, not the one that happened to finish first. */
 export async function reloadSettings(): Promise<Settings> {
   return coordinator.reload();
+}
+
+/** The settings a patch list changes, for the audit log: their paths, never their values. */
+function settingPaths(raw: unknown): string | undefined {
+  const paths = [...new Set(sanitizePatches(raw).map((p) => p.path))];
+  if (!paths.length) return undefined;
+  return paths.length > 5 ? `${paths.slice(0, 5).join(", ")} and ${paths.length - 5} more` : paths.join(", ");
 }
 
 /** Validate the renderer's patch list: dotted paths + JSON values only. */
@@ -94,14 +124,14 @@ function sanitizePatches(raw: unknown): { path: string; value: unknown }[] {
 }
 
 /** IPC surface + change broadcast to the window. */
-export function installSettingsIpc(getWindow: () => BrowserWindow | null): void {
-  ipcMain.on("settings:get-sync", (e) => { e.returnValue = getSettings(); });
-  ipcMain.handle("settings:get", () => getSettings());
-  ipcMain.handle("settings:replace", (_e, next: unknown) => replaceSettings(next));
-  ipcMain.handle("settings:set", (_e, dotted: unknown, value: unknown) => patchSettingsPath(String(dotted), value));
+export function installSettingsIpc(tellWindows: (channel: string, settings: Settings) => void): void {
+  answer("settings:get-sync", () => getSettings());
+  handle("settings:get", () => getSettings());
+  handleEffect("settings:replace", () => ({}), (_e, next: unknown) => replaceSettings(next));
+  handleEffect("settings:set", (dotted) => ({ target: typeof dotted === "string" ? dotted : undefined }), (_e, dotted: unknown, value: unknown) => patchSettingsPath(String(dotted), value));
   // Batched dotted-path patches — what the renderer sends now (a full-object
   // replace from a debounced UI would revert whatever else was written meanwhile).
-  ipcMain.handle("settings:patch", (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
-  ipcMain.handle("settings:path", () => settingsFile());
-  onSettingsChange((s) => { const w = getWindow(); if (w && !w.isDestroyed()) w.webContents.send("settings:changed", s); });
+  handleEffect("settings:patch", (patches) => ({ target: settingPaths(patches) }), (_e, patches: unknown) => patchSettings(sanitizePatches(patches)));
+  handle("settings:path", () => settingsFile());
+  onSettingsChange((s) => tellWindows("settings:changed", s));
 }

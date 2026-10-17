@@ -1,6 +1,7 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import fs from "node:fs";
 import path from "node:path";
 import { build as viteBuild, type Plugin } from "vite";
 
@@ -9,7 +10,7 @@ import { build as viteBuild, type Plugin } from "vite";
 // into main/preload because node has no .ts loader at runtime. Their
 // transitive npm deps (gray-matter, yaml, zod)
 // stay externalized — they're plain JS and load fine from app.asar.
-const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/core/settings", "@hivemind/core/settings-schema", "@hivemind/core/views", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/agent-host", "@hivemind/agent-sdk", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol"];
+const BUNDLE_INTERNAL = ["@hivemind/core", "@hivemind/core/storage", "@hivemind/core/settings", "@hivemind/core/settings-schema", "@hivemind/core/views", "@hivemind/agents", "@hivemind/agents/node", "@hivemind/agent-host", "@hivemind/agent-sdk", "@hivemind/host", "@hivemind/view-host", "@hivemind/view-sdk", "@hivemind/view-sdk/manifest", "@hivemind/view-sdk/protocol", "@hivemind/workspace-host", "@hivemind/workspace-host/store", "@hivemind/workspace-doc", "@hivemind/workspace-api"];
 
 // ---------------------------------------------------------------------------
 // shiki language / theme allowlist
@@ -84,9 +85,21 @@ function viewSdkPlugin(): Plugin {
   };
 }
 
+// The phone page this build goes with, by its hash (crates/hive-web/build.sh writes it; a release
+// passes it on as HIVEMIND_PHONE_PAGE): Use on your phone says whether a server serves that page.
+function phonePage(): string | null {
+  if (process.env.HIVEMIND_PHONE_PAGE) return process.env.HIVEMIND_PHONE_PAGE;
+  try {
+    return fs.readFileSync(path.resolve("../../crates/hive-web/www/page.sha256"), "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin({ exclude: BUNDLE_INTERNAL }), viewSdkPlugin()],
+    define: { __PHONE_PAGE__: JSON.stringify(phonePage()) },
     build: {
       outDir: "out/main",
       rollupOptions: {
@@ -97,6 +110,8 @@ export default defineConfig({
         input: {
           index: path.resolve("src/main/index.ts"),
           "pty-daemon": path.resolve("../../packages/agent-host/src/pty-daemon.ts"),
+          // The daemon's screens run on a worker thread, which loads this file beside it.
+          "screen-worker": path.resolve("../../packages/agent-host/src/screen-worker.ts"),
         },
       },
     },
@@ -116,12 +131,16 @@ export default defineConfig({
     build: {
       outDir: "out/renderer",
       rollupOptions: {
-        input: { index: path.resolve("src/renderer/index.html") },
+        // browser.html: the same renderer, for a browser tab the app serves (src/browser).
+        input: { index: path.resolve("src/renderer/index.html"), browser: path.resolve("src/renderer/browser.html") },
         output: {
           // Split heavy vendors out of the giant index-*.js so cold-start
           // parse work is distributed across smaller scripts that V8 can
           // code-cache independently across launches.
           manualChunks(id) {
+            // Every part loaded on first use loads through this helper. Left to itself it lands in
+            // a vendor chunk, and that whole chunk then loads at startup with it.
+            if (id.includes("vite/preload-helper")) return "preload-helper";
             if (!id.includes("node_modules")) return;
             // Group ALL react ecosystem chunks together — the previous narrow
             // regex (matching only `/react/<file>`) split react internals
@@ -157,6 +176,7 @@ export default defineConfig({
         // (shiki/core, shiki/wasm, shiki/engine/*) are untouched so the
         // Pierre worker keeps working.
         { find: /^shiki$/, replacement: path.resolve("src/renderer/src/shiki-slim.ts") },
+        { find: /^@xterm\/headless$/, replacement: "@xterm/headless/lib-headless/xterm-headless.mjs" },
       ],
     },
     server: {

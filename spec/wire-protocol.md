@@ -1,41 +1,57 @@
 # Wire protocol (HCP 2)
 
-What a client — `hive ctl`, an agent plugin's scripts, a program in any language — speaks to a
-running host. JSON-RPC 2.0, one message per line, over a unix socket only its owner can open
-(a named pipe on Windows). The socket and token are `HIVE_HCP_SOCK` and `HCP_TOKEN` inside an
-agent the host started, else `<config>/hivemind/hcp.sock` and `hcp.token`.
+What an agent's own plugin and hooks say to the host that started it, from its tile: a turn's
+reply, a report to its starter, a tool use its starter approves, a plan a person reviews.
+JSON-RPC 2.0, one message per line, over a unix socket only its owner can open (a named pipe on
+Windows). The socket and token are `HIVE_HCP_SOCK` and `HCP_TOKEN` inside an agent the host
+started, else `<config>/hivemind/hcp.sock` and `hcp.token`. Everything else — starting, sending,
+reading, closing, naming, pipes, tools — is the workspace API on the drive socket
+(`workspace-api.md`, "Drive socket"), which `hive ctl` speaks.
 
 ## Connection
 
-1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp", "capabilities": {"status"}}`.
-   Every other request before it is refused with `UNAUTHORIZED`.
-2. Requests and notifications, in any order. A hook's `agent.event` notification needs no
-   `initialize` (see `hook-protocol.md`).
+1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp"}`; sent as a notification it
+   signs in with no reply. Every other request before it is refused with `FORBIDDEN`. The token says who calls: the
+   host's own (`hcp.token`) is the person at the machine; an agent the host started is given one
+   of its own, `<tile>.<MAC>`, which names its tile. A call made with a tile's token is that
+   tile's: a `callerTile` naming another tile is refused with `FORBIDDEN`, and one naming none
+   is taken as the tile's own. The person may name any tile.
+2. Then requests and notifications, in any order. A notification from a connection that has not
+   signed in is dropped, a hook's `agent.event` too (see `hook-protocol.md`), and so is one from a
+   tile's token that names another tile.
 
 ## Errors
 
 `{"code": -32000, "message", "data": {"code"}}` for the host's own failures, `data.code` one of
-`BAD_REQUEST`, `UNKNOWN_METHOD`, `UNAUTHORIZED`, `APP_NO_RENDERER`, `RATE_LIMITED`,
-`DEPTH_EXCEEDED`, `TILE_NOT_FOUND`, `TIMEOUT`, `UNSUPPORTED`, `UNAVAILABLE`, `INTERNAL`.
+the workspace API's error codes (`workspace-api.md`, "Errors"): `BAD_REQUEST`, `UNKNOWN_METHOD`,
+`FORBIDDEN`, `NOT_FOUND`, `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `TIMEOUT`,
+`UNAVAILABLE`, `FAILED`.
 `-32601` for an unknown method, `-32600` for a malformed message, `-32700` for bad JSON.
-
-## Streams
-
-- `status/subscribe {"since"?}` → `{"cursor", "snapshot"}` (every session's status) or, when
-  `since` is still in the host's log, `{"cursor", "changes"}` (what changed after it). Then
-  `status/changed {"seq","tileId","status"}` notifications, `status` per
-  `status.schema.json` plus `source` (`hooks` | `screen`) and `since` (ms). `status/unsubscribe`.
-- `agent.stream/subscribe {"tileId","since"?,"lines"?}` → `{"subscriptionId","offset"}`, then
-  `agent.stream {"subscriptionId","seq","chunk","offset","replay"?}` notifications: a tile's
-  output as text, `seq` 0 for the catch-up. A gap in `seq` means chunks were dropped for a slow
-  reader. `agent.stream/unsubscribe {"subscriptionId"}`.
 
 ## Methods
 
-The verbs `hive ctl` uses — `tile.spawn_agent`, `agent.send`, `agent.read`, `agent.report`,
-`agent.approve`, `workflow.run`, … — take and return the shapes `hive ctl --json` prints.
+Each is the caller's tile's, and each but `agent.reply` is recorded in the host's audit log
+(`audit.jsonl` beside `hcp.token`): who asked, what, of what, and whether it happened. Any other
+method is `UNKNOWN_METHOD`.
 
-`agent.sessions {"agent", "cwd"?, "limit"?}` → `{"agent", "resumable", "sessions": [{"id",
-"cwd"?, "title"?, "updated"?}]}`, newest first; only sessions started in `cwd` when it is given.
-`UNSUPPORTED` for an agent whose manifest does not say where its sessions are.
-`tile.spawn_agent {"resume": id}` starts the agent on that session instead of a new one.
+- `agent.reply {"tileId", "text"}` → `{"ok": true}`: the reply of the turn the agent is ending,
+  sent before the `turn.ended` event it belongs to. What `agent.read` answers with.
+- `agent.report {"message"}` → `{"delivered": true, "parent"}`: a message to the agent or program
+  that started this one, put in its starter's inbox (an `agent.event` of kind `reported` for a
+  program). This turn's reply is then not forwarded to it
+  as well. `NOT_FOUND` with no starter, or one that is gone.
+- `agent.await_approval {"tool_name", "tool_input"}` → `{"decision": "allow" | "deny" | "ask",
+  "reason"?}`: a supervised worker's hook, before a tool runs. Its starter is asked (an
+  `approval` wait, answered with `agent.answer`); `ask` when nobody can answer, or nobody did in
+  time. The wait ends when the connection that asked closes.
+- `agent.inbox {"wait"?}` → `{"messages": [{"id", "at", "from", "name", "kind", "turn"?, "text"}],
+  "dropped"}`: what other agents have for this one, oldest first, each given once. `kind` is
+  `reply` (a turn of an agent it started or is piped from, unless read with `agent.read`),
+  `report`, `waiting` (one it started waits on an answer) or `approval` (one it supervises asks
+  to use a tool). With none, it waits up to `wait` ms (at most 10 minutes) for the first.
+  `dropped`: how many older ones went unread past 500. Nothing an agent sends is typed into
+  another's terminal: when its inbox gets a message, the agent is told once, at its prompt,
+  `[hive] Your agents sent you messages. Read them: hive ctl inbox`.
+- `review.open {"plan", "cwd"?}` → `{"decision": "allow" | "deny", "feedback"?}`: the agent waits
+  on a person's review of its plan (a `plan` wait, answered with `agent.answer`). `TIMEOUT` when
+  nobody reviews it, or the caller stops waiting.

@@ -3,7 +3,8 @@
 // the bounding box of the tiles inside (auto-fit), and an empty frame collapses
 // to a placeholder. So there is no resize-handle test anymore; we assert the
 // empty frame renders at the collapsed placeholder size + still moves.
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,19 +12,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const APP_DIR = path.resolve(__dirname, "../..");
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 
 test.beforeAll(async () => {
-  app = await electron.launch({
-    args: [
-      path.join(APP_DIR, "out/main/index.js"),
-      "--no-sandbox",
-      `--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    ],
-    cwd: APP_DIR,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: APP_DIR, args: [`--user-data-dir=/tmp/hivemind-ud-${Date.now()}-${Math.random().toString(36).slice(2)}`] });
+  page = app.page;
   page.on("console", (m) => console.log(`[renderer.${m.type()}]`, m.text()));
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 10_000 });
@@ -56,7 +50,7 @@ test("frame header-drag moves it", async () => {
   expect(before).toBeTruthy();
 
   // Drag handle is the colored header bar inside the frame.
-  const header = frame.locator(".tile-drag-handle").first();
+  const header = frame.locator(".frame-drag-handle").first();
   const hb = await header.boundingBox();
   expect(hb).toBeTruthy();
   // Click mid-header to avoid the rename-input + buttons at edges.
@@ -99,13 +93,32 @@ test("frame header-drag moves it", async () => {
 
 test("frame arrange menu offers Columns / Rows / Grid", async () => {
   const frame = page.locator(".react-flow__node-frame").first();
-  await frame.click({ position: { x: 30, y: 4 } });
-  const arrange = frame.locator('[aria-label="arrange"]');
-  await expect(arrange).toBeVisible();
-  await arrange.click();
-  // Menu portals to document.body.
+  await frame.locator("[data-frame-actions]").click();
+  // The frame's menu, and its Arrange, portal to document.body.
+  await page.locator('[data-frame-menu-sub="arrange"]').click();
   await expect(page.getByText("Columns", { exact: true })).toBeVisible({ timeout: 2_000 });
   await expect(page.getByText("Rows", { exact: true })).toBeVisible();
   await expect(page.getByText("Grid", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
+});
+
+test("over a wallpaper (glass), a frame's name line stays one material with the frame: no bar of its own", async () => {
+  const label = page.locator(".react-flow__node-frame").first().locator("[data-frame-label]");
+  await expect(label).toBeVisible();
+  await page.evaluate(() => document.documentElement.classList.add("content-glass"));
+  try {
+    expect(await label.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+    // A tile's title bar is still frosted there.
+    const bar = await page.evaluate(() => {
+      const el = document.createElement("div");
+      el.className = "tile-drag-handle";
+      document.body.append(el);
+      const bg = getComputedStyle(el).backgroundColor;
+      el.remove();
+      return bg;
+    });
+    expect(bar).not.toBe("rgba(0, 0, 0, 0)");
+  } finally {
+    await page.evaluate(() => document.documentElement.classList.remove("content-glass"));
+  }
 });

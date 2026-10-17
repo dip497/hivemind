@@ -1,5 +1,38 @@
 # CLAUDE
 
+## Multiplayer, other devices, phone — work in progress
+
+A multi-session project. **Start at `docs/plans/multiplayer.md`**: what is done, what is in
+progress, how to resume, and the checks to run. The design is
+`docs/design/multiplayer-2026-09-28.md` (accepted; Phase 0 refactors R1–R16 come before any
+feature work) and the facts behind it are in `docs/design/multiplayer-2026-09-28-research.md`.
+Update the status table in `docs/plans/multiplayer.md` in the same commit as the work it
+describes, so the next session picks up where this one stopped. Its **Working rules** (modular
+code, one owner per job, no seams for tests) apply to every item.
+
+## Tests
+
+Every test written or changed passes the authoring gate in `.claude/skills/test-audit/SKILL.md`
+(the maintainer's rule, adapted from openclaw's test-audit skill), and each new test is shown
+to fail when the behaviour it guards is broken.
+
+## Work that runs per event
+
+Agent status, terminal output, keystrokes and store changes fire many times a second, on Electron
+main or the pty daemon's one thread, where every window and terminal waits behind them. Fix the
+cause, at the owner, not the symptom. Before adding work there, check:
+
+- It does not re-derive from scratch (folder scan, whole-document read or copy, full serialize).
+  The owner keeps the result and clears it on change (`WorkspaceStore.getCore`).
+- It gives back the same object when nothing changed. Caches, memos and debounced saves key on
+  identity (`rebaseRecords`).
+- Its cost at 50 tiles, workspaces, board objects or 5000 scrollback lines is measured and stated.
+- A heavy resource per item (GL context, process, full read) is spread or bounded, not made N at once.
+- A feed, poll or listener stops when its last follower leaves.
+
+Measure the built app before and after, on a real GPU (xvfb renders in software and lies), and put
+both numbers in the commit.
+
 ## Adding or completing an agent integration
 
 Wiring a new CLI agent (kiro, gemini, amp, …) — or finishing a half-wired one — follows
@@ -36,18 +69,23 @@ What it does (`scripts/release.sh`):
 
 ### What the workflows do
 
-- **`.github/workflows/ci.yml`** runs on every push to `main` and PR: typecheck + build + unit tests (`pnpm test:unit`). Heavy Playwright e2e is intentionally NOT run here — release builds validate the full build path.
-- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Four jobs: `build-linux` (ubuntu) → `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`; `build-linux-arm64` (ubuntu-24.04-arm) → `hive-linux-arm64` only (a remote-machine CLI, no desktop); `build-macos` (macos-14, Apple Silicon) → `hive-darwin-arm64` + `hivemind-<version>-arm64-mac.zip`; `publish` downloads their artifacts and creates the GitHub Release. A manual `workflow_dispatch` is BUILD-ONLY unless you pass `-f publish=true` — use `gh workflow run release.yml --ref <branch> -f tag=vX.Y.Z-test` to smoke-test a platform's build without cutting a release; the assets land as run artifacts. Each build job compiles the CLI with `bun build --compile` (no `--target` — host arch; the Linux jobs then run `apps/cli/tests/sessions.test.ts` against the binary via `HIVE_BIN`, so a broken embedded pty addon fails the release), builds the renderer + main with `electron-vite`, then packages via `pnpm deploy` + `electron-builder`.
+- **`.github/workflows/ci.yml`** runs on every push to `main` and PR: typecheck of every package + build + unit tests (the desktop's `pnpm test:unit`, then every package's and the CLI's `bun test` through `pnpm test`). Heavy Playwright e2e is intentionally NOT run here — release builds validate the full build path.
+- **`.github/workflows/release.yml`** runs on `v*.*.*` tags (and manual `workflow_dispatch`). Parallel build jobs: `build-linux` (ubuntu) → `hive-linux-x86_64` + `hivemind-<version>-x86_64.AppImage`; `build-linux-arm64` (ubuntu-24.04-arm) → `hive-linux-arm64` only (a remote-machine CLI, no desktop); `build-macos` (macos-26, Apple Silicon) → `hive-darwin-arm64` + `hivemind-<version>-arm64-mac.zip`; `publish` downloads their artifacts and creates the GitHub Release. A manual `workflow_dispatch` is BUILD-ONLY unless you pass `-f publish=true` — use `gh workflow run release.yml --ref <branch> -f tag=vX.Y.Z-test` to smoke-test a platform's build without cutting a release; the assets land as run artifacts. Each build job compiles the CLI with `bun build --compile` (no `--target` — host arch; the Linux jobs then run `apps/cli/tests/sessions.test.ts` against the binary via `HIVE_BIN`, so a broken embedded pty addon fails the release), builds the renderer + main with `electron-vite`, then packages via `pnpm deploy` + `electron-builder`.
+  `build-hive-net` is a matrix over the four targets (`hive-net-linux-x86_64`, `hive-net-linux-arm64`, `hive-net-darwin-arm64`, `hive-net-windows-x64.exe`; `cargo build --release --locked` in `crates/hive-net`), each smoke-tested by checking `hive-net id` against `conformance/identity.json`. The app, `hive host` and hive-net speak one daemon protocol and must come from one release (a mismatched pair stops and says so), so the Linux and macOS targets are required: a failure there holds the release. The Windows target stays `continue-on-error`, as the Windows app does; `install.sh` / `install.ps1` still warn and install the rest when a hive-net asset is missing. CI's `hive-net` job runs the crate's tests.
 
   Windows specifics: `build-windows` (windows-latest) produces `hive-windows-x64.exe` + `hivemind-<version>-x64-win.zip`, both published. The job stays `continue-on-error: true` while being in `publish`'s `needs`: publish waits for it, but a Windows failure ships the release without its assets instead of holding Linux and macOS back. Its smoke steps run the build rather than only packaging it — the compiled CLI, a ConPTY spawn, a bare `.cmd` agent through `resolveWindowsSpawn`, the app opening its named pipe, and a hook through `cmd.exe` asserting env + stdin arrive. The job also parse-checks `install.ps1` (the only Windows host the project has) and asserts the unpacked `win32-x64` `conpty.node` + `conpty.dll` made it into the bundle (Windows drives ConPTY — there is no `pty.node`, and a `.dll` is not covered by electron-builder's implicit native-module unpacking), because nothing else fails when the native module is missing or wrong-arch.
 
   macOS specifics worth not re-deriving: we have no Apple Developer cert, so `mac.identity` is `null` (electron-builder skips signing entirely — it does NOT fall back to ad-hoc). An arm64 bundle with an invalid signature is SIGKILLed by the kernel, and electron-builder's repack invalidates the signature Electron ships with — so the workflow re-applies an ad-hoc signature (`codesign --force --deep --sign -`) and archives with `ditto` (preserves the framework symlinks `zip` mangles). Users still hit Gatekeeper quarantine; `install.sh` strips the xattr. Only arm64 is published: the bundle carries a host-arch `@lydell/node-pty`, so cross-arch packaging would ship the wrong native module. Intel macs use `--dev`.
 
+- **`.github/workflows/nightly.yml`** runs daily at 03:17 UTC and by manual dispatch. It pins the current `main` SHA and calls the same `release.yml` build and smoke jobs, publishing `nightly-YYYYMMDD-RUN_ID` as a pre-release with `make_latest: false`. Stable `releases/latest` remains stable. `bash install.sh --channel nightly` or `install.ps1 -Channel nightly` installs the newest nightly; later upgrades and the app's update check follow that channel. Pass `--channel stable` / `-Channel stable` to switch back. Nightly discovery uses GitHub's releases API, so it can be rate-limited. `--version <tag>` / `-Version <tag>` (or `HIVEMIND_VERSION`) installs exactly that build, older ones too, which is the rollback; `--channel stable` from a nightly installs the latest stable even though the nightly is newer. The `prune` job keeps the 14 newest nightlies and deletes older ones with their tags.
+- Release builds cache the pnpm store, Electron downloads and electron-builder tools. `hive-net`'s Cargo cache is saved by the nightly only (a cache saved under a tag is never read again) and restored by tag runs; its release profile has no cross-crate LTO, which made the build slow for a slightly smaller binary. The phone page restores ci.yml's cache. The Windows zip uses Deflate level 5 instead of the package's maximum, which took 23 minutes on that zip alone (run 37036151192). All binary and app smoke checks still run.
+- CI (`ci.yml`) skips hive-net, hive-phone and compose when the files each one reads already passed (a hash of them, saved as an empty cache entry on success; every job still runs at least weekly), runs hive-net's tests with cargo-nextest, and splits the unit tests into `desktop` and `packages` under the required `build-and-test` check. The repository's Actions cache is capped at 10 GB and fills up: keep cache keys stable and save from main only where a run on another ref would never read it.
+
 ### Pre-release checklist
 
 Before running `./scripts/release.sh`:
 
-- [ ] All e2e tests green locally: `cd apps/desktop && unset ELECTRON_RUN_AS_NODE && xvfb-run -a --server-args="-screen 0 1600x1000x24" pnpm test:e2e --retries=0` (99 tests across 29 specs, all must pass; the profile is isolated per run — see apps/desktop/AGENTS.md). **Run this on a quiet machine.** The suite takes 13-16 minutes and launches Electron ~30 times; at system load 25-30 on 16 CPUs a rotating handful of specs fails on cold-boot and timing, every one of which passes in isolation. Check `uptime` first — a red run on a loaded box is not evidence of a regression.
+- [ ] All e2e tests green locally: `apps/desktop/scripts/e2e.sh` (every spec must pass; the profile is isolated per run — see apps/desktop/AGENTS.md). **Run this on a quiet machine.** The suite takes 8-16 minutes and launches Electron at least once per spec; at system load 25-30 on 16 CPUs a rotating handful of specs fails on cold-boot and timing, every one of which passes in isolation. Check `uptime` first — a red run on a loaded box is not evidence of a regression.
 - [ ] Canvas perf unchanged within noise vs the previous release: `apps/desktop/scripts/perf-canvas-effects.mjs`. Measure on a real display with the backend recorded — **absolute FPS, frame-time and latency gates are not valid under xvfb**, which renders on the llvmpipe CPU rasterizer; see `docs/design/performance-native-2026-09-09.md`. On a live desktop a capped run can read ~1 FPS for anything that moves while the page's main thread sits idle — each present waiting on a vsync that does not arrive. Run the A/B uncapped (`PERF_EXTRA_ARGS="--disable-gpu-vsync --disable-frame-rate-limit"`) and check the recorded `session.type` — after a reboot the desktop may be Wayland, not the X display you expect (`docs/design/perf-streaming-2026-09-11.md`).
 - [ ] Unit tests green: `pnpm test:unit` from `apps/desktop`.
 - [ ] Installer tests green: `bash scripts/install-plan-test.sh` + `bash scripts/install-macos-test.sh` + `bash scripts/install-staged-test.sh`. The first asserts the release-asset names install.sh asks for match what release.yml uploads — a rename on either side breaks every install. The second drives the real Darwin helpers with `ditto`/`xattr` shimmed, so the mac path is covered without a mac. The third drives an upgrade taken while the app is live: what `.installed-version` says has to be the version that runs, or a re-run finds nothing to do and leaves the user on the old build.

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* The tool plugins that come with the app draw with the app's classes too. */
+@source "../../../tools";
 @import "tw-animate-css";
 @import "@xterm/xterm/css/xterm.css";
 @import "@xyflow/react/dist/style.css";
@@ -108,12 +110,16 @@
   --color-brand-hover: oklch(0.57 0.03 250);
   --color-select: oklch(0.80 0.005 250);
   --color-accent: oklch(0.74 0.035 245);
+  /* The focus ring: the selection colour, from the palette, never the accent (which may be amber, "waits on you"). */
+  --color-focus: var(--color-select);
 
   /* Semantic: muted enough to live with all day, distinct enough never to be confused. */
   --color-ok:     oklch(0.74 0.07 155);
   --color-warn:   oklch(0.80 0.13 72);
   --color-err:    oklch(0.66 0.11 32);
   --color-info:   oklch(0.74 0.035 245);
+  /* New for the person (an unread tile): a clear blue, whatever the accent; it marks, never fills. */
+  --color-unread: oklch(0.70 0.14 250);
 
   /* Behind a terminal, before the theme store has painted the preset's own. */
   --color-terminal-bg: #1A1C1F;
@@ -147,6 +153,50 @@
   --hm-shadow-2: 0 4px 12px oklch(0.05 0 0 / 0.38), 0 1px 3px oklch(0.05 0 0 / 0.26);
   --hm-shadow-3: 0 12px 32px oklch(0.05 0 0 / 0.48), 0 4px 12px oklch(0.05 0 0 / 0.32);
   --hm-highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.07);
+  /* What floats on the canvas: tiles, islands, the canvas controls. */
+  --hm-shadow-float: 0 8px 22px oklch(0 0 0 / 0.45);
+  /* Glass: a deeper drop and a brighter top light, so a translucent slab still reads as lifted. */
+  --hm-shadow-glass: 0 10px 36px oklch(0 0 0 / 0.5);
+  --hm-highlight-glass: inset 0 1px 0 0 oklch(1 0 0 / 0.10);
+
+  /* Type: DESIGN.md's steps and nothing else (the defaults are cleared, so text-sm does not
+     exist). A step is a size and its tracking; leading and weight belong to the role. */
+  --text-*: initial;
+  --text-heading: 20px;  --text-heading--letter-spacing: -0.014em;
+  --text-title: 15px;    --text-title--letter-spacing: -0.014em;
+  --text-row: 14px;      --text-row--letter-spacing: -0.005em;
+  --text-body: 13px;     --text-body--letter-spacing: -0.005em;
+  --text-label: 12px;    --text-label--letter-spacing: -0.005em;
+  --text-count: 11px;    --text-count--letter-spacing: 0.01em;
+  --text-chip: 10px;     --text-chip--letter-spacing: 0.01em;
+
+  /* Control heights: a control is 32px; a compact one, 28px, only in dense rows (tile chrome,
+     popovers, the panel). Tile chrome goes down to 24, 20 and 16 (h-6, h-5, h-4). */
+  --spacing-control: 32px;
+  --spacing-control-compact: 28px;
+
+  /* Corners beyond sm 4 / md 6 / lg 8 / xl 12. */
+  --radius-keycap: 5px;
+  --radius-menu: 10px;
+  --radius-sheet: 14px;
+
+  /* Behind a modal, a sheet, the minimap's off-screen area. */
+  --color-scrim: oklch(0 0 0 / 0.55);
+  /* Selected text and the editor's current line, mixed from the text colour so a light theme gets them too. */
+  --color-selection: color-mix(in oklab, var(--color-fg) 20%, transparent);
+  --color-current-line: color-mix(in oklab, var(--color-fg) 2.5%, transparent);
+  --color-match: color-mix(in oklab, var(--color-accent) 22%, transparent);
+  --color-bracket-match: color-mix(in oklab, var(--color-brand) 25%, transparent);
+  --color-grid-dot: oklch(0.70 0.012 260 / 0.10);
+
+  /* The editor's syntax colours. */
+  --color-syntax-keyword: #c084fc;
+  --color-syntax-string: #22c55e;
+  --color-syntax-number: #f59e0b;
+  --color-syntax-function: #60a5fa;
+  --color-syntax-type: #5eead4;
+  --color-syntax-property: #93c5fd;
+  --color-syntax-tag: #f472b6;
 }
 
 @layer base {
@@ -172,7 +222,7 @@ body,
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  font-size: 13px;
+  font-size: var(--text-body);
   line-height: 1.5;
   letter-spacing: var(--hm-track-body);
   font-optical-sizing: auto;
@@ -194,14 +244,12 @@ h2 { letter-spacing: var(--hm-track-heading); line-height: 1.2; }
 h3 { letter-spacing: var(--hm-track-heading); line-height: 1.3; }
 small, .u-caption { letter-spacing: var(--hm-track-caption); }
 
-/* tracked small-caps section-header utility — replaces all-caps mono headers */
+/* A section heading: 12px medium pencil text in sentence case (DESIGN.md, "Label"). */
 .u-eyebrow {
   font-family: var(--font-sans);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-fg2); /* AA: fg3 (#6b7280) fails 4.5:1; eyebrow labels carry real info */
+  font-size: var(--text-label);
+  font-weight: 500;
+  color: var(--color-fg2);
 }
 
 /* ── floating-island chrome — ONE recipe shared by every canvas overlay
@@ -212,7 +260,7 @@ small, .u-caption { letter-spacing: var(--hm-track-caption); }
   background: color-mix(in srgb, var(--color-bg2) 98%, transparent);
   border: 1px solid var(--color-line2);
   border-radius: 12px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--hm-shadow-float);
 }
 
 /* ── Glass toasts (bottom-right stack) — borderless frosted cards. No hairline
@@ -235,7 +283,7 @@ small, .u-caption { letter-spacing: var(--hm-track-caption); }
   background: var(--color-bg3);
   /* liquid-glass: inset top highlight (lit from above) + a deep drop so the
      borderless card still reads as a floating slab against the canvas. */
-  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.10), 0 12px 40px rgba(0, 0, 0, 0.55);
+  box-shadow: var(--hm-highlight-glass), var(--hm-shadow-glass);
 }
 /* Under glass, lean into the live wallpaper frost (matches .hm-island's glass
    rule). The translucent bg lets the blurred wallpaper bleed through. */
@@ -337,14 +385,15 @@ html.glass-on .hm-toast {
   border-radius: 10px;
   box-shadow: var(--hm-shadow-2), var(--hm-highlight);
 }
-/* A menu takes the Layers panel's material: never thinner than the panel it opens from. */
-.hm-menu {
+/* A menu or popover takes the Layers panel's material: never thinner than the panel it opens from. */
+.hm-menu, .hm-popover {
   background: var(--surface-2);
   color: var(--color-fg);
   border-color: var(--color-line2);
-  font-size: 12px;
+  font-size: var(--text-label);
 }
-html.glass-on:not([data-wallpaper="none"]) .hm-menu {
+html.glass-on:not([data-wallpaper="none"]) .hm-menu,
+html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   background: color-mix(in srgb, var(--surface-2) clamp(68%, var(--glass-opacity), 92%), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(130%);
 }
@@ -361,7 +410,6 @@ html.glass-on:not([data-wallpaper="none"]) .hm-menu {
 /* Anchored popover shell — shared by FilterBar dropdowns, peek StateSelect,
    and all pickers. Same padding + radius + shadow so every dropdown matches. */
 .hm-popover {
-  background: var(--color-bg3);
   border: 1px solid var(--color-line2);
   border-radius: 10px;
   box-shadow: var(--hm-shadow-2), var(--hm-highlight);
@@ -373,7 +421,7 @@ html.glass-on:not([data-wallpaper="none"]) .hm-menu {
 .hm-modal-overlay {
   /* No blur: the scrim already hides the detail, and a blur over the whole viewport is
      recomputed on every frame a terminal streams behind an open dialog. */
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--color-scrim);
 }
 
 /* Interactive soft card — gentle hover lift + border brighten + smooth ease.
@@ -431,10 +479,17 @@ html.glass-on:not([data-wallpaper="none"]) .hm-menu {
   .hm-spinner { animation: none; }
 }
 
-*:focus-visible {
-  outline: 2px solid var(--color-brand);
-  outline-offset: 1px;
-  border-radius: 3px;
+/* The one focus ring. Native controls take the theme, not the operating system's colours. */
+:root { color-scheme: dark; accent-color: var(--color-brand); }
+:root[data-theme-mode="light"] { color-scheme: light; }
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+/* An item in a list or menu shows focus by its highlight; a board object is itself the field. */
+:is([role="option"], [role^="menuitem"]):focus-visible,
+:is([data-board-object] textarea, [data-board-object] input, [data-arrow-label] input):focus-visible {
+  outline: none;
 }
 
 
@@ -460,7 +515,7 @@ html.glass-on:not([data-wallpaper="none"]) .hm-menu {
   border: 1px solid var(--color-line2) !important;
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--hm-shadow-float);
 }
 .react-flow__controls-button {
   background: transparent !important;
@@ -470,6 +525,19 @@ html.glass-on:not([data-wallpaper="none"]) .hm-menu {
 .react-flow__controls-button:hover {
   background: var(--color-bg4) !important;
   color: var(--color-fg) !important;
+}
+/* A view plugin's frame: the same scheme as the page inside it (the SDK keeps `normal`), or the
+   browser paints the frame's backdrop opaque white over the wallpaper. */
+iframe[name^="hm-view:"] { color-scheme: normal; }
+/* A pipe's travelling dot (canvas-pipe-edge.tsx): placed by its animation's transform. */
+.hm-pipe-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-brand);
 }
 
 /* Scrollbar (Webkit) — thin, accent on hover */
@@ -557,7 +625,7 @@ a {
 .react-flow__node-frame {
   pointer-events: none !important;
 }
-.react-flow__node-frame .tile-drag-handle,
+.react-flow__node-frame .frame-drag-handle,
 .react-flow__node-frame .react-flow__resize-control {
   pointer-events: auto;
 }
@@ -569,35 +637,14 @@ a {
    Canvas.tsx — only the one tile being grabbed, cleared on pointerup. See
    https://developer.mozilla.org/en-US/docs/Web/CSS/will-change#via_a_script */
 
-/* Motion-aware compositing — while the canvas pans/zooms (.canvas-moving added
-   by Canvas onMoveStart, removed ~120ms after onMoveEnd):
-   - tiles stop hit-testing (no pointer churn mid-pan)
-   - each tile clips its own paint so one tile can't trigger a whole-area
-     repaint and the browser composites cheaper layers.
-   Transient only — restored the instant motion settles, so any clipped shadow
-   during a pan is imperceptible. Hivemind's take on Nyx "GPU promotion". */
-/* Promote ONLY the heavy tile types during pan (terminal/diff/workbench/editor/
-   issues). Frames are big empty boxes — promoting them adds a huge texture +
-   forces re-rasters across every WebGL canvas inside (716 ms worst frame, 34
-   longtasks measured). Scope by node-type class instead of all `.react-flow__node`. */
+/* While the canvas pans or zooms, heavy tiles stop taking the pointer, so a wheel pan keeps
+   panning when a terminal slides under the cursor. Paint is left alone: changing it re-rasters every tile. */
 .canvas-moving .react-flow__node-terminal,
 .canvas-moving .react-flow__node-diff,
 .canvas-moving .react-flow__node-workbench,
 .canvas-moving .react-flow__node-editor,
 .canvas-moving .react-flow__node-issues {
   pointer-events: none;
-  contain: layout paint style;
-}
-/* NOTE: do NOT add `.xterm` here. The terminal now uses xterm's DOM renderer
-   (real text nodes); `will-change: transform` promotes it to a GPU layer, which
-   disables crisp/subpixel text rendering and leaves the terminal blurry — most
-   visibly right after a programmatic zoom-to-1 on select, when `.canvas-moving`
-   is briefly applied. The node's `contain: layout paint style` (rule above)
-   already isolates paint during motion, so the terminal needs no extra
-   promotion. will-change stays only on the raster-heavy Pierre diff tiles. */
-.canvas-moving .react-flow__node-diff [data-pierre-tile],
-.canvas-moving .react-flow__node-workbench [data-pierre-tile] {
-  will-change: transform;
 }
 
 /* @pierre/diffs renders the selectable code text in <code data-code> and ships
@@ -635,16 +682,13 @@ body.canvas-resizing .react-flow__node {
   contain: layout paint style;
 }
 
-/* THE per-frame cost (xyflow #4711: "styles are recalculated every frame").
-   box-shadow and backdrop-filter on tiles are re-rasterised on every move /
-   resize / pan / zoom frame — the dominant source of jank. Drop them (and any
-   transition that would animate the change) for the duration of the motion;
-   restored the instant it settles, so it's imperceptible.
+/* THE per-frame cost of a drag or resize (xyflow #4711: "styles are recalculated
+   every frame"): box-shadow and backdrop-filter on tiles are re-rasterised on every
+   move / resize frame. Drop them (and any transition that would animate the change)
+   for the duration; restored the instant it settles, so it's imperceptible.
    Name the elements that carry them, never `*`: a universal descendant makes
    every toggle of these classes restyle every element in every tile (~80 ms on
    grab and again on release); a class selector restyles only those elements. */
-.canvas-moving .react-flow__node,
-.canvas-moving .react-flow__node .hm-term-root,
 .canvas-dragging .react-flow__node,
 .canvas-dragging .react-flow__node .hm-term-root,
 body.canvas-resizing .react-flow__node,
@@ -656,7 +700,7 @@ body.canvas-resizing .react-flow__node .hm-term-root {
 
 /* Selected-tile indicator. NOT a full outline (too loud) — just a small accent
    "clip" centered above the top edge, so selection reads clean. Visible when
-   idle; the motion `contain` rules clip it during pan/drag, which is fine. */
+   idle; the drag `contain` rules clip it during a drag, which is fine. */
 .react-flow__node .hm-node-selected {
   position: relative;
 }
@@ -668,7 +712,7 @@ body.canvas-resizing .react-flow__node .hm-term-root {
   transform: translateX(-50%);
   width: 26px;
   height: 3px;
-  border-radius: 3px;
+  border-radius: 999px;
   background: var(--color-brand);
   box-shadow: 0 0 8px -1px color-mix(in srgb, var(--color-brand) 70%, transparent);
   pointer-events: none;
@@ -683,7 +727,7 @@ body.canvas-resizing .react-flow__node .hm-term-root {
   background: var(--color-bg2);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--color-brand) 55%, transparent),
-    0 14px 40px -8px rgba(0, 0, 0, 0.55);
+    var(--hm-shadow-glass);
 }
 /* Bottom-right resize grip — a faint corner wedge, brighter on hover. */
 .hm-pinned-panel > [aria-label="Resize pinned tile"] {
@@ -728,7 +772,7 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
 .md-preview {
   color: var(--color-fg);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--text-row);
   line-height: 1.65;
   max-width: 860px;
 }
@@ -778,7 +822,7 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
 .md-preview table { border-collapse: collapse; display: block; overflow-x: auto; }
 .md-preview th, .md-preview td { border: 1px solid var(--color-line2); padding: 6px 10px; text-align: left; }
 .md-preview th { background: var(--color-bg3); font-weight: 600; }
-.md-preview tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+.md-preview tr:nth-child(even) td { background: color-mix(in oklab, var(--color-fg) 1.5%, transparent); }
 .md-preview .md-mermaid { margin: 1em 0; text-align: center; }
 .md-preview .md-mermaid svg { max-width: 100%; height: auto; }
 .md-preview .md-mermaid-error {
@@ -786,7 +830,7 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   background: var(--color-bg);
   border: 1px solid var(--color-err);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--text-label);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -807,6 +851,19 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --surface-3: oklch(0.23 0.005 250);    /* cards / tile chrome / popovers */
   --surface-4: oklch(0.27 0.005 250);    /* hover / active */
   --frame-fill: 7%;       /* frame-zone tint strength (FrameNode reads this) */
+  /* The docked Layers panel's lit trailing edge under glass, in place of a hard divider. */
+  --hm-edge-glass: inset -1px 0 0 oklch(1 0 0 / 0.06), 8px 0 24px oklch(0.05 0 0 / 0.28);
+  /* Sticky notes (board-objects/): paper colours under dark ink — the one place the board is
+     allowed to be bright, because a note is something a person put there to be seen. Six, so
+     notes can be sorted by colour; none sits on the warn hue a waiting agent owns. Read from
+     inline styles, so here and not in @theme, which keeps only what a class uses. */
+  --color-note-yellow: oklch(0.90 0.10 102);
+  --color-note-peach:  oklch(0.85 0.08 45);
+  --color-note-pink:   oklch(0.84 0.08 355);
+  --color-note-violet: oklch(0.82 0.07 300);
+  --color-note-blue:   oklch(0.84 0.06 235);
+  --color-note-green:  oklch(0.86 0.08 150);
+  --color-note-ink:    oklch(0.24 0.01 250);
 }
 
 /* The master switch. Recolor the panel TOKENS to translucent variants of the
@@ -870,7 +927,7 @@ html.glass-on:not([data-wallpaper="none"]) .hm-layers {
   /* The lit edge of a real material, in place of a 1px hard divider — so the
      component's own `border-r` is retired here rather than drawn on top of it. */
   border-right-color: transparent;
-  box-shadow: inset -1px 0 0 oklch(1 0 0 / 0.06), 8px 0 24px oklch(0.05 0 0 / 0.28);
+  box-shadow: var(--hm-edge-glass);
 }
 /* (The glass-mode selection outline was removed — the top-clip indicator above
    works in both opaque + glass themes.) */
@@ -971,11 +1028,11 @@ html.content-glass .hm-glass-embed {
    faint default, for editor (CodeMirror drawn + native) and diff (native). */
 html.content-glass .cm-editor .cm-selectionBackground,
 html.content-glass .cm-editor.cm-focused .cm-selectionBackground {
-  background-color: rgba(255, 255, 255, 0.20) !important;
+  background-color: var(--color-selection) !important;
 }
 html.content-glass .cm-editor ::selection,
 html.content-glass [data-pierre-tile] ::selection {
-  background-color: rgba(255, 255, 255, 0.20);
+  background-color: var(--color-selection);
 }
 /* Markdown preview (editor Preview mode + plan-review) code blocks: their opaque
    --color-bg fill becomes a content-opacity tint so the wallpaper shows. */
@@ -1002,6 +1059,8 @@ html.content-glass .md-preview code {
   --wp-1: #4f46e5;
   --wp-2: #14b8a6;
   --wp-3: #7c3aed;
+  --wp-vignette: oklch(0 0 0 / 0.6);
+  --wp-sheen: oklch(1 0 0 / 0.06);
 }
 /* Embedded variant: fill the positioned parent (e.g. the fit-to-screen overlay)
    instead of the fixed full-window layer, so a fullscreen terminal floats over a
@@ -1013,14 +1072,17 @@ html.content-glass .md-preview code {
 html.content-glass .hm-term-fs-panel {
   background-color: color-mix(in srgb, var(--surface-3) var(--content-opacity, 25%), transparent);
 }
-.hm-wallpaper[data-scene="aurora"] { --wp-base: #090c16; --wp-1: #4f46e5; --wp-2: #14b8a6; --wp-3: #7c3aed; }
-.hm-wallpaper[data-scene="ember"]  { --wp-base: #130a07; --wp-1: #f97316; --wp-2: #db2777; --wp-3: #fbbf24; }
-.hm-wallpaper[data-scene="ice"]    { --wp-base: #05111a; --wp-1: #0ea5e9; --wp-2: #22d3ee; --wp-3: #6366f1; }
-.hm-wallpaper[data-scene="mesh"]   { --wp-base: #0a0914; --wp-1: #8b5cf6; --wp-2: #ec4899; --wp-3: #3b82f6; }
-.hm-wallpaper[data-scene="sunset"] { --wp-base: #160a0c; --wp-1: #f97316; --wp-2: #ef4444; --wp-3: #fbbf24; }
-.hm-wallpaper[data-scene="forest"] { --wp-base: #07140d; --wp-1: #10b981; --wp-2: #34d399; --wp-3: #84cc16; }
-.hm-wallpaper[data-scene="nebula"] { --wp-base: #0a0816; --wp-1: #a855f7; --wp-2: #6366f1; --wp-3: #ec4899; }
-.hm-wallpaper[data-scene="mono"]   { --wp-base: #0b0d12; --wp-1: #475569; --wp-2: #64748b; --wp-3: #334155; }
+[data-scene="aurora"] { --wp-base: #090c16; --wp-1: #4f46e5; --wp-2: #14b8a6; --wp-3: #7c3aed; }
+[data-scene="ember"]  { --wp-base: #130a07; --wp-1: #f97316; --wp-2: #db2777; --wp-3: #fbbf24; }
+[data-scene="ice"]    { --wp-base: #05111a; --wp-1: #0ea5e9; --wp-2: #22d3ee; --wp-3: #6366f1; }
+[data-scene="mesh"]   { --wp-base: #0a0914; --wp-1: #8b5cf6; --wp-2: #ec4899; --wp-3: #3b82f6; }
+[data-scene="sunset"] { --wp-base: #160a0c; --wp-1: #f97316; --wp-2: #ef4444; --wp-3: #fbbf24; }
+[data-scene="forest"] { --wp-base: #07140d; --wp-1: #10b981; --wp-2: #34d399; --wp-3: #84cc16; }
+[data-scene="nebula"] { --wp-base: #0a0816; --wp-1: #a855f7; --wp-2: #6366f1; --wp-3: #ec4899; }
+[data-scene="mono"]   { --wp-base: #0b0d12; --wp-1: #475569; --wp-2: #64748b; --wp-3: #334155; }
+/* A photo or video before it loads, and its swatch in Settings. */
+[data-scene="image"]  { --wp-base: #0f172a; --wp-1: #334155; }
+[data-scene="video"]  { --wp-base: #0b1120; --wp-1: #1e293b; }
 
 /* PERF — the blooms are plain composited textures on purpose. They used to
    carry `border-radius: 50%` + `filter: blur(60px)` + `mix-blend-mode: screen`,
@@ -1072,8 +1134,8 @@ html.content-glass .hm-term-fs-panel {
   position: absolute;
   inset: 0;
   background-image:
-    radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.6)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 30%),
+    radial-gradient(ellipse at center, transparent 40%, var(--wp-vignette)),
+    linear-gradient(180deg, var(--wp-sheen), transparent 30%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
   background-repeat: no-repeat, no-repeat, repeat;
   background-size: 100% 100%, 100% 100%, 160px 160px;
@@ -1082,7 +1144,7 @@ html.content-glass .hm-term-fs-panel {
 .hm-wp-vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, 0.6));
+  background: radial-gradient(ellipse at center, transparent 40%, var(--wp-vignette));
 }
 /* Video wallpaper — full-bleed, cover-fit. object-fit:cover preserves full
    resolution (no quality loss beyond scaling); brightness is user-controlled
@@ -1173,8 +1235,8 @@ html.glass-on .react-flow__node-workbench,
 html.glass-on .react-flow__node-issues,
 html.glass-on .react-flow__node-browser {
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
-    0 10px 36px rgba(0, 0, 0, 0.5);
+    var(--hm-highlight-glass),
+    var(--hm-shadow-glass);
 }
 
 /* Customizer drawer slide-in. */
@@ -1191,7 +1253,6 @@ html.glass-on .react-flow__node-browser {
   height: 4px;
   border-radius: 999px;
   background: var(--color-bg4);
-  accent-color: var(--color-brand);
 }
 .hm-range::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1262,3 +1323,14 @@ html.glass-on .react-flow__node-browser {
    tracking than the same text over a solid one, because the backdrop moves and
    its local contrast is unpredictable. Only applies while glass is actually on. */
 html.glass-on .u-eyebrow { color: var(--color-fg); }
+
+/* Board objects (board-objects/): a selected one is outlined like a selected tile. */
+.react-flow__node .hm-board-selected {
+  outline: 2px solid var(--color-select);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* A view that draws its own chrome around a tile (a slot rect with `chrome: "none"`, as the Windows
+   view's tabs do) gets the body without the bar that only names it; a browser's address bar stays. */
+[data-slot-bare] [data-tile-titlebar] { display: none; }

@@ -2,7 +2,7 @@
  * Base/head branch chooser for the branch and unpushed diff modes.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
 import type { GitBranchList } from "../../../shared/ipc";
@@ -45,7 +45,7 @@ export function BranchPicker({
   const pick = (v: string | undefined) => { onChange(v); setOpen(false); setQuery(""); };
 
   return (
-    <div className="nodrag relative inline-flex items-center gap-1 text-[10px] font-mono" ref={ref}>
+    <div className="nodrag relative inline-flex items-center gap-1 text-chip font-mono" ref={ref}>
       <span className="text-[var(--color-fg3)]">{label}</span>
       <Button
         variant="outline"
@@ -56,18 +56,18 @@ export function BranchPicker({
         title={value ?? autoLabel}
       >
         <span className="truncate">{value ?? autoLabel}</span>
-        <ChevronDown aria-hidden />
+        <ChevronDown />
       </Button>
       {open && (
         <div className="nodrag absolute z-50 left-0 top-full mt-1 w-60 flex flex-col bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-lg shadow-xl overflow-hidden">
           <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-line2)]">
-            <Search size={11} aria-hidden className="text-[var(--color-fg3)] shrink-0" />
+            <Search size={11} className="text-[var(--color-fg3)] shrink-0" />
             <input
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="filter branches…"
-              className="w-full bg-transparent text-[10px] font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
+              className="w-full bg-transparent text-chip font-mono text-[var(--color-fg)] outline-none placeholder:text-[var(--color-fg3)]"
             />
           </div>
           <div className="max-h-64 overflow-y-auto py-1">
@@ -75,7 +75,7 @@ export function BranchPicker({
               {autoLabel}
             </MenuItem>
             {local.length > 0 && (
-              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">local</div>
+              <div className="px-2 pt-1.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Local</div>
             )}
             {local.map((b) => (
               <MenuItem
@@ -90,7 +90,7 @@ export function BranchPicker({
               </MenuItem>
             ))}
             {remote.length > 0 && (
-              <div className="px-2 pt-1.5 pb-0.5 text-[8.5px] uppercase tracking-wider text-[var(--color-fg3)]">remote</div>
+              <div className="px-2 pt-1.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Remote</div>
             )}
             {remote.map((b) => (
               <MenuItem

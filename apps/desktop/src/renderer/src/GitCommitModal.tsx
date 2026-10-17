@@ -15,7 +15,7 @@
  * and Commit&Push require a summary + something to commit; Push/Pull don't.
  */
 import { useEffect, useState } from "react";
-import { GitCommitHorizontal, ArrowUp, ArrowDown, Loader2, X } from "lucide-react";
+import { GitCommit, ArrowUp, ArrowDown, Spinner, X } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
@@ -110,12 +110,12 @@ export function GitCommitModal({
   return (
     <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
       <div
-        className="w-[460px] max-w-[92vw] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded-lg shadow-2xl p-4"
+        className="hm-surface-3 w-[460px] max-w-[92vw] p-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2">
-          <GitCommitHorizontal size={16} className="text-[var(--color-fg2)]" />
-          <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Commit</h2>
+          <GitCommit size={16} className="text-[var(--color-fg2)]" />
+          <h2 className="text-title font-semibold text-[var(--color-fg)]">Commit</h2>
           <Button
             variant="ghost"
             size="icon-xs"
@@ -128,7 +128,7 @@ export function GitCommitModal({
         </div>
 
         {/* Status summary — branch, staged/changed counts, ahead/behind. */}
-        <div className="mt-2 flex items-center flex-wrap gap-x-3 gap-y-1 text-[11px] font-mono text-[var(--color-fg3)]">
+        <div className="mt-2 flex items-center flex-wrap gap-x-3 gap-y-1 text-count font-mono text-[var(--color-fg3)]">
           <span className="text-[var(--color-fg2)]">{branch}</span>
           <span title={`${staged.length} staged · ${unstaged.length} unstaged`}>
             <span className="text-[var(--color-ok)]">{staged.length}</span>
@@ -160,7 +160,7 @@ export function GitCommitModal({
         </div>
 
         {/* Stage-all toggle. */}
-        <label className="mt-2 flex items-center gap-2 text-[12px] text-[var(--color-fg2)] select-none cursor-pointer">
+        <label className="mt-2 flex items-center gap-2 text-label text-[var(--color-fg2)] select-none cursor-pointer">
           <input
             type="checkbox"
             checked={stageAll}
@@ -178,43 +178,39 @@ export function GitCommitModal({
         <div className="mt-4 flex items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
             onClick={onPull}
             disabled={!canPull}
             title="Update this branch from upstream (fast-forward only)"
           >
-            {pullMut.isPending ? <Loader2 className="animate-spin" /> : <ArrowDown />}
+            {pullMut.isPending ? <Spinner className="animate-spin" /> : <ArrowDown />}
             Pull{behind > 0 ? ` ↓${behind}` : ""}
           </Button>
           <Button
             variant="outline"
-            size="sm"
             onClick={onPush}
             disabled={!canPush}
             title={ahead > 0 ? `Push ${ahead} commit(s)` : "Nothing to push yet"}
           >
-            {pushMut.isPending ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+            {pushMut.isPending ? <Spinner className="animate-spin" /> : <ArrowUp />}
             Push{ahead > 0 ? ` ↑${ahead}` : ""}
           </Button>
 
           <div className="ml-auto flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
               onClick={onCommit}
               disabled={!canCommit}
               title="Commit staged changes (⌘↵)"
             >
-              {commitMut.isPending ? <Loader2 className="animate-spin" /> : null}
+              {commitMut.isPending ? <Spinner className="animate-spin" /> : null}
               Commit
             </Button>
             <Button
-              size="sm"
               onClick={onCommitPush}
               disabled={!canCommit}
               title="Commit, then push"
             >
-              {(commitMut.isPending || pushMut.isPending) ? <Loader2 className="animate-spin" /> : null}
+              {(commitMut.isPending || pushMut.isPending) ? <Spinner className="animate-spin" /> : null}
               Commit &amp; Push
             </Button>
           </div>

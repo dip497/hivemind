@@ -25,7 +25,7 @@ async function run(agent: string, file: string, payload: unknown, answer: (m: Li
       let nl;
       while ((nl = buf.indexOf("\n")) >= 0) {
         const m = JSON.parse(buf.slice(0, nl)) as Line; buf = buf.slice(nl + 1);
-        if (m.method === "initialize") { c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
+        if (m.method === "initialize") { if (m.id !== undefined) c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
         got.push(m);
         const res = answer(m);
         if (res) c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, ...res }) + "\n");

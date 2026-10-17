@@ -1,13 +1,14 @@
 /** Canvas camera controls. The standard workspace toolbar lives independently
  *  in workspace/standard-toolbar so scene views do not depend on xyflow here. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useReactFlow, useStore } from "@xyflow/react";
+import { useStore } from "@xyflow/react";
+import { useCamera } from "./canvas-camera";
 import { Button } from "./components/ui/button";
 
 /** Bottom-left zoom + nav island (Excalidraw footer). Uses react-flow's
  *  imperative camera API; lives inside <ReactFlow> so the hooks resolve. */
 export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onFocus }: { tileCount: number; onReset: () => void; minimapOn: boolean; onToggleMinimap: () => void; onFocus: () => void }) {
-  const { zoomIn, zoomOut, zoomTo, fitView } = useReactFlow();
+  const { zoomIn, zoomOut, zoomTo, fitView } = useCamera();
   const zoom = useStore((s) => s.transform[2]);
   const pct = Math.round(zoom * 100);
   const [fpsOn, setFpsOn] = useState(false);
@@ -57,7 +58,7 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         </IslandBtn>
       </div>
       {fpsOn && <FpsMeter />}
-      <span className="ml-1 text-[10px] text-[var(--color-fg3)] font-mono tabular-nums select-none">
+      <span className="ml-1 text-chip text-[var(--color-fg3)] font-mono tabular-nums select-none">
         {tileCount} {tileCount === 1 ? "tile" : "tiles"}
       </span>
     </div>
@@ -112,7 +113,7 @@ function FpsMeter() {
   const color = fps >= 55 ? "var(--color-ok)" : fps >= 30 ? "var(--color-warn)" : "var(--color-err)";
   return (
     <span
-      className="ml-1 text-[10px] font-mono tabular-nums select-none"
+      className="ml-1 text-chip font-mono tabular-nums select-none"
       style={{ color }}
       title="frames/sec — drag a tile and watch this; a big dip = jank to fix"
     >

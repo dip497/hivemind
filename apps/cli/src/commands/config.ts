@@ -1,7 +1,7 @@
 /**
  * `hive config` — read/write settings.json (the app's one configuration file)
  * and `hive theme` — the appearance presets. Both edit the file directly and
- * ask a running app to reload over HCP (`settings.reload`), so a change shows
+ * ask a running app to reload on its drive socket (`settings.reload`), so a change shows
  * without a restart; without an app they just say so.
  *
  *   hive config path
@@ -15,10 +15,10 @@ import {
   HiveError, PRESETS, applyPreset, getPath, mergeAppearance, patchSettingsFile, readSettings, settingsPath, updateSettings,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
-import { hcpCall } from "../hcp.js";
+import { driveCall } from "../drive.js";
 
 async function reloadApp(): Promise<boolean> {
-  try { await hcpCall("settings.reload", {}, 5000); return true; } catch { return false; }
+  try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
 }
 const note = (r: boolean) => (r ? "app reloaded" : "app not running — applies on next start");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e));

@@ -16,7 +16,7 @@ const newestPiSessionForCwd = (cwd: string, root?: string) =>
 const makePiResumeTransforms = ({ sessionsRoot }: { sessionsRoot?: string } = {}) =>
   transformsFor(piDef, manifestRuntime(piDef, () => "")!, {
     private: "/x/ud/agents/pi", hooks: {}, execPath: "/x/electron",
-    hcpSock: "/x/ud/hcp.sock", hcpToken: "t", tileSessionsDir: "/x/ud/sessions", home: "/home/u",
+    hcpSock: "/x/ud/hcp.sock", hcpToken: () => "t", tileSessionsDir: "/x/ud/sessions", home: "/home/u",
   }, { sessionRoot: sessionsRoot });
 
 /** Write a pi session JSONL: a `session` header (type/id/cwd top-level) + a

@@ -50,11 +50,14 @@ test.afterAll(async () => {
   try { execSync(`rm -rf ${repo}`); } catch { /* ignore */ }
 });
 
-test("frame 'worktree' control opens the picker (list + create)", async () => {
-  const attach = page.locator('[aria-label="attach worktree"]').first();
-  await expect(attach).toBeVisible();
-  await expect(attach).toBeEnabled();
-  await attach.click();
+/** The frame's menu ▸ Worktree: its picker. */
+async function openWorktrees() {
+  await page.locator("[data-frame-actions]").first().click();
+  await page.locator('[data-frame-menu-sub="worktree"]').click();
+}
+
+test("a frame's menu ▸ Worktree opens the picker (list + create)", async () => {
+  await openWorktrees();
 
   // Picker portals to body; it offers a Create action and lists the repo's
   // existing (main) worktree.
@@ -73,7 +76,7 @@ test("creating a worktree spawns a nested child frame bound to the branch", asyn
 
   // Open the picker if it closed, then start the create flow.
   if ((await page.getByText("Create new worktree", { exact: false }).count()) === 0) {
-    await page.locator('[aria-label="attach worktree"]').first().click();
+    await openWorktrees();
     await expect(page.getByText("Create new worktree", { exact: false })).toBeVisible({ timeout: 5_000 });
   }
   await page.getByText("Create new worktree", { exact: false }).click();
@@ -86,7 +89,7 @@ test("creating a worktree spawns a nested child frame bound to the branch", asyn
   await expect
     .poll(async () => page.locator(".react-flow__node-frame").count(), { timeout: 15_000 })
     .toBeGreaterThan(beforeFrames);
-  await expect(page.locator('[aria-label="detach worktree"]').first()).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator(".react-flow__node-frame").filter({ hasText: "feature-x" }).first()).toBeVisible({ timeout: 5_000 });
 
   // The worktree actually exists on disk.
   const list = execSync("git worktree list", { cwd: repo }).toString();

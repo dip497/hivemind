@@ -1,0 +1,213 @@
+package com.hivemind.phone.terminal
+
+import android.graphics.Typeface
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.unit.sp
+import com.hivemind.phone.ui.common.FollowTheNewest
+import com.hivemind.phone.ui.common.NewestButton
+import kotlin.math.roundToInt
+
+private const val MAX_ZOOM = 6f
+
+/** The text size a terminal fitted to the phone reads at. */
+private val READABLE = 12.sp
+
+/** The columns and rows a terminal fitted to a view reads at: at least 20 across and 5 down. */
+data class TermSize(val cols: Int, val rows: Int)
+
+/**
+ * The size that fills a view [width] × [height] pixels at [readable] pixels of text, each row as
+ * tall as the view then draws it, so that it shows every row the terminal has.
+ */
+internal fun readableSize(painter: TerminalPainter, width: Float, height: Int, readable: Float): TermSize {
+    val cols = (width / painter.cellWidth(readable)).toInt().coerceAtLeast(20)
+    val line = painter.cells(width / cols).height.roundToInt().coerceAtLeast(1)
+    return TermSize(cols, (height / line).coerceAtLeast(5))
+}
+
+/**
+ * An agent's live terminal: fitted to the width at first, pinched to zoom, following the newest
+ * line until the person scrolls up (design §6.4: the cursor's line or the last line written, kept
+ * the last in sight, also as the view is made shorter). Lines are drawn one by one, in a lazy
+ * list keyed by their index, so a line that changes redraws alone and one that scrolls keeps its
+ * place. [onReadableSize] is told the size that fills the view at a readable text size, and again
+ * when the view's size changes. A program that draws its own screen takes the person's scrolling:
+ * [onScroll] is given it a line at a time (up, to earlier, below 0) and says whether it took it.
+ */
+@Composable
+fun TerminalView(
+    terminal: Terminal,
+    modifier: Modifier = Modifier,
+    onReadableSize: (TermSize) -> Unit = {},
+    onScroll: (lines: Int, col: Int, row: Int) -> Boolean = { _, _, _ -> false },
+) {
+    val palette = TermPalette.SIGNAL
+    val fonts = LocalFontFamilyResolver.current
+    val painter = remember(fonts) {
+        val face = { weight: FontWeight, style: FontStyle ->
+            fonts.resolve(FontFamily.Monospace, weight, style).value as Typeface
+        }
+        TerminalPainter(
+            listOf(
+                face(FontWeight.Normal, FontStyle.Normal),
+                face(FontWeight.Bold, FontStyle.Normal),
+                face(FontWeight.Normal, FontStyle.Italic),
+                face(FontWeight.Bold, FontStyle.Italic),
+            ),
+            palette,
+        )
+    }
+    var zoom by rememberSaveable { mutableFloatStateOf(1f) }
+    val across = rememberScrollState()
+    val density = LocalDensity.current
+
+    FollowTheNewest(terminal.follow)
+
+    BoxWithConstraints(
+        modifier
+            .background(Color(palette.background))
+            .clipToBounds()
+            .pinch(terminal) { factor, centroidX ->
+                val next = (zoom * factor).coerceIn(1f, MAX_ZOOM)
+                val applied = next / zoom
+                zoom = next
+                // The point between the fingers stays where it is, across.
+                across.dispatchRawDelta((across.value + centroidX) * applied - centroidX - across.value)
+                terminal.follow.grew(terminal.rest)
+            },
+    ) {
+        val cols = terminal.cols.coerceAtLeast(1)
+        val viewport = constraints.maxWidth.toFloat()
+        val cells = remember(painter, viewport, cols, zoom) { painter.cells(viewport * zoom / cols) }
+        val width = with(density) { (cells.width * cols).toDp() }
+        val lineHeight = with(density) { cells.height.toDp() }
+        // The whole lines in sight, each as tall as it is laid out: following, the view rests where
+        // the newest line is the last of them, and rests there again once the view is shorter.
+        val inView = constraints.maxHeight / with(density) { lineHeight.roundToPx() }.coerceAtLeast(1)
+        SideEffect { terminal.fit(inView) }
+        val readable = with(density) { READABLE.toPx() }
+        val size = remember(painter, viewport, constraints.maxHeight, readable) { readableSize(painter, viewport, constraints.maxHeight, readable) }
+        val tell by rememberUpdatedState(onReadableSize)
+        LaunchedEffect(size) { tell(size) }
+        val toProgram = rememberUpdatedState(onScroll)
+        val wheel = remember(terminal, cells.height) { ProgramScroll(terminal, cells.height, toProgram) }
+        Box(Modifier.fillMaxSize().nestedScroll(wheel).horizontalScroll(across)) {
+            LazyColumn(state = terminal.follow.list, modifier = Modifier.width(width).fillMaxHeight()) {
+                items(count = terminal.lineCount, key = { terminal.firstLine + it }) { position ->
+                    TerminalLine(terminal.slot(position), painter, cells, lineHeight)
+                }
+            }
+        }
+        NewestButton(terminal.follow) { terminal.rest }
+    }
+}
+
+/** Scrolling, given a line at a time to a program that takes it, before the list would scroll its own lines. */
+private class ProgramScroll(
+    private val terminal: Terminal,
+    private val lineHeight: Float,
+    private val onScroll: State<(Int, Int, Int) -> Boolean>,
+) : NestedScrollConnection {
+    /** What was scrolled short of a whole line. */
+    private var owed = 0f
+
+    private fun send(lines: Int) = onScroll.value(lines, terminal.cols / 2 + 1, terminal.rows / 2 + 1)
+
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        val lines = owed - available.y / lineHeight
+        val whole = lines.toInt()
+        if (!send(whole)) {
+            owed = 0f
+            return Offset.Zero
+        }
+        owed = lines - whole
+        return Offset(0f, available.y)
+    }
+
+    override suspend fun onPreFling(available: Velocity): Velocity = if (send(0)) available else Velocity.Zero
+}
+
+@Composable
+private fun TerminalLine(slot: LineSlot, painter: TerminalPainter, cells: Cells, height: Dp) {
+    // The slot is read while drawing, not composing: a changed line costs a redraw, nothing more.
+    // Its text is what accessibility reads of it (TalkBack, and so the UI tests), read in its
+    // semantics, which a changed line updates without composing either; a blank line has none.
+    Spacer(
+        Modifier
+            .fillMaxWidth()
+            .height(height)
+            .semantics {
+                val shown = slot.line.text
+                if (shown.isNotEmpty()) text = AnnotatedString(shown)
+            }
+            .drawBehind { painter.draw(drawContext.canvas.nativeCanvas, slot.line, slot.cursor, cells) },
+    )
+}
+
+/**
+ * Two fingers zoom; one still scrolls. The pinch is taken before the list sees it, so the list
+ * does not scroll while the fingers spread.
+ */
+private fun Modifier.pinch(key: Any, onZoom: (factor: Float, centroidX: Float) -> Unit): Modifier = this.then(
+    Modifier.pointerInput(key) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                if (event.changes.count { it.pressed } >= 2) {
+                    val factor = event.calculateZoom()
+                    if (factor != 1f) {
+                        onZoom(factor, event.calculateCentroid(useCurrent = true).x)
+                        event.changes.forEach { it.consume() }
+                    }
+                }
+            } while (event.changes.any { it.pressed })
+        }
+    },
+)

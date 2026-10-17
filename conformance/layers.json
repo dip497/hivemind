@@ -1,0 +1,853 @@
+{
+  "about": "The Layers panel's View choices (packages/hive-core/src/layers.ts, crates/hive-phone/src/layers.rs): the same tiles and choices give the same lists. Times are ms since the epoch, days in UTC; `label` names each tile's agent, else its kind, for grouping by agent.",
+  "now": 1791471600000,
+  "tiles": [
+    {
+      "id": "b-claude",
+      "name": "b-claude",
+      "frameId": "f1",
+      "agent": "claude",
+      "status": "working",
+      "needsYou": false,
+      "activity": 1791471000000,
+      "machine": "local"
+    },
+    {
+      "id": "a-codex",
+      "name": "a-codex",
+      "frameId": "f1",
+      "agent": "codex",
+      "status": "permission",
+      "needsYou": true,
+      "activity": 1791464400000,
+      "machine": "local"
+    },
+    {
+      "id": "c-shell",
+      "name": "c-shell",
+      "frameId": "f2",
+      "status": "exited",
+      "needsYou": false,
+      "activity": 1791363600000,
+      "machine": "local"
+    },
+    {
+      "id": "d-pi",
+      "name": "d-pi",
+      "frameId": "f3",
+      "agent": "pi",
+      "status": "idle",
+      "needsYou": false,
+      "activity": null,
+      "machine": "m-1"
+    },
+    {
+      "id": "Agent 10",
+      "name": "Agent 10",
+      "frameId": "f1",
+      "agent": "claude",
+      "status": "idle",
+      "needsYou": false,
+      "activity": 1791212400000,
+      "machine": "local",
+      "seen": 1791126000000
+    },
+    {
+      "id": "agent 9",
+      "name": "agent 9",
+      "frameId": null,
+      "agent": "claude",
+      "status": "idle",
+      "needsYou": false,
+      "activity": 1790694000000,
+      "machine": "local"
+    },
+    {
+      "id": "e-kid",
+      "name": "e-kid",
+      "frameId": "f1",
+      "agent": "claude",
+      "status": "working",
+      "needsYou": false,
+      "activity": 1791471300000,
+      "machine": "local",
+      "parent": "b-claude"
+    },
+    {
+      "id": "f-grandkid",
+      "name": "f-grandkid",
+      "frameId": "f1",
+      "agent": "claude",
+      "status": "idle",
+      "needsYou": false,
+      "activity": 1791399600000,
+      "machine": "local",
+      "parent": "e-kid",
+      "seen": 1791396000000
+    },
+    {
+      "id": "g-loop",
+      "name": "g-loop",
+      "frameId": "f2",
+      "agent": "claude",
+      "status": "idle",
+      "needsYou": false,
+      "activity": 1791298800000,
+      "machine": "local",
+      "parent": "h-loop"
+    },
+    {
+      "id": "h-loop",
+      "name": "h-loop",
+      "frameId": "f2",
+      "agent": "claude",
+      "status": "plan_review",
+      "needsYou": true,
+      "activity": 1791298800000,
+      "machine": "local",
+      "parent": "g-loop"
+    },
+    {
+      "id": "i-looked",
+      "name": "i-looked",
+      "frameId": "f3",
+      "agent": "claude",
+      "status": "idle",
+      "needsYou": false,
+      "activity": 1791450000000,
+      "machine": "local",
+      "seen": 1791450000000
+    },
+    {
+      "id": "j-review",
+      "name": "j-review",
+      "frameId": "f3",
+      "status": "working",
+      "needsYou": true,
+      "activity": 1791468000000,
+      "machine": "local"
+    }
+  ],
+  "label": {
+    "b-claude": "Claude",
+    "a-codex": "Codex",
+    "c-shell": "Shell",
+    "d-pi": "Pi",
+    "Agent 10": "Claude",
+    "agent 9": "Claude",
+    "e-kid": "Claude",
+    "f-grandkid": "Claude",
+    "g-loop": "Claude",
+    "h-loop": "Claude",
+    "i-looked": "Claude",
+    "j-review": "review"
+  },
+  "cases": [
+    {
+      "about": "the defaults: the tree, each frame's tiles in canvas order, a tile under its starter, a loop left in the list",
+      "prefs": {},
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "b-claude",
+              "a-codex",
+              "Agent 10"
+            ]
+          ],
+          [
+            "f2",
+            [
+              "c-shell",
+              "g-loop",
+              "h-loop"
+            ]
+          ],
+          [
+            "f3",
+            [
+              "d-pi",
+              "i-looked",
+              "j-review"
+            ]
+          ],
+          [
+            null,
+            [
+              "agent 9"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": false,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ],
+          [
+            "e-kid",
+            [
+              "f-grandkid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "pinned lead in the order pinned, whatever the choices, and are listed nowhere else",
+      "prefs": {
+        "status": "working"
+      },
+      "pinned": [
+        "d-pi",
+        "a-codex",
+        "gone"
+      ],
+      "shows": {
+        "pinned": [
+          "d-pi",
+          "a-codex"
+        ],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "b-claude"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "needs you: waiting on the person, a review too",
+      "prefs": {
+        "status": "needs-you"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "a-codex"
+            ]
+          ],
+          [
+            "f2",
+            [
+              "h-loop"
+            ]
+          ],
+          [
+            "f3",
+            [
+              "j-review"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": []
+      }
+    },
+    {
+      "about": "unread: changed after the person last looked, and not at work",
+      "prefs": {
+        "status": "unread"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "Agent 10",
+              "f-grandkid"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": []
+      }
+    },
+    {
+      "about": "working, idle and exited: what needs the person is in none but exited",
+      "prefs": {
+        "status": "idle"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f3",
+            [
+              "d-pi",
+              "i-looked"
+            ]
+          ],
+          [
+            "f1",
+            [
+              "Agent 10",
+              "f-grandkid"
+            ]
+          ],
+          [
+            null,
+            [
+              "agent 9"
+            ]
+          ],
+          [
+            "f2",
+            [
+              "g-loop"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": []
+      }
+    },
+    {
+      "about": "working",
+      "prefs": {
+        "status": "working"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "b-claude"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "exited",
+      "prefs": {
+        "status": "exited"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f2",
+            [
+              "c-shell"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": []
+      }
+    },
+    {
+      "about": "the past hour: a tile never active is left out",
+      "prefs": {
+        "activity": "hour"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "b-claude"
+            ]
+          ],
+          [
+            "f3",
+            [
+              "j-review"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "today, from midnight",
+      "prefs": {
+        "activity": "today"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "b-claude",
+              "a-codex"
+            ]
+          ],
+          [
+            "f3",
+            [
+              "i-looked",
+              "j-review"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "this week",
+      "prefs": {
+        "activity": "week"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "b-claude",
+              "a-codex",
+              "Agent 10"
+            ]
+          ],
+          [
+            "f2",
+            [
+              "c-shell",
+              "g-loop",
+              "h-loop"
+            ]
+          ],
+          [
+            "f3",
+            [
+              "i-looked",
+              "j-review"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ],
+          [
+            "e-kid",
+            [
+              "f-grandkid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "by status: needs you, working, exited, idle, each tile once",
+      "prefs": {
+        "groupBy": "status"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": false,
+        "byFrame": [],
+        "buckets": [
+          {
+            "key": "needs-you",
+            "label": "Needs you",
+            "tiles": [
+              "a-codex",
+              "h-loop",
+              "j-review"
+            ]
+          },
+          {
+            "key": "working",
+            "label": "Working",
+            "tiles": [
+              "b-claude"
+            ]
+          },
+          {
+            "key": "exited",
+            "label": "Exited",
+            "tiles": [
+              "c-shell"
+            ]
+          },
+          {
+            "key": "idle",
+            "label": "Idle",
+            "tiles": [
+              "d-pi",
+              "Agent 10",
+              "agent 9",
+              "f-grandkid",
+              "g-loop",
+              "i-looked"
+            ]
+          }
+        ],
+        "filtering": false,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "by date: today, yesterday, this week, older",
+      "prefs": {
+        "groupBy": "date"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": false,
+        "byFrame": [],
+        "buckets": [
+          {
+            "key": "today",
+            "label": "Today",
+            "tiles": [
+              "b-claude",
+              "a-codex",
+              "i-looked",
+              "j-review"
+            ]
+          },
+          {
+            "key": "yesterday",
+            "label": "Yesterday",
+            "tiles": [
+              "c-shell",
+              "f-grandkid"
+            ]
+          },
+          {
+            "key": "week",
+            "label": "This week",
+            "tiles": [
+              "Agent 10",
+              "g-loop",
+              "h-loop"
+            ]
+          },
+          {
+            "key": "older",
+            "label": "Older",
+            "tiles": [
+              "d-pi",
+              "agent 9"
+            ]
+          }
+        ],
+        "filtering": false,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "by agent: by its name, A to Z; a tile with none by its kind",
+      "prefs": {
+        "groupBy": "agent"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": false,
+        "byFrame": [],
+        "buckets": [
+          {
+            "key": "claude",
+            "label": "Claude",
+            "tiles": [
+              "b-claude",
+              "Agent 10",
+              "agent 9",
+              "g-loop",
+              "h-loop",
+              "i-looked"
+            ]
+          },
+          {
+            "key": "codex",
+            "label": "Codex",
+            "tiles": [
+              "a-codex"
+            ]
+          },
+          {
+            "key": "pi",
+            "label": "Pi",
+            "tiles": [
+              "d-pi"
+            ]
+          },
+          {
+            "key": "review",
+            "label": "review",
+            "tiles": [
+              "j-review"
+            ]
+          },
+          {
+            "key": "shell",
+            "label": "Shell",
+            "tiles": [
+              "c-shell"
+            ]
+          }
+        ],
+        "filtering": false,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ],
+          [
+            "e-kid",
+            [
+              "f-grandkid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "none: one list with no heading, by name as people read numbers",
+      "prefs": {
+        "groupBy": "none",
+        "sortBy": "name"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": false,
+        "byFrame": [],
+        "buckets": [
+          {
+            "key": "all",
+            "label": "",
+            "tiles": [
+              "a-codex",
+              "agent 9",
+              "Agent 10",
+              "b-claude",
+              "c-shell",
+              "d-pi",
+              "g-loop",
+              "h-loop",
+              "i-looked",
+              "j-review"
+            ]
+          }
+        ],
+        "filtering": false,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ],
+          [
+            "e-kid",
+            [
+              "f-grandkid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "by last activity, the latest first, one never active last",
+      "prefs": {
+        "groupBy": "none",
+        "sortBy": "activity"
+      },
+      "shows": {
+        "pinned": [],
+        "tree": false,
+        "byFrame": [],
+        "buckets": [
+          {
+            "key": "all",
+            "label": "",
+            "tiles": [
+              "b-claude",
+              "j-review",
+              "a-codex",
+              "i-looked",
+              "c-shell",
+              "g-loop",
+              "h-loop",
+              "Agent 10",
+              "agent 9",
+              "d-pi"
+            ]
+          }
+        ],
+        "filtering": false,
+        "kids": [
+          [
+            "b-claude",
+            [
+              "e-kid"
+            ]
+          ],
+          [
+            "e-kid",
+            [
+              "f-grandkid"
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "about": "machines: only those on the computers kept",
+      "prefs": {
+        "machines": [
+          "m-1"
+        ]
+      },
+      "shows": {
+        "pinned": [],
+        "tree": true,
+        "byFrame": [
+          [
+            "f3",
+            [
+              "d-pi"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": []
+      }
+    },
+    {
+      "about": "searched: by its name or its agent's, any case, pinned ones too",
+      "prefs": {},
+      "pinned": [
+        "a-codex",
+        "b-claude"
+      ],
+      "query": "CLAUDE",
+      "shows": {
+        "pinned": [
+          "b-claude"
+        ],
+        "tree": true,
+        "byFrame": [
+          [
+            "f1",
+            [
+              "Agent 10",
+              "e-kid"
+            ]
+          ],
+          [
+            null,
+            [
+              "agent 9"
+            ]
+          ],
+          [
+            "f2",
+            [
+              "g-loop",
+              "h-loop"
+            ]
+          ],
+          [
+            "f3",
+            [
+              "i-looked"
+            ]
+          ]
+        ],
+        "buckets": [],
+        "filtering": true,
+        "kids": [
+          [
+            "e-kid",
+            [
+              "f-grandkid"
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

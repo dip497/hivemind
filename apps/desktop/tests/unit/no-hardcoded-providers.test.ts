@@ -15,7 +15,7 @@ const ROOT = path.resolve(__dirname, "../../..", "..");
 const HOST = [path.join(ROOT, "packages/agent-host/src"), path.join(ROOT, "packages/agent-sdk/src")];
 // Every app's sources and the shared core package (templates, installer). Tests
 // and the catalog package itself are the only places a provider may be named.
-const SCAN = [path.join(ROOT, "apps/desktop/src"), path.join(ROOT, "apps/cli/src"), path.join(ROOT, "packages/hive-core/src"), ...HOST];
+const SCAN = [path.join(ROOT, "apps/desktop/src"), path.join(ROOT, "apps/cli/src"), path.join(ROOT, "packages/hive-core/src"), path.join(ROOT, "packages/host/src"), ...HOST];
 
 /** Files allowed to carry a provider name, each with the reason. */
 const ALLOW: Record<string, string> = {

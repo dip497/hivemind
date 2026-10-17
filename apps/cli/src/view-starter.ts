@@ -2,11 +2,11 @@
  *  package to install — the app serves it to every view — so a view gets its types here and
  *  leaves `@hivemind/view-sdk` out of its bundle. */
 import { readFileSync } from "node:fs";
-import { agentPrompt } from "./view-prompt.js";
+import { pluginBrief } from "./plugin-brief.js";
 
 /** Embedded by scripts/build.ts; a source checkout reads the package itself. */
 declare const HIVE_VIEW_SDK: Record<string, string> | undefined;
-export const SDK_FILES = ["index.ts", "protocol.ts", "manifest.ts", "client.ts"];
+export const SDK_FILES = ["index.ts", "protocol.ts", "manifest.ts", "client.ts", "testing.ts"];
 const sdkSources = (): Record<string, string> => typeof HIVE_VIEW_SDK === "object" ? HIVE_VIEW_SDK
   : Object.fromEntries(SDK_FILES.map((f) => [f, readFileSync(new URL(`../../../packages/hive-view-sdk/src/${f}`, import.meta.url), "utf8")]));
 
@@ -27,7 +27,7 @@ export function starterFiles(owner: string, name: string): Record<string, string
       compilerOptions: {
         target: "ES2022", module: "ESNext", moduleResolution: "Bundler", lib: ["ES2023", "DOM", "DOM.Iterable"],
         strict: true, noEmit: true, skipLibCheck: true, types: [],
-        paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"] },
+        paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"], "@hivemind/view-sdk/testing": ["./types/view-sdk/testing.ts"] },
       },
       include: ["src", "types"],
     }, null, 2) + "\n",
@@ -93,7 +93,7 @@ hm.on("structure", ({ tiles }) => {
   });
 });
 `,
-    "PROMPT.md": agentPrompt(id, title(name)),
+    "PROMPT.md": pluginBrief("view", id),
     "README.md": `# ${title(name)}
 
 A [Hivemind](https://hivemind.griiken.com) view.

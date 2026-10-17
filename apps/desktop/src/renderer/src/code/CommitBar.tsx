@@ -26,7 +26,7 @@ export function CommitBar({ repoPath, status }: { repoPath: string; status: GitS
   };
 
   return (
-    <div className="border-t border-[var(--color-line)] bg-[var(--color-bg3)] px-2.5 py-1.5 flex items-center gap-2 text-[11px] font-mono">
+    <div className="border-t border-[var(--color-line)] bg-[var(--color-bg3)] px-2.5 py-1.5 flex items-center gap-2 text-count font-mono">
       {status.files.length > 0 && (
         <span className="text-[var(--color-fg3)] tabular-nums shrink-0" title={`${staged.length} staged · ${unstaged.length} unstaged`}>
           <span className="text-[var(--color-ok)]">{staged.length}</span>/{status.files.length}

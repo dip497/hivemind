@@ -12,27 +12,32 @@ import fs from "node:fs";
 import path from "node:path";
 import { homedir, hostname } from "node:os";
 import { createRequire } from "node:module";
+import { execFile } from "node:child_process";
 import type * as NodePty from "@lydell/node-pty";
 import * as bunPty from "./bun-pty.js";
 import { listenExclusive } from "./socket-claim.js";
-import { SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
-import { type ClientMsg, type ServerMsg, frame, makeLineDecoder } from "./pty-protocol.js";
+import { dropHandedDown, HANDED_DOWN } from "./handed-down.js";
+import { Asleep, SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
+import { type ClientMsg, type ServerMsg, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { ipcPath } from "@hivemind/core/ipc";
 import { repairShellSpec } from "./shell-spec.js";
 import {
-  fileNameForId, listSnapshotFiles, readSnapshot, redactSnapshot, rehydrateSnapshot, secureDir,
+  fileNameForId, listSnapshotFiles, parseSnapshot, readSnapshot, redactSnapshot, rehydrateSnapshot, secureDir,
   staleSnapshotIds, type SnapshotEntry,
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
 import { sanitizeShellEnv } from "./shell-env.js";
 import { titleBook } from "./title-book.js";
-import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, type AgentEvent } from "@hivemind/agents/node";
+import { AGENT_EVENT_METHOD, agentForCmd, composeResume, envToUnset, evictTrackedSession, parseAgentEvent, prepareProviders, readTrackedSession, TILE_SESSIONS_DIR, trackerSource, writeTrackedSession, setCatalog, TILE_ENV, type AgentEvent } from "@hivemind/agents/node";
 import { resolveWindowsSpawn } from "@hivemind/agents/discover";
 import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
+import { startHookDoor } from "./hooks/hook-door.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
-import { readOrCreateToken, hcpSockPath } from "./hooks/token.js";
+import { StatusStore } from "./status-store.js";
+import { cleanName } from "@hivemind/agents";
+import { driveSockPath, holderOf, speaksFor, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
@@ -42,6 +47,9 @@ const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; col
   ? bunPty.spawn
   : (createRequire(import.meta.url)("@lydell/node-pty") as typeof NodePty).spawn;
 
+// What the starter handed down is its, not ours: held, it outlives the starter.
+dropHandedDown(process.env[HANDED_DOWN]);
+delete process.env[HANDED_DOWN];
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
 // Set by `hive daemon` (no desktop on this machine); removed so sessions don't inherit it.
 const STANDALONE = process.env.HIVEMIND_DAEMON_STANDALONE === "1";
@@ -94,6 +102,8 @@ const userDataDir = path.dirname(socketPath);
 // Per-tile directory — each tile records its live session id in its OWN file, so
 // concurrent session starts (every tile on restart) never clobber each other.
 const tileSessionsDir = path.join(userDataDir, TILE_SESSIONS_DIR);
+/** The session last written for each tile: a hook's event writes only another one. */
+const recordedSessions = new Map<string, string>();
 const trackerPath = path.join(userDataDir, "tile-session-tracker.cjs");
 try { fs.writeFileSync(trackerPath, trackerSource()); } catch { /* best-effort */ }
 
@@ -127,7 +137,23 @@ try { fs.writeFileSync(eventHookPath, agentEventHookSource()); } catch { /* best
 const sdkPath = path.join(userDataDir, SDK_FILE);
 try { fs.writeFileSync(sdkPath, sdkSource()); } catch { /* best-effort */ }
 const hcpSock = hcpSockPath(userDataDir);
-const hcpToken = readOrCreateToken(userDataDir);
+const installToken = readOrCreateToken(userDataDir);
+// `emit` entries run hive-net's `hook`, a few MB instead of a runtime, when the starter named a
+// hive-net (HIVEMIND_HIVE_NET) that has it; else the script above. Windows keeps the script.
+const nativeHook = await (async (): Promise<{ hookBin?: string; hookDoor?: string }> => {
+  const bin = process.env.HIVEMIND_HIVE_NET;
+  if (!bin || process.platform === "win32" || !fs.existsSync(bin)) return {};
+  try {
+    const door = await startHookDoor({ path: ipcPath(userDataDir, "hook-door.sock"), sock: hcpSock });
+    // One from an older release has no `hook` and would drop every event.
+    const ok = await new Promise<boolean>((r) => execFile(bin, ["hook", door.path], { timeout: 10_000 }, (e) => r(!e)).stdin?.end());
+    if (ok) return { hookBin: bin, hookDoor: door.path };
+    door.close();
+  } catch (e) {
+    console.error("[pty-daemon] native hook unavailable:", (e as Error).message);
+  }
+  return {};
+})();
 
 // Provider-owned assets + config-home overlays (an extension, a private config home,
 // a hook script of its own, …): every catalogued provider's `prepare()` runs here and
@@ -150,9 +176,11 @@ const providerCtx = {
   tileSessionsDir,
   planBridgeSock,
   eventHookPath,
+  ...nativeHook,
   sdkPath,
   hcpSock,
-  hcpToken,
+  driveSock: driveSockPath(userDataDir),
+  hcpToken: (tile: string) => tileToken(installToken, tile),
 };
 let providerPaths: Record<string, Record<string, string>> = {};
 // Rebound by a rescan; the manager reads them through these variables.
@@ -211,7 +239,7 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
   // longer stalls the socket.
   snapshotLatest.set(id, JSON.stringify(redactSnapshot(snap)));
   const prev = snapshotWrites.get(id) ?? Promise.resolve();
-  const next = prev
+  const write = prev
     .then(async () => {
       const body = snapshotLatest.get(id);
       if (body === undefined) return; // an earlier task already wrote a newer body
@@ -222,15 +250,16 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
       const tmp = `${p}.tmp`;
       await fs.promises.writeFile(tmp, body, { encoding: "utf8", mode: 0o600 });
       await fs.promises.rename(tmp, p);
-    })
-    .catch(() => {
-      /* disk full / readonly fs — session loses reboot survival, that's it */
-    })
+    });
+  // Disk full or read-only: the session loses reboot survival, and a later save tries again.
+  const next = write
+    .catch(() => {})
     .finally(() => {
       if (snapshotWrites.get(id) === next) snapshotWrites.delete(id);
     });
   snapshotWrites.set(id, next);
-  return next;
+  // The manager is told it failed: it saves again later, and a sleep is not answered as kept.
+  return write;
 }
 function evictSnapshot(id: string): void {
   // Chain the unlink behind any in-flight write for this id: with async
@@ -251,27 +280,59 @@ function evictSnapshot(id: string): void {
   // Drop the tile's per-tile tracked-session file so killed tiles don't leave
   // stale ids behind.
   evictTrackedSession(tileSessionsDir, id);
+  recordedSessions.delete(id);
+}
+/** Keep, as the one its tile resumes, the conversation of the session `id` about to sleep: woken,
+ *  it is that one, not the newest in its folder. Why it may not sleep; null when it may. */
+function pinConversation(id: string): string | null {
+  const ran = manager.spawnedWith(id);
+  const pinned = ran && resume.conversationOf(ran, id);
+  if (!ran || pinned === undefined) return null;
+  if (pinned === null) return "its conversation cannot be found: woken, it would start afresh";
+  if (pinned.byFolder) {
+    const agentOf = (spec: SpawnSpec) => path.basename(spec.cmd.trim().split(/\s+/)[0] ?? "");
+    const agent = agentOf(ran);
+    const twin = manager.list().find((other) => {
+      if (other === id) return false;
+      const runs = manager.spawnedWith(other);
+      if (runs) return agentOf(runs) === agent && runs.cwd === ran.cwd;
+      return readTrackedSession(tileSessionsDir, other) === pinned.session;
+    });
+    if (twin) return `its conversation is found only by its folder, which session '${twin}' shares`;
+  }
+  try { writeTrackedSession(tileSessionsDir, id, pinned.session); } catch { return "the conversation it resumes could not be kept"; }
+  return null;
+}
+function loadSnapshot(id: string): SessionSnapshot | undefined {
+  const snap = readSnapshot(snapshotPath(id), id);
+  return snap ? rehydrateSnapshot(snap, tileToken(installToken, id)) : undefined;
+}
+async function readSnapshotFile(id: string): Promise<SessionSnapshot | undefined> {
+  const body = await fs.promises.readFile(snapshotPath(id), "utf8").catch(() => undefined);
+  const snap = body === undefined ? undefined : parseSnapshot(body, id);
+  return snap ? rehydrateSnapshot(snap, tileToken(installToken, id)) : undefined;
 }
 function registerSnapshots(): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
   for (const entry of listSnapshotFiles(sessionsDir)) {
-    manager.restoreLazySnapshot(entry.id, () => {
-      const snap = readSnapshot(entry.file, entry.id);
-      return snap ? rehydrateSnapshot(snap, hcpToken) : undefined;
-    });
+    manager.restoreLazySnapshot(entry.id, () => loadSnapshot(entry.id));
     entries.push(entry);
   }
   return entries;
 }
 
-// Real node-pty factory. Mirrors pty-host.doSpawn's env defaults so colors,
-// locale, and TERM_PROGRAM match the in-process path. UUID injection happens
+// Real node-pty factory: the env defaults every terminal gets (colors, locale,
+// TERM_PROGRAM). UUID injection happens
 // in transformSpecOnSpawn (so the snapshot persists it) — by the time spec
 // reaches here, the args already carry the session an agent is bound to.
+// The environment sessions start from: the latest a starter sent (`attach.base`), else this
+// process's. A daemon outlives the app that started it; what the person installed or changed in
+// their shell since reaches new sessions through it.
+let base: Record<string, string> | undefined;
 const factory = (spec: SpawnSpec): ManagedPty => {
-  // What this process inherited is cleaned; what the tile asked for is its own.
+  // The base is cleaned, the tile it was started from too; what the tile asked for is its own.
   const env: Record<string, string> = {
-    ...sanitizeShellEnv({ ...(process.env as Record<string, string>) }, envToUnset()),
+    ...sanitizeShellEnv({ ...(base ?? (process.env as Record<string, string>)) }, [...envToUnset(), ...TILE_ENV]),
     ...(spec.env ?? {}),
   };
   if (!env.COLORTERM) env.COLORTERM = "truecolor";
@@ -283,7 +344,7 @@ const factory = (spec: SpawnSpec): ManagedPty => {
   // A canvas written on another OS can name a shell this one doesn't have.
   const runSpec = repairShellSpec({ cmd: spec.cmd, args: spec.args });
   const { args: execArgs, env: execEnv } = applyInitialPrompt(runSpec.args ?? [], env);
-  // Last step before the pty (see pty-host.doSpawn): spec.cmd stays bare here
+  // Last step before the pty: spec.cmd stays bare here
   // so the session-matching transforms above still see the agent's name.
   const resolved = resolveWindowsSpawn(runSpec.cmd, execArgs, execEnv);
   const p = spawnPty(resolved.file, resolved.args, {
@@ -309,15 +370,31 @@ const factory = (spec: SpawnSpec): ManagedPty => {
 
 /** Connections that asked for events: agent reports and screen readings (desktops viewing this machine). */
 const eventViewers = new Set<(m: ServerMsg) => void>();
+/** The connection serving this machine's control plane (`hive host`), and the socket it serves it
+ *  on (`control`): while it lasts, every connection to the control-plane socket goes on to it, and
+ *  this daemon stays up with no session to run, for the verbs that start one. */
+let controller: { send: (m: ServerMsg) => void; sock: string } | null = null;
+/** Exit 8 s after the last session ends — no orphans — unless a control plane holds this daemon. */
+const IDLE_EXIT_MS = 8000;
+// With no desktop on this machine (one others connect to), it is its sessions' host: the hooks
+// report here, so the status of each session is kept here and every viewer mirrors it as
+// `agent.status` (docs/design/multiplayer-2026-09-28.md, R6). A desktop's own daemon leaves
+// that to the desktop, which its hooks report to.
+const statuses = STANDALONE ? new StatusStore() : null;
+statuses?.subscribe(({ tileId, status }) => { for (const push of eventViewers) push({ t: "event", topic: "agent.status", data: { tileId, status } }); });
 // Every agent session's screen, read here where the screen is kept, for the status of an
 // agent whose hooks have not reported. Viewers take it as `agent.screen`.
 const screens = new ScreenWatcher({
-  read: (id) => manager.viewport(id),
+  read: (ids) => manager.viewports(ids),
   detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
-  report: (id, state) => { for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state } }); },
+  report: (id, { status: state, says }) => {
+    statuses?.screen(id, state, says);
+    for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state, ...(says ? { says } : {}) } });
+  },
+  line: (id, line) => { for (const push of eventViewers) push({ t: "event", topic: "tile.line", data: { tileId: id, line } }); },
 });
 setInterval(() => {
-  screens.tick();
+  void screens.tick();
   // An agent installed or repaired while sessions run: one stat, and the titles and screen
   // rules it brings take effect without waiting for the next spawn.
   void ensureAgentsCurrent();
@@ -326,6 +403,7 @@ setInterval(() => {
 // Viewers take it as `agent.title`, and one that connects is sent what there is.
 const titles = titleBook((id) => agentForCmd(manager.commandOf(id) ?? ""));
 const pushTitle = (tileId: string, title: string): void => {
+  statuses?.title(tileId, cleanName(title));
   for (const push of eventViewers) push({ t: "event", topic: "agent.title", data: { tileId, title } });
 };
 function reportTitle(id: string, raw: string): void {
@@ -336,8 +414,18 @@ onAgentsReloaded = () => { for (const t of titles.recompute()) pushTitle(t.id, t
 const manager = new SessionManager(factory, {
   onOutput: (id) => screens.output(id),
   onTitle: (id, raw) => reportTitle(id, raw),
-  idleMs: 8000, // exit 8s after the last session is killed/exits — no orphans
+  // An ended session is gone for good: its readings go with it, or a desktop that connects later
+  // is told of a screen nothing shows any more.
+  onEnd: (id, asleep) => {
+    titles.forget(id);
+    screens.forget(id);
+    if (asleep) return statuses?.slept(id);
+    statuses?.exited(id);
+    statuses?.forget(id);
+  },
+  idleMs: IDLE_EXIT_MS,
   onEmpty: () => {
+    if (controller) return;
     try {
       server.close();
     } catch {
@@ -346,15 +434,26 @@ const manager = new SessionManager(factory, {
     process.exit(0);
   },
   onSnapshot: persistSnapshot,
+  loadSnapshot,
+  readSnapshot: readSnapshotFile,
   onSnapshotEvict: evictSnapshot,
   // Each agent's manifest says how it binds, tracks and resumes a session (hive-agents
   // runtime-manifest.ts); composed across every agent, each leaving specs it does not own alone.
-  transformSpecOnSpawn: (spec, id) => resume.transformSpecOnSpawn(spec, id),
+  // A session bound to an id as it starts is the tile's until its tracker says otherwise: kept
+  // now, so an agent with no tracker hook is known by its session too (its conversation, M5).
+  transformSpecOnSpawn: (spec, id) => {
+    const out = resume.transformSpecOnSpawn(spec, id);
+    const flag = agentForCmd(out.cmd)?.session?.resume?.from?.bound;
+    const at = flag ? (out.args ?? []).indexOf(flag) : -1;
+    const bound = at >= 0 ? out.args![at + 1] : undefined;
+    if (bound && !bound.startsWith("-")) try { writeTrackedSession(tileSessionsDir, id, bound); recordedSessions.set(id, bound); } catch { /* best-effort */ }
+    return out;
+  },
   // Strip the one-time HIVE_INITIAL_PROMPT before ANY provider sees the spec. A
   // restore re-execs from the persisted spec, so an un-stripped prompt is re-appended
   // as positional argv and the task RUNS AGAIN — for every agent that takes an argv
   // prompt. A property of restore, not of any one agent.
-  transformSpecOnRestore: (spec, id) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id),
+  transformSpecOnRestore: (spec, id, ran) => resume.transformSpecOnRestore(stripInitialPrompt(spec), id, ran),
   restoreRetryMs: resume.restoreRetryMs,
   restoreRetryTransform: (spec) => resume.restoreRetryTransform(spec),
 });
@@ -369,7 +468,7 @@ const bootSnapshots = registerSnapshots();
 // Open canvases attach within seconds, so anything unclaimed after this is a candidate.
 const RETENTION_GRACE_MS = 5 * 60 * 1000;
 const retentionTimer = setTimeout(() => {
-  for (const id of staleSnapshotIds(bootSnapshots, manager.frozenIds(), Date.now())) manager.kill(id);
+  for (const id of staleSnapshotIds(bootSnapshots, manager.frozenIds(), Date.now(), (id) => !!loadSnapshot(id)?.sleeping)) manager.kill(id);
 }, RETENTION_GRACE_MS);
 retentionTimer.unref?.();
 
@@ -488,6 +587,7 @@ const server = net.createServer((sock) => {
     }
     switch (msg.t) {
       case "attach": {
+        if (msg.base && typeof msg.base === "object") base = msg.base;
         if (msg.noSpawn && !(msg.liveOnly ? manager.hasLive(msg.id) : manager.has(msg.id))) {
           send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: `no session '${msg.id}'` });
           break;
@@ -499,27 +599,35 @@ const server = net.createServer((sock) => {
         const viewer: SessionClient = {
           onData: (data, seq) => { if (seq !== undefined) lastSeq.set(msg.id, seq); if (ready) outBuf.push(msg.id, data); },
           // Final bytes must land before the exit banner.
-          onExit: (code, signal) => {
+          onExit: (code, signal, slept) => {
             outBuf.flush(msg.id);
-            send({ t: "exit", id: msg.id, code, signal: signal ?? null });
-            if (viewers.get(msg.id) === viewer) viewers.delete(msg.id);
+            send({ t: "exit", id: msg.id, code, signal: signal ?? null, ...(slept ? { slept: true as const } : {}) });
+            if (viewers.get(msg.id) !== viewer) return;
+            viewers.delete(msg.id);
+            outBuf.forget(msg.id);
+            behind.delete(msg.id);
+            lastSeq.delete(msg.id);
           },
+          // Sized by another viewer: one that only watches draws it at that size. Its bytes so far
+          // were drawn at the size before.
+          onSize: (cols, rows) => { outBuf.flush(msg.id); send({ t: "size", id: msg.id, cols, rows }); },
         };
         viewers.set(msg.id, viewer);
-        const delta = msg.since ? manager.attachDelta(msg.id, viewer, msg.since, msg.spec.cols, msg.spec.rows) : null;
+        const view = msg.view === true;
+        const delta = msg.since ? manager.attachDelta(msg.id, viewer, msg.since, msg.spec.cols, msg.spec.rows, view) : null;
         if (delta) {
           ready = true;
           lastSeq.set(msg.id, delta.seq);
-          send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: delta.pid, isNew: false, replay: delta.replay, seq: delta.seq, epoch: delta.epoch, delta: true });
+          send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: delta.pid, isNew: false, replay: delta.replay, seq: delta.seq, epoch: delta.epoch, delta: true, cols: delta.cols, rows: delta.rows });
           break;
         }
         // The spawn/restore checkpoint: an agent installed after boot is wired here,
         // before its spec is transformed.
         void ensureAgentsCurrent()
-          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer))
+          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view, linesOf(msg.lines), msg.wake === true))
           .then((r) => {
             ready = true;
-            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch });
+            send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch, cols: r.cols, rows: r.rows });
           })
           .catch((e: unknown) => {
             // Bad cwd / node-pty ABI / ENOENT cmd. Without this catch the
@@ -527,6 +635,8 @@ const server = net.createServer((sock) => {
             // pendingAttach hangs until its 6s timeout — with nothing logged.
             // Reply with a failure pid so spawnPty resolves immediately.
             if (viewers.get(msg.id) === viewer) viewers.delete(msg.id);
+            if (e instanceof Asleep) { send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e.message, asleep: true }); return; }
+            if (e instanceof NothingAsleep) { send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e.message, gone: true }); return; }
             console.error(`[pty-daemon] attach ${msg.id} failed:`, e);
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: -1, isNew: false, replay: "", error: e instanceof Error ? e.message : String(e) });
           });
@@ -536,10 +646,14 @@ const server = net.createServer((sock) => {
         // Only the writing connection's outBuf fast-paths its echo; other
         // viewers of the tile keep normal batching.
         outBuf.markInput(msg.id);
+        statuses?.input(msg.id, msg.data);
         manager.write(msg.id, msg.data, viewers.get(msg.id), msg.paste);
         break;
       case "resize":
         manager.resize(msg.id, msg.cols, msg.rows, viewers.get(msg.id));
+        break;
+      case "repaint":
+        manager.repaint(msg.id);
         break;
       case "detach":
         leave(msg.id);
@@ -552,20 +666,34 @@ const server = net.createServer((sock) => {
         manager.kill(msg.id, killer);
         break;
       }
+      case "sleep": {
+        const { reqId, id } = msg;
+        const refused = pinConversation(id);
+        if (refused) { send({ t: "slept", reqId, id, error: refused }); break; }
+        void manager.sleep(id).then((kept) => send({ t: "slept", reqId, id, ...(kept ? {} : { error: `nothing running as '${id}' to put to sleep, or its screen could not be saved` }) }));
+        break;
+      }
       case "pause":
         manager.pause(msg.id, viewers.get(msg.id));
         break;
       case "screen": {
         const { reqId, id } = msg;
-        // What is buffered for this viewer is older than the screen: send it first, so the
-        // screen is the line between bytes it already covers and bytes that follow it.
-        outBuf.flush(id);
-        void manager.snapshot(id).then((snap) => send({ t: "screen", reqId, id, replay: snap?.replay ?? null }));
+        const lines = linesOf(msg.lines);
+        if (msg.saved) { void manager.savedScreen(id, lines).then((replay) => send({ t: "screen", reqId, id, replay })); break; }
+        // What is buffered for this viewer when the screen arrives is older than it: sent first, so
+        // the screen is the line between bytes it already covers and bytes that follow it.
+        void manager.snapshot(id, lines).then((snap) => { outBuf.flush(id); send({ t: "screen", reqId, id, replay: snap?.replay ?? null }); });
         break;
       }
       case "resume":
         manager.resume(msg.id, viewers.get(msg.id));
         break;
+      case "viewport": {
+        const { reqId, id } = msg;
+        // Unread (no screen worker) is an empty screen: null would say the session is not running.
+        void manager.viewports([id]).then((rows) => send({ t: "viewport", reqId, id, text: rows ? rows.get(id)?.screen ?? null : manager.hasLive(id) ? "" : null }));
+        break;
+      }
       case "list":
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list(), ...(msg.detail ? { detail: manager.info() } : {}) });
         break;
@@ -577,7 +705,18 @@ const server = net.createServer((sock) => {
         if (Array.isArray(msg.caps) && msg.caps.includes("events")) {
           eventViewers.add(send);
           for (const { id, title } of titles.current()) send({ t: "event", topic: "agent.title", data: { tileId: id, title } });
-          for (const [tileId, state] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state } });
+          for (const [tileId, { status: state, says }] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state, ...(says ? { says } : {}) } });
+          for (const [tileId, line] of screens.currentLines()) send({ t: "event", topic: "tile.line", data: { tileId, line } });
+          for (const { tileId, status } of statuses?.all() ?? []) send({ t: "event", topic: "agent.status", data: { tileId, status } });
+        }
+        break;
+      case "control":
+        // A daemon the app started leaves the control-plane socket to the app.
+        if (!STANDALONE) send({ t: "control", reqId: msg.reqId, error: "the app serves this machine's control plane" });
+        else if (typeof msg.sock !== "string" || !path.isAbsolute(msg.sock)) send({ t: "control", reqId: msg.reqId, error: "control needs the absolute path of a socket" });
+        else {
+          controller = { send, sock: msg.sock };
+          send({ t: "control", reqId: msg.reqId });
         }
         break;
       case "shutdown":
@@ -597,6 +736,15 @@ const server = net.createServer((sock) => {
     outBuf.clear();
     // Never kill on disconnect.
     for (const id of Array.from(viewers.keys())) leave(id);
+    if (controller?.send !== send) return;
+    // The control plane went: this daemon answers on its socket again, and with no session to run
+    // goes as it would have.
+    controller = null;
+    if (manager.size() === 0) {
+      setTimeout(() => {
+        if (!controller && manager.size() === 0) void flushOnExit().finally(() => process.exit(0));
+      }, IDLE_EXIT_MS).unref?.();
+    }
   });
 });
 
@@ -612,40 +760,92 @@ if (claim === "taken") {
 try { fs.chmodSync(socketPath, 0o600); } catch { /* named pipe on Windows */ }
 
 if (STANDALONE) {
-  // No desktop here owns the control-plane socket, so hook events come to us and go on to viewers and push.
-  const hcp = net.createServer((c) => {
-    c.on("error", () => { /* hook gone */ });
-    const answer = (id: unknown, body: Record<string, unknown>) => { try { c.write(`${JSON.stringify({ jsonrpc: "2.0", id, ...body })}\n`); } catch { /* gone */ } };
-    let authed = false;
-    c.on("data", makeLineDecoder((line) => {
+  // No desktop here owns the control-plane socket: this daemon does. Hook events come to it and go
+  // on to viewers and push; what only a control plane can answer is answered by the one serving
+  // this machine's (`control`, a `hive host`), or refused at once.
+  /** What an agent reported on the control-plane socket, whoever answers it: its session's status,
+   *  and every viewer told but `heard`, the control plane that heard it itself. */
+  const reported = (method: string, params: unknown, heard?: (m: ServerMsg) => void): void => {
+    if (method === "agent.reply") {
+      // A reply goes to the desktops watching this machine, never to push.
+      for (const push of eventViewers) if (push !== heard) push({ t: "event", topic: "agent.reply", data: params });
+      return;
+    }
+    const evt = parseAgentEvent(params);
+    if (!evt) return;
+    // The session an agent reports from is the one its tile resumes.
+    if (evt.sessionId && recordedSessions.get(evt.tileId) !== evt.sessionId) {
+      try {
+        writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId);
+        recordedSessions.set(evt.tileId, evt.sessionId);
+      } catch { /* best-effort: written with its next event */ }
+    }
+    statuses?.event(evt.tileId, evt);
+    for (const push of eventViewers) if (push !== heard) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
+    void notifyPush(evt);
+  };
+  /** One connection's lines: what it reports is heard; what it asks is answered with `answer`, or
+   *  left to the control plane it goes on to (`heard`). */
+  const lines = (answer: ((id: unknown, body: Record<string, unknown>) => void) | null, heard?: (m: ServerMsg) => void) => {
+    /** Whose token signed this connection in: a tile's speaks only for that tile. */
+    let who: ReturnType<typeof holderOf> = null;
+    const mine = (params: unknown): boolean => speaksFor(who, (params as { tileId?: unknown } | null)?.tileId);
+    return (line: string): void => {
       let m: { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
       try { m = JSON.parse(line); } catch { return; }
       if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return;
       const params = (m.params ?? {}) as Record<string, unknown>;
+      // Signing in as a notification asks for no reply: a hook that reads nothing is told nothing.
+      if (m.method === "initialize") {
+        who = holderOf(installToken, params.token);
+        if (m.id === undefined) return;
+        if (!who) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "FORBIDDEN" } } });
+        return answer?.(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
+      }
       if (m.id === undefined) {
-        if (m.method !== AGENT_EVENT_METHOD) return;
-        const evt = parseAgentEvent(m.params);
-        if (!evt) return;
-        // The session an agent reports from is the one its tile resumes.
-        if (evt.sessionId) try { writeTrackedSession(tileSessionsDir, evt.tileId, evt.sessionId); } catch { /* best-effort */ }
-        for (const push of eventViewers) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
-        void notifyPush(evt);
+        // An event, or a reply ahead of the turn end it belongs to, from a hook signed in here.
+        if ((m.method === AGENT_EVENT_METHOD || m.method === "agent.reply") && mine(m.params)) reported(m.method, m.params, heard);
         return;
       }
-      if (m.method === "initialize") {
-        if (params.token !== hcpToken) return answer(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "UNAUTHORIZED" } } });
-        authed = true;
-        return answer(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
-      }
-      if (!authed) return answer(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "UNAUTHORIZED" } } });
+      if (!who) return answer?.(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "FORBIDDEN" } } });
       if (m.method === "agent.reply") {
-        // A reply goes to the desktops watching this machine, never to push.
-        for (const push of eventViewers) push({ t: "event", topic: "agent.reply", data: m.params });
-        return answer(m.id, { result: { ok: true } });
+        if (!mine(params)) return answer?.(m.id, { error: { code: -32000, message: "a tile hands over only its own reply", data: { code: "FORBIDDEN" } } });
+        reported(m.method, m.params, heard);
+        return answer?.(m.id, { result: { ok: true } });
       }
       // Only a desktop can decide (e.g. approvals): answer at once so the agent falls back to its own prompt.
-      answer(m.id, { error: { code: -32000, message: "no desktop on this machine", data: { code: "UNAVAILABLE" } } });
-    }));
+      answer?.(m.id, { error: { code: -32000, message: "no desktop on this machine", data: { code: "UNAVAILABLE" } } });
+    };
+  };
+  /** Answer a connection's lines here: what takes each chunk it sends. */
+  const here = (c: net.Socket): ((chunk: Buffer) => void) => {
+    const answer = (id: unknown, body: Record<string, unknown>) => { try { c.write(`${JSON.stringify({ jsonrpc: "2.0", id, ...body })}\n`); } catch { /* gone */ } };
+    return makeLineDecoder(lines(answer));
+  };
+  const hcp = net.createServer((c) => {
+    c.on("error", () => { /* hook gone */ });
+    const to = controller;
+    if (!to) { c.on("data", here(c)); return; }
+    // What the caller sends waits here until the control plane is reached: a hook writes its line
+    // and goes at once, before then. One that cannot be reached is answered for here.
+    const early: Buffer[] = [];
+    let take: ((chunk: Buffer) => void) | null = null;
+    let reached = false;
+    let ended = false;
+    const go = (path: (chunk: Buffer) => void): void => { take = path; for (const chunk of early.splice(0)) path(chunk); };
+    const up = net.connect(to.sock);
+    c.on("data", (chunk: Buffer) => { if (take) take(chunk); else early.push(chunk); });
+    c.on("end", () => { ended = true; if (reached) up.end(); });
+    c.on("close", () => { ended = true; if (reached) up.end(); });
+    up.once("connect", () => {
+      reached = true;
+      const heard = makeLineDecoder(lines(null, to.send));
+      go((chunk) => { heard(chunk); up.write(chunk); });
+      if (ended) up.end();
+      up.on("data", (d: Buffer) => { try { c.write(d); } catch { /* gone */ } });
+    });
+    up.on("error", () => { if (!reached) go(here(c)); });
+    up.on("close", () => { if (reached) c.destroy(); });
   });
   void listenExclusive(hcp, hcpSock)
     .then((r) => { if (r === "listening") fs.chmodSync(hcpSock, 0o600); })
@@ -664,7 +864,7 @@ console.error(`[pty-daemon] listening on ${socketPath} (pid ${process.pid})`);
 // the next daemon boot reloads them. `manager.list().length` covers both
 // live AND frozen for fairness with other call sites.
 const bootGuard = setTimeout(() => {
-  if (manager.size() === 0) {
+  if (manager.size() === 0 && !controller) {
     // Flush any snapshots that were dirty (shouldn't be any — frozen aren't
     // dirty — but cheap insurance), then exit. Async-await so the snapshot
     // write completes before the process dies.
@@ -672,3 +872,8 @@ const bootGuard = setTimeout(() => {
   }
 }, 30000);
 bootGuard.unref?.();
+
+/** A client's "at most this many lines of scrollback", when it is one. */
+function linesOf(lines: unknown): number | undefined {
+  return Number.isSafeInteger(lines) && (lines as number) >= 0 ? (lines as number) : undefined;
+}

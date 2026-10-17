@@ -1,0 +1,79 @@
+/**
+ * The workspace store on Electron (docs/design/multiplayer-2026-09-28.md, R1, R5, R15, R8): the
+ * app's one `WorkspaceStore`, under `<userData>/workspaces`, and the synchronous channels a
+ * window reads and writes it on, so it builds its first state in one pass and a save made while
+ * it unloads is kept. What each channel answers is the workspace API's (`@hivemind/host/store`), as
+ * the window's own connection: a window writes as itself, and every other window is told of its
+ * change (`store.changed`). A channel always answers, null for what the API refuses, because a
+ * synchronous request left unanswered would hang the window. `flushWorkspaceStore` retries failed
+ * writes on quit, because `app.exit` skips every later handler.
+ */
+import path from "node:path";
+import { app, type IpcMainEvent, type WebContents } from "electron";
+import type { Connection } from "@hivemind/workspace-api/server";
+import { WorkspaceStore, type WorkspaceChange } from "@hivemind/workspace-host/store";
+import { changeHub } from "@hivemind/workspace-host/doc-sync";
+import { answer } from "./app-ipc.js";
+import { machineIdentity } from "./identity.js";
+import type { Layouts } from "@hivemind/host/store";
+
+let store: WorkspaceStore | null = null;
+let shared: WorkspaceStore | null = null;
+/** Who hears of each change: set when the channels are installed. */
+let tell: (change: WorkspaceChange) => void = () => {};
+/** Who else hears of each change (a workspace's peers, M1). */
+const others = changeHub((m) => console.warn(`[workspace-store] ${m}`));
+const told = (change: WorkspaceChange): void => {
+  tell(change);
+  others.tell(change);
+};
+
+/** The app's one store: the windows', and main's own writers' (the control plane). */
+export function workspaceStore(): WorkspaceStore {
+  return (store ??= new WorkspaceStore({
+    dir: path.join(app.getPath("userData"), "workspaces"),
+    person: machineIdentity().person,
+    onWarn: (m) => console.warn(`[workspace-store] ${m}`),
+    onChange: told,
+  }));
+}
+
+/** The replicas of workspaces others share with this person (M1), each named `hive://<id>`. */
+export function sharedStore(): WorkspaceStore {
+  return (shared ??= new WorkspaceStore({
+    dir: path.join(app.getPath("userData"), "shared"),
+    onWarn: (m) => console.warn(`[shared-store] ${m}`),
+    onChange: told,
+  }));
+}
+
+/** The store that holds `repo`'s layout: a replica for a workspace shared from elsewhere. */
+export function storeFor(repo: string): WorkspaceStore {
+  return repo.startsWith("hive://") ? sharedStore() : workspaceStore();
+}
+
+/** Hear each change either store makes; the function returned stops. */
+export const onWorkspaceChange = others.changes;
+
+/** Serve the store's synchronous channels from `layouts`, each window as its `connection`, and
+ *  hand each change the store makes to `changed`. */
+export function installWorkspaceStoreIpc(layouts: Layouts, connection: (window: WebContents) => Connection, changed: (change: WorkspaceChange) => void): void {
+  tell = changed;
+  const { answers } = layouts.domain;
+  const as = (e: IpcMainEvent) => connection(e.sender);
+  answer("workspace:core-sync", (e, repo) => answers["store.core"](as(e), repo));
+  answer("workspace:view-sync", (e, repo, viewId) => answers["store.view"](as(e), repo, viewId));
+  answer("workspace:objects-sync", (e, repo) => answers["store.objects"](as(e), repo));
+  answer("workspace:objects-with-ids-sync", (e, repo, ids) => answers["store.objectsWithIds"](as(e), repo, ids));
+  answer("workspace:set-core-sync", (e, repo, core, base) => answers["store.setCore"](as(e), repo, core, base));
+  answer("workspace:set-view-sync", (e, repo, viewId, layout, base) => answers["store.setView"](as(e), repo, viewId, layout, base));
+  answer("workspace:edit-objects-sync", (e, repo, edit) => answers["store.editObjects"](as(e), repo, edit));
+  answer("workspace:import-sync", (e, repo, legacy) => answers["store.import"](as(e), repo, legacy));
+  answer("workspace:undo-sync", (e, repo) => answers["store.undo"](as(e), repo));
+  answer("workspace:redo-sync", (e, repo) => answers["store.redo"](as(e), repo));
+}
+
+/** Retry writes that failed. Safe to call more than once, and before the store exists. */
+export function flushWorkspaceStore(): void {
+  try { store?.flush(); shared?.flush(); } catch (err) { console.warn("[workspace-store] flush failed:", err); }
+}

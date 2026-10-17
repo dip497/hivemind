@@ -1,10 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { Toaster } from "sonner";
+import { Requests } from "./multiplayer/requests";
 import { TooltipProvider } from "./components/ui/tooltip";
-import { workerFactory } from "./pierre-worker";
 import { App } from "./App";
 // Self-host Geist (UI) and JetBrains Mono (terminal/code/IDs) so glyphs are available
 // immediately and offline — no CDN round-trip, no flash-of-fallback that would
@@ -19,44 +18,62 @@ import "@fontsource/jetbrains-mono/600.css";
 import "@fontsource/jetbrains-mono/700.css";
 import "./styles.css";
 
+// A part loaded on first use (a dialog, a panel) that fails to load means the app was rebuilt or
+// upgraded under this window: reload into the new build instead of going blank. Once a minute at
+// most, so a part that is truly missing shows its error rather than reloading forever.
+window.addEventListener("vite:preloadError", (e) => {
+  const KEY = "hivemind:reloaded-for-new-build";
+  let last = 0;
+  try { last = Number(sessionStorage.getItem(KEY)) || 0; } catch { /* no storage: reload anyway */ }
+  if (Date.now() - last < 60_000) return;
+  try { sessionStorage.setItem(KEY, String(Date.now())); } catch { /* reload anyway */ }
+  e.preventDefault();
+  location.reload();
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 5_000, refetchOnWindowFocus: false },
   },
 });
 
+// The faces the first screen is drawn with, loaded before its first layout: laid out while they
+// load, its text is matched against the system's fonts down each font list, one wait on the browser
+// for each family tried.
+const FIRST_SCREEN_FACES = ['400 1em "Geist Sans"', '500 1em "Geist Sans"', '600 1em "Geist Sans"', '400 1em "JetBrains Mono"', '500 1em "JetBrains Mono"'];
+await Promise.race([
+  Promise.all(FIRST_SCREEN_FACES.map((face) => document.fonts.load(face).catch(() => []))),
+  new Promise((resolve) => setTimeout(resolve, 500)),
+]);
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <WorkerPoolContextProvider
-        poolOptions={{ workerFactory }}
-        highlighterOptions={{ theme: { dark: "pierre-dark", light: "pierre-light" } }}
-      >
-        <TooltipProvider delayDuration={200} skipDelayDuration={500}>
-          <App />
-          <Toaster
-            theme="dark"
-            position="bottom-right"
-            // Same glass family as the agent .hm-toast cards (frosted surface +
-            // token colors + inner-top highlight) so action confirmations and
-            // agent events read as one notification plane. Both are bottom-right
-            // and temporally rare, so they share the corner cleanly.
-            toastOptions={{
-              className: "hm-sonner",
-              style: {
-                background: "color-mix(in srgb, var(--color-bg3) 95%, transparent)",
-                color: "var(--color-fg)",
-                border: "1px solid var(--color-line2)",
-                borderRadius: "12px",
-                boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.08), 0 10px 36px rgba(0,0,0,0.5)",
-                backdropFilter: "blur(10px) saturate(135%)",
-                fontFamily: "var(--font-sans)",
-                fontSize: "12px",
-              },
-            }}
-          />
-        </TooltipProvider>
-      </WorkerPoolContextProvider>
+      <TooltipProvider delayDuration={200} skipDelayDuration={500}>
+        <App />
+        <Requests />
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          // Same glass family as the agent .hm-toast cards (frosted surface +
+          // token colors + inner-top highlight) so action confirmations and
+          // agent events read as one notification plane. Both are bottom-right
+          // and temporally rare, so they share the corner cleanly.
+          toastOptions={{
+            className: "hm-sonner",
+            style: {
+              background: "color-mix(in srgb, var(--color-bg3) 95%, transparent)",
+              color: "var(--color-fg)",
+              border: "1px solid var(--color-line2)",
+              borderRadius: "12px",
+              boxShadow: "var(--hm-highlight-glass), var(--hm-shadow-glass)",
+              backdropFilter: "blur(10px) saturate(135%)",
+              fontFamily: "var(--font-sans)",
+              fontSize: "var(--text-label)",
+            },
+          }}
+        />
+      </TooltipProvider>
     </QueryClientProvider>
   </React.StrictMode>
 );

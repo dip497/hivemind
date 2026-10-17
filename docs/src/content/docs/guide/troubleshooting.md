@@ -6,7 +6,7 @@ description: Diagnose common errors.
 ## Start with the exit code
 
 `hive ctl` failures carry structured codes (full table in [CLI](../cli/)): 2 usage,
-3 app not running, 4 timeout, 5 not found, 6 unauthorized, 7 refused/unsupported.
+3 neither the app nor `hive host` running, 4 timeout, 5 not found, 6 unauthorized, 7 refused/unsupported.
 
 ## Tracker
 
@@ -22,30 +22,31 @@ description: Diagnose common errors.
 
 ## App and canvas
 
-- **Exit 3 on canvas verbs** — the app is not running: `hivemind .`. Issue verbs work
-  without it; spawn/read/list do not.
+- **Exit 3 on canvas verbs** — neither the app nor `hive host` is running: `hivemind .`. Issue
+  verbs work without it; `spawn`, `read` and `agents` do not.
 - **Agent not spawnable** — run `hive agent detect` in the workspace; install the CLI if
   missing. Distinguish spawnable runtimes from recognised-for-status ones
   ([Agents](../agents/)).
 - **Terminal empty after reboot** — runtimes without resume (opencode) start fresh;
   others resume per their provider. Screen content replays from disk after a daemon
   restart either way.
-- **Remote terminals ended** — remote PTYs run in the app process; an SSH drop ends
-  them and there is no remote daemon to reattach. Reopen the tile; use a local worktree
-  when you need sessions to outlive connections.
+- **Remote terminals ended** — the machine has no `hive`, so its terminals are plain ssh and
+  end with the connection. **Manage machines → Install hive** puts them in that machine's own
+  daemon, where they survive drops and app restarts.
 - **Browser page reloaded after a view switch** — known `<webview>` limit; tabs and
   history survive, scroll/form state does not.
 - **Agent cannot browse** — enable agent browser control in Settings, open a Browser
   tile, retry; the `hive-browser` skill reports what is missing.
-- **View missing or disabled** — check Settings → Plugins → Installed for runtime load errors and
-  `hive views list` for package errors. A plugin that
-  violated its budget stays disabled until the app restarts.
+- **View missing or disabled** — its page in Settings ▸ Plugins says why it cannot load (the
+  Views list there shows it under **Off**); `hive views list` shows package errors. A view that
+  broke its budget stays off until the app restarts.
 
 ## Timeouts
 
 - `hive ctl read` waits 100 s by default in ≤ 10 s slices; keep the total under your
   tool's timeout. Exit 4 means the turn had not finished — call
-  again to collect it.
+  again to collect it. Exit 5 with `finalStatus: "closed"` means the tile was closed
+  while you waited; there is nothing left to read.
 - `hive ctl workflow --timeout` is per worker (default `10m`; durations take units — `90s`, `10m`); give the calling
   tool a timeout longer than the slowest worker.
 - `hive ctl open-review --timeout` defaults to a 24 h ceiling; set an explicit value
@@ -66,6 +67,3 @@ After upgrading, refresh workspace skills with `hive add skill`.
 - Playwright/e2e: `unset ELECTRON_RUN_AS_NODE`, run under xvfb; the config isolates the
   profile.
 - `HIVEMIND_SHELL_ENV=0` makes tiles inherit the app environment verbatim.
-
-State is files: `cat` the issue, `hive config get`, `hive views list`. Fixes go through
-[Contributing](../contributing/).

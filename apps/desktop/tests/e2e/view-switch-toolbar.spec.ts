@@ -16,7 +16,7 @@ test.beforeAll(async () => {
   app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${dir}/ud`],
     cwd: APP_DIR,
-    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), HIVEMIND_PTY_DAEMON: "0" },
+    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg") },
   });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
@@ -34,13 +34,14 @@ test("the toolbar switches the view, and shows which one you are in", async () =
   await toggle.click();
   const choices = page.locator("[data-view-choice]");
   expect(await choices.count()).toBeGreaterThan(1);
-  const other = await choices.filter({ hasNot: page.locator("svg.lucide-check") }).first().getAttribute("data-view-choice");
+  const other = await page.locator('[data-view-choice][aria-checked="false"]').first().getAttribute("data-view-choice");
   await page.locator(`[data-view-choice="${other}"]`).click();
 
   await expect.poll(activeView).toBe(other);
   await expect(page.locator("[data-view-choice]")).toHaveCount(0); // the menu closed
-  // …and back, the same way.
-  await page.locator("[data-view-switch]").click();
-  await page.locator('[data-view-choice="canvas"]').click();
+  // …and back from the Layers panel's title menu, which every view has: a view may hide the toolbar.
+  await page.locator("[data-layers-title]").click();
+  await page.locator('[data-layers-show-as="canvas"]').click();
   await expect.poll(activeView).toBe("canvas");
+  await expect(page.locator("[data-view-switch]")).toContainText("Canvas");
 });

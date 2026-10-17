@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   TOKEN_PLACEHOLDER, fileNameForId, idFromFileName, listSnapshotFiles, readSnapshot,
-  redactSnapshot, rehydrateSnapshot, secureDir, staleSnapshotIds, SNAPSHOT_RETENTION_MS,
+  redactSnapshot, rehydrateSnapshot, secureDir, staleSnapshotIds, SNAPSHOT_RETENTION_MS, SLEEP_RETENTION_MS,
 } from "@hivemind/agent-host/session-snapshot-store";
 import type { SessionSnapshot } from "@hivemind/agent-host/pty-session-manager";
 
@@ -92,7 +92,7 @@ test("the directory is 0700 and files are tightened to 0600", { skip: !posix }, 
   assert.equal(fs.statSync(f).mode & 0o777, 0o600, "a snapshot written before this rule is repaired");
 });
 
-test("retention evicts only snapshots that are BOTH unclaimed and old", () => {
+test("retention evicts only snapshots that are unclaimed and old, and one asleep only once much older", () => {
   const now = 1_000_000_000_000;
   const old = now - SNAPSHOT_RETENTION_MS - 1;
   const fresh = now - 1000;
@@ -100,12 +100,15 @@ test("retention evicts only snapshots that are BOTH unclaimed and old", () => {
     { id: "gone-old", file: "a", mtimeMs: old },      // closed long ago → evict
     { id: "gone-fresh", file: "b", mtimeMs: fresh },  // closed recently → keep a while
     { id: "open-old", file: "c", mtimeMs: old },      // attached this boot → keep
+    { id: "asleep-old", file: "d", mtimeMs: old },    // put to sleep long ago → waits to be woken
+    { id: "asleep-older", file: "e", mtimeMs: now - SLEEP_RETENTION_MS - 1 }, // never woken → evict
   ];
-  assert.deepEqual(staleSnapshotIds(entries, ["gone-old", "gone-fresh"], now), ["gone-old"]);
+  const unclaimed = ["gone-old", "gone-fresh", "asleep-old", "asleep-older"];
+  assert.deepEqual(staleSnapshotIds(entries, unclaimed, now, (id) => id.startsWith("asleep")), ["gone-old", "asleep-older"]);
 });
 
 test("retention never evicts a snapshot some tile claimed, however old", () => {
   const now = 1_000_000_000_000;
   const entries = [{ id: "t", file: "x", mtimeMs: 0 }];
-  assert.deepEqual(staleSnapshotIds(entries, [], now), []);
+  assert.deepEqual(staleSnapshotIds(entries, [], now, () => false), []);
 });

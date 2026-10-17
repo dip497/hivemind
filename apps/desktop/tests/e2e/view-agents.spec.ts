@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
+import { stopDaemons } from "./helpers/daemons";
 
 test.use({ trace: "off" });
 
@@ -46,13 +47,13 @@ test.beforeAll(async () => {
   app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"],
     cwd: repo,
-    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
+    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
   });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 20_000 });
   const userData = path.join(XDG, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token")), { timeout: 20_000 }).toBe(true);
-  hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+  hcp = { HIVEMIND_APP_DATA: userData };
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "agent-driver" } })));
   await page.waitForSelector('[data-community-view="agent-driver"][data-community-ready="1"]', { timeout: 20_000 });
   view = page.frame({ name: "hm-view:agent-driver" })!;
@@ -60,8 +61,8 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  try { execSync(`pkill -f "out/main/pty-daemon.js ${XDG}/"`, { stdio: "ignore" }); } catch { /* none */ }
-  await Promise.race([app?.close(), new Promise((r) => setTimeout(r, 10_000))]);
+  await app?.close();
+  stopDaemons(XDG);
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs claude "`, { stdio: "ignore" }); } catch { /* none */ }
   for (const d of [home, fakeBin, repo]) fs.rmSync(d, { recursive: true, force: true });
 });

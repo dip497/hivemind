@@ -8,7 +8,7 @@ import path from "node:path";
 
 const appDir = process.argv[2];
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-cost-"));
-const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVEMIND_PTY_DAEMON: "0" };
+const env = { ...process.env, XDG_CONFIG_HOME: path.join(root, "config") };
 
 const tree = (pid) => {
   const out = execFileSync("ps", ["-eo", "pid,ppid,rss,args"], { encoding: "utf8" }).split("\n").slice(1);

@@ -1,32 +1,30 @@
-// A real headless terminal, fed what an agent's TUI sends: the replay has to carry the
-// encoding the app asked for, or its mouse is answered in a dialect it does not read.
+// A session's replay, drawn by a fresh terminal the way a reattaching window draws it: that
+// terminal has to report the mouse the way the app asked, or the app ignores every click.
 import { test, expect } from "bun:test";
 import { Terminal } from "@xterm/headless";
-import { SerializeAddon } from "@xterm/addon-serialize";
-import { mouseEncodingSeq } from "../src/replay-modes.ts";
+import { SessionManager, type ManagedPty } from "../src/pty-session-manager.ts";
 
-/** Writes are parsed asynchronously: wait for the write to land before reading the modes. */
-const fed = async (seq: string) => {
+async function replayAfter(said: string): Promise<string> {
+  let emit: ((d: string) => void) | undefined;
+  const pty: ManagedPty = { pid: 1, write: () => {}, resize: () => {}, kill: () => {}, onData: (cb) => { emit = cb; }, onExit: () => {} };
+  const m = new SessionManager(() => pty);
+  await m.createOrAttach("t1", { cwd: "/", cmd: "sh", args: [], cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
+  emit!(said);
+  return (await m.snapshot("t1"))!.replay;
+}
+
+/** How a terminal fed `replay` reports the mouse: its tracking mode and its encoding. */
+async function reports(replay: string): Promise<[string, string]> {
   const t = new Terminal({ allowProposedApi: true });
-  await new Promise<void>((r) => t.write(seq, r));
-  return t;
-};
+  await new Promise<void>((r) => t.write(replay, r));
+  const core = (t as unknown as { _core: { coreMouseService: { activeEncoding: string } } })._core;
+  return [t.modes.mouseTrackingMode, core.coreMouseService.activeEncoding];
+}
 
-test("what a TUI turned on comes back: the tracking mode from the replay, the encoding from us", async () => {
-  const t = await fed("\x1b[?1049h\x1b[?1003h\x1b[?1006hhello");
-  const ser = new SerializeAddon();
-  t.loadAddon(ser);
-  const replay = ser.serialize();
-  expect(replay).toContain("\x1b[?1003h");      // tracking: xterm's addon writes it
-  expect(replay).not.toContain("\x1b[?1006h");  // encoding: it does not — this is the gap
-  expect(mouseEncodingSeq(t)).toBe("\x1b[?1006h");
-});
-
-test("pixel coordinates carry too, and a terminal nobody asked for the mouse says nothing", async () => {
-  expect(mouseEncodingSeq(await fed("\x1b[?1003h\x1b[?1016h"))).toBe("\x1b[?1016h");
-  expect(mouseEncodingSeq(await fed("hello"))).toBe("");
-  // Encoding without tracking is not worth re-emitting: nothing is reported either way.
-  expect(mouseEncodingSeq(await fed("\x1b[?1006h"))).toBe("");
-  expect(mouseEncodingSeq(null)).toBe("");
-  expect(mouseEncodingSeq({})).toBe("");
+test.each([
+  ["SGR, asked for by an app tracking every move", "\x1b[?1049h\x1b[?1003h\x1b[?1006hhello", ["any", "SGR"]],
+  ["SGR in pixels", "\x1b[?1003h\x1b[?1016h", ["any", "SGR_PIXELS"]],
+  ["an app that never asked for the mouse", "hello", ["none", "DEFAULT"]],
+])("a replayed session reports the mouse as its app asked: %s", async (_name, said, expected) => {
+  expect(await reports(await replayAfter(said))).toEqual(expected);
 });

@@ -1,0 +1,49 @@
+/**
+ * The workspace side of the control plane's dependencies, for tests of its dispatch
+ * (@hivemind/host/control/methods): a real store with one workspace open and shown in the user's
+ * window, a real status store and the waits it shows, no saved launch options, who started each spawned tile kept in a file there, a record of every spawn the windows
+ * would have been told of, and the host's intents writing a real audit log (`audited()` reads
+ * it back).
+ */
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { StatusStore } from "@hivemind/agent-host/status-store";
+import { Waits } from "@hivemind/host/waits";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
+import { Intents, type AuditRecord } from "@hivemind/workspace-host/intents";
+import { AuditLog } from "@hivemind/workspace-host/audit-log";
+import { SpawnRecords } from "@hivemind/host/control/spawn-records";
+import type { HcpSpawnedEvent } from "../../src/shared/ipc.ts";
+import type { HcpCall } from "@hivemind/host/control/protocol";
+
+/** Who makes a test's call: the person at a terminal, or the agent in a tile. */
+export const PERSON: HcpCall = { actor: { kind: "person" } };
+export const fromTile = (tile: string): HcpCall => ({ actor: { kind: "tile", tile } });
+
+export const REPO = "/work/repo";
+
+export function workspaceDeps() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-ws-"));
+  const workspaces = new WorkspaceStore({ dir, person: newSeed() });
+  const audit = path.join(dir, "audit.jsonl");
+  workspaces.setCore(REPO, { frames: [{ id: "f1", title: "repo", workspacePath: REPO }], tiles: [] });
+  const announced: HcpSpawnedEvent[] = [];
+  const status = new StatusStore();
+  return {
+    workspaces,
+    status,
+    waits: new Waits({ status }),
+    spawnRecords: new SpawnRecords(path.join(dir, "spawned-tiles.json")),
+    shownWorkspace: () => ({ repo: REPO, frame: null }),
+    launchOptions: () => ({}),
+    announceSpawn: (spawn: HcpSpawnedEvent) => void announced.push(spawn),
+    endSession: () => {},
+    sessionHeld: () => false,
+    intents: new Intents(new AuditLog({ file: audit })),
+    announced,
+    audited: (): AuditRecord[] =>
+      fs.existsSync(audit) ? fs.readFileSync(audit, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [],
+  };
+}

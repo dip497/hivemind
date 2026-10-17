@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { SubagentReaper } = await import("../../src/main/hcp/subagent-reaper.ts");
+const { SubagentReaper } = await import("@hivemind/host/control/subagent-reaper");
 
 /** A controllable fake clock: timers fire only when tick() is called. */
 function fakeClock() {

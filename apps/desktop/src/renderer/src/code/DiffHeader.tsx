@@ -3,7 +3,7 @@
  * open, discard. `data-diff-file` is what the comment gutter resolves a
  * clicked line back to a file with.
  */
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight } from "../components/icons";
 import { Button } from "../components/ui/button";
 export function DiffHeader(props: {
   h: number;
@@ -41,28 +41,32 @@ export function DiffHeader(props: {
           props.onToggleCollapsed();
         }}
       >
-        {props.collapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
+        {props.collapsed ? <ChevronRight /> : <ChevronDown />}
       </Button>
 
       {props.showStage && (
         <button
+          type="button"
+          role="checkbox"
+          aria-checked={props.staged}
+          aria-label={props.staged ? "Unstage" : "Stage"}
           title={props.staged ? "unstage" : "stage"}
           onClick={(e) => {
             e.stopPropagation();
             props.onToggleStage();
           }}
           style={{
+            display: "grid",
+            placeItems: "center",
             width: 14,
             height: 14,
-            borderRadius: 3,
+            borderRadius: 4,
             border: props.staged ? "1px solid var(--color-ok)" : "1px solid var(--color-line2)",
             background: props.staged ? "var(--color-ok)" : "transparent",
             color: props.staged ? "var(--color-bg)" : "transparent",
-            fontSize: "0.82em",
-            lineHeight: "12px",
           }}
         >
-          ✓
+          <Check className="size-2.5" strokeWidth={3} />
         </button>
       )}
 

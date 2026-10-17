@@ -9,21 +9,26 @@ The Electron canvas app. Three processes: **main** (Node — IPC, PTY, git, fs),
 ```
 src/main/      Node main process — owns IPC, PTY daemon, git, fs, windows
   index.ts        every ipcMain.handle/on channel; the IPC choke point
-  daemon-client.ts / pty-host.ts   daemon vs in-process PTY transports
-  git-adapter.ts  git ops (simple-git + raw spawn); rawGit() is the low-level seam
-  remote/         ssh2 transport — conn (pool) · pty · fs (SFTP) · exec · git · known-hosts
+  daemon-client.ts   the app's connection to the PTY daemon, where every terminal runs
+  remote/         a machine's pty over ssh, its saved logins, the Machines hub
   claude-resume.ts  session-id binding + shq() POSIX escaper (reused by remote)
 src/preload/index.ts   window.hive bridge (1:1 with shared/ipc.ts HiveIpc)
 src/shared/     types shared main↔renderer
   ipc.ts          HiveIpc interface — the contract
-  remote-uri.ts   ssh:// URI parse/format (pure, shared)
 src/renderer/src/   React app (see "Renderer" below)
 tests/unit/     node:test (pure logic)   tests/e2e/  Playwright
 
-packages/agent-host/src/   the host, shared with the `hive` CLI
+packages/host/src/   the workspace API answered on this machine (R14): what main and the
+                     headless `hive host` serve (its tests: tsx --test)
+  domains.ts · store.ts · terminals.ts · plans.ts · presence.ts · agents.ts
+  git-adapter.ts  git ops (simple-git + raw spawn); rawGit() is the low-level seam
+  remote/         ssh transport — conn (pool) · fs · exec · git · ssh · targets · catalog
+packages/agent-host/src/   the agents' side, shared with the `hive` CLI
   pty-daemon.ts   detached node-pty + headless-xterm snapshots (persistence)
   shell-env.ts    PATH/token patching so claude/gh/git resolve
   hooks/          the hook scripts it writes for agents
+packages/hive-core/src/remote-uri.ts   machine:// and ssh:// URI parse/format (pure, shared)
+packages/workspace-api/src/tile-id.ts  bare ↔ `hm:` tile ids (pure, shared)
 ```
 
 ## Renderer: the Workspace + view plugins
@@ -61,9 +66,10 @@ don't know the difference. When gating editor/diff on "has a repo", gate on this
 
 ## Remote (SSH) frames
 
-A remote frame = a frame whose `workspacePath` is an `ssh://user@host:port/path`
-URI. It flows through `buildTileSurfaces` into every tile's `cwd`/`repoPath`
-unchanged; each
+A remote frame = a frame whose `workspacePath` is a `machine://<machineId>/path`
+URI (R9: the saved machine, by id; main reaches it through `remoteTarget`), or an
+`ssh://user@host:port/path` one for a host no machine is saved for. It flows through
+`buildTileSurfaces` into every tile's `cwd`/`repoPath` unchanged; each
 backend helper branches once on `isRemote()`:
 
 - PTY → `main/remote/pty.ts` (in-main, ssh exec+pty), routed from the `ptySpawn`
@@ -73,16 +79,19 @@ backend helper branches once on `isRemote()`:
 - fs → `fileRead`/`fileWrite` route to SFTP; remote paths use a POSIX traversal
   guard, never `path.resolve` (that mangles the URI).
 
-One pooled `ssh2.Client` per host (`remote/conn.ts`) shared by PTY + SFTP + git.
+One pooled ssh connection per host (`@hivemind/host/remote/conn`) shared by PTY + files + git.
 Full design + edge cases: `docs/design/remote-frames.md`.
 
 ## Persistence & PTYs
 
 PTYs survive window close via a detached daemon (`packages/agent-host/src/pty-daemon.ts`); claude is
 `--session-id`-bound at spawn and `--resume`d after reboot. State persists
-per-repo in `localStorage`: the core blob (`canvas-persistence.ts`, v2) plus one
+per-repo in main's workspace store (`packages/workspace-host`, files in
+`<userData>/workspaces/`): the core blob (`canvas-persistence.ts`, v2) plus one
 versioned blob per view (`workspace/view-layout-store.ts`), all migrated on
-load. Remote PTYs are the exception — in-main, detach == kill — which is why
+load. Both reach it through `workspace/workspace-store-client.ts`, which imports a
+window's pre-store localStorage layout once and uses localStorage only when there
+is no bridge. Remote PTYs are the exception — in-main, detach == kill — which is why
 tile bodies live in the TileHost and are never remounted by a view.
 
 ## Gotchas
@@ -91,15 +100,24 @@ tile bodies live in the TileHost and are never remounted by a view.
   `xxxRef.current = …` patches stay where a handler needs a synchronous read.
 - e2e drag tests probe `.tile-drag-handle` via element-from-point — don't move
   the handle class off the header.
-- Run e2e headless: `xvfb-run -a --server-args="-screen 0 1600x1000x24" npx playwright test …`
+- Run e2e with `scripts/e2e.sh [spec…]`: headless on a private X display (never your desktop), a log, the summary. `--fresh N` reruns a spec N times with a new app each time; `--repeat-each` reuses one app across repeats, so its failures there are piled-up state.
   (else Electron windows open on your desktop). `playwright.config.ts` isolates the
-  profile via a fresh `XDG_CONFIG_HOME` — main's `app.setName("hivemind-dev")` makes
-  userData ignore `--user-data-dir`, so without it every spec restores YOUR dev canvas
-  and spawns its agents. The suite is a gate: 76/76 (22 specs) must pass headless, `--retries=0`. Specs
+  profile via a fresh `XDG_CONFIG_HOME` per run: settings.json and the agents live there
+  whatever `--user-data-dir` says, and a spec launched without `--user-data-dir` uses its
+  `hivemind-dev` dir as userData — so without it every spec reads YOUR settings and agents,
+  and restores YOUR dev canvas. (`--user-data-dir` itself is honoured: the app's own files —
+  `workspaces/`, `hcp.token`, window state — land in it.) The suite is a gate: every spec
+  must pass headless, `--retries=0`. Specs
   assume the FRESH profile (Layers rail visible, no stored layout) and the real
   UI (the created issue opens in the peek; in-diff search is collapsed to its
   icon; the sonner toast stack covers the bottom-right corner; tree rows expose
   the file name only as their accessible name) — wait on state, never on time.
+- The harness (`pnpm test:e2e:harness`, `playwright.harness.config.ts`) runs the canvas, terminal,
+  git and issue specs in a browser tab on the app: `tests/e2e/helpers/window.ts` launches the app,
+  turns on Settings → Your devices, "In a browser on this computer", and opens its link in Chromium, so the spec
+  drives the renderer over the browser server's socket. A spec in it asks only the window
+  (`window.hive`), never Electron's main. Set `HIVE_HARNESS_CHROMIUM` to a Chromium binary when
+  Playwright's own is not installed (in the cloud containers: `/opt/pw-browsers/chromium`).
 - Perf: `scripts/perf-canvas-effects.mjs` is the reproducible workload for canvas
   changes. The view harness (`perf-views.mjs`) went with the World view it measured;
   a scene-view gate would have to be rewritten against a community view.

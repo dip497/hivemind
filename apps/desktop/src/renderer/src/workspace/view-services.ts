@@ -3,15 +3,20 @@
  * session statuses, the activity and presence stores main updates, and the LinkServices a community view's
  * host link reads. Started once; it runs whatever view is active.
  */
-import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewAgentStatus, ViewPresence } from "@hivemind/view-sdk/protocol";
+import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
+import type { Participant } from "@hivemind/workspace-host/presence";
 import { canListSessions, defaultAgent, spawnableAgents, agentById as catalogAgentById } from "@hivemind/agents";
-import type { SessionStatus } from "@hivemind/agent-host/status-store";
+import type { LinkServices } from "@hivemind/view-host/link";
+import { viewAgentStatus } from "@hivemind/view-host/status";
 import { subscribeHostedStatus, subscribeStatus } from "../agent-status-bus";
 import { agentMissing } from "../agent-plugins";
 import { AGENT_TILE_KIND } from "../tile-kinds";
+import { watchPeopleHere } from "../multiplayer/presence";
+import { colorOf } from "../multiplayer/people";
 import { ViewEventHub } from "./view-events";
-import type { LinkServices } from "./views/community/host-link";
+import { clickWidget, pressWidget, watchViewWidgets } from "../board-objects/widget-runtime";
 import type { HcpStatusEvent } from "../../../shared/ipc";
+import { issueService } from "./issue-service";
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
 
@@ -99,18 +104,6 @@ export function startViewHost(): void {
   window.hive.presenceNow().then((p) => viewPresence.set(p), () => {});
 }
 
-/** A session's status as views see it: fixed words and counts, never a subagent's name. */
-export function viewAgentStatus(s: SessionStatus): ViewAgentStatus {
-  return {
-    state: s.state,
-    ...(s.state === "waiting" && s.kind ? { waitingFor: s.kind } : {}),
-    subagents: s.subagents.length,
-    background: s.background,
-    compacting: s.compacting,
-    ...(s.source ? { source: s.source } : {}),
-  };
-}
-
 /** The agents a view may start: installed, enabled, and what each supports. */
 export function viewAgents(): ViewAgent[] {
   const dflt = defaultAgent()?.id;
@@ -119,19 +112,39 @@ export function viewAgents(): ViewAgent[] {
   }));
 }
 
+/** Someone else in the workspace as a view is told of them: pointing at what their pointer is over. */
+const viewParticipant = (p: Participant): ViewParticipant => ({
+  id: p.id, person: p.person, name: p.name, color: colorOf(p), cursor: p.over ? { tileId: p.over } : null, selection: p.selection,
+});
+
 const coded = (code: "UNSUPPORTED" | "BAD_REQUEST", message: string) => Object.assign(new Error(message), { code });
 
 /** What a community view's host link may read. `share` and `confirmPrompt` show the host's confirm. */
 export function viewLinkServices(opts: {
   layoutKey: () => string | null;
+  /** The workspace the view shows, or null (a transient one). */
+  repo: () => string | null;
   share: (png: ArrayBuffer, suggestedName?: string) => Promise<ShareOutcome>;
   /** The local folder a frame is bound to, or null (none, or on another machine). */
   frameFolder: (frameId: string) => string | null;
   isAgentTile: (tileId: string) => boolean;
   confirmPrompt: LinkServices["confirmPrompt"];
+  /** The `.hivemind` root whose issues the plugin is given (protocol 1.9), or null for none. */
+  issueRoot: () => string | null;
+  /** The local folder issues would be set up in, or null (none, or on another machine). */
+  issueFolder: () => string | null;
 }): LinkServices {
   return {
+    issues: issueService(opts.issueRoot, opts.issueFolder),
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
+    widgets: {
+      subscribe: (cb) => {
+        const repo = opts.repo();
+        if (!repo) { cb([]); return () => {}; }
+        return watchViewWidgets(repo, cb);
+      },
+      press: (id, press) => { if ("click" in press) clickWidget(id); else pressWidget(id, press.action); },
+    },
     agents: viewAgents,
     sessions: async (agent, frameId) => {
       const def = catalogAgentById(agent);
@@ -155,5 +168,12 @@ export function viewLinkServices(opts: {
       return window.hive.viewHistory(key, day);
     },
     share: opts.share,
+    participants: {
+      subscribe: (cb) => {
+        const repo = opts.repo();
+        if (!repo) { cb([]); return () => {}; }
+        return watchPeopleHere(repo, (people) => cb(people.map(viewParticipant)));
+      },
+    },
   };
 }

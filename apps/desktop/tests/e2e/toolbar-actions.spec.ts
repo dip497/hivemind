@@ -17,7 +17,7 @@ const cli = path.resolve(appDir, "../cli/src/index.ts");
 const toView = (mode: string) => page.evaluate((mode) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode } })), mode);
 const order = () => page.locator("[data-toolbar-action]").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-toolbar-action")));
 const settings = async () => {
-  await page.getByRole("button", { name: "settings", exact: true }).click();
+  await page.locator('[data-layers-rail="settings"]').click();
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "view:canvas" } })));
   await page.getByText("Customize actions", { exact: true }).click();
 };
@@ -52,25 +52,27 @@ test.beforeAll(launch);
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 test("toolbar order, visibility and labels are per-view and keep live tools", async () => {
-  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "theme"]);
+  await expect.poll(order).toEqual(["agent", "frame", "board", "theme"]);
   await expect(page.locator("[data-toolbar-label]")).toHaveCount(0);
-  await page.getByTitle(/^Terminal  /).click();
+  // A terminal opens from Add, as every tool does.
+  await page.locator('[data-toolbar-action="board"]').click();
+  await page.locator('[data-board-choice="tile:shell"]').click();
   await page.waitForSelector(".xterm");
   const original = await page.locator(".xterm").elementHandle();
   await settings();
-  await page.getByRole("checkbox", { name: "Terminal", exact: true }).uncheck();
+  await page.getByRole("checkbox", { name: "Frame", exact: true }).uncheck();
   await page.getByRole("checkbox", { name: "Show labels", exact: true }).check();
-  await page.getByRole("button", { name: "Move Theme up", exact: true }).click();
-  await page.getByRole("button", { name: "Move Theme up", exact: true }).click();
+  // Past Board and Browser (off, so not shown).
+  for (let i = 0; i < 2; i++) await page.getByRole("button", { name: "Move Theme up", exact: true }).click();
   await close();
-  await expect.poll(order).toEqual(["agent", "explorer", "diff", "issues", "theme", "frame"]);
-  await expect(page.locator("[data-toolbar-label]")).toHaveCount(6);
+  await expect.poll(order).toEqual(["agent", "theme", "board"]);
+  await expect(page.locator("[data-toolbar-label]")).toHaveCount(3);
   expect(await page.locator(".xterm").evaluate((node, old) => node === old, original)).toBe(true);
   await toView("windows");
-  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "theme"]);
-  await expect(page.locator("[data-toolbar-label]")).toHaveCount(0);
+  // Windows has no toolbar: its manifest turns it off, and the Layers panel starts things there.
+  await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await toView("canvas");
-  await expect.poll(order).toEqual(["agent", "explorer", "diff", "issues", "theme", "frame"]);
+  await expect.poll(order).toEqual(["agent", "theme", "board"]);
   await original?.dispose();
 });
 
@@ -83,20 +85,21 @@ test("CLI preferences persist and an empty toolbar has no handle; Settings resto
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   await settings();
   await expect(page.getByText("No toolbar actions selected.", { exact: false })).toBeVisible();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("hidden");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Collapsed");
   await page.getByRole("button", { name: "Reset actions", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Show labels", exact: true })).not.toBeChecked();
-  await expect(page.getByLabel("Display", { exact: true })).toHaveValue("hidden");
+  await expect(page.getByLabel("Display", { exact: true })).toHaveText("Collapsed");
   await close();
   await page.getByRole("button", { name: "show tools", exact: true }).click();
-  await expect.poll(order).toEqual(["terminal", "agent", "explorer", "diff", "issues", "frame", "theme"]);
+  await expect.poll(order).toEqual(["agent", "frame", "board", "theme"]);
 });
 
 test("selecting Browser as the only shortcut cannot activate it", async () => {
   await page.evaluate(() => window.hive.settingsSet("views.toolbars", { canvas: { actions: ["browser"] } }));
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
-  await page.getByRole("button", { name: "settings", exact: true }).click();
-  await page.locator('[data-settings-page="tools"]').click();
+  await page.locator('[data-layers-rail="settings"]').click();
+  await page.locator('[data-settings-page="plugins"]').click();
+  await page.locator('[data-plugin-row="tool:hivemind/web"]').click();
   await expect(page.getByRole("switch", { name: "Enable Browser", exact: true })).toHaveAttribute("aria-checked", "false");
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
   await close();

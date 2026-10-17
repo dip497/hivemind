@@ -43,7 +43,7 @@ const addCmd = defineCommand({
         found = probe(target);
         if (!found.hivePath || !found.daemon) throw new HiveError("machine_install_failed", `installed hive on ${target} but the probe still cannot run its daemon`);
       }
-      const m: Machine = { id: newMachineId(), label, target, enabled: true, hivePath: found.hivePath!, platform: found.platform };
+      const m: Machine = { id: newMachineId(), label, target, enabled: true, hivePath: found.hivePath!, platform: found.platform, ...(found.kind ? { kind: found.kind } : {}) };
       await writeMachines([...list, m]);
       return ok(ctx, { ...m, hiveVersion: found.hiveVersion ?? null, installed }, () =>
         `added ${m.label} (${m.id}) — ${m.platform}, ${found.hiveVersion ?? "hive"} at ${m.hivePath}${installed ? " [installed]" : ""}`);

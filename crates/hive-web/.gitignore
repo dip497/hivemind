@@ -1,0 +1,9 @@
+www/pkg/
+# Made by build.sh: the app compiled, the fonts copied, the shell listed, files compressed.
+www/js/
+www/main.js
+www/fonts/
+www/shell.json
+www/page.sha256
+www/**/*.br
+www/**/*.gz

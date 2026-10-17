@@ -1,0 +1,160 @@
+name: phone-ios
+
+# The iOS app (docs/design/phone-app-2026-10-02.md, P5) on a macOS runner: the Rust core for the
+# simulator (the app's own build phase builds it), the Xcode project from apps/ios/project.yml, the
+# unit and UI tests on an iPhone simulator, the committed Swift bindings held to the core, the app
+# for an iPhone as it ships (Release, the core for devices), and the app on the simulator paired with
+# the desktop app on the runner, driving an agent there. No Apple account: nothing is signed.
+# By hand only (Actions → phone-ios → Run workflow): with no Apple developer account the app is
+# not shipped, so a push does not wait on a macOS runner for it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phone-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+
+      # The newest stable Xcode on the runner, by name, not the image's default: the App Store
+      # takes builds from Xcode 26 and its SDK on, and the simulator below must be one it runs.
+      - name: Xcode, the newest stable one here
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -E '/Xcode_[0-9]+(\.[0-9]+)*\.app$' | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+          echo "IOS_SDK=$(xcrun --sdk iphonesimulator --show-sdk-version)" >> "$GITHUB_ENV"
+
+      - name: Rust (stable), for iOS devices and Apple Silicon simulators
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/hive-phone-ffi
+            crates/hive-net
+          key: ios
+          cache-on-failure: true
+
+      - name: XcodeGen
+        run: brew install xcodegen
+
+      - name: The Xcode project, from project.yml
+        working-directory: apps/ios
+        run: xcodegen generate
+
+      - name: An iPhone simulator, on the newest iOS this Xcode runs
+        run: |
+          udid=$(xcrun simctl list -j devices available | python3 -c '
+          import json, os, re, sys
+          sdk = tuple(int(n) for n in os.environ["IOS_SDK"].split(".")[:2])
+          found = []
+          for runtime, devices in json.load(sys.stdin)["devices"].items():
+              version = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not version or (int(version[1]), int(version[2])) > sdk:
+                  continue
+              for device in devices:
+                  if device.get("isAvailable", True) and device["name"].startswith("iPhone"):
+                      found.append(((int(version[1]), int(version[2])), device["udid"]))
+          if not found:
+              sys.exit("no iPhone simulator for the iOS " + os.environ["IOS_SDK"] + " SDK on this runner")
+          print(max(found)[1])
+          ')
+          echo "SIMULATOR=$udid" >> "$GITHUB_ENV"
+          xcrun simctl list devices | grep "$udid"
+
+      - name: Build the app and its tests (the core first, in the app's build phase)
+        run: |
+          xcodebuild build-for-testing \
+            -project apps/ios/HivePhone.xcodeproj -scheme HivePhone \
+            -destination "platform=iOS Simulator,id=$SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: The committed Swift bindings are the core's
+        # The build phase made them again from the core it built.
+        run: git diff --exit-code -- apps/ios/HivePhone/Core/Generated
+
+      - name: Unit and UI tests
+        run: |
+          xcodebuild test-without-building \
+            -project apps/ios/HivePhone.xcodeproj -scheme HivePhone \
+            -destination "platform=iOS Simulator,id=$SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -resultBundlePath "$RUNNER_TEMP/HivePhone.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: The app for an iPhone, as it ships (Release)
+        # The core built for aarch64-apple-ios in its `mobile-dist` profile and linked into the app
+        # for a device, which the simulator's build above never does.
+        run: |
+          xcodebuild build \
+            -project apps/ios/HivePhone.xcodeproj -scheme HivePhone \
+            -configuration Release -destination "generic/platform=iOS" \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO
+
+      # The app against the desktop app: hive-net and the desktop for the runner, then the desktop's
+      # e2e spec apps/desktop/tests/e2e/phone-app.spec.ts, which starts it, offers Pair a phone, and
+      # runs HivePhoneUITests/ComputerUITests (built above, for testing) with the link. The
+      # simulator shares the Mac's network: it reaches the desktop at the addresses the link carries.
+      - name: hive-net, the desktop app's network
+        run: cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # v6.1.0, not v6: the first release that installs pnpm 12, and the moving v6 tag still names v6.0.10.
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          # The version from `packageManager` in package.json.
+          run_install: false
+
+      - name: The desktop app (its renderer and main)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @hivemind/desktop run build
+
+      # The hive CLI, which the spec installs the community view the phone shows with.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
+
+      - name: The app paired with the desktop app, driving its agent
+        working-directory: apps/desktop
+        env:
+          PHONE_APP: ios
+          PHONE_SIMULATOR: ${{ env.SIMULATOR }}
+          PHONE_DERIVED_DATA: ${{ runner.temp }}/DerivedData
+        # A run that skipped the spec fails.
+        run: |
+          set -o pipefail
+          pnpm exec playwright test phone-app.spec.ts --retries=0 --reporter=list | tee "$RUNNER_TEMP/phone-app.txt"
+          grep -q "1 passed" "$RUNNER_TEMP/phone-app.txt"
+
+      - name: What the desktop and the phone saw
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-ios-computer
+          path: apps/desktop/test-results/
+          if-no-files-found: ignore
+
+      - name: What the tests saw
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: HivePhone.xcresult
+          path: ${{ runner.temp }}/HivePhone.xcresult
+          if-no-files-found: ignore

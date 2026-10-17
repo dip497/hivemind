@@ -81,7 +81,7 @@ every field has a reader:
 | capability | who reads it |
 |---|---|
 | `promptDelivery` | `shared/agent-io.ts` — argv auto-submit vs typed-on-idle |
-| `turnSignal` | HCP `agent.read` / `workflow.run` refuse with `UNSUPPORTED`; `hive ctl workflow --agent` refuses before spawning (exit 7); `workerAgents()` for the skill and help text |
+| `turnSignal` | `agent.read` refuses with `UNSUPPORTED`; `hive ctl workflow --agent` refuses before spawning (exit 7); `workerAgents()` for the skill and help text |
 | `resume` | drift test: needs a node half unless `noNodeHalf` |
 | `supervise` | HCP spawn: `"none"` refuses `--supervise`; `"human"` accepts it (its own prompts stay with the human); `"broker"` brokers |
 | `modelFlag`, `permissionModes` | `useSpawn` / HCP spawn build args only for providers that honour them |

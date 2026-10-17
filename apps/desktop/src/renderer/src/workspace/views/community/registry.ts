@@ -9,7 +9,8 @@
  * newer protocol, when its id is a built-in view's, or when it was disabled
  * earlier this session for misbehaving.
  */
-import { Puzzle } from "lucide-react";
+import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { Puzzle } from "../../../components/icons";
 import { toast } from "sonner";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
@@ -80,14 +81,14 @@ export async function loadCommunityViews(repoRoot: string | null): Promise<Commu
     if (!why && (!p.manifest || !p.url)) why = "no manifest";
     if (!why && p.manifest!.protocol > PROTOCOL_VERSION) why = `needs protocol ${p.manifest!.protocol}; this app speaks ${PROTOCOL_VERSION}`;
     if (!why && disabled.has(p.id)) why = `disabled: ${disabled.get(p.id)}`;
-    // The user switched it off in Settings ▸ Views (settings.json `plugins.disabled`).
-    if (!why && getSettings().plugins.disabled.includes(p.id)) why = "disabled in Settings";
+    // The user switched it off in Settings (its plugin record).
+    if (!why && !isPluginEnabled(getSettings().plugins.state, "view", p.id)) why = "disabled in Settings";
     if (!why && getView(p.id) && getView(p.id)!.source !== "community") why = `"${p.id}" is a built-in view`;
     if (!why && keep.has(p.id)) why = "duplicate id";
     if (why) { refused[p.id] = why; continue; }
     keep.add(p.id);
     if (registeredUrl.get(p.id) !== p.url) {
-      registerView({ id: p.id, label: p.manifest!.name, hint: `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`, icon: Puzzle, component: makeCommunityView(p), source: "community", chrome: { wallpaper: p.manifest!.wallpaper ?? true } });
+      registerView({ id: p.id, label: p.manifest!.name, hint: p.source === "app" ? "Comes with the app" : `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`, icon: Puzzle, component: makeCommunityView(p), source: "community", chrome: { wallpaper: p.manifest!.wallpaper ?? true, ...(p.manifest!.toolbar ? { island: p.manifest!.toolbar } : {}) } });
       registeredUrl.set(p.id, p.url!);
     }
   }

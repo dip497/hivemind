@@ -26,7 +26,7 @@ import {
   type SessionSnapshot,
 } from "@hivemind/agent-host/pty-session-manager";
 import { authoredDef } from "./authored-agents.ts";
-import { hookPathsFor, manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession,
+import { hookPathsFor, manifestRuntime, renderHookDocument, transformsFor, trackerSource, readTrackedSession, type AgentProviderDef,
   type ProviderResumeTransforms, type RuntimePaths } from "@hivemind/agents/node";
 
 // claude is a manifest now. These build the same two things its module used to expose: the
@@ -37,7 +37,7 @@ const pathsFor = (deps: Record<string, string | undefined>): RuntimePaths => ({
   execPath: deps.execPath!,
   tileSessionsDir: deps.tileSessionsDir!,
   home: deps.home ?? "/home/u",
-  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: "tok" } : {}),
+  ...(deps.hcpSock ? { hcpSock: deps.hcpSock, hcpToken: () => "tok" } : {}),
   hooks: hookPathsFor(claudeDef, { ...deps, execPath: deps.execPath!, tileSessionsDir: deps.tileSessionsDir! }),
 });
 const trackerSettings = (deps: Record<string, string | undefined>, tileId: string, supervise?: string): string =>
@@ -282,7 +282,9 @@ test("restore of a session whose JSONL vanished starts fresh under the same id, 
     await delay(80);
     const uuidC = argVal(created[0], "--session-id");
     assert.ok(uuidC);
-    await mgr.flushAll();
+    // Snapshotted once it has said something: on a slow machine that is later than the spawn.
+    for (let i = 0; i < 60 && !snaps.has("hm:tile-C"); i++) { await mgr.flushAll(); await delay(20); }
+    assert.ok(snaps.has("hm:tile-C"), "the tile snapshotted");
 
     // The session's JSONL disappears (claude GC, repo moved, etc.).
     unlinkSync(path.join(markerDir, `${uuidC!}.jsonl`));
@@ -307,3 +309,69 @@ function setupDirOf(tileSessionsDir: string): string {
   return path.dirname(tileSessionsDir);
 }
 
+
+test("a tile restored after its agent's manifest changed runs the new manifest's hooks, keeping what the person chose and its session", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "hm-manifest-"));
+  try {
+    const tileSessionsDir = path.join(dir, "tile-sessions");
+    const markerDir = path.join(dir, ".claude", "projects", "-repo");
+    const ctx: Ctx = { markerDir };
+    // Before: a permission hook that held nothing, run by another install's binary.
+    const events = claudeDef.hooks!.events;
+    const before: AgentProviderDef = { ...claudeDef, hooks: { ...claudeDef.hooks!, events: { ...events, PermissionRequest: { emit: "input.requested", kind: "permission", timeout: 10 } } } };
+    const transforms = (def: AgentProviderDef, execPath: string) => {
+      const paths: RuntimePaths = { private: path.join(dir, "agents", "claude"), execPath, tileSessionsDir, home: dir, hcpSock: path.join(dir, "hcp.sock"), hcpToken: () => "tok",
+        hooks: hookPathsFor(def, { execPath, tileSessionsDir, hcpSock: path.join(dir, "hcp.sock"), trackerPath: path.join(path.dirname(execPath), "tracker.cjs"), eventHookPath: path.join(path.dirname(execPath), "event.cjs") }) };
+      return { t: transformsToOpts(transformsFor(def, manifestRuntime(def, () => undefined)!, paths)), paths };
+    };
+    const snaps = new Map<string, SessionSnapshot>();
+    const run = (def: AgentProviderDef, execPath: string) => {
+      const created: FakeClaude[] = [];
+      const mgr = new SessionManager((spec) => { const p = new FakeClaude(spec, ctx); created.push(p); return p; },
+        { ...transforms(def, execPath).t, onSnapshot: (id, s) => snaps.set(id, s), snapshotDebounceMs: 5 });
+      return { mgr, created };
+    };
+    const first = run(before, "/old-install/electron");
+    await first.mgr.createOrAttach("hm:t1", { cwd: "/repo", cmd: "claude", args: ["--model", "opus"], cols: 80, rows: 24 }, client());
+    await delay(80);
+    const id = argVal(first.created[0], "--session-id")!;
+    for (let i = 0; i < 60 && !snaps.has("hm:t1"); i++) { await first.mgr.flushAll(); await delay(20); }
+
+    // The session it is in is what it ran with, also when its tracker never recorded one.
+    rmSync(tileSessionsDir, { recursive: true, force: true });
+    const second = run(claudeDef, "/new-install/hive-net");
+    second.mgr.restoreSnapshot(snaps.get("hm:t1")!);
+    await second.mgr.createOrAttach("hm:t1", liveSpec("/repo"), client());
+    await delay(80);
+    const args = second.created[0]!.spec.args;
+    const now = renderHookDocument(claudeDef, { tileId: "hm:t1", cwd: "/repo", args: [], env: {}, phase: "restore", paths: transforms(claudeDef, "/new-install/hive-net").paths });
+    assert.equal(args.filter((a) => a === "--settings").length, 1);
+    assert.equal(argVal(second.created[0], "--settings"), now, "the hooks the manifest says now");
+    assert.equal(JSON.parse(argVal(second.created[0], "--settings")!).hooks.PermissionRequest[0].hooks[0].timeout, 3600);
+    assert.ok(!args.join(" ").includes("/old-install/"), "nothing of the install it was spawned from");
+    assert.equal(argVal(second.created[0], "--model"), "opus", "what the person chose");
+    assert.equal(argVal(second.created[0], "--resume"), id, "its session");
+    // Restored again: the session it resumed last.
+    for (let i = 0; i < 60 && !snaps.get("hm:t1")!.spec.args.includes("--resume"); i++) { await second.mgr.flushAll(); await delay(20); }
+    assert.deepEqual(snaps.get("hm:t1")!.asked?.args, ["--model", "opus"], "what a restore launches from outlives it");
+    rmSync(tileSessionsDir, { recursive: true, force: true });
+    const again = run(claudeDef, "/new-install/hive-net");
+    again.mgr.restoreSnapshot(snaps.get("hm:t1")!);
+    await again.mgr.createOrAttach("hm:t1", liveSpec("/repo"), client());
+    await delay(80);
+    assert.equal(argVal(again.created[0], "--resume"), id);
+    assert.equal(argVal(again.created[0], "--settings"), now);
+    // Snapshotted before what was asked was kept: only what it ran with is known.
+    const { asked: _asked, ...was } = snaps.get("hm:t1")!;
+    const third = run(claudeDef, "/new-install/hive-net");
+    third.mgr.restoreSnapshot({ ...was, spec: first.created[0]!.spec });
+    await third.mgr.createOrAttach("hm:t1", liveSpec("/repo"), client());
+    await delay(80);
+    assert.equal(third.created[0]!.spec.args.filter((a) => a === "--settings").length, 1);
+    assert.equal(argVal(third.created[0], "--settings"), now);
+    assert.equal(argVal(third.created[0], "--model"), "opus");
+    assert.equal(argVal(third.created[0], "--resume"), id);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

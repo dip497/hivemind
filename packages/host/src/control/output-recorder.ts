@@ -1,0 +1,77 @@
+/**
+ * Per-tile output recorder — an ANSI-stripped, size-capped ring of an agent's
+ * terminal output, fed from the SAME pty data main already relays to the
+ * renderer (so it's always on, with no dependency on a tile staying mounted).
+ *
+ * `agent.read` falls back to it when no turn is reported in time (the agent crashed, or has
+ * no hooks), and `agent.output` is its tail.
+ */
+const CAP = 256 * 1024; // per-tile ring cap
+
+// Strip the common ANSI/VT escapes so buffered text is readable: CSI sequences,
+// OSC strings, and lone control chars (keep \n and \t).
+// eslint-disable-next-line no-control-regex
+const CSI = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+// eslint-disable-next-line no-control-regex
+const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+// eslint-disable-next-line no-control-regex
+const OTHER = /\x1b[@-Z\\-_]|[\x00-\x08\x0b\x0c\x0e-\x1f]/g;
+
+export function stripAnsi(s: string): string {
+  return s.replace(OSC, "").replace(CSI, "").replace(OTHER, "");
+}
+
+export class OutputRecorder {
+  private buf = new Map<string, string>();
+  /** Total bytes ever appended per tile — the epoch agent.read deltas against. */
+  private total = new Map<string, number>();
+
+  record(tileId: string, data: string): void {
+    const clean = stripAnsi(data);
+    if (!clean) return;
+    const cur = (this.buf.get(tileId) ?? "") + clean;
+    // Trim lazily: slicing back to CAP on EVERY append copied up to 256 KB per
+    // pty chunk (hundreds of times a second per streaming tile). Letting the
+    // ring overshoot to 2×CAP before trimming makes the copy amortized O(1)
+    // per byte; readers only ever see the last ≤CAP bytes via since().
+    this.buf.set(tileId, cur.length > CAP * 2 ? cur.slice(cur.length - CAP) : cur);
+    this.total.set(tileId, (this.total.get(tileId) ?? 0) + clean.length);
+  }
+
+  /** Append count since the start of recording — captured at send time. */
+  mark(tileId: string): number {
+    return this.total.get(tileId) ?? 0;
+  }
+
+  /** Text appended since `fromTotal`. Approximate if the ring dropped older
+   *  bytes (returns at most the ring's worth). */
+  since(tileId: string, fromTotal: number): string {
+    const raw = this.buf.get(tileId) ?? "";
+    const buf = raw.length > CAP ? raw.slice(raw.length - CAP) : raw;
+    const appended = (this.total.get(tileId) ?? 0) - fromTotal;
+    if (appended <= 0) return "";
+    return appended >= buf.length ? buf : buf.slice(buf.length - appended);
+  }
+
+  /** The last `lines` lines currently held for a tile (ANSI-stripped). */
+  tail(tileId: string, lines: number): string {
+    const raw = this.buf.get(tileId) ?? "";
+    if (lines <= 0 || !raw) return "";
+    let i = raw.length;
+    let n = 0;
+    // Walk back over `lines` newlines (a trailing newline doesn't count as a line).
+    if (raw.endsWith("\n")) i -= 1;
+    while (i > 0) {
+      const nl = raw.lastIndexOf("\n", i - 1);
+      if (nl < 0) { i = 0; break; }
+      n += 1;
+      if (n >= lines) { i = nl + 1; break; }
+      i = nl;
+    }
+    return raw.slice(i);
+  }
+  forget(tileId: string): void {
+    this.buf.delete(tileId);
+    this.total.delete(tileId);
+  }
+}

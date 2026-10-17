@@ -8,11 +8,13 @@
  */
 import { createHash } from "node:crypto";
 import { closeSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { execFile, execFileSync } from "node:child_process";
 import { canListSessions, isSessionId } from "./catalog.js";
+import { valueAt as at } from "./field-path.js";
 export { canListSessions };
 import type { AgentProviderDef, ProviderResumeTransforms, SessionFind, SessionInfo, SessionList, SpawnSpec } from "./types.js";
 
@@ -20,16 +22,6 @@ import type { AgentProviderDef, ProviderResumeTransforms, SessionFind, SessionIn
 const MAX_DEPTH = 6;
 const MAX_FILES = 4000;
 const MAX_READS = 200;
-
-/** `a.b.c` through plain objects. Missing link → undefined, never a throw. */
-function at(obj: unknown, path: string): unknown {
-  let cur: unknown = obj;
-  for (const key of path.split(".")) {
-    if (typeof cur !== "object" || cur === null) return undefined;
-    cur = (cur as Record<string, unknown>)[key];
-  }
-  return cur;
-}
 
 /** The first line, read in chunks: a session header can carry a whole system prompt. */
 function firstLine(file: string, cap = 4 * 1024 * 1024): string {
@@ -54,8 +46,8 @@ function firstLine(file: string, cap = 4 * 1024 * 1024): string {
   }
 }
 
-function collectFiles(root: string, ext: string): Array<{ path: string; mtime: number }> {
-  const out: Array<{ path: string; mtime: number }> = [];
+function collectFiles(root: string, ext: string): Array<{ path: string; mtime: number; size: number }> {
+  const out: Array<{ path: string; mtime: number; size: number }> = [];
   const walk = (dir: string, depth: number): void => {
     if (depth > MAX_DEPTH || out.length > MAX_FILES) return;
     let entries: import("node:fs").Dirent[];
@@ -65,7 +57,10 @@ function collectFiles(root: string, ext: string): Array<{ path: string; mtime: n
       const p = join(dir, e.name);
       if (e.isDirectory()) walk(p, depth + 1);
       else if (e.isFile() && e.name.endsWith(ext)) {
-        try { out.push({ path: p, mtime: statSync(p).mtimeMs }); } catch { /* gone mid-scan */ }
+        try {
+          const st = statSync(p);
+          out.push({ path: p, mtime: st.mtimeMs, size: st.size });
+        } catch { /* gone mid-scan */ }
       }
     }
   };
@@ -183,6 +178,37 @@ export function sessionExists(pattern: string, id: string, home: string = homedi
   }
 }
 
+/** The file of the session `id` where `pattern` (a manifest's `session.resume.exists`) says it is
+ *  kept, under `home`; null when it is not there, or cannot be looked for. */
+export function sessionFile(pattern: string, id: string, home: string = homedir()): string | null {
+  if (!/^[\w.-]{1,128}$/.test(id)) return null;
+  const full = pattern.replace("{home}", home).replace("{id}", id);
+  const isFile = (at: string) => { try { return statSync(at).isFile(); } catch { return false; } };
+  const star = full.indexOf("/*/");
+  if (star < 0) return isFile(full) ? full : null;
+  // A session's file stays where it was found, so the folders are looked through again only once
+  // it is gone from there.
+  const was = foundAt.get(full);
+  if (was && isFile(was)) return was;
+  foundAt.delete(full);
+  const dir = full.slice(0, star);
+  const rest = full.slice(star + 3);
+  let names: string[];
+  try { names = readdirSync(dir); } catch { return null; }
+  for (const n of names.slice(0, MAX_FILES)) {
+    const at = join(dir, n, rest);
+    if (!isFile(at)) continue;
+    if (foundAt.size >= FOUND_MAX) foundAt.delete(foundAt.keys().next().value!);
+    foundAt.set(full, at);
+    return at;
+  }
+  return null;
+}
+
+/** Where each session's file was found, by its pattern filled in; the oldest forgotten first. */
+const foundAt = new Map<string, string>();
+const FOUND_MAX = 4096;
+
 /** A listing command that hangs must not hold a restore or a caller for long. */
 const LIST_TIMEOUT_MS = 15_000;
 const LIST_MAX_BYTES = 32 * 1024 * 1024;
@@ -226,51 +252,115 @@ function titleOf(records: unknown[], paths: string | string[] | undefined): stri
   return undefined;
 }
 
-/** The first `n` JSON records of a file, reading no more than `cap` bytes of it. */
-function firstRecords(file: string, n: number, cap = 512 * 1024): unknown[] {
-  const fd = openSync(file, "r");
+/** The first `n` lines of a file, reading no more than `cap` bytes of it. */
+async function firstLines(file: string, n: number, cap = 512 * 1024): Promise<Buffer> {
+  const fh = await open(file, "r");
   try {
-    const buf = Buffer.alloc(Math.min(cap, 64 * 1024));
-    const dec = new StringDecoder("utf8");
-    let text = "";
+    const chunks: Buffer[] = [];
     let pos = 0;
-    while (pos < cap) {
-      const k = readSync(fd, buf, 0, buf.length, pos);
-      if (k === 0) break;
-      text += dec.write(buf.subarray(0, k));
-      pos += k;
-      if (text.split("\n").length > n) break;
+    let lines = 0;
+    while (pos < cap && lines < n) {
+      const buf = Buffer.allocUnsafe(128 * 1024);
+      const { bytesRead } = await fh.read(buf, 0, buf.length, pos);
+      if (bytesRead === 0) break;
+      const got = buf.subarray(0, bytesRead);
+      for (let nl = got.indexOf(0x0a); nl !== -1 && lines < n; nl = got.indexOf(0x0a, nl + 1)) lines++;
+      chunks.push(got);
+      pos += bytesRead;
     }
-    const out: unknown[] = [];
-    for (const line of text.split("\n").slice(0, n)) {
-      try { out.push(JSON.parse(line)); } catch { /* a line cut at the cap, or not JSON */ }
-    }
-    return out;
+    return Buffer.concat(chunks);
   } finally {
-    closeSync(fd);
+    await fh.close();
   }
 }
 
-/** Fields the manifest says are in each session file's first lines, for the newest files. */
-function fillFromLines(rows: Array<SessionInfo & { file?: string }>, list: SessionList | undefined): SessionInfo[] {
-  const n = list?.lines;
-  return rows.sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0)).map(({ file, ...s }, i) => {
-    if (!n || !file || i >= MAX_READS) return s;
-    let records: unknown[];
-    try { records = firstRecords(file, n); } catch { return s; }
-    const cwd = s.cwd ?? (list!.cwdPath ? records.map((r) => at(r, list!.cwdPath!)).find((v) => typeof v === "string") : undefined);
-    const title = titleOf(records, list!.titlePath);
-    const prompt = titleOf(records, list!.promptPath);
-    return { ...s, ...(typeof cwd === "string" ? { cwd } : {}), ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) };
+type Head = Pick<SessionInfo, "cwd" | "title" | "prompt">;
+/** What each session file's first lines said, as of its time and size: a store read once is read
+ *  again only where it changed, and a listing asked for twice at once reads each file once. */
+const heads = new Map<string, { mtime: number | undefined; size: number | undefined; head: Promise<Head | undefined> }>();
+const HEAD_READS_AT_ONCE = 16;
+
+/** A field looked for in a session file's first records, and the first value found for it. A
+ *  record can only have it if its line names the field's first key. */
+interface Wanted { path: string; value: (v: unknown) => string | undefined; key: Buffer | null; found?: string }
+const firstLineOf = (v: unknown): string | undefined =>
+  typeof v === "string" ? v.trim().split("\n")[0]!.trim().slice(0, TITLE_MAX) || undefined : undefined;
+const wanted = (path: string, value: Wanted["value"]): Wanted => {
+  const first = path.split(".")[0]!;
+  return { path, value, key: /^\d+$/.test(first) ? null : Buffer.from(JSON.stringify(first)) };
+};
+const pathsOf = (p: string | string[] | undefined): string[] => (typeof p === "string" ? [p] : p ?? []);
+
+/** The folder, title and prompt a session file's first lines give, as `titleOf` reads them; a line
+ *  is parsed only while it may give one not found yet. */
+async function readHead(file: string, list: SessionList & { lines: number }): Promise<Head | undefined> {
+  let bytes: Buffer;
+  try { bytes = await firstLines(file, list.lines); } catch { return undefined; }
+  const cwd = list.cwdPath ? wanted(list.cwdPath, (v) => (typeof v === "string" ? v : undefined)) : undefined;
+  const titles = pathsOf(list.titlePath).map((p) => wanted(p, firstLineOf));
+  const prompts = pathsOf(list.promptPath).map((p) => wanted(p, firstLineOf));
+  const all = [...(cwd ? [cwd] : []), ...titles, ...prompts];
+  for (let i = 0, start = 0; i < list.lines && start < bytes.length; i++) {
+    const nl = bytes.indexOf(0x0a, start);
+    const line = bytes.subarray(start, nl < 0 ? bytes.length : nl);
+    start = nl < 0 ? bytes.length : nl + 1;
+    const open = all.filter((w) => w.found === undefined && (!w.key || line.includes(w.key)));
+    if (!open.length) continue;
+    let record: unknown;
+    try { record = JSON.parse(line.toString("utf8")); } catch { continue; /* a line cut at the cap, or not JSON */ }
+    for (const w of open) w.found = w.value(at(record, w.path));
+  }
+  const title = titles.find((w) => w.found)?.found;
+  const prompt = prompts.find((w) => w.found)?.found;
+  return { ...(cwd?.found ? { cwd: cwd.found } : {}), ...(title ? { title } : {}), ...(prompt ? { prompt } : {}) };
+}
+
+/** `fn` over `items`, in order, at most `at` at a time. */
+async function eachAtMost<T, R>(items: T[], at: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(at, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]!);
+    }
+  }));
+  return out;
+}
+
+/** Fields the manifest says are in each session file's first lines, newest files first: those
+ *  read before as they were, and at most MAX_READS more each time. */
+async function fillFromLines(rows: StoredSession[], list: SessionList | undefined): Promise<SessionInfo[]> {
+  const sorted = rows.sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0));
+  if (!list?.lines) return sorted.map(({ file: _file, size: _size, ...s }) => s);
+  const read = list as SessionList & { lines: number };
+  const shape = JSON.stringify([read.lines, read.cwdPath, read.titlePath, read.promptPath]);
+  let reads = 0;
+  return eachAtMost(sorted, HEAD_READS_AT_ONCE, async ({ file, size, ...s }) => {
+    if (!file) return s;
+    const key = `${shape}\0${file}`;
+    let known = heads.get(key);
+    if (!known || known.mtime !== s.updated || known.size !== size) {
+      if (reads >= MAX_READS) return s;
+      reads++;
+      known = { mtime: s.updated, size, head: readHead(file, read) };
+      heads.set(key, known);
+    }
+    const head = await known.head;
+    if (!head) { heads.delete(key); return s; }
+    return { ...s, ...head, ...(s.cwd ? { cwd: s.cwd } : {}) };
   });
 }
 
+/** A session found in its agent's store, with the file it is kept in. */
+type StoredSession = SessionInfo & { file?: string; size?: number };
+
 /** Sessions read from the store the manifest describes: one file per session with a header
  *  (`resume.find`), or the path a session is kept at (`resume.exists`), whose file name is the id. */
-function storedSessions(def: AgentProviderDef, home: string, cwd?: string): Array<SessionInfo & { file?: string }> {
+function storedSessions(def: AgentProviderDef, home: string, cwd?: string): StoredSession[] {
   const find = def.session?.resume?.find;
   if (find?.strategy === "jsonl-header" && find.idPath) {
-    const out: Array<SessionInfo & { file?: string }> = [];
+    const out: StoredSession[] = [];
     const files = collectFiles(resolveRoot(find.root, home), find.ext ?? ".jsonl").sort((a, b) => b.mtime - a.mtime);
     for (const f of files.slice(0, MAX_READS)) {
       try {
@@ -278,7 +368,7 @@ function storedSessions(def: AgentProviderDef, home: string, cwd?: string): Arra
         if (find.require && Object.entries(find.require).some(([p, want]) => at(header, p) !== want)) continue;
         const id = at(header, find.idPath);
         const at_cwd = find.cwdPath ? at(header, find.cwdPath) : undefined;
-        if (isSessionId(id)) out.push({ id, ...(typeof at_cwd === "string" ? { cwd: at_cwd } : {}), updated: f.mtime, file: f.path });
+        if (isSessionId(id)) out.push({ id, ...(typeof at_cwd === "string" ? { cwd: at_cwd } : {}), updated: f.mtime, file: f.path, size: f.size });
       } catch { /* not a header */ }
     }
     return out;
@@ -306,7 +396,7 @@ function storedSessions(def: AgentProviderDef, home: string, cwd?: string): Arra
     const rest = dirPart.slice(star + 2);
     try { dirs = readdirSync(base).slice(0, MAX_FILES).map((d) => join(base, d) + rest); } catch { return []; }
   }
-  const out: Array<SessionInfo & { file?: string }> = [];
+  const out: StoredSession[] = [];
   for (const d of dirs) {
     let names: string[];
     try { names = readdirSync(d); } catch { continue; }
@@ -314,7 +404,10 @@ function storedSessions(def: AgentProviderDef, home: string, cwd?: string): Arra
       if (!n.startsWith(pre) || !n.endsWith(post) || out.length > MAX_FILES) continue;
       const id = n.slice(pre.length, n.length - post.length);
       if (!isSessionId(id)) continue;
-      try { out.push({ id, updated: statSync(join(d, n)).mtimeMs, file: join(d, n) }); } catch { /* gone */ }
+      try {
+        const st = statSync(join(d, n));
+        out.push({ id, updated: st.mtimeMs, file: join(d, n), size: st.size });
+      } catch { /* gone */ }
     }
   }
   return out;
@@ -328,7 +421,7 @@ export async function listSessions(def: AgentProviderDef, opts: { cwd?: string; 
     ? parseListing(list, await new Promise<string>((resolve) => {
         execFile(def.bin, list.args!, { encoding: "utf8", env: process.env, timeout: LIST_TIMEOUT_MS, maxBuffer: LIST_MAX_BYTES }, (err, stdout) => resolve(err ? "" : stdout));
       }))
-    : fillFromLines(storedSessions(def, opts.home ?? homedir(), opts.cwd), list);
+    : await fillFromLines(storedSessions(def, opts.home ?? homedir(), opts.cwd), list);
   return rows.filter((s) => !opts.cwd || s.cwd === opts.cwd)
     .sort((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
     .slice(0, opts.limit ?? 100);

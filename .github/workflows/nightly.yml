@@ -1,0 +1,50 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      tag: ${{ steps.source.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - id: source
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tag=nightly-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: source
+    uses: ./.github/workflows/release.yml
+    with:
+      channel: nightly
+      source_ref: ${{ needs.source.outputs.sha }}
+      tag: ${{ needs.source.outputs.tag }}
+      publish: "true"
+    permissions:
+      contents: write
+
+  # Keep the 14 newest nightlies: enough to roll back a fortnight (`--version nightly-…`).
+  prune:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - run: |
+          gh release list --limit 200 --json tagName,isPrerelease \
+            --jq '[.[] | select(.isPrerelease and (.tagName | test("^nightly-[0-9]{8}-[0-9]+$"))) | .tagName] | sort_by(split("-") | [.[1], (.[2] | tonumber)]) | reverse | .[14:][]' |
+            while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done

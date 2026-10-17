@@ -4,7 +4,10 @@
 > server this doc originally targeted was retired; every `hive_workflow(...)` /
 > `mcp__hive__*` reference below reads as the matching `hive ctl` verb — see the
 > `hive-workflow` skill in packages/hive-core/src/templates.ts for the current
-> vocabulary). The HCP `workflow.run` design here is unchanged.
+> vocabulary). The loop now runs in the CLI (`apps/cli/src/workflow.ts`), from the workspace
+> API's `agent.start`, `agent.read` and `agent.close` on the drive socket. HCP now carries only
+> an agent's own channel (`spec/wire-protocol.md`): the `tile.*` verbs, `agent.send`, `agent.read`
+> and `workflow.run` below are the workspace API's methods, or gone.
 
 ## Goal
 
@@ -20,7 +23,7 @@ structured results. We want the same developer experience, but:
 
 ## What already exists (and what's missing)
 
-Shipped in HCP (`apps/desktop/src/main/hcp/methods.ts`):
+Shipped in HCP (`packages/host/src/control/methods.ts`):
 
 | Primitive | Verb / mechanism |
 |---|---|
@@ -135,7 +138,7 @@ to `hive-work`. Triggers on "orchestrate", "fan out", "run N agents in parallel"
 It teaches the patterns Claude's `Workflow` doc describes, re-expressed in hive tools:
 
 - **Fan-out / gather** — `hive_spawn_agent({prompt, report:true})` × N (fire-and-forget;
-  replies auto-land in your terminal as `[hive] report from <tile>`), keep working,
+  replies wait in your inbox, `hive ctl inbox`), keep working,
   collect. Or `hive_workflow({shape:"fanout"})` for the blocking version.
 - **Pipeline** — `hive_connect(a,b)`, `hive_connect(b,c)`; seed `a`; the chain flows.
 - **Map-reduce** — fan out, then spawn a reducer and `hive_send` it the gathered results.
@@ -181,8 +184,8 @@ on the canvas/board, and is queryable by other agents. v1 can ship without it
 
 | File | Change |
 |---|---|
-| `apps/desktop/src/main/hcp/methods.ts` | new `workflow.run` verb + concurrency cap |
-| `apps/desktop/src/main/hcp/protocol.ts` | (none — reuses req/res) |
+| `packages/host/src/control/methods.ts` | new `workflow.run` verb + concurrency cap |
+| `packages/host/src/control/protocol.ts` | (none — reuses req/res) |
 | `packages/hive-mcp/src/index.ts` | `hive_workflow` tool def + handler + `CANVAS_TOOLS` |
 | `apps/cli/src/commands/ctl.ts` | `hive ctl workflow` subcommand |
 | `templates/agentic/.claude/skills/hive-workflow/SKILL.md` | new skill |

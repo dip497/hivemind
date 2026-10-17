@@ -10,8 +10,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { safeStorage } from "electron";
-import { hostIdOf } from "../../shared/remote-uri.js";
-import type { HostAuth } from "./conn.js";
+import { hostIdOf } from "@hivemind/core/remote-uri";
+import type { HostAuth } from "@hivemind/host/remote/conn";
 
 const STORE = join(homedir(), ".hivemind-remote-hosts.json");
 

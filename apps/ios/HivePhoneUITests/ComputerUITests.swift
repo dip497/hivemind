@@ -1,0 +1,180 @@
+import XCTest
+
+/// The app against a real computer (design §7): it pastes the link the computer's Settings → Your devices
+/// → Use on your phone shows, pairs, and is the person's; finds the computer and its agent on Home;
+/// opens the agent on its chat, reads its line in its terminal (opened from the header, fitted to
+/// the phone), then what it and the person said in its chat; and sends it a message from the reply
+/// box, which it answers in the chat and in its terminal, still followed. Then, from Home's gear,
+/// the community view the computer offers the phone (P8): its page,
+/// served by the computer, shows the computer's agent; what the view may do at once (selecting a
+/// tile) the computer answers; what would start an agent waits for the phone's lock, whose prompt
+/// (a simulator always has a passcode) is cancelled, so nothing starts. Run by
+/// apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=ios), which hands it the link and what to find
+/// there: xcodebuild gives the test runner each `TEST_RUNNER_<NAME>` it was given as `<NAME>`.
+/// Without a link it skips itself, so the app's own UI test run is unchanged. A computer's network,
+/// a terminal and a conversation over it are slow on a CI simulator: every wait is long.
+final class ComputerUITests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testItPairsWithTheComputerAndDrivesItsAgent() throws {
+        let told = ProcessInfo.processInfo.environment
+        guard let link = told["PAIR_LINK"], !link.isEmpty else {
+            throw XCTSkip("no computer to pair with: apps/desktop/tests/e2e/phone-app.spec.ts runs this with PAIR_LINK")
+        }
+        func given(_ name: String) throws -> String {
+            try XCTUnwrap(told[name], "\(name) is given with PAIR_LINK")
+        }
+        let person = try given("PAIR_PERSON")
+        let computer = try given("PAIR_COMPUTER")
+        let agent = try given("PAIR_AGENT")
+        let line = try given("PAIR_LINE")
+        let said = try given("PAIR_SAID")
+        let message = try given("PAIR_MESSAGE")
+        let answer = try given("PAIR_ANSWER")
+        let heard = try given("PAIR_HEARD")
+        let view = try given("PAIR_VIEW")
+        let viewAgent = try given("PAIR_VIEW_AGENT")
+        let selected = try given("PAIR_VIEW_SELECTED")
+
+        let app = XCUIApplication()
+        app.launch()
+
+        // Paired by the link, pasted as the computer shows it: the phone is the person's now.
+        let field = app.textFields["pair.link"]
+        XCTAssertTrue(field.waitForExistence(timeout: 60), "the app opens on Pair")
+        field.tap()
+        field.typeText(link)
+        XCTAssertEqual(field.value as? String, link, "the link went in whole")
+        // The return key connects, as the button does; once the person at the computer says the
+        // phone is theirs, the words match.
+        field.typeText("\n")
+        let yes = app.buttons["connect.yes"]
+        XCTAssertTrue(yes.waitForExistence(timeout: 120), "the computer says the phone is theirs")
+        yes.tap()
+        XCTAssertTrue(showing("This phone is \(person)'s.", in: app).waitForExistence(timeout: 120), "paired, as \(person)'s")
+        app.buttons["Continue"].tap()
+
+        // The computer, and its agent, on Home.
+        let settings = app.buttons["home.settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 30), "Home is shown")
+        XCTAssertTrue(showing(computer, in: app).waitForExistence(timeout: 120), "\(computer) is among the agents' devices")
+        let row = showing(agent, in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: 120), "\(agent) is among the agents")
+        row.tap()
+
+        // Its terminal, from the header: fitted to the phone, and the line the agent printed, as its
+        // screen has it.
+        let openTerminal = app.buttons["agent.terminal.open"]
+        XCTAssertTrue(openTerminal.waitForExistence(timeout: 30), "the agent's screen is shown, on its chat")
+        openTerminal.tap()
+        let terminal = app.descendants(matching: .any)["agent.terminal"]
+        XCTAssertTrue(terminal.waitForExistence(timeout: 30), "its terminal is shown")
+        let fit = app.buttons["terminal.fit"]
+        XCTAssertTrue(fit.waitForExistence(timeout: 10), "its terminal offers Fit")
+        XCTAssertTrue(fit.isSelected, "its terminal opens fitted to the phone")
+        XCTAssertEqual(shows(line, terminal), .completed, "its terminal shows \(line)")
+
+        // What it and the person said to each other, back on its chat.
+        let closeTerminal = app.buttons["terminal.close"]
+        closeTerminal.tap()
+        XCTAssertTrue(showing(said, in: app).waitForExistence(timeout: 60), "its chat shows \(said)")
+
+        // A message from the reply box: the agent hears it, and answers.
+        let reply = app.textFields["agent.reply"]
+        XCTAssertTrue(reply.waitForExistence(timeout: 30), "the reply box is there")
+        reply.tap()
+        reply.typeText(message)
+        // The app's Send, by its identifier: the keyboard's return key is Send too (the reply box's
+        // submit label), and a tap by "Send" finds both.
+        app.buttons["agent.send"].tap()
+        XCTAssertTrue(showing(answer, in: app).waitForExistence(timeout: 60), "the agent answered: \(answer)")
+
+        // The reply box gives the keyboard back (nothing is left in it to send).
+        if app.keyboards.firstMatch.exists {
+            reply.typeText("\n")
+            XCTAssertEqual(gone(app.keyboards.firstMatch), .completed, "the keyboard went")
+        }
+
+        // Its terminal, followed all the while the chat was: what it printed on hearing it.
+        openTerminal.tap()
+        XCTAssertTrue(terminal.waitForExistence(timeout: 30), "its terminal is shown again")
+        XCTAssertEqual(shows(heard, terminal), .completed, "its terminal shows \(heard)")
+        closeTerminal.tap()
+
+        // Home again; its gear opens Settings, with the community views the computer offers the
+        // phone, and the one it offers for this test.
+        let back = app.navigationBars.buttons.element(boundBy: 0)
+        XCTAssertTrue(back.waitForExistence(timeout: 10), "the agent's screen has a way back")
+        back.tap()
+        XCTAssertTrue(settings.waitForExistence(timeout: 30), "Home is shown again")
+        settings.tap()
+        let offered = showing(view, in: app)
+        XCTAssertTrue(offered.waitForExistence(timeout: 120), "\(view) is among the views in Settings")
+        offered.tap()
+
+        // Its page, as the computer serves it, laid out for a phone, with the computer's agent on it.
+        XCTAssertTrue(app.webViews.firstMatch.waitForExistence(timeout: 60), "the view's page is shown")
+        XCTAssertTrue(inPage("On a phone", app).waitForExistence(timeout: 120), "the view is told it is on a phone")
+        XCTAssertTrue(inPage(viewAgent, app).waitForExistence(timeout: 60), "the view shows \(viewAgent)")
+
+        // What the view may do at once: select a tile, which the computer answers.
+        let select = app.webViews.buttons["Select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 30), "the view offers Select")
+        select.tap()
+        XCTAssertTrue(inPage(selected, app).waitForExistence(timeout: 60), "the computer answered: \(selected)")
+
+        // What would start an agent waits for the phone's lock.
+        let start = app.webViews.buttons["Start an agent"]
+        XCTAssertTrue(start.waitForExistence(timeout: 30), "the view offers Start an agent")
+        start.tap()
+        // A simulator always has a passcode (it takes any), so the lock is asked as on a phone with
+        // one: the system's passcode screen over the app, in SpringBoard, saying why with the app's
+        // reason. It has no Cancel button of its own: its keyboard's return key is "cancel" while
+        // nothing is typed. Cancelled, nothing is started, which the computer checks on its board
+        // after.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let why = springboard.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "\(view) asks.")).firstMatch
+        XCTAssertTrue(why.waitForExistence(timeout: 60), "the phone's lock was asked first, for \(view); the app showed: \(texts(app))")
+        let cancel = springboard.keyboards.buttons.matching(NSPredicate(format: "label ==[c] %@", "cancel")).firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10), "the passcode screen can be cancelled")
+        cancel.tap()
+        XCTAssertEqual(gone(why), .completed, "the lock's prompt went")
+    }
+
+    /// Waits a minute at most for `terminal` to show `line` among the lines in sight.
+    @MainActor
+    private func shows(_ line: String, _ terminal: XCUIElement) -> XCTWaiter.Result {
+        let shown = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", line), object: terminal)
+        return XCTWaiter.wait(for: [shown], timeout: 60)
+    }
+
+    /// Waits half a minute at most for `element` to go.
+    @MainActor
+    private func gone(_ element: XCUIElement) -> XCTWaiter.Result {
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
+        return XCTWaiter.wait(for: [gone], timeout: 30)
+    }
+
+    /// The first element of a view's page whose label has `text` in it, whatever kind it is.
+    @MainActor
+    private func inPage(_ text: String, _ app: XCUIApplication) -> XCUIElement {
+        app.webViews.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
+    }
+
+    /// Every text the app shows, the view's page's too: what a failed step says it saw.
+    @MainActor
+    private func texts(_ app: XCUIApplication) -> String {
+        app.descendants(matching: .staticText).allElementsBoundByIndex.map(\.label).filter { !$0.isEmpty }.joined(separator: " | ")
+    }
+
+    /// The first element whose label has `text` in it, whatever kind it is: a row's text may be its
+    /// own element or part of the row's.
+    @MainActor
+    private func showing(_ text: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", text)).firstMatch
+    }
+}

@@ -1,6 +1,10 @@
-import { ViewsOverview, ViewPage } from "./settings-views";
-import { ToolsOverview, ToolPage } from "./settings-tools";
-import { BrowsePlugins, InstalledPlugins } from "./settings-plugins";
+import { ProfilePrefs } from "./settings-profile";
+import { ConnectPrefs } from "./settings-connect";
+import { ServersPrefs } from "./settings-network";
+import { BrowserPrefs } from "./settings-browser";
+import { ApiAccessPrefs } from "./settings-programs";
+import { PluginPage } from "./plugins/PluginPage";
+import { PluginsHome } from "./plugins/PluginsHome";
 /**
  * Settings pages that read and write settings.json (via settings-store /
  * theme-store): Appearance, Views (installed community packages, per-view
@@ -13,15 +17,15 @@ import { BrowsePlugins, InstalledPlugins } from "./settings-plugins";
  * each one has a single implementation over the same `useTheme` / `setTheme`.
  */
 import { useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown } from "./components/icons";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { getSettings, patchSettings } from "./settings-store";
 import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, TerminalColors,
 } from "./appearance-controls";
-import { AgentsOverview, AgentPage } from "./settings-agents";
 import { createContext, useContext } from "react";
 import { pluginPage } from "./settings-registry";
 
@@ -69,14 +73,13 @@ function AppearancePrefs() {
             <label htmlFor="plugin-surfaces">Tools in scene views</label>
             <p>How terminals and editors look inside a view you installed.</p>
           </div>
-          <select
-            id="plugin-surfaces"
-            value={t.pluginSurfaces}
-            onChange={(e) => setTheme({ pluginSurfaces: e.target.value as "theme" | "opaque" })}
-          >
-            <option value="theme">Use my theme</option>
-            <option value="opaque">Opaque</option>
-          </select>
+          <Select value={t.pluginSurfaces} onValueChange={(v) => setTheme({ pluginSurfaces: v as "theme" | "opaque" })}>
+            <SelectTrigger id="plugin-surfaces" className="min-w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="theme">Use my theme</SelectItem>
+              <SelectItem value="opaque">Opaque</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <OverlayControls t={t} />
       </Section>
@@ -89,8 +92,8 @@ function AppearancePrefs() {
         <div className="settings-row">
           <div><label>Theme file</label></div>
           <div className="settings-inline">
-            <Button type="button" size="sm" variant="outline" onClick={() => void exportTheme()}>Copy JSON</Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>Import…</Button>
+            <Button type="button" variant="outline" onClick={() => void exportTheme()}>Copy JSON</Button>
+            <Button type="button" variant="outline" onClick={() => fileRef.current?.click()}>Import…</Button>
             <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => void importTheme(e)} />
           </div>
         </div>
@@ -107,19 +110,25 @@ const SHORTCUTS_ANYWHERE: [string, string][] = [
   ["⌘/Ctrl + ⇧ + `", "New terminal"],
   ["⌘/Ctrl + ⇧ + A", "New agent"],
   ["⌘/Ctrl + ⇧ + E", "File tree"],
-  ["⌘/Ctrl + ⇧ + G", "Diff review"],
   ["⌘/Ctrl + ⇧ + N", "New frame"],
   ["⌘/Ctrl + 1 … 9", "Go to tile 1 … 9"],
   ["⌘/Ctrl + Tab", "Next tile (⇧ for previous)"],
-  ["⌘/Ctrl + E", "Cycle views"],
   ["⌘/Ctrl + ,", "Settings"],
   ["⌘/Ctrl + .", "Focus the selected tile"],
+  ["⌘/Ctrl + ⇧ + F", "Fit the selected terminal to the screen"],
   ["F11", "Full screen"],
 ];
 const SHORTCUTS_CANVAS: [string, string][] = [
   ["⌘/Ctrl + B", "Show or hide Layers (⌘ works in a terminal too)"],
-  ["⌘/Ctrl + N", "New issue (⌘ works in a terminal too)"],
-  ["1 … 7", "Toolbar actions"],
+  ["⌘/Ctrl + E", "Switch views, in any view"],
+  ["1", "New terminal"],
+  ["2", "New agent"],
+  ["3", "File tree"],
+  ["6", "New frame"],
+  ["7", "New browser"],
+  ["⌫", "Delete the selected widget or arrow on the board"],
+  ["⌘/Ctrl + D", "Duplicate the selected widget"],
+  ["⌘/Ctrl + Z / ⇧Z", "Undo / redo on the board"],
   ["⌘/Ctrl + = / −", "Zoom in / out"],
   ["⌘/Ctrl + 0", "Zoom to 100%"],
   ["Esc", "Fit everything in view"],
@@ -163,23 +172,23 @@ const NavigateContext = createContext<(id: string) => void>(() => {});
 export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
 
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
-export const LAZY_SETTINGS_PAGES = ["appearance", "shortcuts", "agents", "views", "tools", "plugins", "installed"] as const;
+export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "connect", "api", "plugins", "browser", "servers"] as const;
 
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
   return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
 }
 
 function renderPage(page: string) {
+  if (page === "profile") return <ProfilePrefs />;
+  if (page === "connect") return <ConnectPrefs />;
+  if (page === "browser") return <BrowserPrefs />;
+  if (page === "api") return <ApiAccessPrefs />;
+  if (page === "servers") return <ServersPrefs />;
   if (page === "appearance") return <AppearancePrefs />;
   if (page === "shortcuts") return <ShortcutPrefs />;
-  if (page === "agents") return <AgentsOverview />;
-  if (page === "views") return <ViewsOverview />;
-  if (page === "tools") return <ToolsOverview />;
-  if (page === "plugins") return <BrowsePlugins />;
-  if (page === "installed") return <InstalledPlugins />;
+  if (page === "plugins") return <PluginsHome />;
+  // Every kind's page is one component: pp?.kind === "agent" | "view" | "widget" | "tool".
   const pp = pluginPage(page);
-  if (pp?.kind === "agent") return <AgentPage id={pp.pluginId} />;
-  if (pp?.kind === "view") return <ViewPage id={pp.pluginId} />;
-  if (pp?.kind === "tool") return <ToolPage id={pp.pluginId} />;
+  if (pp) return <PluginPage key={page} kind={pp.kind} id={pp.pluginId} />;
   return null;
 }

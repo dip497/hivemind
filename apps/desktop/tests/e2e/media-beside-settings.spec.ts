@@ -25,7 +25,7 @@ test("a photo named in the shared settings loads in a run with its own profile",
     // A profile that is NOT the settings folder — what a dev run is.
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${dir}/other-profile`],
     cwd: APP_DIR,
-    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), HIVEMIND_PTY_DAEMON: "0" },
+    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg") },
   });
   try {
     const page = await app.firstWindow();

@@ -12,6 +12,7 @@
  */
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
+import { parsePluginStates, pluginStatesFromLegacy, type PluginState } from "./plugin-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -253,6 +254,26 @@ export function terminalThemeFor(t: TerminalPalette): Record<string, string> {
 export type IslandPlacement = "top" | "bottom" | "hidden" | "off";
 export const ISLAND_PLACEMENTS: readonly IslandPlacement[] = ["top", "bottom", "hidden", "off"];
 
+/** How the Layers panel lists tiles (its View menu): which, grouped how, in what order. */
+export const LAYERS_STATUS = ["all", "needs-you", "unread", "working", "idle", "exited"] as const;
+export const LAYERS_ACTIVITY = ["all", "hour", "today", "week"] as const;
+export const LAYERS_GROUP_BY = ["machine", "group", "date", "status", "agent", "none"] as const;
+export const LAYERS_SORT_BY = ["canvas", "activity", "name"] as const;
+/** How Recents groups past sessions: by the agent, by the project (folder) they ran in, by day, or not. */
+export const LAYERS_RECENTS_BY = ["agent", "project", "date", "none"] as const;
+export interface LayersPrefs {
+  /** Only the tiles in this state. */
+  status: (typeof LAYERS_STATUS)[number];
+  /** Only the tiles whose status changed within this long. */
+  activity: (typeof LAYERS_ACTIVITY)[number];
+  groupBy: (typeof LAYERS_GROUP_BY)[number];
+  sortBy: (typeof LAYERS_SORT_BY)[number];
+  /** Only the tiles on these computers ("local", or a machine's id); empty: every one. */
+  machines: string[];
+  recentsBy: (typeof LAYERS_RECENTS_BY)[number];
+}
+export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" };
+
 export interface ViewsSettings {
   /** The view to open with (a registered id; unknown → canvas). */
   defaultView: string;
@@ -266,26 +287,24 @@ export interface ViewsSettings {
    *  whether they carry text labels. Absent view = the catalog defaults; see
    *  `resolveToolbar`. Presentation only — never an availability decision. */
   toolbars: Record<string, ToolbarPreferences>;
+  /** The Layers panel's View menu, for every view that shows it. */
+  layers: LayersPrefs;
 }
 export interface PluginsSettings {
-  /** Community view ids the user switched off (still installed). */
-  disabled: string[];
+  /** Every plugin's stored state, by `<kind>:<id>` (plugin-settings.ts): whether it is on, and
+   *  the values set for its fields. One record for every kind of plugin. */
+  state: Record<string, PluginState>;
 }
+/** Which tool plugins are on, and which of their tools are off: what the tool registry takes,
+ *  worked out from the plugins' stored state (`toolPreferences`). Never stored as such. */
 export interface ToolsSettings {
-  /** Tool plugins the user switched ON. Installation alone activates nothing:
-   *  an empty list means every managed tool (the Browser tile) is unavailable. */
+  /** Tool plugins switched ON. A tool plugin that is not built in is off until switched on. */
   enabledPlugins: string[];
-  /** Individual tool ids switched off inside an enabled plugin. */
+  /** Individual tool ids (`<plugin>/<tool>`) switched off inside a plugin. */
   disabledTools: string[];
 }
 export interface AgentsSettings {
-  /** Provider ids the user switched off. Built-ins included: an agent is
-   *  configuration now, so any of them can be turned off without uninstalling
-   *  anything. An unknown id here is harmless — it simply matches nothing. */
-  disabled: string[];
   defaultAgent: string;
-  /** Agent id → option id → value, e.g. { claude: { model: "opus" } }. Absent = the agent's own default. */
-  options: Record<string, Record<string, string>>;
   /** Add catalog agents whose CLI is found on this machine, without asking. */
   autoInstall: boolean;
   /** Catalog agents the user removed: never added automatically again. */
@@ -293,25 +312,54 @@ export interface AgentsSettings {
   /** Agents that came from the plugin catalog, so their page can say where they are from. */
   fromCatalog: string[];
 }
+/** Who you are to the people you work with (R3): the name and colour they see beside your cursor
+ *  and your edits. Each is empty until chosen. */
+export interface ProfileSettings {
+  /** Trimmed, at most 64 characters, no control characters. */
+  name: string;
+  /** `#rrggbb`, lowercase. */
+  color: string;
+}
+/** Settings → About and updates (R16): what this app reaches outside the network profile's servers. */
+export interface NetworkSettings {
+  /** Ask, now and then, whether a newer release is out (GitHub) and whether the agents the app
+   *  adds by itself have new versions (the plugin catalog). Off: the app reaches nothing the
+   *  network profile does not name, unless the person browses plugins. */
+  updateCheck: boolean;
+}
+/** Settings → Advanced → In a browser (docs/design/browser-app-2026-10-13.md): the app served
+ *  to a browser on 127.0.0.1, off until the person turns it on. */
+export interface BrowserAppSettings {
+  enabled: boolean;
+  /** 1024–65535. Fixed, so a `tailscale serve` set up for it keeps working. */
+  port: number;
+  /** Host names a request may name besides 127.0.0.1 and localhost, each with the port a browser
+   *  uses when it is not 443: the machine's tailnet name as `tailscale serve` gives it. */
+  names: string[];
+}
 export interface Settings {
   v: 1;
   appearance: Appearance;
   views: ViewsSettings;
   plugins: PluginsSettings;
-  tools: ToolsSettings;
   agents: AgentsSettings;
+  profile: ProfileSettings;
+  network: NetworkSettings;
+  browserApp: BrowserAppSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   v: 1,
   appearance: DEFAULT_APPEARANCE,
-  views: { defaultView: "canvas", chrome: {}, toolbars: {} },
-  plugins: { disabled: [] },
-  // Fresh install: no tool plugin is on.
-  tools: { enabledPlugins: [], disabledTools: [] },
+  views: { defaultView: "canvas", chrome: {}, toolbars: {}, layers: DEFAULT_LAYERS_PREFS },
+  // Fresh install: every plugin as it is by default (a tool plugin that is not built in: off).
+  plugins: { state: {} },
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
-  agents: { disabled: [], defaultAgent: "", options: {}, autoInstall: true, declined: [], fromCatalog: [] },
+  agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [] },
+  profile: { name: "", color: "" },
+  network: { updateCheck: true },
+  browserApp: { enabled: false, port: 4483, names: [] },
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -387,35 +435,52 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   };
 }
 
+/** A host's look as a guest shows it, from anything (a peer's message is untrusted): checked as
+ *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper
+ *  becomes the default one, and overlays go: their media is the host's alone. Fonts are not the
+ *  look: a guest reads in their own, so the host's are not sent. */
+export function sharedAppearance(raw: unknown): Appearance {
+  const a = mergeAppearance(raw);
+  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  return {
+    ...a,
+    uiFont: DEFAULT_APPEARANCE.uiFont,
+    monoFont: DEFAULT_APPEARANCE.monoFont,
+    wallpaper: { kind: media ? DEFAULT_APPEARANCE.wallpaper.kind : a.wallpaper.kind, brightness: a.wallpaper.brightness },
+    overlayMedia: [],
+  };
+}
+
 /** A registered view id: a built-in or folder-installed name, or `@owner/name` from HiveHub. */
 const VIEW_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,63}$/;
 /** No toolbar can name more actions than the catalog holds. */
 const TOOLBAR_MAX_ACTIONS = 32;
-
-/** Plugin id (`org/name`) and tool id (`org/name/tool`) shapes, matching
- *  tool-registry's own validation. Anything else is dropped rather than stored. */
-const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/;
-const TOOL_ID_RE = /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{0,63}$/;
-
-/** Validate + dedupe + bound a list of namespaced ids, order preserved. */
-function idList(raw: unknown, re: RegExp, fallback: readonly string[], max = 200): string[] {
-  const src = Array.isArray(raw) ? raw : fallback;
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const v of src) {
-    if (typeof v !== "string" || !re.test(v) || seen.has(v)) continue;
-    seen.add(v);
-    out.push(v);
-    if (out.length >= max) break;
-  }
-  return out;
-}
 
 /** Validate + fill a parsed settings.json (any junk) into a Settings.
  *
  *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
  *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
  *  hand, base given). */
+/** Whether a settings.json holds plugin state in the keys a version before `plugins.state` used. */
+export function hasLegacyPluginKeys(p: Record<string, unknown>): boolean {
+  const has = (o: unknown, k: string) => isObj(o) && o[k] !== undefined;
+  return has(p.agents, "disabled") || has(p.agents, "options") || has(p.plugins, "disabled") || isObj(p.tools);
+}
+
+/** What the tool registry takes, from the tool plugins' stored state: the plugins switched on,
+ *  and the tools switched off inside them (each a plugin option set to false). */
+export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
+  const enabledPlugins: string[] = [];
+  const disabledTools: string[] = [];
+  for (const [key, st] of Object.entries(s.plugins.state)) {
+    if (!key.startsWith("tool:")) continue;
+    const id = key.slice(5);
+    if (st.enabled === true) enabledPlugins.push(id);
+    for (const [tool, v] of Object.entries(st.options ?? {})) if (v === false) disabledTools.push(`${id}/${tool}`);
+  }
+  return { enabledPlugins, disabledTools };
+}
+
 export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
   const p = isObj(raw) ? raw : {};
   const views = isObj(p.views) ? p.views : {};
@@ -455,45 +520,71 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   }
   const plugins = isObj(p.plugins) ? p.plugins : {};
   const agents = isObj(p.agents) ? p.agents : {};
-  const toolsIn = isObj(p.tools) ? p.tools : {};
-  const tools = {
-    enabledPlugins: idList(toolsIn.enabledPlugins, PLUGIN_ID_RE, base.tools.enabledPlugins),
-    disabledTools: idList(toolsIn.disabledTools, TOOL_ID_RE, base.tools.disabledTools),
-  };
+  // Plugin state as stored; else, from a settings.json written before it, made from the keys
+  // that held it then; else (a partial merge) as `base` has it.
+  const state = isObj(plugins.state) ? parsePluginStates(plugins.state)
+    : hasLegacyPluginKeys(p) ? pluginStatesFromLegacy(p)
+    : base.plugins.state;
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
-    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars },
-    plugins: { disabled: (Array.isArray(plugins.disabled) ? plugins.disabled : base.plugins.disabled).filter((x): x is string => typeof x === "string").slice(0, 200) },
-    tools,
+    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
+    plugins: { state },
     agents: {
-      disabled: (Array.isArray(agents.disabled) ? agents.disabled : base.agents.disabled)
-        .filter((x): x is string => typeof x === "string").slice(0, 200),
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
-      options: isObj(agents.options) ? agentOptions(agents.options) : base.agents.options,
       autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
       declined: (Array.isArray(agents.declined) ? agents.declined : base.agents.declined)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
       fromCatalog: (Array.isArray(agents.fromCatalog) ? agents.fromCatalog : base.agents.fromCatalog)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
     },
+    profile: profileOf(p.profile, base.profile),
+    network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
+    browserApp: browserAppOf(p.browserApp, base.browserApp),
   };
+}
+
+const HOST_NAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
+
+/** `name` or `name:port`, a port being 1–65535. */
+function isHostAndPort(n: string): boolean {
+  const [, name, port] = /^([^:]*)(?::(\d{1,5}))?$/.exec(n) ?? [];
+  return name !== undefined && HOST_NAME_RE.test(name) && (port === undefined || (Number(port) >= 1 && Number(port) <= 65535));
+}
+
+function browserAppOf(raw: unknown, base: BrowserAppSettings): BrowserAppSettings {
+  const p = isObj(raw) ? raw : {};
+  const port = typeof p.port === "number" && Number.isInteger(p.port) && p.port >= 1024 && p.port <= 65535 ? p.port : base.port;
+  const names = Array.isArray(p.names)
+    ? [...new Set(p.names.filter((n): n is string => typeof n === "string").map((n) => n.trim().toLowerCase()).filter(isHostAndPort))].slice(0, 8)
+    : base.names;
+  return { enabled: bool(p.enabled, base.enabled), port, names };
+}
+
+/** A profile as others see it, from anything (settings.json, or someone asking to join): its
+ *  fields checked, and what does not pass kept as `base` has it. */
+export function profileOf(raw: unknown, base: ProfileSettings = DEFAULT_SETTINGS.profile): ProfileSettings {
+  const p = isObj(raw) ? raw : {};
+  return {
+    name: profileName(p.name, base.name),
+    color: typeof p.color === "string" && PROFILE_COLOR_RE.test(p.color) ? p.color.toLowerCase() : base.color,
+  };
+}
+
+/** Empty, to clear it, or a hex colour. */
+const PROFILE_COLOR_RE = /^(#[0-9a-fA-F]{6})?$/;
+
+/** A name as others see it: trimmed, at most 64 characters, with no control characters, line
+ *  breaks or bidirectional overrides (which would let a name show as something it is not). Empty
+ *  clears it; anything else keeps the name before. */
+function profileName(v: unknown, def: string): string {
+  if (typeof v !== "string") return def;
+  const name = v.trim();
+  return name.length <= 64 && !/[\p{Cc}\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(name) ? name : def;
 }
 
 /** An agent's id, which may carry a HiveHub scope — unlike the option ids inside it. */
 const AGENT_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
-const OPTION_KEY_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
-
-function agentOptions(raw: Record<string, unknown>): Record<string, Record<string, string>> {
-  const out: Record<string, Record<string, string>> = {};
-  for (const [agent, opts] of Object.entries(raw).slice(0, 64)) {
-    if (!AGENT_KEY_RE.test(agent) || !isObj(opts)) continue;
-    const kept = Object.entries(opts).slice(0, 16)
-      .filter((e): e is [string, string] => OPTION_KEY_RE.test(e[0]) && typeof e[1] === "string" && e[1].length > 0 && e[1].length <= 200);
-    if (kept.length) out[agent] = Object.fromEntries(kept);
-  }
-  return out;
-}
 
 // ── the renderer's flat theme view ──────────────────────────────────────────
 // The renderer components (customizer, wallpaper, terminal) read a FLAT shape;
@@ -514,6 +605,12 @@ export function flattenAppearance(a: Appearance): FlatTheme {
     accent: a.accent, overlayMedia: a.overlayMedia,
     preset: a.preset, mode: a.mode, palette: a.palette, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
   };
+}
+
+/** What a guest paints while a host's workspace is shown: the host's look (`sharedAppearance`),
+ *  read in the guest's own fonts. */
+export function guestTheme(own: FlatTheme, host: Appearance): FlatTheme {
+  return { ...flattenAppearance(host), uiFont: own.uiFont, monoFont: own.monoFont };
 }
 
 export function nestAppearance(f: FlatTheme): Appearance {
@@ -545,4 +642,20 @@ export function setPath<T>(obj: T, path: string, value: unknown): T {
     return base;
   };
   return rec(obj, 0) as T;
+}
+
+/** The Layers View menu from a stored value: each choice kept when it is one of its list, else `base`'s. */
+function mergeLayersPrefs(raw: unknown, base: LayersPrefs): LayersPrefs {
+  const v = isObj(raw) ? raw : {};
+  const pick = <T extends string>(x: unknown, list: readonly T[], fallback: T): T => (list.includes(x as T) ? (x as T) : fallback);
+  return {
+    status: pick(v.status, LAYERS_STATUS, base.status),
+    activity: pick(v.activity, LAYERS_ACTIVITY, base.activity),
+    groupBy: pick(v.groupBy, LAYERS_GROUP_BY, base.groupBy),
+    sortBy: pick(v.sortBy, LAYERS_SORT_BY, base.sortBy),
+    machines: Array.isArray(v.machines)
+      ? [...new Set(v.machines.filter((m): m is string => typeof m === "string" && m.length > 0 && m.length <= 128))].slice(0, 64)
+      : base.machines,
+    recentsBy: pick(v.recentsBy, LAYERS_RECENTS_BY, base.recentsBy),
+  };
 }

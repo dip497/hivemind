@@ -16,6 +16,8 @@
 
 /** A hook script and the single argument it takes. Both are the daemon's to decide. */
 export interface HookScript {
+  /** A program that runs the hook itself; none: `execPath` runs the script at `path`. */
+  exec?: string;
   path: string;
   arg?: string;
   /** Put in front of the command: a plugin script is told where the SDK and sockets are. */
@@ -34,7 +36,10 @@ export interface RuntimePaths {
   execPath: string;
   /** Control plane, when the daemon has one. */
   hcpSock?: string;
-  hcpToken?: string;
+  /** The drive socket, where the agent drives its workspace. */
+  driveSock?: string;
+  /** The token a tile's agent is given: its own, which names the tile. */
+  hcpToken?: (tile: string) => string;
   /** The SDK an agent's plugin loads, in its hook scripts or inside the agent itself. */
   sdk?: string;
   /** Where per-tile session records live. */

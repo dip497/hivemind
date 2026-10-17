@@ -27,9 +27,26 @@ pulse/
   dist/                what you install and publish
 ```
 
+A manifest may say what the view is for with `"category"`: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). Any other value is
+refused.
+
+A view may also say what an agent can run in it while it is the view shown, under
+`"commands"`, each answered by `hm.onCommand(name, handler)`: what the handler returns is what
+`hive ctl plugin call <view> <command>` prints. `examples/views/agent-board` is one: agents pin
+notes to it.
+
+A command may also name the keys that run it, `"keys": "mod+alt+k"`: modifiers (`mod`, which is
+Cmd on a Mac and Ctrl elsewhere, `ctrl`, `meta`, `alt`, `shift`) and one key, with at least one of
+`mod`, `ctrl` or `meta`. While the view is shown they work wherever focus is in the app, inside a
+terminal too, which then never sees them; the same handler answers them. Keys the terminals and
+the app answer are refused: escape and tab, and unless `alt` is among the modifiers a letter or
+digit (Ctrl+C, Ctrl+Shift+V), an arrow, Home, End, Page Up/Down, Backspace, Delete, Space, F11,
+`[ / = - + _ . ,`, and Enter without `shift`. `mod+\`, `mod+shift+enter` and `mod+alt+arrowleft`
+are free.
+
 `hive views install <dir>` validates the manifest and copies it to
 `$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views list` reports load errors. In the app,
-Settings ▸ Plugins ▸ Installed → Install from folder shows a review step first.
+**Settings ▸ Plugins ▸ Yours → Add a view from a folder** shows a review step first.
 
 ## Publish
 
@@ -65,9 +82,20 @@ hm.on("structure", ({ tiles }) => {
 For a complete view with live docking, name updates, status subscriptions, and saved
 layout, read `views/tiled` in [the published plugins](https://github.com/dip497/hivemind-plugins).
 
-`setSurfaceRects` places host-owned tools in your view; `onReveal` answers focus
-requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
+`setSurfaceRects` places host-owned tools in your view (a tile's live terminal, where the
+screen places them: `hm.supports("surfaces")`, protocol 1.6; a phone's app draws its own terminal
+over your view there); `onReveal` answers focus requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
 `createInvalidator` to coalesce drawing and pause while hidden.
+
+A rect may round its corners to match a card you draw around it (`radius`, 0 to 24) and, while
+you drag something across the surfaces (a divider between panes), let the pointer through to
+your view (`inert: true`; set it as the pointer reaches your grip, so the first moves are not
+caught). `setLayout` gathers saves for 250 ms, as a drag makes many; pass `{ now: true }` for a
+change made in one step, so a view switched away from straight after it keeps it.
+
+The manifest's `"toolbar"` says where the app's toolbar sits over your view: `"top"`,
+`"bottom"` (the default), `"hidden"` behind a handle, or `"off"`. The view's page in Settings ▸
+Plugins (**Toolbar → Display**) can still change it.
 
 
 The hello/structure payload includes the resolved palette (`applyThemeVars`), so chrome
@@ -144,17 +172,93 @@ after three cancels the view's prompts are declined until it's reloaded. Text wi
 or zero-width characters is refused. A view never reads an agent's replies and never answers its
 permission prompts.
 
+### People and devices
+
+View protocol 1.5 tells a view who else is in a shared workspace, and what it is shown on:
+
+```ts
+if (hm.supports("participants")) hm.onParticipants((people) => {
+  // [{ id, person, name, color, cursor: { tileId } | null, selection: [tileId | frameId] }]
+});
+if (hm.device.compact) { /* a phone's screen: one column */ }
+if (hm.device.touch) { /* a finger: give what it taps room */ }
+```
+
+A view that arranges tiles can ask for the app's own Layers rail beside it, `"layers": true`:
+frames, their tiles, and every frame action (spawn into it, worktrees, bind a folder, git), drawn by
+the app, so the view need not draw one. What a view saves with `setLayout` is kept in the
+workspace, the same for everyone in it; `"layout": "personal"` keeps it on this device instead,
+each person's own (which tabs are minimized, say).
+
+A view that lays itself out for a phone says so in its manifest, `"phone": true`: only those are
+offered on the person's phone. There its host runs on their computer, and the view may do what
+the phone may: start and close agents (the phone asks its own lock first), but not rename tiles. A
+phone's screen places live terminal surfaces only where it says it does (`hm.supports("surfaces")`),
+and has no folder picker or share sheet, and starts no tile but an agent's: what asks for them is
+refused (`UNSUPPORTED`). Give a page of your own `<meta name="viewport" content="width=device-width,
+initial-scale=1">` (the page made for a script entry has it): without one, iOS lays the page out
+980 pixels wide. On iOS a view's page is not a secure context (it is served on the app's own
+scheme), so `crypto.subtle` and `crypto.randomUUID` are not there; the SDK needs neither.
+
+`cursor` is the tile someone's pointer is over, `selection` what they selected, both only of the
+view's own tiles and frames; the person at the view is never in the list. A view tests without the
+app against `fakeHost()` from `@hivemind/view-sdk/testing` (it comes with `hive views new`): it
+greets the view as the app does, and says what the app would refuse, and why.
+
+## Widgets
+
+A view can show the workspace's widgets (protocol 1.8, feature `widgets`), which is how a phone
+shows them: `hm.onWidgets((widgets) => …)` hears every widget now and whenever one changes, each
+`{ id, widget, name, tree, card, tint?, text?, items?, images, placement }`: `tree` is what it draws,
+in the same nodes a widget renders (stack, row, text, number, meter, button, image, sprite, input,
+textarea, list), `text` and `items` what people wrote in it, `images` the pictures its tree names.
+`hm.pressWidget(id, action)` presses one of its buttons and `hm.clickWidget(id)` its card, with the
+permission `workspace:widgets`: the widget's code hears it wherever it runs, and does what it does
+then as you, so pressing is asked for at install. `@dip497/widgets` on HiveHub is such a view.
+
+With the permission `workspace:issues`, a view reads and changes the workspace's issues (protocol
+1.9, feature `issues`): `hm.onIssues((issues) => …)`
+hears the list now and whenever an issue changes (an agent's `hive update` included), each
+`{ id, title, state, parent, labels, assignee, created, updated }`. `hm.issues.read(id)` gives one in
+full, with its description, acceptance criteria and activity; `create`, `update`, `setState`,
+`comment`, `delete`, `link`, `unlink` and `move` change them; `workspaces()` names the host's
+other workspaces. `read` finds an id of another workspace (a link's other end) by its prefix; every
+write is to the view's own workspace. Nothing a view is given says where a workspace is.
+
+## Settings
+
+A view declares what the person can set it to in its manifest's `settings`; the app draws the
+controls on its page in Settings ▸ Plugins (a view never draws its own settings screen), and
+`hive plugins set` sets them from a terminal. Each field is a `boolean`, a `number` (`min`,
+`max`), a `text` (`maxLength`) or a `choice` (`values`, `labels`), with a `label`, an optional
+`description` and a `default`:
+
+```json
+"settings": [
+  { "id": "columns", "label": "Columns", "type": "choice", "values": ["todo", "all"], "labels": ["To do", "Everything"], "default": "todo" },
+  { "id": "max", "label": "Most cards", "type": "number", "min": 1, "max": 50, "default": 20 }
+]
+```
+
+The view reads the values as `hm.settings` (protocol 1.7, feature `settings`) and hears each
+change as the `settings` event. A host before 1.7 sends none, so read each with its default
+beside it: `hm.settings.max ?? 20`.
+
 ## Permissions
 
 Declared in the manifest, refused at install if unknown:
 `workspace:close` → `closeTile`; `workspace:spawn` → `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`;
 `workspace:prompt` → `prompt` and `spawnAgent` with a `prompt`; `workspace:sessions` →
-`sessions` and `spawnAgent` with `resume`. Selection and focus need none.
+`sessions` and `spawnAgent` with `resume`; `workspace:widgets` → `pressWidget` / `clickWidget`;
+`workspace:issues` → `onIssues` and every `hm.issues` call. Selection and focus need none.
 
 `spawnAgent(agent, frameId, { prompt?, name?, resume? })` starts an agent by its catalog id (`null` is
 the user's default); a `prompt` becomes its first message once the user sends it. An id that isn't installed is
 refused. `openFolder(frameId)` asks the user to pick the frame's folder; the view never sees a path.
+
+Each tile in `structure` carries its `icon`, the mark the app draws for it (an agent's logo, a
+kind's icon) as one `<svg>` in `currentColor`: put it in your markup and size it with CSS.
 
 `structure` also tells you how the workspace is wired: each tile's `agent`, each frame's
 `parentId` (a worktree nested under its repo), `branch` and `folder: { name, kind }`, and
@@ -166,6 +270,8 @@ refused. `openFolder(frameId)` asks the user to pick the frame's folder; the vie
 - Render on change: subscribe per tile for status, coalesce draws, stop work while
   `document.hidden`.
 - Keep the entry bundle small; heavy libraries load inside your iframe.
+- Name your own files relatively (`./main.js`, never `/main.js`): in a browser tab the app
+  serves your view under a path, not at a root of its own.
 - Store camera/placements via `setLayout`; version your blob yourself.
 - A disabled plugin recovers from its layout blob on next mount.
 

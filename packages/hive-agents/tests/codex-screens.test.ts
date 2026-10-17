@@ -15,9 +15,9 @@ test("Codex's hooks review and update prompt read as waiting for the user", () =
     "  ✨ Update available! 0.155.1 -> 0.157.1", "  Release notes: https://github.com/openai/codex/releases/latest",
     "› 1. Update now (runs `npm install -g @openai/codex`)", "  2. Skip", "  3. Skip until next version", "  Press Enter to continue.",
   ].join("\n");
-  expect(codex().detect!(review)).toBe("blocked");
-  expect(codex().detect!(update)).toBe("blocked");
-  expect(codex().detect!("› Explain this codebase\n\n  gpt-5 high · 100% left")).toBe("idle");
+  expect(codex().detect!(review)).toEqual({ status: "blocked" });
+  expect(codex().detect!(update)).toEqual({ status: "blocked" });
+  expect(codex().detect!("› Explain this codebase\n\n  gpt-5 high · 100% left")).toEqual({ status: "idle" });
 });
 
 test("the hook review it opens on a first run reads as waiting, on both of its screens", () => {
@@ -25,24 +25,26 @@ test("the hook review it opens on a first run reads as waiting, on both of its s
     "  Hooks", "  Lifecycle hooks from config and enabled plugins.",
     "  ⚠ 11 hooks need review before they can run.", "  Event                 Installed   Active",
     "↓ t trust all · enter review · esc close",
-  ].join("\n"))).toBe("blocked");
+  ].join("\n"))).toEqual({ status: "blocked" });
   expect(codex().detect!([
     "  PostToolUse hooks", "  1 hook needs review before it can run.",
     "› [x] Hook 1", "  [!] Hook 2 · modified", "  space/enter toggle · esc back",
-  ].join("\n"))).toBe("blocked");
+  ].join("\n"))).toEqual({ status: "blocked" });
 });
 
 test("tiles Hivemind starts skip the startup update check and keep the wheel", () => {
   expect(codex().launch?.args).toEqual([
     "-c", "check_for_update_on_startup=false",
     "-c", "tui.fullscreen_transcript=false",
-    "--dangerously-bypass-hook-trust",
   ]);
 });
 
-test("waiving its hook review is disclosed, because it waives the review of your own hooks too", () => {
+test("it is told our hooks are trusted and waives no review: any other hook it still asks about, and the user answers", () => {
   const lines = agentDisclosures(codex());
-  expect(lines.some((l) => l.includes("hook review waived"))).toBe(true);
+  expect(lines.some((l) => l.includes("its hooks for Hivemind are trusted"))).toBe(true);
+  expect(lines.some((l) => l.includes("hook review waived"))).toBe(false);
+  // Its review of any other hook is the user's to answer, never skipped for them.
+  expect(codex().dismiss ?? []).toEqual([]);
 });
 
 test("what it is printing is not what it is asking: a working screen quoting a question stays working", () => {
@@ -53,23 +55,7 @@ test("what it is printing is not what it is asking: a working screen quoting a q
     "  > [y/n] in the manual means it wants an answer", "  applying patch to apps/desktop/src/App.tsx",
     "", "• Working (23s • Esc to interrupt)",
   ].join("\n");
-  expect(codex().detect!(streaming)).toBe("working");
+  expect(codex().detect!(streaming)).toEqual({ status: "working" });
   // And a real prompt, at the bottom where it lives, still reads as waiting.
-  expect(codex().detect!(`${streaming}\n  Allow command?\n› 1. Yes (y)\n  2. No`)).toBe("blocked");
-});
-
-test("the hook review it opens before it will take a task is skipped, not answered", () => {
-  const d = codex().dismiss ?? [];
-  expect(d.length).toBe(1);
-  // Esc is its own "skip": it trusts nothing and writes nothing. The launch flags already
-  // told it to run the hooks.
-  expect(d[0]!.keys).toEqual(["Escape"]);
-  const review = [
-    "  Hooks need review", "  11 hooks are new or changed.",
-    "› 1. Review hooks", "  2. Trust all and continue", "  3. Continue without trusting (hooks won't run)",
-  ].join("\n");
-  expect(d[0]!.match(review)).toBe(true);
-  // Its per-hook screen is NOT dismissed: that one the user opened themselves.
-  expect(d[0]!.match("  PostToolUse hooks\n  1 hook needs review before it can run.\n  space/enter toggle · esc back")).toBe(false);
-  expect(d[0]!.match("› Ask Codex to do anything")).toBe(false);
+  expect(codex().detect!(`${streaming}\n  Allow command?\n› 1. Yes (y)\n  2. No`)).toEqual({ status: "blocked" });
 });

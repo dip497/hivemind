@@ -1,0 +1,330 @@
+name: phone-android
+
+# The Android app (apps/android) over the phone's Rust core (docs/design/phone-app-2026-10-02.md):
+# the core built for arm64-v8a and x86_64, the app assembled and unit-tested, then launched on an
+# emulator for a Maestro smoke flow, and on another paired with the desktop app, driving an agent
+# there. On every push touching the phone, on any branch.
+on:
+  push:
+    paths:
+      - apps/android/**
+      - crates/hive-phone/**
+      - crates/hive-phone-ffi/**
+      - crates/hive-net/**
+      - scripts/phone/**
+      - apps/desktop/tests/e2e/phone-app.spec.ts
+      - apps/desktop/tests/e2e/helpers/phone.ts
+      - apps/desktop/tests/e2e/fixtures/views/phone-probe/**
+      - .github/workflows/phone-android.yml
+  pull_request:
+    paths:
+      - apps/android/**
+      - crates/hive-phone/**
+      - crates/hive-phone-ffi/**
+      - crates/hive-net/**
+      - scripts/phone/**
+      - apps/desktop/tests/e2e/phone-app.spec.ts
+      - apps/desktop/tests/e2e/helpers/phone.ts
+      - apps/desktop/tests/e2e/fixtures/views/phone-probe/**
+      - .github/workflows/phone-android.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The phone's paths, as `paths:` above lists them: what the `changes` job looks for in a push.
+env:
+  PHONE_PATHS: '^(apps/android/|crates/hive-phone/|crates/hive-phone-ffi/|crates/hive-net/|scripts/phone/|apps/desktop/tests/e2e/phone-app\.spec\.ts$|apps/desktop/tests/e2e/helpers/phone\.ts$|apps/desktop/tests/e2e/fixtures/views/phone-probe/|\.github/workflows/phone-android\.yml$)'
+
+concurrency:
+  group: phone-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Whether this push changed the phone. On a pull request GitHub's `paths:` reads the whole pull
+  # request, so once one touched the phone, every push to it ran all of this (14 min), a push of
+  # desktop code alone too. A push to a pull request that changed none of the phone's paths, made
+  # on a head this workflow passed on, is not run again: what it would test is what passed.
+  # A push to a branch with an open pull request is that pull request's run to check: both ran
+  # all of this on the same commit, and each kept its own 4 GB of caches.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      phone: ${{ steps.diff.outputs.phone }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}/${{ github.event.action }}
+          BEFORE: ${{ github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          phone=true
+          if [ "$EVENT" = pull_request/synchronize ] && [ -n "$BEFORE" ]; then
+            passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/phone-android.yml/runs?head_sha=$BEFORE&event=pull_request&status=success&per_page=1" --jq .total_count || echo 0)
+            # The previous head may be gone (a force push): then everything runs.
+            if [ "$passed" != 0 ] && git fetch -q --depth=1 origin "$BEFORE" "$HEAD"; then
+              changed=$(git diff --name-only "$BEFORE" "$HEAD")
+              echo "changed since $BEFORE, which passed:"; echo "$changed"
+              grep -Eq "$PHONE_PATHS" <<< "$changed" || phone=false
+            fi
+          fi
+          if [ "$EVENT" = push/ ]; then
+            # Should the question fail, this runs.
+            open=$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$GITHUB_REF_NAME&state=open" --jq length || echo 0)
+            if [ "${open:-0}" -gt 0 ]; then
+              echo "an open pull request from $GITHUB_REF_NAME checks this commit"; phone=false
+            fi
+          fi
+          echo "phone=$phone" | tee -a "$GITHUB_OUTPUT"
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.phone == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Rust (rust-toolchain.toml) for the host and the app's two ABIs
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-linux-android x86_64-linux-android
+
+      # Keyed by the Rust version and the lockfile, and pruned of what this build no longer uses, so
+      # the cache stays the size of one build.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/hive-phone-ffi -> target
+
+      - name: cargo-ndk
+        run: command -v cargo-ndk || cargo install cargo-ndk --locked --version 4.1.2
+
+      - name: The NDK the app is built with (gradle/libs.versions.toml)
+        run: |
+          ndk=$(sed -n 's/^ndk = "\(.*\)"/\1/p' apps/android/gradle/libs.versions.toml)
+          # The runner's download now and then arrives corrupt ("Error on ZipFile unknown archive"):
+          # tried again, from scratch, before the job is failed for it.
+          for try in 1 2 3; do
+            if yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null \
+              && [ -f "$ANDROID_HOME/ndk/$ndk/source.properties" ]; then exit 0; fi
+            echo "::warning::NDK $ndk install failed (try $try)"
+            rm -rf "$ANDROID_HOME/ndk/$ndk"
+            sleep $((try * 10))
+          done
+          exit 1
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          # The action's open-source cache (MIT); its default from v6 is a proprietary one.
+          cache-provider: basic
+          # Written from every branch, not only main: a pull request's next push starts from its last
+          # build (dependencies, and the build cache org.gradle.caching keeps there), not cold. Read
+          # only, it restored nothing and the step took 7 min every time (run 38965971758).
+          cache-read-only: false
+
+      - name: Build (the core through buildCore), unit tests and lint
+        working-directory: apps/android
+        run: ./gradlew assembleDebug testDebugUnitTest lintDebug
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hivemind-phone-debug
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: What the unit tests said
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit-test-reports
+          path: apps/android/app/build/reports/tests/
+
+  emulator:
+    # The built app on an emulator (KVM on ubuntu-latest), driven by apps/android/maestro.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: hivemind-phone-debug
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Maestro
+        env:
+          MAESTRO_VERSION: "2.11.0"
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: SDK command-line tools, the newest (the image's cannot make an Android 17 AVD)
+        run: bash scripts/phone/update-cmdline-tools.sh
+
+      # The emulator's system image, kept between runs: downloading it took a minute of every run
+      # (run 38965971758). The emulator still boots cold, from no snapshot.
+      - uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-37.0/google_apis/x86_64
+          key: android-system-image-37.0-google_apis-x86_64
+
+      # Booted cold, not from a snapshot: an emulator restored from one dropped off adb as Maestro
+      # started its driver ("device offline", runs 36987502508 and 36989241234). Drawn by SwiftShader
+      # through ANGLE (`-gpu swangle`), one of the emulator's software modes now
+      # (developer.android.com/studio/run/emulator-acceleration): `swiftshader_indirect`, deprecated
+      # since emulator 36.4.9, ran as SwiftShader's GLES translator, under which the app's web view
+      # drew the top 40 px of a view's page and nothing below, and no tap on it reached the page
+      # (run 37030428261).
+      - name: Smoke flow
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "120000"
+        with:
+          # Android 17. The app targets 36, so its local-network rule for apps targeting 37 is not
+          # in play; the smoke shows the app runs on the newest Android all the same.
+          api-level: "37.0"
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          # One line: the runner runs each line of a script on its own.
+          script: bash scripts/phone/emulator-smoke.sh app-debug.apk maestro-report.xml
+
+      - name: What Maestro said
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: maestro-report
+          path: |
+            maestro-report.xml
+            maestro-report-logcat.txt
+            ~/.maestro/tests/
+          if-no-files-found: ignore
+
+  computer:
+    # The built app on an emulator, paired with the desktop app running beside it on the runner as
+    # the person pairs a phone, driving an agent there: the desktop's e2e spec
+    # apps/desktop/tests/e2e/phone-app.spec.ts (PHONE_APP=android) offers Pair a phone and runs
+    # apps/android/maestro/computer with the link. The emulator reaches the desktop at the addresses
+    # the link carries, the runner's own, through its virtual router.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: hivemind-phone-debug
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Maestro
+        env:
+          MAESTRO_VERSION: "2.11.0"
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # v6.1.0, not v6: the first release that installs pnpm 12, and the moving v6 tag still names v6.0.10.
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          # The version from `packageManager` in package.json.
+          run_install: false
+
+      - name: The desktop app (its renderer and main)
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @hivemind/desktop run build
+
+      # The hive CLI, which the spec installs the community view the phone shows with.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
+
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          # ci.yml's: the same debug build.
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
+          restore-keys: hive-net-${{ runner.os }}-
+
+      - name: hive-net, the desktop app's network
+        run: cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - name: SDK command-line tools, the newest (the image's cannot make an Android 17 AVD)
+        run: bash scripts/phone/update-cmdline-tools.sh
+
+      # The emulator's system image, kept between runs: downloading it took a minute of every run
+      # (run 38965971758). The emulator still boots cold, from no snapshot.
+      - uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/system-images/android-37.0/google_apis/x86_64
+          key: android-system-image-37.0-google_apis-x86_64
+
+      # Booted cold, and drawn through ANGLE, as for the smoke flow.
+      - name: The app paired with the desktop app, driving its agent
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "120000"
+        with:
+          api-level: "37.0"
+          target: google_apis
+          arch: x86_64
+          emulator-options: -no-snapshot -no-window -gpu swangle -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          # One line: the runner runs each line of a script on its own.
+          script: bash scripts/phone/emulator-computer.sh app-debug.apk logcat.txt
+
+      - name: What the desktop and the phone saw
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-android-computer
+          path: |
+            apps/desktop/test-results/
+            logcat.txt
+          if-no-files-found: ignore

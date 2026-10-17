@@ -6,6 +6,8 @@ name: release
 #   3. packages the AppImage (electron-builder --linux AppImage)
 # and, in a parallel job on a macOS arm64 runner, the same two artifacts for
 # Apple Silicon (`hive-darwin-arm64` + an ad-hoc-signed `hivemind.app` zip).
+# `build-hive-net` builds the network binary (crates/hive-net, Rust) for every
+# target; it may fail on its own, and the installers go on without it.
 # A final `publish` job downloads both jobs' assets and creates the GitHub
 # Release from the tag.
 #
@@ -26,35 +28,183 @@ on:
         required: false
         default: "false"
         type: string
+  workflow_call:
+    inputs:
+      channel:
+        type: string
+        required: true
+      source_ref:
+        type: string
+        required: true
+      tag:
+        type: string
+        required: true
+      publish:
+        type: string
+        required: true
 
 permissions:
   contents: write  # needed to create releases + upload assets
 
+env:
+  electron_config_cache: ${{ github.workspace }}/.ci-cache/electron
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.ci-cache/electron-builder
+
 jobs:
+  # The phone page (crates/hive-web), which `hive-net serve --phone` serves: built once, published
+  # with its hash, and that hash built into each desktop, whose Pair a phone compares it with what a
+  # server serves.
+  build-phone-page:
+    name: build the phone page
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      hash: ${{ steps.build.outputs.hash }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+          cache: true
+
+      # ci.yml's phone-page cache, read and never saved: main's is the one a tag's run can see.
+      # The path list must stay ci.yml's, which is part of the cache's identity.
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: hive-web-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        id: build
+        run: |
+          set -euo pipefail
+          tools=$(crates/hive-web/tools.sh "$RUNNER_TEMP/hive-web-tools")
+          eval "$tools"
+          crates/hive-web/build.sh
+          echo "hash=$(cat crates/hive-web/www/page.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Stage release artifacts
+        # What the server serves, under phone/: `hive-net serve --phone <dir>/phone`. Not the
+        # sources, nor B0's echo probe.
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets stage
+          cp -r crates/hive-web/www stage/phone
+          rm -rf stage/phone/app stage/phone/js stage/phone/tsconfig.json stage/phone/echo.html stage/phone/pkg/*.js stage/phone/pkg/*.d.ts stage/phone/pkg/package.json stage/phone/pkg/.gitignore
+          tar -czf release-assets/hive-phone-page.tar.gz -C stage phone
+          cp crates/hive-web/www/page.sha256 release-assets/hive-phone-page.sha256
+          ls -la release-assets/
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v7
+        with:
+          name: phone-page
+          path: release-assets/
+
+  # The phone page in a phone-sized Chromium, beside the desktop builds rather than before them:
+  # they need only the page's hash, and installing Chromium and running the spec held every one
+  # of them back. Built again here (cached), and published only if this passes.
+  test-phone-page:
+    name: test the phone page
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+          cache: true
+
+      # ci.yml's phone-page cache, read and never saved: main's is the one a tag's run can see.
+      # The path list must stay ci.yml's, which is part of the cache's identity.
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: hive-web-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          tools=$(crates/hive-web/tools.sh "$RUNNER_TEMP/hive-web-tools")
+          eval "$tools"
+          crates/hive-web/build.sh
+
+      - name: Its lists in a phone-sized Chromium
+        working-directory: apps/desktop
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test tests/e2e/phone-page.spec.ts
+
   build-linux:
     name: build linux x86_64
+    needs: build-phone-page
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        # v6.1.0, not v6: the first release that installs pnpm 12, and the moving v6 tag still names v6.0.10.
+        uses: pnpm/action-setup@v6.1.0
         with:
           # version pinned via `packageManager` in package.json (avoid dupes)
           run_install: false
+          cache: true
+
+      - name: Cache Electron downloads and builder tools
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: electron-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-tools-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3"
+          bun-version: "1.4"
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -73,6 +223,9 @@ jobs:
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
+        env:
+          # The phone page this release made: Pair a phone says whether a server serves it.
+          HIVEMIND_PHONE_PAGE: ${{ needs.build-phone-page.outputs.hash }}
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
         # electron-builder rejects workspace symlinks that point outside the
@@ -82,7 +235,14 @@ jobs:
         # NOT --prod: electron itself is a devDependency in apps/desktop, and
         # electron-builder needs it installed in the deploy dir to read the
         # version it should bundle ("Cannot compute electron version" otherwise).
+        # verifyDepsBeforeRun off, here and for electron-builder below: pnpm 11+
+        # reinstalls before running a script or `exec` when it judges node_modules
+        # stale, and the deploy dir is no workspace project, so that install meets
+        # `catalog:` with no catalog (ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC)
+        # and fails the step. Nothing is stale: both run on the one frozen install.
         run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Copy build output into deploy
         # electron-vite emits to apps/desktop/out — the deploy copy has only
@@ -97,17 +257,18 @@ jobs:
         # Run electron-builder INSIDE the deployed copy so node_modules are
         # all under the app dir (no more "package.json must be under …" error).
         # `pnpm exec`, NOT `npx`: electron-builder 26 picks its node-module
-        # collector by detecting the package manager, and `pnpm deploy` leaves
+        # collector by detecting the package manager, and pnpm 10's deploy left
         # no lockfile in desktop-deploy/ for it to detect by file. Run under npx
-        # it guesses npm from the environment, and the npm collector only walks a
+        # it guessed npm from the environment, and the npm collector only walks a
         # flat node_modules — it never sees pnpm's nested
-        # @lydell/node-pty-<platform>, so the app ships with a dead terminal.
+        # @lydell/node-pty-<platform>, so the app shipped with a dead terminal.
         run: |
           cd desktop-deploy
           pnpm exec electron-builder --linux AppImage \
             --config.directories.output=dist-electron
         env:
           DEBUG: electron-builder
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Verify the bundle has a linux-x64 pty
         # Nothing else fails when the prebuild is missing — the app just launches
@@ -134,7 +295,7 @@ jobs:
           echo "assets_dir=release-assets" >> "$GITHUB_OUTPUT"
 
       - name: Upload artifacts (workflow result)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-x86_64
           path: release-assets/
@@ -149,22 +310,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
+          cache: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3"
+          bun-version: "1.4"
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -187,34 +351,47 @@ jobs:
           chmod +x release-assets/hive-linux-arm64
 
       - name: Upload artifacts (workflow result)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-arm64
           path: release-assets/
 
   build-macos:
     name: build macos arm64
-    runs-on: macos-14  # Apple Silicon runner
+    needs: build-phone-page
+    runs-on: macos-26  # Apple Silicon runner
     timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
+          cache: true
+
+      - name: Cache Electron downloads and builder tools
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: electron-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-tools-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3"
+          bun-version: "1.4"
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -227,9 +404,15 @@ jobs:
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
+        env:
+          # The phone page this release made: Pair a phone says whether a server serves it.
+          HIVEMIND_PHONE_PAGE: ${{ needs.build-phone-page.outputs.hash }}
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
+        # verifyDepsBeforeRun off here and for electron-builder: see the linux job.
         run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Copy build output into deploy
         run: |
@@ -262,6 +445,7 @@ jobs:
             "desktop-deploy/$app" "release-assets/hivemind-${version}-arm64-mac.zip"
         env:
           DEBUG: electron-builder
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Stage release artifacts
         run: |
@@ -292,15 +476,20 @@ jobs:
           # `codesign --verify` above proves the signature is INTERNALLY valid;
           # this proves the bundle is actually signed (ad-hoc = no Authority).
           codesign -dv "$app" 2>&1 | grep -q "Signature=adhoc" || { echo "bundle is not ad-hoc signed"; exit 1; }
+          # Built on the newest runner, each still starts on the macOS releases ran on before it
+          # (they were built on macOS 14 until 2026-10).
+          bash scripts/check-macos-floor.sh 14 release-assets/hive-darwin-arm64 \
+            "$app/Contents/MacOS/hivemind" $(find "$app" -name '*.node')
 
       - name: Upload artifacts (workflow result)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-arm64
           path: release-assets/
 
   build-windows:
     name: build windows x64
+    needs: build-phone-page
     runs-on: windows-latest
     timeout-minutes: 40
     # Published, but never blocking: the smoke steps below run the build (CLI, a ConPTY
@@ -311,22 +500,34 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6.1.0
         with:
           run_install: false
+          cache: true
+
+      - name: Cache Electron downloads and builder tools
+        uses: actions/cache@v6
+        with:
+          path: |
+            ${{ env.electron_config_cache }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: electron-tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-tools-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3"
+          bun-version: "1.4"
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -346,9 +547,15 @@ jobs:
 
       - name: Build renderer + main
         run: pnpm --filter @hivemind/desktop run build
+        env:
+          # The phone page this release made: Pair a phone says whether a server serves it.
+          HIVEMIND_PHONE_PAGE: ${{ needs.build-phone-page.outputs.hash }}
 
       - name: pnpm deploy (materialize workspace deps for electron-builder)
+        # verifyDepsBeforeRun off here and for electron-builder: see the linux job.
         run: pnpm --filter @hivemind/desktop deploy --legacy desktop-deploy
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
 
       - name: Copy build output into deploy
         shell: pwsh
@@ -362,7 +569,12 @@ jobs:
         shell: pwsh
         run: |
           cd desktop-deploy
-          pnpm exec electron-builder --win zip --config.directories.output=dist-electron
+          # package.json's compression "maximum" took 23 min on this zip (run 37036151192), and
+          # "normal" is 7-Zip Deflate level 7, three passes; the level set below (one pass) overrides it.
+          pnpm exec electron-builder --win zip --config.directories.output=dist-electron --config.compression=normal
+        env:
+          PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: "5"
 
       - name: Verify the bundle is x64 with a win32 pty
         # Same class of check as the macOS job: nothing fails the build when the
@@ -601,22 +813,97 @@ jobs:
           Get-ChildItem release-assets
 
       - name: Upload artifacts (workflow result)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-x64
           path: release-assets/
 
+  # hive-net (crates/hive-net, R10): this machine's device on the network, and the relay role.
+  # The app, `hive host` and hive-net speak one daemon protocol and must come from one release
+  # (a mismatched pair stops and says so), so a release does not ship without the hive-net of a
+  # platform it ships the app or the CLI for. Windows alone stays optional, as its app does.
+  build-hive-net:
+    name: build ${{ matrix.asset }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    continue-on-error: ${{ matrix.optional }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, asset: hive-net-linux-x86_64, exe: hive-net, optional: false }
+          - { os: ubuntu-24.04-arm, asset: hive-net-linux-arm64, exe: hive-net, optional: false }
+          - { os: macos-26, asset: hive-net-darwin-arm64, exe: hive-net, optional: false }
+          - { os: windows-latest, asset: hive-net-windows-x64.exe, exe: hive-net.exe, optional: true }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Rust (rust-toolchain.toml)
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup toolchain install
+
+      # Saved by the nightly only: a cache saved under a tag is seen by no later run, and main's is
+      # what a tag's run restores.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/hive-net
+          key: release-${{ matrix.asset }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo build --release --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - name: Smoke-test the binary
+        # The id it gives a device key is the one the app shows for it (conformance/identity.json):
+        # proof the binary runs on this target and reads keys as the app writes them.
+        run: |
+          set -euo pipefail
+          dir=$(mktemp -d)
+          jq -r '.ed25519[0].seed' conformance/identity.json > "$dir/device.key"
+          want=$(jq -r '.ed25519[0].id' conformance/identity.json)
+          got=$("crates/hive-net/target/release/${{ matrix.exe }}" id --identity "$dir")
+          [ "$got" = "$want" ] || { echo "hive-net id gave $got, want $want"; exit 1; }
+
+      - name: It starts on the macOS releases ran on before (14)
+        if: runner.os == 'macOS'
+        run: bash scripts/check-macos-floor.sh 14 "crates/hive-net/target/release/${{ matrix.exe }}"
+
+      - name: Stage release artifact
+        run: |
+          mkdir -p release-assets
+          cp "crates/hive-net/target/release/${{ matrix.exe }}" "release-assets/${{ matrix.asset }}"
+          chmod +x "release-assets/${{ matrix.asset }}"
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.asset }}
+          path: release-assets/
+
   publish:
     name: publish github release
-    needs: [build-linux, build-linux-arm64, build-macos, build-windows]
+    needs: [build-phone-page, test-phone-page, build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net]
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
-    if: github.event_name != 'workflow_dispatch' || inputs.publish == 'true'
+    if: github.event_name == 'push' || inputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Download all build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -642,18 +929,21 @@ jobs:
       - name: Resolve release tag
         id: tag
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
           else
             echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create / update GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
+          prerelease: ${{ inputs.channel == 'nightly' }}
+          make_latest: ${{ inputs.channel == 'nightly' && 'false' || 'legacy' }}
+          target_commitish: ${{ inputs.source_ref || github.sha }}
           # Windows is listed but its job stays continue-on-error: a Windows failure
           # publishes the release without those two names rather than blocking it.
           files: |
@@ -667,3 +957,9 @@ jobs:
             release-assets/hive-windows-x64.exe
             release-assets/*-win.zip
             release-assets/hivemind-windows-x64.zip
+            release-assets/hive-net-linux-x86_64
+            release-assets/hive-net-linux-arm64
+            release-assets/hive-net-darwin-arm64
+            release-assets/hive-net-windows-x64.exe
+            release-assets/hive-phone-page.tar.gz
+            release-assets/hive-phone-page.sha256

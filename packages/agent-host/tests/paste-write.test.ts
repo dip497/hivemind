@@ -17,15 +17,14 @@ function fakePty() {
   return { pty, wrote, say: (d: string) => emit?.(d) };
 }
 
-/** Let the session's headless terminal parse what the app just said. */
-const settled = () => new Promise<void>((r) => setTimeout(r, 30));
 
 async function session(announce: string) {
   const f = fakePty();
   const m = new SessionManager(() => f.pty);
   await m.createOrAttach("t1", { cwd: "/", cmd: "agent", args: [], cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
   f.say(announce);
-  await settled();
+  // Its screen shows what the app said, so its terminal has read it.
+  await m.snapshot("t1");
   f.wrote.length = 0;
   return { m, ...f };
 }

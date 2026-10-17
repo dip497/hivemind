@@ -1,3 +1,5 @@
+import { withoutTrailingSlashes } from "@hivemind/core/remote-uri";
+
 export type BrowserOpenTarget =
   | { kind: "browser"; url: string }
   | { kind: "editor"; path: string }
@@ -30,7 +32,7 @@ export function htmlFileUrl(repoPath: string, relPath: string): string | null {
   const rel = stripLineSuffix(relPath).replace(/^file:\/\//i, "");
   if (!isHtmlPath(rel)) return null;
   if (rel.startsWith("/") || rel.split(/[\\/]+/).includes("..")) return null;
-  const root = repoPath.replace(/\/+$/, "");
+  const root = withoutTrailingSlashes(repoPath);
   return localPathToFileUrl(`${root}/${rel.replace(/^\.\/+/, "")}`);
 }
 
@@ -58,7 +60,7 @@ export function resolveTerminalPath(cwd: string, target: string): string | null 
   if (target.startsWith("~/")) return null;
   if (target.split(/[\\/]+/).includes("..")) return null;
   if (target.startsWith("/")) return target;
-  return `${cwd.replace(/\/+$/, "")}/${target.replace(/^\.\/+/, "")}`;
+  return `${withoutTrailingSlashes(cwd)}/${target.replace(/^\.\/+/, "")}`;
 }
 
 function htmlUrlFromTerminalPath(cwd: string, target: string): string | null {
@@ -75,7 +77,7 @@ function htmlUrlFromTerminalPath(cwd: string, target: string): string | null {
   if (t.split(/[\\/]+/).includes("..")) return null;
   const abs = t.startsWith("/")
     ? t
-    : `${cwd.replace(/\/+$/, "")}/${t.replace(/^\.\/+/, "")}`;
+    : `${withoutTrailingSlashes(cwd)}/${t.replace(/^\.\/+/, "")}`;
   return localPathToFileUrl(abs);
 }
 

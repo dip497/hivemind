@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import YAML from "yaml";
-import { sessionExists } from "../src/session.js";
+import { sessionExists, sessionFile } from "../src/session.js";
 import { defFromManifest } from "../src/manifest.js";
 import { AUTHORED, authoredYaml } from "./authored.js";
 
@@ -31,4 +31,24 @@ test("the manifest may only name a store inside home, with {id} and at most one 
   for (const bad of ["/etc/{id}", "{home}/../{id}.jsonl", "{home}/.claude/projects/x.jsonl", "{home}/*/*/{id}", "{home}/p*/{id}"]) {
     expect(() => defFromManifest(withExists(bad)), bad).toThrow(/session.resume.exists/);
   }
+});
+
+test("a session's file is found where its store says, under any one directory; none when it is not there, or the id could leave the store", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "sf-"));
+  const at = path.join(home, ".claude", "projects", "-repo", "abc-1.jsonl");
+  fs.mkdirSync(path.dirname(at), { recursive: true });
+  fs.writeFileSync(at, "{}");
+  expect(sessionFile(PATTERN, "abc-1", home)).toBe(at);
+  expect(sessionFile("{home}/.claude/projects/-repo/{id}.jsonl", "abc-1", home)).toBe(at);
+  expect(sessionFile(PATTERN, "abc-2", home)).toBeNull();
+  expect(sessionFile(PATTERN, "../../etc/passwd", home)).toBeNull();
+  expect(sessionFile(PATTERN, "abc-1", path.join(home, "nope"))).toBeNull();
+  // Moved under another directory, it is found there; gone, it is none.
+  const moved = path.join(home, ".claude", "projects", "-other", "abc-1.jsonl");
+  fs.mkdirSync(path.dirname(moved), { recursive: true });
+  fs.renameSync(at, moved);
+  expect(sessionFile(PATTERN, "abc-1", home)).toBe(moved);
+  fs.rmSync(moved);
+  expect(sessionFile(PATTERN, "abc-1", home)).toBeNull();
+  fs.rmSync(home, { recursive: true, force: true });
 });

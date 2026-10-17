@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, terminalThemeFor,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
@@ -38,6 +39,30 @@ describe("settings schema", () => {
       expect(a.preset).toBe(p.id);
       expect(mergeSettings({ appearance: a }).appearance).toEqual(a); // survives validation unchanged
     }
+  });
+
+  test("a host's look as a guest gets it names no file on the host, and junk from a peer is dropped", () => {
+    const host = {
+      ...DEFAULT_APPEARANCE, preset: "nord", accent: "ice", mode: "light", uiFont: "Host Sans", monoFont: "Host Mono",
+      wallpaper: { kind: "video", videoSrc: "hm-media://v/%2Fhome%2Fhost%2Fclip.mp4", brightness: 0.7 },
+      overlayMedia: [{ id: "o", url: "hivemedia://cat.png", kind: "image", opacity: 1, fit: "cover", size: 1, anchor: "center" }],
+    };
+    const got = sharedAppearance(host);
+    expect(got).toMatchObject({ preset: "nord", accent: "ice", mode: "light", overlayMedia: [], uiFont: DEFAULT_APPEARANCE.uiFont, monoFont: DEFAULT_APPEARANCE.monoFont });
+    expect(got.wallpaper).toEqual({ kind: DEFAULT_APPEARANCE.wallpaper.kind, brightness: 0.7 });
+    expect(JSON.stringify(got)).not.toContain("host");
+    expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness });
+    expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });
+  });
+
+  test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {
+    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" });
+    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"], recentsBy: "project" } as const;
+    const s = mergeSettings({ v: 1, views: { layers: chosen } });
+    expect(s.views.layers).toEqual({ ...chosen, machines: ["local", "m-1"] });
+    expect(mergeSettings({ v: 1, views: { layers: { groupBy: "colour", sortBy: 3, machines: ["local", 7, "", "local"] } } }).views.layers)
+      .toMatchObject({ groupBy: "group", sortBy: "canvas", machines: ["local"] });
+    expect(mergeSettings(setPath(s, "views.layers.groupBy", "status"), s).views.layers).toEqual({ ...chosen, machines: ["local", "m-1"], groupBy: "status" });
   });
 
   test("views.chrome: every island placement round-trips, junk is dropped", () => {
@@ -103,24 +128,24 @@ describe("settings schema", () => {
       views: {
         chrome: {},
         toolbars: {
-          canvas: { actions: ["theme", "terminal", "theme", "ghost"], labels: false },
+          canvas: { actions: ["theme", "frame", "theme", "ghost"], labels: false },
           world: { actions: [] },                    // deliberate empty toolbar
           windows: { labels: true },                 // labels only (opt-IN), actions default
-          orbit: { actions: "terminal" },            // not an array → no preference
+          orbit: { actions: "frame" },            // not an array → no preference
           solar: {},                                 // nothing meaningful → no entry
           "../x": { actions: ["agent"] },            // not a view id → dropped
         },
       },
     });
     expect(s.views.toolbars).toEqual({
-      canvas: { actions: ["theme", "terminal"], labels: false }, // dedupe + drop unknown, false kept
+      canvas: { actions: ["theme", "frame"], labels: false }, // dedupe + drop unknown, false kept
       world: { actions: [] },
       windows: { labels: true },
     });
     // Absent view → catalog defaults; the stored shape feeds resolveToolbar directly.
     expect(resolveToolbar(s.views.toolbars.mars)).toEqual(BUILTIN_TOOLBAR_ACTIONS);
     expect(resolveToolbar(s.views.toolbars.world)).toEqual([]);
-    expect(resolveToolbar(s.views.toolbars.canvas).map((a) => a.id)).toEqual(["theme", "terminal"]);
+    expect(resolveToolbar(s.views.toolbars.canvas).map((a) => a.id)).toEqual(["theme", "frame"]);
     // The render flag rides on the preferences; absent means icon-only (the
     // host default is FALSE, so this setting changes nothing for existing users).
     expect(s.views.toolbars.canvas!.labels).toBe(false);
@@ -139,17 +164,17 @@ describe("settings schema", () => {
   });
 
   test("views.toolbars: partial merges preserve it; an explicit {} resets", () => {
-    const cur = mergeSettings({ v: 1, views: { toolbars: { canvas: { actions: ["terminal"], labels: false } } } });
+    const cur = mergeSettings({ v: 1, views: { toolbars: { canvas: { actions: ["frame"], labels: false } } } });
     // A patch that does not mention `views` at all keeps every toolbar.
     expect(mergeSettings({ v: 1, appearance: { accent: "ember" } }, cur).views.toolbars)
-      .toEqual({ canvas: { actions: ["terminal"], labels: false } });
+      .toEqual({ canvas: { actions: ["frame"], labels: false } });
     // A patch that mentions `views` but not `toolbars` keeps them too.
     expect(mergeSettings({ v: 1, views: { defaultView: "world" } }, cur).views.toolbars)
-      .toEqual({ canvas: { actions: ["terminal"], labels: false } });
+      .toEqual({ canvas: { actions: ["frame"], labels: false } });
     // The CLI patch path: setPath then merge.
     const patched = mergeSettings(setPath(cur, "views.toolbars.world", { actions: [], labels: true }), cur);
     expect(patched.views.toolbars.world).toEqual({ actions: [], labels: true });
-    expect(patched.views.toolbars.canvas).toEqual({ actions: ["terminal"], labels: false });
+    expect(patched.views.toolbars.canvas).toEqual({ actions: ["frame"], labels: false });
     // Explicit {} is the reset — back to catalog defaults everywhere.
     const reset = mergeSettings(setPath(patched, "views.toolbars", {}), patched);
     expect(reset.views.toolbars).toEqual({});
@@ -159,32 +184,11 @@ describe("settings schema", () => {
     expect(mergeSettings(undefined).views.toolbars).toEqual({});
   });
 
-  test("tools: a fresh install has every plugin off; the section, once present, is authoritative", () => {
-    // Missing file / no input at all → defaults → nothing enabled.
-    expect(mergeSettings(undefined).tools).toEqual({ enabledPlugins: [], disabledTools: [] });
-    expect(DEFAULT_SETTINGS.tools).toEqual({ enabledPlugins: [], disabledTools: [] });
-    expect(mergeSettings({}).tools.enabledPlugins).toEqual([]); // an object with no `v` is not a v:1 file
-    expect(mergeSettings({ v: 1, appearance: {} }).tools.enabledPlugins).toEqual([]);
-
-    expect(mergeSettings({ v: 1, tools: { enabledPlugins: [], disabledTools: [] } }).tools.enabledPlugins).toEqual([]);
-    expect(mergeSettings({ v: 1, tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] } }).tools)
-      .toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] });
-  });
-
-  test("tools: ids are validated, deduped and bounded", () => {
-    const s = mergeSettings({
-      v: 1,
-      tools: {
-        enabledPlugins: ["hivemind/web", "hivemind/web", "NoCaps/x", "noslash", "a/b/c", 7, "ok-org/ok-name"],
-        disabledTools: ["hivemind/web/browser", "hivemind/web/browser", "hivemind/web", "bad id/x/y"],
-      },
-    });
-    expect(s.tools.enabledPlugins).toEqual(["hivemind/web", "ok-org/ok-name"]); // deduped, malformed dropped
-    expect(s.tools.disabledTools).toEqual(["hivemind/web/browser"]);            // a plugin id is not a tool id
-
-    const many = mergeSettings({ v: 1, tools: { enabledPlugins: Array.from({ length: 500 }, (_, i) => `org/p${i}`) } });
-    expect(many.tools.enabledPlugins.length).toBe(200); // bounded
-    expect(mergeSettings({ v: 1, tools: { enabledPlugins: "hivemind/web" } }).tools.enabledPlugins).toEqual([]);
+  test("tools: a fresh install has every tool plugin off; a record switches one on", () => {
+    expect(toolPreferences(mergeSettings(undefined))).toEqual({ enabledPlugins: [], disabledTools: [] });
+    expect(toolPreferences(DEFAULT_SETTINGS)).toEqual({ enabledPlugins: [], disabledTools: [] });
+    const s = mergeSettings({ v: 1, plugins: { state: { "tool:hivemind/web": { enabled: true, options: { browser: false } } } } });
+    expect(toolPreferences(s)).toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] });
   });
 
   test("mergeSettings: junk falls back per field, values are clamped, unknown keys dropped", () => {
@@ -201,11 +205,45 @@ describe("settings schema", () => {
     expect(s.appearance.terminal.ansi[1]).toBe(SIGNAL.terminal.ansi[1]);
     expect(s.appearance.palette.bg).toBe(SIGNAL.palette.bg);
     expect(s.appearance.pluginSurfaces).toBe("theme");
-    expect(s.views).toEqual({ defaultView: "orbit", chrome: { world: { island: "hidden" } }, toolbars: {} });
-    expect(s.plugins.disabled).toEqual(["a", "b"]);
+    expect(s.views).toEqual({ defaultView: "orbit", chrome: { world: { island: "hidden" } }, toolbars: {}, layers: DEFAULT_SETTINGS.views.layers });
+    expect(s.plugins.state).toEqual({ "view:a": { enabled: false }, "view:b": { enabled: false } }); // the old key, read once
     // Empty stays empty: "" means "whatever the agent catalog's default is".
     expect(s.agents.defaultAgent).toBe(DEFAULT_SETTINGS.agents.defaultAgent);
     expect("extra" in s).toBe(false);
+  });
+
+  test("browserApp: off until turned on; a port outside 1024–65535 and a name that is not a host name, or not one with a port, are dropped", () => {
+    expect(mergeSettings({}).browserApp).toEqual({ enabled: false, port: 4483, names: [] });
+    const on = mergeSettings({ browserApp: { enabled: true, port: 80, names: ["Box.tail1234.ts.net", "*", "evil.example/x", "a b", "box.tail1234.ts.net", "lap.tail1234.ts.net:8444", "lap.tail1234.ts.net:", "lap.tail1234.ts.net:70000"] } });
+    expect(on.browserApp).toEqual({ enabled: true, port: 4483, names: ["box.tail1234.ts.net", "lap.tail1234.ts.net:8444"] });
+    expect(mergeSettings({ browserApp: { enabled: "yes", port: 47000 } }, on).browserApp).toEqual({ enabled: true, port: 47000, names: ["box.tail1234.ts.net", "lap.tail1234.ts.net:8444"] });
+  });
+
+  test("network: the update check is on until turned off, and only a yes or a no changes it", () => {
+    expect(mergeSettings({}).network).toEqual({ updateCheck: true });
+    const off = mergeSettings({ network: { updateCheck: false } });
+    expect(off.network.updateCheck).toBe(false);
+    expect(mergeSettings({ network: { updateCheck: "no" } }, off).network.updateCheck).toBe(false);
+    expect(mergeSettings({ network: {} }, off).network.updateCheck).toBe(false);
+    expect(mergeSettings({ network: { updateCheck: true } }, off).network.updateCheck).toBe(true);
+  });
+
+  test("profile: a name and colour are kept as given and cleared by empty; a bad one keeps what was there", () => {
+    expect(mergeSettings({}).profile).toEqual({ name: "", color: "" });
+    const set = mergeSettings({ profile: { name: "  Priya Shah  ", color: "#3B82F6" } });
+    expect(set.profile).toEqual({ name: "Priya Shah", color: "#3b82f6" });
+    // A patch of one field keeps the other.
+    expect(mergeSettings({ profile: { color: "#10b981" } }, set).profile).toEqual({ name: "Priya Shah", color: "#10b981" });
+    // Too long, a line break, a control character, a right-to-left override that makes it read as someone else's.
+    for (const name of ["x".repeat(65), "Priya\nShah", "Priya\u0007", "\u202eahS ayirP", 7]) {
+      expect(mergeSettings({ profile: { name } }, set).profile.name).toBe("Priya Shah");
+    }
+    for (const color of ["blue", "#3b82f", "#3b82f6ff", "oklch(0.7 0.1 200)", null]) {
+      expect(mergeSettings({ profile: { color } }, set).profile.color).toBe("#3b82f6");
+    }
+    expect(mergeSettings({ profile: { name: "", color: "" } }, set).profile).toEqual({ name: "", color: "" });
+    // An emoji joined by a zero-width joiner is a name, not a trick.
+    expect(mergeSettings({ profile: { name: "Priya \u{1F469}\u200D\u{1F4BB}" } }).profile.name).toBe("Priya \u{1F469}\u200D\u{1F4BB}");
   });
 
   test("flatten/nest round-trips an appearance", () => {
@@ -213,9 +251,7 @@ describe("settings schema", () => {
     expect(nestAppearance(flattenAppearance(a))).toEqual(a);
   });
 
-  test("agent options: per agent, validated", () => {
-    const s = mergeSettings({ v: 1, agents: { options: { claude: { model: "opus", mode: "", "Bad Key": "x" }, "../x": { model: "y" }, codex: "nope" } } });
-    expect(s.agents.options).toEqual({ claude: { model: "opus" } });
+  test("agents: declined and autoInstall are validated", () => {
     const off = mergeSettings({ v: 1, agents: { autoInstall: false, declined: ["aider", "../x", 3] } });
     expect(off.agents.autoInstall).toBe(false);
     expect(off.agents.declined).toEqual(["aider"]);
@@ -239,21 +275,23 @@ describe("plugin ids in settings", () => {
     const cur = mergeSettings({}, DEFAULT_SETTINGS);
     let next = setPath(cur, "agents.declined", ["aider", "gemini"]);
     next = setPath(next, "agents.fromCatalog", ["amp"]);
-    next = setPath(next, "agents.options", { aider: { model: "big" } });
+    next = setPath(next, "plugins.state.agent:aider", { options: { model: "big" } });
     next = setPath(next, "views.chrome", { "@dip497/board": { island: "top" } });
     const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
     expect(back.agents.declined).toEqual(["aider", "gemini"]);
     expect(back.agents.fromCatalog).toEqual(["amp"]);
-    expect(back.agents.options.aider).toEqual({ model: "big" });
+    expect(back.plugins.state["agent:aider"]).toEqual({ options: { model: "big" } });
     expect(Object.keys(back.views.chrome)).toContain("@dip497/board");
   });
 
   test("what is not an agent id is dropped — a scope included — and option names stay plain", () => {
     const cur = mergeSettings({}, DEFAULT_SETTINGS);
-    const next = setPath(setPath(cur, "agents.declined", ["dip497/aider", "@dip497/aider", "../x"]), "agents.options", { aider: { "@evil/opt": "x", model: "ok" } });
+    const next = setPath(setPath(cur, "agents.declined", ["dip497/aider", "@dip497/aider", "../x"]), "plugins.state", {
+      "agent:aider": { options: { "@evil/opt": "x", model: "ok" } }, "agent:../x": { enabled: false }, "agent:@dip497/aider": { enabled: false },
+    });
     const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
     expect(back.agents.declined).toEqual([]);
-    expect(back.agents.options.aider).toEqual({ model: "ok" });
+    expect(back.plugins.state).toEqual({ "agent:aider": { options: { model: "ok" } } });
   });
 });
 
@@ -261,7 +299,9 @@ describe("settings file", () => {
   let tmp: string;
   const saved = { HIVE_SETTINGS: process.env.HIVE_SETTINGS, XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME };
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-settings-")); delete process.env.HIVE_SETTINGS; process.env.XDG_CONFIG_HOME = tmp; });
-  afterEach(() => { process.env.HIVE_SETTINGS = saved.HIVE_SETTINGS; process.env.XDG_CONFIG_HOME = saved.XDG_CONFIG_HOME; fs.rmSync(tmp, { recursive: true, force: true }); });
+  // A variable that was unset is unset again: assigning undefined to process.env sets the text
+  // "undefined", a relative directory every later test would then write into.
+  afterEach(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } fs.rmSync(tmp, { recursive: true, force: true }); });
 
   test("path honours HIVE_SETTINGS then XDG; missing file reads as defaults; write is atomic and round-trips", async () => {
     expect(settingsPath()).toBe(path.join(tmp, "hivemind", "settings.json"));
@@ -284,6 +324,42 @@ describe("settings file", () => {
     expect(raw.browserCdp).toBe(true);
     expect(raw.browserCdpPort).toBe("9333");
     expect(raw.views.defaultView).toBe("world");
+  });
+});
+
+describe("plugin state from a settings.json written before it", () => {
+  let tmp: string;
+  const saved = process.env.HIVE_SETTINGS;
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-plugin-state-")); process.env.HIVE_SETTINGS = path.join(tmp, "settings.json"); });
+  afterEach(() => { if (saved === undefined) delete process.env.HIVE_SETTINGS; else process.env.HIVE_SETTINGS = saved; fs.rmSync(tmp, { recursive: true, force: true }); });
+  // The shape an install had before plugin state: every switch the person made lives in its own key.
+  const OLD = {
+    v: 1, browserCdp: true,
+    agents: { defaultAgent: "claude", autoInstall: true, declined: ["aider"], fromCatalog: [], disabled: ["codex"], options: { claude: { model: "opus" } } },
+    plugins: { disabled: ["@dip497/board"] },
+    tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] },
+  };
+
+  test("is read into one record per plugin, and the first write keeps the old file beside it", async () => {
+    fs.writeFileSync(settingsPath(), JSON.stringify(OLD));
+    const read = await readSettings();
+    expect(read.plugins.state).toEqual({
+      "agent:codex": { enabled: false },
+      "agent:claude": { options: { model: "opus" } },
+      "view:@dip497/board": { enabled: false },
+      "tool:hivemind/web": { enabled: true, options: { browser: false } },
+    });
+    await writeSettings(setPath(read, "views.defaultView", "world"));
+    const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
+    expect(raw.plugins.state).toEqual(read.plugins.state);
+    expect(raw.tools).toBeUndefined();
+    expect(raw.agents.disabled).toBeUndefined();
+    expect(raw.browserCdp).toBe(true);
+    expect(JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"))).toEqual(OLD);
+    // Once written, the record is what counts, and the backup is never replaced.
+    await writeSettings(setPath(await readSettings(), "plugins.state", {}));
+    expect((await readSettings()).plugins.state).toEqual({});
+    expect(JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"))).toEqual(OLD);
   });
 });
 
@@ -317,13 +393,13 @@ describe("settings concurrency", () => {
       patchSettingsFile([{ path: "appearance.glass.blur", value: 20 }]),
       patchSettingsFile([{ path: "appearance.accent", value: "ember" }]),
       patchSettingsFile([{ path: "views.defaultView", value: "windows" }]),
-      patchSettingsFile([{ path: "agents.options.claude.model", value: "opus" }]),
+      patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "opus" }]),
     ]);
     const s = await readSettings();
     expect(s.appearance.glass.blur).toBe(20);
     expect(s.appearance.accent).toBe("ember");
     expect(s.views.defaultView).toBe("windows");
-    expect(s.agents.options.claude?.model).toBe("opus");
+    expect(s.plugins.state["agent:claude"]?.options?.model).toBe("opus");
   });
 
   test("a patch is validated like any other write, and unknown top-level keys survive it", async () => {
@@ -361,17 +437,17 @@ describe("settings concurrency", () => {
   });
 
   test("an extras patch leaves the schema settings untouched, and removes a key set to undefined", async () => {
-    await patchSettingsFile([{ path: "agents.options.claude.model", value: "opus" }]);
+    await patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "opus" }]);
     await patchSettingsExtras({ browserCdp: true, legacyThing: 1 });
     let raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
-    expect(raw.agents.options.claude.model).toBe("opus");
+    expect(raw.plugins.state["agent:claude"].options.model).toBe("opus");
     expect(raw.legacyThing).toBe(1);
 
     await patchSettingsExtras({ legacyThing: undefined });
     raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
     expect("legacyThing" in raw).toBe(false);
     expect(raw.browserCdp).toBe(true);
-    expect(raw.agents.options.claude.model).toBe("opus");
+    expect(raw.plugins.state["agent:claude"].options.model).toBe("opus");
   });
 
   test("a lock we do not own is NEVER deleted, however old it looks — the write fails safely", async () => {
@@ -384,7 +460,7 @@ describe("settings concurrency", () => {
     fs.utimesSync(lock, new Date(Date.now() - 600_000), new Date(Date.now() - 600_000));
     const before = fs.readFileSync(settingsPath(), "utf8").toString();
 
-    await expect(patchSettingsFile([{ path: "agents.options.claude.model", value: "sonnet" }])).rejects.toBeInstanceOf(SettingsLockError);
+    await expect(patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "sonnet" }])).rejects.toBeInstanceOf(SettingsLockError);
 
     expect(fs.readFileSync(lock, "utf8")).toBe("someone-else"); // untouched
     expect(fs.readFileSync(settingsPath(), "utf8").toString()).toBe(before); // nothing written
@@ -397,8 +473,8 @@ describe("settings concurrency", () => {
     expect(await breakSettingsLock()).toBe(true);
     expect(fs.existsSync(lock)).toBe(false);
     expect(await breakSettingsLock()).toBe(false); // nothing left to clear
-    const s = await patchSettingsFile([{ path: "agents.options.claude.model", value: "sonnet" }]);
-    expect(s.agents.options.claude?.model).toBe("sonnet");
+    const s = await patchSettingsFile([{ path: "plugins.state.agent:claude.options.model", value: "sonnet" }]);
+    expect(s.plugins.state["agent:claude"]?.options?.model).toBe("sonnet");
     expect(fs.existsSync(lock)).toBe(false); // our own lock released
   });
 
@@ -442,6 +518,32 @@ describe("a lock left by a process that is gone", () => {
     const started = Date.now();
     await patchSettingsFile([{ path: "agents.defaultAgent", value: "pi" }], file);
     expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+    expect((await readSettings(file)).agents.defaultAgent).toBe("pi");
+    fs.rmSync(dir, { recursive: true, force: true });
+  }, 20_000);
+
+  // An app that quit in the middle of a write used to leave an empty lock, naming nobody, that
+  // no later writer could clear: every `hive config set` after it failed until the file was
+  // deleted by hand.
+  test.skipIf(process.platform === "win32")("a writer that dies while taking the lock leaves nothing that blocks the next one", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-lock-"));
+    const file = path.join(dir, "settings.json");
+    const writer = path.join(dir, "writer.ts");
+    fs.writeFileSync(writer, [
+      `import { patchSettingsFile } from ${JSON.stringify(path.join(import.meta.dir, "settings.ts"))};`,
+      `console.log("writing");`,
+      `await patchSettingsFile([{ path: "agents.defaultAgent", value: "codex" }]);`,
+      `console.log("wrote");`,
+    ].join("\n"));
+    // No file may grow past 0 bytes, so the writer dies at the first byte it writes: its lock token.
+    const run = spawnSync("sh", ["-c", 'ulimit -f 0; exec "$0" "$1"', process.execPath, writer], {
+      env: { ...process.env, HIVE_SETTINGS: file }, encoding: "utf8",
+    });
+    expect(run.stdout).toContain("writing");
+    expect(run.stdout).not.toContain("wrote");
+    expect(run.status).not.toBe(0);
+
+    await patchSettingsFile([{ path: "agents.defaultAgent", value: "pi" }], file);
     expect((await readSettings(file)).agents.defaultAgent).toBe("pi");
     fs.rmSync(dir, { recursive: true, force: true });
   }, 20_000);

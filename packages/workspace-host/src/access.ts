@@ -1,0 +1,395 @@
+/**
+ * Who may reach a workspace (R11; design §6 and §10): its access list, kept by the owner's
+ * devices and never shown to anyone else. Each grant gives a person a role in one workspace and
+ * is signed by the owner's person key, so a device of the owner's checks it before acting on it
+ * (a grant altered on disk, or made by anyone else, is dropped). A person reaches the workspace
+ * through their devices, known by the certificates they have shown (spec/identity.md); the
+ * owner's own devices, certified by the owner's key, are the owner. The devices the lists let in
+ * are what the network gate (hive-net) admits.
+ *
+ * Each workspace's list is a Loro document of its own (`<dir>`, one file per workspace), so the
+ * owner's devices can merge grants made on either (M3).
+ */
+import { createHash, randomBytes } from "node:crypto";
+import { LoroDoc } from "loro-crdt";
+import { readDoc, storedKeys, writeDoc } from "./doc-file.js";
+import { certificateVerifies, idOf, revocationVerifies, signWith, verifies, type DeviceCertificate, type Seed } from "./identity.js";
+
+/** Roles (design §6), least to most. The owner is not a role that can be granted. */
+export const ROLES = ["view", "edit", "terminals", "agents"] as const;
+export type Role = (typeof ROLES)[number];
+
+/** "Person `person` has role `role` in workspace `workspace`", signed by the owner's person key. */
+export interface Grant {
+  v: 1;
+  workspace: string;
+  person: string;
+  role: Role;
+  /** When it was granted, ms since the epoch. */
+  grantedAt: number;
+  /** When it stops, ms since the epoch; null: never. */
+  expires: number | null;
+  /** Ed25519 over `grantBytes`, in hex. */
+  signature: string;
+}
+
+const GRANT_TAG = new TextEncoder().encode("hive/grant/1\n");
+
+/** What a grant signs: its tag, the workspace's id (16 bytes), the person's key, the role's index
+ *  in `ROLES`, when it was granted and when it stops (u64, big-endian ms; 0 for never). */
+export function grantBytes(g: Pick<Grant, "workspace" | "person" | "role" | "grantedAt" | "expires">): Uint8Array {
+  const times = Buffer.alloc(16);
+  times.writeBigUInt64BE(BigInt(g.grantedAt), 0);
+  times.writeBigUInt64BE(BigInt(g.expires ?? 0), 8);
+  return Buffer.concat([GRANT_TAG, Buffer.from(g.workspace, "hex"), Buffer.from(g.person, "hex"), Buffer.from([ROLES.indexOf(g.role)]), times]);
+}
+
+const isHex = (v: unknown, bytes: number): v is string => typeof v === "string" && new RegExp(`^[0-9a-f]{${bytes * 2}}$`).test(v);
+const isTime = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+/** Whether `g` is a grant in `workspace` that `owner` signed. False for anything malformed. */
+export function grantVerifies(g: unknown, workspace: string, owner: string): g is Grant {
+  if (typeof g !== "object" || g === null) return false;
+  const c = g as Partial<Grant>;
+  if (c.v !== 1 || c.workspace !== workspace || !isHex(c.workspace, 16) || !isHex(c.person, 32)) return false;
+  if (!ROLES.includes(c.role as Role) || !isTime(c.grantedAt) || !(c.expires === null || isTime(c.expires))) return false;
+  if (!isHex(c.signature, 64)) return false;
+  return verifies(owner, grantBytes(c as Grant), Buffer.from(c.signature, "hex"));
+}
+
+/** What a device may do in a workspace: a role, or "owner". */
+export type Access = Role | "owner";
+
+/** A person on a workspace's list, as the owner's People panel shows them. */
+export interface Person {
+  person: string;
+  /** The name and colour they joined with ("" when none was given). */
+  name: string;
+  color: string;
+  role: Role;
+  grantedAt: number;
+  expires: number | null;
+  /** The ids of the devices they have shown certificates for, sorted. */
+  devices: string[];
+}
+
+/** The roles an invite link can carry: never "agents" (design §6). */
+export const LINK_ROLES = ["view", "edit", "terminals"] as const;
+export type LinkRole = (typeof LINK_ROLES)[number];
+
+/** How someone with a valid invite is let in: asked about first (the default), or at once at the
+ *  invite's role. */
+export const ANSWERING = ["ask", "invite"] as const;
+export type Answering = (typeof ANSWERING)[number];
+
+/** An invite as the owner's devices keep it: the secret itself is never stored, only its hash. */
+interface Invite {
+  role: LinkRole;
+  /** ms since the epoch. */
+  expires: number;
+  reusable: boolean;
+  /** How many more it lets in, a reusable one made for so many; none: as many as come. */
+  left?: number;
+  used: boolean;
+}
+
+const hashOf = (secret: string): string => createHash("sha256").update(secret).digest("hex");
+
+export interface AccessListsOptions {
+  /** One file per workspace; created (0700) on the first write. */
+  dir: string;
+  /** The person key of the owner, whose devices keep these lists and whose key signs them. */
+  owner: Seed;
+  /** The certificates of the owner's other devices this one was paired with (spec/pairing.md):
+   *  each is the owner in every workspace. */
+  devices?: () => DeviceCertificate[];
+  /** Hears what the embedder should log: a grant dropped, a list set aside. */
+  onWarn?: (message: string) => void;
+}
+
+/** The access lists of the workspaces this person owns. */
+export class AccessLists {
+  private readonly docs = new Map<string, LoroDoc>();
+  private readonly listeners = new Set<(workspace: string) => void>();
+  private ownerId: string;
+
+  constructor(private readonly opts: AccessListsOptions) {
+    this.ownerId = idOf(opts.owner);
+  }
+
+  /** This machine holds `person` now (pairing gave it, spec/pairing.md): the lists are theirs from
+   *  here on, their devices the owner and their key signing. What the person held before signed
+   *  counts no more; a device takes another person only while nobody is on its lists. */
+  takePerson(person: Seed): void {
+    this.opts.owner = person;
+    this.ownerId = idOf(person);
+  }
+
+  /** Give `person` `role` in `workspace` (replacing what they had), until `expires` if given. */
+  grant(workspace: string, person: string, role: Role, expires: number | null = null): Grant {
+    if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
+    if (!isHex(person, 32)) throw new TypeError("access: a person is named by their public key in hex");
+    if (!ROLES.includes(role)) throw new TypeError(`access: ${String(role)} is not a role`);
+    if (person === this.ownerId) throw new TypeError("access: the owner has every role already");
+    const grantedAt = Date.now();
+    if (expires !== null && (!isTime(expires) || expires <= grantedAt)) throw new TypeError("access: a grant expires after it is made");
+    const unsigned = { v: 1 as const, workspace, person, role, grantedAt, expires };
+    const grant: Grant = { ...unsigned, signature: Buffer.from(signWith(this.opts.owner, grantBytes(unsigned))).toString("hex") };
+    this.edit(workspace, (doc) => doc.getMap("grants").set(person, grant));
+    return grant;
+  }
+
+  /** Take `person` off `workspace`'s list, with the devices they showed; the invite they joined by
+   *  lets nobody in again, even a reusable one. False when they were not on it. */
+  revoke(workspace: string, person: string): boolean {
+    const doc = this.doc(workspace);
+    if (doc.getMap("grants").get(person) === undefined) return false;
+    this.edit(workspace, (d) => {
+      d.getMap("grants").delete(person);
+      d.getMap("profiles").delete(person);
+      const via = d.getMap("via").get(person);
+      const invite = typeof via === "string" ? (d.getMap("invites").get(via) as Invite | undefined) : undefined;
+      if (invite) d.getMap("invites").set(via as string, { ...invite, used: true });
+      d.getMap("via").delete(person);
+      const devices = d.getMap("devices");
+      for (const [id, cert] of Object.entries(devices.toJSON() as Record<string, DeviceCertificate>)) {
+        if (cert.person === person) devices.delete(id);
+      }
+    });
+    return true;
+  }
+
+  /** Forget, in every workspace here, the device `revocation` names as its person's, as they
+   *  certified it then or before (spec/identity.md). False when it was in none, or the revocation
+   *  is not its person's. */
+  forgetDevice(revocation: unknown): boolean {
+    if (!revocationVerifies(revocation)) return false;
+    const { person, device, at } = revocation;
+    let forgot = false;
+    for (const ws of this.workspaces()) {
+      const cert = this.doc(ws).getMap("devices").get(device) as DeviceCertificate | undefined;
+      if (!cert || cert.person !== person || cert.issuedAt > at) continue;
+      this.edit(ws, (doc) => doc.getMap("devices").delete(device));
+      forgot = true;
+    }
+    return forgot;
+  }
+
+  /** Record a device a person has shown its certificate for. Only a certificate that verifies, of
+   *  a person on the list, is kept; false otherwise. The owner's devices are known by pairing alone,
+   *  so Unpair is all it takes to let one in no more. */
+  addDevice(workspace: string, cert: unknown): boolean {
+    if (!certificateVerifies(cert) || !this.grantOf(workspace, cert.person)) return false;
+    const known = this.doc(workspace).getMap("devices").get(cert.device) as DeviceCertificate | undefined;
+    if (known && known.person === cert.person && known.signature === cert.signature) return true;
+    this.edit(workspace, (doc) => doc.getMap("devices").set(cert.device, cert));
+    return true;
+  }
+
+  /** Whether `device` is one of the owner's own, paired with this one. */
+  ownersDevice(device: string): boolean {
+    const cert = this.opts.devices?.().find((c) => c.device === device);
+    return !!cert && certificateVerifies(cert) && cert.person === this.ownerId;
+  }
+
+  /** What the device `device` may do in `workspace` now: the owner's devices paired here are the
+   *  owner; a person's are their role until it expires; any other, nothing. */
+  accessOf(workspace: string, device: string): Access | null {
+    if (this.ownersDevice(device)) return "owner";
+    const cert = this.doc(workspace).getMap("devices").get(device) as DeviceCertificate | undefined;
+    if (!cert || !certificateVerifies(cert) || cert.device !== device) return null;
+    return this.grantOf(workspace, cert.person)?.role ?? null;
+  }
+
+  /** The person whose device `device` is, when it may reach `workspace` now. */
+  personOf(workspace: string, device: string): string | null {
+    if (this.ownersDevice(device)) return this.ownerId;
+    if (!this.accessOf(workspace, device)) return null;
+    return (this.doc(workspace).getMap("devices").get(device) as DeviceCertificate).person;
+  }
+
+  /** The people on `workspace`'s list whose grant holds now, in the order they were let in. */
+  people(workspace: string): Person[] {
+    const doc = this.doc(workspace);
+    const certs = Object.values(doc.getMap("devices").toJSON() as Record<string, DeviceCertificate>);
+    const out: Person[] = [];
+    for (const person of Object.keys(doc.getMap("grants").toJSON() as Record<string, unknown>)) {
+      const g = this.grantOf(workspace, person);
+      if (!g) continue;
+      const profile = doc.getMap("profiles").get(person) as { name?: unknown; color?: unknown } | undefined;
+      out.push({
+        person,
+        name: typeof profile?.name === "string" ? profile.name : "",
+        color: typeof profile?.color === "string" ? profile.color : "",
+        role: g.role,
+        grantedAt: g.grantedAt,
+        expires: g.expires,
+        devices: certs.filter((c) => c.person === person).map((c) => c.device).sort(),
+      });
+    }
+    return out.sort((a, b) => a.grantedAt - b.grantedAt || a.person.localeCompare(b.person));
+  }
+
+  /** A new invite to `workspace` (the repo `repo` here) for `role`, for `expiresIn` ms, used once
+   *  unless `reusable`, then by `uses` people at most when given: its secret, which only the link
+   *  carries. */
+  invite(workspace: string, repo: string, role: LinkRole, expiresIn: number, reusable = false, uses?: number): string {
+    if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
+    if (!LINK_ROLES.includes(role)) throw new TypeError(`access: an invite cannot carry ${String(role)}`);
+    if (!(expiresIn > 0)) throw new TypeError("access: an invite expires after it is made");
+    if (uses !== undefined && !(Number.isSafeInteger(uses) && uses >= 1)) throw new TypeError("access: an invite lets one person in or more");
+    const secret = randomBytes(32).toString("hex");
+    const invite: Invite = { role, expires: Date.now() + expiresIn, reusable, ...(reusable && uses !== undefined ? { left: uses } : {}), used: false };
+    this.edit(workspace, (doc) => {
+      doc.getMap("meta").set("repo", repo);
+      doc.getMap("invites").set(hashOf(secret), invite);
+    });
+    return secret;
+  }
+
+  /** The role an invite with `secret` to `workspace` offers now: null when there is none, it has
+   *  expired, or it was used. */
+  offered(workspace: string, secret: unknown): LinkRole | null {
+    if (typeof secret !== "string" || !isHex(workspace, 16)) return null;
+    const invite = this.doc(workspace).getMap("invites").get(hashOf(secret)) as Invite | undefined;
+    if (!invite || invite.used || !(invite.expires > Date.now()) || !LINK_ROLES.includes(invite.role)) return null;
+    return invite.role;
+  }
+
+  /** `person` used the invite with `secret`: it offers nothing more unless it is reusable, and
+   *  nothing more at all once they are removed. */
+  redeem(workspace: string, secret: string, person: string): void {
+    const key = hashOf(secret);
+    const invite = this.doc(workspace).getMap("invites").get(key) as Invite | undefined;
+    if (!invite) return;
+    this.edit(workspace, (doc) => {
+      doc.getMap("via").set(person, key);
+      if (!invite.reusable) doc.getMap("invites").set(key, { ...invite, used: true });
+      else if (invite.left !== undefined) doc.getMap("invites").set(key, { ...invite, left: invite.left - 1, used: invite.left <= 1 });
+    });
+  }
+
+  /** The name and colour `person` goes by, as the People panel shows them. */
+  remember(workspace: string, person: string, profile: { name: string; color: string }): void {
+    this.edit(workspace, (doc) => doc.getMap("profiles").set(person, { name: profile.name, color: profile.color }));
+  }
+
+  /** How someone with a valid invite to `workspace` is let in. */
+  answering(workspace: string): Answering {
+    return this.doc(workspace).getMap("meta").get("answer") === "invite" ? "invite" : "ask";
+  }
+
+  setAnswering(workspace: string, rule: Answering): void {
+    if (!ANSWERING.includes(rule)) throw new TypeError(`access: ${String(rule)} is not a way to answer`);
+    this.edit(workspace, (doc) => doc.getMap("meta").set("answer", rule));
+  }
+
+  /** The repo here that `workspace` is, as its first invite recorded. */
+  repoOf(workspace: string): string | null {
+    const repo = this.doc(workspace).getMap("meta").get("repo");
+    return typeof repo === "string" ? repo : null;
+  }
+
+  /** Which of the owner's devices hosts `workspace` now, the moves that brought it there, and the
+   *  record saying so that the device it moved from hands on (M3, spec/hosting.md); null for one
+   *  never moved, which the device keeping the list hosts. */
+  hosting(workspace: string): { host: string; seq: number; record: string | null } | null {
+    const meta = this.doc(workspace).getMap("meta");
+    const host = meta.get("host");
+    const seq = meta.get("seq");
+    const record = meta.get("record");
+    return typeof host === "string" && typeof seq === "number" ? { host, seq, record: typeof record === "string" ? record : null } : null;
+  }
+
+  /** `host` hosts `workspace` from now on, the `seq`th to, as `record` says when there is one. */
+  setHosting(workspace: string, host: string, seq: number, record: string | null = null): void {
+    if (!isHex(host, 32) || !Number.isSafeInteger(seq) || seq < 1) throw new TypeError("access: a host is a device, and its count a whole number from 1");
+    this.edit(workspace, (doc) => {
+      const meta = doc.getMap("meta");
+      meta.set("host", host);
+      meta.set("seq", seq);
+      if (record) meta.set("record", record); else meta.delete("record");
+    });
+  }
+
+  /** The list of `workspace` as it is, to hand to another of the owner's devices. */
+  exportList(workspace: string): Uint8Array {
+    return this.doc(workspace).export({ mode: "snapshot" });
+  }
+
+  /** Keep the list of `workspace` another of the owner's devices handed over (a move), as the list
+   *  of the repo `repo` here. What it signed counts as it did there: the owner is one person. */
+  adoptList(workspace: string, list: Uint8Array, repo: string): void {
+    if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
+    this.edit(workspace, (doc) => {
+      doc.import(list);
+      doc.getMap("meta").set("repo", repo);
+    });
+  }
+
+  /** Keep the list of `workspace` as the device hosting it has it (M3, design §5.8): one of the
+   *  owner's devices keeps it in step, so whichever of them takes the workspace over carries it as
+   *  it was. Where the workspace is on this device (its repo here) stays this device's own. */
+  follow(workspace: string, list: Uint8Array): void {
+    if (!isHex(workspace, 16)) throw new TypeError("access: a workspace is named by its 16-byte id in hex");
+    const repo = this.repoOf(workspace);
+    this.edit(workspace, (doc) => {
+      doc.import(list);
+      const meta = doc.getMap("meta");
+      if (meta.get("repo") === repo) return;
+      if (repo === null) meta.delete("repo");
+      else meta.set("repo", repo);
+    });
+  }
+
+  /** Hear each change to a list, made here or followed: by the workspace it is of. */
+  subscribe(listener: (workspace: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
+  /** The workspaces with a list here. */
+  workspaces(): string[] {
+    return storedKeys(this.opts.dir).filter((k) => isHex(k, 16));
+  }
+
+  /** Every device any list admits now: the people's, and the owner's own. */
+  admitted(): string[] {
+    const out = new Set<string>();
+    for (const ws of this.workspaces()) {
+      const certs = Object.values(this.doc(ws).getMap("devices").toJSON() as Record<string, DeviceCertificate>);
+      for (const cert of certs) if (this.accessOf(ws, cert.device)) out.add(cert.device);
+    }
+    for (const cert of this.opts.devices?.() ?? []) if (this.ownersDevice(cert.device)) out.add(cert.device);
+    return [...out].sort();
+  }
+
+  /** The person's grant in `workspace` if it verifies and holds now. A grant that does not
+   *  verify is reported and treated as none. */
+  private grantOf(workspace: string, person: string): Grant | null {
+    const g: unknown = this.doc(workspace).getMap("grants").get(person);
+    if (g === undefined) return null;
+    if (!grantVerifies(g, workspace, this.ownerId) || g.person !== person) {
+      this.opts.onWarn?.(`a grant to ${person.slice(0, 8)}… in ${workspace} is not the owner's; ignored`);
+      return null;
+    }
+    return g.expires === null || g.expires > Date.now() ? g : null;
+  }
+
+  private doc(workspace: string): LoroDoc {
+    let doc = this.docs.get(workspace);
+    if (!doc) {
+      doc = readDoc(this.opts.dir, workspace, (m) => this.opts.onWarn?.(m));
+      this.docs.set(workspace, doc);
+    }
+    return doc;
+  }
+
+  private edit(workspace: string, change: (doc: LoroDoc) => void): void {
+    const doc = this.doc(workspace);
+    change(doc);
+    doc.commit();
+    writeDoc(this.opts.dir, workspace, doc);
+    for (const listener of this.listeners) listener(workspace);
+  }
+}

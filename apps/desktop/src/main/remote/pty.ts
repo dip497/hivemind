@@ -1,5 +1,5 @@
 /**
- * Remote interactive PTYs, keyed by tileId with the local pty-host surface so the
+ * Remote interactive PTYs, keyed by tileId with the local daemon client's surface so the
  * ptySpawn IPC handler only branches on an ssh:// cwd. A host that has `hive`
  * runs them in its own PTY daemon (they survive ssh drops and app restarts);
  * otherwise they fall back to a local PTY running `ssh -tt`, where detach == kill.
@@ -9,13 +9,13 @@ import os from "node:os";
 import path from "node:path";
 import { app } from "electron";
 import * as nodePty from "@lydell/node-pty";
-import { parseRemote, type RemoteTarget } from "../../shared/remote-uri.js";
+import { parseRemote, type RemoteTarget } from "@hivemind/core/remote-uri";
 import { pasteText } from "@hivemind/agent-host/paste";
-import { shq } from "@hivemind/agents/node";
-import { remoteConns } from "./conn.js";
+import { shq, withoutControl } from "@hivemind/agents/node";
+import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
 import { acceptRemoteEvent } from "./events.js";
-import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "./ssh.js";
+import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
 
 interface SpawnOpts {
   tileId: string;
@@ -30,11 +30,16 @@ interface SpawnOpts {
   initialPrompt?: string;
   /** Show an existing session (`tileId` is its id); never start one. */
   attachOnly?: boolean;
+  /** At most this many lines of scrollback in the replay of a running session. */
+  history?: number;
+  /** Restore a session put to sleep (its daemon's). */
+  wake?: boolean;
 }
 
 interface Callbacks {
   onData: (data: string, replay?: boolean) => void;
-  onExit: (code: number, signal: number | undefined) => void;
+  /** `slept`: it was put to sleep, not ended. */
+  onExit: (code: number, signal: number | undefined, slept?: boolean) => void;
 }
 
 const remotePtys = new Map<string, nodePty.IPty>();
@@ -213,18 +218,11 @@ function remoteEvent(ep: DaemonEndpoint, topic: string, data: unknown): void {
   if (ok) eventSink?.(topic, ok);
 }
 
-/** Local control-plane credentials never travel to another machine. */
-const remoteEnv = (env?: Record<string, string>) => {
-  if (!env) return undefined;
-  const { HCP_TOKEN: _t, HIVE_HCP_SOCK: _s, ...rest } = env;
-  return rest;
-};
 
-/** Spawn a remote PTY for an ssh:// cwd. Returns a synthetic negative pid (the
- *  renderer uses pid only as an opaque liveness token). */
-export async function spawnRemotePty(opts: SpawnOpts, cb: Callbacks): Promise<{ pid: number }> {
+/** Spawn a remote PTY at `target` (its cwd, on the host it names). Returns a synthetic negative
+ *  pid (the renderer uses pid only as an opaque liveness token). */
+export async function spawnRemotePty(opts: SpawnOpts, target: RemoteTarget, cb: Callbacks): Promise<{ pid: number; asleep?: true }> {
   if (remotePtys.has(opts.tileId)) killRemotePty(opts.tileId);
-  const target = parseRemote(opts.cwd);
   const release = hold(target.hostId);
   try {
     return await spawnThroughDaemon(opts, target, cb);
@@ -233,18 +231,20 @@ export async function spawnRemotePty(opts: SpawnOpts, cb: Callbacks): Promise<{ 
   }
 }
 
-async function spawnThroughDaemon(opts: SpawnOpts, target: RemoteTarget, cb: Callbacks): Promise<{ pid: number }> {
+async function spawnThroughDaemon(opts: SpawnOpts, target: RemoteTarget, cb: Callbacks): Promise<{ pid: number; asleep?: true }> {
   const ep = process.platform === "win32" ? null : await endpointFor(target);
   if (!ep && opts.attachOnly) return { pid: -1 };
+  // Only its daemon kept it: plain ssh would start the agent afresh, its conversation left there.
+  if (!ep && opts.wake) throw new Error("this machine has no hive daemon: what slept there cannot be woken");
   if (ep) {
     daemonTiles.set(opts.tileId, ep);
     const r = await ep.spawn(
-      { tileId: opts.tileId, cwd: target.path, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: remoteEnv(opts.env), noSpawn: opts.attachOnly },
-      { onData: cb.onData, onExit: (code, signal) => { daemonTiles.delete(opts.tileId); cb.onExit(code, signal); } },
+      { tileId: opts.tileId, cwd: target.path, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: withoutControl(opts.env), noSpawn: opts.attachOnly, lines: opts.history, wake: opts.wake },
+      { onData: cb.onData, onExit: (code, signal, slept) => { daemonTiles.delete(opts.tileId); cb.onExit(code, signal, slept); } },
     );
     // A session that could not be opened is let go, so nothing streams into a tile that says it failed.
-    if (r.pid === -1 && opts.attachOnly) { daemonTiles.delete(opts.tileId); ep.detach(opts.tileId); }
-    return { pid: r.pid > 0 ? -r.pid : r.pid };
+    if (r.pid === -1 && (opts.attachOnly || r.asleep)) { daemonTiles.delete(opts.tileId); ep.detach(opts.tileId); }
+    return { pid: r.pid > 0 ? -r.pid : r.pid, ...(r.asleep ? { asleep: true as const } : {}) };
   }
   // The local PTY is ssh's terminal, so a resize reaches the remote as a window change.
   const inner = `cd ${shq(target.path)} && exec ${[opts.cmd, ...(opts.args ?? [])].map(shq).join(" ")}`;
@@ -267,14 +267,22 @@ export function resizeRemotePty(tileId: string, cols: number, rows: number): voi
   const ep = daemonTiles.get(tileId);
   if (ep) ep.resize(tileId, cols, rows); else remotePtys.get(tileId)?.resize(cols, rows);
 }
+/** Only a daemon keeps a copy of its screen to show, so only a session under one repaints. */
+export function repaintRemotePty(tileId: string): void {
+  daemonTiles.get(tileId)?.repaint(tileId);
+}
 /** Whether a remote session runs under a daemon, which keeps its screen. */
 export function remoteKeepsScreen(tileId: string): boolean { return daemonTiles.has(tileId); }
 /** Ask a daemon-backed remote session for its screen now; false for one with no screen kept. */
-export function screenRemotePty(tileId: string, cb: (replay: string | null) => void): boolean {
+export function screenRemotePty(tileId: string, cb: (replay: string | null) => void, lines?: number): boolean {
   const ep = daemonTiles.get(tileId);
   if (!ep) return false;
-  ep.screen(tileId, cb);
+  ep.screen(tileId, cb, lines);
   return true;
+}
+/** A daemon-backed remote session's screen as text, line by line; null for one with no screen kept. */
+export function viewportRemotePty(tileId: string): Promise<string | null> {
+  return daemonTiles.get(tileId)?.viewport(tileId) ?? Promise.resolve(null);
 }
 export function pauseRemotePty(tileId: string): void {
   const ep = daemonTiles.get(tileId);
@@ -284,11 +292,33 @@ export function resumeRemotePty(tileId: string): void {
   const ep = daemonTiles.get(tileId);
   if (ep) ep.resume(tileId); else remotePtys.get(tileId)?.resume();
 }
-export function killRemotePty(tileId: string): void {
+/** `target`: where a session nothing here is attached to (one asleep) is kept. */
+export function killRemotePty(tileId: string, target?: RemoteTarget): void {
   const ep = daemonTiles.get(tileId);
   if (ep) { daemonTiles.delete(tileId); ep.kill(tileId); return; }
   const p = remotePtys.get(tileId);
-  if (p) { remotePtys.delete(tileId); try { p.kill(); } catch { /* already gone */ } }
+  if (p) { remotePtys.delete(tileId); try { p.kill(); } catch { /* already gone */ } return; }
+  if (target) void onDaemon(target, async (d) => d.kill(tileId)).catch(() => { /* unreachable: its snapshot ages out there */ });
+}
+/** Put a session on `target` to sleep: only its daemon can keep one. */
+export function sleepRemotePty(tileId: string, target: RemoteTarget): Promise<void> {
+  if (remotePtys.has(tileId)) return Promise.reject(new Error("this machine has no hive daemon: a session over plain ssh cannot sleep"));
+  return onDaemon(target, (d) => d.sleep(tileId));
+}
+/** What a session asleep on `target` saved as its screen; null when none sleeps there. */
+export function savedRemotePty(tileId: string, target: RemoteTarget, lines?: number): Promise<string | null> {
+  return onDaemon(target, (d) => d.saved(tileId, lines)).catch(() => null);
+}
+/** `use` the daemon on `target`, held open while it does. */
+async function onDaemon<T>(target: RemoteTarget, use: (d: DaemonEndpoint) => Promise<T>): Promise<T> {
+  const release = hold(target.hostId);
+  try {
+    const ep = process.platform === "win32" ? null : await endpointFor(target);
+    if (!ep) throw new Error("this machine has no hive daemon: a session over plain ssh cannot sleep");
+    return await use(ep);
+  } finally {
+    release();
+  }
 }
 /** A daemon-backed session keeps running on the remote; an in-app one cannot outlive its channel. */
 export function detachRemotePty(tileId: string): void {

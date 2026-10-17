@@ -202,8 +202,58 @@ describe("manifest validation refuses what it cannot back", () => {
       detect: { default: "idle", rules: [{ when: { any: [{ contains: "a" }, { line: [{ startsWith: "x" }] }] }, then: "working" }] },
     });
     expect(spawnArgsFor(def, { mode: "plan", model: "z" })).toEqual(["--x", "-p", "-m", "z"]);
-    expect(def.detect!("about")).toBe("working");
-    expect(def.detect!("zzz")).toBe("idle");
+    expect(def.detect!("about")).toEqual({ status: "working" });
+    expect(def.detect!("zzz")).toEqual({ status: "idle" });
+  });
+
+  test("the keys that allow and deny a permission on the agent's screen are carried as written, and a block that cannot be typed is refused at load", () => {
+    const def = defFromManifest({ ...base, answer: { permission: { allow: ["1"], deny: ["escape"] } } });
+    expect(def.answer).toEqual({ permission: { allow: ["1"], deny: ["escape"] } });
+    expect(defFromManifest(base).answer).toBeUndefined();
+    bad({ answer: ["1"] }, /answer must be a map/);
+    bad({ answer: { permission: "1" } }, /answer.permission must be a map/);
+    bad({ answer: { permission: { allow: ["1"] } } }, /answer.permission.deny must be 1-4 key tokens/);
+    bad({ answer: { permission: { allow: [], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
+    bad({ answer: { permission: { allow: ["y"], deny: ["n", "enter", "n", "enter", "n"] } } }, /answer.permission.deny must be 1-4 key tokens/);
+    bad({ answer: { permission: { allow: [1], deny: ["n"] } } }, /answer.permission.allow must be 1-4 key tokens/);
+  });
+
+  test("a waiting rule may say what screen it is, answered by its own keys; a rule that does not wait, or a name that is no name, is refused at load", () => {
+    const detect = (rule: object) => ({ default: "idle", rules: [{ when: { contains: "trust this folder" }, then: "permission", ...rule }] });
+    const def = defFromManifest({ ...base, detect: detect({ says: "trust" }), answer: { trust: { allow: ["down", "enter"], deny: ["escape"] } } });
+    expect(def.detect!("Yes, I trust this folder")).toEqual({ status: "permission", says: "trust" });
+    expect(def.detect!("elsewhere")).toEqual({ status: "idle" });
+    expect(def.answer).toEqual({ trust: { allow: ["down", "enter"], deny: ["escape"] } });
+    bad({ detect: detect({ then: "working", says: "trust" }) }, /says names the screen of a wait/);
+    bad({ detect: detect({ says: "Trust me" }) }, /says names the screen of a wait/);
+    bad({ detect: detect({ says: 7 }) }, /says names the screen of a wait/);
+    bad({ answer: { "Trust me": { allow: ["1"], deny: ["n"] } } }, /a wait is named in lowercase/);
+    bad({ answer: { trust: { allow: ["1"] } } }, /answer.trust.deny must be 1-4 key tokens/);
+  });
+
+  test("an agent that reads a message typed while it works says so, and anything but a flag is refused at load", () => {
+    expect(defFromManifest({ ...base, steer: true }).steer).toBe(true);
+    expect(defFromManifest(base).steer).toBeUndefined();
+    bad({ steer: "yes" }, /steer must be true or false/);
+  });
+
+  test("the keys that interrupt the agent's turn are carried as written, and a list that cannot be typed is refused at load", () => {
+    expect(defFromManifest({ ...base, interrupt: ["escape"] }).interrupt).toEqual(["escape"]);
+    expect(defFromManifest(base).interrupt).toBeUndefined();
+    bad({ interrupt: "escape" }, /interrupt must be 1-4 key tokens/);
+    bad({ interrupt: [] }, /interrupt must be 1-4 key tokens/);
+    bad({ interrupt: ["escape", "escape", "escape", "escape", "escape"] }, /interrupt must be 1-4 key tokens/);
+    bad({ interrupt: [27] }, /interrupt must be 1-4 key tokens/);
+  });
+
+  test("the keys that choose an option of a question are carried as written, and a list that cannot be typed, or does not say where the option goes, is refused at load", () => {
+    expect(defFromManifest({ ...base, choose: ["{n}"] }).choose).toEqual(["{n}"]);
+    expect(defFromManifest({ ...base, choose: ["{n}", "enter"] }).choose).toEqual(["{n}", "enter"]);
+    expect(defFromManifest(base).choose).toBeUndefined();
+    bad({ choose: ["enter"] }, /choose must be 1-4 key tokens, one naming the option/);
+    bad({ choose: "{n}" }, /choose must be 1-4 key tokens/);
+    bad({ choose: [] }, /choose must be 1-4 key tokens/);
+    bad({ choose: ["{n}", "a", "b", "c", "d"] }, /choose must be 1-4 key tokens/);
   });
 
   test("an agent id is one name — an agent stands for one CLI, so there is no scope", () => {

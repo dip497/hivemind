@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, noteInstall, parseCatalog, stageEntry, type CatalogEntry } from "./plugin-catalog.js";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, noteInstall, parseCatalog, stageEntry, type CatalogEntry } from "./plugin-catalog.js";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -41,11 +41,18 @@ describe("reading the index", () => {
     expect(bad({ files: [{ path: "../../x", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
     expect(bad({ files: [{ path: "a.js" }] })).toThrow(/sha256/);
     expect(bad({ files: [{ path: "NUL.js", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
-    expect(bad({ type: "tool" })).toThrow(/agent or view/);
     expect(bad({ bin: "x" })).toThrow(/bare name of an agent/); // views have no CLI
     expect(bad({ type: "agent", id: "x", bin: "../bin/sh" })).toThrow(/bare name/);
     expect(bad({ id: "Bad Id" })).toThrow(/view id/);
     expect(() => parseCatalog({ version: 2, plugins: [] })).toThrow(/version 1/);
+  });
+
+  test("a widget is scoped like a view, and a kind this app does not know is left out, not the catalog", () => {
+    const view = { id: "@a/x", type: "view", name: "X", description: "d", author: "a", version: "1", path: "views/x", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
+    const widget = { ...view, id: "@a/pet", type: "widget", path: "widgets/pet" };
+    const listed = parseCatalog({ version: 1, plugins: [view, widget, { ...view, id: "@a/later", type: "theme" }] });
+    expect(listed.map((e) => `${e.type}:${e.id}`)).toEqual(["view:@a/x", "widget:@a/pet"]);
+    expect(() => parseCatalog({ version: 1, plugins: [{ ...widget, id: "pet" }] })).toThrow(/a widget id — it must be @owner\/name/);
   });
 });
 
@@ -158,6 +165,11 @@ test("an installed agent follows the catalog only while it is the catalog's own,
   expect(catalogAgentNeedsUpdate(entry, { ...base, recordedSha: null })).toBe(true); // installed before this was recorded
   expect(catalogAgentNeedsUpdate(entry, { ...base, recordedSha: "c".repeat(64) })).toBe(false); // edited since
   expect(catalogAgentNeedsUpdate(entry, { ...base, fromCatalog: false })).toBe(false); // the user's own
+  // Nothing recorded installing it, but its bytes are a version the catalog published.
+  const unrecorded = { ...base, fromCatalog: false, recordedSha: null, published: true };
+  expect(catalogAgentNeedsUpdate(entry, unrecorded)).toBe(true);
+  expect(catalogAgentNeedsUpdate(entry, { ...unrecorded, published: false })).toBe(false);
+  expect(catalogAgentNeedsUpdate(entry, { ...unrecorded, manifestSha: "b".repeat(64) })).toBe(false);
   expect(catalogAgentNeedsUpdate(entry, { ...base, appVersion: "2026.9.5" })).toBe(false); // needs a newer app
   expect(catalogAgentNeedsUpdate(entry, { ...base, manifestSha: "b".repeat(64) })).toBe(false); // already current
 });
@@ -172,4 +184,29 @@ test("an agent this app cannot load is repaired from the catalog, however it was
   expect(catalogAgentNeedsUpdate(entry, { ...broken, broken: false })).toBe(false);
   // Still never onto an app too old to run what the catalog lists.
   expect(catalogAgentNeedsUpdate(entry, { ...broken, appVersion: "2026.9.6" })).toBe(false);
+});
+
+test("a file is the catalog's when its repository on GitHub holds those exact bytes", async () => {
+  const entry = parseCatalog({ version: 1, plugins: [{ id: "codex", type: "agent", name: "Codex", description: "d", author: "a",
+    version: "1.0.0", path: "agents/codex", source: `https://raw.githubusercontent.com/dip497/hivemind-plugins/${"1".repeat(40)}/`,
+    files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] })[0]!;
+  const asked: string[] = [];
+  const answering = async (status: number | Error, fn: () => Promise<boolean>): Promise<boolean> => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (u: URL | string, init?: RequestInit) => {
+      asked.push(`${init?.method} ${String(u)}`);
+      if (status instanceof Error) throw status;
+      return new Response(null, { status });
+    }) as typeof fetch;
+    try { return await fn(); } finally { globalThis.fetch = real; }
+  };
+  const hello = new TextEncoder().encode("hello\n");
+  expect(await answering(200, () => catalogRepoHolds(entry, hello))).toBe(true);
+  // git's blob id of "hello\n", as `git hash-object` prints it.
+  expect(asked).toEqual(["HEAD https://api.github.com/repos/dip497/hivemind-plugins/git/blobs/ce013625030ba8dba906f756967f9e9ca394464a"]);
+  expect(await answering(404, () => catalogRepoHolds(entry, hello))).toBe(false);
+  expect(await answering(new Error("offline"), () => catalogRepoHolds(entry, hello))).toBe(false);
+  asked.length = 0;
+  expect(await answering(200, () => catalogRepoHolds({ ...entry, source: "https://example.test/repo/" }, hello))).toBe(false);
+  expect(asked).toEqual([]);
 });

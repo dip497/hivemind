@@ -1,0 +1,39 @@
+{
+  "id": "dip497/git-history",
+  "name": "Git history",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "git",
+  "description": "The repository's commits: search them, read each one's diff, and ask an agent to explain one.",
+  "entry": "index.js",
+  "permissions": [
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
+  "settings": [
+    {
+      "id": "count",
+      "label": "Commits to list",
+      "type": "number",
+      "min": 20,
+      "max": 2000,
+      "default": 300
+    }
+  ],
+  "tools": [
+    {
+      "key": "history",
+      "label": "Git history",
+      "description": "Commits of the repository, with their diffs.",
+      "tileKind": "git-history",
+      "size": {
+        "width": 1100,
+        "height": 720
+      },
+      "needsRepo": true,
+      "singleton": true,
+      "glyph": "⎇",
+      "icon": "icon.svg"
+    }
+  ]
+}

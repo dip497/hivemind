@@ -7,14 +7,11 @@ import {
 describe("toolbar catalog", () => {
   test("the builtin actions are ordered, labelled and hinted", () => {
     expect(BUILTIN_TOOLBAR_ACTIONS.map((a) => [a.id, a.label, a.hint])).toEqual([
-      ["terminal", "Terminal", "1"],
       ["agent", "Agent", "2"],
-      ["explorer", "Explorer", "3"],
-      ["diff", "Diff", "4"],
-      ["issues", "Issues", "5"],
       ["frame", "Frame", "6"],
       ["browser", "Browser", "7"],
-      ["theme", "Theme", "8"],
+      ["board", "Add", ""],
+      ["theme", "Theme", ""],
     ]);
     expect(DEFAULT_TOOLBAR_ORDER).toEqual(BUILTIN_TOOLBAR_ACTIONS.map((a) => a.id));
     expect(new Set(DEFAULT_TOOLBAR_ORDER).size).toBe(DEFAULT_TOOLBAR_ORDER.length);
@@ -23,7 +20,7 @@ describe("toolbar catalog", () => {
   test("id guard + lookup", () => {
     expect(isToolbarActionId("browser")).toBe(true);
     for (const junk of ["Browser", "browse", "", null, 7, {}]) expect(isToolbarActionId(junk)).toBe(false);
-    expect(toolbarAction("theme")).toEqual({ id: "theme", label: "Theme", hint: "8" });
+    expect(toolbarAction("theme")).toEqual({ id: "theme", label: "Theme", hint: "" });
   });
 });
 
@@ -48,11 +45,11 @@ describe("resolveToolbar", () => {
   });
 
   test("a list is honoured in its own order, deduped, unknowns dropped", () => {
-    const r = resolveToolbar({ actions: ["theme", "terminal", "theme"] });
-    expect(r.map((a) => a.id)).toEqual(["theme", "terminal"]);
+    const r = resolveToolbar({ actions: ["theme", "frame", "theme"] });
+    expect(r.map((a) => a.id)).toEqual(["theme", "frame"]);
     // A hand-edited file cannot inject an action that does not exist.
-    expect(resolveToolbar({ actions: ["agent", "ghost", "diff"] as never }).map((a) => a.id))
-      .toEqual(["agent", "diff"]);
+    expect(resolveToolbar({ actions: ["agent", "ghost", "diff", "terminal", "explorer", "frame"] as never }).map((a) => a.id))
+      .toEqual(["agent", "frame"]);
     // Resolved entries are the catalog's own frozen metadata.
     expect(r[0]).toBe(toolbarAction("theme")!);
   });

@@ -1,17 +1,20 @@
 /** Browse and install from the plugin catalog. Every download is hash-verified into a
  *  staging folder, then goes through the same review as a folder the user picked. */
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { app, ipcMain, type BrowserWindow } from "electron";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, fetchCatalog, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
+import { app } from "electron";
+import { handle, handleEffect } from "./app-ipc.js";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
 import { existsSync } from "node:fs";
 import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
-import { newNonce } from "./view-package-files.js";
+import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
+import { installWidget, listWidgets, readWidget } from "@hivemind/core/widgets";
+import { widgetsChanged } from "./widgets.js";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 
 export interface AgentReview {
@@ -31,26 +34,59 @@ export interface AgentReview {
   install?: { url: string; command?: string };
 }
 
-export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): void {
-  let catalog: CatalogEntry[] = [];
-  let pendingAgent: { token: string; dir: string } | null = null;
-  const assertSender = (event: Electron.IpcMainInvokeEvent) => {
-    const win = getWindow();
-    if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error("Only the workspace can install plugins");
-  };
+/** HiveHub's catalog as last fetched: asked again once it is CATALOG_FRESH_MS old, and asks while
+ *  a fetch is out wait on that one. What review and the update check compare against. */
+const CATALOG_FRESH_MS = 5 * 60_000;
+let catalog: CatalogEntry[] = [];
+let fetchedAt = -Infinity;
+let fetching: Promise<CatalogEntry[]> | null = null;
+/** Each listed plugin's README, fetched once for the catalog that lists it. */
+const readmes = new WeakMap<CatalogEntry, Promise<string | null>>();
 
-  ipcMain.handle("plugins:catalog", async (event) => {
-    assertSender(event);
-    catalog = await fetchCatalog();
-    return catalog;
+function catalogNow(): Promise<CatalogEntry[]> {
+  if (Date.now() - fetchedAt < CATALOG_FRESH_MS) return Promise.resolve(catalog);
+  fetching ??= fetchCatalog().then((list) => {
+    catalog = list;
+    fetchedAt = Date.now();
+    return list;
+  }).finally(() => { fetching = null; });
+  return fetching;
+}
+
+export function installPluginCatalogIpc(): void {
+  // A plugin's README, to read before or after installing it: from its folder here, or from the
+  // catalog for one not installed. Shown as text, never run.
+  handle("plugins:readme", async (_e, from: unknown) => {
+    const f = (from ?? {}) as { dir?: unknown; catalog?: { type?: unknown; id?: unknown } };
+    if (typeof f.dir === "string" && path.isAbsolute(f.dir)) {
+      try {
+        const file = path.join(f.dir, "README.md");
+        const st = await stat(file);
+        return st.size <= 256 * 1024 ? await readFile(file, "utf8") : null;
+      } catch { return null; }
+    }
+    if (f.catalog && typeof f.catalog.id === "string") {
+      const entry = (await catalogNow().catch(() => [] as CatalogEntry[])).find((e) => e.id === f.catalog!.id && e.type === f.catalog!.type);
+      if (!entry) return null;
+      let readme = readmes.get(entry);
+      if (!readme) {
+        readmes.set(entry, (readme = fetchReadme(entry)));
+        // One that could not be fetched is asked for again next time.
+        void readme.then((text) => { if (text === null) readmes.delete(entry); });
+      }
+      return readme;
+    }
+    return null;
   });
+  let pendingAgent: { token: string; dir: string; id: string } | null = null;
+  let pendingWidget: { token: string; dir: string; id: string } | null = null;
+  handle("plugins:catalog", () => catalogNow());
 
   // Which installed agents are no longer what the catalog lists. Agents carry no version of
   // their own, so "is there an update" was unanswerable for them and the button never
   // appeared — but every file is pinned by hash, which answers it exactly: a manifest whose
   // bytes differ from the listed hash is a copy of something that has since changed.
-  ipcMain.handle("plugins:outdated", async (event) => {
-    assertSender(event);
+  handle("plugins:outdated", async () => {
     const out: string[] = [];
     for (const entry of catalog) {
       if (entry.type !== "agent") continue;
@@ -64,8 +100,7 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
     return out;
   });
 
-  ipcMain.handle("plugins:review", async (event, type: string, id: string) => {
-    assertSender(event);
+  handle("plugins:review", async (_event, type: string, id: string) => {
     const entry = catalog.find((e) => e.type === type && e.id === id);
     if (!entry) throw new Error("That plugin is not in the catalog. Refresh and try again.");
     // Refuse before downloading: a plugin that needs a newer Hivemind fails at use, and by
@@ -74,6 +109,18 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
       throw new Error(`${entry.name} needs Hivemind ${entry.minAppVersion} or newer; this is ${app.getVersion()}.`);
     }
     const dir = await stageEntry(entry);
+    if (entry.type === "widget") {
+      try {
+        // Checked as a folder would be, and its widget.json must name the listing it came from.
+        const meta = JSON.parse(await readFile(path.join(dir, "widget.json"), "utf8")) as { id?: unknown };
+        if (meta.id !== entry.id) throw new Error(`its widget.json says it is ${JSON.stringify(meta.id ?? null)}, not ${entry.id}`);
+        const pkg = await readWidget(dir, entry.id);
+        if (pendingWidget) await rm(pendingWidget.dir, { recursive: true, force: true }).catch(() => {});
+        pendingWidget = { token: newNonce(), dir, id: entry.id };
+        const replaces = (await listWidgets()).some((w) => w.id === entry.id && !w.builtin);
+        return { type: "widget", token: pendingWidget.token, id: entry.id, name: pkg.name, permissions: pkg.permissions, code: pkg.code !== "", replaces };
+      } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
+    }
     if (entry.type === "view") {
       try { return { type: "view", ...(await reviewViewDir(dir, true)) }; }
       catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
@@ -89,7 +136,7 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
       ...Object.values(o.values ?? {}).map((argv) => argv.join(" ")),
     ]))];
     if (pendingAgent) await rm(pendingAgent.dir, { recursive: true, force: true }).catch(() => {});
-    pendingAgent = { token: newNonce(), dir };
+    pendingAgent = { token: newNonce(), dir, id: def.id };
     const review: AgentReview = {
       token: pendingAgent.token, id: def.id, label: def.label, bin: def.bin,
       command: [def.bin, ...(def.defaultArgs ?? [])].join(" "), flags,
@@ -107,13 +154,16 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
   // load broken until the app is restarted — which is exactly when nothing works.
   let checkedCatalog = false;
   let checking: Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }> | null = null;
-  ipcMain.handle("agents:auto-install", async (event) => {
-    assertSender(event);
+  // What it installed or updated, if anything, is the person's standing choice (agents.autoInstall) carried out.
+  const installedIds = (r: { added: Array<{ id: string }>; updated: Array<{ id: string }> }) => [...r.added, ...r.updated].map((a) => a.id).join(", ") || undefined;
+  handleEffect("agents:auto-install", () => ({ target: installedIds }), async () => {
     if (checkedCatalog) return { added: [], updated: [] };
+    // Settings → About and updates: with the update check off, the catalog is not asked either (R16).
+    if (!getSettings().network.updateCheck) return { added: [], updated: [] };
     if (checking) return checking; // a second ask while the first is in flight rides along
     checking = (async () => {
       await applyShellEnvToProcess();
-      const listed = await fetchCatalog();
+      const listed = await catalogNow();
       return { added: await autoInstallDetectedAgents(listed), updated: await autoUpdateCatalogAgents(listed) };
     })();
     try {
@@ -128,13 +178,18 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
     }
   });
 
-  ipcMain.handle("agents:remove", async (event, id: string) => {
-    assertSender(event);
+  handleEffect("agents:remove", (id) => ({ target: typeof id === "string" ? id : undefined }), async (_event, id: string) => {
     await removeInstalledAgent(String(id));
   });
 
-  ipcMain.handle("plugins:install-agent", async (event, token: string) => {
-    assertSender(event);
+  handleEffect("plugins:install-widget", (token) => ({ target: pendingWidget && pendingWidget.token === token ? pendingWidget.id : undefined }), async (_event, token: string) => {
+    if (!pendingWidget || pendingWidget.token !== token) throw new Error("Review the widget again before installing it.");
+    const { dir, id } = pendingWidget;
+    pendingWidget = null;
+    try { await installWidget(dir, id); widgetsChanged(); }
+    finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
+  });
+  handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (_event, token: string) => {
     if (!pendingAgent || pendingAgent.token !== token) throw new Error("Review the agent again before installing it.");
     const { dir } = pendingAgent;
     pendingAgent = null;
@@ -151,7 +206,7 @@ export function installPluginCatalogIpc(getWindow: () => BrowserWindow | null): 
 export async function autoInstallDetectedAgents(listed?: CatalogEntry[]): Promise<Array<{ id: string; label: string; does: string[] }>> {
   const settings = getSettings().agents;
   if (!settings.autoInstall) return [];
-  const entries = (listed ?? await fetchCatalog()).filter((e) => e.type === "agent" && e.bin
+  const entries = (listed ?? await catalogNow()).filter((e) => e.type === "agent" && e.bin
     && !settings.declined.includes(e.id)
     && !existsSync(path.join(userAgentsDir(), e.id))
     // The index names the command; a runtime that runs anything proves nothing about the agent.
@@ -203,13 +258,18 @@ export async function autoUpdateCatalogAgents(listed: CatalogEntry[]): Promise<A
   for (const entry of listed) {
     if (entry.type !== "agent") continue;
     const dir = path.join(userAgentsDir(), entry.id);
-    let have: string;
-    try { have = sha256(await readFile(path.join(dir, AGENT_MANIFEST_FILE))); } catch { continue; }
+    let body: Buffer;
+    try { body = await readFile(path.join(dir, AGENT_MANIFEST_FILE)); } catch { continue; }
+    const have = sha256(body);
     const recorded = await readFile(path.join(dir, CATALOG_MARK), "utf8").then((s) => s.trim(), () => null);
+    const fromCatalog = settings.fromCatalog.includes(entry.id);
     const installed = await readAgentManifest(path.join(dir, AGENT_MANIFEST_FILE), { source: "user" });
+    // Nothing says where an outdated copy came from: its bytes do.
+    const listedSha = entry.files.find((f) => f.path === AGENT_MANIFEST_FILE)?.sha256;
+    const published = !fromCatalog && recorded === null && listedSha !== have && await catalogRepoHolds(entry, body);
     if (!catalogAgentNeedsUpdate(entry, {
-      fromCatalog: settings.fromCatalog.includes(entry.id), manifestSha: have, recordedSha: recorded,
-      appVersion: app.getVersion(), broken: !!installed.error,
+      fromCatalog, manifestSha: have, recordedSha: recorded,
+      appVersion: app.getVersion(), broken: !!installed.error, published,
     })) continue;
     let stage: string | null = null;
     try {

@@ -1,8 +1,18 @@
 /** Host toolbar visibility shared by all workspace views. */
 import { useSyncExternalStore } from "react";
 
-interface ChromeState { suppressed: boolean }
-let state: ChromeState = { suppressed: false };
+interface ChromeState {
+  suppressed: boolean;
+  /** The tool island is drawn. Settings is on it, and on the Layers rail; with neither drawn, it
+   *  sits in the window's corner. */
+  islandShown: boolean;
+  /** The Layers panel is drawn, in any view. */
+  layersShown: boolean;
+  /** How far up from the window's bottom the island covers (px), 0 when it is not drawn there. A
+   *  view that docks tiles keeps them above it, or the island hides their last lines. */
+  bottomInset: number;
+}
+let state: ChromeState = { suppressed: false, islandShown: true, layersShown: false, bottomInset: 0 };
 const listeners = new Set<() => void>();
 function set(patch: Partial<ChromeState>) {
   state = { ...state, ...patch };
@@ -18,3 +28,14 @@ export function openAppearanceSettings(): void {
 /** A view (the canvas's zen mode) hides ALL host chrome while it is active;
  *  the view must call this with `false` on unmount. */
 export function setChromeSuppressed(on: boolean): void { if (on !== state.suppressed) set({ suppressed: on }); }
+/** Host chrome says how much of the window's bottom its island covers. */
+export function setBottomInset(px: number): void { if (px !== state.bottomInset) set({ bottomInset: px }); }
+/** Host chrome says whether its island is drawn. */
+export function setIslandShown(on: boolean): void { if (on !== state.islandShown) set({ islandShown: on }); }
+let layers = 0;
+/** The Layers panel says it is drawn, until the function it gets back is called. */
+export function layersDrawn(): () => void {
+  layers++;
+  set({ layersShown: true });
+  return () => { layers--; if (layers === 0) set({ layersShown: false }); };
+}

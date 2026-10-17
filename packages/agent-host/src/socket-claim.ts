@@ -33,6 +33,13 @@ function listenOnce(server: net.Server, p: string): Promise<NodeJS.ErrnoExceptio
 }
 
 export async function listenExclusive(server: net.Server, p: string): Promise<ListenResult> {
+  // Bun's listen replaces whatever is at the path, a live listener's socket or a regular file,
+  // where Node refuses with EADDRINUSE: so what is there is looked at first.
+  if (process.platform !== "win32") {
+    const there = fs.lstatSync(p, { throwIfNoEntry: false });
+    if (there && !there.isSocket()) throw new Error(`${p} exists and is not a socket — refusing to remove it`);
+    if (there && await probeLive(p)) return "taken";
+  }
   const first = await listenOnce(server, p);
   if (!first) return "listening";
   if (first.code !== "EADDRINUSE" || process.platform === "win32") throw first;

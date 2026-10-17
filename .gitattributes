@@ -1,0 +1,3 @@
+# Generated from the phone core's facade by scripts/phone/bindings.sh, never edited by hand: its
+# whitespace is the generator's, and code review folds it away.
+apps/ios/HivePhone/Core/Generated/** -whitespace linguist-generated

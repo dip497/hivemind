@@ -1,0 +1,29 @@
+# Every server role of a hivemind network on one machine (R13): a relay, a lookup server, the
+# access role and the push server, on one port, as `hive-net serve --all` runs them, and the phone
+# page at /phone/, its views on 3341 (an origin of their own). This file serves plain HTTP on port 3340, for a network inside a building or to
+# try it; phones may be told at a UnifiedPush distributor in the building too when HIVE_PUSH_ALLOW
+# names its network (192.168.1.0/24, say). `compose.public.yml` beside it is for a server with a
+# public name (HTTPS, a certificate from Let's Encrypt), which a phone's browser needs to install
+# the page.
+#
+#   HIVE_URL=http://192.168.1.10:3340 docker compose -f infra/compose.yml up -d
+#
+# HIVE_URL is how the devices reach this machine. The first start makes the network's admin key
+# in the `hive-net` volume and prints the network's link (`docker compose logs hive-net`): open it
+# on your computer to use the network. Guide: docs, Self-hosting.
+name: hivemind
+services:
+  hive-net:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile
+    image: hivemind/hive-net:local
+    command: [serve, --all, --data, /data, --phone, /phone, --views, "3341", --url, "${HIVE_URL:-http://127.0.0.1:3340}", --name, "${HIVE_NAME:-}", --push-allow, "${HIVE_PUSH_ALLOW:-}"]
+    ports:
+      - "3340:3340"
+      - "3341:3341"
+    volumes:
+      - hive-net:/data
+    restart: unless-stopped
+volumes:
+  hive-net:

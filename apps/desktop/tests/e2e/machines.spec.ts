@@ -1,6 +1,9 @@
 // Machines, end to end against a real OpenSSH server this spec starts on 127.0.0.1 with its own
 // keys, agent and remote $HOME: add a machine (hive installed over ssh), run a frame on it, adopt a
-// job started with `hive run` there, lose the server and get it back. Skips without sshd or a built `hive`.
+// job started with `hive run` there, lose the server and get it back. A frame names the machine it
+// runs on, not its address (R9): the address edited, the frame follows; the machine removed, the
+// frame goes back to the address, still running there; saved again, it is on the new machine.
+// Skips without sshd or a built `hive`.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -8,6 +11,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stopDaemons } from "./helpers/daemons";
 
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const HIVE = path.resolve(APP_DIR, "../cli/dist/hive");
@@ -33,6 +37,13 @@ const remote = (cmd: string) => execFileSync("ssh", ["-F", path.join(dir, "ssh_c
 const startSshd = () => execFileSync(SSHD, ["-f", sshdCfg()]);
 const sshdPid = () => Number(fs.readFileSync(path.join(dir, "sshd.pid"), "utf8"));
 const chipState = () => page.locator('button[aria-label="machine build-box"]').getAttribute("data-machine-state");
+/** Where the frame on the machine is bound, as its chip's panel shows it (the uri is its path's title). */
+async function binding(chip = page.locator('.react-flow__node-frame button[aria-label^="machine "]').first()): Promise<string | null> {
+  await chip.click();
+  const at = await page.getByRole("dialog", { name: "machine" }).locator("span[title]").last().getAttribute("title");
+  await page.mouse.click(4, 4); // the panel's backdrop
+  return at;
+}
 const terminalText = () => page.evaluate(() => [...document.querySelectorAll(".xterm")]
   .map((x) => (x.parentElement as (HTMLElement & { __hmScreen?: () => string }) | null)?.__hmScreen?.() ?? "").join("\n"));
 
@@ -69,7 +80,7 @@ test.beforeAll(async () => {
     // Own HOME and config: saved hosts and machines of the person running the suite stay out of it.
     // Persistence ON (the suite defaults it off): a remote tile must keep a stable session id and
     // detach — not kill — when it unmounts, which is how the app really runs.
-    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), SSH_AUTH_SOCK: path.join(dir, "agent.sock"), HIVE_BIN: HIVE, HIVEMIND_PTY_DAEMON: "1" },
+    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), SSH_AUTH_SOCK: path.join(dir, "agent.sock"), HIVE_BIN: HIVE },
   });
   app.process().stderr.on("data", (d) => { for (const l of String(d).split("\n")) if (/\[remote\]|\[machines\]/.test(l)) console.log("  [main]", l.slice(0, 200)); });
   page = await app.firstWindow();
@@ -79,11 +90,13 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  try { await Promise.race([app?.close(), new Promise((r) => setTimeout(r, 10_000))]); } catch { /* already gone */ }
+  await app?.close();
   if (!dir) return;
   try { remote(`${rhive()} daemon stop`); } catch { /* not running */ }
-  // The "remote" daemon is a local process; its socket path is unique to this spec.
+  // The "remote" daemon is a local process; its socket path is unique to this spec. So is the
+  // app's own daemon's, which outlives the app.
   spawnSync("pkill", ["-f", `${dir}/r.sock`]);
+  stopDaemons(dir);
   try { const listener = sshdPid(); spawnSync("pkill", ["-P", String(listener)]); process.kill(listener); } catch { /* not running */ }
   if (agentPid) try { process.kill(agentPid); } catch { /* gone */ }
   fs.rmSync(dir, { recursive: true, force: true });
@@ -91,7 +104,8 @@ test.afterAll(async () => {
 
 test("add a machine: probe, install hive over ssh, save", async () => {
   test.setTimeout(180_000);
-  await page.getByRole("button", { name: "add machine" }).click();
+  await page.locator('.hm-layers [data-layers-rail="machines"]').click();
+  await page.locator('[data-layers-action="machine"]').click();
   await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
   await page.getByLabel("Name", { exact: true }).fill("build-box");
   await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -105,6 +119,11 @@ test("add a machine: probe, install hive over ssh, save", async () => {
   await expect(header.locator("[data-machine-state]")).not.toHaveText(/offline|off/);
   await expect(header.getByRole("button", { name: "open folder on build-box" })).toBeVisible();
   await expect(page.locator('.hm-layers [data-machine-header="local"]')).toContainText("This computer");
+  // The fixture is this computer over ssh: its probe and this computer's own say the same kind,
+  // and each row draws it.
+  const kindOf = (name: string) => page.locator(`.hm-layers [data-machine-header="${name}"] [data-machine-kind]`).getAttribute("data-machine-kind");
+  await expect.poll(() => kindOf("build-box"), { timeout: 10_000 }).not.toBe("unknown");
+  expect(await kindOf("local")).toBe(await kindOf("build-box"));
 });
 
 test("the folder picker is keyboard-first: type a path, filter, go in and up, cancel", async () => {
@@ -146,6 +165,8 @@ test("a frame runs on the machine: chip online with a round trip, terminals run 
   remoteTile = (await page.locator(".react-flow__node-terminal").last().getAttribute("data-id")) ?? "";
   await expect(page.locator('button[aria-label="machine build-box"]')).toContainText(/\d+ms/, { timeout: 30_000 });
   await expect.poll(() => remote(`${rhive()} ps`), { timeout: 30_000 }).toContain("bash");
+  // The frame names the machine by its id, not its address.
+  expect(await binding()).toMatch(/^machine:\/\/m_[0-9a-f]{12}\//);
 });
 
 test("a job started with `hive run` there opens from the chip as a live tile", async () => {
@@ -211,6 +232,12 @@ test("the server goes away and comes back: chip and banner say so, the job never
 
 test("the Layers rail groups frames by the computer they run on, in every view", async () => {
   const rail = page.locator(".hm-layers");
+  // Grouped by machine, from the View menu.
+  await rail.locator('[data-layers-rail="tiles"]').click();
+  await rail.locator("[data-layers-view-menu]").click();
+  await page.locator('[data-layers-view="groupBy"]').click();
+  await page.locator('[data-layers-choice="groupBy:machine"]').click();
+  await page.keyboard.press("Escape");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame"))); // a frame on this computer too
   await expect(rail.locator('[data-machine-group="build-box"]')).toBeVisible();
   await expect(rail.locator('[data-machine-group="local"]')).toContainText("This computer");
@@ -224,16 +251,16 @@ test("the Layers rail groups frames by the computer they run on, in every view",
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
 });
 
-test("turning a machine off disconnects it and keeps its terminals running there; on brings them back", async () => {
+test("pausing a machine disconnects it and keeps its terminals running there; resuming brings them back", async () => {
   test.setTimeout(90_000);
   const header = page.locator('.hm-layers [data-machine-header="build-box"]');
   await header.getByRole("button", { name: "build-box actions" }).click();
-  await page.getByRole("button", { name: "Turn off" }).click();
-  await expect(header.locator("[data-machine-state]")).toHaveText("off");
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect(header.locator("[data-machine-state]")).toHaveText("paused");
   await expect(page.locator('[data-link-banner="off"]').first()).toBeVisible({ timeout: 10_000 });
   expect(remote(`${rhive()} ps`)).toContain("bash");
   // The tile may sit off-screen on the canvas; the banner's own button is what a user there clicks.
-  await page.locator('[data-link-banner="off"]').first().locator("xpath=..").getByRole("button", { name: "Turn on" }).dispatchEvent("click");
+  await page.locator('[data-link-banner="off"]').first().locator("xpath=..").getByRole("button", { name: "Resume" }).dispatchEvent("click");
   await expect.poll(chipState, { timeout: 60_000 }).toBe("online");
   await expect(page.locator('[data-link-banner="off"]')).toHaveCount(0);
 });
@@ -282,4 +309,17 @@ test("removing a machine in use asks first, says what it touches, and leaves its
   await expect(row).toHaveCount(0, { timeout: 15_000 });
   await expect.poll(() => remote(`${rhive()} ps`), { timeout: 15_000 }).toContain("bash");
   expect(await page.locator(`.react-flow__node[data-id="${remoteTile}"]`).count()).toBe(1);
+  await page.keyboard.press("Escape");
+  // Its frame is back at the machine's address, where it still runs, and can be saved again.
+  const chip = page.locator('.react-flow__node-frame button[aria-label="machine localhost"]');
+  expect(await binding(chip)).toMatch(/^ssh:\/\/[^/]*localhost:\d+\//);
+  await chip.click();
+  await page.getByRole("dialog", { name: "machine" }).getByRole("button", { name: "Save as a machine…" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("build-box");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.locator('ul[aria-label="machines"] li', { hasText: "build-box" })).toContainText("online", { timeout: 60_000 });
+  await page.keyboard.press("Escape");
+  // A frame bound by an address a machine is saved at — as a workspace from before R9 is — is on that machine.
+  await expect.poll(chipState, { timeout: 60_000 }).toBe("online");
+  expect(await binding()).toMatch(/^machine:\/\/m_[0-9a-f]{12}\//);
 });

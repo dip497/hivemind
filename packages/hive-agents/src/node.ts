@@ -11,13 +11,15 @@ import { SDK_ENV } from "@hivemind/agent-sdk";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import nodePath from "node:path";
-import type { AgentNodeParts, AgentProviderDef, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
+import type { AgentNodeParts, AgentProviderDef, Conversation, DaemonPaths, ProviderResumeTransforms, ProviderSpawnContext, SpawnSpec } from "./types.js";
 
 export * from "./types.js";
 export * from "./catalog.js";
 export { shq } from "./shq.js";
 export * from "./tile-session-store.js";
 export * from "./session.js";
+export * from "./transcript.js";
+export * from "./hook-answer.js";
 export * from "./runtime.js";
 export * from "./runtime-manifest.js";
 export * from "./hooks.js";
@@ -48,12 +50,15 @@ interface ScriptPaths {
   trackerPath?: string;
   tileSessionsDir: string;
   eventHookPath?: string;
+  hookBin?: string;
+  hookDoor?: string;
   sdkPath?: string;
   planBridgeSock?: string;
   hcpSock?: string;
 }
 
-/** Our two scripts — the session tracker and the generic event reporter — and the ones the agent
+/** Our two scripts — the session tracker and the generic event reporter (hive-net's `hook` where
+ *  the daemon has it) — and the ones the agent
  *  ships as assets, which run with the SDK. An entry missing here is an event the manifest asked
  *  for that this daemon cannot wire — the renderer drops it. */
 function hookScripts(def: AgentProviderDef, dir: string, p: ScriptPaths): Record<string, HookScript> {
@@ -65,6 +70,7 @@ function hookScripts(def: AgentProviderDef, dir: string, p: ScriptPaths): Record
   return {
     ...(p.trackerPath ? { tracker: { path: p.trackerPath, arg: p.tileSessionsDir } } : {}),
     ...(p.eventHookPath && p.hcpSock ? { event: { path: p.eventHookPath, arg: p.hcpSock } } : {}),
+    ...(p.hookBin && p.hookDoor ? { event: { exec: p.hookBin, path: "hook", arg: p.hookDoor } } : {}),
     ...Object.fromEntries((def.assets ?? []).filter((a) => a.hook && p.sdkPath && p.hcpSock)
       .map((a) => [a.hook!, { path: nodePath.join(dir, a.name), env: sdkEnv }])),
   };
@@ -96,6 +102,7 @@ function partsFromManifest(def: AgentProviderDef): AgentNodeParts | undefined {
       hooks: hookPathsFor(def, ctx),
       execPath: ctx.execPath,
       ...(ctx.hcpSock ? { hcpSock: ctx.hcpSock } : {}),
+      ...(ctx.driveSock ? { driveSock: ctx.driveSock } : {}),
       ...(ctx.hcpToken ? { hcpToken: ctx.hcpToken } : {}),
       ...(ctx.sdkPath ? { sdk: ctx.sdkPath } : {}),
       tileSessionsDir: ctx.tileSessionsDir,
@@ -162,9 +169,10 @@ export function providerFor(cmd: string): AgentProvider | undefined {
  *  in any order. */
 export interface ComposedResume {
   transformSpecOnSpawn: (spec: SpawnSpec, id: string) => SpawnSpec;
-  transformSpecOnRestore: (spec: SpawnSpec, id: string) => SpawnSpec;
+  transformSpecOnRestore: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   restoreRetryTransform: (spec: SpawnSpec) => SpawnSpec | null;
   restoreRetryMs: number;
+  conversationOf: (spec: SpawnSpec, id: string) => Conversation | null | undefined;
 }
 
 export function composeResume(ctx: ProviderSpawnContext): ComposedResume {
@@ -180,14 +188,21 @@ export function composeResumeFrom(providers: readonly AgentProvider[], ctx: Prov
   return {
     transformSpecOnSpawn: (spec, id) =>
       ts.reduce((s, t) => (t.transformSpecOnSpawn ? t.transformSpecOnSpawn(s, id) : s), spec),
-    transformSpecOnRestore: (spec, id) =>
-      ts.reduce((s, t) => (t.transformSpecOnRestore ? t.transformSpecOnRestore(s, id) : s), spec),
+    transformSpecOnRestore: (spec, id, ran) =>
+      ts.reduce((s, t) => (t.transformSpecOnRestore ? t.transformSpecOnRestore(s, id, ran) : s), spec),
     restoreRetryTransform: (spec) => {
       for (const t of ts) {
         const r = t.restoreRetryTransform?.(spec);
         if (r) return r;
       }
       return null;
+    },
+    conversationOf: (spec, id) => {
+      for (const t of ts) {
+        const c = t.conversationOf?.(spec, id);
+        if (c !== undefined) return c;
+      }
+      return undefined;
     },
     // The window in which a fast death triggers a restore-retry: the largest any
     // provider asks for (5s floor).

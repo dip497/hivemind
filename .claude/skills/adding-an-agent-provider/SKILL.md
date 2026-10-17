@@ -62,7 +62,7 @@ then grep its `dist/` for flag strings. Finish with one adversarial search per t
 
 ### The capability probe → the `caps` you will write
 
-Answer all ten with a source. Each answer decides a field of the manifest.
+Answer all eleven with a source. Each answer decides a field of the manifest.
 
 | # | Question | Decides |
 |---|---|---|
@@ -76,10 +76,17 @@ Answer all ten with a source. Each answer decides a field of the manifest.
 | 8 | Can the agent run shell commands + inherit the spawn env? | whether the worker can call `hive ctl report` (needs `hive` on PATH + HIVE_HCP_SOCK/HCP_TOKEN/HIVEMIND_TILE from the env) |
 | 9 | `--model` flag? claude-style permission modes? | the `options` block (`model`, `mode`) |
 | 10 | What the TUI prints while **working**, and while **waiting for approval** | the `detect` rules and `caps.blockedDetection` — capture real output, do not guess |
+| 11 | Which keys **allow** and which **deny** its own permission prompt | the `answer.permission` block (the phone's Allow / Deny types them) — read them from the binary's chooser, or leave the block out |
+| 11b | Which keys **choose an option** of a question it asks (AskUserQuestion's chooser) | `choose` with `{n}` (the phone's option buttons type it) and `asks` under the transcript's `tool` — read them from the binary's chooser, or leave them out |
+| 12 | Which key **interrupts its turn** (the "esc to interrupt" hint) | `interrupt` (the phone's Stop types it) — read it from the binary's own hint, or leave it out |
+| 13 | Does its **session file** keep what was said, a JSON record a line? Which records and fields? | `session.transcript` (the phone's conversation) — map a real session file's records, check the mapping against `conformance/conversation.json`'s rules, or leave it out |
 
 Row 10 needs a real run. If you cannot install the CLI, say so and set
 `blockedDetection: false` rather than inventing prompt text — a wrong detector is
-worse than a missing one, because it reports the wrong state confidently.
+worse than a missing one, because it reports the wrong state confidently. Rows 11 and
+12 the same: a wrong key allows what the person denied, or quits the agent instead of
+stopping its turn (Ctrl+C twice ends some CLIs), so with no evidence, leave `answer`
+and `interrupt` out: the phone answers that agent with text, and offers no Stop.
 
 ---
 
@@ -132,22 +139,26 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    `input.resolved` too (e.g. `PostToolUse`), or a tile answered in the agent stays
    "needs you" until the turn ends. One generic script reports
    them and never forwards text the agent wrote. Map an event only after seeing the real
-   binary fire it, and inject per launch — never write the user's global config.
+   binary fire it, and inject per launch — never write the user's global config. When the
+   agent's turn-end payload carries the turn's reply (Claude's and Codex's
+   `last_assistant_message`), name that field with `reply:` on the `turn.ended` entry (it needs
+   `launch.hcp`): the same generic hook hands it over before the turn end, natively, with no
+   script of the plugin's.
 
    Anything data cannot say is a script **the plugin ships**, never code in the host: list it
    in `assets` with a `hook:` name (and `produces:` for the events it reports), and name that
    hook in `events`. It loads the host's SDK — `const hive = require(process.env.HIVE_SDK)` —
    for `payload()`, `emit()`, `reportReply()`, `requestApproval()` and `openPlanReview()`
    (`packages/agent-sdk`, wire format in `spec/hook-protocol.md`). The reply `hive ctl read`
-   returns comes only from `reportReply` — from the payload if the agent puts it there
-   (Claude's `last_assistant_message`), else from the agent's own transcript (Droid). An agent
+   returns comes from `reply:` when the payload carries it, else from `reportReply` reading the
+   agent's own transcript (Droid). An agent
    whose hook config is a file of its own shape uses `{emit:turn.ended}` / `{hookCmd:<name>}`
    placeholders inside that asset.
 
    ```yaml
    events:
      UserPromptSubmit: { emit: turn.started }
-     Stop: { hook: turnEnd }          # the plugin's script: reportReply, then emit turn.ended
+     Stop: { hook: turnEnd }          # the plugin's script: reads the reply, reportReply, then emit turn.ended
      StopFailure: { emit: turn.ended, outcome: failed }
      PermissionRequest: { emit: input.requested, kind: permission }
    assets:
@@ -156,6 +167,12 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
 
    An app older than `emit` refuses such a manifest, so publishing one needs the registry to
    carry a `minAppVersion` for agents.
+
+   When the agent's permission hook can print the decision, declare `answer:` on its
+   `input.requested` entry (`spec/needs.md` 0.9; Claude's is in the fixture manifest): the hook
+   then holds until the phone answers, and nothing is typed. Probe first that the agent's own
+   prompt is still drawn while the hook runs. Codex 0.162 draws its prompt only after the hook
+   returns, so a held hook leaves the desktop nothing to answer, and Codex stays on keys.
 
 **Try it before you publish**: drop the folder into
 `~/.config/hivemind/agents/<id>/` (or run `hive agents install ./<id>`) — the running
@@ -181,7 +198,7 @@ cd apps/desktop && npx electron-vite build        # then drop it in and launch t
 ```
 
 - `hive agents list` — the agent appears, with its CLI found (or the reason it is not).
-- Settings ▸ Agents — the card shows the launch options, the install link if the CLI is
+- Settings ▸ Plugins (the agent's row, then its page) — the card shows the launch options, the install link if the CLI is
   missing, and the capability note if it is not a worker.
 - The e2e suite runs the full lifecycle for a throwaway manifest
   (`apps/desktop/tests/e2e/zz-sixth-provider.spec.ts`) — read it before claiming done.

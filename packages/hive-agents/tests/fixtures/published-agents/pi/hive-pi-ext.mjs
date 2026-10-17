@@ -1,7 +1,8 @@
 // pi lifecycle → HCP bridge + native hive orchestration tools.
 // Loaded via `pi -e <this file>`; no-ops unless hivemind injected HIVE_HCP_SOCK + HIVEMIND_TILE.
-// Self-contained: only `node:net` + `typebox` (typebox is bundled with pi at runtime).
+// Self-contained: only node built-ins + `typebox` (typebox is bundled with pi at runtime).
 import net from "node:net";
+import { execFile } from "node:child_process";
 import { Type } from "typebox";
 
 export default function (pi) {
@@ -10,11 +11,14 @@ export default function (pi) {
   const token = process.env.HCP_TOKEN;
   if (!sock || !tile) return; // not spawned by hivemind → stay a plain pi session
 
-  // ── lifecycle bridge: fire-and-forget JSON-RPC notification (connect, write one line, close) ──
+  // ── lifecycle bridge: fire-and-forget JSON-RPC notification, signed in with the tile's token ──
   const post = (method, params) => {
     try {
       const c = net.connect(sock, () => {
-        try { c.write(JSON.stringify({ jsonrpc: "2.0", method: method, params: params }) + "\n"); } catch (e) {}
+        try {
+          c.write(JSON.stringify({ jsonrpc: "2.0", method: "initialize", params: { token: token } }) + "\n"
+            + JSON.stringify({ jsonrpc: "2.0", method: method, params: params }) + "\n");
+        } catch (e) {}
         try { c.end(); } catch (e) {}
       });
       c.on("error", () => {});
@@ -45,60 +49,29 @@ export default function (pi) {
       }
     }
     // The reply first, on its own token-gated request; then the turn end it belongs to.
-    if (text) await hcpRequest("agent.reply", { tileId: tile, text: text }, undefined, 5000);
+    if (text) await reply(text);
     post("agent.event", { tileId: tile, event: "turn.ended" });
   });
 
-  // ── HCP JSON-RPC client (initialize with the token, then one request). Resolves
-  //    { ok, result } | { ok:false, error } | null. NEVER rejects, NEVER hangs:
-  //    any socket error / close / parse failure / timeout / abort → resolve(null)
-  //    so callers can fail open. `id` is a monotonic counter + this tile id. ──
-  let reqCounter = 0;
-  const hcpRequest = (method, params, signal, timeoutMs) => new Promise((resolve) => {
-    let settled = false;
+  // ── the reply, on its own token-gated request (initialize, then agent.reply). NEVER rejects,
+  //    NEVER hangs: any socket error / close / timeout settles it. ──
+  const reply = (text) => new Promise((resolve) => {
     let c = null;
-    let timer = null;
-    const done = (v) => {
-      if (settled) return;
-      settled = true;
-      if (timer) { try { clearTimeout(timer); } catch (e) {} }
-      try { if (c) c.end(); } catch (e) {}
-      resolve(v);
-    };
-    const id = "pi_" + tile + "_" + (++reqCounter);
+    const done = () => { try { if (c) c.end(); } catch (e) {} resolve(); };
     try {
       c = net.connect(sock, () => {
         try {
-          c.write(JSON.stringify({ jsonrpc: "2.0", id: id + "_init", method: "initialize", params: { token: token } }) + "\n"
-            + JSON.stringify({ jsonrpc: "2.0", id: id, method: method, params: params }) + "\n");
-        } catch (e) { done(null); }
+          c.write(JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: token } }) + "\n"
+            + JSON.stringify({ jsonrpc: "2.0", id: "reply", method: "agent.reply", params: { tileId: tile, text: text } }) + "\n");
+        } catch (e) { done(); }
       });
-    } catch (e) { resolve(null); return; }
+    } catch (e) { resolve(); return; }
     let buf = "";
-    c.on("data", (d) => {
-      buf += d.toString("utf8");
-      let nl;
-      while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        if (!line) continue;
-        let msg;
-        try { msg = JSON.parse(line); } catch (e) { continue; }
-        if (msg && msg.id === id + "_init" && msg.error) { done({ ok: false, error: msg.error.data || msg.error }); return; }
-        if (msg && msg.id === id) {
-          done(msg.error ? { ok: false, error: msg.error.data ? { code: msg.error.data.code, message: msg.error.message } : msg.error } : { ok: true, result: msg.result });
-          return;
-        }
-      }
-    });
-    c.on("error", () => done(null));
-    c.on("close", () => done(null));
-    timer = setTimeout(() => done(null), timeoutMs);
-    if (timer && typeof timer.unref === "function") timer.unref();
-    if (signal) {
-      if (signal.aborted) done(null);
-      else { try { signal.addEventListener("abort", () => done(null), { once: true }); } catch (e) {} }
-    }
+    c.on("data", (d) => { buf += d.toString("utf8"); if (buf.split("\n").some((l) => { try { return JSON.parse(l).id === "reply"; } catch (e) { return false; } })) done(); });
+    c.on("error", done);
+    c.on("close", done);
+    const timer = setTimeout(done, 5000);
+    if (typeof timer.unref === "function") timer.unref();
   });
 
   // ── NO SUPERVISE FOR PI (deliberate) ──────────────────────────────────────
@@ -120,49 +93,51 @@ export default function (pi) {
   // open to claude's own permission prompt, so a lost approval still stops at a human.
 
   // ── NATIVE HIVE ORCHESTRATION TOOLS ───────────────────────────────────────
-  // Only when the full control-plane triple is present (socket + token + tile),
-  // so a pi worker can spawn/drive/supervise other agents straight over HCP.
+  // Each runs `hive ctl … --json`, as every agent drives hive, when this tile has its token.
   if (!token) return;
-  const ORCH_TIMEOUT_MS = 60 * 60 * 1000; // generous ceiling; a long workflow.run blocks main-side, not us
+  const ORCH_TIMEOUT_MS = 60 * 60 * 1000; // generous ceiling; a long workflow blocks in the CLI, not us
 
-  const call = async (method, params, signal, timeoutMs) => {
-    const r = await hcpRequest(method, params, signal, timeoutMs || ORCH_TIMEOUT_MS);
-    if (r && r.ok) {
-      return { content: [{ type: "text", text: JSON.stringify(r.result) }], details: r.result };
-    }
-    const msg = r && r.error
-      ? (r.error.message || (typeof r.error === "string" ? r.error : JSON.stringify(r.error)))
-      : "no response from hive control plane";
-    // AgentToolResult has no isError field — encode the failure in the text + details.
-    return { content: [{ type: "text", text: "hive error: " + msg }], details: { error: msg } };
-  };
+  const ctl = (args, signal) => new Promise((resolve) => {
+    execFile("hive", ["ctl"].concat(args, ["--json"]), { signal: signal, timeout: ORCH_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      // A result is printed even when the exit code says how it ended (a read that timed out).
+      let result;
+      const last = String(stdout || "").trim().split("\n").pop();
+      try { result = last ? JSON.parse(last) : undefined; } catch (e) {}
+      if (result !== undefined && !(result && result.ok === false && result.code)) {
+        resolve({ content: [{ type: "text", text: JSON.stringify(result) }], details: result });
+        return;
+      }
+      const msg = (result && result.message) || String(stderr || "").trim() || (err && err.message) || "no answer from hive";
+      // AgentToolResult has no isError field — encode the failure in the text + details.
+      resolve({ content: [{ type: "text", text: "hive error: " + msg }], details: { error: msg } });
+    });
+  });
+  /** `--flag value` for each value given. */
+  const flags = (o) => Object.keys(o).reduce((a, k) => (o[k] == null || o[k] === "" ? a : a.concat(["--" + k, String(o[k])])), []);
+  const toolList = (v) => (Array.isArray(v) ? v.join(",") : v);
 
   // CLAUDE workers only — a pi worker cannot be supervised (pi has no permission
   // system to broker); asking for it is a spawn ERROR, not a silent downgrade.
-  const superviseParam = Type.Optional(Type.Union([Type.Boolean(), Type.String(), Type.Array(Type.String())], {
-    description: "CLAUDE workers only — supervising a 'pi' worker is an ERROR (pi has no permission system; a pi worker always runs autonomously). Routes a claude worker's tool-permission prompts to YOU to answer with hive_approve.",
+  const superviseParam = Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())], {
+    description: "CLAUDE workers only — supervising a 'pi' worker is an ERROR (pi has no permission system; a pi worker always runs autonomously). 'all', or the tools to broker. Routes a claude worker's tool-permission prompts to YOU to answer with hive_approve.",
   }));
 
   pi.registerTool({
     name: "hive_spawn_agent",
     label: "Spawn hive agent",
     description:
-      "Spawn a NEW coding agent as a tile on the hivemind canvas and hand it a prompt. Returns its tileId. Delegate a subtask to a sibling agent. By default the worker AUTO-REPORTS: its reply is delivered back into your session when it finishes a turn. Pass `supervise` (CLAUDE workers only) to route the worker's tool-permission prompts to YOU (answer with hive_approve); supervising a pi worker is an error. Requires the hivemind desktop app.",
+      "Spawn a NEW coding agent as a tile on the hivemind canvas and hand it a prompt. Returns its tile id. Delegate a subtask to a sibling agent. By default the worker AUTO-REPORTS: its reply is delivered back into your session when it finishes a turn. Pass `supervise` (CLAUDE workers only) to route the worker's tool-permission prompts to YOU (answer with hive_approve); supervising a pi worker is an error.",
     parameters: Type.Object({
       agent: Type.Optional(Type.String({ description: "Agent to launch: 'claude' (default), 'codex', 'droid', 'pi', …" })),
       name: Type.Optional(Type.String({ description: "Short display name ('reviewer', 'test-writer') — becomes the worker's tile label and tags every message it reports back to you. Name your workers when you spawn more than one." })),
       prompt: Type.Optional(Type.String({ description: "Initial task delivered once the agent is ready." })),
-      frame: Type.Optional(Type.String({ description: "Frame to spawn into (id, repo/worktree name, or title). Omit to use your own frame." })),
-      mode: Type.Optional(Type.String({ description: "claude permission mode. Omit → the worker runs autonomously (bypassPermissions). Pass 'plan'/'acceptEdits'/'default' to keep a human in the loop." })),
-      model: Type.Optional(Type.String({ description: "claude only — model alias like 'opus' or 'sonnet'." })),
+      frame: Type.Optional(Type.String({ description: "Frame to spawn into, by its id or name (hive_list_frames). Omit to use your own frame." })),
+      mode: Type.Optional(Type.String({ description: "Permission mode. Omit → the worker runs autonomously. Pass 'plan'/'acceptEdits'/'default' to keep a human in the loop." })),
+      model: Type.Optional(Type.String({ description: "Model alias like 'opus' or 'sonnet'." })),
       supervise: superviseParam,
     }),
     async execute(toolCallId, params, signal) {
-      return call("tile.spawn_agent", {
-        agent: params.agent, name: params.name, prompt: params.prompt, frame: params.frame,
-        mode: params.mode, model: params.model, supervise: params.supervise,
-        callerTile: tile,
-      }, signal);
+      return ctl(["spawn"].concat(flags({ agent: params.agent, name: params.name, prompt: params.prompt, frame: params.frame, mode: params.mode, model: params.model, supervise: toolList(params.supervise) })), signal);
     },
   });
 
@@ -170,15 +145,13 @@ export default function (pi) {
     name: "hive_read",
     label: "Read hive agent",
     description:
-      "Block until a spawned agent (by tileId) finishes its current turn, then return its reply. On timeout returns finalStatus:'timeout' (the agent is still working). Most of the time you don't need this — report:true workers auto-deliver their replies. Requires the hivemind desktop app.",
+      "Block until a spawned agent (by tile id) finishes its current turn, then return its reply. On timeout returns finalStatus:'timeout' (the agent is still working). Most of the time you don't need this — workers auto-deliver their replies.",
     parameters: Type.Object({
-      tileId: Type.String({ description: "The worker's tileId (from hive_spawn_agent)." }),
-      timeout_ms: Type.Optional(Type.Number({ description: "Max wait in ms (default 120000)." })),
+      tileId: Type.String({ description: "The worker's tile id (from hive_spawn_agent)." }),
+      timeout_ms: Type.Optional(Type.Number({ description: "Max wait in ms (default 100000)." })),
     }),
     async execute(toolCallId, params, signal) {
-      const p = { tileId: params.tileId };
-      if (typeof params.timeout_ms === "number") p.timeoutMs = params.timeout_ms;
-      return call("agent.read", p, signal);
+      return ctl(["read", params.tileId].concat(typeof params.timeout_ms === "number" ? ["--timeout", Math.max(0, Math.floor(params.timeout_ms)) + "ms"] : []), signal);
     },
   });
 
@@ -186,16 +159,10 @@ export default function (pi) {
     name: "hive_send",
     label: "Send to hive agent",
     description:
-      "Send text to an agent tile (by tileId) — like typing into its terminal and pressing Enter. Use for follow-up turns in a conversation with a spawned agent. Requires the hivemind desktop app.",
-    parameters: Type.Object({
-      tileId: Type.String(),
-      text: Type.String(),
-      submit: Type.Optional(Type.Boolean({ description: "Press Enter after the text (default true)." })),
-    }),
+      "Send a message to an agent (by tile id): it is typed in as its next prompt once it is at its prompt. Use for follow-up turns in a conversation with a spawned agent.",
+    parameters: Type.Object({ tileId: Type.String(), text: Type.String() }),
     async execute(toolCallId, params, signal) {
-      const p = { tileId: params.tileId, text: params.text };
-      if (typeof params.submit === "boolean") p.submit = params.submit;
-      return call("agent.send", p, signal);
+      return ctl(["send", params.tileId, params.text], signal);
     },
   });
 
@@ -203,12 +170,12 @@ export default function (pi) {
     name: "hive_report",
     label: "Report to spawner",
     description:
-      "Report a result back to the agent that SPAWNED you (your parent). If you were launched by another agent via hive_spawn_agent, call this when you finish your delegated task — your message is delivered into the parent's session so it can collect your findings without polling. Prefer a concise summary over dumping everything. No-op error if you have no parent. Requires the hivemind desktop app.",
+      "Report a result back to the agent that SPAWNED you (your parent). If you were launched by another agent via hive_spawn_agent, call this when you finish your delegated task — your message is delivered into the parent's session so it can collect your findings without polling. Prefer a concise summary over dumping everything. An error if you have no parent.",
     parameters: Type.Object({
       message: Type.String({ description: "Your result/findings to send to the parent agent." }),
     }),
     async execute(toolCallId, params, signal) {
-      return call("agent.report", { callerTile: tile, message: params.message }, signal);
+      return ctl(["report", params.message], signal);
     },
   });
 
@@ -216,23 +183,21 @@ export default function (pi) {
     name: "hive_list_frames",
     label: "List hive frames",
     description:
-      "List the canvas frames (workspaces) — each with its id, title, repo/worktree path, branch, and tile COUNT (not the tiles themselves). This is the CHEAP overview: call it first to see what frames exist, then hive_list_tiles(frame) for the tiles inside one. Requires the hivemind desktop app.",
+      "List the workspace's frames, where an agent may be started — each with its id, name and the machine it runs on.",
     parameters: Type.Object({}),
     async execute(toolCallId, params, signal) {
-      return call("tile.list_frames", {}, signal);
+      return ctl(["frames"], signal);
     },
   });
 
   pi.registerTool({
-    name: "hive_list_tiles",
-    label: "List hive tiles",
+    name: "hive_list_agents",
+    label: "List hive agents",
     description:
-      "List the tiles on the hivemind canvas grouped by frame — returns { frames:[{ frameId, title, repo, branch, tiles:[{ tileId, kind, label, status }] }], loose:[…] }. This is HEAVIER than hive_list_frames (it returns every tile); prefer passing `frame` to scope it to one frame rather than dumping the whole canvas. Requires the hivemind desktop app.",
-    parameters: Type.Object({
-      frame: Type.Optional(Type.String({ description: "Filter to one frame (id, repo name, or title) — recommended. Omit to list ALL tiles in ALL frames (can be large)." })),
-    }),
+      "List the workspace's agents — returns { seq, agents:[{ tile, agent, program, state, waiting?, parent? }] }: each agent's tile, name, what it runs, whether it is working, idle, done or waiting, and on what.",
+    parameters: Type.Object({}),
     async execute(toolCallId, params, signal) {
-      return call("tile.list", { frame: params.frame }, signal);
+      return ctl(["agents"], signal);
     },
   });
 
@@ -240,21 +205,21 @@ export default function (pi) {
     name: "hive_focus",
     label: "Focus a hive tile",
     description:
-      "Bring a tile (by tileId) into view and select it on the canvas — pans/centers it so the user sees it. Requires the hivemind desktop app.",
+      "Bring a tile (by tile id) into view and select it on the canvas, so the user sees it.",
     parameters: Type.Object({ tileId: Type.String() }),
     async execute(toolCallId, params, signal) {
-      return call("tile.focus", { tileId: params.tileId }, signal);
+      return ctl(["focus", params.tileId], signal);
     },
   });
 
   pi.registerTool({
     name: "hive_close_tile",
-    label: "Close a hive tile",
+    label: "Close a hive agent",
     description:
-      "Close a tile (by tileId) — ends its session and removes it from the canvas. Use to clean up a worker you spawned once you've collected its result. Requires the hivemind desktop app.",
+      "Close an agent (by tile id) — ends its session and removes its tile. Use to clean up a worker you spawned once you've collected its result.",
     parameters: Type.Object({ tileId: Type.String() }),
     async execute(toolCallId, params, signal) {
-      return call("tile.close", { tileId: params.tileId }, signal);
+      return ctl(["close", params.tileId], signal);
     },
   });
 
@@ -262,10 +227,10 @@ export default function (pi) {
     name: "hive_connect",
     label: "Pipe hive agents",
     description:
-      "Pipe one agent's output into another's input: whenever the source agent (srcTileId) finishes a turn, its reply is automatically sent to the destination agent (dstTileId). Chains workers without you relaying by hand. Requires the hivemind desktop app.",
+      "Pipe one agent's output into another's input: whenever the source agent (srcTileId) finishes a turn, its reply is automatically sent to the destination agent (dstTileId). Chains workers without you relaying by hand.",
     parameters: Type.Object({ srcTileId: Type.String(), dstTileId: Type.String() }),
     async execute(toolCallId, params, signal) {
-      return call("tile.connect", { srcTileId: params.srcTileId, dstTileId: params.dstTileId }, signal);
+      return ctl(["connect", params.srcTileId, params.dstTileId], signal);
     },
   });
 
@@ -273,12 +238,10 @@ export default function (pi) {
     name: "hive_disconnect",
     label: "Unpipe hive agents",
     description:
-      "Remove a pipe created with hive_connect. Omit dstTileId to remove ALL pipes out of srcTileId. Requires the hivemind desktop app.",
+      "Remove a pipe created with hive_connect. Omit dstTileId to remove ALL pipes out of srcTileId.",
     parameters: Type.Object({ srcTileId: Type.String(), dstTileId: Type.Optional(Type.String()) }),
     async execute(toolCallId, params, signal) {
-      const p = { srcTileId: params.srcTileId };
-      if (typeof params.dstTileId === "string") p.dstTileId = params.dstTileId;
-      return call("tile.disconnect", p, signal);
+      return ctl(["disconnect", params.srcTileId].concat(typeof params.dstTileId === "string" ? [params.dstTileId] : []), signal);
     },
   });
 
@@ -286,10 +249,10 @@ export default function (pi) {
     name: "hive_send_keys",
     label: "Send keys to a hive agent",
     description:
-      "Send symbolic keystrokes to a tile (by tileId) — e.g. ['Down','Enter'] to pick a menu item, ['Escape'] to cancel, ['C-c'] for Ctrl-C. For plain text use hive_send instead; this is for navigating a TUI's prompts. Requires the hivemind desktop app.",
+      "Send symbolic keystrokes to a tile (by tile id) — e.g. ['Down','Enter'] to pick a menu item, ['Escape'] to cancel, ['C-c'] for Ctrl-C. For a message use hive_send instead; this is for navigating a TUI's prompts.",
     parameters: Type.Object({ tileId: Type.String(), keys: Type.Array(Type.String()) }),
     async execute(toolCallId, params, signal) {
-      return call("agent.send_keys", { tileId: params.tileId, keys: params.keys }, signal);
+      return ctl(["keys", params.tileId, params.keys.join(",")], signal);
     },
   });
 
@@ -297,16 +260,14 @@ export default function (pi) {
     name: "hive_approve",
     label: "Approve hive worker",
     description:
-      "Answer an approval request from a supervised worker (spawned with `supervise`). When a worker wants to run a brokered tool you'll get a '[hive] APPROVAL — worker <id> wants to run <tool>' message with a reqId; call this with that reqId. decision: 'allow'/'deny' for this one call, or 'always'/'never' to also remember it for that worker+tool. Requires the hivemind desktop app.",
+      "Answer an approval request from a supervised worker (spawned with `supervise`). When a worker wants to run a brokered tool you'll get a '[hive] APPROVAL — worker <id> wants to run <tool>' message with a request id; call this with it. decision: 'allow'/'deny' for this one call, or 'always'/'never' to also remember it for that worker+tool.",
     parameters: Type.Object({
       reqId: Type.String({ description: "The approval request id from the '[hive] APPROVAL …' message." }),
       decision: Type.String({ description: "allow | deny | always | never." }),
       reason: Type.Optional(Type.String({ description: "Optional note shown to the worker (useful on deny)." })),
     }),
     async execute(toolCallId, params, signal) {
-      const p = { reqId: params.reqId, decision: params.decision };
-      if (typeof params.reason === "string") p.reason = params.reason;
-      return call("agent.approve", p, signal);
+      return ctl(["approve", params.reqId, params.decision].concat(flags({ reason: params.reason })), signal);
     },
   });
 
@@ -314,7 +275,7 @@ export default function (pi) {
     name: "hive_workflow",
     label: "Run hive workflow",
     description:
-      "Run a MULTI-AGENT WORKFLOW: spawn a fleet of worker agents as visible tiles, drive them, and BLOCK until done — then return their replies aggregated. shape: 'fanout' (one worker per items[i], `prompt` is a template with {item}); 'mapreduce' (fanout then one reducer fed all outputs via `reduce_prompt` with {results}); 'pipeline' (sequential `stages`, each may use {input} for the prior stage's reply). Each worker result carries a status ('turn'|'timeout'|'error'). Requires the hivemind desktop app.",
+      "Run a MULTI-AGENT WORKFLOW: spawn a fleet of worker agents as visible tiles, drive them, and BLOCK until done — then return their replies aggregated. shape: 'fanout' (one worker per items[i], `prompt` is a template with {item}); 'mapreduce' (fanout then one reducer fed all outputs via `reduce_prompt` with {results}); 'pipeline' (sequential `stages`, each may use {input} for the prior stage's reply). Each worker result carries a status ('turn'|'timeout'|'closed'|'error').",
     parameters: Type.Object({
       shape: Type.String({ description: "fanout | pipeline | mapreduce." }),
       items: Type.Optional(Type.Array(Type.String(), { description: "fanout/mapreduce: one worker per element, substituted into {item}." })),
@@ -323,22 +284,20 @@ export default function (pi) {
       input: Type.Optional(Type.String({ description: "pipeline: optional seed for the first stage's {input}." })),
       reduce_prompt: Type.Optional(Type.String({ description: "mapreduce: the reducer prompt. Use {results}." })),
       agent: Type.Optional(Type.String({ description: "Runtime for every worker: 'claude' (default), 'codex', 'droid', 'pi', …" })),
-      model: Type.Optional(Type.String({ description: "claude only — model alias applied to every worker." })),
-      frame: Type.Optional(Type.String({ description: "Frame to spawn workers into. Omit to use your own frame." })),
+      model: Type.Optional(Type.String({ description: "Model alias applied to every worker." })),
+      frame: Type.Optional(Type.String({ description: "Frame to spawn workers into, by its id or name. Omit to use your own frame." })),
       supervise: superviseParam,
       max_concurrent: Type.Optional(Type.Number({ description: "Max workers live at once (default 6, capped 12)." })),
       timeout_ms: Type.Optional(Type.Number({ description: "Per-worker turn ceiling in ms (default 600000)." })),
       close_when_done: Type.Optional(Type.Boolean({ description: "Close each worker tile after collecting its reply (default false)." })),
     }),
     async execute(toolCallId, params, signal) {
-      return call("workflow.run", {
-        shape: params.shape, items: params.items, prompt: params.prompt,
-        stages: params.stages, input: params.input, reduce_prompt: params.reduce_prompt,
-        agent: params.agent, model: params.model, frame: params.frame,
-        supervise: params.supervise, max_concurrent: params.max_concurrent,
-        timeout_ms: params.timeout_ms, close_when_done: params.close_when_done,
-        callerTile: tile,
-      }, signal);
+      return ctl(["workflow"].concat(flags({
+        shape: params.shape, items: params.items && params.items.join("||"), prompt: params.prompt,
+        stages: params.stages && params.stages.join("||"), input: params.input, "reduce-prompt": params.reduce_prompt,
+        agent: params.agent, model: params.model, frame: params.frame, supervise: toolList(params.supervise),
+        "max-concurrent": params.max_concurrent, timeout: typeof params.timeout_ms === "number" ? Math.floor(params.timeout_ms) + "ms" : undefined,
+      }), params.close_when_done ? ["--close"] : []), signal);
     },
   });
 }

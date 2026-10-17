@@ -115,13 +115,14 @@ export function MediaLayerView({
     ...box,
   };
   const objectFit: "cover" | "contain" = layer.fit === "contain" ? "contain" : "cover";
+  const url = window.hive.resourceUrl(layer.url);
 
   if (layer.kind === "video") {
     return (
       <video
         ref={videoRef}
         data-scene={scene}
-        src={layer.url}
+        src={url}
         // tiling isn't meaningful for <video> — fall back to cover.
         style={{ ...base, objectFit }}
         autoPlay={!paused}
@@ -148,7 +149,7 @@ export function MediaLayerView({
         aria-hidden="true"
         style={{
           ...base,
-          backgroundImage: `url("${layer.url}")`,
+          backgroundImage: `url("${url}")`,
           backgroundRepeat: "repeat",
           backgroundSize: "auto",
         }}
@@ -158,7 +159,7 @@ export function MediaLayerView({
   return (
     <img
       data-scene={scene}
-      src={layer.url}
+      src={url}
       alt=""
       aria-hidden="true"
       style={{ ...base, objectFit }}

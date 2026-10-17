@@ -14,6 +14,8 @@ import { defFromManifest } from "../src/manifest.js";
 import { AUTHORED, authoredYaml } from "../tests/authored.js";
 import { CORPUS } from "../tests/corpus.js";
 
+// A reading as hashed: its status, and what screen when it says.
+const answered = (r) => (r.says ? `${r.status}:${r.says}` : r.status);
 const MODES = [undefined, "default", "plan", "acceptEdits", "bypassPermissions", "ask", "yolo", "high"];
 const MODELS = [undefined, "default", "opus", "gpt-5"];
 
@@ -27,7 +29,7 @@ const golden = {
 for (const agent of AUTHORED) {
   const def = defFromManifest(YAML.parse(authoredYaml(agent)));
   if (def.detect) {
-    const states = CORPUS.map((screen) => def.detect(screen)).join(",");
+    const states = CORPUS.map((screen) => answered(def.detect(screen))).join(",");
     golden.detectors[def.id] = createHash("sha256").update(states).digest("hex");
   }
   const rows = [];

@@ -1,6 +1,5 @@
 /** `hive daemon start|status|stop` — the desktop's PTY daemon, hosted by `hive` on machines without the app. */
 import { defineCommand } from "citty";
-import { spawn } from "node:child_process";
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
@@ -8,7 +7,9 @@ import { err, ok } from "../format.js";
 import { EXIT } from "../hcp.js";
 import { connect, defaultSocket, listSessions, MAX_SOCKET_PATH, ping } from "../pty-client.js";
 import { compiledSelf } from "../remote.js";
+import { hiveNetBin } from "../app-data.js";
 import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
+import { startDaemon } from "@hivemind/agent-host/daemon-start";
 
 /** Set by scripts/build.ts so bun embeds the addon; absent when running from source. */
 declare const HIVE_PTY_NATIVE: string | undefined;
@@ -32,10 +33,8 @@ export async function ensureDaemon(sock: string): Promise<{ started: boolean }> 
   const dir = path.dirname(sock);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const log = fs.openSync(path.join(dir, "pty-daemon.log"), "a");
-  const [file, ...args] = [...selfArgv(), "daemon", "start", "--foreground", "--socket", sock];
-  // Detached so it outlives this command and the ssh session that ran it.
-  const child = spawn(file!, args, { detached: true, stdio: ["ignore", log, log] });
-  child.unref();
+  // Outliving this command and the ssh session that ran it.
+  startDaemon([...selfArgv(), "daemon", "start", "--foreground", "--socket", sock], { stdio: ["ignore", log, log] });
   fs.closeSync(log);
   for (let t = 0; t < 10_000; t += 100) {
     if (await ping(sock, 500)) return { started: true };
@@ -61,6 +60,9 @@ async function runForeground(sock: string): Promise<never> {
   // The daemon reads its socket from argv[2] and runs on import.
   process.argv = [process.argv[0]!, process.argv[1]!, sock];
   process.env.HIVEMIND_DAEMON_STANDALONE = "1";
+  // The daemon runs agents' hooks through hive-net when it is named here.
+  const hiveNet = hiveNetBin();
+  if (hiveNet) process.env.HIVEMIND_HIVE_NET = hiveNet;
   await import("@hivemind/agent-host/pty-daemon");
   return new Promise<never>(() => { /* the daemon owns the process now */ });
 }

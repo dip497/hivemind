@@ -6,54 +6,17 @@
  * remain clickable. Pure visual grouping in v1 — moving the frame does NOT
  * move tiles inside (use react-flow `parentId` later for strong containment).
  */
-import { FRAME_SWATCHES } from "./frame-color";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { GitBranch, FolderGit2, Plus, LayoutGrid, Server, GitCommitHorizontal } from "lucide-react";
+import { useEffect, useState } from "react";
+import { GitBranch, FolderGit, Server, Ellipsis } from "./components/icons";
 import { Button } from "./components/ui/button";
-import { MenuItem } from "./components/ui/menu-item";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
-import { WorktreePicker } from "./WorktreePicker";
+import { FrameMenu, type FrameActions } from "./FrameMenu";
 import { useGitBranch } from "./queries";
-import { isRemote, parseRemote, remoteBasename, remoteDisplay } from "../../shared/remote-uri";
+import { isRemote, remoteBasename, remoteDisplay } from "@hivemind/core/remote-uri";
+import { frameMachine, useMachines } from "./machines/store";
+import { useMachineOwners } from "./machines/owners";
+import { useShown } from "./multiplayer/shown";
 import { MachineChip } from "./machines/MachineChip";
-import { useAgents } from "./agents";
-import type { ArrangeMode } from "./frame-layout";
-import type { WorktreeEntry } from "../../shared/ipc";
-
-/** Dropdown anchored under a trigger button, rendered in a portal to
- *  document.body. Frame nodes have a low zIndex (≤90, BELOW tiles), and a
- *  child popover can't escape its parent's stacking context — so a normal
- *  absolute-positioned menu renders BEHIND any tile inside the frame.
- *  Portaling to body + fixed positioning lifts it above everything. */
-function AnchoredMenu({
-  anchor,
-  open,
-  onClose,
-  children,
-}: {
-  anchor: HTMLElement | null;
-  open: boolean;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  if (!open || !anchor) return null;
-  const r = anchor.getBoundingClientRect();
-  return createPortal(
-    <>
-      {/* click-away catcher */}
-      <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-      <div
-        className="fixed z-[9999] bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md p-1 shadow-xl flex flex-col"
-        style={{ top: r.bottom + 4, left: Math.max(8, r.right - 160), minWidth: 150 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </>,
-    document.body,
-  );
-}
 
 export interface FrameNodeData {
   title: string;
@@ -74,40 +37,19 @@ export interface FrameNodeData {
   /** False when there's no repo → branch binding is impossible. */
   canBind?: boolean;
   onTitleChange: (id: string, title: string) => void;
-  onColorChange: (id: string, color: string) => void;
-  onDelete: (id: string) => void;
-  /** Opt-in tidy: snap this frame's tiles + worktree sub-frames into a layout. */
-  onArrange: (id: string, mode: ArrangeMode) => void;
   onBringToFront: (id: string) => void;
-  /** Attach an existing worktree → caller spawns a nested sub-frame. */
-  onAttachWorktree: (frameId: string, entry: WorktreeEntry) => void;
-  /** Create a worktree on `branch`, then attach it as a sub-frame. */
-  onCreateWorktree: (frameId: string, branch: string) => void;
-  /** Detach this worktree sub-frame (remove its worktree, delete the frame). */
-  onUnbindBranch: (id: string) => void;
-  onBindWorkspace: (id: string) => void;
-  onUnbindWorkspace: (id: string) => void;
+  /** Everything else a frame does: its menu, the same one the Layers panel opens. */
+  actions: FrameActions;
   id: string;
   /** Terminal tile ids inside this frame — Canvas precomputes via position
    *  overlap. Drives the header chip strip so renames inside surface here. */
   tileIds?: string[];
 }
 
-// Identity colours, shared with the rail menu and the default generator (frame-color.ts).
-const COLORS = FRAME_SWATCHES;
-
 export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeData; selected: boolean }) {
-  const agents = useAgents();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.title);
-  const [showPicker, setShowPicker] = useState(false);
-  const [showAdd, setShowAdd] = useState(false);
-  const [showWt, setShowWt] = useState(false);
-  const [showArrange, setShowArrange] = useState(false);
-  const addBtnRef = useRef<HTMLButtonElement>(null);
-  const colorBtnRef = useRef<HTMLButtonElement>(null);
-  const wtBtnRef = useRef<HTMLButtonElement>(null);
-  const arrangeBtnRef = useRef<HTMLButtonElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   // Live status per child tile — chips show a colored dot for working/blocked.
   // Subscribe filters by data.tileIds so unrelated tile events are skipped.
   const [chipStatus, setChipStatus] = useState<Map<string, TileStatusKind>>(new Map());
@@ -134,10 +76,9 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const wsBound = !!data.workspacePath;
   const wsName = data.workspacePath?.split("/").filter(Boolean).pop();
   const isRemoteWs = isRemote(data.workspacePath);
-  // `host:dir` for the remote pill (e.g. 10.20.40.84:app).
-  const remoteHostLabel = isRemoteWs
-    ? `${parseRemote(data.workspacePath!).host}:${remoteBasename(data.workspacePath!)}`
-    : "";
+  // `machine:dir` for the remote pill (e.g. build-box:app): the saved machine's name, or the host.
+  const machineName = frameMachine(useMachines(), data.workspacePath, useMachineOwners(useShown().repo))?.name;
+  const remoteHostLabel = isRemoteWs ? `${machineName}:${remoteBasename(data.workspacePath!)}` : "";
   // Current branch of this repo frame (base or workspace zone) — shown as a
   // badge like Zed's title bar. Uses the dedicated long-staleTime git:branch
   // query (NOT git:status), so it stays off the 200ms fs-invalidation storm:
@@ -160,7 +101,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
 
   return (
     <div
-      className="w-full h-full rounded-xl relative"
+      className="group/frame w-full h-full rounded-xl relative"
       // Frame node is pointer-transparent at the .react-flow__node-frame
       // wrapper level (styles.css). Pan/right-drag/Space+left/rubber-band
       // selection all need pointer events to reach the pane container —
@@ -168,32 +109,27 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
       // starting from a node element. Header bar + NodeResizer handles
       // re-enable events on themselves below.
       style={{
-        // A grouping ZONE, not a tile: faint fill + a DASHED, lower-saturation
-        // border so it reads as a region behind the tiles (a solid 2px high-sat
-        // border made it look like a giant empty tile). Selected = solid accent.
-        // Fill strength is a CSS var so glass mode can dial the frame tint down
-        // (styles.css sets --frame-fill lower under .glass-on) — the frame reads
-        // as a faint zone over the wallpaper instead of a colored block.
+        // A zone behind the tiles, not a tile: a faint fill and a hairline at low strength, one
+        // material with its label. --frame-fill is lower under glass (styles.css).
         background: `color-mix(in oklab, ${data.color} var(--frame-fill, 7%), transparent)`,
         border: selected
-          ? `2px solid ${data.color}`
-          : `1.5px dashed color-mix(in oklab, ${data.color} 45%, transparent)`,
+          ? `1.5px solid ${data.color}`
+          : `1px solid color-mix(in oklab, ${data.color} 32%, transparent)`,
       }}
     >
       {/* No NodeResizer — frames are NOT manually resizable. Their geometry is
           derived reactively from the bounding box of their member tiles (see
           Canvas auto-fit effect): a tile entering grows the frame, leaving
           shrinks it, an empty frame collapses to a placeholder. */}
-      {/* Header bar IS the drag handle — body stays transparent + non-grabbing
-          so child tiles inside the frame remain clickable. */}
+      {/* The label line is the drag handle; the body passes pan and selection through to the
+          pane (pointer-events:none on the wrapper, styles.css) so the tiles inside stay clickable. */}
       <div
-        className="absolute top-0 left-0 right-0 h-7 flex items-center gap-2 px-2 rounded-t-xl tile-drag-handle cursor-grab active:cursor-grabbing"
-        // Re-enable events here — the body wrapper sets pointer-events:none
-        // to pass pan/selection through. Header IS the drag handle + holds
-        // all the chrome (rename, binding, color, delete).
-        style={{ background: `color-mix(in oklab, ${data.color} 20%, transparent)`, pointerEvents: "auto" }}
+        className="absolute top-0 left-0 right-0 h-7 flex items-center gap-2 pl-3 pr-1.5 frame-drag-handle cursor-grab active:cursor-grabbing"
+        data-frame-label
+        style={{ pointerEvents: "auto" }}
         onPointerDown={() => data.onBringToFront(data.id)}
       >
+        <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: data.color }} />
         {editing ? (
           <input
             autoFocus
@@ -213,7 +149,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
                 setEditing(false);
               }
             }}
-            className="flex-1 bg-transparent border-none outline-none text-[12px] font-semibold text-[var(--color-fg)] focus:bg-[var(--color-bg3)] px-1 rounded"
+            className="flex-1 bg-transparent border-none outline-none text-label font-semibold text-[var(--color-fg)] focus:bg-[var(--color-bg3)] px-1 rounded"
           />
         ) : (
           <button
@@ -221,7 +157,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               setDraft(data.title);
               setEditing(true);
             }}
-            className="flex-1 text-left text-[12px] font-semibold text-[var(--color-fg)] truncate"
+            className="min-w-0 flex-1 text-left text-label font-semibold text-[var(--color-fg)] truncate"
             title="Double-click to rename"
           >
             {data.title}
@@ -231,7 +167,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             show their own branch · sha pill below instead. */}
         {!isWorktreeChild && repoBranch && (
           <span
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg2)] shrink-0"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-chip font-mono text-[var(--color-fg2)] shrink-0"
             style={{ background: "var(--color-bg3)" }}
             title={`on branch ${repoBranch}`}
           >
@@ -246,7 +182,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             sub-frame — plus the "workspace" bind. */}
         {isWorktreeChild ? (
           <span
-            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg)]"
+            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-chip font-mono text-[var(--color-fg)]"
             style={{ background: `color-mix(in oklab, ${data.color} 28%, transparent)` }}
             title={`worktree ${data.branch}\n${data.worktreePath}`}
           >
@@ -254,27 +190,18 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             <span className="shrink-0 text-[var(--color-fg3)]">worktree</span>
             <span className="truncate font-semibold">{data.branch}</span>
             {data.head && <span className="shrink-0 text-[var(--color-fg3)]">{data.head.slice(0, 7)}</span>}
-            <Button
-              variant="ghost-destructive"
-              size="micro"
-              onClick={() => data.onUnbindBranch(data.id)}
-              title="Detach worktree (destructive)"
-              aria-label="detach worktree"
-            >
-              ×
-            </Button>
           </span>
         ) : isRemoteWs ? (
-          <MachineChip uri={data.workspacePath!} frameId={data.id} onUnbind={() => data.onUnbindWorkspace(data.id)} />
+          <MachineChip uri={data.workspacePath!} frameId={data.id} onUnbind={() => data.actions.onUnbindWorkspace(data.id)} />
         ) : wsBound ? (
           <span
-            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-[10px] font-mono"
+            className="flex items-center gap-1 max-w-[60%] rounded px-1.5 py-0.5 text-chip font-mono"
             style={{ background: isRemoteWs ? "color-mix(in oklab, var(--color-brand) 22%, transparent)" : "var(--color-bg3)", color: "var(--color-fg)" }}
-            title={isRemoteWs ? `remote ${remoteDisplay(data.workspacePath!)}` : `workspace ${data.workspacePath}`}
+            title={isRemoteWs ? `remote ${remoteDisplay(data.workspacePath!, machineName)}` : `workspace ${data.workspacePath}`}
           >
             {isRemoteWs
               ? <Server size={11} className="shrink-0 text-[var(--color-brand)]" />
-              : <FolderGit2 size={11} className="shrink-0 text-[var(--color-fg2)]" />}
+              : <FolderGit size={11} className="shrink-0 text-[var(--color-fg2)]" />}
             {/* The pill's label is dropped when it just repeats the frame title —
                 which is the DEFAULT, since a new frame is titled after its repo.
                 The same word twice in one header is noise, and the icon already
@@ -287,72 +214,8 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
               // Name == title (the default): say what it is instead — VS Code calls it a folder.
               <span className="text-[var(--color-fg3)]">folder</span>
             )}
-            <Button
-              variant="ghost-destructive"
-              size="micro"
-              onClick={() => data.onUnbindWorkspace(data.id)}
-              title={isRemoteWs ? "Disconnect remote" : "Unbind workspace"}
-              aria-label={isRemoteWs ? "disconnect remote" : "unbind workspace"}
-            >
-              ×
-            </Button>
           </span>
         ) : null}
-        {!isWorktreeChild && (
-          <Button
-            ref={wtBtnRef}
-            onClick={() => setShowWt((x) => !x)}
-            disabled={!data.canBind && !data.repoPath}
-            variant="ghost"
-            size="micro"
-            title="Attach a git worktree — opens a nested sub-frame scoped to that branch"
-            aria-label="attach worktree"
-          >
-            <GitBranch />
-            worktree
-          </Button>
-        )}
-        <AnchoredMenu anchor={wtBtnRef.current} open={showWt} onClose={() => setShowWt(false)}>
-          {data.repoPath ? (
-            <WorktreePicker
-              repoPath={data.repoPath}
-              onAttach={(entry) => {
-                data.onAttachWorktree(data.id, entry);
-                setShowWt(false);
-              }}
-              onCreate={(branch) => {
-                data.onCreateWorktree(data.id, branch);
-                setShowWt(false);
-              }}
-            />
-          ) : (
-            <div className="px-3 py-2 text-[11px] text-[var(--color-fg3)]">no git repo</div>
-          )}
-        </AnchoredMenu>
-        {!isWorktreeChild && !wsBound && (
-          <Button
-            onClick={() => data.onBindWorkspace(data.id)}
-            variant="ghost"
-            size="micro"
-            title="Bind this frame to a repo folder — tiles inside run in that workspace"
-            aria-label="bind workspace"
-          >
-            <FolderGit2 />
-            workspace
-          </Button>
-        )}
-        {!isWorktreeChild && !wsBound && (
-          <Button
-            onClick={() => window.dispatchEvent(new CustomEvent("hivemind:attach-remote", { detail: { frameId: data.id } }))}
-            variant="ghost"
-            size="micro"
-            title="Run this frame on a machine — its terminals, editor and diff run there"
-            aria-label="attach remote"
-          >
-            <Server />
-            machine
-          </Button>
-        )}
         {/* ── frame attention dot ───────────────────────────────────────
             This used to be a strip of up to three name pills plus a "+N".
             The names were dead weight: every tile already prints its own name
@@ -381,128 +244,18 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             />
           );
         })()}
-        {/* Git — open the commit/sync modal for this frame's repo. Shown when
-            the frame has a repo: a worktree sub-frame (always), a bound
-            workspace, or the base repo. */}
-        {(isWorktreeChild || data.workspacePath || data.repoPath) && (
-          <Button
-            onClick={() => window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId: data.id } }))}
-            variant="ghost"
-            size="icon-micro"
-            title="Git — commit, push, pull"
-            aria-label="git"
-          >
-            <GitCommitHorizontal />
-          </Button>
-        )}
-        <Button
-          ref={addBtnRef}
-          onClick={() => setShowAdd((x) => !x)}
-          variant="ghost"
-          size="icon-micro"
-          title="Open a tile in this zone (terminal / Claude / editor / diff / issues)"
-          aria-label="add tile"
-        >
-          <Plus />
-        </Button>
-        <AnchoredMenu anchor={addBtnRef.current} open={showAdd} onClose={() => setShowAdd(false)}>
-          <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">open in zone</div>
-          {/* Agents come from the registry — adding one there adds it here. */}
-          {agents.filter((a) => a.enabled).map((a) => (
-            <MenuItem
-              key={a.id}
-              size="sm"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind: a.id } }));
-                setShowAdd(false);
-              }}
-            >
-              <a.icon />
-              {a.label}
-            </MenuItem>
-          ))}
-          {([
-            ["shell", "Terminal"],
-            ["tree", "Editor"],
-            ["diff", "Diff"],
-            ["issues", "Issues"],
-            ["browser", "Browser"],
-          ] as const).map(([kind, label]) => (
-            <MenuItem
-              key={kind}
-              size="sm"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent("hivemind:frame-open", { detail: { frameId: data.id, kind } }));
-                setShowAdd(false);
-              }}
-            >
-              {label}
-            </MenuItem>
-          ))}
-        </AnchoredMenu>
-        <Button
-          ref={arrangeBtnRef}
-          onClick={() => setShowArrange((x) => !x)}
-          variant="ghost"
-          size="icon-micro"
-          title="Arrange tiles + worktrees (Columns / Rows / Grid)"
-          aria-label="arrange"
-        >
-          <LayoutGrid />
-        </Button>
-        <AnchoredMenu anchor={arrangeBtnRef.current} open={showArrange} onClose={() => setShowArrange(false)}>
-          <div className="px-2 py-1 text-[9px] uppercase tracking-[0.12em] text-[var(--color-fg3)] font-semibold">arrange</div>
-          {([
-            ["columns", "Columns"],
-            ["rows", "Rows"],
-            ["grid", "Grid"],
-          ] as const).map(([mode, label]) => (
-            <MenuItem
-              key={mode}
-              size="sm"
-              onClick={() => {
-                data.onArrange(data.id, mode);
-                setShowArrange(false);
-              }}
-            >
-              {label}
-            </MenuItem>
-          ))}
-        </AnchoredMenu>
-        <button
-          ref={colorBtnRef}
-          onClick={() => setShowPicker((x) => !x)}
-          className="size-4 rounded-full border border-[var(--color-line2)]"
-          style={{ background: data.color }}
-          title="Change color"
-          aria-label="color"
-        />
-        <Button
-          onClick={() => data.onDelete(data.id)}
-          variant="ghost-destructive"
-          size="icon-micro"
-          title="Delete frame"
-          aria-label="delete"
-        >
-          ×
+        {/* Its menu, the one the Layers panel opens: shown on hover, while selected or open, or on focus. */}
+        <Button variant="ghost" size="icon-micro" aria-label={`${data.title} actions`} title="Frame actions" data-frame-actions={data.id}
+          className={`transition-opacity duration-150 focus-visible:opacity-100 group-hover/frame:opacity-100 ${selected || menu ? "opacity-100" : "opacity-0"}`}
+          onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu((m) => (m ? null : { x: r.right - 230, y: r.bottom })); }}>
+          <Ellipsis />
         </Button>
       </div>
-      <AnchoredMenu anchor={colorBtnRef.current} open={showPicker} onClose={() => setShowPicker(false)}>
-        <div className="flex gap-1">
-          {COLORS.map((c) => (
-            <button
-              key={c.value}
-              onClick={() => {
-                data.onColorChange(data.id, c.value);
-                setShowPicker(false);
-              }}
-              className="size-5 rounded-full border border-[var(--color-line2)] hover:scale-110 transition-transform"
-              style={{ background: c.value }}
-              title={c.name}
-            />
-          ))}
-        </div>
-      </AnchoredMenu>
+      {menu && (
+        <FrameMenu frame={{ id: data.id, title: data.title, parentFrameId: data.parentFrameId, path: data.workspacePath, remote: isRemoteWs }}
+          at={menu} actions={data.actions} arrange onClose={() => setMenu(null)}
+          onRename={() => { setDraft(data.title); setEditing(true); }} />
+      )}
     </div>
   );
 }

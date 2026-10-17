@@ -58,3 +58,14 @@ export function computeRepoPath(root: string | null, gitRoot: string | null): st
   if (root) return path.dirname(root);
   return null;
 }
+
+/**
+ * The folder to open: the one asked for (a folder picked, the project opened last) while it is a
+ * folder, else the one the app was started in. A last project since moved or deleted then opens
+ * as the app's own folder, not as a canvas in a folder that is gone, where no terminal can start.
+ */
+export async function projectDir(asked: string | undefined, startedIn: string): Promise<string> {
+  if (!asked) return startedIn;
+  const st = await fsp.stat(asked).catch(() => null);
+  return st?.isDirectory() ? asked : startedIn;
+}

@@ -9,7 +9,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ipcPath } from "@hivemind/core";
-import { sockPath, token, win32UserDataDir } from "../src/hcp.js";
+import { sockPath, token } from "../src/hcp.js";
+import { win32UserDataDir } from "../src/app-data.js";
+import { driveSockPath } from "../src/drive.js";
 import { defaultSocket } from "../src/pty-client.js";
 
 const APPDATA = "C:\\Users\\u\\AppData\\Roaming";
@@ -44,11 +46,14 @@ describe("win32 endpoints", () => {
     expect(s).not.toContain(".sock");
   });
 
-  test("posix derivation is unchanged (config dir file paths)", () => {
+  test("every socket is in the app's data folder, where Electron keeps it: the config folder on Linux, Application Support on a Mac", () => {
     expect(sockPath({ platform: "linux", env: { XDG_CONFIG_HOME: "/cfg" } })).toBe(path.join("/cfg", "hivemind", "hcp.sock"));
     expect(defaultSocket({ platform: "linux", env: {} })).toBe(path.join(os.homedir(), ".config", "hivemind", "pty-daemon.sock"));
-    // Degenerate win32 without APPDATA falls back to the same file convention.
-    expect(sockPath({ platform: "win32", env: { XDG_CONFIG_HOME: "C:\\cfg" } })).toBe(path.join("C:\\cfg", "hivemind", "hcp.sock"));
+    const mac = path.join(os.homedir(), "Library", "Application Support", "hivemind");
+    expect([sockPath, defaultSocket, driveSockPath].map((of) => of({ platform: "darwin", env: { XDG_CONFIG_HOME: "/cfg" } })))
+      .toEqual([path.join(mac, "hcp.sock"), path.join(mac, "pty-daemon.sock"), path.join(mac, "drive.sock")]);
+    // HIVEMIND_APP_DATA names another, for all of them.
+    expect(driveSockPath({ platform: "linux", env: { HIVEMIND_APP_DATA: "/data" } })).toBe(path.join("/data", "drive.sock"));
   });
 
   test("the token is read from the win32 userData dir; HCP_TOKEN still wins", () => {

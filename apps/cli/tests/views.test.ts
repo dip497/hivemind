@@ -50,6 +50,9 @@ describe("hive views", () => {
     expect(fs.readFileSync(path.join(dir, "build.mjs"), "utf8")).toContain('external: ["@hivemind/view-sdk"]');
     const sdk = path.join(__dirname, "..", "..", "..", "packages", "hive-view-sdk", "src", "protocol.ts");
     expect(fs.readFileSync(path.join(dir, "types/view-sdk/protocol.ts"), "utf8")).toEndWith(fs.readFileSync(sdk, "utf8"));
+    // …and the fake host the view's own tests run against.
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "tsconfig.json"), "utf8")).compilerOptions.paths["@hivemind/view-sdk/testing"]).toEqual(["./types/view-sdk/testing.ts"]);
+    expect(fs.readFileSync(path.join(dir, "types/view-sdk/testing.ts"), "utf8")).toContain("export function fakeHost(");
     // The manifest it writes is one the app installs.
     r = hive(["views", "install", dir, "--json"], { cwd: tmp, env });
     expect(r.json).toMatchObject({ ok: true, data: { id: "@dip497/pulse" } });

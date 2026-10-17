@@ -14,10 +14,11 @@
  */
 import { createContext, useContext, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { Node } from "@xyflow/react";
-import type { WorktreeEntry } from "../../../../shared/ipc";
-import type { ArrangeMode } from "../../frame-layout";
 import type { PinRect } from "../tile-surfaces";
 import type { Toast } from "../../useAgentAwareness";
+import type { Board } from "../../board-objects/useBoard";
+import type { Point } from "../../board-objects/board-model";
+import type { Pins } from "../pins";
 
 export type Viewport = { x: number; y: number; zoom: number };
 export type FocusReq = { id: string; cx: number; cy: number; w: number; h: number; n: number; exact?: boolean } | null;
@@ -55,17 +56,15 @@ export interface CanvasRuntime {
   // ── frame / worktree ops for FrameNode headers ──
   frameTiles: Map<string, string[]>;
   updateFrameTitle: (id: string, title: string) => void;
-  updateFrameColor: (id: string, color: string) => void;
-  deleteFrame: (id: string) => void;
-  arrangeFrame: (id: string, mode: ArrangeMode) => void;
   bringFrameToFront: (id: string) => void;
-  onAttachWorktree: (frameId: string, entry: WorktreeEntry) => void;
-  onCreateWorktree: (frameId: string, branch: string) => void;
-  unbindBranch: (id: string) => void;
-  bindWorkspace: (id: string) => void;
-  unbindWorkspace: (id: string) => void;
+  // ── the board's notes, checklists, text and arrows (board-objects/) ──
+  board: Board;
+  /** Set by the canvas while it is mounted: where on it a new box goes (under the pointer, else
+   *  the middle of the pane). */
+  canvasPointRef: MutableRefObject<(() => Point) | null>;
   // ── pins ──
-  pinnedIds: Set<string>;
+  /** Tiles pinned to this person's screen. */
+  pins: Pins;
   togglePin: (id: string, rect: PinRect) => void;
   onPinChange: (id: string, patch: { anchor?: { sx: number; sy: number }; size?: { w: number; h: number } }) => void;
   // ── tool island ──
@@ -73,7 +72,6 @@ export interface CanvasRuntime {
   setAgentSel: (id: string) => void;
   spawnAgent: (a: { id: string; cmd: string; defaultArgs?: string[]; label: string }) => void;
   spawnBrowser: () => void;
-  onInitWorkspace?: () => void;
   updateAvailable: boolean;
   onUpgrade: () => void;
   upgrading: boolean;

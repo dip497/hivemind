@@ -21,10 +21,12 @@ expect() { # os arch key value
 expect Linux  x86_64 platform  linux-x86_64
 expect Linux  x86_64 cli_asset hive-linux-x86_64
 expect Linux  x86_64 app_asset hivemind-9.9.9-x86_64.AppImage
+expect Linux  x86_64 net_asset hive-net-linux-x86_64
 expect Darwin arm64  os_kind   mac
 expect Darwin arm64  platform  darwin-arm64
 expect Darwin arm64  cli_asset hive-darwin-arm64
 expect Darwin arm64  app_asset hivemind-9.9.9-arm64-mac.zip
+expect Darwin arm64  net_asset hive-net-darwin-arm64
 # No prebuilt, but --dev must still be reachable: OS resolves, platform doesn't.
 expect Darwin x86_64 os_kind   mac
 expect Darwin x86_64 platform  none
@@ -32,8 +34,29 @@ expect Darwin x86_64 platform  none
 expect Linux  aarch64 platform  linux-arm64
 expect Linux  aarch64 cli_asset hive-linux-arm64
 expect Linux  aarch64 app_asset none
+expect Linux  aarch64 net_asset hive-net-linux-arm64
 expect Linux  arm64   cli_asset hive-linux-arm64
 expect Linux  riscv64 platform  none
+expect Linux  riscv64 net_asset none
+
+nightly_plan() { HIVEMIND_PRINT_PLAN=1 HIVEMIND_OS="$1" HIVEMIND_ARCH="$2" bash install.sh --channel nightly; }
+for spec in 'Linux x86_64 hivemind-linux-x86_64.AppImage' 'Darwin arm64 hivemind-macos-arm64.zip'; do
+  read -r os arch asset <<< "$spec"
+  got=$(nightly_plan "$os" "$arch" | grep '^app_asset=' | cut -d= -f2-)
+  if [ "$got" = "$asset" ]; then
+    printf '  ok   nightly %-14s %-8s app_asset=%s\n' "$os" "$arch" "$asset"
+  else
+    printf '  FAIL nightly %s %s: want %s, got %s\n' "$os" "$arch" "$asset" "$got"; fail=1
+  fi
+done
+# --version installs exactly the tag named: a nightly one asks for the nightly asset names.
+got=$(HIVEMIND_PRINT_PLAN=1 HIVEMIND_OS=Linux HIVEMIND_ARCH=x86_64 bash install.sh --version nightly-20260101-5 | grep '^app_asset=' | cut -d= -f2-)
+if [ "$got" = hivemind-linux-x86_64.AppImage ]; then echo '  ok   --version names the build'; else echo "  FAIL --version: got $got"; fail=1; fi
+if HIVEMIND_PRINT_PLAN=1 bash install.sh --channel invalid >/dev/null 2>&1; then
+  echo '  FAIL invalid channel accepted'; fail=1
+else
+  echo '  ok   invalid channel rejected'
+fi
 
 # Git Bash reports MINGW64_NT-*; such a user must be sent to install.ps1, not
 # told "unsupported OS" — they are on a supported platform, wrong installer.

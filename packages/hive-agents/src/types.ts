@@ -14,6 +14,7 @@
  * An agent is one directory: its `agent.yaml` and the files that manifest names.
  */
 import type { AgentEventName, InputKind, TurnOutcome } from "./events.js";
+import type { ScreenReading } from "./detect-rules.js";
 
 /** "blocked" = needs the human (approval or question). */
 export type AgentState = "idle" | "working" | "blocked";
@@ -52,10 +53,12 @@ export interface AgentCapabilities {
 
 export interface AgentIcon {
   viewBox: string;
-  /** Inner SVG markup. App-owned constants, never user input. */
+  /** Inner SVG markup, drawn from `shapes`: escaped values on allowed shapes, never markup. */
   body: string;
   /** Root <svg> attributes (e.g. fill, stroke, strokeWidth, fillRule). */
   attrs?: Record<string, string>;
+  /** Its shapes, as its manifest gives them: what a device without SVG markup draws. */
+  shapes: Array<Record<string, Record<string, string | number>>>;
 }
 
 /** A launch setting an agent offers. The agent declares the flag; the values
@@ -170,6 +173,53 @@ export interface AgentSession {
      *  but ahead of what the launch adds, or last of all (the default). */
     position?: "before" | "beforeLaunch" | "after";
   };
+  /** How the session file `resume.exists` names says what the person, the agent and its tools
+   *  said to each other, which Hivemind reads as the conversation the person's phone shows
+   *  (spec/agents.md "Conversation"). */
+  transcript?: AgentTranscript;
+}
+
+/** A session file read as a conversation: one JSON record a line, each read by the rules in
+ *  `said`. Every path is a field path (`message.content`) into the record, or into an item of a
+ *  list in it. */
+export interface AgentTranscript {
+  /** The record's id. */
+  id: string;
+  /** When it was written, an ISO 8601 time. */
+  at: string;
+  /** A record with any of these values says nothing. */
+  skipWhen?: Record<string, string | number | boolean>;
+  said: TranscriptRule[];
+}
+
+/** One way a record says something: the records it reads (`require`: each field equal to its
+ *  value), the record itself or each item of the list `each` (those `item` requires), and what
+ *  it reads there: exactly one of text said by `who`, a tool the agent used, or what a tool gave
+ *  back. Rules over the same list read it together, each item by the first that requires it. */
+export interface TranscriptRule {
+  require?: Record<string, string | number | boolean>;
+  each?: string;
+  item?: Record<string, string | number | boolean>;
+  text?: string;
+  who?: "person" | "agent";
+  /** `about`: what the use is about, the first of these that is text. `asks`: where its input
+   *  asks the person questions to choose an answer to. `input`: its input, shown whole when the
+   *  person unfolds it. */
+  tool?: { id: string; name: string; about?: string[]; asks?: TranscriptAsks; input?: string };
+  /** `text`: text, or a list whose items' `text` are joined a line each. `error`: when true. */
+  result?: { of: string; text: string; error?: string };
+}
+
+/** Where a tool use's input asks the person questions, each with options to choose from: the list
+ *  of questions (a path into the item), and in each question its text, its options' list, each
+ *  option's label and what it means, and whether several may be chosen. */
+export interface TranscriptAsks {
+  list: string;
+  question: string;
+  options: string;
+  label: string;
+  description?: string;
+  many?: string;
 }
 
 /** A file inside the overlay that Hivemind writes rather than links. */
@@ -216,6 +266,25 @@ export interface AgentHookEntry {
   matcher?: string;
   /** `supervised` includes this entry only for a tile that runs under supervision. */
   when?: "supervised";
+  /** `input.requested` only: the hook can carry the answer, and holds until it has one. */
+  answer?: HookAnswer;
+  /** `turn.ended` only: the field of the agent's payload that holds the turn's reply, handed to
+   *  the host ahead of the turn's end. */
+  reply?: string;
+}
+
+/** What a hook prints to answer what its agent asks: a map each, filled. `{message}` is the
+ *  reason a person gave for a denial; `{input}` the tool's input with the chosen answer set. */
+export interface HookAnswer {
+  allow: Record<string, unknown>;
+  deny: Record<string, unknown>;
+  /** Answers the questions its tool asks: `{input}` with each answer at `chosen`, keyed by its
+   *  question's text as `asks` reads the tool's input. */
+  choose?: Record<string, unknown>;
+  asks?: TranscriptAsks;
+  chosen?: string;
+  /** Tools left to the agent's own prompt. */
+  leave?: string[];
 }
 
 /** How an agent is told to call our hooks: which events, and where the config goes. */
@@ -240,6 +309,10 @@ export interface AgentHooks {
   /** The commands name no tile: for an agent that asks its user to trust each distinct hook
    *  command once, so every tile runs the same commands and the tile rides the spawn env. */
   stable?: boolean;
+  /** The agent runs a hook only once its user has trusted that exact handler, and reads that
+   *  trust from its configuration too: the document then carries the trust for the hooks it
+   *  wrote, so the agent never asks about ours. Any other hook it still asks about. */
+  trust?: "codex";
 }
 
 /** A file an agent needs on disk before it runs: a bridge extension, a hook script, a
@@ -295,7 +368,7 @@ export interface AgentProviderDef {
    *  recognised for status at all (a user-run tile of it is treated like any
    *  unknown program): it exists for `hive agent detect` / `--assignee` only,
    *  until real screen text is captured. */
-  detect?: (screen: string) => TileStatus;
+  detect?: (screen: string) => ScreenReading;
   /** The agent's mark as inline SVG: the viewBox, the inner markup (paths /
    *  shapes using `currentColor`) and any root attributes (fill / stroke /
    *  fillRule). Rendered by the UI generically — no per-provider React code. */
@@ -331,6 +404,25 @@ export interface AgentProviderDef {
   /** Startup screens the host may answer because the launch flags already answered them
    *  (see ManifestSpawn.dismiss). `keys` are the tokens `hive ctl keys` takes. */
   dismiss?: ReadonlyArray<{ match: (screen: string) => boolean; keys: readonly string[] }>;
+  /** How the person's answer to one of the agent's own prompts is typed, from another of their
+   *  devices (a phone's Allow / Deny): by the wait's name (what its screen says it is, else its
+   *  kind), the keys that allow what it asks and the keys that deny it. Tokens as `hive ctl keys`
+   *  takes them. */
+  answer?: Readonly<Record<string, AnswerKeys>>;
+  /** The keys that choose an option of the question its tool asks (`session.transcript`'s
+   *  `asks`), `{n}` the option's number from 1. */
+  choose?: readonly string[];
+  /** The keys that interrupt its turn, typed from another of the person's devices (a phone's
+   *  Stop). Tokens as `hive ctl keys` takes them. */
+  interrupt?: readonly string[];
+  /** It reads a message typed while it works, at its next step. */
+  steer?: boolean;
+}
+
+/** The keys that allow, and the keys that deny, what an agent asks on its screen. */
+export interface AnswerKeys {
+  allow: readonly string[];
+  deny: readonly string[];
 }
 
 // ── daemon-side ──────────────────────────────────────────────────────────────
@@ -350,12 +442,23 @@ export interface SpawnSpec {
 export interface ProviderResumeTransforms {
   /** Fresh spawn: bind a deterministic session id + inject signal hooks. */
   transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
-  /** Restore after a daemon restart: resume the prior session. */
-  transformSpecOnRestore?: (spec: SpawnSpec, id: string) => SpawnSpec;
+  /** Restore after a daemon restart: resume the prior session. `spec` is what was asked for,
+   *  `ran` what it last ran with; without `ran`, `spec` is what it ran with. */
+  transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   /** A restored session died fast → respawn once with this transformed spec. */
   restoreRetryTransform?: (spec: SpawnSpec) => SpawnSpec | null;
   /** Window in which a fast death triggers `restoreRetryTransform`. */
   restoreRetryMs?: number;
+  /** The conversation a restore of a session that ran with `spec` resumes (`byFolder`: found
+   *  only as the newest in its folder); null when it is this agent's and none is found, undefined
+   *  when it is not this agent's. */
+  conversationOf?: (spec: SpawnSpec, id: string) => Conversation | null | undefined;
+}
+
+/** A conversation a restore resumes. */
+export interface Conversation {
+  session: string;
+  byFolder?: true;
 }
 
 /** Everything the daemon generated that a provider might wire into a spawn: the
@@ -371,10 +474,17 @@ export interface ProviderSpawnContext {
   planBridgeSock?: string;
   /** The generic script every `emit` entry runs. */
   eventHookPath?: string;
+  /** The native hook (`hive-net hook`) and the door it reaches: with both, `emit` entries run it
+   *  instead of the generic script. */
+  hookBin?: string;
+  hookDoor?: string;
   /** The SDK a plugin's own hook scripts load (`HIVE_SDK`). */
   sdkPath?: string;
   hcpSock?: string;
-  hcpToken?: string;
+  /** Where the agent drives its workspace (the workspace API's drive socket). */
+  driveSock?: string;
+  /** The control-plane token a tile's agent is given: its own, which names the tile. */
+  hcpToken?: (tile: string) => string;
   /** Provider-private paths, keyed by provider id — whatever that provider's
    *  `prepare()` returned at daemon start (an extension file, a config-home
    *  overlay, its own hook script). Opaque to everything but the owning
@@ -392,6 +502,10 @@ export interface DaemonPaths {
   trackerPath: string;
   tileSessionsDir: string;
   eventHookPath?: string;
+  /** The native hook (`hive-net hook`) and the door it reaches: with both, `emit` entries run it
+   *  instead of the generic script. */
+  hookBin?: string;
+  hookDoor?: string;
   sdkPath?: string;
   planBridgeSock?: string;
   hcpSock: string;

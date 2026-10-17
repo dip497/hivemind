@@ -61,7 +61,7 @@ export class TileErrorBoundary extends Component<Props, State> {
     const stale = isStaleChunkError(error);
     return (
       <div className="flex h-full w-full flex-col rounded-xl border border-[var(--color-err)] bg-[var(--color-bg2)] overflow-hidden">
-        <div className="h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-[11px] font-mono text-[var(--color-err)]">
+        <div className="h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-err)]">
           <span>⚠ {this.props.label ?? "tile"} {stale ? "needs a reload (stale build)" : "crashed"}</span>
           <div className="ml-auto flex items-center gap-1">
             {stale ? (
@@ -99,7 +99,7 @@ export class TileErrorBoundary extends Component<Props, State> {
           </div>
         </div>
         <div className="flex-1 overflow-auto p-3">
-          <pre className="text-[11px] leading-relaxed text-[var(--color-fg2)] whitespace-pre-wrap break-words">
+          <pre className="text-count leading-relaxed text-[var(--color-fg2)] whitespace-pre-wrap break-words">
             {error.message}
             {error.stack ? `\n\n${error.stack}` : ""}
           </pre>

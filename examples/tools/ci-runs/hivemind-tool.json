@@ -1,0 +1,56 @@
+{
+  "id": "dip497/ci-runs",
+  "name": "CI runs",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "monitoring",
+  "description": "The repository's GitHub Actions runs: read why one failed, rerun it, or hand the failure to an agent.",
+  "entry": "index.js",
+  "permissions": [
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
+  "commands": [
+    {
+      "name": "failures",
+      "description": "The runs listed now that failed, newest first, each with the jobs that failed and the command that prints their lines."
+    }
+  ],
+  "settings": [
+    {
+      "id": "count",
+      "label": "Runs to list",
+      "type": "number",
+      "min": 10,
+      "max": 200,
+      "default": 40
+    },
+    {
+      "id": "branch",
+      "label": "Branch",
+      "type": "choice",
+      "values": [
+        "all",
+        "current"
+      ],
+      "default": "all",
+      "description": "Every branch's runs, or only the checked-out branch's."
+    }
+  ],
+  "tools": [
+    {
+      "key": "runs",
+      "label": "CI runs",
+      "description": "GitHub Actions runs, with the failed jobs' logs.",
+      "tileKind": "ci-runs",
+      "size": {
+        "width": 1100,
+        "height": 720
+      },
+      "needsRepo": true,
+      "singleton": true,
+      "glyph": "▶",
+      "icon": "icon.svg"
+    }
+  ]
+}

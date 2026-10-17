@@ -10,8 +10,8 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { findSession, sessionExists, sessionListed } from "./session.js";
 import { readTrackedSession } from "./tile-session-store.js";
-import { hookCommand, renderHookDocument } from "./hooks.js";
-import { EVENT_HOOK, isAgentEventName } from "./events.js";
+import { hookCommand, renderHookDocument, stableHookEnv } from "./hooks.js";
+import { EVENT_ENV, EVENT_HOOK, isAgentEventName, keptFields } from "./events.js";
 import { homePaths, seedHome } from "./home-overlay.js";
 import { SDK_ENV } from "@hivemind/agent-sdk";
 import { NO_PLAN, validatePlan, type AgentRuntime, type LaunchPlan, type LaunchRequest, type RuntimePaths } from "./runtime.js";
@@ -54,7 +54,7 @@ function resolve(
     if (key.startsWith("hook:")) { const h = req.paths.hooks[key.slice(5)]; return h ? put(h.path) : whole; }
     switch (key) {
       case "hcpSock": return req.paths.hcpSock ? put(req.paths.hcpSock!) : whole;
-      case "hcpToken": return req.paths.hcpToken ? put(req.paths.hcpToken!) : whole;
+      case "hcpToken": return req.paths.hcpToken && req.tileId ? put(req.paths.hcpToken(req.tileId)) : whole;
       case "tileId": return put(req.tileId);
       case "agentId": return put(def.id);
       case "cwd": return put(req.cwd);
@@ -76,12 +76,24 @@ const perTileName = (name: string, tileId: string): string => {
   return `${stem}-${tileId.replace(/[^A-Za-z0-9._-]/g, "-")}${ext}`;
 };
 
+/** What says which tile a process is and how it reaches the control plane: each tile's own, given
+ *  at its launch, so never taken from the environment its sessions start from. */
+export const TILE_ENV = ["HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH", SDK_ENV.sdk, SDK_ENV.sock, SDK_ENV.planSock, EVENT_ENV.keep] as const;
+
+/** `env` without this machine's control-plane credentials, which never go to another machine. */
+export function withoutControl(env?: Record<string, string>): Record<string, string> | undefined {
+  if (!env) return undefined;
+  const { HCP_TOKEN: _t, HIVE_HCP_SOCK: _s, HIVE_DRIVE_SOCK: _d, ...rest } = env;
+  return rest;
+}
+
 /** Every agent that reports through the control plane needs the same variables; the SDK's
  *  are there for a plugin that runs inside the agent rather than as a hook command. */
 function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {
   return {
     HIVE_HCP_SOCK: req.paths.hcpSock!,
-    HCP_TOKEN: req.paths.hcpToken!,
+    ...(req.paths.driveSock ? { HIVE_DRIVE_SOCK: req.paths.driveSock } : {}),
+    HCP_TOKEN: req.paths.hcpToken!(req.tileId), // its own: the calls it makes are known to be this tile's
     HIVEMIND_TILE: req.tileId, // the agent's own `hive ctl` calls attribute to this tile
     HIVE_AGENT_ID: def.id, // signs the Activity rows it writes
     HIVE_AGENT_DEPTH: req.env.HIVE_AGENT_DEPTH ?? "0",
@@ -143,6 +155,8 @@ export function manifestRuntime(
       const env: Record<string, string> = {};
       if (def.launch?.hcp && req.paths.hcpSock && req.paths.hcpToken) Object.assign(env, hcpEnv(def, req));
       if (def.home) env[def.home.env] = homePaths(def.home, req.paths.private).root;
+      Object.assign(env, stableHookEnv(def, req));
+      if (def.hooks || def.assets?.length) env[EVENT_ENV.keep] = keptFields();
       for (const [k, v] of Object.entries(def.launch?.env ?? {})) env[k] = resolve(v, req, def, ESCAPE_NONE, assetFile);
       if (Object.keys(env).length) plan.env = env;
 
@@ -190,27 +204,48 @@ export function manifestRuntime(
 }
 
 /**
- * The session this agent would resume, in the order a manifest asks for: the live one our
- * tracker hook recorded for this tile (it follows whatever the user did inside the agent),
- * then the id bound when the tile first spawned, then whatever its own store says.
+ * The session this agent would resume: the one recorded for this tile (by our tracker hook, which
+ * follows whatever the user did inside the agent, the agent's own report, its bind or its sleep),
+ * then the one its command line names, then the newest its own store keeps in its folder
+ * (`byFolder` false: never that one).
  */
 export function sessionFor(
   def: AgentProviderDef,
   spec: { cwd: string; args?: readonly string[] },
-  ctx: { tileId?: string; tileSessionsDir?: string; sessionRoot?: string } = {},
+  ctx: { tileId?: string; tileSessionsDir?: string; sessionRoot?: string; byFolder?: false } = {},
 ): string | undefined {
   const resume = def.session?.resume;
   if (!resume) return undefined;
-  if (resume.from?.tracked && ctx.tileId && ctx.tileSessionsDir) {
-    const tracked = readTrackedSession(ctx.tileSessionsDir, ctx.tileId);
-    if (tracked) return tracked;
+  if (ctx.tileId && ctx.tileSessionsDir) {
+    const recorded = readTrackedSession(ctx.tileSessionsDir, ctx.tileId);
+    if (recorded) return recorded;
   }
+  const named = sessionNamed(def, spec.args ?? []);
+  if (named || ctx.byFolder === false) return named;
+  return resume.find ? findSession(resume.find, spec.cwd, ctx.sessionRoot) : undefined;
+}
+
+/** The session `args` name for this agent: the id bound when the tile first spawned, then the one
+ *  it was last resumed in. */
+export function sessionNamed(def: AgentProviderDef, args: readonly string[]): string | undefined {
+  const resume = def.session?.resume;
+  if (!resume) return undefined;
   if (resume.from?.bound) {
-    const i = (spec.args ?? []).indexOf(resume.from.bound);
-    const bound = i >= 0 ? (spec.args ?? [])[i + 1] : undefined;
+    const i = args.indexOf(resume.from.bound);
+    const bound = i >= 0 ? args[i + 1] : undefined;
     if (bound && !bound.startsWith("-")) return bound;
   }
-  return resume.find ? findSession(resume.find, spec.cwd, ctx.sessionRoot) : undefined;
+  const resumed = args.indexOf(resume.args[0] ?? "\0");
+  const named = resumed >= 0 ? args[resumed + 1] : undefined;
+  return named && !named.startsWith("-") && resume.args[1]?.includes("{id}") ? named : undefined;
+}
+
+/** `spec` without the argument that hands the agent its hooks document, and that document. */
+function withoutHooks(def: AgentProviderDef, spec: SpawnSpec): SpawnSpec {
+  const flag = def.hooks?.arg;
+  const args = spec.args ?? [];
+  const i = flag ? args.indexOf(flag) : -1;
+  return i < 0 ? spec : { ...spec, args: [...args.slice(0, i), ...args.slice(i + 2)] };
 }
 
 /** Carry out a plan: write what it asks for, then shape the command line. */
@@ -251,10 +286,10 @@ export function transformsFor(
 ): ProviderResumeTransforms {
   const isThisAgent = (spec: SpawnSpec): boolean =>
     path.basename((spec.cmd ?? "").trim().split(/\s+/)[0] ?? "") === def.bin;
-  const run = (spec: SpawnSpec, tileId: string, phase: "spawn" | "restore"): SpawnSpec => {
+  const run = (spec: SpawnSpec, tileId: string, phase: "spawn" | "restore", ran: SpawnSpec = spec): SpawnSpec => {
     if (!isThisAgent(spec) || !runtime.launch) return spec;
     const session = phase === "restore"
-      ? sessionFor(def, spec, { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot })
+      ? sessionFor(def, ran, { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot })
       : undefined;
     // The flag that bound the session at spawn is replaced by the resume, not kept beside it.
     const bound = def.session?.resume?.from?.bound;
@@ -298,11 +333,22 @@ export function transformsFor(
     return exists ? !sessionExists(exists, id, paths.home) : !sessionListed(def, id);
   };
   return {
+    conversationOf: (spec, tileId) => {
+      if (!isThisAgent(spec) || !def.session?.resume) return undefined;
+      const ctx = { tileId, tileSessionsDir: paths.tileSessionsDir, sessionRoot: opts.sessionRoot };
+      const known = sessionFor(def, spec, { ...ctx, byFolder: false });
+      if (known) return { session: known };
+      const found = sessionFor(def, spec, ctx);
+      return found ? { session: found, byFolder: true } : null;
+    },
     transformSpecOnSpawn: (spec, tileId) => run(spec, tileId, "spawn"),
-    transformSpecOnRestore: (spec, tileId) => {
+    transformSpecOnRestore: (spec, tileId, ran) => {
+      // Only what it ran with is known (a snapshot of before): the hooks it was given go, so the
+      // ones of this manifest are put.
+      if (!ran && isThisAgent(spec)) spec = withoutHooks(def, spec);
       const out = (spec.args ?? []).includes(marker ?? "\0")
         ? run(spec, tileId, "spawn") // already resuming: keep its own session, still wire it up
-        : run(spec, tileId, "restore");
+        : run(spec, tileId, "restore", ran);
       // Known to be gone: start fresh under the same id now, rather than fail and retry.
       return vanished(out) ? retry(out) ?? out : out;
     },

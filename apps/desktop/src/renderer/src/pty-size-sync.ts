@@ -1,6 +1,6 @@
 /**
  * Keep the PTY's size equal to the terminal's, as an invariant rather than an
- * event.
+ * event; and, where the session's size is someone else's, draw it at theirs.
  *
  * xterm's `onResize` fires only when ITS OWN cols/rows change. Every path that
  * can leave the pty at a different size than the grid therefore goes unnoticed:
@@ -27,4 +27,52 @@ export function nextPtySize(last: PtySize | null, cols: number, rows: number): P
   if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return null;
   if (last && last.cols === cols && last.rows === rows) return null;
   return { cols, rows };
+}
+
+/** How long a resize burst must be quiet before its last size is taken. */
+export const RESIZE_SETTLE_MS = 120;
+
+/**
+ * Resizes in a burst (a drag, a window resized, a view laid out): the first is taken at once, the
+ * rest wait until the burst has been quiet `settleMs`, and only the last of them is taken. A terminal
+ * resizes its grid and tells its program in the same step, so the two never disagree: a program
+ * drawing at a width its grid no longer has wraps its lines, and what it meant to erase stays.
+ */
+export function resizeBurst(settleMs = RESIZE_SETTLE_MS) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: (() => void) | null = null;
+  const quiet = () => {
+    timer = null;
+    const last = pending;
+    pending = null;
+    // Taken, the burst may go on: the next waits for quiet again.
+    if (last) { last(); timer = setTimeout(quiet, settleMs); }
+  };
+  return {
+    run(resize: () => void): void {
+      if (!timer) { resize(); timer = setTimeout(quiet, settleMs); return; }
+      pending = resize;
+      clearTimeout(timer);
+      timer = setTimeout(quiet, settleMs);
+    },
+    cancel(): void { if (timer) clearTimeout(timer); timer = null; pending = null; },
+  };
+}
+
+/**
+ * The grid a window draws a terminal at (R4, M2). Several windows, on this machine or others, may
+ * show one session, and only one of them sizes it: the one typing into it here, or a guest holding
+ * its keyboard. While the session has a size this window asked for (`asked`: its last few asks),
+ * the window's size is the session's and it draws `own`, what fits its tile; otherwise it draws the
+ * session at the size it was given, which it letterboxes, or scales down when that is the larger
+ * (`scaleToFit`). With no size heard, its own.
+ */
+export function drawnSize(own: PtySize, asked: readonly PtySize[], session: PtySize | null): PtySize {
+  if (!session || asked.some((a) => a.cols === session.cols && a.rows === session.rows)) return own;
+  return session;
+}
+
+/** How much a grid drawn at `drawn` is scaled down to fit a tile that fits `own`: 1 when it fits. */
+export function scaleToFit(own: PtySize, drawn: PtySize): number {
+  return Math.min(1, own.cols / drawn.cols, own.rows / drawn.rows);
 }

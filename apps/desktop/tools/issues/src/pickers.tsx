@@ -1,0 +1,187 @@
+import { useState } from "react";
+import type { Assignee, IssueSummary } from "./data";
+import { Avatar, LabelChip } from "./StateMeta";
+import { Input } from "@hivemind/app-ui";
+import { MenuItem } from "@hivemind/app-ui";
+import { Popover } from "@hivemind/app-ui";
+
+const Check = () => (
+  <svg width="9" height="9" viewBox="0 0 10 10">
+    <path d="M2 5.2L4.2 7.2L8 3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export function AssigneePicker({
+  value,
+  allAssignees,
+  onChange,
+}: {
+  value: Assignee | null;
+  allAssignees: string[];
+  onChange: (a: Assignee | null) => void;
+}) {
+  const [q, setQ] = useState("");
+  return (
+    <Popover
+      width={200}
+      trigger={
+        value ? (
+          <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)] hover:text-[var(--color-accent)]">
+            <Avatar id={value.id} size={18} />
+            {value.id}
+          </span>
+        ) : (
+          <span className="text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Unassigned</span>
+        )
+      }
+    >
+      {(close) => (
+        <div className="flex flex-col gap-1">
+          <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="assign to…" />
+          <div className="max-h-40 overflow-y-auto">
+            {value && (
+              <MenuItem variant="muted" size="sm" onClick={() => { onChange(null); close(); }}>
+                Unassign
+              </MenuItem>
+            )}
+            {allAssignees
+              .filter((a) => a.toLowerCase().includes(q.toLowerCase()))
+              .map((a) => (
+                <MenuItem key={a} size="sm" onClick={() => { onChange({ type: "member", id: a }); close(); }}>
+                  <Avatar id={a} size={16} />
+                  {a}
+                </MenuItem>
+              ))}
+            {q.trim() && !allAssignees.includes(q.trim()) && (
+              <button
+                onClick={() => { onChange({ type: "member", id: q.trim() }); close(); }}
+                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
+              >
+                Assign “{q.trim()}”
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </Popover>
+  );
+}
+
+export function LabelPicker({
+  value,
+  allLabels,
+  onChange,
+}: {
+  value: string[];
+  allLabels: string[];
+  onChange: (l: string[]) => void;
+}) {
+  const [q, setQ] = useState("");
+  const toggle = (l: string) => onChange(value.includes(l) ? value.filter((x) => x !== l) : [...value, l]);
+  return (
+    <Popover
+      width={210}
+      trigger={
+        value.length ? (
+          <div className="flex flex-wrap gap-1">
+            {value.map((l) => (
+              <LabelChip key={l} label={l} />
+            ))}
+          </div>
+        ) : (
+          <span className="text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Add labels…</span>
+        )
+      }
+    >
+      {() => (
+        <div className="flex flex-col gap-1">
+          <Input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="filter / add…"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && q.trim()) {
+                if (!value.includes(q.trim())) onChange([...value, q.trim()]);
+                setQ("");
+              }
+            }}
+          />
+          <div className="max-h-40 overflow-y-auto">
+            {allLabels
+              .filter((l) => l.toLowerCase().includes(q.toLowerCase()))
+              .map((l) => (
+                <MenuItem key={l} size="sm" onClick={() => toggle(l)}>
+                  <span
+                    className="size-3 rounded-sm border flex items-center justify-center shrink-0"
+                    style={{
+                      color: "var(--color-fg)",
+                      background: value.includes(l) ? "var(--color-brand)" : "transparent",
+                      borderColor: value.includes(l) ? "var(--color-brand)" : "var(--color-line2)",
+                    }}
+                  >
+                    {value.includes(l) && <Check />}
+                  </span>
+                  <LabelChip label={l} />
+                </MenuItem>
+              ))}
+            {q.trim() && !allLabels.includes(q.trim()) && (
+              <button
+                onClick={() => { onChange([...value, q.trim()]); setQ(""); }}
+                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
+              >
+                Create “{q.trim()}”
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </Popover>
+  );
+}
+
+export function ParentPicker({
+  value,
+  candidates,
+  onChange,
+}: {
+  value: string | null;
+  candidates: IssueSummary[];
+  onChange: (p: string | null) => void;
+}) {
+  const [q, setQ] = useState("");
+  const matches = candidates
+    .filter((i) => i.id.toLowerCase().includes(q.toLowerCase()) || i.title.toLowerCase().includes(q.toLowerCase()))
+    .slice(0, 25);
+  return (
+    <Popover
+      width={250}
+      trigger={
+        value ? (
+          <span className="font-mono text-count text-[var(--color-fg)] hover:text-[var(--color-accent)]">{value}</span>
+        ) : (
+          <span className="text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Set parent…</span>
+        )
+      }
+    >
+      {(close) => (
+        <div className="flex flex-col gap-1">
+          <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="search issues…" />
+          <div className="max-h-48 overflow-y-auto">
+            {value && (
+              <MenuItem variant="muted" size="sm" onClick={() => { onChange(null); close(); }}>
+                Clear parent
+              </MenuItem>
+            )}
+            {matches.map((i) => (
+              <MenuItem key={i.id} size="sm" onClick={() => { onChange(i.id); close(); }}>
+                <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums shrink-0">{i.id}</span>
+                <span className="text-label text-[var(--color-fg)] truncate">{i.title}</span>
+              </MenuItem>
+            ))}
+          </div>
+        </div>
+      )}
+    </Popover>
+  );
+}

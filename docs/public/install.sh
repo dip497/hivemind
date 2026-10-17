@@ -9,9 +9,11 @@
 # (a remote machine); anything else needs `--dev`.
 #
 #   curl -fsSL https://raw.githubusercontent.com/dip497/hivemind/main/install.sh | bash
+#   bash install.sh --channel nightly  # latest pre-release from main
+#   bash install.sh --version v2026.10.0  # exactly that build, older ones too (rollback)
 #
 # WITH `--dev`: clones the source repo and builds locally. Needs `git`,
-# `node` ≥ 22, `pnpm` ≥ 10, `bun` ≥ 1.2.10. Use this if you want to hack on
+# `node` ≥ 22, `pnpm` ≥ 12, `bun` ≥ 1.2.10. Use this if you want to hack on
 # hivemind or if no prebuilt is published for your platform yet.
 #
 #   bash install.sh --dev
@@ -31,6 +33,7 @@
 #                     (default: ~/.hivemind-app)
 #   HIVEMIND_REPO     "owner/repo" for release downloads (default: dip497/hivemind)
 #   HIVEMIND_VERSION  pin a specific release tag (default: latest)
+#   HIVEMIND_CHANNEL stable or nightly (default: stable on first install)
 #
 set -euo pipefail
 
@@ -104,6 +107,8 @@ fi
 # one. Swap it in now, before launch (this process is the fresh start).
 if [ -d "${appdir}.staged" ]; then
   rm -rf "$appdir" && mv "${appdir}.staged" "$appdir" && echo "hivemind: applied staged upgrade" >&2
+  # The version is only installed once it is the one that starts.
+  [ -f "$APP_DIR/.staged-version" ] && mv "$APP_DIR/.staged-version" "$APP_DIR/.installed-version"
 fi
 #
 # APPDIR must be exported explicitly: the bundled AppRun auto-detects APPDIR by
@@ -155,6 +160,43 @@ EOF
   command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$data_dir/applications" >/dev/null 2>&1 || true
   command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t "$data_dir/icons/hicolor" >/dev/null 2>&1 || true
   ok "installed desktop entry + icon ($desk_dst)"
+}
+
+# The tag of the latest release, without asking the API for it: the /releases/latest URL
+# redirects to /releases/tag/<tag>, and a redirect is served by the website, which has no
+# hourly limit. The API is the fallback — its 403 is that limit for this address (60 an hour,
+# shared by everyone behind it), which is not a network fault and must not be reported as one.
+LATEST_ERROR="could not resolve the latest release"
+latest_tag() {
+  local url tag code body
+  LATEST_ERROR="could not resolve the latest release of $REPO"
+  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" 2>/dev/null || true)
+  tag=${url##*/tag/}
+  case "$tag" in
+    v[0-9]*|[0-9]*) printf '%s\n' "$tag"; return 0 ;;
+  esac
+  body=$(curl -sS -H 'Cache-Control: no-cache' -w '\n%{http_code}' \
+    "https://api.github.com/repos/$REPO/releases/latest?nocache=$(date +%s)" 2>/dev/null || true)
+  code=$(printf '%s' "$body" | tail -n1)
+  tag=$(printf '%s' "$body" | grep -oE '"tag_name":[[:space:]]*"[^"]+"' | sed -E 's/.*"([^"]+)".*/\1/' | head -1)
+  if [ -n "$tag" ]; then printf '%s\n' "$tag"; return 0; fi
+  case "$code" in
+    403|429) LATEST_ERROR="github is rate-limiting this address (60 api requests an hour, shared). Wait, or install a known version: HIVEMIND_VERSION=vX.Y.Z" ;;
+    "") LATEST_ERROR="could not reach github.com — check your network" ;;
+    *) LATEST_ERROR="github answered $code asking for the latest release of $REPO" ;;
+  esac
+  return 1
+}
+
+# Nightlies are pre-releases, so GitHub's releases/latest intentionally omits them.
+# The releases list is newest first; a unique query avoids its one-minute cache.
+latest_nightly_tag() {
+  local body tag
+  body=$(curl -fsSL -H 'Cache-Control: no-cache' \
+    "https://api.github.com/repos/$REPO/releases?per_page=30&nocache=$(date +%s)" 2>/dev/null) || return 1
+  tag=$(printf '%s' "$body" | grep -oE '"tag_name":[[:space:]]*"nightly-[0-9]{8}-[0-9]+"' | head -1 | sed -E 's/.*"(nightly-[^"]+)"/\1/' || true)
+  [ -n "$tag" ] || return 1
+  printf '%s\n' "$tag"
 }
 
 # Is a packaged hivemind instance live right now? Matches the bundled Electron /
@@ -303,12 +345,23 @@ esac
 # the BARE version (no leading v).
 resolve_assets() {
   local v="${TAG#v}"
+  if [[ "$TAG" == nightly-* ]]; then
+    case "$PLATFORM" in
+      linux-x86_64) CLI_ASSET="hive-linux-x86_64"; APP_ASSET="hivemind-linux-x86_64.AppImage" ;;
+      linux-arm64)  CLI_ASSET="hive-linux-arm64"; APP_ASSET="" ;;
+      darwin-arm64) CLI_ASSET="hive-darwin-arm64"; APP_ASSET="hivemind-macos-arm64.zip" ;;
+      *)            CLI_ASSET=""; APP_ASSET="" ;;
+    esac
+    NET_ASSET="${PLATFORM:+hive-net-$PLATFORM}"
+    return
+  fi
   case "$PLATFORM" in
     linux-x86_64) CLI_ASSET="hive-linux-x86_64"; APP_ASSET="hivemind-${v}-x86_64.AppImage" ;;
     linux-arm64)  CLI_ASSET="hive-linux-arm64"; APP_ASSET="" ;;
     darwin-arm64) CLI_ASSET="hive-darwin-arm64"; APP_ASSET="hivemind-${v}-arm64-mac.zip" ;;
     *)            CLI_ASSET=""; APP_ASSET="" ;;
   esac
+  NET_ASSET="${PLATFORM:+hive-net-$PLATFORM}"
 }
 
 # Test seam: `HIVEMIND_LIB_ONLY=1 source install.sh` stops here, leaving every
@@ -320,27 +373,39 @@ fi
 
 # ── flags ─────────────────────────────────────────────────────────────────
 MODE="prebuilt"
-for arg in "$@"; do
-  case "$arg" in
+CHANNEL="${HIVEMIND_CHANNEL:-}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --dev|--source|--from-source) MODE="dev" ;;
+    --channel)
+      [ "$#" -ge 2 ] || die "--channel needs stable or nightly"
+      CHANNEL="$2"; shift ;;
+    --version)
+      [ "$#" -ge 2 ] || die "--version needs a release tag, e.g. v2026.10.0 or nightly-20261003-123"
+      HIVEMIND_VERSION="$2"; shift ;;
     -h|--help)
       sed -n '2,20p' "$0"
       exit 0
       ;;
-    *) warn "unknown flag: $arg" ;;
+    *) warn "unknown flag: $1" ;;
   esac
+  shift
 done
+case "$CHANNEL" in ""|stable|nightly) ;; *) die "channel must be stable or nightly" ;; esac
 
 # Resolve-only mode: print the platform + release assets this box would use and
 # exit, touching nothing. Drives scripts/install-plan-test.sh and is handy for
 # debugging a failed download ("which asset was it even asking for?").
 if [ "${HIVEMIND_PRINT_PLAN:-0}" = "1" ]; then
-  TAG="${HIVEMIND_VERSION:-v0.0.0}"
+  CHANNEL="${CHANNEL:-stable}"
+  TAG="${HIVEMIND_VERSION:-$(if [ "$CHANNEL" = nightly ]; then echo nightly-20261003-123; else echo v0.0.0; fi)}"
   resolve_assets
+  echo "channel=$CHANNEL"
   echo "os_kind=$OS_KIND"
   echo "platform=${PLATFORM:-none}"
   echo "cli_asset=${CLI_ASSET:-none}"
   echo "app_asset=${APP_ASSET:-none}"
+  echo "net_asset=${NET_ASSET:-none}"
   exit 0
 fi
 
@@ -348,6 +413,12 @@ BIN_DIR="${HIVEMIND_BIN_DIR:-$HOME/.local/bin}"
 APP_DIR="${HIVEMIND_APP_DIR:-$HOME/.hivemind-app}"
 REPO="${HIVEMIND_REPO:-dip497/hivemind}"
 mkdir -p "$BIN_DIR" "$APP_DIR"
+if [ -z "$CHANNEL" ]; then
+  case "$(cat "$APP_DIR/.installed-version" 2>/dev/null || true)" in
+    nightly-*) CHANNEL=nightly ;;
+    *) CHANNEL=stable ;;
+  esac
+fi
 
 # Remove temp download files on ANY exit — including a killed run (SIGINT/SIGTERM,
 # closed terminal, dropped network). The inline `rm -f` on curl failure only fires
@@ -355,11 +426,27 @@ mkdir -p "$BIN_DIR" "$APP_DIR"
 # `*.new` (up to ~115MB). On a near-full disk those orphans snowball into ENOSPC
 # and wedge every future upgrade. CLI_TMP/APPIMG_TMP are assigned later in
 # install_prebuilt; declared here so the trap can always see them.
-CLI_TMP=""; APPIMG_TMP=""
-cleanup_tmp() { rm -f "$CLI_TMP" "$APPIMG_TMP" 2>/dev/null || true; }
+CLI_TMP=""; APPIMG_TMP=""; NET_TMP=""
+cleanup_tmp() { rm -f "$CLI_TMP" "$APPIMG_TMP" "$NET_TMP" 2>/dev/null || true; }
 trap cleanup_tmp EXIT INT TERM
 # Sweep orphans a PREVIOUS killed run may have left (the bug above, pre-fix).
-rm -f "$APP_DIR"/hive.*.new "$APP_DIR"/hivemind.AppImage.*.new "$APP_DIR"/hivemind.app.*.new 2>/dev/null || true
+rm -f "$APP_DIR"/hive.*.new "$APP_DIR"/hive-net.*.new "$APP_DIR"/hivemind.AppImage.*.new "$APP_DIR"/hivemind.app.*.new 2>/dev/null || true
+
+# hive-net, beside hive: this machine's device on the network (R10). Its release build is
+# allowed to fail on its own, so a release without it installs the rest, and one installed
+# before stays.
+install_net() {
+  NET_TMP="$APP_DIR/hive-net.$$.new"
+  if curl -fsL -o "$NET_TMP" "https://github.com/$REPO/releases/download/$TAG/$NET_ASSET" && [ -s "$NET_TMP" ]; then
+    chmod +x "$NET_TMP"
+    mv -f "$NET_TMP" "$APP_DIR/hive-net"
+    ln -sf "$APP_DIR/hive-net" "$BIN_DIR/hive-net"
+    ok "linked $BIN_DIR/hive-net → $APP_DIR/hive-net"
+  else
+    rm -f "$NET_TMP"
+    warn "hive-net is not in $TAG; the rest is installed without it"
+  fi
+}
 
 # ── PREBUILT path ─────────────────────────────────────────────────────────
 install_prebuilt() {
@@ -380,12 +467,12 @@ install_prebuilt() {
   # Resolve target version (latest by default).
   if [ -n "${HIVEMIND_VERSION:-}" ]; then
     TAG="$HIVEMIND_VERSION"
+  elif [ "$CHANNEL" = nightly ]; then
+    say "resolving latest nightly of $REPO"
+    TAG=$(latest_nightly_tag) || die "could not resolve a nightly release of $REPO; check your network or use --version nightly-YYYYMMDD-RUN"
   else
     say "resolving latest release of $REPO"
-    TAG=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-      | grep -oE '"tag_name":\s*"[^"]+"' \
-      | sed -E 's/.*"([^"]+)".*/\1/' | head -1) \
-      || die "could not reach github.com api — check your network"
+    TAG=$(latest_tag) || die "$LATEST_ERROR"
     [ -n "$TAG" ] || die "no published releases yet for $REPO. Try --dev to build from source."
   fi
   say "target version: $TAG"
@@ -395,7 +482,12 @@ install_prebuilt() {
   # aborts on the SUID-sandbox error; re-running the installer should repair
   # that to the --no-sandbox wrapper even when the version hasn't changed.
   INSTALLED_FILE="$APP_DIR/.installed-version"
-  if [ -f "$INSTALLED_FILE" ] && [ "$(cat "$INSTALLED_FILE")" = "$TAG" ]; then
+  STAGED_FILE="$APP_DIR/.staged-version"
+  if [ -f "$STAGED_FILE" ] && [ "$(cat "$STAGED_FILE")" = "$TAG" ] && [ -d "$APP_DIR/hivemind-extracted.staged" ]; then
+    ok "$TAG is downloaded already — restart hivemind to finish"
+    return 0
+  fi
+  if [ -f "$INSTALLED_FILE" ] && [ "$(cat "$INSTALLED_FILE")" = "$TAG" ] && [ ! -d "$APP_DIR/hivemind-extracted.staged" ]; then
     if [ "$OS_KIND" = "mac" ]; then
       # Nothing to heal on macOS (no AppImage, no AppRun) — just make sure the
       # launcher + ~/Applications alias exist and point at the current bundle.
@@ -450,6 +542,7 @@ install_prebuilt() {
   mv -f "$CLI_TMP" "$APP_DIR/hive"
   ln -sf "$APP_DIR/hive" "$BIN_DIR/hive"
   ok "linked $BIN_DIR/hive → $APP_DIR/hive"
+  install_net
 
   if [ -z "$APP_ASSET" ]; then
     echo "$TAG" > "$INSTALLED_FILE"
@@ -509,6 +602,7 @@ install_prebuilt() {
       # ~/.local/share, not the running process).
       write_launcher "$APP_DIR/hivemind-extracted/AppRun"
       install_desktop_entry "$APP_DIR/hivemind-extracted.staged"
+      STAGED=1
       warn "hivemind is running — upgrade STAGED. Quit & reopen hivemind to apply it. Your canvas + sessions are safe; nothing is lost."
     fi
   else
@@ -519,8 +613,16 @@ install_prebuilt() {
                # short-circuiting on "already on $TAG".
   fi
 
-  echo "$TAG" > "$INSTALLED_FILE"
-  ok "installed $TAG"
+  # What `.installed-version` says is what runs: a build waiting for a restart is
+  # recorded apart, so a later run offers to finish it instead of finding nothing to do.
+  if [ "${STAGED:-0}" = 1 ]; then
+    echo "$TAG" > "$APP_DIR/.staged-version"
+    ok "downloaded $TAG — restart hivemind to finish"
+  else
+    rm -f "$APP_DIR/.staged-version"
+    echo "$TAG" > "$INSTALLED_FILE"
+    ok "installed $TAG"
+  fi
 }
 
 # ── DEV path (source build) ───────────────────────────────────────────────
@@ -653,6 +755,7 @@ esac
 # ── next steps ────────────────────────────────────────────────────────────
 if [ "$MODE" = "prebuilt" ] && [ "$PLATFORM" = "linux-arm64" ]; then
   printf '\n%b✓ hive ready.%b From your desktop:  hive machine add %s@%s\n' "$GREEN" "$NC" "$(id -un)" "$(hostname)"
+  printf '  Or keep this machine serving your workspaces, always on:  hive host install && hive host pair\n'
   exit 0
 fi
 cat <<EOF

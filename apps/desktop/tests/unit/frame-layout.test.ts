@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   resolveFrameCollisions,
   nextSlotInFrame,
+  reserveTileSlot,
   computeFrameLayout,
   arrangeBoxes,
   frameAtPoint,
@@ -91,6 +92,28 @@ test("second tile extends the row to the right when it fits", () => {
   assert.equal(slot.y, 248, "top-aligned with the row");
 });
 
+test("a dragged tile far across the frame does not push a new spawn away from the open first slot", () => {
+  const slot = nextSlotInFrame({ x: 100, y: 200 }, [rect("moved", 5000, 248, 1200, 800)], { w: 1100, h: 740 }, PACK);
+  assert.deepEqual(slot, { x: 124, y: 248 });
+});
+
+test("a new tile fills the first free gap in a row before wrapping", () => {
+  const members = [rect("first", 124, 248, 1100, 740), rect("moved", 2600, 248, 1100, 740)];
+  const slot = nextSlotInFrame({ x: 100, y: 200 }, members, { w: 1100, h: 740 }, PACK);
+  assert.deepEqual(slot, { x: 124 + 1100 + PACK.gap, y: 248 });
+});
+
+test("a tile opened by another lands right of it, else below it, else in the first free slot", () => {
+  const lead = rect("lead", 2600, 248, 1100, 740);
+  const tile = { w: 1100, h: 740 };
+  const origin = { x: 100, y: 200 };
+  assert.deepEqual(nextSlotInFrame(origin, [lead], tile, { ...PACK, near: lead }), { x: 2600 + 1100 + 24, y: 248 });
+  const right = rect("right", 3724, 248, 1100, 740);
+  assert.deepEqual(nextSlotInFrame(origin, [lead, right], tile, { ...PACK, near: lead }), { x: 2600, y: 248 + 740 + 24 });
+  const below = rect("below", 2600, 1012, 1100, 740);
+  assert.deepEqual(nextSlotInFrame(origin, [lead, right, below], tile, { ...PACK, near: lead }), { x: 124, y: 248 });
+});
+
 test("tile wraps to a new row when the row would exceed maxRowWidth", () => {
   const origin = { x: 100, y: 200 };
   // Two big tiles already fill the row (124..124+1480+24+1480 ≈ 3108); a third
@@ -102,6 +125,18 @@ test("tile wraps to a new row when the row would exceed maxRowWidth", () => {
   const slot = nextSlotInFrame(origin, m, { w: 1480, h: 1000 }, PACK);
   assert.equal(slot.x, 124, "wraps back to the left pad");
   assert.equal(slot.y, 248 + 1000 + 24, "drops below the tallest in the row");
+});
+
+test("three tile spawns before state settles reserve non-overlapping boxes", () => {
+  const pending = new Map<string, ReturnType<typeof rect>>();
+  const staleMembers: ReturnType<typeof rect>[] = [];
+  const boxes = ["first", "second", "third"].map((id) => {
+    const slot = reserveTileSlot(id, { x: 100, y: 200 }, staleMembers, pending, { w: 1100, h: 740 }, PACK);
+    return rect(id, slot.x, slot.y, 1100, 740);
+  });
+  for (let i = 0; i < boxes.length; i++)
+    for (let j = i + 1; j < boxes.length; j++)
+      assert.equal(overlap(boxes[i]!, boxes[j]!), false, `${boxes[i]!.id} overlaps ${boxes[j]!.id}`);
 });
 
 // ── computeFrameLayout (nesting-aware auto-fit) ──────────────────────────────
@@ -122,6 +157,13 @@ test("flat: a lone frame fits its member-tile bbox (pad+header)", () => {
   const { geometry, tileShift } = computeFrameLayout(frames, members, null, K);
   assert.deepEqual(geometry.get("a"), { x: 72, y: 64, w: 556, h: 464 });
   assert.deepEqual(tileShift.get("a"), { dx: 0, dy: 0 });
+});
+
+test("flat: a frame around a small member (a sticky note) is still as wide as an empty one, for its header", () => {
+  const frames: FrameGeom[] = [{ id: "a", x: 0, y: 0, w: 460, h: 200 }];
+  const members = new Map([["a", [mem(100, 100, 220, 180)]]]);
+  const { geometry } = computeFrameLayout(frames, members, null, K);
+  assert.deepEqual(geometry.get("a"), { x: 72, y: 64, w: 460, h: 244 });
 });
 
 test("flat: an empty frame collapses to the placeholder at its origin", () => {

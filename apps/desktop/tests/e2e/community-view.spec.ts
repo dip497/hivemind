@@ -71,7 +71,7 @@ test.beforeAll(async () => {
   const userData = path.join(XDG, "hivemind-dev");
   const sock = path.join(userData, "hcp.sock"), tokenFile = path.join(userData, "hcp.token");
   await expect.poll(() => fs.existsSync(sock) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
-  hcpEnv = { HIVE_HCP_SOCK: sock, HCP_TOKEN: fs.readFileSync(tokenFile, "utf8").trim() };
+  hcpEnv = { HIVEMIND_APP_DATA: userData };
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.waitForTimeout(300);
@@ -87,8 +87,8 @@ test.afterAll(async () => {
   await fs.promises.rm(XDG, { recursive: true, force: true }).catch(() => {});
 });
 
-test("an installed view is registered after the built-ins: ⌘E cycles canvas → windows → queue → canvas", async () => {
-  await expect.poll(async () => (await report()).registered).toEqual(["queue"]);
+test("an installed view is registered after the app's own: ⌘E cycles canvas → windows → queue → canvas", async () => {
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue"]);
   expect(await activeView()).toBe("canvas");
   const seen: string[] = [];
   // One toggle per registered view, so the cycle ends where it started — a lap too many
@@ -96,6 +96,28 @@ test("an installed view is registered after the built-ins: ⌘E cycles canvas �
   for (let i = 0; i < 3; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
   expect(seen).toEqual(["windows", "queue", "canvas"]);
   expect(hive("views", "list").data.map((v: { id: string; error: string | null }) => [v.id, v.error])).toEqual([["queue", null]]);
+});
+
+test("a view's frame is see-through where no pane covers it: the dark app shows, not white", async () => {
+  await toView("windows");
+  const frame = page.locator('iframe[name="hm-view:windows"]');
+  await expect(frame).toBeVisible();
+  await expect.poll(() => page.frame({ name: "hm-view:windows" })?.locator(".w-pane").count() ?? 0).toBeGreaterThan(0);
+  // The strip right of the panes, the room's padding: what is behind the frame.
+  const box = (await frame.boundingBox())!;
+  const shot = await page.screenshot({ clip: { x: box.x + box.width - 5, y: box.y + box.height / 2, width: 3, height: 3 } });
+  const rgb = await page.evaluate(async (png) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${png}`;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d")!;
+    g.drawImage(img, 0, 0);
+    return Array.from(g.getImageData(0, 0, c.width, c.height).data).filter((_, i) => i % 4 !== 3);
+  }, shot.toString("base64"));
+  expect(Math.max(...rgb)).toBeLessThan(128);
+  await toView("canvas");
 });
 
 test("the plugin runs sandboxed: its own origin, no window.hive, no node, no network", async () => {
@@ -156,7 +178,7 @@ test("`hive views install` while the app runs: the CLI asks the app to rescan an
     expect(r.data.rescanned).toBe(true);
   }
   // No reloadViews() here: the rescan came from the CLI's HCP call.
-  await expect.poll(async () => (await report()).registered).toEqual(["queue", "hostile-flood", "hostile-loop"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue", "hostile-flood", "hostile-loop"]);
   const seen: string[] = [];
   await toView("canvas");
   for (let i = 0; i < 5; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
@@ -164,7 +186,7 @@ test("`hive views install` while the app runs: the CLI asks the app to rescan an
 });
 
 test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes back with the session intact", async () => {
-  await expect.poll(async () => (await report()).registered).toEqual(["queue", "hostile-flood", "hostile-loop"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue", "hostile-flood", "hostile-loop"]);
 
   await toView("hostile-flood");
   await expect.poll(activeView, { timeout: 10_000 }).toBe("canvas");
@@ -187,7 +209,7 @@ test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes 
   expect((await report()).refused["hostile-loop"]).toMatch(/^disabled: runaway/);
   // Disabled for the session: gone from the cycle even after a rescan.
   await reloadViews();
-  await expect.poll(async () => (await report()).registered).toEqual(["queue"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue"]);
   await expect(page.locator(".xterm")).toHaveCount(1);
   await page.waitForSelector(".react-flow__node-terminal .xterm");
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
@@ -202,7 +224,7 @@ test("a package asking for an unknown permission is refused by install AND by th
   fs.cpSync(path.join(FIXTURES, "greedy"), path.join(viewsDir(), "greedy"), { recursive: true });
   await reloadViews();
   await expect.poll(async () => (await report()).refused["greedy"]).toMatch(/unknown permission "fs:read"/);
-  expect((await report()).registered).toEqual(["queue"]);
+  expect((await report()).registered).toEqual(["windows", "queue"]);
   expect(hive("views", "list").data.find((v: { id: string }) => v.id === "greedy").error).toMatch(/unknown permission/);
 });
 
@@ -213,7 +235,7 @@ test("`hive views remove` of the ACTIVE view: the app rescans, the switcher drop
   expect(r.ok).toBe(true);
   expect(r.data.rescanned).toBe(true);
   // No reloadViews(): the CLI's rescan did it.
-  await expect.poll(async () => (await report()).registered).toEqual([]);
+  await expect.poll(async () => (await report()).registered).toEqual(["windows"]);
   await expect.poll(activeView).toBe("canvas");
   await expect(page.locator(".xterm")).toHaveCount(1);
   expect(hive("views", "list").data.map((v: { id: string }) => v.id)).toEqual(["greedy", "hostile-flood", "hostile-loop"]);

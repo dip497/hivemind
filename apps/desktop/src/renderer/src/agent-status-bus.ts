@@ -9,16 +9,9 @@
  *     activity — and the exit details (code, signal) only the tile sees.
  */
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
+import { tileStatusOf, type TileStatusKind } from "@hivemind/agent-host/tile-status";
 
-export type TileStatusKind =
-  | "working"
-  | "idle"
-  | "blocked"
-  | "permission"
-  | "question"
-  | "exited"
-  | "plan_review"        // handed off a plan — waiting for a person's review
-  | "awaiting_approval"; // supervised worker — waiting for its supervisor
+export type { TileStatusKind };
 
 export interface StatusEvent {
   tileId: string;
@@ -30,6 +23,8 @@ export interface StatusEvent {
   synthetic?: boolean;
   /** Process exit code, on an `exited` status from a PTY exit: a crash (non-zero) vs a close. */
   exitCode?: number;
+  /** The signal that ended the process, on an `exited` status from a PTY exit. */
+  signal?: number;
   /** One-line detail: why an exit or a turn ended the way it did. */
   detail?: string;
 }
@@ -43,20 +38,6 @@ const local = new Map<string, StatusEvent>();
 const hosted = new Map<string, SessionStatus>();
 const labels = new Map<string, string>();
 const emitted = new Map<string, StatusEvent>();
-
-const WAITING: Record<NonNullable<SessionStatus["kind"]>, TileStatusKind> = {
-  permission: "permission", question: "question", plan: "plan_review", approval: "awaiting_approval", other: "blocked",
-};
-const ENDED: Partial<Record<SessionStatus["state"], string>> = { failed: "turn failed", limited: "usage limit reached", interrupted: "interrupted" };
-
-/** A hosted status, as the kinds tiles and views colour by. */
-export function tileStatusOf(s: SessionStatus): Pick<StatusEvent, "status" | "synthetic" | "detail"> {
-  if (s.state === "exited") return { status: "exited" };
-  if (s.state === "waiting") return { status: WAITING[s.kind ?? "other"] };
-  if (s.state === "working" || s.subagents.length > 0) return { status: "working" };
-  const detail = ENDED[s.state];
-  return { status: "idle", ...(detail ? { detail } : {}), ...(s.state === "interrupted" ? { synthetic: true } : {}) };
-}
 
 function effective(tileId: string): StatusEvent | undefined {
   const l = local.get(tileId);
@@ -145,6 +126,12 @@ export function clearStatus(tileId: string): void {
   local.delete(tileId);
   labels.delete(tileId);
   emitted.delete(tileId);
+}
+
+/** The tile closed for good (its id never comes back): the host's status for it goes too. */
+export function forgetStatus(tileId: string): void {
+  clearStatus(tileId);
+  hosted.delete(tileId);
 }
 
 /** Last-known effective status of a tile, or null if none recorded. */

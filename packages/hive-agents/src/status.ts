@@ -10,7 +10,7 @@ export type SessionState = (typeof SESSION_STATES)[number];
 
 /** What the host sees without the agent telling it: the process ended, the user interrupted. */
 export type HostFact = { fact: "exited" } | { fact: "interrupt" };
-export type StatusInput = Pick<AgentEvent, "event" | "outcome" | "kind" | "agentId" | "background"> | HostFact;
+export type StatusInput = Pick<AgentEvent, "event" | "outcome" | "kind" | "agentId" | "background" | "sessionId"> | HostFact;
 
 export interface AgentStatus {
   state: SessionState;

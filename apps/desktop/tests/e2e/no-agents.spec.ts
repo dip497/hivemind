@@ -36,7 +36,8 @@ test("with no agent installed, starting one opens Settings ▸ Plugins, and a pl
 
     // Terminals are agent-independent.
     await page.getByRole("button", { name: "Close", exact: true }).click();
-    await page.getByTitle(/^Terminal  /).click();
+    await page.locator('[data-toolbar-action="board"]').click();
+    await page.locator('[data-board-choice="tile:shell"]').click();
     await page.waitForSelector(".xterm");
     await expect(page.locator(".react-flow__node-terminal")).toHaveCount(before + 1);
   } finally {

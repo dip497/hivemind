@@ -18,7 +18,7 @@ templates/              hive-browser skill source
 docs/design/            architecture notes (historical; do not rewrite)
 ```
 
-pnpm workspace; Node ≥ 22, pnpm ≥ 10, bun ≥ 1.1 (CLI compile only).
+pnpm workspace; Node ≥ 22, pnpm 12 (`packageManager` in package.json pins the exact version), bun ≥ 1.1 (CLI compile only).
 
 ## Install dependencies
 
@@ -40,17 +40,16 @@ pnpm test:unit        # node:test; add tests here first
 pnpm test:e2e         # when touching canvas/frame/tile/issue behaviour
 ```
 
-Dev loop: `pnpm --filter @hivemind/desktop run dev` (full app) or
-`pnpm --filter @hivemind/desktop run dev:bridge -- /path/to/repo` (renderer-only, fastest); CLI:
-`pnpm --filter @hivemind/cli run dev <cmd>`.
+Dev loop: `pnpm --filter @hivemind/desktop run dev` (the app; Settings → Advanced → In a browser
+serves it to a browser tab too); CLI: `pnpm --filter @hivemind/cli run dev <cmd>`.
 
-Known traps: the dev-bridge runs under tsx (node), not bun; e2e needs
+Known traps: e2e needs
 `unset ELECTRON_RUN_AS_NODE` and xvfb; the e2e suite is a gate with `retries=0`.
 
 ## Conventions
 
 - TypeScript strict; comments explain *why*, matching surrounding density.
-- Icons: `lucide-react` only. Colours: `var(--color-*)` tokens; `--color-fg2` for
+- Icons: from `components/icons.tsx` only (Hugeicons, one stroke weight); a plugin imports them from `@hivemind/app-ui`. Colours: `var(--color-*)` tokens; `--color-fg2` for
   informational text; `aria-label` on icon-only buttons; focus rings on inputs.
 - Agent providers: one directory in `packages/hive-agents/src/providers/`, registered
   in the shared catalog.

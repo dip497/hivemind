@@ -7,12 +7,12 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "types": ["vite/client"],
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/src/*"]
+      "@/*": ["./src/renderer/src/*"],
+      "@hivemind/app-ui": ["./src/renderer/src/plugin-ui.ts"]
     },
     "outDir": "out/.tsc-web"
   },
-  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "include": ["src/renderer/**/*", "src/shared/**/*", "src/browser/**/*", "views/*/src/**/*", "tools/*/src/**/*"],
   "exclude": ["node_modules", "out", "dist"]
 }

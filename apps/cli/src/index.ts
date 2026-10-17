@@ -29,13 +29,19 @@ import { viewsCmd } from "./commands/views.js";
 import { reviewCmd } from "./commands/review.js";
 import { toolsCmd } from "./commands/tools.js";
 import { configCmd, themeCmd } from "./commands/config.js";
+import { pluginsCmd } from "./commands/plugins.js";
+import { widgetsCmd } from "./commands/widgets.js";
+import { networkCmd } from "./commands/network.js";
 import { daemonCmd } from "./commands/daemon.js";
+import { hostCmd } from "./commands/host.js";
 import { psCmd } from "./commands/ps.js";
 import { attachCmd } from "./commands/attach.js";
 import { runCmd } from "./commands/run.js";
 import { machineCmd } from "./commands/machine.js";
 import { killCmd } from "./commands/kill.js";
 import { pushCmd } from "./commands/push.js";
+import { joinCmd, peopleCmd, shareCmd } from "./commands/share.js";
+import { grantCmd } from "./commands/grant.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -79,13 +85,21 @@ const main = defineCommand({
     tools: toolsCmd,
     agents: agentsCmd,
     packages: packagesCmd,
+    plugins: pluginsCmd,
+    widgets: widgetsCmd,
     config: configCmd,
     theme: themeCmd,
     daemon: daemonCmd,
+    host: hostCmd,
+    share: shareCmd,
+    people: peopleCmd,
+    grant: grantCmd,
+    join: joinCmd,
     ps: psCmd,
     attach: attachCmd,
     run: runCmd,
     machine: machineCmd,
+    network: networkCmd,
     kill: killCmd,
     push: pushCmd,
   },

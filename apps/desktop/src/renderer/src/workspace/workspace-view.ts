@@ -15,11 +15,12 @@
  * docs/design/workspace-views.md.
  */
 import { useSyncExternalStore, type ComponentType } from "react";
-import type { LucideIcon } from "lucide-react";
+import type { Icon } from "../components/icons";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
-import type { FrameActions } from "../FrameRailMenu";
+import type { FrameActions } from "../FrameMenu";
+import type { SleepActions } from "./SleepAgents";
 import type { TileKind } from "../tile-kinds";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
 
@@ -48,6 +49,8 @@ export interface WorkspaceViewModel {
   layerFrames: LayerFrame[];
   /** Frame-level actions (spawn into / worktree / workspace / git …). */
   frameActions: FrameActions;
+  /** Put agents to sleep and wake them: a tile, a frame, or every agent here. */
+  sleepActions: SleepActions;
   /** Live agent wiring — data-flow pipes (hive_connect) + spawn parentage. */
   links: { pipes: { src: string; dst: string }[]; spawnLinks: { parent: string; child: string }[] };
 }
@@ -74,7 +77,7 @@ export interface WorkspaceCommands {
   focusTile: (id: string, opts?: { exact?: boolean }) => void;
   closeTile: (id: string) => void;
   spawnTile: (kind: TileKind, frameId: string | null, opts?: SpawnOpts) => string | undefined;
-  spawnVis: (which: "tree" | "shell" | "diff" | "issues") => void;
+  spawnVis: (which: "tree" | "shell" | "issues") => void;
   /** Protocol name since 1.0: it starts the DEFAULT agent, whichever that is. 1.2 views use
    *  `spawnAgent(null, frameId)` instead. */
   spawnClaude: () => void;
@@ -127,7 +130,7 @@ export interface WorkspaceViewPlugin {
   id: string;
   label: string;
   hint: string;
-  icon: LucideIcon;
+  icon: Icon;
   /** May be `React.lazy(...)` — the ViewHost wraps it in Suspense. */
   component: ComponentType<WorkspaceViewProps>;
   /** Built-ins run in the renderer; community views run in a sandboxed iframe
@@ -173,6 +176,9 @@ function changed() { snapshot = [...views.values()]; for (const l of listeners) 
 
 /** The view we fall back to when the stored/requested one is unknown or crashes. */
 export const FALLBACK_VIEW_ID = "canvas";
+
+/** Window event, detail a tile id: put the keyboard in that tile if it is the selected one. */
+export const TILE_KEYBOARD = "hivemind:tile-keyboard";
 
 export function registerView(plugin: WorkspaceViewPlugin): void {
   views.set(plugin.id, plugin);

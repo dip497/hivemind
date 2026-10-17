@@ -12,10 +12,11 @@
  * `when: supervised` appears only for a supervised tile, `matcher: supervise` becomes the
  * tools that tile's policy covers, and the whole document is omitted when nothing is left.
  */
+import { createHash } from "node:crypto";
 import { shq } from "./shq.js";
 import type { AgentHookEntry, AgentHooks, AgentProviderDef } from "./types.js";
 import type { HookScript, LaunchRequest } from "./runtime.js";
-import { EVENT_ENV, EVENT_HOOK } from "./events.js";
+import { EVENT_ENV, EVENT_HOOK, keptFields } from "./events.js";
 
 /** What the generic script reports for an `emit` entry. */
 function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
@@ -24,6 +25,10 @@ function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
     [EVENT_ENV.event]: entry.emit,
     ...(entry.outcome ? { [EVENT_ENV.outcome]: entry.outcome } : {}),
     ...(entry.kind ? { [EVENT_ENV.kind]: entry.kind } : {}),
+    ...(entry.answer ? { [EVENT_ENV.answer]: "1" } : {}),
+    ...(entry.reply ? { [EVENT_ENV.reply]: entry.reply } : {}),
+    // The ids alone come from the agent's environment, so most commands stay as they were.
+    ...(entry.answer || entry.reply ? { [EVENT_ENV.keep]: keptFields(entry) } : {}),
   };
 }
 
@@ -56,7 +61,7 @@ const DEFAULT_SYSTEM_ROOT = "C:/Windows";
 function win32HookCommand(env: Record<string, string>, hook: HookScript, req: LaunchRequest): string {
   const root = (req.env.SystemRoot ?? DEFAULT_SYSTEM_ROOT).replace(/\\/g, "/");
   const exe = `${root}/System32/WindowsPowerShell/v1.0/powershell.exe`;
-  const pairs: Array<[string, string]> = [...Object.entries(env), ["ELECTRON_RUN_AS_NODE", "1"]];
+  const pairs: Array<[string, string]> = [...Object.entries(env), ...(hook.exec ? [] : [["ELECTRON_RUN_AS_NODE", "1"] as [string, string]])];
   const sets = pairs.map(([k, v]) => `$env:${k}=${pshq(v)}`).join("; ");
   // The call operator returns at once for a GUI-subsystem exe (ours is one), so start it through
   // .NET: no shell and no redirection means it inherits stdin/stdout and can be waited on.
@@ -65,10 +70,40 @@ function win32HookCommand(env: Record<string, string>, hook: HookScript, req: La
   const script = [
     "$ProgressPreference='SilentlyContinue'", ...(sets ? [sets] : []),
     "$s=New-Object System.Diagnostics.ProcessStartInfo",
-    `$s.FileName=${pshq(req.paths.execPath)}`, `$s.Arguments=${pshq(args)}`, "$s.UseShellExecute=$false",
+    `$s.FileName=${pshq(hook.exec ?? req.paths.execPath)}`, `$s.Arguments=${pshq(args)}`, "$s.UseShellExecute=$false",
     "$p=[System.Diagnostics.Process]::Start($s)", "$p.WaitForExit()", "exit $p.ExitCode",
   ].join("; ");
   return `${exe} -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
+}
+
+/** The variable a stable hook command reads its script's path from (`_ARG`: its argument,
+ *  `_EXEC`: the program that runs it). */
+const stableVar = (name: string): string => `HIVEMIND_HOOK_${name.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+
+/** A stable hook's command names no path: the binary, the script and its argument come from the
+ *  agent's environment (`stableHookEnv`), set at launch by whichever app started it. So the text is
+ *  the same for every install and build, and an agent that asks before running a hook it has not
+ *  seen (codex) is asked once, not each time another app or version starts it. It needs the agent
+ *  to run hooks through a shell, as codex does. */
+function stableHookCommand(name: string, hook: HookScript, entry?: AgentHookEntry): string {
+  const env = emitEnv(entry);
+  const v = stableVar(name);
+  return ["env", ...Object.entries(env).map(([k, x]) => `${k}=${shq(x)}`), "ELECTRON_RUN_AS_NODE=1",
+    `"$${v}_EXEC"`, `"$${v}"`, ...(hook.arg ? [`"$${v}_ARG"`] : [])].join(" ");
+}
+
+/** What a stable hook command reads from the agent's environment: each script it may run, its
+ *  argument, the variables it is told (an asset hook's SDK paths), and the binary that runs them. */
+export function stableHookEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, string> {
+  if (!def.hooks?.stable || (req.platform ?? process.platform) === "win32") return {};
+  const out: Record<string, string> = {};
+  for (const [name, hook] of Object.entries(req.paths.hooks)) {
+    out[`${stableVar(name)}_EXEC`] = hook.exec ?? req.paths.execPath;
+    out[stableVar(name)] = hook.path;
+    if (hook.arg) out[`${stableVar(name)}_ARG`] = hook.arg;
+    Object.assign(out, hook.env);
+  }
+  return out;
 }
 
 /** The command line the daemon runs for one of its own hooks, attributed to a tile. It starts
@@ -77,7 +112,7 @@ export function hookCommand(hook: HookScript, req: LaunchRequest, entry?: AgentH
   const env = hookEnv(hook, req, entry);
   if ((req.platform ?? process.platform) === "win32") return win32HookCommand(env, hook, req);
   const parts = ["env", ...Object.entries(env).map(([k, v]) => `${k}=${shq(v)}`)];
-  parts.push("ELECTRON_RUN_AS_NODE=1", shq(req.paths.execPath), shq(hook.path));
+  parts.push(...(hook.exec ? [shq(hook.exec)] : ["ELECTRON_RUN_AS_NODE=1", shq(req.paths.execPath)]), shq(hook.path));
   if (hook.arg) parts.push(shq(hook.arg));
   return parts.join(" ");
 }
@@ -119,7 +154,8 @@ function entryFor(
   const hook = req.paths.hooks[name];
   if (!hook) return undefined; // the daemon does not have this script: the event is not wired
   const matcher = matcherFor(entry, req);
-  const values = { command: hookCommand(hook, req, entry), timeout: entry.timeout, matcher };
+  const stable = hooks.stable && (req.platform ?? process.platform) !== "win32";
+  const values = { command: stable ? stableHookCommand(name, hook, entry) : hookCommand(hook, req, entry), timeout: entry.timeout, matcher };
   return { body: fill(hooks.entry ?? DEFAULT_ENTRY, values), ...(matcher ? { matcher } : {}) };
 }
 
@@ -149,12 +185,48 @@ function toTomlInline(v: unknown): string {
   return JSON.stringify(v);
 }
 
+/** JSON with every object's keys sorted, as codex serializes a hook before hashing it. */
+function sortedJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(sortedJson).join(",")}]`;
+  if (v && typeof v === "object") return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${sortedJson((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  return JSON.stringify(v);
+}
+
+/** Events whose matcher codex ignores, and leaves out of the hash. */
+const CODEX_NO_MATCHER = new Set(["user_prompt_submit", "stop", "interrupt"]);
+
+/** What codex records once its user trusts each of these hooks, keyed as it keys hooks passed on
+ *  its command line: the sha256 of the hook as it reads it (event, matcher, the handler with its
+ *  defaults filled in). Given at launch, the hooks this document wires run without asking. */
+function codexTrust(events: Record<string, unknown[]>): Record<string, { trusted_hash: string }> {
+  const out: Record<string, { trusted_hash: string }> = {};
+  for (const [event, groups] of Object.entries(events)) {
+    const label = event.replace(/(?<!^)([A-Z])/g, "_$1").toLowerCase();
+    groups.forEach((g, gi) => {
+      const group = g as { matcher?: string; hooks?: Array<Record<string, unknown>> };
+      (group.hooks ?? []).forEach((h, hi) => {
+        if (h.type !== "command") return;
+        const t = typeof h.timeout === "number" ? h.timeout : undefined;
+        const timeout = label === "session_end" || label === "interrupt" ? Math.min(3, Math.max(1, t ?? 1)) : Math.max(1, t ?? 600);
+        const handler = { type: "command", command: h.command, timeout, async: h.async === true,
+          ...(typeof h.statusMessage === "string" ? { statusMessage: h.statusMessage } : {}),
+          ...(typeof h.commandWindows === "string" ? { commandWindows: h.commandWindows } : {}) };
+        const matcher = CODEX_NO_MATCHER.has(label) ? undefined : group.matcher;
+        const identity = { event_name: label, hooks: [handler], ...(matcher !== undefined ? { matcher } : {}) };
+        out[`/<session-flags>/config.toml:${label}:${gi}:${hi}`] = { trusted_hash: `sha256:${createHash("sha256").update(sortedJson(identity)).digest("hex")}` };
+      });
+    });
+  }
+  return out;
+}
+
 /** The whole document, in the shape the agent's own configuration wants. */
 export function renderHookDocument(def: AgentProviderDef, req: LaunchRequest): string | undefined {
   if (!def.hooks) return undefined;
   // Commands every tile shares carry no tile id; the tile is in the spawn environment.
-  const events = renderHookEvents(def.hooks, def.hooks.stable ? { ...req, tileId: "", supervise: undefined } : req);
-  if (!events) return undefined;
+  const rendered = renderHookEvents(def.hooks, def.hooks.stable ? { ...req, tileId: "", supervise: undefined } : req);
+  if (!rendered) return undefined;
+  const events = def.hooks.trust === "codex" ? { ...rendered, state: codexTrust(rendered) } : rendered;
   const template = def.hooks.template ?? "{events}";
   return template.replace("{events}", def.hooks.format === "toml" ? toTomlInline(events) : JSON.stringify(events));
 }

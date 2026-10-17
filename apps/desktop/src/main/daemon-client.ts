@@ -1,18 +1,18 @@
 /**
- * Daemon client — the main process's connection to the persistent PTY daemon.
- * Exposes the SAME surface as pty-host (spawnPty/writePty/resizePty/killPty +
- * detachPty) so index.ts can route to either. Spawns the daemon on demand and
- * reconnects transparently. See research/persistence-plan.md.
+ * Daemon client — the main process's connection to the persistent PTY daemon, where every
+ * terminal runs (spawnPty/writePty/resizePty/killPty + detachPty). Starts the daemon on demand
+ * and reconnects transparently. See research/persistence-plan.md.
  */
 import net from "node:net";
 import path from "node:path";
 import { readFileSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
+import { reachDaemon } from "@hivemind/agent-host/daemon-start";
 import { ipcPath } from "./platform.js";
+import { hiveNetBin } from "./hive-net-bin.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +30,11 @@ interface SpawnOpts {
 
 const socketPath = () => ipcPath(app.getPath("userData"), SOCKET_NAME);
 const daemonScript = () => path.join(__dirname, "pty-daemon.js");
+// The daemon runs agents' hooks through hive-net when it is named here.
+const daemonEnv = (): NodeJS.ProcessEnv => {
+  const hiveNet = hiveNetBin();
+  return { ...process.env, ELECTRON_RUN_AS_NODE: "1", ...(hiveNet ? { HIVEMIND_HIVE_NET: hiveNet } : {}) };
+};
 const delay = (ms: number) =>
   new Promise((r) => {
     const t = setTimeout(r, ms);
@@ -55,9 +60,15 @@ function currentBuildStamp(): number {
  * connect spawns a fresh one carrying the new code (hooks, env injection, …).
  * Sessions persist via on-disk snapshots, so the new daemon replays + respawns
  * them. No-op when no daemon is running or it's already current. Call ONCE at
- * startup, before the renderer attaches any tiles.
+ * startup; every connection waits for it, so the window need not.
  */
-export async function ensureFreshDaemon(): Promise<void> {
+let freshness: Promise<void> | null = null;
+export function ensureFreshDaemon(): Promise<void> {
+  freshness ??= replaceStaleDaemon();
+  return freshness;
+}
+
+async function replaceStaleDaemon(): Promise<void> {
   const want = currentBuildStamp();
   if (!want) return; // can't stat the script — don't risk disrupting a live daemon
   const sp = socketPath();
@@ -84,77 +95,30 @@ export async function ensureFreshDaemon(): Promise<void> {
   await delay(300); // let it exit + unlink the socket so the next connect spawns fresh
 }
 
-// GNOME / systemd desktops launch the app inside a transient
-// `app-gnome-<name>-<pid>.scope` cgroup whose default `KillMode=control-group`
-// terminates EVERY process in the cgroup when the window closes. `detached`
-// (setsid) escapes the process group + controlling terminal but NOT the cgroup,
-// so a plainly-detached daemon is killed on every close. Detect this and, if so,
-// register the daemon in its OWN transient scope (a `run-*.scope` outside the
-// app cgroup) via `systemd-run --user --scope`. Returns the systemd-run argv
-// prefix to wrap the daemon command with, or null to spawn it directly.
-function cgroupEscapePrefix(): string[] | null {
-  if (process.platform !== "linux") return null;
-  if (!process.env.XDG_RUNTIME_DIR) return null; // no user systemd manager to talk to
-  let cg = "";
-  try { cg = readFileSync("/proc/self/cgroup", "utf8"); } catch { return null; }
-  // Only intervene when we're actually inside a killable app scope — elsewhere
-  // (plain login session, container, non-systemd) the direct spawn is correct.
-  if (!/app-[^/\n]*\.scope/.test(cg)) return null;
-  const probe = spawnSync("systemd-run", ["--version"], { stdio: "ignore" });
-  if (probe.status !== 0) return null;
-  // --scope runs the command in OUR env + cwd (no env-forwarding dance), just in
-  // a fresh scope cgroup; --collect cleans the unit up when the daemon exits.
-  return ["systemd-run", "--user", "--scope", "--quiet", "--collect"];
-}
-
-function spawnDaemon(sp: string): void {
-  // ELECTRON_RUN_AS_NODE makes Electron run the daemon as plain Node (no
-  // Chromium); detached + unref so it outlives this window.
-  const env = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
-  const daemonCmd = [process.execPath, daemonScript(), sp];
-  const prefix = cgroupEscapePrefix();
-  const [file, ...args] = prefix ? [...prefix, ...daemonCmd] : daemonCmd;
-  const child = spawn(file as string, args, { env, detached: true, stdio: "ignore" });
-  child.unref();
-}
-
-function tryConnect(sp: string): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const s = net.connect(sp);
-    const onErr = (e: Error) => {
-      s.destroy();
-      reject(e);
-    };
-    s.once("error", onErr);
-    s.once("connect", () => {
-      s.removeListener("error", onErr);
-      // Never keep main's event loop alive on this socket, or quit would hang.
-      s.unref();
-      resolve(s);
-    });
-  });
-}
-
+/** This computer's daemon, started if it is not running; never keeping quit waiting on it. */
 async function doConnect(): Promise<net.Socket> {
+  await freshness?.catch(() => undefined);
   const sp = socketPath();
-  for (let attempt = 0; attempt < 25; attempt++) {
-    try {
-      return await tryConnect(sp);
-    } catch {
-      if (attempt === 0) spawnDaemon(sp); // first failure → bring the daemon up
-      await delay(120);
-    }
-  }
-  throw new Error("pty-daemon unreachable");
+  // ELECTRON_RUN_AS_NODE: Electron runs the daemon as plain Node, no Chromium.
+  const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: daemonEnv() });
+  s.unref();
+  return s;
+}
+
+/** A connection of its own to this computer's daemon, started if it is not running: for another
+ *  of the person's devices running terminals in frames here (M3), through hive-net. */
+export function connectDaemon(): Promise<net.Socket> {
+  return doConnect();
 }
 
 let eventSink: ((topic: string, data: unknown) => void) | null = null;
 /** Where this computer's daemon's events go: its sessions' screen readings. */
 export function setDaemonEventSink(fn: (topic: string, data: unknown) => void): void { eventSink = fn; }
-const local = new DaemonEndpoint({ connect: doConnect, onEvent: (topic, data) => eventSink?.(topic, data) });
+// New sessions start from this app's environment, the person's shell's as last read.
+const local = new DaemonEndpoint({ connect: doConnect, onEvent: (topic, data) => eventSink?.(topic, data), env: () => process.env as Record<string, string> });
 
-export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean }, cb: Callbacks): Promise<{ pid: number }> {
-  const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly }, cb);
+export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean; history?: number }, cb: Callbacks): Promise<{ pid: number; asleep?: true }> {
+  const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history }, cb);
   if (r.pid === -1 && opts.attachOnly) local.detach(opts.tileId);
   return r;
 }
@@ -167,16 +131,23 @@ export function hasSession(tileId: string): boolean {
   return local.has(tileId);
 }
 /** Ask for the session's screen now; false when this client does not hold the session. */
-export function screenPty(tileId: string, cb: (replay: string | null) => void): boolean {
+export function screenPty(tileId: string, cb: (replay: string | null) => void, lines?: number): boolean {
   if (!local.has(tileId)) return false;
-  local.screen(tileId, cb);
+  local.screen(tileId, cb, lines);
   return true;
+}
+/** The session's screen as text, line by line; null when this client does not hold it. */
+export function viewportPty(tileId: string): Promise<string | null> {
+  return local.has(tileId) ? local.viewport(tileId) : Promise.resolve(null);
 }
 export function writePty(tileId: string, data: string, paste?: boolean): void {
   local.write(tileId, data, paste);
 }
 export function resizePty(tileId: string, cols: number, rows: number): void {
   local.resize(tileId, cols, rows);
+}
+export function repaintPty(tileId: string): void {
+  local.repaint(tileId);
 }
 /** Renderer back-pressure (see TerminalTile flow control); the daemon also
  *  resumes on its own on detach/kill/reattach, so a dropped resume can't wedge a session. */
@@ -189,6 +160,14 @@ export function resumePty(tileId: string): void {
 /** Explicit close (× button): terminate the session in the daemon. */
 export function killPty(tileId: string): void {
   local.kill(tileId);
+}
+/** End the session's process but keep it, its screen saved, for a wake to bring back. */
+export function sleepPty(tileId: string): Promise<void> {
+  return local.sleep(tileId);
+}
+/** What a sleeping session saved as its screen; null when none sleeps as `tileId`. */
+export function savedPty(tileId: string, lines?: number): Promise<string | null> {
+  return local.saved(tileId, lines);
 }
 /** Window closed / tile unmounted: stop streaming but KEEP the session alive. */
 export function detachPty(tileId: string): void {

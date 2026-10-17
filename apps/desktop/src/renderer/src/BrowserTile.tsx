@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WebviewTag } from "electron";
-import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "lucide-react";
+import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot, GripVertical } from "./components/icons";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -114,7 +114,23 @@ function TabView({
   );
 }
 
-export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, pinned, onTogglePin }: Props) {
+/** A page: in the app window, a web view on the canvas; in a browser tab, which has none, a link
+ *  that opens it in a tab of that browser. */
+export function BrowserTile(props: Props) {
+  return window.hive.browserRegister ? <WebView {...props} /> : <OpensInATab url={props.url} />;
+}
+
+function OpensInATab({ url }: { url?: string }) {
+  const href = url ?? DEFAULT_URL;
+  return (
+    <div className="tile-drag-handle flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] p-6 text-center text-label" data-browser-elsewhere>
+      <p className="text-[var(--color-fg2)]">Pages show here in the app window. In this browser, open it in a tab of its own.</p>
+      <a className="nodrag font-mono text-[var(--color-fg)] underline" href={href} target="_blank" rel="noopener noreferrer">{href}</a>
+    </div>
+  );
+}
+
+function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onTogglePin }: Props) {
   const seq = useRef(1);
   const initialUrls = useRef<Record<string, string>>({ t0: url ?? DEFAULT_URL });
   const [tabs, setTabs] = useState<TabMeta[]>(() => [
@@ -142,7 +158,7 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
     if (!wv) return;
     let curUrl = "";
     try { curUrl = wv.getURL(); } catch { /* not ready */ }
-    try { window.hive.browserRegister(tileId, wv.getWebContentsId(), frameId ?? null, curUrl); } catch { /* not ready */ }
+    try { window.hive.browserRegister?.(tileId, wv.getWebContentsId(), frameId ?? null, curUrl); } catch { /* not ready */ }
   }, [tileId, frameId]);
 
   const onReady = useCallback((id: string, wv: WebviewTag) => {
@@ -248,11 +264,11 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
   const cdpSelfTest = async () => {
     setCdpMsg("running…");
     try {
-      const t = await window.hive.browserCdp(tileId, "Runtime.evaluate", {
+      const t = await window.hive.browserCdp!(tileId, "Runtime.evaluate", {
         expression: "document.title", returnByValue: true,
       }) as { result?: { value?: string } };
       const title = t?.result?.value ?? "(no title)";
-      await window.hive.browserCdp(tileId, "Page.navigate", { url: "https://example.com" });
+      await window.hive.browserCdp!(tileId, "Page.navigate", { url: "https://example.com" });
       setCdpMsg(`CDP ok · read "${title}" · navigated to example.com`);
     } catch (e) {
       setCdpMsg(`CDP failed: ${(e as Error).message}`);
@@ -276,16 +292,16 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
   };
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[0_8px_22px_rgba(0,0,0,0.45)]" onKeyDown={onKeyDown}>
+    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]" onKeyDown={onKeyDown}>
       {/* Tab strip (doubles as the drag handle). */}
       <div className="tile-drag-handle flex items-stretch gap-0.5 px-1.5 pt-1 bg-[var(--color-bg3)] border-b border-[var(--color-line)] cursor-grab active:cursor-grabbing">
-        <GripVertical aria-hidden size={13} className="text-[var(--color-fg3)] self-center shrink-0 mr-0.5" />
+        <GripVertical size={13} className="text-[var(--color-fg3)] self-center shrink-0 mr-0.5" />
         <div className="flex items-end gap-0.5 overflow-x-auto flex-1 min-w-0">
           {tabs.map((t) => (
             <button
               key={t.id}
               onClick={() => setActiveId(t.id)}
-              className={`nodrag group flex items-center gap-1.5 px-2 py-1 rounded-t-md text-[11px] font-mono max-w-[160px] min-w-[90px] border-b-2 ${
+              className={`nodrag group flex items-center gap-1.5 px-2 py-1 rounded-t-md text-count font-mono max-w-[160px] min-w-[90px] border-b-2 ${
                 t.id === activeId
                   ? "bg-[var(--color-bg2)] text-[var(--color-fg)] border-[var(--color-brand)]"
                   : "bg-[var(--color-bg4)] text-[var(--color-fg3)] border-transparent hover:text-[var(--color-fg2)]"
@@ -391,7 +407,7 @@ export function BrowserTile({ tileId, frameId, url, selected, openReq, onClose, 
       )}
 
       {cdpMsg && (
-        <div className="px-2 py-1 text-[10px] font-mono bg-[var(--color-bg4)] border-b border-[var(--color-line)] text-[var(--color-fg2)] truncate" title={cdpMsg}>
+        <div className="px-2 py-1 text-chip font-mono bg-[var(--color-bg4)] border-b border-[var(--color-line)] text-[var(--color-fg2)] truncate" title={cdpMsg}>
           🤖 {cdpMsg}
         </div>
       )}

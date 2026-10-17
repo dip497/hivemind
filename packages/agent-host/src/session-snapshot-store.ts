@@ -72,23 +72,39 @@ export function listSnapshotFiles(dir: string): SnapshotEntry[] {
 /** Sync on purpose: an await in the attach path would let a second attach spawn fresh. */
 export function readSnapshot(file: string, expectedId?: string): SessionSnapshot | undefined {
   try {
-    const snap = JSON.parse(fs.readFileSync(file, "utf8")) as SessionSnapshot;
+    return parseSnapshot(fs.readFileSync(file, "utf8"), expectedId);
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseSnapshot(body: string, expectedId?: string): SessionSnapshot | undefined {
+  try {
+    const snap = JSON.parse(body) as SessionSnapshot;
     if (!snap || typeof snap.id !== "string" || typeof snap.replay !== "string" || !snap.spec) return undefined;
     if (expectedId !== undefined && snap.id !== expectedId) return undefined;
+    if (snap.recentReplay !== undefined && typeof snap.recentReplay !== "string") return undefined;
     return snap;
   } catch {
     return undefined;
   }
 }
 
-/** Unclaimed AND old: a canvas not opened this session keeps its tiles. */
+/** How long a session put to sleep and never woken is kept: by then an agent has usually let go of
+ *  the conversation itself, so waking it would start afresh anyway. */
+export const SLEEP_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+
+/** Unclaimed AND old: a canvas not opened this session keeps its tiles. One put to sleep waits to be
+ *  woken for SLEEP_RETENTION_MS (`asleep` is asked only of the old ones). */
 export function staleSnapshotIds(
   entries: readonly SnapshotEntry[],
   unclaimed: Iterable<string>,
   now: number,
+  asleep: (id: string) => boolean,
   retentionMs: number = SNAPSHOT_RETENTION_MS,
 ): string[] {
   const open = new Set(unclaimed);
   const cutoff = now - retentionMs;
-  return entries.filter((e) => open.has(e.id) && e.mtimeMs < cutoff).map((e) => e.id);
+  const sleepCutoff = now - SLEEP_RETENTION_MS;
+  return entries.filter((e) => open.has(e.id) && e.mtimeMs < cutoff && (e.mtimeMs < sleepCutoff || !asleep(e.id))).map((e) => e.id);
 }

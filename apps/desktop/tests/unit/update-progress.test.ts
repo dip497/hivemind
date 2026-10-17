@@ -1,7 +1,7 @@
 // The installer writes for a terminal; the app says which of four things is happening.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { UPDATE_START, tagFromReleasesLatest, updateProgress, type UpdateProgress } from "../../src/shared/update-progress.ts";
+import { UPDATE_START, latestNightlyTag, newerNightlyTag, tagFromReleasesLatest, updateProgress, type UpdateProgress } from "../../src/shared/update-progress.ts";
 
 /** The lines install.sh prints, in order, for an upgrade that lands in place. */
 const RUN = [
@@ -60,4 +60,18 @@ test("the tag comes out of the url GitHub's releases/latest redirects to", () =>
   // Not a tag: the redirect went somewhere else, or there is no release at all.
   assert.equal(tagFromReleasesLatest("https://github.com/dip497/hivemind/releases"), null);
   assert.equal(tagFromReleasesLatest("https://github.com/login?return_to=/releases/tag/x"), null);
+});
+
+test("nightly updates follow pre-releases and their UTC day and run order", () => {
+  const releases = [
+    { tag_name: "v2026.10.0", prerelease: false },
+    { tag_name: "nightly-20261003-12", prerelease: true },
+    { tag_name: "nightly-20261003-123", prerelease: true },
+    { tag_name: "nightly-20261004-1", prerelease: false },
+  ];
+  assert.equal(latestNightlyTag(releases), "nightly-20261003-123");
+  assert.equal(newerNightlyTag("nightly-20261003-123", "nightly-20261003-12"), true);
+  assert.equal(newerNightlyTag("nightly-20261003-12", "nightly-20261003-123"), false);
+  assert.equal(newerNightlyTag("nightly-20261004-1", "nightly-20261003-123"), true);
+  assert.equal(latestNightlyTag({}), null);
 });

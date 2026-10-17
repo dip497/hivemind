@@ -1,6 +1,6 @@
 /**
- * Worker display names (hcp/names.ts) + the reply-forward gate that dropped every
- * pi worker's report (main/index.ts `turn` handler).
+ * What main calls a tile in its banners (hcp/names.ts) + the reply-forward gate that dropped
+ * every pi worker's report (main/index.ts `turn` handler).
  *
  * The forward gate is inline in index.ts (Electron-bound, can't be imported here),
  * so `pickReply` below MIRRORS it exactly. If you change the gate in index.ts,
@@ -9,10 +9,17 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { setName, labelOf } from "../../src/main/hcp/names.js";
-import { makeDispatch } from "../../src/main/hcp/methods.js";
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.js";
-import { OutputRecorder } from "../../src/main/hcp/output-recorder.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { StatusStore } from "@hivemind/agent-host/status-store";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
+import { labelOf } from "@hivemind/host/control/names";
+import { REPO, workspaceDeps } from "./hcp-workspace.ts";
+import { makeDispatch } from "@hivemind/host/control/methods";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // The spawn path reads the live catalog: load the published fixtures.
@@ -42,30 +49,36 @@ test("a turn with neither transcript nor text yields nothing (no empty banner)",
   assert.equal(pickReply(null, "   ", TRANSCRIPT), "");
 });
 
-test("labelOf: named worker reads as name + id; unnamed falls back to the bare id", () => {
-  setName("tile-claude-1", "reviewer");
-  assert.equal(labelOf("tile-claude-1"), "reviewer (tile-claude-1)");
-  assert.equal(labelOf("tile-claude-unnamed"), "tile-claude-unnamed");
+test("a banner calls a tile what every surface does, on one line, with its id; a tile no workspace holds, by its id", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hcp-names-"));
+  const workspaces = new WorkspaceStore({ dir, person: newSeed() });
+  workspaces.setCore("/w", { frames: [], tiles: [
+    { id: "tile-a", kind: "claude", label: "claude #1" },
+    { id: "tile-b", kind: "claude", label: "claude #2", task: "fix the flaky test" },
+    { id: "tile-c", kind: "claude", label: "claude #3" },
+    { id: "tile-d", kind: "shell", label: "shell #1" },
+  ], tileNames: { "tile-a": "lead\nreviewer" } });
+  const status = new StatusStore();
+  status.title("tile-b", "reading the logs");
+  const label = (tileId: string) => labelOf(tileId, workspaces, status);
+  assert.equal(label("tile-a"), "lead reviewer (tile-a)", "a name someone gave it, which cannot forge a second line");
+  assert.equal(label("tile-b"), "reading the logs (tile-b)", "else what its agent says it is doing");
+  assert.equal(label("tile-c"), "claude #3 (tile-c)");
+  assert.equal(label("tile-nowhere"), "tile-nowhere");
+  // Closed, its name goes with it: an id is never reused, but nothing of it lingers either.
+  workspaces.removeTile("tile-a");
+  assert.equal(label("tile-a"), "tile-a");
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("names are dropped on close — a recycled id must not inherit the old name", () => {
-  setName("tile-claude-2", "test-writer");
-  setName("tile-claude-2", null);
-  assert.equal(labelOf("tile-claude-2"), "tile-claude-2");
-});
-
-test("tile.spawn_agent actually forwards `name` — it enumerates its params, and a dropped one is silent", async () => {
-  // v1.13.0 shipped `name` end-to-end EXCEPT here: the tile.spawn_agent case lists
-  // its params by hand, `name` wasn't in the list, and the feature was dead with no
-  // error anywhere. This asserts the wire, not the sanitizer.
-  const seen: Array<Record<string, unknown>> = [];
-  const { dispatch } = makeDispatch({
+test("spawn names the tile it opens: it enumerates its params, and a dropped one is silent", async () => {
+  // v1.13.0 shipped `name` end-to-end EXCEPT where spawn listed its params by hand: `name`
+  // wasn't in the list, and the feature was dead with no error anywhere.
+  const ws = workspaceDeps();
+  const { spawn } = makeDispatch({
     turns: new TurnTracker(),
     recorder: new OutputRecorder(),
-    callRenderer: async (_m: string, p: unknown) => {
-      seen.push(p as Record<string, unknown>);
-      return { tileId: "tile-w" };
-    },
+    callRenderer: async () => { throw new Error("no window"); },
     writeToTile: () => true,
     deliverToTile: () => true,
     spawnAllowed: () => true,
@@ -73,13 +86,12 @@ test("tile.spawn_agent actually forwards `name` — it enumerates its params, an
     disconnect: () => {},
     forgetPipes: () => {},
     spawnEdge: () => {},
-    setSupervise: () => {},
-    awaitingApproval: () => {},
+    ...ws,
   } as unknown as Parameters<typeof makeDispatch>[0]);
 
-  await dispatch("tile.spawn_agent", { agent: "pi", name: "student-fe", callerTile: "hm:tile-p" });
-  assert.equal(seen[0]?.name, "student-fe", "the renderer must receive the name — it's the tile label");
-  assert.equal(labelOf("tile-w"), "student-fe (tile-w)", "and main must remember it — it tags every report back");
+  const tileId = await spawn({ agent: "pi", name: "student-fe", parent: "tile-p", repo: REPO });
+  assert.equal(ws.workspaces.getCore(REPO)?.tileNames?.[tileId], "student-fe", "the tile is named");
+  assert.equal(labelOf(tileId, ws.workspaces, ws.status), `student-fe (${tileId})`, "and every report it sends back says so");
 });
 
 /** MIRROR of the sanitizer in methods.ts doSpawn. */

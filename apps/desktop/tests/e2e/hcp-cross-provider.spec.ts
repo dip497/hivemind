@@ -11,11 +11,13 @@
 // injection); the daemon lives under the isolated XDG profile and is reaped in
 // afterAll + global-teardown.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { execSync, spawnSync } from "node:child_process";
+import { execSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
+import { stopDaemons } from "./helpers/daemons";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, "../..");
@@ -27,9 +29,9 @@ let page: Page;
 let repo: string;
 let fakeBin: string;
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-home-"));
-let sock: string;
 let token: string;
 let orchestrator: string;
+let userData: string;
 
 function onPath(bin: string): string {
   for (const d of (process.env.PATH ?? "").split(":")) {
@@ -39,17 +41,58 @@ function onPath(bin: string): string {
   throw new Error(`${bin} not on PATH`);
 }
 
-/** Run `hive …` exactly as an agent would: a subprocess with the HCP env. */
-function hive(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync(onPath("bun"), [CLI, ...args], {
-    encoding: "utf8",
-    timeout: 120_000,
-    env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVE_HCP_SOCK: sock, HCP_TOKEN: token, ...env },
-  });
-  let json: any;
-  try { json = JSON.parse(r.stdout.trim().split("\n").pop() || ""); } catch { /* not json */ }
-  return { code: r.status, stdout: r.stdout, stderr: r.stderr, json };
+const hiveEnv = (env: Record<string, string>) =>
+  ({ ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_APP_DATA: userData, ...env });
+function lastJson(stdout: string): any {
+  try { return JSON.parse(stdout.trim().split("\n").pop() || ""); } catch { return undefined; }
 }
+
+/** Run `hive …` as the person at this machine would, or as an agent with `asAgent`. */
+function hive(args: string[], env: Record<string, string> = {}) {
+  const r = spawnSync(onPath("bun"), [CLI, ...args], { encoding: "utf8", timeout: 120_000, env: hiveEnv(env) });
+  return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: lastJson(r.stdout) };
+}
+
+/** `hive …` left running, for a call that waits on what the test does next. */
+/** Every message read so far from `tile`'s inbox, read as its agent; each is given once. */
+const inboxRead = new Map<string, string[]>();
+function inboxTexts(tile: string): string[] {
+  const read = inboxRead.get(tile) ?? [];
+  const r = hive(["ctl", "inbox", "--tile", tile, "--json"], asAgent(tile));
+  read.push(...(r.json?.messages ?? []).map((m: { text: string }) => m.text));
+  inboxRead.set(tile, read);
+  return read;
+}
+
+function hiveLater(args: string[]): Promise<{ code: number | null; json: any }> {
+  return new Promise((resolve) => {
+    const child = spawn(onPath("bun"), [CLI, ...args], { env: hiveEnv({}) });
+    let out = "";
+    child.stdout.on("data", (d) => { out += d; });
+    child.on("close", (code) => resolve({ code, json: lastJson(out) }));
+  });
+}
+
+/** What an agent's `hive` is given: the token of its own tile. */
+const asAgent = (tile: string) => ({ HCP_TOKEN: tileToken(token, `hm:${tile}`) });
+/** The workspace's agents, as `hive ctl agents` lists them. */
+const agents = (): Array<{ tile: string; agent: string; parent?: string }> => hive(["ctl", "agents", "--json"]).json.agents;
+const nameOf = (tile: string) => agents().find((a) => a.tile === tile)?.agent;
+
+/** The processes running for a tile: an agent and what it starts carry the tile's id. */
+function processesOf(tileId: string): string[] {
+  return fs.readdirSync("/proc").filter((pid) => {
+    if (!/^\d+$/.test(pid)) return false;
+    try { return fs.readFileSync(`/proc/${pid}/environ`, "utf8").split("\0").includes(`HIVEMIND_TILE=hm:${tileId}`); } catch { return false; }
+  });
+}
+
+/** What the app's audit log says was done, without when. */
+const audited = () =>
+  fs.readFileSync(path.join(userData, "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => { const { at: _at, ...rest } = JSON.parse(l); return rest; });
+
+/** The tiles the canvas has a place for, as main's store keeps them for this workspace. */
+const placed = () => page.evaluate((r) => Object.keys((window.hive.workspaceViewSync(r, "canvas") as { data?: { positions?: object } } | null)?.data?.positions ?? {}), repo);
 
 test.beforeAll(async () => {
   test.setTimeout(180_000);
@@ -72,29 +115,23 @@ test.beforeAll(async () => {
     // HIVEMIND_SHELL_ENV=0: keep OUR PATH (the stand-ins first) instead of the
     // login shell's, which would put the real `claude` back in front.
     // HOME of its own: the sessions this spec lists are written there, never in a real one.
-    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_PTY_DAEMON: "1", HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
+    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
 
-  // The control-plane socket + token live in the (isolated) userData dir.
-  const userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
-  sock = path.join(userData, "hcp.sock");
+  // The drive socket + token live in the (isolated) userData dir.
+  userData = path.join(process.env.XDG_CONFIG_HOME!, "hivemind-dev");
   const tokenFile = path.join(userData, "hcp.token");
-  await expect.poll(() => fs.existsSync(sock) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
+  await expect.poll(() => fs.existsSync(path.join(userData, "drive.sock")) && fs.existsSync(tokenFile), { timeout: 20_000 }).toBe(true);
   token = fs.readFileSync(tokenFile, "utf8").trim();
 });
 
 test.afterAll(async () => {
-  // Reap ONLY the daemon this spec started (its socket is under the test XDG)
-  // BEFORE closing the app: electronApp.close() waits on child processes, and
-  // the detached daemon would stall teardown.
-  try { execSync(`pkill -f "out/main/pty-daemon.js ${process.env.XDG_CONFIG_HOME}/"`, { stdio: "ignore" }); } catch { /* none */ }
-  // close() waits on child processes; if the app is wedged on one, kill it
-  // outright rather than stall the worker teardown.
-  const closed = await Promise.race([app?.close().then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), 10_000))]);
-  if (!closed) { try { app?.process().kill("SIGKILL"); } catch { /* gone */ } }
+  await app?.close();
+  // This profile's daemon, or the next spec on its socket runs in this spec's environment.
+  stopDaemons(process.env.XDG_CONFIG_HOME!);
   // Stand-in agents this spec's tiles spawned (pattern anchored on the fixture
   // path + provider argv so it can never match an unrelated shell).
   try { execSync(`pkill -f "fixtures/fake-agent\\.cjs (claude|droid|cursor-agent|faux) "`, { stdio: "ignore" }); } catch { /* none */ }
@@ -106,7 +143,7 @@ test.afterAll(async () => {
 test("spawn a claude worker and read its reply: --settings hooks → reply → turn", async () => {
   const r = hive(["ctl", "spawn", "--agent", "claude", "--name", "orchestrator", "--prompt", "echo orchestrator ready", "--json"]);
   expect(r.code, r.stderr).toBe(0);
-  orchestrator = r.json.tileId;
+  orchestrator = r.json.tile;
   expect(orchestrator).toMatch(/^tile-/);
   const read = hive(["ctl", "read", orchestrator, "--timeout", "40000", "--json"]);
   expect(read.code, read.stdout + read.stderr).toBe(0);
@@ -120,14 +157,13 @@ test("spawn a claude worker and read its reply: --settings hooks → reply → t
 test("an unnamed tile is called by what its agent says it is doing — the host's reading of its title", async () => {
   const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo titled", "--json"]);
   expect(r.code, r.stderr).toBe(0);
-  const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === r.json.tileId)?.name;
-  await expect.poll(nameOf, { timeout: 20_000 }).toBe("echo titled");
+  await expect.poll(() => nameOf(r.json.tile), { timeout: 20_000 }).toBe("echo titled");
 });
 
 test("fanout over droid workers from the claude orchestrator: hooks.json injection + typed prompt + gather", async () => {
   const r = hive(
     ["ctl", "workflow", "--shape", "fanout", "--agent", "droid", "--items", "alpha || beta", "--prompt", "echo reviewed {item} by $HIVE_AGENT_ID", "--timeout", "60000", "--close", "--json"],
-    { HIVEMIND_TILE: orchestrator },
+    asAgent(orchestrator),
   );
   expect(r.code, r.stdout + r.stderr).toBe(0);
   expect(r.json.shape).toBe("fanout");
@@ -140,31 +176,113 @@ test("fanout over droid workers from the claude orchestrator: hooks.json injecti
 test("a droid worker reports back to the claude orchestrator with `hive ctl report`; send/read a follow-up", async () => {
   const spawn = hive(
     ["ctl", "spawn", "--agent", "droid", "--name", "reporter", "--prompt", "hive ctl report 'droid worker done' --json", "--json"],
-    { HIVEMIND_TILE: orchestrator },
+    asAgent(orchestrator),
   );
   expect(spawn.code, spawn.stderr).toBe(0);
-  const worker: string = spawn.json.tileId;
+  const worker: string = spawn.json.tile;
   const read = hive(["ctl", "read", worker, "--timeout", "60000", "--json"]);
   expect(read.code, read.stdout + read.stderr).toBe(0);
   expect(read.json.finalStatus).toBe("turn");
   expect(JSON.parse(read.json.text)).toMatchObject({ delivered: true });
-  // The report is typed into the orchestrator's terminal (mailbox delivery) —
-  // visible on its screen via stream --snapshot.
-  await expect
-    .poll(() => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout, { timeout: 30_000, intervals: [500] })
-    .toContain("droid worker done");
+  // The report waits in the orchestrator's inbox; its terminal is only told to read it. The bell
+  // rings only while something is unread, so it is looked for before the inbox is read.
+  const screen = () => hive(["ctl", "stream", orchestrator, "--lines", "60", "--snapshot"]).stdout;
+  await expect.poll(screen, { timeout: 30_000, intervals: [500] }).toContain("Read them: hive ctl inbox");
+  await expect.poll(() => inboxTexts(orchestrator).join("\n"), { timeout: 30_000, intervals: [500] }).toContain("droid worker done");
+  expect(screen()).not.toContain("droid worker done");
 
   hive(["ctl", "send", worker, "echo second turn from $HIVE_AGENT_ID"]);
   const again = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
   expect(again.json).toMatchObject({ text: "second turn from droid", finalStatus: "turn" });
 
-  const list = hive(["ctl", "list", "--json"]);
-  const ids = list.json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId));
-  expect(ids).toEqual(expect.arrayContaining([orchestrator, worker]));
-  expect(hive(["ctl", "close", worker, "--json"]).json).toEqual({ ok: true });
+  expect(agents().find((a) => a.tile === worker)).toMatchObject({ agent: "reporter", parent: orchestrator });
+  expect(processesOf(worker)).not.toEqual([]);
+  await expect.poll(placed).toContain(worker);
+  expect(hive(["ctl", "close", worker, "--json"]).json).toEqual({ closed: true });
+  await expect.poll(() => agents().map((a) => a.tile), { timeout: 10_000 }).not.toContain(worker);
+  // Closed is ended: nothing is left running for it in the daemon, and the window keeps nothing of it.
+  await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);
+  await expect.poll(placed).not.toContain(worker);
+  // Each was done by someone the app's audit log names: the spawn by the orchestrator and the report
+  // by the worker, each with the token its tile was given; the send and the close by the person at
+  // this terminal, with the app's.
+  expect(audited().filter((l) => l.target === worker || l.actor.tile === worker)).toEqual([
+    { actor: expect.objectContaining({ kind: "peer", access: "agents", tile: orchestrator }), verb: "agent.start", target: worker, outcome: "ok" },
+    { actor: { kind: "tile", tile: worker }, verb: "agent.report", target: orchestrator, outcome: "ok" },
+    { actor: { kind: "person" }, verb: "agent.send", target: worker, outcome: "ok" },
+    { actor: { kind: "person" }, verb: "agent.close", target: worker, outcome: "ok" },
+  ]);
+});
+
+test("a busy worker closed in the Windows view ends, and a read waiting on its reply is told so at once", async () => {
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--name", "closed-early", "--prompt", "sleep 60; echo late", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const worker: string = spawned.json.tile;
+  await expect.poll(() => processesOf(worker).length, { timeout: 15_000 }).toBeGreaterThan(0);
+  const reading = hiveLater(["ctl", "read", worker, "--timeout", "30000", "--json"]);
+  await page.waitForTimeout(1_500); // the read is waiting before the tile goes
+  const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
+  await toView("windows");
+  const tab = page.frameLocator('[data-community-view="windows"] iframe').getByRole("tab", { name: "closed-early" });
+  await tab.hover();
+  await tab.getByRole("button", { name: "Close closed-early", exact: true }).click();
+  // Told at once, and told it is gone (exit 5): reading it again would wait for nothing.
+  expect(await reading).toMatchObject({ code: 5, json: { finalStatus: "closed" } });
+  await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);
+  await toView("canvas");
+});
+
+test("a tile named by the control plane is named in the window at once; with no name it goes back to what it does", async () => {
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--name", "before", "--prompt", "echo named", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const tile: string = spawned.json.tile;
+  // Straight after the spawn: the tile the window made for it is already in main's store.
+  expect(hive(["ctl", "rename", tile, "after", "--json"]).json).toEqual({ name: "after" });
+  await expect(page.locator(".hm-layers").getByText("after", { exact: true })).toBeVisible();
+  expect(nameOf(tile)).toBe("after");
+  // No name: what its agent says it is doing, or what it was started to do.
+  expect(hive(["ctl", "rename", tile, "--json"]).json).toEqual({ name: "" });
+  await expect.poll(() => nameOf(tile)).not.toBe("after");
+  expect(hive(["ctl", "rename", "tile-nowhere", "x", "--json"]).code).toBe(5);
+});
+
+test("a tile the control plane closes straight after spawning it leaves the window and ends; one no workspace holds is not found", async () => {
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--name", "brief", "--prompt", "sleep 60; echo late", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const tile: string = spawned.json.tile;
+  await expect(page.locator(`.react-flow__node[data-id="${tile}"]`)).toHaveCount(1);
+  expect(hive(["ctl", "close", tile, "--json"])).toMatchObject({ code: 0, json: { closed: true } });
+  await expect(page.locator(`.react-flow__node[data-id="${tile}"]`)).toHaveCount(0);
+  await expect.poll(() => processesOf(tile), { timeout: 10_000 }).toEqual([]);
+  expect(hive(["ctl", "close", tile, "--json"])).toMatchObject({ code: 5, json: { code: "NOT_FOUND" } });
+  // Nothing of it is kept: a window that opens now is not sent its status.
+  expect((await page.evaluate(() => window.hive.hcpStatusAll())).map((s) => s.tileId)).not.toContain(tile);
+});
+
+test("a worker spawned into a frame by its name opens there, and the window lays it out; a name no frame answers to is refused", async () => {
+  const [frame] = hive(["ctl", "frames", "--json"]).json;
+  const spawned = hive(["ctl", "spawn", "--agent", "claude", "--frame", frame.name.toUpperCase(), "--name", "framed", "--prompt", "echo framed", "--json"]);
+  expect(spawned.code, spawned.stderr).toBe(0);
+  const tile: string = spawned.json.tile;
+  await expect.poll(placed).toContain(tile);
+  expect(hive(["ctl", "spawn", "--agent", "claude", "--frame", "no-such-frame", "--json"])).toMatchObject({ code: 5, json: { code: "NOT_FOUND" } });
+  hive(["ctl", "close", tile]);
+});
+
+test("a worker that stops at a question is reported to its leader, who answers it with keys", async () => {
+  const spawn = hive(
+    ["ctl", "spawn", "--agent", "claude", "--name", "asker", "--prompt", "ASK:ship it?", "--json"],
+    asAgent(orchestrator),
+  );
+  expect(spawn.code, spawn.stderr).toBe(0);
+  const worker: string = spawn.json.tile;
   await expect
-    .poll(() => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles.map((t: any) => t.tileId)), { timeout: 10_000 })
-    .not.toContain(worker);
+    .poll(() => inboxTexts(orchestrator).join("\n"), { timeout: 30_000, intervals: [500] })
+    .toContain(`asker (${worker}) is waiting for`);
+  hive(["ctl", "keys", worker, "1,Enter"]);
+  const read = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
+  expect(read.json).toMatchObject({ text: "answered: 1", finalStatus: "turn" });
+  hive(["ctl", "close", worker, "--json"]);
 });
 
 test("an agent's past sessions are listed for its folder, and one can be continued", async () => {
@@ -174,29 +292,34 @@ test("an agent's past sessions are listed for its folder, and one can be continu
   fs.writeFileSync(path.join(proj, `${id}.jsonl`), JSON.stringify({ type: "user", cwd: repo, message: { content: "earlier work" } }) + "\n");
   const list = hive(["ctl", "sessions", "claude", "--cwd", repo, "--json"]);
   expect(list.code, list.stderr).toBe(0);
-  expect(list.json).toMatchObject({ agent: "claude", resumable: true, sessions: [{ id, cwd: repo, title: "earlier work" }] });
+  // Beside the sessions the earlier tests' agents left in this folder.
+  expect(list.json).toMatchObject({ agent: "claude", resumable: true });
+  expect(list.json.sessions).toContainEqual(expect.objectContaining({ id, cwd: repo, title: "earlier work" }));
   expect(hive(["ctl", "sessions", "claude", "--cwd", "/nowhere", "--json"]).json.sessions).toEqual([]);
 
   const r = hive(["ctl", "spawn", "--agent", "claude", "--resume", id, "--prompt", "echo resumed=$FAKE_RESUMED", "--json"]);
   expect(r.code, r.stderr).toBe(0);
-  const read = hive(["ctl", "read", r.json.tileId, "--timeout", "40000", "--json"]);
+  const read = hive(["ctl", "read", r.json.tile, "--timeout", "40000", "--json"]);
   expect(read.json).toMatchObject({ text: `resumed=${id}`, finalStatus: "turn" });
   // An id is never anything but an id on the command line.
   expect(hive(["ctl", "spawn", "--agent", "claude", "--resume", "../x", "--json"]).code).not.toBe(0);
 });
 
-test("structured failures: bad token exits 6, missing tile exits 5", async () => {
-  const bad = hive(["ctl", "list", "--json"], { HCP_TOKEN: "nope" });
+test("structured failures: bad token exits 6, missing tile or frame exits 5", async () => {
+  const bad = hive(["ctl", "agents", "--json"], { HCP_TOKEN: "nope" });
   expect(bad.code).toBe(6);
-  expect(bad.json).toMatchObject({ ok: false, code: "UNAUTHORIZED" });
+  expect(bad.json).toMatchObject({ ok: false, code: "FORBIDDEN" });
   const gone = hive(["ctl", "send", "tile-does-not-exist", "hi", "--json"]);
   expect(gone.code).toBe(5);
-  expect(gone.json).toMatchObject({ ok: false, code: "TILE_NOT_FOUND" });
+  expect(gone.json).toMatchObject({ ok: false, code: "NOT_FOUND" });
+  const started = Date.now();
+  expect(hive(["ctl", "read", "tile-does-not-exist", "--timeout", "30000", "--json"])).toMatchObject({ code: 5, json: { ok: false, code: "NOT_FOUND" } });
+  expect(Date.now() - started).toBeLessThan(10_000); // at once, not at the timeout
 });
 
 test("a runtime without a turn signal is refused up front, not timed out (exit 7 UNSUPPORTED)", async () => {
   // Client-side: `workflow` needs gatherable replies — refused before any tile is spawned.
-  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "cursor", "--items", "a", "--prompt", "echo {item}", "--json"], { HIVEMIND_TILE: orchestrator });
+  const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "cursor", "--items", "a", "--prompt", "echo {item}", "--json"], asAgent(orchestrator));
   expect(wf.code).toBe(7);
   expect(wf.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
   expect(String(wf.json.message)).toContain("cursor");
@@ -207,11 +330,11 @@ test("a runtime without a turn signal is refused up front, not timed out (exit 7
   // Spawning it is fine (a manual tile); reading from it is refused by the control plane.
   const spawn = hive(["ctl", "spawn", "--agent", "cursor", "--name", "manual", "--prompt", "echo raw", "--json"]);
   expect(spawn.code, spawn.stderr).toBe(0);
-  const read = hive(["ctl", "read", spawn.json.tileId, "--poll", "--json"]);
+  const read = hive(["ctl", "read", spawn.json.tile, "--poll", "--json"]);
   expect(read.code).toBe(7);
   expect(read.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
   expect(String(read.json.message)).toMatch(/cursor has no turn signal/);
-  expect(hive(["ctl", "close", spawn.json.tileId, "--json"]).json).toEqual({ ok: true });
+  expect(hive(["ctl", "close", spawn.json.tile, "--json"]).json).toEqual({ closed: true });
 });
 
 test("a title read while the agent's manifest is broken shows up when the manifest comes back", async () => {
@@ -220,10 +343,9 @@ test("a title read while the agent's manifest is broken shows up when the manife
   // meanwhile must not be lost — an idle agent never sets its title again, so putting the
   // manifest back has to be enough. Last in this file: it takes claude's manifest away.
   const r = hive(["ctl", "spawn", "--agent", "claude", "--prompt", "echo first", "--json"]);
-  expect(r.code, r.stderr).toBe(0);
-  const tile: string = r.json.tileId;
-  const nameOf = () => hive(["ctl", "list", "--json"]).json.frames.flatMap((f: any) => f.tiles).find((t: any) => t.tileId === tile)?.name;
-  await expect.poll(nameOf, { timeout: 20_000 }).toBe("echo first");
+  expect(r.code, r.stdout + r.stderr).toBe(0);
+  const tile: string = r.json.tile;
+  await expect.poll(() => nameOf(tile), { timeout: 20_000 }).toBe("echo first");
 
   const dir = path.join(process.env.XDG_CONFIG_HOME!, "hivemind", "agents", "claude");
   const away = `${dir}.away`;
@@ -232,9 +354,9 @@ test("a title read while the agent's manifest is broken shows up when the manife
     await new Promise((done) => setTimeout(done, 3000));
     hive(["ctl", "send", tile, "echo second"]);
     await new Promise((done) => setTimeout(done, 6000)); // its new title is read with no manifest to read it
-    expect(await nameOf()).not.toMatch(/echo second/);
+    expect(nameOf(tile)).not.toMatch(/echo second/);
     fs.renameSync(away, dir);
-    await expect.poll(nameOf, { timeout: 30_000 }).toBe("echo second");
+    await expect.poll(() => nameOf(tile), { timeout: 30_000 }).toBe("echo second");
   } finally {
     if (fs.existsSync(away)) fs.renameSync(away, dir);
     hive(["ctl", "close", tile, "--json"]);

@@ -62,7 +62,9 @@ export type Term =
 export type Cmp = "gt" | "gte" | "lt" | "lte" | "eq";
 export type HelperName = "hasBrailleSpinner" | "hasConfirmationPrompt" | "hasInterruptPattern";
 
-export type Rule = { when: Expr; then: TileStatus; scope?: Scope };
+/** `says`: what the screen a waiting rule matches is (its trust prompt, say), so what it waits on
+ *  can be told apart from another wait of its kind and answered with its own keys. */
+export type Rule = { when: Expr; then: TileStatus; says?: string; scope?: Scope };
 export type DetectRules = { rules: Rule[]; default: TileStatus; scope?: Scope };
 
 const isBraille = (c: string): boolean => c >= "⠀" && c <= "⣿";
@@ -381,12 +383,15 @@ export function evalExpr(e: Expr, text: string): boolean {
   return seqMatches(e, text);
 }
 
-export function compileDetect(d: DetectRules): (screen: string) => TileStatus {
+/** What an agent's screen shows: its status, and for a wait, what screen it is when its rule says. */
+export interface ScreenReading { status: TileStatus; says?: string }
+
+export function compileDetect(d: DetectRules): (screen: string) => ScreenReading {
   return (screen: string) => {
     for (const r of d.rules) {
-      if (evalExpr(r.when, sliceScope(screen, r.scope ?? d.scope))) return r.then;
+      if (evalExpr(r.when, sliceScope(screen, r.scope ?? d.scope))) return r.says ? { status: r.then, says: r.says } : { status: r.then };
     }
-    return d.default;
+    return { status: d.default };
   };
 }
 

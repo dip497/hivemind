@@ -17,9 +17,14 @@ function parse(status: number | null, stdout: string, stderr: string): Run {
 }
 type Opts = { cwd?: string; env?: Record<string, string | undefined> };
 
+/** The environment a run starts from: this process's, but never the tile it may run in, so no
+ *  test reaches the app this suite was started from; a test names the sockets it means. */
+const TILE_ENV = ["HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH"];
+export const sealedEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !TILE_ENV.includes(k)));
+
 /** Run `hive …` as a real subprocess (like an agent would); blocking flavour. */
 export function hive(args: string[], opts: Opts = {}): Run {
-  const r = spawnSync(...cmd(args), { cwd: opts.cwd ?? process.cwd(), env: { ...process.env, ...opts.env }, encoding: "utf8", timeout: 60_000 });
+  const r = spawnSync(...cmd(args), { cwd: opts.cwd ?? process.cwd(), env: { ...sealedEnv(), ...opts.env }, encoding: "utf8", timeout: 60_000 });
   return parse(r.status, r.stdout, r.stderr);
 }
 
@@ -27,7 +32,7 @@ export function hive(args: string[], opts: Opts = {}): Run {
  *  process (spawnSync would block its event loop). */
 export function hiveAsync(args: string[], opts: Opts = {}): Promise<Run> {
   return new Promise((resolve) => {
-    const c = spawn(...cmd(args), { cwd: opts.cwd ?? process.cwd(), env: { ...process.env, ...opts.env } });
+    const c = spawn(...cmd(args), { cwd: opts.cwd ?? process.cwd(), env: { ...sealedEnv(), ...opts.env } });
     let out = "", err = "";
     c.stdout.setEncoding("utf8").on("data", (d: string) => { out += d; });
     c.stderr.setEncoding("utf8").on("data", (d: string) => { err += d; });

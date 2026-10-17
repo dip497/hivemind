@@ -7,17 +7,24 @@
  *   const off = hm.subscribeStatus(tileId, (s) => paint(tileId, s));
  *   hm.commands.selectTile(tileId);
  *   hm.setSurfaceRects([{ tileId, x, y, w, h }]);   // a live terminal appears here
+ *   hm.onParticipants((people) => ring(people));      // 1.5: who else is here, and on what
  *
  * The host hands the MessagePort over with a `PORT_HANDSHAKE` window message
  * right after the iframe loads; `connect()` resolves once `hello` arrives.
  */
+import type { SettingValue } from "./settings.js";
+import { chordMatches } from "./commands.js";
 import {
   COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
-  type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect,
-  type ViewCommands, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme,
+  type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
+  type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
+  ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
+/** How long an invoked command waits for its handler to be registered. */
+const HANDLER_WAIT_MS = 1000;
+
 export class HostError extends Error {
   constructor(readonly code: RequestErrorCode, message: string) { super(message); this.name = "HostError"; }
 }
@@ -33,6 +40,8 @@ type EventMap = {
   resize: { w: number; h: number };
   visibility: { visible: boolean };
   theme: Extract<HostMessage, { type: "theme" }>["theme"];
+  /** 1.7: every declared setting's value, after the person changed one. */
+  settings: Record<string, SettingValue>;
   /** The host undocked this surface (its bar, or Shift+Esc); the tile is
    *  already released — forget the rect. The client drops it from what it
    *  last sent, so a plugin that ignores the event still stays consistent. */
@@ -45,6 +54,13 @@ export interface ViewClient {
   /** Latest viewport size / visibility as told by the host. */
   readonly viewport: { w: number; h: number };
   readonly visible: boolean;
+  /** 1.5: what the view is shown on. A host that predates it is a desktop's: no touch, not compact. */
+  readonly device: ViewDevice;
+  /** 1.7: what the person set this view to, one value per field its manifest's `settings` declares.
+   *  Empty from a host that predates it. Changes arrive as the `settings` event. */
+  readonly settings: Readonly<Record<string, SettingValue>>;
+  /** What the host says. One that says how things are now (structure, names, selection, resize,
+   *  visibility, theme, settings) replays its latest to a new listener, at once. */
   on<K extends keyof EventMap>(event: K, cb: (payload: EventMap[K]) => void): () => void;
   /** Per-tile status. Subscribes on first listener, unsubscribes on last. */
   subscribeStatus(tileId: string, cb: (status: ViewStatus, info?: StatusInfo) => void): () => void;
@@ -59,6 +75,24 @@ export interface ViewClient {
   activity(tileId: string, cb: (level: ActivityLevel) => void): () => void;
   /** 1.3: whether the user is at the machine. The latest state replays to a new listener. */
   onPresence(cb: (presence: ViewPresence) => void): () => void;
+  /** 1.5: everyone else in the workspace — who, their colour, the tile their pointer is over and
+   *  what they selected, of this view's. On every change; the latest replays to a new listener. */
+  onParticipants(cb: (participants: ViewParticipant[]) => void): () => void;
+  /** 1.8: every widget in the workspace, now and whenever one changes. A host before 1.8 sends none. */
+  onWidgets(cb: (widgets: ViewWidget[]) => void): () => void;
+  /** 1.8, `workspace:widgets`: press one of a widget's buttons, as a person pressing it where it is drawn. */
+  pressWidget(id: string, action: unknown): void;
+  /** 1.8: click a widget's card, not on a button. */
+  clickWidget(id: string): void;
+  /** 1.9: the workspace's issues, now and whenever one changes; needs `workspace:issues`. A host
+   *  before 1.9 sends none. */
+  onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void;
+  /** 1.10: answer the command `name` your manifest declares, when an agent runs it
+   *  (`hive ctl plugin call`): the handler gets its JSON argument, and what it returns (or a promise
+   *  of it) is the agent's answer; what it throws, the agent's error. One handler per name. */
+  onCommand(name: string, handler: (args: unknown) => unknown): () => void;
+  /** 1.9: the workspace's issue methods. Like `onIssues`, they need `workspace:issues`. */
+  readonly issues: ViewIssues;
   /** 1.3: per-tile status intervals for a local day (YYYY-MM-DD). */
   history(day: string): Promise<ViewHistoryDay>;
   /** 1.3: ask the user to copy or save this PNG; resolves with what they chose. */
@@ -73,7 +107,8 @@ export interface ViewClient {
   prompt(tileId: string, text: string): Promise<PromptOutcome>;
   /** Typed commands; one the manifest did not request throws locally. */
   readonly commands: ViewCommands;
-  /** The hole-punch — deduplicated: identical rects are not re-sent. */
+  /** The hole-punch — deduplicated: identical rects are not re-sent. A rect goes to the host once
+   *  a `structure` has named its tile, and leaves when one no longer does. */
   setSurfaceRects(rects: SurfaceRect[]): void;
   /** The host asked to reveal a tile; answer with where it is (or null). */
   onReveal(handler: (tileId: string) => ViewRect | null | Promise<ViewRect | null>): () => void;
@@ -81,10 +116,48 @@ export interface ViewClient {
   reportFrame(): void;
   readonly framesDrawn: number;
   /** Persist an opaque blob under the plugin id (debounced). */
-  setLayout(data: unknown): void;
+  /** Keep `data` as this view's layout. Saves are gathered for a moment, as a drag makes many; `now`
+   *  sends this one at once, for a change made in one step (a click), so a view switched away from
+   *  straight after it still has it. */
+  setLayout(data: unknown, opts?: { now?: boolean }): void;
   /** Report a non-fatal problem to the host log. */
   error(message: string): void;
 }
+
+/** What a client gives that runs elsewhere than where it is used (a widget's worker): the calls,
+ *  by name, and the values it holds, which the other side keeps a copy of. Surfaces and reveals
+ *  are a view's own and are not among them. */
+export const CLIENT_CALLS = [
+  "on", "subscribeStatus", "supports", "onEvents", "onCustom", "activity", "onPresence", "onParticipants", "onWidgets", "onIssues", "onCommand",
+  "pressWidget", "clickWidget", "history", "share", "agents", "sessions", "prompt", "setLayout", "error",
+] as const satisfies readonly (keyof ViewClient)[];
+export const CLIENT_VALUES = ["hello", "capabilities", "viewport", "visible", "device", "settings", "features"] as const satisfies readonly (keyof ViewClient)[];
+
+/** The workspace's issue methods (1.9), each answered with what the workspace's own returns. */
+export interface ViewIssues {
+  read(id: string): Promise<ViewIssue>;
+  create(issue: { title: string; state?: ViewIssueState; parent?: string; labels?: string[]; assignee?: ViewIssueAssignee | null; description?: string; acceptanceCriteria?: { done: boolean; text: string }[] }): Promise<ViewIssue>;
+  /** Change its fields: title, labels, assignee, parent, description, acceptance criteria. */
+  update(id: string, patch: Record<string, unknown>): Promise<ViewIssue>;
+  /** A new state, with a note in the same activity entry. */
+  setState(id: string, state: ViewIssueState, note?: string): Promise<ViewIssue>;
+  comment(id: string, message: string): Promise<ViewIssue>;
+  delete(id: string): Promise<void>;
+  /** Relate it to `other`, which may be in another of the host's workspaces. */
+  link(id: string, other: string, type: string): Promise<unknown>;
+  unlink(id: string, other: string): Promise<{ removed: number }>;
+  /** Into the host's workspace with prefix `prefix`; the result names the issue there (`newId`). */
+  move(id: string, prefix: string, mode: "move" | "copy"): Promise<{ newId: string; mode: "move" | "copy"; from: string }>;
+  /** The host's other workspaces an issue can go to: their prefix and title. */
+  workspaces(): Promise<{ prefix: string; title: string }[]>;
+  /** 1.12: whether this workspace keeps issues yet, and the prefix `setUp` would suggest. */
+  status(): Promise<ViewIssuesStatus>;
+  /** 1.12: start keeping issues in this workspace's folder, their ids starting `prefix`. */
+  setUp(prefix: string): Promise<ViewIssuesStatus>;
+}
+
+/** Whether a workspace keeps issues: `ready` once set up; `folder` names where they would live. */
+export interface ViewIssuesStatus { ready: boolean; folder: string | null; suggested: string }
 
 export interface ConnectOptions {
   /** Where to listen for the handshake (default `window`). */
@@ -108,6 +181,9 @@ export function connect(opts: ConnectOptions = {}): Promise<ViewClient> {
   });
 }
 
+/** Events that say how things are now (not that something happened): replayed to a late listener. */
+const STATE_EVENTS = new Set<string>(["structure", "names", "selection", "resize", "visibility", "theme", "settings"]);
+
 interface EventListener { kinds: Set<ViewEventKind>; custom: string[]; cb: (e: ViewEvent) => void; lastSeq: number }
 
 class Client implements ViewClient {
@@ -115,6 +191,7 @@ class Client implements ViewClient {
   capabilities: readonly ViewPermission[] = [];
   viewport = { w: 0, h: 0 };
   visible = true;
+  settings: Readonly<Record<string, SettingValue>> = {};
   framesDrawn = 0;
   readonly commands: ViewCommands;
   private listeners = new Map<string, Set<(p: unknown) => void>>();
@@ -128,13 +205,26 @@ class Client implements ViewClient {
   private activitySyncQueued = false;
   private presenceCbs = new Set<(p: ViewPresence) => void>();
   private presence: ViewPresence | null = null;
+  private participantCbs = new Set<(p: ViewParticipant[]) => void>();
+  private participants: ViewParticipant[] | null = null;
+  private widgets: ViewWidget[] | null = null;
+  private issueList: ViewIssueSummary[] | null = null;
+  private issueCbs = new Set<(issues: ViewIssueSummary[]) => void>();
+  private commandHandlers = new Map<string, (args: unknown) => unknown>();
+  readonly issues: ViewIssues = Object.fromEntries(ISSUE_CALLS.map((call) => [call, (...args: unknown[]) => this.issueCall(call, args)])) as unknown as ViewIssues;
+  private widgetCbs = new Set<(widgets: ViewWidget[]) => void>();
   private requests = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer?: ReturnType<typeof setTimeout> }>();
   private nextRequest = 1;
   private revealHandler: ((tileId: string) => ViewRect | null | Promise<ViewRect | null>) | null = null;
-  private lastRects = "";
+  /** The rects the view asked for, and the tiles the host has named (the last `structure`). */
+  private wantedRects: SurfaceRect[] = [];
+  private tiles = new Set<string>();
+  /** What the host was last told: nothing, at first. */
+  private lastRects = "[]";
   private frameTimer: ReturnType<typeof setTimeout> | null = null;
   private lastReportedFrames = 0;
   private layoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingLayout: { data: unknown } | null = null;
   private ready: Promise<void>;
 
   constructor(private port: MessagePort) {
@@ -145,7 +235,7 @@ class Client implements ViewClient {
       port.onmessage = (e) => {
         const r = parseHostMessage(e.data);
         if (!r.ok) return;
-        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; res(); return; }
+        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; this.settings = r.msg.settings ?? {}; this.bindKeys(r.msg.keys); res(); return; }
         this.dispatch(r.msg);
       };
     });
@@ -160,7 +250,12 @@ class Client implements ViewClient {
 
   private dispatch(m: HostMessage) {
     switch (m.type) {
-      case "structure": case "names": case "selection": this.emit(m.type, m); break;
+      case "structure":
+        this.tiles = new Set(m.tiles.map((t) => t.id));
+        this.sendRects();
+        this.emit(m.type, m);
+        break;
+      case "names": case "selection": this.emit(m.type, m); break;
       case "status": {
         const info: StatusInfo | undefined = m.since === undefined && m.agent === undefined ? undefined : {
           ...(m.since === undefined ? {} : { since: m.since }), ...(m.exact === undefined ? {} : { exact: m.exact }), ...(m.agent ? { agent: m.agent } : {}),
@@ -183,6 +278,19 @@ class Client implements ViewClient {
         this.presence = m.presence;
         for (const cb of this.presenceCbs) cb(m.presence);
         break;
+      case "widgets":
+        this.widgets = m.widgets;
+        for (const cb of this.widgetCbs) cb(m.widgets);
+        break;
+      case "issues":
+        this.issueList = m.issues;
+        for (const cb of this.issueCbs) cb(m.issues);
+        break;
+      case "invoke": void this.answer(m.invokeId, m.name, m.args); break;
+      case "participants":
+        this.participants = m.participants;
+        for (const cb of this.participantCbs) cb(m.participants);
+        break;
       case "response": {
         const r = this.requests.get(m.requestId);
         if (!r) break;
@@ -194,8 +302,11 @@ class Client implements ViewClient {
       case "resize": this.viewport = { w: m.w, h: m.h }; this.emit("resize", this.viewport); break;
       case "visibility": this.visible = m.visible; this.emit("visibility", { visible: m.visible }); break;
       case "theme": this.emit("theme", m.theme); break;
+      case "settings": this.settings = m.settings; this.emit("settings", m.settings); break;
       case "undock": {
-        try { const kept = (JSON.parse(this.lastRects || "[]") as SurfaceRect[]).filter((r) => r.tileId !== m.tileId); this.lastRects = JSON.stringify(kept); } catch { this.lastRects = ""; }
+        // The host has let go of it already: forget it without telling the host again.
+        this.wantedRects = this.wantedRects.filter((r) => r.tileId !== m.tileId);
+        this.lastRects = JSON.stringify(this.shownRects());
         this.emit("undock", { tileId: m.tileId });
         break;
       }
@@ -204,7 +315,12 @@ class Client implements ViewClient {
     }
   }
 
-  private emit(event: string, payload: unknown) { for (const cb of this.listeners.get(event) ?? []) cb(payload); }
+  /** The last of each event that says how things are now, which a listener added later is told first. */
+  private latest = new Map<string, unknown>();
+  private emit(event: string, payload: unknown) {
+    if (STATE_EVENTS.has(event)) this.latest.set(event, payload);
+    for (const cb of this.listeners.get(event) ?? []) cb(payload);
+  }
 
   private async answerReveal(requestId: number, tileId: string) {
     let rect: ViewRect | null = null;
@@ -229,10 +345,12 @@ class Client implements ViewClient {
     let set = this.listeners.get(event);
     if (!set) this.listeners.set(event, (set = new Set()));
     set.add(cb as (p: unknown) => void);
+    if (this.latest.has(event)) cb(this.latest.get(event) as EventMap[K]);
     return () => { set!.delete(cb as (p: unknown) => void); };
   }
 
   get features(): readonly ViewFeature[] { return this.hello.features ?? []; }
+  get device(): ViewDevice { return { touch: this.hello.device?.touch === true, compact: this.hello.device?.compact === true }; }
   supports(feature: ViewFeature): boolean { return this.features.includes(feature); }
 
   onEvents(kinds: readonly ViewEventKind[], cb: (event: ViewEvent) => void, opts: { replaySince?: number } = {}): () => void {
@@ -311,6 +429,84 @@ class Client implements ViewClient {
     };
   }
 
+  onParticipants(cb: (participants: ViewParticipant[]) => void): () => void {
+    if (!this.supports("participants")) return () => {};
+    this.participantCbs.add(cb);
+    if (this.participantCbs.size === 1) this.send({ type: "subscribeParticipants" });
+    else if (this.participants) cb(this.participants);
+    return () => {
+      if (this.participantCbs.delete(cb) && this.participantCbs.size === 0) { this.participants = null; this.send({ type: "unsubscribeParticipants" }); }
+    };
+  }
+
+  onWidgets(cb: (widgets: ViewWidget[]) => void): () => void {
+    if (!this.supports("widgets")) return () => {};
+    this.widgetCbs.add(cb);
+    if (this.widgetCbs.size === 1) this.send({ type: "subscribeWidgets" });
+    else if (this.widgets) cb(this.widgets);
+    return () => {
+      if (this.widgetCbs.delete(cb) && this.widgetCbs.size === 0) { this.widgets = null; this.send({ type: "unsubscribeWidgets" }); }
+    };
+  }
+
+  /** The declared commands' keys, run here while focus is in this frame; the host runs them elsewhere. */
+  private bindKeys(keys: CommandKeys[] | undefined) {
+    if (!keys?.length || typeof globalThis.addEventListener !== "function") return;
+    const mac = typeof navigator !== "undefined" && /mac/i.test(navigator.platform);
+    globalThis.addEventListener("keydown", (e) => {
+      const bound = keys.find((k) => chordMatches(k.keys, e as KeyboardEvent, mac));
+      const handler = bound && this.commandHandlers.get(bound.command);
+      if (!handler) return;
+      e.preventDefault();
+      void Promise.resolve().then(() => handler(null)).catch(() => {});
+    });
+  }
+
+  onCommand(name: string, handler: (args: unknown) => unknown): () => void {
+    this.commandHandlers.set(name, handler);
+    return () => { if (this.commandHandlers.get(name) === handler) this.commandHandlers.delete(name); };
+  }
+
+  private async answer(invokeId: number, name: string, args: unknown) {
+    // A plugin registers its handlers just after it connects: a call that arrives first waits for one.
+    for (let waited = 0; !this.commandHandlers.has(name) && waited < HANDLER_WAIT_MS; waited += 50) await new Promise((r) => setTimeout(r, 50));
+    const handler = this.commandHandlers.get(name);
+    if (!handler) { this.send({ type: "invokeResult", invokeId, ok: false, error: `it does not answer "${name}" now` }); return; }
+    try {
+      const result = JSON.parse(JSON.stringify((await handler(args)) ?? null)) as unknown;
+      this.send({ type: "invokeResult", invokeId, ok: true, result });
+    } catch (e) {
+      this.send({ type: "invokeResult", invokeId, ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  onIssues(cb: (issues: ViewIssueSummary[]) => void): () => void {
+    this.need("workspace:issues", "onIssues");
+    if (!this.supports("issues")) return () => {};
+    this.issueCbs.add(cb);
+    if (this.issueCbs.size === 1) this.send({ type: "subscribeIssues" });
+    else if (this.issueList) cb(this.issueList);
+    return () => {
+      if (this.issueCbs.delete(cb) && this.issueCbs.size === 0) { this.issueList = null; this.send({ type: "unsubscribeIssues" }); }
+    };
+  }
+
+  private issueCall(call: IssueCall, args: unknown[]): Promise<unknown> {
+    this.need("workspace:issues", `issues.${call}`);
+    if (!this.supports("issues")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no issues"));
+    return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), 30_000);
+  }
+
+  pressWidget(id: string, action: unknown): void {
+    this.need("workspace:widgets", "pressWidget");
+    if (this.supports("widgets")) this.send({ type: "pressWidget", id, action });
+  }
+
+  clickWidget(id: string): void {
+    this.need("workspace:widgets", "clickWidget");
+    if (this.supports("widgets")) this.send({ type: "pressWidget", id, click: true });
+  }
+
   private need(p: ViewPermission, what: string) {
     if (!this.capabilities.includes(p)) throw new Error(`hivemind: ${what} needs permission "${p}" — add it to hivemind-view.json`);
   }
@@ -370,11 +566,22 @@ class Client implements ViewClient {
   }
 
   setSurfaceRects(rects: SurfaceRect[]) {
-    const norm = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), ...(r.chrome ? { chrome: r.chrome } : {}) }));
-    const key = JSON.stringify(norm);
+    this.wantedRects = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h),
+      ...(r.chrome ? { chrome: r.chrome } : {}), ...(r.radius ? { radius: r.radius } : {}), ...(r.inert ? { inert: true as const } : {}) }));
+    this.sendRects();
+  }
+
+  // A tile the host has not named (one from a saved layout that is gone, or not heard of yet) is
+  // held back: the host refuses a rect for a tile it does not have, and enough refusals disable
+  // the view.
+  private shownRects(): SurfaceRect[] { return this.wantedRects.filter((r) => this.tiles.has(r.tileId)); }
+
+  private sendRects() {
+    const rects = this.shownRects();
+    const key = JSON.stringify(rects);
     if (key === this.lastRects) return;
     this.lastRects = key;
-    this.send({ type: "surfaceRects", rects: norm });
+    this.send({ type: "surfaceRects", rects });
   }
 
   onReveal(handler: (tileId: string) => ViewRect | null | Promise<ViewRect | null>) {
@@ -392,9 +599,19 @@ class Client implements ViewClient {
     }, 1000);
   }
 
-  setLayout(data: unknown) {
+  setLayout(data: unknown, opts?: { now?: boolean }) {
+    this.pendingLayout = { data };
+    if (opts?.now) { this.flushLayout(); return; }
     if (this.layoutTimer) clearTimeout(this.layoutTimer);
-    this.layoutTimer = setTimeout(() => { this.layoutTimer = null; this.send({ type: "layout", data }); }, 250);
+    this.layoutTimer = setTimeout(() => this.flushLayout(), 250);
+  }
+
+  private flushLayout() {
+    if (this.layoutTimer) clearTimeout(this.layoutTimer);
+    this.layoutTimer = null;
+    const pending = this.pendingLayout;
+    this.pendingLayout = null;
+    if (pending) this.send({ type: "layout", data: pending.data });
   }
 
   error(message: string) { this.send({ type: "error", message }); }

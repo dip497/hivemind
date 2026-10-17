@@ -58,6 +58,10 @@ export interface ToolRegistry {
   };
 }
 
+/** A tool plugin's id: `owner/name`. */
+export const TOOL_ID_RE = /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/;
+export const isToolId = (id: string): boolean => TOOL_ID_RE.test(id);
+
 /** Call after package validation, when the installed catalog changes. Invalid
  * contributions are rejected before publication; callers retain their old catalog. */
 export function createToolRegistry(plugins: readonly ToolPluginContribution[]): ToolRegistry {
@@ -68,7 +72,7 @@ export function createToolRegistry(plugins: readonly ToolPluginContribution[]): 
   const pluginIds = new Set<string>();
   if (plugins.length > 200) throw new Error("Too many tool plugins");
   for (const plugin of plugins) {
-    if (!/^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/.test(plugin.id)) throw new Error("Invalid tool plugin id");
+    if (!isToolId(plugin.id)) throw new Error("Invalid tool plugin id");
     if (pluginIds.has(plugin.id)) throw new Error(`Duplicate tool plugin: ${plugin.id}`);
     pluginIds.add(plugin.id);
     if (plugin.builtin) builtins.add(plugin.id);

@@ -1,0 +1,101 @@
+package com.hivemind.phone.ui.common
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.hivemind.phone.R
+import com.hivemind.phone.core.Agent
+import com.hivemind.phone.core.AgentState
+import com.hivemind.phone.core.WaitKind
+import com.hivemind.phone.ui.start.PHOTOS_MAX
+import kotlinx.coroutines.delay
+
+/** The time now, refreshed often enough to say how long ago something was. */
+@Composable
+fun rememberNow(): Long {
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(15_000)
+            value = System.currentTimeMillis()
+        }
+    }
+    return now
+}
+
+/** How long something has run, [ms], as the working line says it: 12s, 3m 04s, 1h 02m. */
+fun elapsed(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    return when {
+        s < 60 -> "${s}s"
+        s < 3_600 -> "${s / 60}m ${"%02d".format(s % 60)}s"
+        else -> "${s / 3_600}h ${"%02d".format(s / 60 % 60)}m"
+    }
+}
+
+/** How long it has been since [since] (ms since the epoch), as the lists say it: now, 5 min, 2 h, 3 d. */
+@Composable
+fun sinceText(since: ULong, now: Long): String {
+    val seconds = ((now - since.toLong()) / 1000).coerceAtLeast(0)
+    return when {
+        seconds < 60 -> stringResource(R.string.ago_now)
+        seconds < 3_600 -> stringResource(R.string.ago_minutes, seconds / 60)
+        seconds < 86_400 -> stringResource(R.string.ago_hours, seconds / 3_600)
+        else -> stringResource(R.string.ago_days, seconds / 86_400)
+    }
+}
+
+@Composable
+fun AgentState.label(): String = stringResource(
+    when (this) {
+        AgentState.IDLE -> R.string.state_idle
+        AgentState.WORKING -> R.string.state_working
+        AgentState.WAITING -> R.string.state_waiting
+        AgentState.DONE -> R.string.state_done
+        AgentState.FAILED -> R.string.state_failed
+        AgentState.INTERRUPTED -> R.string.state_interrupted
+        AgentState.LIMITED -> R.string.state_limited
+        AgentState.EXITED -> R.string.state_exited
+    },
+)
+
+@Composable
+fun WaitKind.label(): String = stringResource(
+    when (this) {
+        WaitKind.PERMISSION -> R.string.wait_permission
+        WaitKind.QUESTION -> R.string.wait_question
+        WaitKind.PLAN -> R.string.wait_plan
+        WaitKind.OTHER -> R.string.wait_other
+    },
+)
+
+/** What an agent waiting on the person asks for, as the card over its answers names it. */
+@Composable
+fun WaitKind.asked(): String = stringResource(
+    when (this) {
+        WaitKind.PERMISSION -> R.string.asks_permission
+        WaitKind.QUESTION -> R.string.asks_question
+        WaitKind.PLAN -> R.string.asks_plan
+        WaitKind.OTHER -> R.string.asks_other
+    },
+)
+
+@Composable
+fun Notice.text(): String = when (this) {
+    is Notice.Failed -> message.ifEmpty { stringResource(R.string.notice_failed) }
+    Notice.AlreadyAnswered -> stringResource(R.string.notice_already_answered)
+    Notice.NotRunning -> stringResource(R.string.notice_not_running)
+    Notice.NotStopped -> stringResource(R.string.notice_not_stopped)
+    Notice.AlreadyClosed -> stringResource(R.string.notice_already_closed)
+    is Notice.NotTold -> stringResource(R.string.notice_not_told, device)
+    Notice.NoLock -> stringResource(R.string.notice_no_lock)
+    Notice.Retargeted -> stringResource(R.string.notice_retargeted)
+    is Notice.PhotosLeftOut -> pluralStringResource(R.plurals.notice_photos_left_out, count, count, PHOTOS_MAX)
+}
+
+/**
+ * Whether Stop applies: the agent is in a turn, working or waiting, and its manifest says how to
+ * interrupt it (spec/agents.md, "Stopping").
+ */
+val Agent.stoppable: Boolean get() = canInterrupt && (state == AgentState.WORKING || state == AgentState.WAITING)

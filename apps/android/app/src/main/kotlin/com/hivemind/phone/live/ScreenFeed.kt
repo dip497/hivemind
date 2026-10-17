@@ -1,0 +1,124 @@
+package com.hivemind.phone.live
+
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.hivemind.phone.core.AgentRef
+import com.hivemind.phone.core.Phone
+import com.hivemind.phone.core.ScreenEnded
+import com.hivemind.phone.core.ScreenListener
+import com.hivemind.phone.core.Watch
+import com.hivemind.phone.terminal.FitHeld
+import com.hivemind.phone.terminal.TermSize
+import com.hivemind.phone.terminal.Terminal
+
+/**
+ * One agent's terminal, watched (design §5.3). The core tells of a new frame from its own thread,
+ * at most one per 16 ms; the terminal pulls what changed since the revision it last drew, in one
+ * call, once on the main thread's next frame, however many frames came meanwhile. When the core
+ * resumes the watch after the app was away, it starts from a fresh screen, which the update that
+ * follows carries whole.
+ *
+ * Made on the main thread; [stop] it when the screen showing it goes.
+ */
+class ScreenFeed(phone: Phone, agent: AgentRef) {
+    /** The terminal as drawn. */
+    val terminal = Terminal()
+
+    /** Whether the session still has the size this phone fitted it to. */
+    private val held = FitHeld()
+
+    /** Who holds the session's keyboard; null while the person's own devices do. */
+    var keyboard: String? by mutableStateOf(null)
+        private set
+
+    /** How the watch ended, once it has. */
+    var ended: ScreenEnded? by mutableStateOf(null)
+        private set
+
+    private val main = Handler(Looper.getMainLooper())
+
+    /** Whether the terminal is out of sight (its agent's chat is shown): what changes is pulled once it is back, in one update. */
+    private var hidden = false
+
+    /** A frame came while the terminal was out of sight. */
+    private var missed = false
+
+    // Before watching: the core may tell of a frame as soon as the watch begins.
+    private val pull = FramePull {
+        if (hidden) {
+            missed = true
+        } else {
+            terminal.apply(watch.update(terminal.revision))
+            held.sized(terminal.cols, terminal.rows)
+        }
+    }
+
+    /** The terminal is shown, or [hidden] behind its agent's chat: hidden, its frames wait, not pulled each one on the main thread. Main thread. */
+    fun shown(shown: Boolean) {
+        hidden = !shown
+        if (shown && missed) {
+            missed = false
+            pull.request()
+        }
+    }
+
+    // What the core tells, from its threads: kept apart from what the screen calls.
+    private val told = object : ScreenListener {
+        override fun frameReady(revision: ULong) = pull.request()
+
+        override fun keyboard(holder: String?) {
+            main.post { keyboard = holder }
+        }
+
+        override fun ended(why: ScreenEnded) {
+            main.post { ended = why }
+        }
+    }
+
+    private val watch: Watch = phone.watch(agent, told)
+
+    init {
+        // What the core has already, drawn at once rather than at its next frame.
+        pull.request()
+    }
+
+    /** Types [text] into the session as it is, as the person. */
+    fun typeText(text: String) = watch.typeText(text)
+
+    /** Presses [keys], tokens as `hive ctl keys` takes them: `enter`, `escape`, `ctrl-c`, … */
+    fun typeKeys(keys: List<String>) = watch.typeKeys(keys)
+
+    /** Scrolls [lines] (up below 0) at the cell [col], [row] (from 1) in a program that takes scrolling; false: the view scrolls its own lines. */
+    fun scroll(lines: Int, col: Int, row: Int): Boolean = watch.scroll(lines, col.toUShort(), row.toUShort())
+
+    /** The phone fitted the session, and another screen has since taken its size (by typing there, or asking for it). */
+    val takenBack: Boolean get() = held.takenBack
+
+    /** Sizes the session to [size] for this phone, by the host's rule: the last to fit or type holds the size. */
+    fun fit(size: TermSize) {
+        if (size == held.size && !held.takenBack) return
+        held.asked(size)
+        watch.fit(size.cols.toUShort(), size.rows.toUShort())
+    }
+
+    /** Takes the size back for this phone after another screen took it. */
+    fun fitAgain() {
+        held.size?.let(::fit)
+    }
+
+    /** Gives the session back the size it had, if the phone fitted it. */
+    fun unfit() {
+        if (held.size == null) return
+        held.letGo()
+        watch.unfit()
+    }
+
+    fun stop() {
+        pull.stop()
+        watch.stop()
+        watch.destroy()
+    }
+}

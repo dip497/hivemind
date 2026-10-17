@@ -7,7 +7,8 @@ import { installView, listInstalledViews, readViewPackage, removeView, userViews
 let tmp: string;
 const savedXdg = process.env.XDG_CONFIG_HOME;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-views-")); process.env.XDG_CONFIG_HOME = path.join(tmp, "xdg"); });
-afterEach(() => { process.env.XDG_CONFIG_HOME = savedXdg; fs.rmSync(tmp, { recursive: true, force: true }); });
+// Unset again when it was unset: `= undefined` would set the text "undefined" (see settings.test.ts).
+afterEach(() => { if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = savedXdg; fs.rmSync(tmp, { recursive: true, force: true }); });
 
 function pkg(dir: string, manifest: unknown, entry = "index.html") {
   fs.mkdirSync(dir, { recursive: true });
@@ -105,6 +106,19 @@ describe("view packages", () => {
       ["orbit", "user", null],
       ["orbit", "repo", 'shadowed by the user-installed view "orbit"'],
       ["ring", "repo", null],
+    ]);
+  });
+
+  test("the app's own are listed first, and one installed under the id of one replaces it", async () => {
+    const own = path.join(tmp, "app-views");
+    pkg(path.join(own, "windows"), good("windows"));
+    pkg(path.join(own, "dock"), good("dock"));
+    pkg(path.join(userViewsDir(), "windows"), good("windows"));
+    const all = await listInstalledViews(null, own);
+    expect(all.map((x) => [x.id, x.source, x.error])).toEqual([
+      ["dock", "app", null],
+      ["windows", "app", 'replaced by the installed view "windows"'],
+      ["windows", "user", null],
     ]);
   });
 });

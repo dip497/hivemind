@@ -21,5 +21,5 @@ export function identifyAgent(cmd: string): Agent | null {
  * distinguishes permission/question keeps them; the rest map to "blocked".
  */
 export function detectTileStatus(agent: Agent, screen: string): TileStatus {
-  return agentById(agent)?.detect?.(screen) ?? "idle";
+  return agentById(agent)?.detect?.(screen).status ?? "idle";
 }

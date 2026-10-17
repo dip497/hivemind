@@ -30,22 +30,6 @@ function Lines({ count, widths }: { count: number; widths?: string[] }) {
   );
 }
 
-export function DiffSkeleton() {
-  return (
-    <Shell label="Loading diff">
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-4 w-24" />
-        <Skeleton className="h-4 w-16" />
-        <Skeleton className="ml-auto h-4 w-10" />
-      </div>
-      <div className="grid flex-1 grid-cols-2 gap-3 overflow-hidden">
-        <Lines count={9} />
-        <Lines count={9} widths={["w-9/12", "w-11/12", "w-7/12", "w-10/12"]} />
-      </div>
-    </Shell>
-  );
-}
-
 export function EditorSkeleton() {
   return (
     <Shell label="Loading editor">

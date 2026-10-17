@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { SessionManager, type ManagedPty, type SessionClient, type SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
 
 class FakePty implements ManagedPty {
-  readonly pid = 4242;
+  // A live pid, as a running program has: a paused pty whose program has ended is resumed.
+  readonly pid = process.pid;
   size: [number, number];
   written: string[] = [];
   paused = false;
@@ -91,7 +92,7 @@ test("info() lists live sessions with viewers, size and command", async () => {
   const { mgr, viewer } = setup();
   await mgr.createOrAttach("t1", spec(80, 24), viewer().c);
   const [row] = mgr.info();
-  assert.deepEqual(row, { id: "t1", state: "live", cmd: "bash", args: ["-l"], cwd: "/r", pid: 4242, viewers: 1, cols: 80, rows: 24 });
+  assert.deepEqual(row, { id: "t1", state: "live", cmd: "bash", args: ["-l"], cwd: "/r", pid: process.pid, viewers: 1, cols: 80, rows: 24 });
 });
 
 test("frozen snapshots show as frozen with no pid", () => {
@@ -184,4 +185,28 @@ test("a snapshot's position never counts output its replay lacks", async () => {
   const snap = (await pending)!;
   assert.equal(snap.seq, 10);
   assert.ok(snap.replay.includes("LOST"), JSON.stringify(snap.replay));
+});
+
+test("a viewer that only watches (a host shown a session on someone else's machine, M4) leaves its size and its pauses as they are, attaching or returning, and is told its size whenever someone sizes it, as every viewer is", async () => {
+  const { mgr, ptys, viewer } = setup();
+  const desk = viewer(), host = viewer();
+  const sizes = { desk: [] as number[][], host: [] as number[][] };
+  desk.c.onSize = (c, r) => sizes.desk.push([c, r]);
+  host.c.onSize = (c, r) => sizes.host.push([c, r]);
+  await mgr.createOrAttach("t1", spec(120, 40), desk.c);
+  mgr.pause("t1", desk.c);
+  const r = await mgr.createOrAttach("t1", spec(45, 30), host.c, true);
+  assert.deepEqual(ptys[0]!.size, [120, 40], "watching is not interacting");
+  assert.deepEqual([r.cols, r.rows], [120, 40], "it is told the size it is drawn at");
+  assert.equal(ptys[0]!.paused, true, "the desk's pause holds");
+  assert.deepEqual(sizes, { desk: [], host: [] });
+
+  mgr.resize("t1", 100, 30, desk.c);
+  mgr.resize("t1", 100, 30, desk.c);
+  assert.deepEqual(sizes, { desk: [[100, 30]], host: [[100, 30]] }, "told once, when it changes");
+  mgr.detach("t1", host.c);
+  const back = mgr.attachDelta("t1", host.c, { seq: r.seq, epoch: r.epoch }, 45, 30, true);
+  assert.deepEqual([back?.cols, back?.rows], [100, 30]);
+  assert.deepEqual(ptys[0]!.size, [100, 30]);
+  assert.equal(ptys[0]!.paused, true);
 });

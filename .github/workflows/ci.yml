@@ -9,42 +9,115 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # By hand, on any branch (Actions → ci → Run workflow).
+  workflow_dispatch:
 
 # Read-only: nothing here writes to the repository.
 permissions:
   contents: read
 
+# A pull request's newer push replaces its running checks; every push to main is checked.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # The check the main branch requires: desktop and packages, which run side by side, both passed.
   build-and-test:
+    needs: [desktop, packages]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          DESKTOP: ${{ needs.desktop.result }}
+          PACKAGES: ${{ needs.packages.result }}
+        run: |
+          echo "desktop: $DESKTOP, packages: $PACKAGES"
+          [ "$DESKTOP" = success ] && [ "$PACKAGES" = success ]
+
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
+
+      - name: Build hive-net (the workspace host's and the CLI's network tests run it)
+        # Without it those tests skip, and pass.
+        run: rustup toolchain install && cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      - name: Unit tests (packages and CLI)
+        # Every package's own tests: the workspace store, settings.json and its lock, agent
+        # discovery, the view SDK, the agent host, the CLI (`bun test`), and the host's domains
+        # (under Node, as the app runs them). None reads what the build makes.
+        run: pnpm test
+
+  desktop:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version: "24"
 
-      - uses: pnpm/action-setup@v4
+      # v6.1.0, not v6: the first release that installs pnpm 12, and the moving v6 tag still names v6.0.10.
+      - uses: pnpm/action-setup@v6.1.0
         with:
           # version pinned via `packageManager` in package.json (avoid dupes)
           run_install: false
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3"
+          bun-version: "1.4"
 
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm --filter @hivemind/desktop run typecheck
+      - name: Typecheck (every package)
+        run: pnpm typecheck
 
       - name: Build (renderer + main + CLI)
         run: pnpm -r --parallel build
 
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
+
+      - name: Build hive-net (the daemon client's tests run it)
+        run: rustup toolchain install && cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
       - name: Unit tests (desktop)
+        # After hive-net's build: the daemon client's test under Node runs it.
         run: pnpm --filter @hivemind/desktop run test:unit
 
       - name: Installer platform matrix
@@ -56,3 +129,272 @@ jobs:
         # Runs install.sh's Darwin helpers against a fake .app (ditto/xattr/pkill
         # shimmed), so the mac install/uninstall path is covered on this ubuntu box.
         run: bash scripts/install-macos-test.sh
+
+      - name: The docs site's vendored copies
+        # The site's container builds from docs/ alone and serves the committed installers and
+        # design tokens, so they have to match the repository's.
+        run: node docs/scripts/sync-install.mjs --check && node docs/scripts/sync-tokens.mjs --check && node docs/scripts/sync-agent-icons.mjs --check
+
+  # The files hive-net, hive-phone and compose read, hashed. A job whose files passed it before, on
+  # this pull request or on main, is skipped, and a skipped check counts as passed. The hash is of
+  # the commit checked out (a pull request's merge with main), so a change on main counts; and of
+  # the week, so what the repository does not pin (base images, the runner) is met at least weekly.
+  inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      hive-net: ${{ steps.hash.outputs.hive-net }}
+      hive-phone: ${{ steps.hash.outputs.hive-phone }}
+      compose: ${{ steps.hash.outputs.compose }}
+      hive-net-passed: ${{ steps.hive-net.outputs.cache-hit }}
+      hive-phone-passed: ${{ steps.hive-phone.outputs.cache-hit }}
+      compose-passed: ${{ steps.compose.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # compose's are what infra/Dockerfile.dockerignore lets in, infra/ and the hive-net the checks run.
+      - id: hash
+        run: |
+          hash() { { date -u +%G-%V; git ls-tree -r HEAD -- .github/workflows/ci.yml rust-toolchain.toml "$@"; } | sha256sum | cut -c1-40; }
+          {
+            echo "hive-net=$(hash crates/hive-net conformance scripts/traffic-test.sh)"
+            echo "hive-phone=$(hash crates/hive-phone crates/hive-phone-ffi crates/hive-net conformance spec scripts/phone/bindings.sh apps/ios/HivePhone/Core/Generated)"
+            echo "compose=$(hash infra crates/Cargo.toml crates/Cargo.lock crates/hive-net crates/hive-phone crates/hive-web crates/vendor spec pnpm-lock.yaml pnpm-workspace.yaml)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - id: hive-net
+        uses: actions/cache/restore@v6
+        with:
+          path: .passed
+          key: passed-hive-net-${{ steps.hash.outputs.hive-net }}
+          lookup-only: true
+
+      - id: hive-phone
+        uses: actions/cache/restore@v6
+        with:
+          path: .passed
+          key: passed-hive-phone-${{ steps.hash.outputs.hive-phone }}
+          lookup-only: true
+
+      - id: compose
+        uses: actions/cache/restore@v6
+        with:
+          path: .passed
+          key: passed-compose-${{ steps.hash.outputs.compose }}
+          lookup-only: true
+
+  hive-net:
+    # The Rust network crate (R10): its CLI end to end, on the local network and through a relay.
+    needs: inputs
+    # Not cancelled(): should inputs fail, this runs.
+    if: ${{ !cancelled() && needs.inputs.outputs.hive-net-passed != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: crates/hive-net
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # The test binaries side by side: one after another they took 160 s, mostly waiting on the
+      # network. nextest runs no doc tests, so they run after.
+      - name: Test
+        run: |
+          cargo nextest run --locked
+          cargo test --locked --doc
+
+      - name: A device's side alone, without the server roles (what a phone links)
+        run: cargo check --locked --no-default-features --all-targets
+
+      - name: Two machines (network namespaces)
+        # R10's "Done when" on one runner: one network with no internet (mDNS, direct), and two
+        # networks that reach each other only through a relay hive-net serves.
+        run: |
+          cargo build --locked
+          sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash tests/two-machines.sh
+
+      - name: What leaves a device (network namespaces, nft)
+        # R16's "Done when": on the local network hive-net sends nothing off it; on a network
+        # someone runs, it talks to that network's relay and no one else. (The app's part runs
+        # where the app is built: `sudo bash scripts/traffic-test.sh`.)
+        run: |
+          command -v nft >/dev/null || sudo apt-get install -y nftables
+          sudo HIVE_NET_BIN="$PWD/target/debug/hive-net" bash ../../scripts/traffic-test.sh
+
+      - run: touch "$GITHUB_WORKSPACE/.passed"
+      - uses: actions/cache/save@v6
+        with:
+          path: .passed
+          key: passed-hive-net-${{ needs.inputs.outputs.hive-net }}
+
+  hive-phone:
+    # The phone's Rust core (M5): conformance/pairing.json from the phone's side, and what it keeps;
+    # the facade the apps link (crates/hive-phone-ffi), and the Swift generated from it, committed.
+    # That crates/hive-web builds for a browser with them is phone-page's: it builds its wasm.
+    needs: inputs
+    if: ${{ !cancelled() && needs.inputs.outputs.hive-phone-passed != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: crates/hive-phone
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      # Dependencies only: the whole target dirs were a 4.2 GB cache, 2 min to restore, that pushed
+      # the other caches out of the repository's 10 GB.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            crates/hive-phone -> target
+            crates/hive-phone-ffi -> target
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: It links none of hive-net's server roles
+        # A phone runs no relay, lookup, access or push role (hive-net's `server` feature).
+        run: |
+          if cargo tree --locked -e normal --prefix none | grep -E '^(iroh-dns-server|tokio-rustls-acme) '; then
+            echo "the phone links hive-net's server roles"; exit 1
+          fi
+
+      - name: Test the facade
+        working-directory: crates/hive-phone-ffi
+        run: cargo test --locked
+
+      - name: The Swift committed is what the facade generates
+        # Generated unformatted, so any machine generates the same; the Kotlin is the Android
+        # build's own.
+        working-directory: .
+        run: |
+          scripts/phone/bindings.sh
+          git diff --exit-code -- apps/ios/HivePhone/Core/Generated
+          test -z "$(git status --porcelain -- apps/ios/HivePhone/Core/Generated)"
+
+      - run: touch "$GITHUB_WORKSPACE/.passed"
+      - uses: actions/cache/save@v6
+        with:
+          path: .passed
+          key: passed-hive-phone-${{ needs.inputs.outputs.hive-phone }}
+
+  phone-page:
+    # The phone page (crates/hive-web, docs/design/phone-browser-2026-10-03.md): the wasm and the app
+    # built as a release builds them, with wasm-bindgen at Cargo.lock's version; the desktop's hash
+    # of what a server serves is build.sh's; and its lists in a phone-sized Chromium.
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: hive-web-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the page
+        run: |
+          tools=$(crates/hive-web/tools.sh "$RUNNER_TEMP/hive-web-tools")
+          eval "$tools"
+          crates/hive-web/build.sh
+
+      - name: The desktop's hash of the page served is build.sh's
+        working-directory: apps/desktop
+        run: pnpm exec tsx --test tests/unit/phone-page.test.ts
+
+      - name: Its lists in a phone-sized Chromium
+        working-directory: apps/desktop
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test tests/e2e/phone-page.spec.ts
+
+  compose:
+    # R13: the stack self-hosters run (infra/compose.yml), built from this commit, and its checks:
+    # the network's link, admission, a device found by id through the lookup server, a host
+    # record, and a restart survived.
+    needs: inputs
+    if: ${{ !cancelled() && needs.inputs.outputs.compose-passed != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Rust (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/hive-net/target
+          key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
+
+      - name: Build hive-net (the devices the checks run)
+        run: cargo build --locked --manifest-path crates/hive-net/Cargo.toml
+
+      # The image compose.yml names, built with its layers kept between runs: a push that changes
+      # none of what it copies takes none of the 5 min a cold release build of hive-net did
+      # (run 38965971741). `--no-build` below then runs this image.
+      - uses: docker/setup-buildx-action@v3
+      - name: The stack's image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/Dockerfile
+          tags: hivemind/hive-net:local
+          load: true
+          cache-from: type=gha,scope=infra
+          cache-to: type=gha,scope=infra,mode=max
+
+      - name: Start the stack
+        run: docker compose -f infra/compose.yml up -d --no-build
+
+      - name: Check it
+        run: bash infra/check.sh
+
+      - name: What the server said
+        if: failure()
+        run: docker compose -f infra/compose.yml logs
+
+      - name: Stop it
+        if: always()
+        run: docker compose -f infra/compose.yml down -v
+
+      - run: touch .passed
+      - uses: actions/cache/save@v6
+        with:
+          path: .passed
+          key: passed-compose-${{ needs.inputs.outputs.compose }}

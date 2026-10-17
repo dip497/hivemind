@@ -1,13 +1,20 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
 import { RecentProjects } from "./RecentProjects";
+import { WorkspaceActions } from "./multiplayer/workspace-actions";
+import { AppControls } from "./workspace/app-controls";
+import { useChromeState } from "./workspace/chrome-store";
+import { SharedBanner } from "./multiplayer/shared-banner";
+import { ShownWorkspaceProvider } from "./multiplayer/shown";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ChevronRight, ExternalLink, Loader2, Plus, Settings, X, Palette, PanelsTopLeft, Puzzle, Bot, Keyboard, Info } from "lucide-react";
+import { Bell, ExternalLink, Spinner, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "./components/icons";
 import { Button } from "./components/ui/button";
+import { Loading } from "./components/ui/loading";
+import { preloadable } from "./lib/preloadable";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Switch } from "./components/ui/switch";
@@ -16,18 +23,21 @@ import type { UpdateStatus } from "../../shared/ipc";
 import {
   inElectron,
   useFsChangedInvalidation,
-  useIssues,
   useProject,
 } from "./queries";
 import { Workspace } from "./Workspace";
-import { IssuePeek } from "./components/IssuePeek";
-import { NewIssueModal } from "./components/NewIssueModal";
 import { resolveSettingsPage } from "./settings-registry";
+import { TileErrorBoundary } from "./TileErrorBoundary";
 import { flushSettings } from "./settings-store";
-import { useExpandedGroups, useSettingsNav } from "./settings-nav";
+import { useSettingsNav } from "./settings-nav";
+import { UpdateCheckSwitch } from "./update-check";
 import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
-const SettingsPages = lazy(() => import("./settings-panels"));
+import { tellRecentFolders } from "./recent-folders";
+import { chooseFolder, FolderPathDialog } from "./choose-folder";
+const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
+// Sharing's dialogs load when opened: they are nothing the first frame draws.
+const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
 
 // Last 8 opened folders, most recent first. Persisted via localStorage —
 // mirrors VSCode's "Open Recent" (Ctrl+R) behavior at workspace granularity.
@@ -48,10 +58,11 @@ function pushRecent(path: string): string[] {
   const cur = loadRecents().filter((p) => p !== path);
   const next = [path, ...cur].slice(0, RECENT_MAX);
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  tellRecentFolders();
   return next;
 }
 
-/** GitHub-release update check, owned at the App level so the top-right Settings
+/** GitHub-release update check, owned at the App level so the Settings
  *  dialog (full status) and the canvas "Update available" pill share ONE check.
  *  The fetch runs in main (renderer CSP blocks api.github.com); the last result
  *  is cached in localStorage so the affordance survives a reload, then re-checked
@@ -106,7 +117,7 @@ function useUpdateCheck() {
   const upgradingRef = useRef(false);
   const restart = useCallback(() => {
     toast.loading("Restarting into the new version…");
-    window.setTimeout(() => { void window.hive.relaunchApp(); }, 600);
+    window.setTimeout(() => { void window.hive.relaunchApp?.(); }, 600);
   }, []);
   const upgrade = useCallback(() => {
     if (upgradingRef.current || !window.hive?.runUpgrade) return;
@@ -150,7 +161,7 @@ export function App() {
   const [recents, setRecents] = useState<string[]>(() => loadRecents());
   const { data: project, isLoading } = useProject(rootHint);
   async function pickFolder() {
-    const picked = await window.hive.pickProjectFolder();
+    const picked = await chooseFolder();
     if (!picked) return;
     window.localStorage.setItem("hivemind:last-project", picked);
     setRecents(pushRecent(picked));
@@ -177,6 +188,16 @@ export function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Settings' code is fetched while nothing else is happening, so opening it never waits.
+  useEffect(() => {
+    // Safari has no requestIdleCallback.
+    if (typeof requestIdleCallback !== "function") {
+      const id = setTimeout(() => void SettingsPages.preload(), 1000);
+      return () => clearTimeout(id);
+    }
+    const id = requestIdleCallback(() => void SettingsPages.preload());
+    return () => cancelIdleCallback(id);
+  }, []);
   const root = project?.root ?? null;
   const cwd = project?.cwd ?? "";
   // Prefer the explicit repoPath from main (handles the no-.hivemind case
@@ -184,109 +205,74 @@ export function App() {
   // root for older builds.
   const repoPath = project?.repoPath ?? (root ? path.dirname(root) : null);
   useFsChangedInvalidation(repoPath, root);
-  const { data: issues = [] } = useIssues(root);
-
-  // Canvas-only: the Board/List views + their sidebar/filter chrome were
-  // removed — the canvas IS the workspace (issues live as the IssuesTile, the
-  // ⌘K palette, and IssuePeek). No view switcher.
-  const [peekId, setPeekId] = useState<string | null>(null);
-  // The workspace root the peek reads from. Defaults to the app's base root,
-  // but a cross-repo link (an id whose prefix belongs to another registered
-  // workspace) resolves to that repo's root so the peek shows the right issue.
-  const [peekRoot, setPeekRoot] = useState<string | null>(null);
-  const [newOpen, setNewOpen] = useState(false);
   // Ctrl+O / Ctrl+R on the canvas (useCanvasShortcuts): VS Code's Open Folder and Open Recent.
-  const [recentOpen, setRecentOpen] = useState(false);
+  // Which page of the Recent dialog is open: its list, or joining a workspace shared with you.
+  const [recentOpen, setRecentOpen] = useState<"recent" | "join" | null>(null);
+  const { islandShown, layersShown } = useChromeState();
+  // Make your own plugin (the Add menu, Settings ▸ Plugins): a prompt to copy or hand an agent here.
+  const [making, setMaking] = useState<"widget" | "tool" | "view" | null>(null);
+  useEffect(() => {
+    const open = (e: Event) => { setSettingsOpen(false); setMaking((e as CustomEvent<{ kind?: "widget" | "tool" | "view" }>).detail?.kind ?? "widget"); };
+    window.addEventListener("hivemind:make-plugin", open);
+    return () => window.removeEventListener("hivemind:make-plugin", open);
+  }, []);
   useEffect(() => {
     const onFolder = () => void pickFolder();
-    const onRecent = () => setRecentOpen(true);
+    // One dialog at a time: Join from Settings → Connect closes Settings.
+    const onRecent = (e: Event) => { setSettingsOpen(false); setRecentOpen((e as CustomEvent<{ join?: boolean }>).detail?.join ? "join" : "recent"); };
+    // The Layers panel's Projects: this window shows that workspace instead.
+    const onWorkspace = (e: Event) => { const repo = (e as CustomEvent<{ repo?: string }>).detail?.repo; if (repo) openRecent(repo); };
+    // An agent started from Settings (set it up with an agent): the agent is shown.
+    const onAgent = () => setSettingsOpen(false);
+    window.addEventListener("hivemind:spawn-agent", onAgent);
     window.addEventListener("hivemind:open-folder", onFolder);
     window.addEventListener("hivemind:open-recent", onRecent);
-    return () => { window.removeEventListener("hivemind:open-folder", onFolder); window.removeEventListener("hivemind:open-recent", onRecent); };
+    window.addEventListener("hivemind:open-workspace", onWorkspace);
+    return () => {
+      window.removeEventListener("hivemind:spawn-agent", onAgent);
+      window.removeEventListener("hivemind:open-folder", onFolder);
+      window.removeEventListener("hivemind:open-recent", onRecent);
+      window.removeEventListener("hivemind:open-workspace", onWorkspace);
+    };
   });
-  const [initing, setIniting] = useState(false);
-  const [initOpen, setInitOpen] = useState(false);
-  const openInit = useCallback(() => setInitOpen(true), []);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const update = useUpdateCheck();
   const qc = useQueryClient();
-
-  // Initialize a .hivemind/ workspace in the current folder (no terminal).
-  // NOTE: Electron disables window.prompt() (returns null), so the prefix is
-  // collected via an inline input (InitWorkspacePrompt) instead.
-  async function doInitWorkspace(prefix: string) {
-    const dir = repoPath ?? cwd;
-    if (!dir || !prefix.trim()) return;
-    setIniting(true);
-    try {
-      await window.hive.initWorkspace(dir, prefix.trim());
-      // Point the project query at `dir` explicitly. Changing the query key
-      // (["project", dir]) forces useProject to refetch with the new hint;
-      // resolveProject now finds the freshly-written .hivemind/ → root set →
-      // New button + board appear.
-      window.localStorage.setItem("hivemind:last-project", dir);
-      setRecents(pushRecent(dir));
-      setRootHint(dir);
-      setInitOpen(false);
-      await qc.invalidateQueries({ queryKey: ["project"] });
-    } catch (e) {
-      window.alert(`Could not initialize workspace: ${(e as Error).message}`);
-    } finally {
-      setIniting(false);
-    }
-  }
-  const suggestedPrefix = (() => {
-    const base = (repoPath ?? cwd).split("/").filter(Boolean).slice(-1)[0] ?? "HIVE";
-    const p = base.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6);
-    return p.length >= 2 ? p : "HIVE";
-  })();
-
-  // ⌘K palette → open peek via CustomEvent (decouples palette from App state)
+  /** Open `path` where it is now, after its hosting moved (M3): the same folder may open from
+   *  elsewhere than it did a moment ago. */
+  const openMoved = (path: string) => {
+    openRecent(path);
+    void qc.invalidateQueries({ queryKey: ["project", path] });
+  };
+  // Settings → Connect hands this on: Settings closes for the moved workspace.
   useEffect(() => {
-    const onOpen = (e: Event) => {
-      // Detail is either a bare id (⌘K palette, peek links) or {id, root} when
-      // the opener knows its root (Issues tile). An explicit root is
-      // authoritative — use it and skip the registry guess entirely.
-      const detail = (e as CustomEvent<string | { id: string; root?: string | null }>).detail;
-      const id = typeof detail === "string" ? detail : detail?.id;
-      if (typeof id !== "string") return;
-      const explicitRoot = typeof detail === "object" && detail ? detail.root ?? null : null;
-      setPeekId(id);
-      if (explicitRoot) {
-        setPeekRoot(explicitRoot);
-        return;
-      }
-      // No root supplied: optimistically read from the base root; if the id
-      // belongs to another registered workspace, repoint once resolved.
-      setPeekRoot(root);
-      void window.hive
-        .resolveIssueRoot(id)
-        .then((r) => { if (r.root) setPeekRoot(r.root); })
-        .catch(() => { /* fall back to base root */ });
-    };
-    const onNew = () => setNewOpen(true);
-    // Canvas is always mounted now (canvas-only), so spawn-agent is handled
-    // directly by Canvas's own listener — no view-switch bridge needed.
-    window.addEventListener("hivemind:open-issue", onOpen as EventListener);
-    window.addEventListener("hivemind:new-issue", onNew);
-    return () => {
-      window.removeEventListener("hivemind:open-issue", onOpen as EventListener);
-      window.removeEventListener("hivemind:new-issue", onNew);
-    };
-  }, [root]);
+    const moved = (event: Event) => { setSettingsOpen(false); openMoved((event as CustomEvent<{ uri: string }>).detail.uri); };
+    window.addEventListener("hivemind:open-moved", moved);
+    return () => window.removeEventListener("hivemind:open-moved", moved);
+  });
 
-  // Ctrl+N new issue, Ctrl+B Layers — only when nothing is typed into: a terminal's textarea keeps them.
+  // A plugin set issues up in a folder: the workspace there now has a `.hivemind`, so read it again,
+  // in place (a new project key would show the loading screen and remount the workspace).
+  useEffect(() => {
+    const onSetUp = (event: Event) => {
+      const { dir } = (event as CustomEvent<{ dir: string }>).detail;
+      if (dir === (repoPath ?? cwd)) { window.localStorage.setItem("hivemind:last-project", dir); setRecents(pushRecent(dir)); }
+      void qc.invalidateQueries({ queryKey: ["project"] });
+    };
+    window.addEventListener("hivemind:issues-set-up", onSetUp);
+    return () => window.removeEventListener("hivemind:issues-set-up", onSetUp);
+  });
+
+  // Ctrl+B Layers — only when nothing is typed into: a terminal's textarea keeps it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      const k = e.key.toLowerCase();
-      if (k !== "n" && k !== "b") return;
+      if (e.key.toLowerCase() !== "b") return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       e.preventDefault();
-      if (k === "n") setNewOpen(true);
-      else window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"));
+      window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -312,7 +298,7 @@ export function App() {
   }, []);
 
   // A new app version landed → ping once (not every 4h re-check). Only when the
-  // master notification preference is on; the Settings gear dot always shows it
+  // master notification preference is on; the toolbar's update button always shows it
   // regardless. Uses the sonner action surface (an inline Update button) since
   // an update is an actionable confirmation, not an agent-status event.
   const announcedUpdateRef = useRef(false);
@@ -334,7 +320,6 @@ export function App() {
   useEffect(() => {
     const w = window as unknown as {
       hive?: {
-        onMenuNewIssue?: (cb: () => void) => () => void;
         onMenuToggleLayers?: (cb: () => void) => () => void;
         onMenuFitOverlay?: (cb: () => void) => () => void;
         onMenuResetScale?: (cb: () => void) => () => void;
@@ -342,8 +327,7 @@ export function App() {
         onMenuShortcut?: (cb: (action: string) => void) => () => void;
       };
     };
-    if (!w.hive?.onMenuNewIssue) return;
-    const offNew = w.hive.onMenuNewIssue(() => setNewOpen(true));
+    if (!w.hive?.onMenuToggleLayers) return;
     // ⌘/Ctrl+B toggles the Layers panel (LayersPanel listens for the event).
     const offLayers = w.hive.onMenuToggleLayers?.(() =>
       window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")),
@@ -363,7 +347,6 @@ export function App() {
       window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: action })),
     );
     return () => {
-      offNew?.();
       offLayers?.();
       offFit?.();
       offResetScale?.();
@@ -373,93 +356,63 @@ export function App() {
   }, []);
 
   if (isLoading) {
-    return <div className="grid place-items-center h-screen text-[var(--color-fg3)]">loading…</div>;
+    return <Loading className="h-screen" label="Opening the workspace" />;
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[var(--color-bg)]">
-      {/* Canvas-only workspace. The canvas is full-bleed; floating chrome sits
-          on top — frame = workspace, so the per-Frame "+ workspace" bind is the
-          canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
-      <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
-        <Workspace
-          cwd={cwd}
-          repoPath={repoPath}
-          root={root}
-          onInitWorkspace={!root ? openInit : undefined}
-          updateAvailable={update.status?.updateAvailable === true}
-          updateStaged={!!update.status?.staged}
-          onUpgrade={update.upgrade}
-          onRestart={update.restart}
-          upgrading={update.upgrading}
-        />
-        <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
-          {root && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setNewOpen(true)}
-              className="pointer-events-auto"
-              title="New issue (⌘N)"
-            >
-              <Plus aria-hidden />
-              <span>New issue</span>
-              <kbd className="font-mono text-[9.5px] ml-0.5">⌘N</kbd>
-            </Button>
-          )}
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={() => setSettingsOpen(true)}
-            className="pointer-events-auto relative"
-            title={update.status?.updateAvailable ? "Settings — update available" : "Settings"}
-            aria-label="settings"
-          >
-            <Settings aria-hidden />
-            {update.status?.updateAvailable && (
-              <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[var(--color-warn)] ring-2 ring-[var(--color-bg2)]" aria-hidden />
-            )}
-          </Button>
+    <ShownWorkspaceProvider repo={repoPath}>
+      <div className="h-screen w-screen overflow-hidden bg-[var(--color-bg)]">
+        {/* Canvas-only workspace. The canvas is full-bleed; floating chrome sits
+            on top — frame = workspace, so the per-Frame "+ workspace" bind is the
+            canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
+        <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
+          <Workspace
+            cwd={cwd}
+            repoPath={repoPath}
+            root={root}
+            updateAvailable={update.status?.updateAvailable === true}
+            updateStaged={!!update.status?.staged}
+            onUpgrade={update.upgrade}
+            onRestart={update.restart}
+            upgrading={update.upgrading}
+          />
+          <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
+            <SharedBanner onMoved={openMoved} />
+            <WorkspaceActions onPeople={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "connect" } }))} />
+            {!islandShown && !layersShown && <AppControls corner />}
+          </div>
         </div>
-      </div>
 
-      <IssuePeek root={peekRoot ?? root} id={peekId} onClose={() => setPeekId(null)} />
-      <RecentProjects
-        open={recentOpen}
-        recents={recents}
-        current={repoPath}
-        onOpen={openRecent}
-        onBrowse={() => void pickFolder()}
-        onClose={() => setRecentOpen(false)}
-      />
-      <NewIssueModal
-        root={root}
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        onCreated={setPeekId}
-      />
-      <InitWorkspacePrompt
-        open={initOpen}
-        onOpenChange={setInitOpen}
-        dir={repoPath ?? cwd}
-        suggested={suggestedPrefix}
-        pending={initing}
-        onConfirm={doInitWorkspace}
-      />
-      <ThemePanel />
-      <SettingsModal
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        version={update.version}
-        update={update.status}
-        checking={update.checking}
-        onCheck={() => { void update.check(); }}
-        onUpgrade={update.upgrade}
-        upgrading={update.upgrading}
-        progress={update.progress}
-        onRestart={update.restart}
-      />
-    </div>
+        <FolderPathDialog />
+        <RecentProjects
+          open={!!recentOpen}
+          joining={recentOpen === "join"}
+          recents={recents}
+          current={repoPath}
+          onOpen={openRecent}
+          onBrowse={() => void pickFolder()}
+          onNewWindow={() => void (window.hive.newWindow ? window.hive.newWindow() : window.open(window.location.href, "_blank"))}
+          onClose={() => setRecentOpen(null)}
+        />
+        <Suspense fallback={null}>
+          {making && <MakePluginDialog kind={making} onClose={() => setMaking(null)}
+            onStart={(prompt) => window.dispatchEvent(new CustomEvent("hivemind:deliver-to-agent", { detail: { text: prompt } }))} />}
+        </Suspense>
+        <ThemePanel />
+        <SettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          version={update.version}
+          update={update.status}
+          checking={update.checking}
+          onCheck={(opts) => { void update.check(opts); }}
+          onUpgrade={update.upgrade}
+          upgrading={update.upgrading}
+          progress={update.progress}
+          onRestart={update.restart}
+        />
+      </div>
+    </ShownWorkspaceProvider>
   );
 }
 
@@ -474,13 +427,13 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
   return (
     <>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
-          {busy && <Loader2 className="size-3 animate-spin text-[var(--color-fg2)]" aria-hidden />}
+        <div className="flex items-center gap-1.5 text-label text-[var(--color-fg)]">
+          {busy && <Spinner className="size-3 animate-spin text-[var(--color-fg2)]" />}
           <span className="truncate">{p.label}</span>
         </div>
         <div className="hm-update-bar mt-1.5" data-busy={busy ? "1" : "0"} role="progressbar"
           aria-valuemin={0} aria-valuemax={UPDATE_STEPS.length} aria-valuenow={UPDATE_STEPS.indexOf(p.step) + 1} aria-label={p.label}>
-          <span style={{ width: `${filled}%` }} />
+          <span style={{ transform: `scaleX(${filled / 100})` }} />
         </div>
       </div>
       {ready && <Button onClick={onRestart} size="xs" title="Restart into the new version">Restart</Button>}
@@ -511,7 +464,7 @@ function NotificationPrefs() {
       <div className="settings-row">
         <div className="flex items-center gap-2">
           <Bell size={14} className="text-[var(--color-fg2)]" />
-          <span className="text-[13px] font-medium text-[var(--color-fg)]">Notifications</span>
+          <span className="text-body font-medium text-[var(--color-fg)]">Notifications</span>
         </div>
         <Switch checked={s.enabled} onCheckedChange={(v) => update({ enabled: v })} aria-label="Enable notifications" />
       </div>
@@ -522,7 +475,7 @@ function NotificationPrefs() {
         {kinds.map((k) => (
           <div key={k.key} className="settings-row">
             <div className="min-w-0">
-              <div className="text-[12px] text-[var(--color-fg)]">{k.label}</div>
+              <div className="text-label text-[var(--color-fg)]">{k.label}</div>
               <div className="settings-note">{k.hint}</div>
             </div>
             <Switch
@@ -539,11 +492,11 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-subheading">Delivery</div>
         <div className="settings-row">
-          <div className="text-[12px] text-[var(--color-fg)]">In-app toasts</div>
+          <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
           <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" />
         </div>
         <div className="settings-row">
-          <div className="text-[12px] text-[var(--color-fg)]">Native OS popups</div>
+          <div className="text-label text-[var(--color-fg)]">Native OS popups</div>
           <Switch disabled={dim} checked={s.osPopups} onCheckedChange={(v) => update({ osPopups: v })} aria-label="Native OS popups" />
         </div>
       </div>
@@ -552,7 +505,7 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-row">
           <div className="min-w-0">
-            <div className="text-[12px] text-[var(--color-fg)]">Do Not Disturb</div>
+            <div className="text-label text-[var(--color-fg)]">Do Not Disturb</div>
             <div className="settings-note">Mutes finished/failed; needs-you still fires</div>
           </div>
           <Switch disabled={dim} checked={s.dnd.enabled} onCheckedChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} aria-label="Do Not Disturb" />
@@ -567,7 +520,7 @@ function NotificationPrefs() {
               className="w-auto"
               aria-label="DND start"
             />
-            <span className="text-[11px] text-[var(--color-fg2)]">to</span>
+            <span className="text-count text-[var(--color-fg2)]">to</span>
             <Input
               type="time"
               disabled={dim}
@@ -576,7 +529,7 @@ function NotificationPrefs() {
               className="w-auto"
               aria-label="DND end"
             />
-            <span className="text-[10px] text-[var(--color-fg2)] ml-auto">local time</span>
+            <span className="text-chip text-[var(--color-fg2)] ml-auto">local time</span>
           </div>
         )}
       </div>
@@ -620,9 +573,15 @@ function SettingsModal({
   onRestart: () => void;
 }) {
   const [page, setPage] = useState("appearance");
-  const nav = useSettingsNav(page);
-  const [expanded, toggleGroup] = useExpandedGroups();
+  const nav = useSettingsNav();
+  const go = useCallback((id: string) => setPage(resolveSettingsPage(id) ?? id), []);
   const settingsReturnFocus = useRef<HTMLElement | null>(null);
+  const settingsNav = useRef<HTMLElement | null>(null);
+  // Focus in the sidebar follows the page shown, however it changed, so its ring is never on another.
+  useEffect(() => {
+    const nav = settingsNav.current;
+    if (nav?.contains(document.activeElement)) nav.querySelector<HTMLElement>('[aria-current="page"]')?.focus({ preventScroll: true });
+  }, [page]);
   useEffect(() => {
     setWorkspaceOccluded(open);
     return () => setWorkspaceOccluded(false);
@@ -650,31 +609,32 @@ function SettingsModal({
       <SettingsDialog.Portal>
         <SettingsDialog.Overlay className="settings-overlay" />
         <SettingsDialog.Content className="settings-dialog" aria-describedby="settings-description"
-          onOpenAutoFocus={() => { settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+          onOpenAutoFocus={(event) => {
+            settingsReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            // Start on the section it opened at, not the first one.
+            const current = (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('nav [aria-current="page"]');
+            if (current) { event.preventDefault(); current.focus({ preventScroll: true }); }
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             const target = settingsReturnFocus.current;
-            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"]'))?.focus({ preventScroll: true });
+            // The toolbar's Settings, else the Layers rail's.
+            (target?.isConnected ? target : document.querySelector<HTMLElement>('[aria-label="settings"]') ?? document.querySelector<HTMLElement>('[data-layers-rail="settings"]'))?.focus({ preventScroll: true });
           }}
         >
           <aside className="settings-sidebar">
             <SettingsDialog.Title className="settings-title">Settings</SettingsDialog.Title>
-            <nav aria-label="Settings sections">
-              {nav.groups.map(({ group, items }) => {
-                const foldable = items.some((item) => item.plugin);
-                const open = expanded.has(group);
-                // Folded shows the overview only; the page you are on always stays in view.
-                const shown = items.filter((item) => !item.plugin || open || item.id === page);
-                return <div key={group} className="settings-nav-group" role="group" aria-label={group}>
-                <h3 className="settings-nav-heading">{foldable
-                  ? <button aria-expanded={open} onClick={() => toggleGroup(group)}><ChevronRight size={12} aria-hidden="true" /><span>{group}</span></button>
-                  : <span className="settings-nav-heading-text">{group}</span>}</h3>
-                {shown.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={page === item.id ? "page" : undefined}
-                  title={item.label} data-settings-page={item.id} data-plugin={item.plugin ? "" : undefined}>
-                  <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span>
-                </button>)}
-              </div>;
-              })}
+            <nav aria-label="Settings sections" ref={settingsNav}>
+              {nav.groups.map(({ group, items }) => (
+                <div key={group} className="settings-nav-group" role="group" aria-label={group}>
+                  <h3 className="settings-nav-heading"><span className="settings-nav-heading-text">{group}</span></h3>
+                  {items.map((item) => <button key={item.id} onClick={() => setPage(item.id)} aria-current={nav.selected(page) === item.id ? "page" : undefined}
+                    title={item.label} data-settings-page={item.id}>
+                    <span className="settings-nav-icon" aria-hidden="true">{item.icon}</span>
+                    <span className="settings-nav-text"><span>{item.label}</span>{item.hint && <span className="settings-nav-hint" data-settings-hint>{item.hint}</span>}</span>
+                  </button>)}
+                </div>
+              ))}
             </nav>
             <span className="settings-sidebar-foot">Hivemind {version ? `v${version}` : ""}</span>
           </aside>
@@ -691,24 +651,24 @@ function SettingsModal({
         <div className="settings-section">
           <div className="flex items-baseline justify-between gap-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-[14px] font-semibold text-[var(--color-fg)]">hivemind</span>
-              <span className="text-[11px] font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
+              <span className="text-row font-semibold text-[var(--color-fg)]">hivemind</span>
+              <span className="text-count font-mono text-[var(--color-fg2)]">{version ? `v${version}` : "version…"}</span>
             </div>
             <a
               href={REPO_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
+              className="inline-flex items-center gap-1 text-count text-[var(--color-fg2)] hover:text-[var(--color-fg)]"
             >
               GitHub <ExternalLink className="size-3 text-[var(--color-fg2)]" />
             </a>
           </div>
-          <div className="settings-row">
+          {window.hive.checkForUpdate ? <div className="settings-row">
             {upgrading || progress ? (
               <UpdateWork progress={progress} busy={upgrading} onRestart={onRestart} />
             ) : update?.staged ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-ok)]" aria-hidden />
                   v{update.staged} is downloaded — restart to finish
                 </span>
@@ -716,15 +676,22 @@ function SettingsModal({
               </>
             ) : update?.updateAvailable ? (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                   <span className="size-2 rounded-full bg-[var(--color-warn)]" aria-hidden />
                   Update available{update.latest ? ` — v${update.latest}` : ""}
                 </span>
                 <Button onClick={onUpgrade} size="xs" title="Download the latest release">Update</Button>
               </>
+            ) : update?.off ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]" data-update-off>
+                  <span className="size-2 rounded-full bg-[var(--color-fg3)]" aria-hidden />
+                  The update check is off
+                </span>
+              </>
             ) : (
               <>
-                <span className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-fg2)]">
+                <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]">
                   <span className="size-2 rounded-full" style={{ background: checking ? "var(--color-fg3)" : "var(--color-ok)" }} aria-hidden />
                   {checking ? "Checking…" : "Up to date"}
                 </span>
@@ -733,11 +700,12 @@ function SettingsModal({
                   onClick={() => onCheck({ force: true })}
                   disabled={checking}
                 >
-                  {checking ? "Checking…" : "Check now"}
+                  Check now
                 </Button>
               </>
             )}
-          </div>
+          </div> : <p className="settings-note" data-update-elsewhere>Updates are made in the app on the computer it runs on.</p>}
+          <UpdateCheckSwitch onTurnedOn={() => onCheck({ force: true })} />
           <div className="settings-row">
             <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>
@@ -749,7 +717,10 @@ function SettingsModal({
         {page === "notifications" && <NotificationPrefs />}
 
 
-        <Suspense fallback={<p role="status" className="settings-note">Loading preferences…</p>}><SettingsPages page={page} navigate={setPage} /></Suspense>
+        {/* A page that fails is that page's failure, not the app's: the rest of Settings stays. */}
+        <TileErrorBoundary key={page} label="This settings page">
+          <Suspense fallback={<Loading label="Loading Settings" />}><SettingsPages page={page} navigate={go} /></Suspense>
+        </TileErrorBoundary>
 
           </div>
         </div>
@@ -757,75 +728,6 @@ function SettingsModal({
       </SettingsDialog.Content>
     </SettingsDialog.Portal>
   </SettingsDialog.Root>
-  );
-}
-
-/** Inline prefix prompt for "Initialize workspace" — window.prompt is
- *  disabled in Electron, so we collect the prefix in a small dialog. */
-function InitWorkspacePrompt({
-  open,
-  onOpenChange,
-  dir,
-  suggested,
-  pending,
-  onConfirm,
-}: {
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-  dir: string;
-  suggested: string;
-  pending: boolean;
-  onConfirm: (prefix: string) => void;
-}) {
-  const [prefix, setPrefix] = useState(suggested);
-  useEffect(() => {
-    if (open) setPrefix(suggested);
-  }, [open, suggested]);
-  if (!open) return null;
-  const valid = /^[A-Z][A-Z0-9]{1,9}$/.test(prefix);
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
-      <div
-        className="w-[420px] bg-[var(--color-bg2)] border border-[var(--color-line2)] rounded-lg shadow-2xl p-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-[15px] font-semibold text-[var(--color-fg)]">Initialize workspace</h2>
-        <p className="mt-1 text-[12px] text-[var(--color-fg2)] leading-relaxed">
-          Creates <code className="font-mono text-[11px] bg-[var(--color-bg3)] px-1 rounded">.hivemind/</code> in
-          <span className="font-mono text-[11px] text-[var(--color-fg3)]"> {dir.split("/").slice(-2).join("/")}</span>.
-          Issues will be numbered <span className="font-mono">{valid ? prefix : "PREFIX"}-1</span>, -2, …
-        </p>
-        <form
-          className="mt-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (valid && !pending) onConfirm(prefix);
-          }}
-        >
-          <div className="grid gap-1">
-            <Label htmlFor="init-prefix">Issue prefix</Label>
-            <Input font="mono"
-              id="init-prefix"
-              autoFocus
-              value={prefix}
-              onChange={(e) => setPrefix(e.target.value.toUpperCase())}
-              placeholder="e.g. PAY"
-            />
-            {!valid && prefix.length > 0 && (
-              <span className="text-[10.5px] text-[var(--color-err)]">UPPERCASE, 2–10 chars, starts with a letter</span>
-            )}
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!valid || pending}>
-              {pending ? "Initializing…" : "Initialize"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }
 

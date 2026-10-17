@@ -3,9 +3,8 @@
  *  hooks) it must wire itself (`launch.hcp`, `session.resume`), and claiming a
  *  capability nothing here delivers is refused. */
 import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
-import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, SessionFind, TileStatus } from "./types.js";
-import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope } from "./detect-rules.js";
-import { GENERIC_AGENT_ICON } from "./icon.js";
+import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptRule } from "./types.js";
+import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope, type ScreenReading } from "./detect-rules.js";
 import { RESERVED_AGENTS } from "./reserved.js";
 import { MIN_APP_VERSION_RE } from "./catalog.js";
 
@@ -65,6 +64,20 @@ export interface AgentManifest {
    *  never downloads the plugin. The app itself answers to `manifestVersion`. */
   minAppVersion?: string;
   detect?: DetectRules;
+  /** How the person's answer to one of the agent's own prompts is typed from another of their
+   *  devices: for a wait, by what its screen `says` it is (`trust`) or else its kind
+   *  (`permission`), the keys that allow what it asks and the keys that deny it on its screen (a
+   *  phone's Allow / Deny). Claim them only from the real binary: a wrong key answers the wrong way. */
+  answer?: Record<string, { allow: string[]; deny: string[] }>;
+  /** The keys that choose an option of a question its tool asks (`session.transcript`'s `asks`),
+   *  `{n}` the option's number from 1. Claim them only from the real binary, as `answer`. */
+  choose?: string[];
+  /** The keys that interrupt its turn, as the person stops it from another of their devices (a
+   *  phone's Stop). Claim them only from the real binary, as `answer`. */
+  interrupt?: string[];
+  /** It reads a message typed while it works, at its next step, instead of leaving it unsent in
+   *  its composer. Claim it only from the real binary. */
+  steer?: boolean;
   session?: unknown;
   assets?: unknown;
   launch?: unknown;
@@ -110,6 +123,9 @@ function safeDef(manifest: unknown): AgentProviderDef | undefined {
  *  scope. Published agents come from the plugins repository, where the name is settled. */
 export const AGENT_ID_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const STATUSES: readonly TileStatus[] = ["idle", "working", "blocked", "permission", "question"];
+const WAITING: readonly TileStatus[] = ["blocked", "permission", "question"];
+/** What a screen says it is, and what `answer` is keyed by. */
+const WAIT_NAME_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const CAP_KEYS = [
   "promptDelivery", "turnSignal", "resume", "supervise",
   "blockedDetection",
@@ -146,10 +162,24 @@ export function iconFromManifest(icon: ManifestIcon): AgentIcon {
       return `<${kind} ${rendered} />`;
     })
     .join("");
-  return { viewBox: icon.viewBox, attrs: icon.attrs, body };
+  return { viewBox: icon.viewBox, ...(icon.attrs ? { attrs: icon.attrs } : {}), body, shapes: icon.shapes as AgentIcon["shapes"] };
 }
 
+/** The generic agent glyph, a small robot, for providers without a brand mark and for unknown ids. */
+export const GENERIC_AGENT_ICON: AgentIcon = iconFromManifest({
+  viewBox: "0 0 16 16",
+  attrs: { fill: "none" },
+  shapes: [
+    { rect: { x: "2.5", y: "4", width: "11", height: "8.5", rx: "2", stroke: "currentColor", "stroke-width": "1.2" } },
+    { circle: { cx: "6", cy: "8", r: "1", fill: "currentColor" } },
+    { circle: { cx: "10", cy: "8", r: "1", fill: "currentColor" } },
+    { path: { d: "M8 4V2M5.5 12.5v1M10.5 12.5v1", stroke: "currentColor", "stroke-width": "1.2", "stroke-linecap": "round" } },
+  ],
+});
+
 const strArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
+/** Keys to type, as `hive ctl keys` takes them: one to four tokens. */
+const keyTokens = (v: unknown): v is string[] => strArray(v) && v.length > 0 && v.length <= 4;
 const OPTION_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const FLAG_RE = /^--?[A-Za-z0-9][\w-]*$/;
 
@@ -274,6 +304,26 @@ function validateHome(raw: unknown): AgentHome {
  *  it never writes the command line, and a name that is not one of ours is dropped when the
  *  document is rendered — so the worst a hostile manifest can do is ask for a script we
  *  wrote. What it does buy is the control plane, which the review says out loud. */
+const HOOK_ANSWER_KEYS = new Set(["allow", "deny", "choose", "asks", "chosen", "leave"]);
+const ASKS_KEYS = ["list", "question", "options", "label"] as const;
+
+function validateHookAnswer(raw: unknown, at: string): void {
+  req(isObj(raw), `${at} must be a map`);
+  const a = raw as Record<string, unknown>;
+  for (const k of Object.keys(a)) req(HOOK_ANSWER_KEYS.has(k), `${at}: unknown key "${k}"`);
+  const printed = (k: string) => req(isObj(a[k]) && JSON.stringify(a[k]).length <= 2000, `${at}.${k} must be a small map: what the hook prints`);
+  printed("allow");
+  printed("deny");
+  const chooses = a.choose !== undefined || a.asks !== undefined || a.chosen !== undefined;
+  if (chooses) {
+    printed("choose");
+    req(isObj(a.asks) && ASKS_KEYS.every((k) => typeof (a.asks as Record<string, unknown>)[k] === "string"), `${at}.asks must name ${ASKS_KEYS.join(", ")} in the tool's input`);
+    for (const k of ["description", "many"]) req((a.asks as Record<string, unknown>)[k] === undefined || typeof (a.asks as Record<string, unknown>)[k] === "string", `${at}.asks.${k} must name where it is in the tool's input`);
+    req(typeof a.chosen === "string" && a.chosen.length > 0 && a.chosen.length <= 100, `${at}.chosen must name where the answers go in the tool's input`);
+  }
+  if (a.leave !== undefined) req(Array.isArray(a.leave) && a.leave.length <= 20 && a.leave.every((t) => typeof t === "string" && t.length > 0 && t.length <= 100), `${at}.leave must be a list of tool names`);
+}
+
 function validateHooks(raw: unknown): AgentHooks {
   req(isObj(raw), "hooks must be a map");
   const m = raw as Record<string, unknown>;
@@ -293,6 +343,11 @@ function validateHooks(raw: unknown): AgentHooks {
       if (entry.timeout !== undefined) req(typeof entry.timeout === "number" && entry.timeout > 0 && entry.timeout <= 604800, `hooks.events.${event}[${i}].timeout must be seconds`);
       if (entry.matcher !== undefined) req(typeof entry.matcher === "string" && entry.matcher.length <= 200, `hooks.events.${event}[${i}].matcher must be a string`);
       if (entry.when !== undefined) req(entry.when === "supervised", `hooks.events.${event}[${i}].when: only "supervised"`);
+      if (entry.answer !== undefined) {
+        req(entry.emit === "input.requested", `${at}.answer is for emit: input.requested`);
+        validateHookAnswer(entry.answer, `${at}.answer`);
+      }
+      if (entry.reply !== undefined) req(entry.emit === "turn.ended" && typeof entry.reply === "string" && DOT_PATH_RE.test(entry.reply), `${at}.reply is for emit: turn.ended, a field path`);
       return entry as unknown as AgentHookEntry;
     });
     events[event] = Array.isArray(spec) ? list : list[0]!;
@@ -318,7 +373,77 @@ function validateHooks(raw: unknown): AgentHooks {
   }
   if (m.format !== undefined) { req(m.format === "json" || m.format === "toml", "hooks.format must be json or toml"); out.format = m.format; }
   if (m.stable !== undefined) { req(m.stable === true, "hooks.stable must be true"); out.stable = true; }
+  if (m.trust !== undefined) {
+    // The trust rides in the same TOML document, read from the command line.
+    req(m.trust === "codex" && out.format === "toml" && out.arg !== undefined, 'hooks.trust: only "codex", with format: toml and arg');
+    out.trust = "codex";
+  }
   req(!!out.arg !== !!out.file, "hooks needs exactly one of `arg` (inline) or `file` (written)");
+  return out;
+}
+
+/** `session.transcript`: how the session file's records say what was said. */
+function validateTranscript(raw: unknown): AgentTranscript {
+  const w = "session.transcript";
+  req(isObj(raw), `${w} must be a map: how each record of the session file says what was said`);
+  const t = raw as Record<string, unknown>;
+  const path = (v: unknown, at: string): string => {
+    req(typeof v === "string" && DOT_PATH_RE.test(v), `${at} must be a field path`);
+    return v as string;
+  };
+  const values = (v: unknown, at: string): Record<string, string | number | boolean> => {
+    const ok = isObj(v) && Object.keys(v).length >= 1 && Object.keys(v).length <= 4
+      && Object.entries(v as Record<string, unknown>).every(([k, x]) => DOT_PATH_RE.test(k) && ["string", "number", "boolean"].includes(typeof x));
+    req(ok, `${at} must map 1-4 field paths to the values they hold`);
+    return v as Record<string, string | number | boolean>;
+  };
+  const out: AgentTranscript = { id: path(t.id, `${w}.id`), at: path(t.at, `${w}.at`), said: [] };
+  if (t.skipWhen !== undefined) out.skipWhen = values(t.skipWhen, `${w}.skipWhen`);
+  req(Array.isArray(t.said) && t.said.length >= 1 && t.said.length <= 16, `${w}.said must be 1-16 rules`);
+  (t.said as unknown[]).forEach((raw, i) => {
+    const at = `${w}.said[${i}]`;
+    req(isObj(raw), `${at} must be a map`);
+    const r = raw as Record<string, unknown>;
+    const rule: TranscriptRule = {};
+    if (r.require !== undefined) rule.require = values(r.require, `${at}.require`);
+    if (r.each !== undefined) rule.each = path(r.each, `${at}.each`);
+    if (r.item !== undefined) {
+      req(rule.each !== undefined, `${at}.item needs each: the list whose items it requires`);
+      rule.item = values(r.item, `${at}.item`);
+    }
+    req(["text", "tool", "result"].filter((k) => r[k] !== undefined).length === 1, `${at} must read exactly one of text, tool or result`);
+    if (r.text !== undefined) {
+      rule.text = path(r.text, `${at}.text`);
+      req(r.who === "person" || r.who === "agent", `${at}.who must be person or agent: who said the text`);
+      rule.who = r.who;
+    } else {
+      req(r.who === undefined, `${at}.who goes with text alone: a tool's use is the agent's, what it gave back the tool's`);
+    }
+    if (r.tool !== undefined) {
+      req(isObj(r.tool), `${at}.tool must be a map`);
+      const x = r.tool as Record<string, unknown>;
+      rule.tool = { id: path(x.id, `${at}.tool.id`), name: path(x.name, `${at}.tool.name`) };
+      if (x.about !== undefined) {
+        req(strArray(x.about) && x.about.length >= 1 && x.about.length <= 8 && x.about.every((p) => DOT_PATH_RE.test(p)), `${at}.tool.about must be 1-8 field paths`);
+        rule.tool.about = x.about;
+      }
+      if (x.input !== undefined) rule.tool.input = path(x.input, `${at}.tool.input`);
+      if (x.asks !== undefined) {
+        req(isObj(x.asks), `${at}.tool.asks must be a map`);
+        const k = x.asks as Record<string, unknown>;
+        rule.tool.asks = { list: path(k.list, `${at}.tool.asks.list`), question: path(k.question, `${at}.tool.asks.question`), options: path(k.options, `${at}.tool.asks.options`), label: path(k.label, `${at}.tool.asks.label`) };
+        if (k.description !== undefined) rule.tool.asks.description = path(k.description, `${at}.tool.asks.description`);
+        if (k.many !== undefined) rule.tool.asks.many = path(k.many, `${at}.tool.asks.many`);
+      }
+    }
+    if (r.result !== undefined) {
+      req(isObj(r.result), `${at}.result must be a map`);
+      const x = r.result as Record<string, unknown>;
+      rule.result = { of: path(x.of, `${at}.result.of`), text: path(x.text, `${at}.result.text`) };
+      if (x.error !== undefined) rule.result.error = path(x.error, `${at}.result.error`);
+    }
+    out.said.push(rule);
+  });
   return out;
 }
 
@@ -363,6 +488,10 @@ function validateSession(raw: unknown): AgentSession {
       list[k] = l[k] as string | string[];
     }
     out.list = list;
+  }
+  if (m.transcript !== undefined) {
+    req(isObj(m.resume) && typeof (m.resume as Record<string, unknown>).exists === "string", "session.transcript needs session.resume.exists: where the session file is");
+    out.transcript = validateTranscript(m.transcript);
   }
   if (m.resume === undefined) return out;
   req(isObj(m.resume), "session.resume must be a map");
@@ -503,6 +632,11 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   // that does the talking.
   const wiredToControlPlane = !!(m.launch as { hcp?: unknown } | undefined)?.hcp
     && ((Array.isArray(m.assets) && m.assets.length > 0) || !!m.hooks || !!m.home);
+  // A report (and the reply it hands over) is signed in as the agent's own tile, with the token
+  // only a launch gives it.
+  const reports = isObj(m.hooks) && isObj((m.hooks as Record<string, unknown>).events)
+    && Object.values((m.hooks as { events: Record<string, unknown> }).events).flat().some((e) => isObj(e) && (e as { emit?: unknown }).emit !== undefined);
+  if (reports) req((m.launch as { hcp?: unknown } | undefined)?.hcp === true, "hooks: an entry that reports (emit) needs launch.hcp: true");
   if (!wiredToControlPlane) {
     req(m.caps.turnSignal === false,
       "caps.turnSignal must be false: nothing here sends it — a daemon half, or `launch.hcp` with the asset that talks to it");
@@ -524,13 +658,26 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
       req(Array.isArray(sp.dismiss), "spawn.dismiss must be an array");
       (sp.dismiss as Array<Record<string, unknown>>).forEach((d, i) => {
         req(d && typeof d === "object" && d.when !== undefined, `spawn.dismiss[${i}] needs a \`when\``);
-        req(strArray(d.keys) && (d.keys as string[]).length > 0 && (d.keys as string[]).length <= 4,
-          `spawn.dismiss[${i}].keys must be 1-4 key tokens`);
+        req(keyTokens(d.keys), `spawn.dismiss[${i}].keys must be 1-4 key tokens`);
         try { validateExpr(d.when, `spawn.dismiss[${i}].when`); validateScope(d.scope, `spawn.dismiss[${i}].scope`); }
         catch (e) { throw new ManifestError((e as Error).message); }
       });
     }
   }
+
+  if (m.answer !== undefined) {
+    const a = m.answer as Record<string, unknown>;
+    req(a && typeof a === "object" && !Array.isArray(a), "answer must be a map");
+    for (const [name, keys] of Object.entries(a)) {
+      req(WAIT_NAME_RE.test(name), `answer.${name}: a wait is named in lowercase letters, digits and -`);
+      const p = keys as Record<string, unknown>;
+      req(p && typeof p === "object" && !Array.isArray(p), `answer.${name} must be a map`);
+      for (const k of ["allow", "deny"] as const) req(keyTokens(p[k]), `answer.${name}.${k} must be 1-4 key tokens`);
+    }
+  }
+  req(m.interrupt === undefined || keyTokens(m.interrupt), "interrupt must be 1-4 key tokens");
+  req(m.choose === undefined || (keyTokens(m.choose) && m.choose.some((k) => k.includes("{n}"))), "choose must be 1-4 key tokens, one naming the option, {n}");
+  req(m.steer === undefined || typeof m.steer === "boolean", "steer must be true or false");
 
   const aliases = m.aliases;
   req(aliases === undefined || (Array.isArray(aliases) && aliases.every((a) => typeof a === "string")),
@@ -546,7 +693,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
       "install.command must be one line");
   }
 
-  let detect: ((screen: string) => TileStatus) | undefined;
+  let detect: ((screen: string) => ScreenReading) | undefined;
   if (m.detect) {
     req(Array.isArray(m.detect.rules), "detect.rules must be an array");
     req(STATUSES.includes(m.detect.default), `detect.default must be one of ${STATUSES.join(", ")}`);
@@ -555,6 +702,8 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     m.detect.rules.forEach((r, i) => {
       req(r && typeof r === "object" && r.when, `detect.rules[${i}] needs a \`when\``);
       req(STATUSES.includes(r.then), `detect.rules[${i}].then must be one of ${STATUSES.join(", ")}`);
+      req(r.says === undefined || (WAITING.includes(r.then) && typeof r.says === "string" && WAIT_NAME_RE.test(r.says)),
+        `detect.rules[${i}].says names the screen of a wait (${WAITING.join(", ")}), in lowercase letters, digits and -`);
       try {
         validateExpr(r.when, `detect.rules[${i}].when`);
         validateScope(r.scope, `detect.rules[${i}].scope`);
@@ -567,7 +716,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   const dismiss = (m.spawn?.dismiss ?? []).map((d) => ({
     match: compileDetect({ rules: [{ when: d.when, then: "blocked", ...(d.scope ? { scope: d.scope } : {}) }], default: "idle" }),
     keys: d.keys,
-  })).map(({ match, keys }) => ({ match: (screen: string) => match(screen) === "blocked", keys }));
+  })).map(({ match, keys }) => ({ match: (screen: string) => match(screen).status === "blocked", keys }));
 
   const def: AgentProviderDef = {
     id: m.id,
@@ -577,6 +726,10 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.spawn?.args ? { defaultArgs: m.spawn.args } : {}),
     ...(m.spawn?.titles ? { titles: m.spawn.titles } : {}),
     ...(dismiss.length ? { dismiss } : {}),
+    ...(m.answer ? { answer: Object.fromEntries(Object.entries(m.answer).map(([name, k]) => [name, { allow: k.allow, deny: k.deny }])) } : {}),
+    ...(m.interrupt ? { interrupt: m.interrupt } : {}),
+    ...(m.choose ? { choose: m.choose } : {}),
+    ...(m.steer ? { steer: true } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),
@@ -618,6 +771,12 @@ export function agentDisclosures(def: AgentProviderDef): string[] {
   if (def.session?.resume?.find) out.push(`reads ${def.session.resume.find.root} to find a session to resume`);
   if (def.launch?.hcp && (def.hooks || def.assets?.length)) {
     out.push("reports its status and approval prompts to Hivemind through its own hooks, which can also read and type into your other tiles");
+  }
+  const answers = Object.values(def.hooks?.events ?? {}).flat().some((e) => e.answer);
+  if (answers) out.push("lets you allow or deny what it asks from your other devices, through its own hooks");
+  // A CLI that gates its hooks behind a per-hook review, handed its trust for ours alone.
+  if (def.hooks?.trust) {
+    out.push(`tells ${def.bin} its hooks for Hivemind are trusted, so it does not ask about them; it still asks about any other hook`);
   }
   // A CLI that gates its own hooks behind a per-hook review, waived for tiles Hivemind starts.
   if (def.launch?.args?.some((a) => a.includes("bypass-hook-trust"))) {

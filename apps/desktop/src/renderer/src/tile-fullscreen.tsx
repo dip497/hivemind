@@ -29,14 +29,14 @@ function FsFontButtons({ font }: { font: TileFont }) {
     >
       <button
         onClick={font.dec}
-        className="px-1.5 text-[10px] leading-none text-white/80 hover:bg-white/10 hover:text-white transition-colors h-5 grid place-items-center"
+        className="px-1.5 text-chip leading-none text-white/80 hover:bg-white/10 hover:text-white transition-colors h-5 grid place-items-center"
         aria-label="decrease font size"
       >
         A−
       </button>
       <button
         onClick={font.inc}
-        className="px-1.5 text-[11px] leading-none text-white/80 hover:bg-white/10 hover:text-white transition-colors h-5 grid place-items-center border-l border-white/20"
+        className="px-1.5 text-count leading-none text-white/80 hover:bg-white/10 hover:text-white transition-colors h-5 grid place-items-center border-l border-white/20"
         aria-label="increase font size"
       >
         A+
@@ -84,13 +84,13 @@ export function FullscreenShell({
     <div className="fixed inset-0 z-[9999] overflow-hidden">
       <Wallpaper embedded covering />
       <div className="relative z-10 flex h-full w-full flex-col gap-2 p-3">
-        <div className="h-7 flex items-center gap-2 px-1 text-[11px] font-mono text-white/85 shrink-0">
+        <div className="h-7 flex items-center gap-2 px-1 text-count font-mono text-white/85 shrink-0">
           <span className="font-semibold text-white/95">{title}</span>
           <span className="ml-auto flex items-center gap-2">
             <FsFontButtons font={font} />
             <button
               onClick={onClose}
-              className="nodrag rounded border border-white/20 px-1.5 h-5 grid place-items-center text-[10px] text-white/85 hover:bg-white/10 hover:text-white transition-colors"
+              className="nodrag rounded border border-white/20 px-1.5 h-5 grid place-items-center text-chip text-white/85 hover:bg-white/10 hover:text-white transition-colors"
               title="Exit fullscreen (Esc)"
             >
               Esc ✕

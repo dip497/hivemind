@@ -4,22 +4,27 @@ import os from "node:os";
 import path from "node:path";
 import { seedAgents } from "./tests/e2e/helpers/agents";
 
-// Persistence is default-ON in the real app, but the detached pty-daemon
-// intentionally outlives the window — and Playwright's electronApp.close()
-// waits on child processes, so a persistent daemon stalls worker teardown ~60s.
-// Tests run the in-process (legacy) PTY path via this opt-out; the daemon path
-// is proven separately by the unit + real socket integration tests.
-// electron.launch inherits this process's env, so setting it here propagates.
-process.env.HIVEMIND_PTY_DAEMON = "0";
-
 // Per run, not per spec: specs share settings.json, so isolate or restore what you persist.
-process.env.XDG_CONFIG_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "hivemind-e2e-xdg-"));
-// Nothing is compiled in, so the shared profile installs the usual six from the published
-// fixtures — the same manifests a HiveHub auto-install would drop there.
-seedAgents(process.env.XDG_CONFIG_HOME);
+// Made once: each worker loads this file again, with the run's environment.
+if (!process.env.HIVEMIND_E2E_XDG) {
+  process.env.HIVEMIND_E2E_XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hivemind-e2e-xdg-"));
+  // Nothing is compiled in, so the shared profile installs the usual six from the published
+  // fixtures — the same manifests a HiveHub auto-install would drop there.
+  seedAgents(process.env.HIVEMIND_E2E_XDG);
+}
+process.env.XDG_CONFIG_HOME = process.env.HIVEMIND_E2E_XDG;
 // No spec may touch the network: the catalog lives on HiveHub, and an unreachable index
 // fails auto-install closed. Specs that build their own registry set their own value.
 process.env.HIVEMIND_PLUGIN_INDEX = "file:///hivemind-e2e-unreachable/index.json";
+// Windows go to the X display xvfb-run gives (DISPLAY): on a Wayland desktop Electron would
+// otherwise open each one there, over the person's work, taking the keyboard.
+delete process.env.WAYLAND_DISPLAY;
+if (process.platform === "linux") process.env.XDG_SESSION_TYPE = "x11";
+// Nor do its notifications reach the person's desktop, over their session bus.
+delete process.env.DBUS_SESSION_BUS_ADDRESS;
+// Run from an agent's terminal, the runner holds that agent's way into the person's own app: no
+// spec, nor any app or `hive` it starts, may inherit it. A spec names its app's data folder.
+for (const name of ["HCP_TOKEN", "HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HIVEMIND_TILE", "HIVEMIND_APP_DATA"]) delete process.env[name];
 
 export default defineConfig({
   testDir: "./tests/e2e",

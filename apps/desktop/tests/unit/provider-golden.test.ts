@@ -18,15 +18,16 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { composeResume, composeResumeFrom, hookPathsFor, providers as registry, renderHookDocument } from "@hivemind/agents/node";
 import { authoredDef, authoredAsset, useAuthoredAgents } from "./authored-agents.ts";
+import { workspaceDeps, REPO } from "./hcp-workspace.ts";
 import type { SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
-import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
+import { deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { applyInitialPrompt, INITIAL_PROMPT_ENV } from "@hivemind/agent-host/initial-prompt";
 import { identifyAgent, detectTileStatus, type Agent } from "../../src/renderer/src/agent-state.ts";
-import { makeDispatch } from "../../src/main/hcp/methods.ts";
-import { TurnTracker } from "../../src/main/hcp/turn-tracker.ts";
-import { OutputRecorder } from "../../src/main/hcp/output-recorder.ts";
-import { Mailbox } from "../../src/main/hcp/mailbox.ts";
-import { SUBMIT_DELAY_MS } from "../../src/shared/agent-io.ts";
+import { makeDispatch } from "@hivemind/host/control/methods";
+import { TurnTracker } from "@hivemind/host/control/turn-tracker";
+import { OutputRecorder } from "@hivemind/host/control/output-recorder";
+import { Mailbox } from "@hivemind/host/control/mailbox";
+import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = path.join(__dirname, "fixtures", "provider-golden.json");
@@ -45,7 +46,7 @@ const CTX = {
   eventHookPath: "/x/ud/hcp-event-hook.cjs",
   sdkPath: "/x/ud/hive-sdk.cjs",
   hcpSock: "/x/ud/hcp.sock",
-  hcpToken: "golden-token",
+  hcpToken: (tile: string) => `golden-token:${tile}`,
   // Provider-private paths, as each provider's prepare() would return them.
   // What the daemon hands each agent after it has prepared: its own directory, and for an
   // agent with a private configuration home, that the overlay was seeded.
@@ -99,10 +100,11 @@ function fakeDeps() {
   const mailbox = new Mailbox(() => true, SUBMIT_DELAY_MS);
   return {
     turns: new TurnTracker(), recorder: new OutputRecorder(),
-    callRenderer: async () => ({ tileId: "tile-x" }),
+    callRenderer: async () => { throw new Error("no window"); },
+    ...workspaceDeps(),
     writeToTile: () => true,
     deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent),
-    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {}, setSupervise: () => {}, awaitingApproval: () => {},
+    spawnAllowed: () => true, connect: () => true, disconnect: () => {}, forgetPipes: () => {}, spawnEdge: () => {},
   };
 }
 
@@ -116,7 +118,7 @@ async function capture(make = () => composeResume(CTX)) {
   process.env.HOME = home;
   const resume = make();
   try {
-    const { dispatch } = makeDispatch(fakeDeps());
+    const { spawn: spawnAgent } = makeDispatch(fakeDeps());
     const out: Record<string, unknown> = {};
     for (const p of PROVIDERS) {
       const base: SpawnSpec = { cwd: "/repo", cmd: p.cmd, args: [...p.defaultArgs], cols: 80, rows: 24, env: { HIVE_AGENT_DEPTH: "1" } };
@@ -127,7 +129,11 @@ async function capture(make = () => composeResume(CTX)) {
       const promptSpawn = resume.transformSpecOnSpawn(withPrompt, "tile-g");
       const exec = applyInitialPrompt(promptSpawn.args ?? [], promptSpawn.env ?? {});
       let supervise: unknown;
-      try { supervise = await dispatch("tile.spawn_agent", { agent: p.id, supervise: "all", callerTile: "parent", report: false }); }
+      // The id is minted fresh each time: the snapshot records that one was, in this agent's name.
+      try {
+        const tileId = await spawnAgent({ agent: p.id, supervise: "all", parent: "parent", report: false, repo: REPO });
+        supervise = { tileId: tileId.replace(/-\d+$/, "-<minted>") };
+      }
       catch (e) { supervise = { error: (e as { code?: string }).code ?? String(e) }; }
       out[p.id] = {
         identify: { bare: identifyAgent(p.cmd), path: identifyAgent(`/usr/local/bin/${p.cmd} --x`) },

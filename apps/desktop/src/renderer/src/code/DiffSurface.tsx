@@ -54,7 +54,7 @@ export function DiffSurface({
   const items = useMemo(() => (item ? [item] : []), [item]);
   return (
     <div className="h-full flex flex-col border-b border-[var(--color-line)]">
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg3)] text-[11px] font-mono shrink-0">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-bg3)] text-count font-mono shrink-0">
         <span className="text-[var(--color-fg)] truncate" title={file}>{file}</span>
         <span className="text-[var(--color-fg3)]">· working copy</span>
         {onClose && (
@@ -62,17 +62,17 @@ export function DiffSurface({
         )}
       </div>
       <div className="flex-1 overflow-auto">
-        {q.isLoading && <div className="p-3 text-[11px] text-[var(--color-fg3)]">loading {file}…</div>}
+        {q.isLoading && <div className="p-3 text-count text-[var(--color-fg3)]">loading {file}…</div>}
         {q.error && (
-          <div className="p-3 text-[11px] text-[var(--color-err)] font-mono">{(q.error as Error).message}</div>
+          <div className="p-3 text-count text-[var(--color-err)] font-mono">{(q.error as Error).message}</div>
         )}
         {data != null && oversized && (
-          <div className="p-3 text-[11px] text-[var(--color-warn)] font-mono">
+          <div className="p-3 text-count text-[var(--color-warn)] font-mono">
             file too large to preview ({(bytes / (1024 * 1024)).toFixed(1)} MB)
           </div>
         )}
         {data != null && !oversized && binary && (
-          <div className="p-3 text-[11px] text-[var(--color-warn)] font-mono">binary file — not shown</div>
+          <div className="p-3 text-count text-[var(--color-warn)] font-mono">binary file — not shown</div>
         )}
         {item && (
           <CodeView

@@ -15,7 +15,7 @@ const ctx = {
   eventHookPath: "/x/event.cjs",
   sdkPath: "/x/hive-sdk.cjs",
   hcpSock: "/x/hcp.sock",
-  hcpToken: "tok",
+  hcpToken: () => "tok",
 };
 const spec = (cmd: string): SpawnSpec => ({ cwd: "/repo", cmd, args: [], cols: 80, rows: 24 });
 

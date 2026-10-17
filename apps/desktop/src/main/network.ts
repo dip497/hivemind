@@ -1,0 +1,969 @@
+/**
+ * This machine on the network, for the app (M1): hive-net's daemon, started the first time
+ * something is shared or joined (or at start when something already is), and what the app
+ * decides on it. Sharing: a workspace's invite links, who asks to join and whom the person here
+ * lets in (the access lists, `Sharing`); the daemon admits only the devices the lists do.
+ * Joining: this person's joins elsewhere (`JoinedList`). Devices (R14, M3, spec/pairing.md): the
+ * person's other devices this app paired with (hosts, and other computers), which this app lets in
+ * as the owner of everything here, and whose workspaces it opens as this person's.
+ */
+import { AgentFeed } from "@hivemind/host/agent-feed";
+import { app, net, powerMonitor } from "electron";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { hiveNetBin } from "./hive-net-bin.js";
+import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
+import { createHash } from "node:crypto";
+import type { Duplex } from "node:stream";
+import { HiveNet, type Link } from "@hivemind/workspace-host/hive-net";
+import { AccessLists } from "@hivemind/workspace-host/access";
+import { Sharing } from "@hivemind/workspace-host/sharing";
+import { join, type JoinReply } from "@hivemind/workspace-host/join";
+import { parseJoinLink } from "@hivemind/workspace-host/join-link";
+import { JoinedList } from "@hivemind/workspace-host/joined";
+import { NetworkProfiles } from "@hivemind/workspace-host/network-profile";
+import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
+import { enterPairing, offeringNearby, pairAnnouncement, parseCode, parsePairLink, type Admission, type PairedWith, type PairingDevice, type PairLink } from "@hivemind/workspace-host/pairing";
+import { askToForget, heldWorkspaces, tellGuestOf, tellPhones } from "@hivemind/host/peer-links";
+import { HostRecords, type Hosted } from "@hivemind/workspace-host/host-records";
+import { Hosting } from "@hivemind/host/hosting";
+import type { LayersShown } from "@hivemind/host/home";
+import { People } from "@hivemind/host/people";
+import { handle, handleEffect, on } from "./app-ipc.js";
+import { connectPageLink, pageHash, phonePageAt, SHIPPED_PAGE } from "./phone-page.js";
+import { hostIntents } from "./audit.js";
+import { displayName, machineIdentity, takePerson } from "./identity.js";
+import { idOf, revokeDevice, workspaceSeed, type Seed } from "@hivemind/workspace-host/identity";
+import { OwedRevocations } from "@hivemind/workspace-host/revocations";
+import { getSettings } from "./settings-store.js";
+import { broadcast, userWindow } from "./windows.js";
+import { onWorkspaceChange, sharedStore, workspaceStore } from "./workspace-store-ipc.js";
+import { PeerLinks, type PeerLinksOptions, type ShownMachine } from "@hivemind/host/peer-links";
+import { answerKeys, heldBoards, participantNamed, type Decides, type WaitingStatus } from "@hivemind/host/needs";
+import { manifestFacts, type AgentFacts } from "@hivemind/host/agent-list";
+import type { Waits } from "@hivemind/host/waits";
+import type { KnownMachines } from "@hivemind/core/remote-uri";
+import { machines as savedMachines } from "@hivemind/host/remote/catalog";
+import { PushNotices, PushSubscriptions, postNotice } from "@hivemind/host/push";
+import { participantAt } from "@hivemind/host/device-sessions";
+import type { TerminalMachine } from "@hivemind/host/terminals";
+import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
+import { elsewhere, forgetShared, handOffTo, leaveShared, machineGrant, openShared, setMachineGrant, sharedLooks, sharedStatus, type SharedStatus } from "./shared-workspaces.js";
+import { Connecting } from "./connecting.js";
+import { connectAnnouncement, enterConnect, parseConnectLink, TAKE_WITHIN_MS, type GuestAnswer } from "@hivemind/workspace-host/connect";
+import type { ConnectAnswer, ConnectEntered, ConnectEntering, JoinPreview, PairedDeviceSummary } from "../shared/ipc.js";
+import { GRANTS, type Grant } from "@hivemind/host/machine-share";
+import type { WorkspaceServer } from "@hivemind/workspace-api/server";
+import type { EventMessage } from "@hivemind/workspace-api/protocol";
+
+/** The workspaces shared from here, served to peers from the host's workspace API: set when the
+ *  IPC is installed. */
+let peers: PeerLinks | null = null;
+
+
+/** The daemon's socket: in the data folder, unless its path is too long for a socket. */
+function socketPath(): string {
+  const tag = createHash("sha256").update(app.getPath("userData")).digest("hex").slice(0, 12);
+  if (process.platform === "win32") return `\\\\.\\pipe\\hivemind-net-${tag}`;
+  const inData = path.join(app.getPath("userData"), "hive-net.sock");
+  return inData.length < 100 ? inData : path.join(os.tmpdir(), `hivemind-net-${tag}.sock`);
+}
+
+let lists: AccessLists | null = null;
+let paired: Devices | null = null;
+let pushed: PushSubscriptions | null = null;
+/** Where each of the person's phones is told what happens here (M5, spec/push.md). */
+function pushSubscriptions(): PushSubscriptions {
+  return (pushed ??= new PushSubscriptions(path.join(app.getPath("userData"), "identity", "push.json")));
+}
+/** The person's other devices this app paired with, kept beside its keys. */
+function pairedDevices(): Devices {
+  return (paired ??= new Devices(path.join(app.getPath("userData"), "identity", "devices.json")));
+}
+/** Forget one of the person's devices: it is let in no more, nor onto this network's relays as
+ *  this device vouched it, nor by the hosts of the workspaces it said it is a guest of (spec/pairing.md
+ *  0.9); its workspaces are no longer listed here, and a phone is told nothing more. A phone that
+ *  paired here is forgotten by the person's other devices as they are told so; one another of them
+ *  paired with, by that one, as it is asked (0.7). False when it was not kept here. */
+function forgetDevice(device: string): boolean {
+  const was = pairedDevices().list().find((d) => d.device === device);
+  if (!was || !pairedDevices().remove(device)) return false;
+  pushSubscriptions().remove(device);
+  admitNow();
+  void unvouch(device);
+  if (was.guestOf?.length) {
+    owedRevocations().add(revokeDevice(machineIdentity().person, device), was.guestOf);
+    void payRevocations();
+  }
+  broadcast("net:devices-changed");
+  if (was.kind === "phone") void (was.via ? forgetWhereItPaired(was) : tellDevices());
+  return true;
+}
+
+/** How often word of a device unpaired here is tried again on a host that did not take it. */
+const PAY_AGAIN_MS = 5 * 60_000;
+
+let owed: OwedRevocations | null = null;
+function owedRevocations(): OwedRevocations {
+  return (owed ??= new OwedRevocations(path.join(app.getPath("userData"), "identity", "revocations.json")));
+}
+
+/** Tell each host owed it that a device unpaired here is the person's no more. One that does not
+ *  answer is told again as this app is reachable again, and every few minutes until it is. */
+async function payRevocations(): Promise<void> {
+  if (owedRevocations().list().length === 0) return;
+  const hn = await network();
+  await Promise.all(owedRevocations().list().map(async (o) => {
+    try {
+      const reply = await hn.pair(o.host, { addrs: o.addrs, relay: o.relay }, { v: 1, revoke: o.revocation }) as { ok?: unknown } | null;
+      if (reply?.ok === true) owedRevocations().paid(o.host, o.revocation.device);
+    } catch (e) {
+      console.warn(`[devices] ${o.host.slice(0, 8)}… was not told ${o.revocation.device.slice(0, 8)}… is unpaired: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }));
+}
+
+/** One of the person's devices, as another of theirs is told of it. */
+const pairedWith = ({ device, name, kind, certificate, addrs, relay }: PairedDevice): PairedWith => ({ device, name, kind, certificate, addrs, relay });
+
+/** How long after each failed try a device is told again of the phones here: a host that has
+ *  just paired starts again as the person a moment later. */
+const TELL_AGAIN_MS = [2_000, 5_000, 15_000];
+
+/** Tell each of the person's computers and hosts paired here which phones paired with this app
+ *  (spec/pairing.md 0.7), so that they let them in too, and forget one unpaired here; and where this
+ *  app is a guest, so that they tell those hosts if they unpair it (0.9): as one pairs or is
+ *  forgotten, as this app joins a workspace, and as it is reachable again, when one that was away
+ *  hears it. Each try tells them as things are then. */
+async function tellDevices(): Promise<void> {
+  const hn = await network();
+  await Promise.all(placesToRun().map(async (d) => {
+    for (let tried = 0; ; tried++) {
+      try {
+        const link = await hn.dial(d.device, { addrs: d.addrs, relay: d.relay });
+        try {
+          await tellPhones(link, pairedDevices().list().filter((p) => p.kind === "phone" && !p.via).map(pairedWith));
+          await tellGuestOf(link, joinedList().guestOf());
+        } finally {
+          link.close();
+        }
+        return;
+      } catch (e) {
+        if (tried === TELL_AGAIN_MS.length) return console.warn(`[devices] ${d.name} was not told of the phones paired here, or where this app is a guest: ${e instanceof Error ? e.message : String(e)}`);
+        await new Promise((r) => setTimeout(r, TELL_AGAIN_MS[tried]));
+      }
+    }
+  }));
+}
+
+/** Ask each device that told this one of `phone` to forget it: it was unpaired here. */
+async function forgetWhereItPaired(phone: PairedDevice): Promise<void> {
+  const hn = await network();
+  await Promise.all(placesToRun().filter((d) => phone.via?.includes(d.device)).map(async (d) => {
+    try {
+      const link = await hn.dial(d.device, { addrs: d.addrs, relay: d.relay });
+      try { await askToForget(link, phone.device); } finally { link.close(); }
+    } catch (e) {
+      console.warn(`[devices] ${d.name} was not asked to forget ${phone.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }));
+}
+
+function accessLists(): AccessLists {
+  return (lists ??= new AccessLists({
+    dir: path.join(app.getPath("userData"), "access"),
+    owner: machineIdentity().person,
+    // The person's other devices are the owner of every workspace here.
+    devices: () => pairedDevices().list().map((d) => d.certificate),
+    onWarn: (m) => console.warn(`[access] ${m}`),
+  }));
+}
+
+/** Let in, from now on, whom the access lists let in: someone added or removed, or a device paired
+ *  or unpaired. */
+function admitNow(): void {
+  void current?.then((n) => n.admit(accessLists().admitted()), () => {});
+}
+
+/** Whether people know this app as its person: it let someone into a workspace of its own, or was
+ *  let into someone else's. Then it does not take another person. */
+const sharesWorkspaces = (): boolean =>
+  accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0)
+  || joinedList().list().some((j) => j.role !== "owner" && !j.ended);
+
+/** A workspace this person owns, as its host record is filed: its id, its key, and the moves that
+ *  brought it here (M3). */
+const hostedAs = (workspace: string): Hosted => {
+  const moved = accessLists().hosting(workspace);
+  return { workspace, key: idOf(workspaceSeed(machineIdentity().person, workspace)), ...(moved ? { seq: moved.seq } : {}) };
+};
+/** The workspaces shared from here that are hosted here still, not moved to another device. */
+const hostedHere = (): Hosted[] => accessLists().workspaces()
+  .filter((ws) => { const h = accessLists().hosting(ws); return !h || h.host === machineIdentity().deviceId; })
+  .map(hostedAs);
+
+let hosting: Hosting | null = null;
+/** Moving the workspaces hosted here to another of the person's devices, and taking them back
+ *  (M3, spec/hosting.md). */
+function hostingHere(): Hosting {
+  return (hosting ??= new Hosting({
+    self: () => machineIdentity().deviceId,
+    person: () => machineIdentity().personId,
+    store: workspaceStore(),
+    lists: accessLists(),
+    dial: dialDevice,
+    sign: async (workspace, seq, host) => (await network()).signHost(workspace, seq, host),
+    moved: (workspace, notice) => peers?.moved(workspace, notice),
+    // Hosted here again: opened from its folder, not from where it was.
+    took: (workspace) => {
+      admitNow();
+      void records?.start();
+      forgetShared(workspace);
+      joinedList().remove(workspace);
+    },
+    onWarn: (m) => console.warn(`[hosting] ${m}`),
+  }));
+}
+
+/** This computer's folder of `workspace`, when it was moved from here to another of the person's
+ *  devices (M3): where it is kept again once it moves back. Null for any other. */
+function folderHere(workspace: string): string | null {
+  const folder = workspaceStore().repoOf(workspace);
+  const h = accessLists().hosting(workspace);
+  return folder?.startsWith("/") && h && h.host !== machineIdentity().deviceId ? folder : null;
+}
+
+/** Where the workspaces shared from here say they are hosted, on a network with a lookup server
+ *  (M3, spec/host-record.md): kept while the daemon runs. */
+let records: HostRecords | null = null;
+
+/** This app is the person `person` from now on: it entered another computer's code (spec/pairing.md).
+ *  Its keys, its workspaces, and the access lists it keeps are that person's. */
+function becomePerson(person: Seed): void {
+  takePerson(person);
+  workspaceStore().takePerson(person);
+  accessLists().takePerson(person);
+  admitNow();
+}
+
+let joined: JoinedList | null = null;
+function joinedList(): JoinedList {
+  return (joined ??= new JoinedList(path.join(app.getPath("userData"), "joined.json")));
+}
+
+let sharing: Sharing | null = null;
+function sharingOf(): Sharing {
+  // The person is asked at this app's windows, or at another of their devices connected to it.
+  return (sharing ??= new Sharing(accessLists(), (request) => peopleHere.ask(request), (devices) => {
+    void current?.then((n) => n.admit(devices));
+    for (const device of devices) void vouchFor(device);
+  }));
+}
+
+/** When this network has an access service that admits only who it is told to, the devices this
+ *  person let in are vouched for on it, so they reach its relays; and again each day they
+ *  connect, before it lapses (R16, §13.3 D). */
+const MEMBER_FOR_S = 30 * 24 * 3600;
+const vouched = new Map<string, number>();
+async function vouchFor(device: string): Promise<void> {
+  if (Date.now() - (vouched.get(device) ?? 0) < 24 * 3600_000) return;
+  try {
+    const access = (await networkProfiles().active()).profile.access;
+    if (access?.policy !== "closed") return;
+    await networkProfiles().vouch(access.url, await networkProfiles().voucher({ device, expiresIn: MEMBER_FOR_S, uses: 1 }));
+    vouched.set(device, Date.now());
+  } catch (e) {
+    console.warn(`[network] could not vouch for ${device.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** Take back the visit this device vouched `device` onto a closed network for. */
+async function unvouch(device: string): Promise<void> {
+  vouched.delete(device);
+  try {
+    const access = (await networkProfiles().active()).profile.access;
+    if (access?.policy === "closed") await networkProfiles().revoke(access.url, device);
+  } catch (e) {
+    console.warn(`[network] could not take back the visit of ${device.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+let current: Promise<HiveNet> | null = null;
+
+/** hive-net's executable, or why there is none. */
+function hiveNet(): string {
+  const bin = hiveNetBin();
+  if (!bin) throw new Error("hive-net is not installed here: reinstall hivemind to share or join workspaces");
+  return bin;
+}
+
+let profiles: NetworkProfiles | null = null;
+/** This device's network profile (R16), kept in `<userData>/network`. */
+function networkProfiles(): NetworkProfiles {
+  return (profiles ??= new NetworkProfiles({
+    dir: path.join(app.getPath("userData"), "network"),
+    bin: hiveNet(),
+    identity: path.join(app.getPath("userData"), "identity"),
+  }));
+}
+
+/** This machine's daemon, started if it is not running, on the network in use. */
+export function network(): Promise<HiveNet> {
+  current ??= (async () => {
+    const bin = hiveNet();
+    machineIdentity();
+    const hn = await HiveNet.start({
+      bin,
+      identity: path.join(app.getPath("userData"), "identity"),
+      socket: socketPath(),
+      profile: networkProfiles().arg(),
+      onIncoming: (link) => {
+        if (!peers) return link.close();
+        peers.serve(link);
+        void vouchFor(link.peer);
+      },
+      // A device using this app's offer to connect; anyone else asks to join.
+      onPairRequest: async (peer, hello) => {
+        if ((hello as { connect?: unknown } | null)?.connect) return connecting.answer(peer, hello);
+        return sharingOf().answer(peer, hello);
+      },
+      onExit: (why) => { current = null; records?.stop(); records = null; console.warn(`[network] ${why}`); },
+      onWarn: (message) => console.warn(`[network] ${message}`),
+    });
+    hn.admit(accessLists().admitted());
+    records?.stop();
+    records = new HostRecords({
+      net: hn,
+      hosted: hostedHere,
+      // Taken over while this computer was away: what it has goes to the device hosting it now.
+      elsewhere: (workspace, found) => void hostingHere().yieldTo(workspace, found).catch((e: unknown) => console.warn(`[hosting] could not hand over ${workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`)),
+      onWarn: (m) => console.warn(`[hosting] ${m}`),
+    });
+    records.start();
+    return hn;
+  })().catch((e: unknown) => { current = null; throw e; });
+  return current;
+}
+
+/** The name `person` joined a workspace shared from here with; "" when there is none. */
+export function personName(person: string): string {
+  for (const ws of accessLists().workspaces()) {
+    const found = accessLists().people(ws).find((p) => p.person === person);
+    if (found?.name) return found.name;
+  }
+  return "";
+}
+
+/** Whose machine a session runs on, when it is a participant's (M4), and whether they lend it. */
+export function terminalMachine(opts: TerminalOpts): TerminalMachine | null {
+  return participantAt(opts, { self: machineIdentity().deviceId, mine: isYourDevice, lists: accessLists(), nameOf: personName, shown: shownFrom });
+}
+
+/** What a participant's app shows of their machine `device`, for the workspace `tile` is in (M4). */
+export function shownFrom(device: string, tile: string): ShownMachine | null {
+  return peers?.shownFrom(device, tile) ?? null;
+}
+
+/** Stop the daemon (the app is quitting). */
+/** The agents here as one feed every reader follows (the workspace API's `agent.list`,
+ *  `agent.changed`, `agent.event`); null until the network is installed. */
+export function agentFeed(): AgentFeed | null { return feed; }
+let feed: AgentFeed | null = null;
+
+export function stopNetwork(): void {
+  records?.stop();
+  records = null;
+  void current?.then((n) => n.stop(), () => {});
+  current = null;
+}
+
+/** This computer, as the person's other devices know it: its id, and what it is called. */
+const thisComputer = (): { device: string; name: string } => ({ device: machineIdentity().deviceId, name: os.hostname() });
+
+/** The machines this computer knows, by what each is called: where an agent here runs, as the
+ *  person's devices are told (spec/needs.md 0.3). */
+export const knownMachines: KnownMachines = {
+  self: thisComputer,
+  mine: (device) => pairedDevices().list().find((d) => d.device === device)?.name,
+  whose: (device) => participantNamed(accessLists(), device),
+  saved: (id) => savedMachines.list.find((m) => m.id === id)?.label,
+};
+/** Who this person is to the people they work with, and to their phone (Settings → Profile): the
+ *  name they see, and their colour. */
+const shownProfile = async (): Promise<{ name: string; color: string }> => ({ name: await displayName(getSettings().profile.name), color: getSettings().profile.color });
+
+/** Resolves once this computer is online, or after a minute: one waking takes a moment to join
+ *  its network again. */
+async function online(): Promise<void> {
+  for (let waited = 0; !net.isOnline() && waited < 60_000; waited += 1_000) await new Promise((r) => setTimeout(r, 1_000));
+}
+
+/** When the network file was last changed from this app, which restarted the daemon on it then. */
+let changedHere = 0;
+
+/** The network in use changed: a running daemon starts again on it. Connections drop and come
+ *  back by themselves (shared-workspaces.ts). */
+function restartNetwork(): void {
+  if (!current) return;
+  stopNetwork();
+  void network().catch((e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+}
+
+/** The `hive://` name of the workspace at `repo` when it was moved to another of the person's
+ *  devices (M3): it is opened from there, as its owner; null while it is hosted here. */
+export function movedAway(repo: string): string | null {
+  if (!workspaceStore().repos().includes(repo)) return null;
+  const workspace = workspaceStore().ownership(repo)?.workspaceId;
+  if (typeof workspace !== "string" || !accessLists().workspaces().includes(workspace)) return null;
+  const h = accessLists().hosting(workspace);
+  return h && h.host !== machineIdentity().deviceId && joinedList().list().some((j) => j.workspace === workspace) ? `hive://${workspace}` : null;
+}
+
+/** Open the workspace `workspace` that this person joined: its host dialled, its replica kept in
+ *  sync, its events published to the windows with `publish`. One they left, or were removed from,
+ *  opens as the last copy kept here, and nothing is dialled. */
+export async function openJoined(workspace: string, publish: (event: EventMessage) => void): Promise<void> {
+  const joined = joinedList().list().find((j) => j.workspace === workspace);
+  if (!joined) throw new Error("that workspace was not joined here: open its invite link");
+  if (joined.ended) return;
+  await network();
+  await openShared(workspace, joined.role, {
+    // The daemon in use when dialling (it starts again when the network changes), to the device
+    // the workspace's host record names now (M3).
+    dial: async () => {
+      const hn = await network();
+      const at = await joinedList().hostOf(workspace, hn);
+      if (!at) throw new Error("that workspace is no longer joined here");
+      return hn.dial(at.host, at.where);
+    },
+    publish,
+    // A workspace of the person's hosted on another of their devices: its list, kept in step (M3).
+    lists: accessLists(),
+    // Someone else's: the sessions this person placed on this computer, shown to its host (M4).
+    daemon: daemonHere,
+    // The workspace moved to another of its owner's devices (M3): where it is now, as the record
+    // its key signed says, is where the next dial goes.
+    moved: async (notice) => joinedList().follow(workspace, notice, await network()),
+    told: (ws, status) => {
+      if (status.state === "removed") joinedList().update(ws, { ended: "removed" });
+      else if (status.state === "connected" && status.access !== "owner") joinedList().update(ws, { role: status.access });
+      broadcast("net:shared-status", ws, status);
+    },
+    looks: (ws, appearance) => broadcast("net:shared-looks", ws, appearance),
+  });
+}
+
+/** How a joined workspace is: whose it is, and where its connection is (or how it ended). */
+function joinedStatus(workspace: string): ({ names: { workspace: string; host: string } } & SharedStatus) | null {
+  const joined = joinedList().list().find((j) => j.workspace === workspace);
+  if (!joined) return null;
+  const live = joined.ended ? null : sharedStatus(workspace);
+  return { names: joined.names, state: joined.ended ?? live?.state ?? "offline", access: live?.access ?? joined.role };
+}
+
+/** The person here, asked whether the words match while a computer waits to give its person. */
+let sure: ((yes: boolean) => void) | null = null;
+
+/** Onto another device's network, as its link says: redeeming its voucher, or registering. */
+async function admitTo(admission: Admission): Promise<void> {
+  if (admission.voucher) await networkProfiles().redeem(admission.access, admission.voucher);
+  else await networkProfiles().register(admission.access);
+}
+
+/** Pair with the device `offering`, which offers `code` (its `link`, when one was entered). */
+async function enterPair(code: string, link: PairLink | null, offering: string): Promise<PairedDeviceSummary & { took: boolean }> {
+  const hn = await network();
+  const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
+  // Onto the offering device's network first, as its link says.
+  if (link?.admission) await admitTo(link.admission);
+  const done = await enterPairing({ me: { ...(await pairingMe()), shares: sharesWorkspaces() }, code, offering, ask: (hello) => hn.pair(offering, where, hello) });
+  if (done.person) becomePerson(done.person);
+  const device = { ...done.with, pairedAt: Date.now() };
+  keepPaired(device);
+  return { ...summary(device), took: done.person !== null };
+}
+
+/** The one offer to connect this app makes (Settings → Connect), and the requests made with it. */
+const connecting = new Connecting({
+  me: async () => ({ ...(await pairingMe()), profile: await shownProfile() }),
+  announce: (data) => void network().then((hn) => hn.advertise(data), () => {}),
+  // On a network whose relays admit only who they are told to, the link carries a voucher for the
+  // device using it from elsewhere, for as long as the offer lasts; on an open one, where to register.
+  admission: async (seconds) => {
+    const access = (await networkProfiles().active()).profile.access;
+    if (!access) return undefined;
+    return { access: access.url, voucher: access.policy === "closed" ? await networkProfiles().voucher({ expiresIn: seconds, uses: 1 }) : null };
+  },
+  // A phone without hivemind opens the page where the relay's server serves it.
+  page: async (link) => { const at = await phonePageAt(link.relay); return at ? connectPageLink(at, link) : undefined; },
+  // Let in by the workspace's host: this app's, or the device of the person's it was moved to.
+  admit: async (repo, request, role) => {
+    const params = [repo, request.certificate, request.profile, role] as const;
+    const there = elsewhere.call("people.admit", params);
+    if (!there) return peopleHere.admit(...params);
+    const answer = await there;
+    if ("error" in answer) throw new Error(answer.error.message);
+    return answer.result as GuestAnswer;
+  },
+  kept: ({ with: other }) => keepPaired({ ...other, pairedAt: Date.now() }),
+  changed: (state) => broadcast("net:connect-changed", state),
+});
+
+/** This app, as pairing needs it: it gives the person it holds, and a phone the network it is on. */
+async function pairingMe(): Promise<PairingDevice> {
+  const hn = await network();
+  const { deviceId, certificate, person } = machineIdentity();
+  const using = networkProfiles().arg();
+  const on = using === "local" ? "local" : fs.readFileSync(using, "utf8").trim();
+  return {
+    device: deviceId, name: os.hostname(), kind: "app", certificate, person, addrs: hn.ready.addrs, relay: hn.ready.relay,
+    ...(on === "local" ? {} : { network: on }),
+  };
+}
+
+/** An answer to a device asking to connect, as a window sends it, or null. */
+function answerOf(v: unknown): ConnectAnswer | null {
+  const a = v as { as?: unknown; role?: unknown } | null;
+  if (a?.as === "me" || a?.as === "no") return { as: a.as };
+  if (a?.as === "guest" && (a.role === "view" || a.role === "edit" || a.role === "terminals")) return { as: "guest", role: a.role };
+  return null;
+}
+const answerDetail = (v: unknown): string => {
+  const a = answerOf(v);
+  return a?.as === "guest" ? `guest as ${a.role}` : a?.as ?? "?";
+};
+
+/** A device, as Settings lists it. */
+const summary = (d: PairedDevice) => ({ device: d.device, name: d.name, kind: d.kind, pairedAt: d.pairedAt });
+
+/** Keep a device just paired with, let it in (onto this network's relays too), and tell the
+ *  windows. */
+function keepPaired(device: PairedDevice): void {
+  pairedDevices().add(device);
+  admitNow();
+  void vouchFor(device.device);
+  broadcast("net:devices-changed");
+  // A phone is the person's other devices' too; a computer or host is told of the phones here.
+  void tellDevices();
+}
+
+/** What asking to join answers: the host's reply, or that this device could not get onto the
+ *  host network's relays. */
+
+/** The person's devices paired here that frames run on, workspaces are held on and hosting moves
+ *  to: their computers and hosts. A phone runs nothing (spec/pairing.md 0.3). */
+const placesToRun = (): PairedDevice[] => pairedDevices().list().filter((d) => d.kind !== "phone");
+
+/** Whether `device` is one of this person's computers or hosts, paired here. */
+export function isYourDevice(device: string): boolean {
+  return placesToRun().some((d) => d.device === device);
+}
+
+/** Connect to one of the person's computers or hosts, where it said it is reached when it paired. */
+export async function dialDevice(device: string): Promise<Link> {
+  const d = placesToRun().find((x) => x.device === device);
+  if (!d) throw new Error("that device is not one of yours: connect it under Settings → Connect");
+  return (await network()).dial(device, { addrs: d.addrs, relay: d.relay });
+}
+
+/** Serve this computer's workspaces to whom the access lists let in. `daemon`: this computer's PTY
+ *  daemon, where the person's other devices run terminals in frames here (none without one). */
+/** Who is in the workspaces hosted here (`people.*`): the People panel and Share, at a window of
+ *  this app's, or on another of the person's devices while a workspace of theirs is hosted here. */
+export const peopleHere = new People({
+  lists: accessLists,
+  workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
+  connected: (workspace) => peers?.connectedTo(workspace) ?? new Set<string>(),
+  disconnect: (workspace, person, reason) => peers?.disconnect(workspace, person, reason),
+  admit: admitNow,
+  network: async () => ({ ready: (await network()).ready, profiles: networkProfiles() }),
+  owner: () => displayName(getSettings().profile.name),
+  // Until the workspace moves, the record of where it is hosted names the device the link does.
+  keyOf: (workspace) => hostedAs(workspace).key,
+  publishTo: (to, event, ...params) => apiServer?.publishTo(to, event, ...params),
+  ownerHere: (workspace) => !!userWindow() || (peers?.connectedTo(workspace).has(machineIdentity().personId) ?? false),
+  phones: (repo, question) => {
+    const workspace = workspaceStore().ownership(repo)?.workspaceId;
+    return !!workspace && !!pushNotices?.asked(workspace, question);
+  },
+  waitsAway: false,
+});
+/** What the person's phones are told (M5), once the network is set up. */
+let pushNotices: PushNotices | null = null;
+/** The workspace API every window and device is answered by, once it is set up. */
+let apiServer: WorkspaceServer | null = null;
+/** This computer's PTY daemon, once the IPC is installed: none without one. */
+let daemonHere: (() => Promise<Duplex>) | undefined;
+
+/** What the network's links are served from besides the workspace API: this computer's PTY daemon,
+ *  where the person's other devices run terminals in frames here (none without one); a participant
+ *  lending their machine anew (M4); and this computer's agents' statuses, each change to them, and
+ *  what they wait on, for what waits on the person and what their phones are told (M5). */
+export interface NetworkSources {
+  daemon?: () => Promise<Duplex>;
+  granted?: (device: string) => void;
+  statuses: () => WaitingStatus[];
+  onStatus: (listener: (change: WaitingStatus) => void) => void;
+  /** Who started each agent: the control plane's. */
+  workers?: Pick<AgentFacts, "parent">;
+  /** The plans and supervised tool uses agents wait on, and how each was answered. */
+  waits?: Pick<Waits, "of" | "answerOf" | "asked">;
+  /** For Home (spec/home.md): the links between agents, how a remote frame's machine is linked,
+   *  what the window's Layers panel shows of a workspace, and what a tile last said or showed. */
+  home?: Pick<PeerLinksOptions, "links" | "linkState" | "line">;
+}
+
+/** What each workspace's Layers panel shows, as the window last said, by folder: Home's order. */
+const layersShown = new Map<string, LayersShown>();
+const ids = (v: unknown): v is string[] => Array.isArray(v) && v.length <= 10_000 && v.every((x) => typeof x === "string");
+
+/** Something Home shows changed that the boards and statuses do not say. */
+export function homeChanged(): void {
+  peers?.homeChanged();
+}
+
+// The same invite can be submitted from two windows, or after the join dialog is reopened
+// while its first request is still waiting. Both callers get the one answer from the host.
+const joining = new Map<string, Promise<JoinReply>>();
+/** Ask the host a link names to let this person in: the Join dialog, and `hive join`. */
+export async function joinLink(text: unknown): Promise<JoinReply> {
+  const link = typeof text === "string" ? parseJoinLink(text) : null;
+  if (!link) throw new Error("join: that is not an invite link");
+  const key = `${link.host}:${link.workspace}:${link.secret}`;
+  const pending = joining.get(key);
+  if (pending) return pending;
+  const attempt = (async (): Promise<JoinReply> => {
+    const reply = await join(link, {
+      net: await network(), profiles: networkProfiles(), certificate: machineIdentity().certificate,
+      profile: await shownProfile(), joined: joinedList(),
+    });
+    if (reply?.ok) void tellDevices();
+    if (reply?.ok && apiServer) {
+      const server = apiServer;
+      // A window may still show this workspace. Replace its old link so the new grant and
+      // invite address take effect even when opening the same hive:// path changes no query key.
+      if (sharedStatus(link.workspace)) {
+        leaveShared(link.workspace);
+        void openJoined(link.workspace, (event) => server.relay(event)).catch((e: unknown) =>
+          console.warn(`[network] could not reopen ${link.workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`));
+      }
+    }
+    return reply;
+  })();
+  joining.set(key, attempt);
+  try { return await attempt; }
+  finally { if (joining.get(key) === attempt) joining.delete(key); }
+}
+
+export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, workers, waits, home }: NetworkSources): void {
+  apiServer = server;
+  daemonHere = daemon;
+  // What an agent here waits on that the person's phone may allow or deny: its agent says which
+  // of its keys do (spec/needs.md 0.5).
+  const decides: Decides = (tile, status) => !!answerKeys(heldBoards(workspaceStore()), tile, status);
+  peers = new PeerLinks({
+    store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
+    phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
+    statuses, facts: (held) => ({ ...manifestFacts(held, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)), ...workers, wait: (tile) => waits?.of(tile), asked: (tile) => waits?.asked(tile) }),
+    machines: knownMachines,
+    subscribe: (device, sub) => pushSubscriptions().set(device, sub),
+    // A phone unpairing itself, recorded as that phone.
+    unpair: (device) => {
+      const phone = { kind: "peer", person: accessLists().personOf("", device) ?? "", device, access: "owner" } as const;
+      void hostIntents().perform(phone, { verb: "net:unpair", detail: device.slice(0, 8) }, () => forgetDevice(device));
+    },
+    // The phones another of the person's computers paired with are the person's here too
+    // (spec/pairing.md 0.7); one of this app's own, unpaired there, is forgotten here, recorded as
+    // that computer.
+    introduced: (by, phones) => {
+      if (!placesToRun().some((d) => d.device === by)) return;
+      for (const gone of pairedDevices().introduce(by, phones, machineIdentity().personId, Date.now())) pushSubscriptions().remove(gone);
+      admitNow();
+      broadcast("net:devices-changed");
+    },
+    // Where another of the person's computers is a guest: the hosts told if it is unpaired here.
+    guestOf: (by, workspaces) => placesToRun().some((d) => d.device === by) && pairedDevices().guestOf(by, workspaces),
+    forget: (by, device) => {
+      if (!placesToRun().some((d) => d.device === by) || !pairedDevices().list().some((d) => d.device === device && d.kind === "phone" && !d.via)) return false;
+      const there = { kind: "peer", person: machineIdentity().personId, device: by, access: "owner" } as const;
+      void hostIntents().perform(there, { verb: "net:unpair", detail: device.slice(0, 8) }, () => forgetDevice(device));
+      return true;
+    },
+    // The person's computers and hosts a phone may reach through this one, and whose they are.
+    devices: () => placesToRun().map(pairedWith),
+    profile: shownProfile,
+    onWarn: (m) => console.warn(`[peers] ${m}`),
+    ...home,
+    shown: (repo) => layersShown.get(repo),
+  });
+  // The window's Layers panel shows another order, or other pins.
+  on("layers:shown", (_e, repo: unknown, shown: unknown) => {
+    const s = shown as Partial<LayersShown> | null;
+    if (typeof repo !== "string" || !s || !ids(s.order) || !ids(s.pinned)) return;
+    layersShown.set(repo, { order: s.order, pinned: s.pinned });
+    homeChanged();
+  });
+  // The person's phones are told what happens here, encrypted to each (M5).
+  const notices = (pushNotices = new PushNotices({
+    me: thisComputer,
+    boards: () => heldBoards(workspaceStore()),
+    decides,
+    changes: onWorkspaceChange,
+    subscriptions: pushSubscriptions(),
+    post: (endpoint, body, urgency, sign) => postNotice(endpoint, body, urgency, sign ? machineIdentity().device : null),
+    onWarn: (m) => console.warn(`[push] ${m}`),
+  }));
+  onStatus((change) => notices.changed(change));
+  // Be where the people let in, and the person's other devices, reach this computer, when anything
+  // is shared from here, the person has other devices or a host is owed word of one unpaired: as
+  // this app starts (below), and as the computer wakes, once it is online again. Then each phone is
+  // told it is back, and shows it if it found this computer away (spec/push.md).
+  const reachable = () => {
+    if (!accessLists().workspaces().some((ws) => accessLists().people(ws).length > 0) && pairedDevices().list().length === 0 && owedRevocations().list().length === 0) return;
+    void network().then(() => { notices.back(); void tellDevices(); void payRevocations(); }, (e: unknown) => console.warn(`[network] ${e instanceof Error ? e.message : String(e)}`));
+  };
+  powerMonitor.on("resume", () => void online().then(reachable));
+  setInterval(() => void payRevocations(), PAY_AGAIN_MS).unref();
+  // The network in use, changed by `hive network use`: the daemon starts again on it. A change
+  // made here has done that already (below).
+  try {
+    fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => {
+      if (now.mtimeMs !== before.mtimeMs && now.mtimeMs !== changedHere) restartNetwork();
+    });
+  } catch { /* hive-net is not installed: there is no network to change */ }
+
+  // This device's network (Settings → Servers): which it is, whether its servers answer, and
+  // another to use.
+  handle("net:network", () => networkProfiles().active());
+  handle("net:network-health", () => networkProfiles().health());
+  handleEffect("net:use-network", (given: unknown) => ({ detail: typeof given === "string" ? given.slice(0, 40) : undefined }), async (_e, given: unknown) => {
+    if (typeof given !== "string" || !given.trim()) throw new Error("network: which one?");
+    // The daemon starts again on it now: what is offered or dialled next waits for it, and no
+    // restart comes after to cut that off.
+    const used = await networkProfiles().use(given);
+    changedHere = fs.statSync(networkProfiles().file).mtimeMs;
+    restartNetwork();
+    return used;
+  });
+
+  reachable();
+  // The person's workspaces hosted on another of their devices: their documents and lists are kept
+  // in step while this app is online, whether a window shows them or not (M3, design §5.8), so
+  // the one taken over carries what was done meanwhile and who was let in.
+  for (const j of joinedList().list()) {
+    if (j.role !== "owner" || j.ended) continue;
+    void openJoined(j.workspace, (event) => server.relay(event)).catch((e: unknown) => console.warn(`[network] ${j.workspace.slice(0, 8)}…: ${e instanceof Error ? e.message : String(e)}`));
+  }
+  // What a link offers, to show before using it: null when it is none.
+  handle("net:join-preview", (_e, text: unknown): JoinPreview => {
+    if (typeof text !== "string") return null;
+    const join = parseJoinLink(text);
+    if (join) return { kind: "join", workspace: join.names.workspace, host: join.names.host };
+    const connect = parseConnectLink(text);
+    if (connect) return { kind: "connect", name: connect.name };
+    const pair = parsePairLink(text);
+    if (pair) return { kind: "pair", name: pair.name };
+    return parseCode(text) ? { kind: "words" } : null;
+  });
+
+  // Ask the host a link names to let this person in.
+  handleEffect("net:join", () => ({}), (_e, text: unknown) => joinLink(text));
+
+  // The workspaces this person joined elsewhere.
+  handle("net:joined", () => joinedList().list());
+
+  // How a workspace joined here is: whose, and where its connection is.
+  handle("net:shared-status", (_e, workspace: unknown) => (typeof workspace === "string" ? joinedStatus(workspace) : null));
+  handle("net:shared-looks", (_e, workspace: unknown) => (typeof workspace === "string" ? sharedLooks(workspace) : null));
+
+  // The person's devices this app paired with (Settings → Connect).
+  handle("net:devices", () => pairedDevices().list().map(summary));
+
+  // An offer to connect, from the window showing `repo` (none: Home), and the person's answers to
+  // the devices that use it.
+  handleEffect("net:connect-offer", (repo: unknown) => ({ target: typeof repo === "string" ? repo : "home" }), (_e, repo: unknown) => {
+    if (repo !== null && typeof repo !== "string") throw new Error("connect: not a workspace");
+    return connecting.offer(repo);
+  });
+  handleEffect("net:connect-cancel", () => ({}), () => connecting.cancel());
+  handle("net:connect-state", () => connecting.state());
+  handleEffect("net:connect-answer", (_id: unknown, answer: unknown) => ({ detail: answerDetail(answer) }), (_e, id: unknown, answer: unknown) => {
+    const a = answerOf(answer);
+    if (typeof id !== "string" || !a) throw new Error("connect: not an answer");
+    return connecting.decide(id, a);
+  });
+
+  // The hash of the phone page `page` serves, and of the one this build goes with: whether a
+  // server serves the page this release made, asked before a phone is given a link there.
+  handle("net:phone-page", async (_e, page: unknown) => {
+    if (typeof page !== "string" || !/^https?:\/\//.test(page)) throw new Error("phone-page: not a page's address");
+    return { served: await pageHash(page), shipped: SHIPPED_PAGE };
+  });
+
+  // Enter the code or link another of the person's devices shows: a host (`hive host pair`) takes
+  // this person; another computer gives its own, and this app becomes that person.
+  handleEffect("net:pair-enter", () => ({}), async (_e, text: unknown) => {
+    const link = typeof text === "string" ? parsePairLink(text) : null;
+    const code = link?.code ?? (typeof text === "string" ? parseCode(text) : null);
+    if (!code) throw new Error("pair: that is not a pairing code or link");
+    const hn = await network();
+    // From the words alone, the device offering them on this network; a link says where it is.
+    return enterPair(code, link, link?.device ?? (await offeringNearby([pairAnnouncement(code)], () => hn.nearby())).id);
+  });
+
+  // Use another computer's offer to connect (spec/pairing.md 0.10), by its link or its words; words
+  // a host announces for its code pair with it instead. The windows show the words both screens
+  // show, and, once that computer says this one is its person's, ask the person here whether they
+  // match: it takes the person only on their yes.
+  handleEffect("net:connect-enter", () => ({}), async (_e, text: unknown): Promise<ConnectEntered> => {
+    const link = typeof text === "string" ? parseConnectLink(text) : null;
+    const code = link?.code ?? (typeof text === "string" ? parseCode(text) : null);
+    if (!code) throw new Error("connect: that is not a code or a link to connect with");
+    const hn = await network();
+    const found = link ? null : await offeringNearby([connectAnnouncement(code), pairAnnouncement(code)], () => hn.nearby());
+    if (found && found.announced === pairAnnouncement(code)) return { as: "paired", device: await enterPair(code, null, found.id) };
+    const offering = link?.device ?? found!.id;
+    const where = link ? { addrs: link.addrs, relay: link.relay } : { addrs: [], relay: null };
+    if (link?.admission) await admitTo(link.admission);
+    let shown: ConnectEntering | null = null;
+    const show = (s: ConnectEntering | null) => { shown = s; broadcast("net:connect-entering", s); };
+    try {
+      const { person: _, ...me } = await pairingMe();
+      const done = await enterConnect({
+        me: { ...me, profile: await shownProfile(), shares: sharesWorkspaces() }, code, offering, ask: (hello) => hn.pair(offering, where, hello),
+        words: (words, name) => show({ name, words, theirs: null }),
+        sure: (theirs) => new Promise<boolean>((resolve) => {
+          // Asked until that computer would no longer give it; no answer is no.
+          const timer = setTimeout(() => settle(false), TAKE_WITHIN_MS - 10_000);
+          const settle = (yes: boolean) => { clearTimeout(timer); if (sure === settle) sure = null; resolve(yes); };
+          sure = settle;
+          show({ ...shown!, theirs });
+        }),
+      });
+      if (done.as === "me") {
+        becomePerson(done.pairing.person!);
+        const device = { ...done.pairing.with, pairedAt: Date.now() };
+        keepPaired(device);
+        return { as: "me", device: summary(device) };
+      }
+      const g = done.guest;
+      joinedList().add({
+        workspace: g.workspace, host: g.host, where: { addrs: g.addrs, relay: g.relay }, role: g.role, names: g.names, joinedAt: Date.now(),
+        ...(g.hosting ? { hosting: g.hosting } : {}),
+      });
+      void tellDevices();
+      return { as: "guest", workspace: `hive://${g.workspace}`, role: g.role, names: g.names };
+    } finally {
+      sure?.(false);
+      show(null);
+    }
+  });
+  // The person here says whether the words match, while a computer waits to give its person.
+  handleEffect("net:connect-sure", (yes: unknown) => ({ detail: yes === true ? "yes" : "no" }), (_e, yes: unknown) => {
+    if (!sure) throw new Error("connect: nothing waits on that");
+    sure(yes === true);
+  });
+
+  // Forget one of the person's devices: its workspaces are no longer listed here.
+  handleEffect("net:unpair", (device: unknown) => ({ detail: String(device).slice(0, 8) }), (_e, device: unknown) => {
+    if (typeof device !== "string" || !forgetDevice(device)) throw new Error("unpair: that device is not paired with this one");
+  });
+
+  // The workspaces each of the person's other devices holds; null for one that does not answer.
+  handle("net:device-workspaces", async () => {
+    const hosts = placesToRun();
+    if (hosts.length === 0) return [];
+    const hn = await network();
+    return Promise.all(hosts.map(async (d) => {
+      try {
+        const link = await hn.dial(d.device, { addrs: d.addrs, relay: d.relay });
+        try { return { device: d.device, name: d.name, workspaces: await heldWorkspaces(link) }; } finally { link.close(); }
+      } catch {
+        return { device: d.device, name: d.name, workspaces: null };
+      }
+    }));
+  });
+
+  // Open a workspace another of the person's devices holds: a joined workspace this person owns.
+  handle("net:open-device-workspace", (_e, device: unknown, workspace: unknown, name: unknown) => {
+    const host = placesToRun().find((d) => d.device === device);
+    if (!host || typeof workspace !== "string" || !/^[0-9a-f]{32}$/.test(workspace)) throw new Error("open: that is not a workspace of one of your devices");
+    const names = { workspace: typeof name === "string" && name ? name.slice(0, 200) : "workspace", host: host.name };
+    // The person's own: its key is theirs to derive, and its record is on their network.
+    joinedList().add({ workspace, host: host.device, where: { addrs: host.addrs, relay: host.relay }, role: "owner", names, joinedAt: Date.now(), hosting: { key: hostedAs(workspace).key, lookup: null } });
+    return `hive://${workspace}`;
+  });
+
+  // Move the workspace `repo`, hosted here, to another of the person's devices (M3, spec/hosting.md):
+  // whoever is in it follows; its frames here stay here. Its `hive://` name, which this computer
+  // opens it by from now on, as its owner, from the device it is on.
+  handleEffect("net:move-hosting", (repo: unknown) => ({ target: typeof repo === "string" ? repo : undefined }), async (_e, repo: unknown, device: unknown) => {
+    const to = placesToRun().find((d) => d.device === device);
+    if (typeof repo !== "string" || !repo || repo.startsWith("hive://")) throw new Error("move: only a workspace hosted here moves from here");
+    if (!to) throw new Error("move: that is not one of your computers or hosts");
+    const notice = await hostingHere().moveTo(repo, to.device);
+    const workspace = workspaceStore().ownership(repo)!.workspaceId as string;
+    joinedList().add({
+      workspace, host: to.device, where: { addrs: to.addrs, relay: to.relay }, role: "owner",
+      names: { workspace: path.basename(repo), host: to.name }, joinedAt: Date.now(), hosting: { key: hostedAs(workspace).key, lookup: null }, seq: notice.seq,
+    });
+    return `hive://${workspace}`;
+  });
+
+  // This computer's folder of a workspace moved from here, which it moves back to (M3).
+  handle("net:folder-here", (_e, workspace: unknown) => (typeof workspace === "string" ? folderHere(workspace) : null));
+
+  // Ask the device hosting `workspace`, moved from here, to hand it back (M3, spec/hosting.md):
+  // whoever is in it follows. Its folder, which this computer opens it by again.
+  handleEffect("net:move-hosting-here", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), async (_e, workspace: unknown) => {
+    const folder = typeof workspace === "string" ? folderHere(workspace) : null;
+    const host = folder ? accessLists().hosting(workspace as string)!.host : null;
+    if (!folder || !host) throw new Error("move: only a workspace moved from this computer moves back to it");
+    await hostingHere().moveHere(workspace as string, host);
+    return folder;
+  });
+
+  // Host a workspace moved from here again, from the copy kept here, while the device hosting it
+  // cannot be reached (M3, §5.7 E): whoever is in it finds it here by its record. Its folder.
+  handleEffect("net:take-over", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), (_e, workspace: unknown) => {
+    const folder = typeof workspace === "string" ? folderHere(workspace) : null;
+    if (!folder) throw new Error("take over: only a workspace moved from this computer is hosted here again");
+    if (sharedStatus(workspace as string)?.state === "connected") throw new Error("take over: its host answers; move it here instead");
+    hostingHere().takeOver(workspace as string, folder, sharedStore().exportSince(`hive://${workspace as string}`, null));
+    return folder;
+  });
+
+  // What this person lets the people in a workspace joined here do on this computer (M4), and
+  // letting them do something else: its host is told at once.
+  handle("net:machine-grant", (_e, workspace: unknown) => (typeof workspace === "string" ? machineGrant(workspace) : "watch"));
+  handleEffect("net:set-machine-grant", (workspace: unknown, grant: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined, detail: typeof grant === "string" ? grant.slice(0, 16) : undefined }), (_e, workspace: unknown, grant: unknown) => {
+    if (typeof workspace !== "string" || !joinedStatus(workspace)) throw new Error("machine: that workspace was not joined here");
+    if (!GRANTS.includes(grant as Grant)) throw new Error("machine: watch, terminals or agents");
+    setMachineGrant(workspace, grant as Grant);
+  });
+  // Hand off the branch of a frame of this person's on this computer to the host of a workspace
+  // joined here (M4): what lands there.
+  handleEffect("net:hand-off", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), (_e, workspace: unknown, uri: unknown) => {
+    if (typeof workspace !== "string" || !joinedStatus(workspace)) throw new Error("hand off: that workspace was not joined here");
+    if (typeof uri !== "string") throw new Error("hand off: which frame?");
+    return handOffTo(workspace, uri);
+  });
+
+  // Leave a workspace joined here: its connection closes, and the last copy is kept, to read.
+  handleEffect("net:leave", (workspace: unknown) => ({ target: typeof workspace === "string" ? `hive://${workspace}` : undefined }), (_e, workspace: unknown) => {
+    if (typeof workspace !== "string" || !joinedStatus(workspace)) throw new Error("leave: that workspace was not joined here");
+    leaveShared(workspace);
+    joinedList().update(workspace, { ended: "left" });
+    broadcast("net:shared-status", workspace, { state: "left", access: joinedStatus(workspace)!.access });
+  });
+  // The agents here as one feed, worked out again when a status or a board changes.
+  feed = new AgentFeed({
+    build: () => peers?.agentList().agents ?? [],
+    publish: (event, repo, payload) => server.publish(event, repo, payload as never),
+    repoOf: (workspace) => heldBoards(workspaceStore()).find((b) => b.workspace === workspace)?.repo ?? null,
+    answerOf: (tile, since) => waits?.answerOf(tile, since),
+  });
+  onStatus(() => feed?.changed());
+  onWorkspaceChange((change) => { if (change.part === "core") feed?.changed(); });
+}

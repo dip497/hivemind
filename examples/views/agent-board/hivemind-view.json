@@ -1,0 +1,14 @@
+{
+  "id": "agent-board",
+  "name": "Agent board",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "protocol": 1,
+  "permissions": [],
+  "category": "agents",
+  "commands": [
+    { "name": "post", "description": "Pin a note to the board: what you did, found or need.", "args": "{ \"text\": string, \"from\"?: string, \"kind\"?: \"done\" | \"blocked\" | \"note\" }" },
+    { "name": "list", "description": "Every note on the board, newest first." },
+    { "name": "clear", "description": "Take every note down." }
+  ]
+}

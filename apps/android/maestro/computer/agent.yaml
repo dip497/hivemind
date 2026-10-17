@@ -1,0 +1,112 @@
+# The app against a real computer (docs/design/phone-app-2026-10-02.md §7): it is opened on the link
+# the computer's Settings → Connect shows, says the words match once the person there says it is theirs,
+# and is the person's; finds the computer
+# and its agent among the agents; opens the agent on what it and the person said in its chat; sends
+# it a message from the reply box, which it answers in the chat; then reads, in its terminal opened
+# from the header and still followed, its line and what it printed on hearing it. Then the
+# community view the computer offers the phone (P8): listed under Views in Settings, shown in the
+# app's web view, told it is on a phone and what the board holds; Select is answered by its host on the computer, and Start an agent asks the phone's
+# lock first, which this emulator has none of. Run by apps/desktop/tests/e2e/phone-app.spec.ts
+# (PHONE_APP=android), which hands it the link and what to find (PAIR_LINK, PAIR_PERSON,
+# PAIR_COMPUTER, PAIR_AGENT, PAIR_LINE, PAIR_SAID, PAIR_MESSAGE, PAIR_ANSWER, PAIR_HEARD, PAIR_VIEW,
+# PAIR_VIEW_AGENT, PAIR_VIEW_SELECTED); in a folder of its own, so the smoke run of
+# apps/android/maestro leaves it out. A computer's network, a terminal and a conversation over it
+# are slow on a CI emulator: every wait is long.
+appId: com.hivemind.phone
+name: Pair with a computer, and drive its agent
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "pair-link"
+    timeout: 60000
+# The link opened as a scanned QR code or a tapped link opens it: the app takes it to Pair.
+- openLink: ${PAIR_LINK}
+# The person at the computer says it is theirs (the spec answers there); the words match.
+- extendedWaitUntil:
+    visible:
+      id: "connect-yes"
+    timeout: 120000
+- tapOn:
+    id: "connect-yes"
+- extendedWaitUntil:
+    visible: "This phone is ${PAIR_PERSON}'s now."
+    timeout: 120000
+- tapOn: "Continue"
+
+# The computer, among the person's devices in Settings, by Home's gear.
+- tapOn:
+    id: "home-settings"
+- extendedWaitUntil:
+    visible: ${PAIR_COMPUTER}
+    timeout: 120000
+# Home, as the computer's Layers panel lists it: its agent, with what it last said.
+- tapOn:
+    id: "settings-back"
+- extendedWaitUntil:
+    visible: ${PAIR_AGENT}
+    timeout: 120000
+- extendedWaitUntil:
+    visible: ${PAIR_SAID}
+    timeout: 60000
+- tapOn: ${PAIR_AGENT}
+
+# What it and the person said to each other, first.
+- extendedWaitUntil:
+    visible: ${PAIR_SAID}
+    timeout: 60000
+# A message from the reply box: the agent hears it, and answers.
+- tapOn:
+    id: "reply"
+- inputText: ${PAIR_MESSAGE}
+# The app's Send, by its tag: the keyboard's action key sends too (the reply box's ImeAction.Send),
+# and a tap by "Send" could find either.
+- tapOn:
+    id: "reply-send"
+- extendedWaitUntil:
+    visible: ${PAIR_ANSWER}
+    timeout: 60000
+# Its terminal, from the header, followed all the while the chat was: the line the agent printed,
+# and what it printed on hearing the message.
+- tapOn:
+    id: "agent-terminal"
+- extendedWaitUntil:
+    visible: ${PAIR_LINE}
+    timeout: 60000
+- extendedWaitUntil:
+    visible: ${PAIR_HEARD}
+    timeout: 60000
+
+# The community view the computer offers the phone: back to the chat, then Home, by the screen's
+# Back (by its tag: the system's own Back is "Back" too, and with the keyboard up it only closes
+# that), and Settings by Home's gear.
+- tapOn:
+    id: "terminal-back"
+- tapOn:
+    id: "agent-back"
+- tapOn:
+    id: "home-settings"
+- extendedWaitUntil:
+    visible: ${PAIR_VIEW}
+    timeout: 60000
+- tapOn: ${PAIR_VIEW}
+# Its page, from the computer, in the app's web view (read through accessibility, as any screen):
+# told by its host that it is on a phone, and what the board holds.
+- extendedWaitUntil:
+    visible: "On a phone"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: ${PAIR_VIEW_AGENT}
+    timeout: 30000
+# Selected on the page; what the page shows is its host's answer, from the computer.
+- tapOn: "Select"
+- extendedWaitUntil:
+    visible: ${PAIR_VIEW_SELECTED}
+    timeout: 30000
+# Starting an agent asks the phone's lock first; with none set, the app says to set one, and posts
+# nothing (the spec finds nothing started on the computer).
+- tapOn: "Start an agent"
+- extendedWaitUntil:
+    visible: "Set a screen lock on this phone to start or close agents."
+    timeout: 30000

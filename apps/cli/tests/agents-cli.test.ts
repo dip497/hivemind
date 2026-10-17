@@ -37,6 +37,7 @@ function profile(opts: { agents?: Record<string, string>; disabled?: string[] } 
     XDG_CONFIG_HOME: xdg,
     HIVE_SETTINGS: undefined,
     HIVE_HCP_SOCK: path.join(xdg, "no-such.sock"),
+    HIVE_DRIVE_SOCK: path.join(xdg, "no-such-drive.sock"),
     HCP_TOKEN: "x",
   };
 }

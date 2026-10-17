@@ -21,15 +21,34 @@ const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ou
 // Re-baselined at the update flow: the toolbar says whether an update is waiting on the first
 // frame, so reading the installer's steps is on this path (~4 kB). The rest of the gap to the
 // previous baseline is growth nobody re-baselined; measured here so the margin means something.
-const ENTRY_BASELINE = 899_638;
+// Re-baselined for the board (R15, board-objects/): its notes, checklists and arrows are canvas
+// content drawn on the first frame with the tiles, and a note added with `8` takes the very next
+// key, so its code cannot wait for a chunk. ~30 kB of it, plus its icons (905 418 before).
+// Re-baselined for multiplayer (M1): others' pointers and faces, and the banner over a workspace
+// joined from elsewhere, are drawn on the first frame; Share, People, joining and the reach
+// chooser load when opened (they had been on this path, 989 290 bytes, which this test caught).
+// Re-baselined for the host's view and Follow (M1a): a guest's first frame opens in the host's view
+// and follows its camera, so both sit on this path (~4 kB; 1 010 541 before, already near the margin).
+// Re-baselined for tailwind-merge 3: cn() is on every first-frame component and v3 carries
+// Tailwind v4's class grammar (~29 kB over v2; 1 009 683 before).
+// Re-baselined for sonner 2: the Toaster mounts with the app and v2 inlines its styles (~19 kB).
+// Re-baselined for widgets: notes, checklists and text are widgets now, so the canvas's first frame
+// draws through the widget body, its editable fields, the widget runtime and the agent kit (~44 kB;
+// the floating layer and the confirm dialog load later; 1 058 031 before).
+// Re-baselined for the phone: pairing a browser, the page's hash and the folders an agent may be
+// started in from the phone sit on the window's first path (~2 kB over four commits; 1 145 977
+// before, 57 bytes under the ceiling).
+const ENTRY_BASELINE = 1_148_092;
 const ENTRY_MARGIN = 0.04;
 
 test("the default renderer path stays small, and three.js is gone from the build", (t) => {
   const html = path.join(OUT, "index.html");
   if (!fs.existsSync(html)) { t.skip("no renderer build in out/ — run `pnpm build` first"); return; }
   const index = fs.readFileSync(html, "utf8");
-  const eager = [...index.matchAll(/assets\/([^"']+\.js)/g)].map((m) => m[1]!);
-  const entry = eager.find((f) => f.startsWith("index-"));
+  // The page's own script, beside the vendor chunks it loads first (named for its module, as the
+  // browser tab's entry shares it).
+  const eager = [...index.matchAll(/<script type="module"[^>]*src="\.\/assets\/([^"]+\.js)"/g)].map((m) => m[1]!);
+  const entry = eager.find((f) => !f.startsWith("vendor-"));
   assert.ok(entry, "index.html references an entry chunk");
   const entrySize = fs.statSync(path.join(OUT, "assets", entry)).size;
   assert.ok(entrySize <= ENTRY_BASELINE * (1 + ENTRY_MARGIN), `entry chunk grew to ${entrySize} bytes (baseline ${ENTRY_BASELINE} +${ENTRY_MARGIN * 100}%)`);

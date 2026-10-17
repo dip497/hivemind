@@ -18,8 +18,9 @@
  * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
 import { useState } from "react";
-import { Film, Image as ImageIcon, Plus, Trash2, ChevronDown } from "lucide-react";
+import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
 import {
@@ -68,8 +69,8 @@ export function Section({ title, hint, action, children }: {
  *  chosen preset looks like. The strip is five flat colours — no preview
  *  rendering, no motion.
  *
- *  SELECTOR NOTE: `data-preset-option` now lives on each <option> (it was on a
- *  card <button>); the select itself carries `data-preset-select`. */
+ *  SELECTOR NOTE: `data-preset-option` lives on each item of the list; the control
+ *  itself carries `data-preset-select`. */
 export function PresetRow({ t }: { t: ThemeState }) {
   const preset = PRESETS[t.preset] ?? PRESETS.ubuntu!;
   const swatches = [preset.palette.bg, preset.palette.bg3, preset.terminal.background, preset.terminal.ansi[1]!, preset.terminal.ansi[2]!];
@@ -82,19 +83,20 @@ export function PresetRow({ t }: { t: ThemeState }) {
             <span key={i} className="settings-swatch" style={{ background: c }} />
           ))}
         </span>
-        <select
-          id="theme-preset"
-          data-preset-select
+        <Select
           value={t.preset in PRESETS ? t.preset : "ubuntu"}
-          onChange={(e) => {
-            const p = PRESETS[e.target.value];
+          onValueChange={(v) => {
+            const p = PRESETS[v];
             if (p) setTheme({ preset: p.id, mode: p.mode, palette: { ...p.palette }, accent: p.accent, terminal: { ...p.terminal, ansi: [...p.terminal.ansi] } });
           }}
         >
-          {Object.values(PRESETS).map((p) => (
-            <option key={p.id} value={p.id} data-preset-option={p.id}>{p.label}</option>
-          ))}
-        </select>
+          <SelectTrigger id="theme-preset" data-preset-select className="min-w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.values(PRESETS).map((p) => (
+              <SelectItem key={p.id} value={p.id} data-preset-option={p.id}>{p.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     </div>
   );
@@ -130,23 +132,6 @@ export function AccentPicker({ t }: { t: ThemeState }) {
 
 // ── background ──────────────────────────────────────────────────────────────
 
-/** Static scene swatches — the same palettes styles.css paints, as flat
- *  gradients. Deliberately NOT the live scene: a grid of animated previews
- *  costs a compositor layer each, every frame Settings is open. */
-const WP_SWATCH: Record<WallpaperId, string> = {
-  none: "var(--color-bg3)",
-  aurora: "radial-gradient(circle at 28% 30%, #4f46e5, transparent 58%), radial-gradient(circle at 74% 72%, #14b8a6, transparent 58%), #0a0d18",
-  ember: "radial-gradient(circle at 28% 30%, #f97316, transparent 58%), radial-gradient(circle at 74% 72%, #db2777, transparent 58%), #140a08",
-  ice: "radial-gradient(circle at 28% 30%, #0ea5e9, transparent 58%), radial-gradient(circle at 74% 72%, #22d3ee, transparent 58%), #06121a",
-  mesh: "radial-gradient(circle at 28% 30%, #8b5cf6, transparent 58%), radial-gradient(circle at 74% 72%, #ec4899, transparent 58%), #0b0a14",
-  sunset: "radial-gradient(circle at 28% 30%, #f97316, transparent 58%), radial-gradient(circle at 74% 72%, #ef4444, transparent 58%), #160a0c",
-  forest: "radial-gradient(circle at 28% 30%, #10b981, transparent 58%), radial-gradient(circle at 74% 72%, #84cc16, transparent 58%), #07140d",
-  nebula: "radial-gradient(circle at 28% 30%, #a855f7, transparent 58%), radial-gradient(circle at 74% 72%, #6366f1, transparent 58%), #0a0816",
-  mono: "radial-gradient(circle at 28% 30%, #64748b, transparent 58%), radial-gradient(circle at 74% 72%, #475569, transparent 58%), #0b0d12",
-  image: "linear-gradient(135deg, #334155, #0f172a)",
-  video: "linear-gradient(135deg, #1e293b, #0b1120)",
-};
-
 /** Filename of a picked media URL, for the "currently using" line. */
 function mediaName(src?: string): string | null {
   if (!src) return null;
@@ -180,7 +165,7 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
               : () => setTheme({ wallpaper: w.id });
             return (
               <button key={w.id} type="button" className="settings-wallpaper" role="radio" aria-checked={sel} aria-label={w.label} data-wallpaper-option={w.id} onClick={onClick}>
-                <span className="settings-wallpaper-preview" aria-hidden style={{ background: WP_SWATCH[w.id] }}>
+                <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id}>
                   {w.id === "video" && <Film size={13} />}
                   {w.id === "image" && <ImageIcon size={13} />}
                 </span>
@@ -198,8 +183,8 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
             <p className="settings-path">{name ?? "No file chosen yet."}</p>
           </div>
           <div className="settings-inline">
-            <Button variant="outline" size="sm" onClick={() => void pick()}>{name ? "Change…" : "Choose file…"}</Button>
-            <Button variant="outline" size="sm" title="Dim the media and thicken the panel tint so text stays readable" onClick={() => setTheme(CINEMATIC)}>Cinematic</Button>
+            <Button variant="outline" onClick={() => void pick()}>{name ? "Change…" : "Choose file…"}</Button>
+            <Button variant="outline" title="Dim the media and thicken the panel tint so text stays readable" onClick={() => setTheme(CINEMATIC)}>Cinematic</Button>
           </div>
         </div>
       )}
@@ -272,11 +257,11 @@ function OverlayRow({ layer, index }: { layer: MediaLayer; index: number }) {
         </div>
         <Button
           variant="destructive"
-          size="icon-sm"
+          size="icon"
           aria-label={`Remove overlay ${index + 1}`}
           onClick={() => removeOverlay(layer.id)}
         >
-          <Trash2 />
+          <Trash />
         </Button>
       </div>
       <Slider label="Opacity" value={Math.round(layer.opacity * 100)} min={0} max={100} suffix="%" onChange={(v) => updateOverlay(layer.id, { opacity: v / 100 })} />
@@ -284,7 +269,7 @@ function OverlayRow({ layer, index }: { layer: MediaLayer; index: number }) {
         <div><label>Fit</label></div>
         <div className="settings-inline" role="radiogroup" aria-label={`Overlay ${index + 1} fit`}>
           {FITS.map((f) => (
-            <Button key={f.id} role="radio" aria-checked={layer.fit === f.id} variant={layer.fit === f.id ? "secondary" : "outline"} size="sm" data-selected={layer.fit === f.id ? "" : undefined} onClick={() => updateOverlay(layer.id, { fit: f.id })}>
+            <Button key={f.id} role="radio" aria-checked={layer.fit === f.id} variant={layer.fit === f.id ? "secondary" : "outline"} data-selected={layer.fit === f.id ? "" : undefined} onClick={() => updateOverlay(layer.id, { fit: f.id })}>
               {f.label}
             </Button>
           ))}
@@ -342,7 +327,7 @@ export function OverlayControls({ t }: { t: ThemeState }) {
       <div className="settings-extension-list">
         {t.overlayMedia.map((layer, i) => <OverlayRow key={layer.id} layer={layer} index={i} />)}
       </div>
-      <Button variant="link" size="sm" className="mt-3" onClick={() => void add()}><Plus />Add overlay</Button>
+      <Button variant="link" className="mt-3" onClick={() => void add()}><Plus />Add overlay</Button>
     </details>
   );
 }
@@ -385,7 +370,7 @@ export function TerminalColors({ t }: { t: ThemeState }) {
         ))}
       </div>
       <div className="settings-actions">
-        <Button variant="outline" size="sm" disabled={!dirty} onClick={() => setTerm({ ...preset.terminal, ansi: [...preset.terminal.ansi] })}>
+        <Button variant="outline" disabled={!dirty} onClick={() => setTerm({ ...preset.terminal, ansi: [...preset.terminal.ansi] })}>
           Reset to {preset.label}
         </Button>
       </div>

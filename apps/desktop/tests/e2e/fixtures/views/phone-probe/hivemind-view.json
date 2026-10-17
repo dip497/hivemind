@@ -1,0 +1,9 @@
+{
+  "id": "phone-probe",
+  "name": "Priya's phone board",
+  "version": "1.0.0",
+  "entry": "main.js",
+  "protocol": 1,
+  "phone": true,
+  "permissions": ["workspace:spawn", "workspace:edit"]
+}

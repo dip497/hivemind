@@ -12,7 +12,7 @@
  * portals this into a popover (FrameNode's AnchoredMenu).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GitBranch, Plus, Check, Loader2 } from "lucide-react";
+import { GitBranch, Plus, Check, Spinner } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { MenuItem } from "./components/ui/menu-item";
@@ -136,13 +136,13 @@ export function WorktreePicker({ repoPath, activePath, onAttach, onCreate }: Wor
       {/* list */}
       <div className="max-h-[280px] overflow-y-auto py-1">
         {err ? (
-          <div className="px-3 py-2 text-[11px] text-[var(--color-err)]">{err}</div>
+          <div className="px-3 py-2 text-count text-[var(--color-err)]">{err}</div>
         ) : list === null ? (
-          <div className="flex items-center gap-2 px-3 py-2 text-[11px] text-[var(--color-fg3)]">
-            <Loader2 size={12} className="animate-spin" /> loading worktrees…
+          <div className="flex items-center gap-2 px-3 py-2 text-count text-[var(--color-fg3)]">
+            <Spinner size={12} className="animate-spin" /> loading worktrees…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="px-3 py-2 text-[11px] text-[var(--color-fg3)]">no worktrees</div>
+          <div className="px-3 py-2 text-count text-[var(--color-fg3)]">no worktrees</div>
         ) : (
           filtered.map((w) => {
             const active = !!activePath && w.path === activePath;
@@ -155,11 +155,11 @@ export function WorktreePicker({ repoPath, activePath, onAttach, onCreate }: Wor
               >
                 <GitBranch className="mt-0.5 text-[var(--color-fg2)]" />
                 <span className="flex flex-col min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5 text-[12px] text-[var(--color-fg)]">
+                  <span className="flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                     <span className="truncate font-medium">{baseName(w.path)}</span>
                     {active && <Check className="shrink-0 text-[var(--color-brand)]" />}
                   </span>
-                  <span className="truncate text-[10px] font-mono text-[var(--color-fg3)]">
+                  <span className="truncate text-chip font-mono text-[var(--color-fg3)]">
                     {w.branch ?? "detached"} · {w.head.slice(0, 7)} · {truncPath(w.path)}
                   </span>
                 </span>

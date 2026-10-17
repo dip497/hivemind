@@ -1,0 +1,361 @@
+//! An agent's terminal, watched from the phone (watching.rs, workspace.rs; docs/design/phone-app-
+//! 2026-10-02.md §5.3): its screen drawn by the core at the size the session took; who holds its
+//! keyboard told by name, and none once this phone holds it; what it takes of the output is
+//! acknowledged; what the person types goes in as it is, in order, the keyboard asked for first and
+//! keys a moment apart; a fit asked for, until it is let go; its end told with its code.
+//! The watch goes on across a dropped connection and the background, its screen drawn anew on each
+//! connection, and ends only with the session; at once, told which, when there is none to watch,
+//! the device refuses it, or does not hold its workspace. A watch stopped lets go of the terminal.
+
+mod support;
+
+use std::{
+    sync::{atomic::Ordering::SeqCst, Arc, Mutex},
+    time::Duration,
+};
+
+use hive_phone::{
+    connections::Connections,
+    failure::Lost,
+    screen::{FIRST_HISTORY, SCROLLBACK},
+    watching::{Ended, Watcher, Watching},
+    workspace::{self, Input},
+};
+use serde_json::json;
+use support::{paired_with, tmp, until, Desk, REFUSED, TILE, WORKSPACE};
+
+/// What a watch told.
+#[derive(Default)]
+struct Told {
+    frames: Mutex<Vec<u64>>,
+    keyboards: Mutex<Vec<Option<String>>>,
+    ended: Mutex<Vec<Ended>>,
+}
+
+impl Watcher for Told {
+    fn frame_ready(&self, revision: u64) {
+        self.frames.lock().unwrap().push(revision);
+    }
+
+    fn keyboard(&self, holder: Option<String>) {
+        self.keyboards.lock().unwrap().push(holder);
+    }
+
+    fn ended(&self, why: Ended) {
+        self.ended.lock().unwrap().push(why);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watched_terminal_is_drawn_at_its_size_and_typed_into_as_the_person_in_order() {
+    let desk = Desk::start(31).await;
+    let phone = paired_with(&tmp("watching"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    let drawn = || {
+        let frame = watching.newest();
+        let first = frame.changed(0).next().map(|(_, line)| line.text.clone());
+        (frame.cols, frame.rows, first)
+    };
+    let screen = (100, 30, Some("Hello from the agent — ready".to_string()));
+    assert!(
+        until(Duration::from_secs(10), || drawn() == screen).await,
+        "{:?}",
+        drawn()
+    );
+    assert!(!told.frames.lock().unwrap().is_empty());
+    assert_eq!(
+        told.keyboards.lock().unwrap()[..],
+        [Some("Sam".to_string())]
+    );
+
+    watching.size(48, 30);
+    watching.type_text("ls -la".into());
+    watching.fit(Some((48, 30)));
+    watching.fit(None);
+    let keys = ["Enter", "down", "down", "ctrl-c"];
+    watching.type_keys(keys.map(String::from).to_vec());
+    let ended = || !told.ended.lock().unwrap().is_empty();
+    assert!(until(Duration::from_secs(10), ended).await);
+    assert_eq!(*told.ended.lock().unwrap(), [Ended::Exited(3)]);
+    let session = format!("hm:{TILE}");
+    let write = |data: &str| json!({ "method": "terminal.write", "params": [session, data] });
+    // Paced: it acknowledges the screen it took, in UTF-16 units as the device counts them. Its
+    // acknowledgements go out as frames come in, whatever is typed meanwhile.
+    assert_eq!(desk.opens.lock().unwrap()[0]["acks"], true);
+    // An app keeps all the scrollback it is sent: it asks for as much as it keeps.
+    assert_eq!(desk.opens.lock().unwrap()[0]["history"], SCROLLBACK);
+    let (acks, typed): (Vec<_>, Vec<_>) = desk
+        .told
+        .lock()
+        .unwrap()
+        .iter()
+        .cloned()
+        .partition(|(_, notice)| notice["method"] == "terminal.ack");
+    let screen = "Hello from the agent — ready".encode_utf16().count();
+    assert_eq!(
+        acks.into_iter().map(|(_, n)| n).collect::<Vec<_>>(),
+        [json!({ "method": "terminal.ack", "params": [session, screen] })]
+    );
+    assert_eq!(
+        typed.iter().map(|(_, n)| n.clone()).collect::<Vec<_>>(),
+        [
+            json!({ "method": "terminal.resize", "params": [session, 48, 30] }),
+            json!({ "method": "terminal.keyboard.ask", "params": [session] }),
+            write("ls -la"),
+            json!({ "method": "terminal.fit", "params": [session, 48, 30] }),
+            json!({ "method": "terminal.fit", "params": [session] }),
+            write("\r"),
+            write("\x1b[B"),
+            write("\x1b[B"),
+            write("\x03"),
+        ]
+    );
+    // Three gaps of 40 ms between the four keys, give or take how late each one came.
+    assert!(typed[8].0 - typed[5].0 >= Duration::from_millis(60));
+    // Given to this phone, its keyboard is the person's own.
+    assert_eq!(told.keyboards.lock().unwrap().last(), Some(&None));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watch_stopped_lets_go_of_the_terminal_even_once_the_person_typed() {
+    let desk = Desk::start(32).await;
+    let phone = paired_with(&tmp("stopped"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    watching.type_text("y".into());
+    let typed = || {
+        desk.notices()
+            .iter()
+            .any(|n| n["method"] == "terminal.write")
+    };
+    assert!(until(Duration::from_secs(10), typed).await);
+    watching.stop();
+    assert!(until(Duration::from_secs(5), || desk.left.load(SeqCst) == 1).await);
+    // Its connection is the phone's still, for all else.
+    assert!(connections.seen()[0].reachable);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watch_goes_on_across_a_dropped_connection_and_the_background_drawn_anew_on_each_and_ends_only_with_the_session(
+) {
+    let desk = Desk::start(33).await;
+    let phone = paired_with(&tmp("resumed"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    let shown = || -> Vec<String> {
+        let frame = watching.newest();
+        let lines = frame.changed(0).map(|(_, line)| line.text.clone());
+        lines.filter(|text| !text.is_empty()).collect()
+    };
+    let showing = |text: &str| shown().iter().any(|line| line.contains(text));
+    assert!(until(Duration::from_secs(10), || showing("Hello from the agent")).await);
+
+    // The connection drops: on the next, the terminal is sent whole again, and drawn in place of
+    // what was shown.
+    *desk.screen.lock().unwrap() = "Hello again".into();
+    desk.drop_connections();
+    assert!(until(Duration::from_secs(10), || showing("Hello again")).await);
+    assert_eq!(shown(), ["Hello again"]);
+
+    // In the background nothing is watched; back in the foreground, it is again.
+    *desk.screen.lock().unwrap() = "Hello once more".into();
+    connections.background();
+    assert!(until(Duration::from_secs(5), || !connections.seen()[0].reachable).await);
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    assert_eq!(desk.opened.load(SeqCst), 2);
+    connections.foreground();
+    assert!(until(Duration::from_secs(10), || showing("Hello once more")).await);
+    assert_eq!(shown(), ["Hello once more"]);
+    assert!(told.ended.lock().unwrap().is_empty());
+
+    // Typed into on the connection it is on now, it ends with its session.
+    watching.type_keys(vec!["ctrl-c".into()]);
+    let ended = || !told.ended.lock().unwrap().is_empty();
+    assert!(until(Duration::from_secs(10), ended).await);
+    assert_eq!(*told.ended.lock().unwrap(), [Ended::Exited(3)]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_watch_with_nothing_to_show_ends_at_once_told_why_once() {
+    let desk = Desk::start(34).await;
+    // Its session ended before it was watched.
+    desk.ended.store(true, SeqCst);
+    let phone = paired_with(&tmp("none"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let not_held = "desk does not hold that workspace now";
+    let cases = [
+        (WORKSPACE, TILE, Ended::NoSession),
+        (
+            WORKSPACE,
+            REFUSED,
+            Ended::Lost(Lost::Refused("not yours to watch".into())),
+        ),
+        (
+            "elsewhere",
+            TILE,
+            Ended::Lost(Lost::NotHeld(not_held.into())),
+        ),
+    ];
+    for (workspace, tile, why) in cases {
+        let told = Arc::new(Told::default());
+        let _watching = Watching::start(
+            &connections,
+            &phone.id(),
+            &desk.id,
+            workspace,
+            tile,
+            told.clone(),
+        );
+        let ended = || !told.ended.lock().unwrap().is_empty();
+        assert!(until(Duration::from_secs(10), ended).await, "{why:?}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(*told.ended.lock().unwrap(), [why]);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_page_asks_for_some_history_as_it_begins_to_watch_and_more_when_the_person_asks() {
+    let desk = Desk::start(35).await;
+    let phone = paired_with(&tmp("history"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let connection = connections.kept_for(&desk.id, WORKSPACE).await.unwrap();
+    let (put, mut inputs) = tokio::sync::mpsc::unbounded_channel();
+    let (sent, sending) = tokio::sync::mpsc::channel(64);
+    put.send(Input::History(800)).unwrap();
+    put.send(Input::Text("\x03".into())).unwrap();
+    let watched = workspace::watch(
+        &connection,
+        WORKSPACE,
+        TILE,
+        FIRST_HISTORY,
+        Some(sending),
+        |_| {},
+    );
+    let ended = tokio::select! {
+        ended = watched => ended,
+        never = workspace::pass_on(&mut inputs, sent) => match never {},
+    };
+    assert!(ended.unwrap().is_some());
+    assert_eq!(desk.opens.lock().unwrap()[0]["history"], FIRST_HISTORY);
+    let session = format!("hm:{TILE}");
+    assert_eq!(
+        desk.notices()
+            .into_iter()
+            .filter(|n| n["method"] != "terminal.ack")
+            .collect::<Vec<_>>(),
+        [
+            json!({ "method": "terminal.history", "params": [session, 800] }),
+            json!({ "method": "terminal.keyboard.ask", "params": [session] }),
+            json!({ "method": "terminal.write", "params": [session, "\x03"] }),
+        ]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_scroll_goes_to_a_program_that_draws_its_own_screen_as_wheel_reports() {
+    let desk = Desk::start(36).await;
+    // Claude's TUI: the alternate screen, the mouse taken, reported as SGR.
+    *desk.screen.lock().unwrap() = "\x1b[?1049h\x1b[?1000h\x1b[?1006hthe transcript".into();
+    let phone = paired_with(&tmp("scroll"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    let drawn = || {
+        watching
+            .newest()
+            .changed(0)
+            .any(|(_, line)| line.text == "the transcript")
+    };
+    assert!(until(Duration::from_secs(10), drawn).await);
+
+    assert!(watching.scroll(-2, 10, 5));
+    let session = format!("hm:{TILE}");
+    let wheel =
+        json!({ "method": "terminal.write", "params": [session, "\x1b[<64;10;5M\x1b[<64;10;5M"] });
+    let sent = || {
+        desk.told
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, notice)| *notice == wheel)
+    };
+    assert!(
+        until(Duration::from_secs(10), sent).await,
+        "{:?}",
+        desk.told.lock().unwrap()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_shell_scrolled_is_the_views_to_scroll_and_nothing_is_typed() {
+    let desk = Desk::start(37).await;
+    let phone = paired_with(&tmp("scroll-shell"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let told = Arc::new(Told::default());
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        told.clone(),
+    );
+    let drawn = || {
+        watching
+            .newest()
+            .changed(0)
+            .next()
+            .is_some_and(|(_, l)| !l.text.is_empty())
+    };
+    assert!(until(Duration::from_secs(10), drawn).await);
+
+    assert!(!watching.scroll(-2, 10, 5));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let writes = desk
+        .told
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(_, notice)| notice["method"] == "terminal.write")
+        .count();
+    assert_eq!(writes, 0);
+}

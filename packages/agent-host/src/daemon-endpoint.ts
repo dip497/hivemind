@@ -1,6 +1,6 @@
 /** One PTY daemon connection over any transport: attach, stream, and re-attach live tiles after a drop. */
 import type { Duplex } from "node:stream";
-import { type ClientMsg, type ServerMsg, type SessionInfo, frame, makeLineDecoder } from "./pty-protocol.js";
+import { type ClientMsg, type ServerMsg, type SessionInfo, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
 
 export interface SpawnOpts {
   tileId: string;
@@ -14,11 +14,26 @@ export interface SpawnOpts {
   noSpawn?: boolean;
   /** With noSpawn: a running session only; one saved before a reboot is not restored. */
   liveOnly?: boolean;
+  /** At most this many lines of scrollback in the replay of a running session. */
+  lines?: number;
+  /** A session put to sleep is restored (its agent resumed); without it, one is answered `asleep`. */
+  wake?: boolean;
 }
+
+/** How long a sleep or a wake is waited for: an agent may take seconds to end, or to resume. */
+const WAKE_TIMEOUT_MS = 30_000;
+/** How long a sleeping session's saved screen is waited for. */
+const SAVED_TIMEOUT_MS = 10_000;
+
+/** What an attach came to: `pid` -1 when nothing runs, `asleep` when that is because it sleeps. */
+export interface Attached { pid: number; asleep?: true }
 export interface Callbacks {
   /** `replay`: a redraw of output already seen, not new output. */
   onData: (data: string, replay?: boolean) => void;
-  onExit: (code: number, signal: number | undefined) => void;
+  /** `slept`: it was put to sleep (`sleep`), not ended: an attach brings it back. */
+  onExit: (code: number, signal: number | undefined, slept?: boolean) => void;
+  /** The session's size, as its daemon says it on attaching and whenever it changes. */
+  onSize?: (cols: number, rows: number) => void;
 }
 type AttachSpec = Extract<ClientMsg, { t: "attach" }>["spec"];
 
@@ -28,6 +43,8 @@ export const REATTACH_RESET = "\x1bc";
 export interface EndpointOptions {
   /** Open a fresh transport to the daemon; reject when it is unreachable. */
   connect: () => Promise<Duplex>;
+  /** The environment sessions this endpoint starts begin from, as it is now. */
+  env?: () => Record<string, string>;
   retryInitialMs?: number;
   retryMaxMs?: number;
   attachTimeoutMs?: number;
@@ -48,7 +65,7 @@ export class DaemonEndpoint {
   private connecting: Promise<Duplex> | null = null;
   private readonly cbs = new Map<string, Callbacks>();
   private readonly specs = new Map<string, AttachSpec>();
-  private readonly pending = new Map<string, (r: { pid: number }) => void>();
+  private readonly pending = new Map<string, (r: Attached & { error?: string; gone?: true }) => void>();
   /** Where each tile's output stands, so a re-attach asks only for what it missed. */
   private readonly pos = new Map<string, { seq: number; epoch: string }>();
   /** Tiles whose session exists in the daemon: a re-attach must never start them again. */
@@ -57,6 +74,9 @@ export class DaemonEndpoint {
   private readonly screens = new Map<string, (replay: string | null) => void>();
   private seq = 0;
   private retry: ReturnType<typeof setTimeout> | null = null;
+  /** The socket this process serves the machine's control plane on (`control`): claimed again on
+   *  each connection, which is kept up from then on. */
+  private controlSock: string | null = null;
   private attempts = 0;
   private closed = false;
   private state: EndpointState = "idle";
@@ -75,6 +95,12 @@ export class DaemonEndpoint {
   private handle(msg: ServerMsg): void {
     switch (msg.t) {
       case "attached": {
+        if (msg.asleep) {
+          const cb = this.cbs.get(msg.id);
+          this.forget(msg.id);
+          // It was put to sleep while we were away.
+          if (msg.reqId.startsWith("re")) cb?.onExit(0, undefined, true);
+        }
         if (msg.error && (msg.reqId.startsWith("re") || this.live.has(msg.id))) {
           const cb = this.cbs.get(msg.id);
           this.forget(msg.id);
@@ -83,11 +109,13 @@ export class DaemonEndpoint {
         }
         if (msg.pid > 0) this.live.add(msg.id);
         if (msg.seq !== undefined && msg.epoch) this.pos.set(msg.id, { seq: msg.seq, epoch: msg.epoch });
+        // The size first: the replay is drawn at it.
+        if (msg.pid > 0 && msg.cols && msg.rows) this.cbs.get(msg.id)?.onSize?.(msg.cols, msg.rows);
         // A delta continues the stream exactly; a redraw of a tile that shows the old screen starts from a reset.
         const redraw = msg.reqId.startsWith("re") && !msg.delta;
         if (msg.replay) this.cbs.get(msg.id)?.onData(redraw ? REATTACH_RESET + msg.replay : msg.replay, true);
         const resolve = this.pending.get(msg.reqId);
-        if (resolve) { this.pending.delete(msg.reqId); resolve({ pid: msg.pid }); }
+        if (resolve) { this.pending.delete(msg.reqId); resolve({ pid: msg.pid, ...(msg.asleep ? { asleep: true as const } : {}), ...(msg.gone ? { gone: true as const } : {}), ...(msg.error ? { error: msg.error } : {}) }); }
         break;
       }
       case "data": {
@@ -96,6 +124,9 @@ export class DaemonEndpoint {
         this.cbs.get(msg.id)?.onData(msg.data);
         break;
       }
+      case "size":
+        this.cbs.get(msg.id)?.onSize?.(msg.cols, msg.rows);
+        break;
       case "resync":
         this.pos.set(msg.id, { seq: msg.seq, epoch: msg.epoch });
         this.cbs.get(msg.id)?.onData(REATTACH_RESET + msg.replay, true);
@@ -112,7 +143,10 @@ export class DaemonEndpoint {
         break;
       }
       case "pong":
-      case "sessions": {
+      case "slept":
+      case "sessions":
+      case "control":
+      case "viewport": {
         const reply = this.replies.get(msg.reqId);
         if (reply) { this.replies.delete(msg.reqId); reply(msg); }
         break;
@@ -120,7 +154,7 @@ export class DaemonEndpoint {
       case "exit": {
         const cb = this.cbs.get(msg.id);
         this.forget(msg.id);
-        cb?.onExit(msg.code, msg.signal ?? undefined);
+        cb?.onExit(msg.code, msg.signal ?? undefined, msg.slept);
         break;
       }
       default:
@@ -132,6 +166,7 @@ export class DaemonEndpoint {
     this.conn = s;
     this.status("online");
     s.write(frame({ t: "hello", caps: this.o.onEvent ? ["resync", "events"] : ["resync"] }));
+    if (this.controlSock) s.write(frame({ t: "control", reqId: `c${++this.seq}`, sock: this.controlSock }));
     s.on("data", makeLineDecoder(
       (line) => { try { this.handle(JSON.parse(line) as ServerMsg); } catch { /* not a protocol line */ } },
       () => { this.status("reconnecting", "the daemon sent a line that never ended"); s.destroy(); },
@@ -168,6 +203,11 @@ export class DaemonEndpoint {
     return this.connecting;
   }
 
+  /** What an attach that may start a session carries: the environment it starts from. */
+  private base(): { base?: Record<string, string> } {
+    return this.o.env ? { base: this.o.env() } : {};
+  }
+
   private async send(msg: ClientMsg): Promise<void> {
     (await this.ensure()).write(frame(msg));
   }
@@ -177,7 +217,7 @@ export class DaemonEndpoint {
   }
 
   private scheduleReattach(): void {
-    if (this.retry || this.closed || this.cbs.size === 0 || this.o.isPaused?.()) return;
+    if (this.retry || this.closed || (this.cbs.size === 0 && !this.controlSock) || this.o.isPaused?.()) return;
     const base = this.o.retryInitialMs ?? 250;
     const max = this.o.retryMaxMs ?? 30_000;
     // Jittered, so several machines dropped by one network blip don't reconnect in lockstep.
@@ -193,7 +233,7 @@ export class DaemonEndpoint {
       for (const [id, spec] of this.specs) {
         if (!this.cbs.has(id)) continue;
         const since = this.pos.get(id);
-        c.write(frame({ t: "attach", reqId: `re${++this.seq}`, id, spec, ...(since ? { since } : {}), ...(this.live.has(id) ? { noSpawn: true } : {}) }));
+        c.write(frame({ t: "attach", reqId: `re${++this.seq}`, id, spec, ...(since ? { since } : {}), ...(this.live.has(id) ? { noSpawn: true } : this.base()) }));
       }
     } catch (e) {
       this.attempts++;
@@ -234,25 +274,38 @@ export class DaemonEndpoint {
     return Math.round(performance.now() - t0);
   }
 
+  /**
+   * Serve the machine's control plane on `sock` from now on (`hive host`): the daemon passes each
+   * connection to its own control-plane socket on to `sock`, and this endpoint claims it again on
+   * every connection after, which it keeps up. Rejects when the daemon serves none (one the app
+   * started).
+   */
+  async control(sock: string, timeoutMs = 10_000): Promise<void> {
+    const r = await this.request<Extract<ServerMsg, { t: "control" }>>({ t: "control", reqId: `c${++this.seq}`, sock }, timeoutMs);
+    if (r.error) throw new Error(r.error);
+    this.controlSock = sock;
+  }
+
   /** Every session in the daemon, connecting if needed. */
   async sessions(timeoutMs = 15_000): Promise<SessionInfo[]> {
     const r = await this.request<Extract<ServerMsg, { t: "sessions" }>>({ t: "list", reqId: `l${++this.seq}`, detail: true }, timeoutMs);
     return r.detail ?? [];
   }
 
-  async spawn(opts: SpawnOpts, cb: Callbacks): Promise<{ pid: number }> {
+  async spawn(opts: SpawnOpts, cb: Callbacks): Promise<Attached> {
     this.cbs.set(opts.tileId, cb);
     const spec: AttachSpec = { cwd: opts.cwd, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: opts.env };
     this.specs.set(opts.tileId, spec);
     if (opts.noSpawn) this.live.add(opts.tileId);
     const reqId = `a${++this.seq}`;
-    const result = new Promise<{ pid: number }>((resolve) => {
+    const result = new Promise<Attached & { error?: string; gone?: true }>((resolve) => {
       this.pending.set(reqId, resolve);
-      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, this.o.attachTimeoutMs ?? 6000);
+      // A wake starts an agent that resumes its conversation: given as long as a sleep.
+      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, Math.max(this.o.attachTimeoutMs ?? 6000, opts.wake ? WAKE_TIMEOUT_MS : 0));
       t.unref?.();
     });
     try {
-      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : {}), ...(opts.liveOnly ? { liveOnly: true } : {}) });
+      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}), ...(opts.wake ? { wake: true } : {}) });
     } catch (e) {
       // Unreachable now (e.g. offline): keep retrying so the tile attaches once it is back.
       const msg = e instanceof Error ? e.message : String(e);
@@ -260,20 +313,53 @@ export class DaemonEndpoint {
       if (!this.o.isFatal?.(msg)) this.scheduleReattach();
       if (this.pending.delete(reqId)) return { pid: -1 };
     }
-    return result;
+    const r = await result;
+    // Refused (nothing asleep there, or what it saved cannot be read): nothing to bring back later.
+    if (opts.wake && r.error) {
+      this.forget(opts.tileId);
+      throw r.gone ? new NothingAsleep(r.error) : new Error(r.error);
+    }
+    return r.asleep ? { pid: r.pid, asleep: true } : { pid: r.pid };
   }
 
   has(tileId: string): boolean { return this.specs.has(tileId); }
   write(tileId: string, data: string, paste?: boolean): void { this.fire({ t: "write", id: tileId, data, ...(paste ? { paste: true } : {}) }); }
   resize(tileId: string, cols: number, rows: number): void { this.fire({ t: "resize", id: tileId, cols, rows }); }
+  repaint(tileId: string): void { this.fire({ t: "repaint", id: tileId }); }
   pause(tileId: string): void { this.fire({ t: "pause", id: tileId }); }
   resume(tileId: string): void { this.fire({ t: "resume", id: tileId }); }
-  /** The session's screen now. `cb` runs synchronously in the message loop, so every data
-   *  callback after it carries bytes the screen does not already show. */
-  screen(tileId: string, cb: (replay: string | null) => void): void {
+  /** The session's screen now, with at most `lines` of its scrollback. `cb` runs synchronously in
+   *  the message loop, so every data callback after it carries bytes the screen does not already
+   *  show. */
+  screen(tileId: string, cb: (replay: string | null) => void, lines?: number): void {
     const reqId = `sc${++this.seq}`;
     this.screens.set(reqId, cb);
-    this.send({ t: "screen", reqId, id: tileId }).catch(() => { this.screens.delete(reqId); cb(null); });
+    this.send({ t: "screen", reqId, id: tileId, lines }).catch(() => { this.screens.delete(reqId); cb(null); });
+  }
+
+  /** The session's screen as text, line by line, as the daemon reads it; null when it is not
+   *  running. */
+  async viewport(tileId: string, timeoutMs = 5_000): Promise<string | null> {
+    const r = await this.request<Extract<ServerMsg, { t: "viewport" }>>({ t: "viewport", reqId: `v${++this.seq}`, id: tileId }, timeoutMs);
+    return r.text;
+  }
+
+  /** End the session's process but keep it, its screen saved, for an attach to bring back. Rejects
+   *  with the daemon's reason. */
+  async sleep(tileId: string, timeoutMs = WAKE_TIMEOUT_MS): Promise<void> {
+    const r = await this.request<Extract<ServerMsg, { t: "slept" }>>({ t: "sleep", reqId: `z${++this.seq}`, id: tileId }, timeoutMs);
+    if (r.error) throw new Error(r.error);
+  }
+
+  /** What a sleeping session saved as its screen, with its newest 1000 lines when `lines` asks for no
+   *  more (none: all of it); null when the daemon keeps it running or not at all. */
+  saved(tileId: string, lines?: number): Promise<string | null> {
+    return new Promise((resolve) => {
+      const reqId = `sv${++this.seq}`;
+      this.screens.set(reqId, resolve);
+      setTimeout(() => { if (this.screens.delete(reqId)) resolve(null); }, SAVED_TIMEOUT_MS).unref?.();
+      this.send({ t: "screen", reqId, id: tileId, saved: true, ...(lines !== undefined ? { lines } : {}) }).catch(() => { this.screens.delete(reqId); resolve(null); });
+    });
   }
 
   /** Terminate the session in the daemon. */

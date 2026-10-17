@@ -15,26 +15,23 @@
  */
 
 export type ToolbarActionId =
-  | "terminal" | "agent" | "explorer" | "diff" | "issues" | "frame" | "browser" | "theme";
+  | "agent" | "frame" | "browser" | "board" | "theme";
 
 export interface ToolbarAction {
   readonly id: ToolbarActionId;
   readonly label: string;
-  /** The hotkey hint the toolbar prints on the button (the number-row keys). */
+  /** The hotkey hint the toolbar prints on the button (the number-row keys); empty when no key opens it. */
   readonly hint: string;
 }
 
 /** The catalog, in the order a toolbar shows them when the user has no
  *  preference. Frozen: callers hand this straight to a renderer. */
 export const BUILTIN_TOOLBAR_ACTIONS: readonly ToolbarAction[] = Object.freeze([
-  Object.freeze({ id: "terminal", label: "Terminal", hint: "1" }),
   Object.freeze({ id: "agent", label: "Agent", hint: "2" }),
-  Object.freeze({ id: "explorer", label: "Explorer", hint: "3" }),
-  Object.freeze({ id: "diff", label: "Diff", hint: "4" }),
-  Object.freeze({ id: "issues", label: "Issues", hint: "5" }),
   Object.freeze({ id: "frame", label: "Frame", hint: "6" }),
   Object.freeze({ id: "browser", label: "Browser", hint: "7" }),
-  Object.freeze({ id: "theme", label: "Theme", hint: "8" }),
+  Object.freeze({ id: "board", label: "Add", hint: "" }),
+  Object.freeze({ id: "theme", label: "Theme", hint: "" }),
 ] as const);
 
 /** The default order as bare ids. */

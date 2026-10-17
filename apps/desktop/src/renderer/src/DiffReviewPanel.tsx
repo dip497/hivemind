@@ -1,12 +1,12 @@
 /**
  * DiffReviewPanel — a GitHub-style review surface for the DiffTile. Lists every
  * review comment GROUPED BY FILE (unresolved first), each a thread you can
- * reply to, resolve, jump to in the diff, or send to claude. Rendered as a
+ * reply to, resolve, jump to in the diff, or send to an agent. Rendered as a
  * collapsible right column inside the DiffTile; DiffTile owns the comment data
  * + actions.
  */
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X } from "./components/icons";
 import type { ReviewComment } from "./diff-comments";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -36,9 +36,9 @@ export function DiffReviewPanel({ comments, onJump, onReply, onResolve, onDelete
 
   return (
     <aside className="nodrag flex flex-col w-[280px] shrink-0 border-l border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden">
-      <header className="flex items-center gap-2 px-2.5 h-8 border-b border-[var(--color-line)] text-[11px] font-semibold text-[var(--color-fg2)]">
+      <header className="flex items-center gap-2 px-2.5 h-8 border-b border-[var(--color-line)] text-count font-semibold text-[var(--color-fg2)]">
         <span>Review</span>
-        <span className="font-mono text-[10px] text-[var(--color-fg3)] tabular-nums">
+        <span className="font-mono text-chip text-[var(--color-fg3)] tabular-nums">
           {unresolved} open{comments.length > unresolved ? ` · ${comments.length - unresolved} resolved` : ""}
         </span>
         <Button
@@ -47,7 +47,7 @@ export function DiffReviewPanel({ comments, onJump, onReply, onResolve, onDelete
           className="ml-auto"
           onClick={onSendAll}
           disabled={unresolved === 0}
-          title="Send all unresolved comments to claude"
+          title="Send all unresolved comments to an agent"
         >
           send all
         </Button>
@@ -56,15 +56,15 @@ export function DiffReviewPanel({ comments, onJump, onReply, onResolve, onDelete
         </Button>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-3 text-[12px]">
+      <div className="flex-1 overflow-y-auto p-2 space-y-3 text-label">
         {comments.length === 0 && (
-          <div className="text-[11px] text-[var(--color-fg3)] px-1 py-2">
+          <div className="text-count text-[var(--color-fg3)] px-1 py-2">
             No comments yet. Click a line number in the diff (or select a range) to comment — on any line, changed or not.
           </div>
         )}
         {[...byFile.entries()].map(([file, list]) => (
           <div key={file}>
-            <div className="px-1 mb-1 font-mono text-[10px] text-[var(--color-fg3)] truncate" title={file}>
+            <div className="px-1 mb-1 font-mono text-chip text-[var(--color-fg3)] truncate" title={file}>
               {file}
             </div>
             <div className="space-y-1.5">
@@ -106,7 +106,7 @@ function CommentThread({
           : "border-[var(--color-line2)] bg-[var(--color-bg3)]"
       }`}
     >
-      <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-fg3)]">
+      <div className="flex items-center gap-1.5 text-chip text-[var(--color-fg3)]">
         <Button variant="link" size="micro" font="mono" onClick={onJump} title="Jump to lines">
           {fmtRange(c)}
         </Button>
@@ -116,8 +116,8 @@ function CommentThread({
       </div>
       <div className="mt-1 text-[var(--color-fg)] whitespace-pre-wrap break-words">{c.body}</div>
       {c.replies?.map((r, i) => (
-        <div key={i} className="mt-1 pl-2 border-l border-[var(--color-line2)] text-[11px]">
-          <span className="text-[10px] text-[var(--color-fg3)]">{r.author}</span>
+        <div key={i} className="mt-1 pl-2 border-l border-[var(--color-line2)] text-count">
+          <span className="text-chip text-[var(--color-fg3)]">{r.author}</span>
           <div className="text-[var(--color-fg2)] whitespace-pre-wrap break-words">{r.body}</div>
         </div>
       ))}
@@ -130,11 +130,11 @@ function CommentThread({
           className="flex-1 min-w-0"
         />
       </div>
-      <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
+      <div className="mt-1.5 flex items-center gap-1.5 text-chip">
         <Button variant="outline" size="2xs" onClick={onResolve}>
           {c.resolved ? "reopen" : "resolve"}
         </Button>
-        <Button variant="outline" size="2xs" onClick={onSend} title="Send this comment to claude">
+        <Button variant="outline" size="2xs" onClick={onSend} title="Send this comment to an agent">
           → claude
         </Button>
         <Button variant="destructive" size="2xs" className="ml-auto" onClick={onDelete} title="Delete comment">

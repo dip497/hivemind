@@ -177,38 +177,58 @@ function separateSiblingFrames(
 }
 
 /**
- * Slot for a NEW tile inside a frame. Extends the current top row to the right
- * if the tile still fits within `maxRowWidth` (measured from the leftmost
- * member); otherwise wraps to a fresh row below everything. Top-aligned within
- * a row. `members` are the absolute rects of tiles already in the frame.
+ * First free slot for a NEW tile inside a frame. Beside `near` (the tile that
+ * opened it) when that is free, right of it and then below it; otherwise fill
+ * gaps in reading order, left to right and then down, within the preferred row
+ * width. `members` are the absolute rects of tiles already in the frame.
  */
 export function nextSlotInFrame(
   origin: { x: number; y: number },
   members: LayoutRect[],
   tile: { w: number; h: number },
-  opts: { padX: number; padTop: number; gap: number; maxRowWidth?: number },
+  opts: { padX: number; padTop: number; gap: number; maxRowWidth?: number; near?: LayoutRect },
 ): { x: number; y: number } {
   const startX = origin.x + opts.padX;
   const startY = origin.y + opts.padTop;
-  if (members.length === 0) return { x: startX, y: startY };
-
-  const maxRowWidth = opts.maxRowWidth ?? FRAME_ROW_MAX;
-  // Single pass — avoid four array allocations per call.
-  let leftX = Infinity, rightX = -Infinity, topY = Infinity, botY = -Infinity;
-  for (const m of members) {
-    if (m.x < leftX) leftX = m.x;
-    if (m.x + m.w > rightX) rightX = m.x + m.w;
-    if (m.y < topY) topY = m.y;
-    if (m.y + m.h > botY) botY = m.y + m.h;
+  const n = opts.near;
+  if (n) {
+    for (const c of [{ x: n.x + n.w + opts.gap, y: n.y }, { x: n.x, y: n.y + n.h + opts.gap }]) {
+      if (!members.some((m) => overlaps({ id: "", ...c, ...tile }, m, opts.gap))) return c;
+    }
   }
-
-  const candidateX = rightX + opts.gap;
-  if (candidateX + tile.w - leftX <= maxRowWidth) {
-    // Fits on the current row — top-align with the existing row.
-    return { x: candidateX, y: topY };
+  const rightLimit = startX + Math.max(opts.maxRowWidth ?? FRAME_ROW_MAX, tile.w);
+  // A free rectangle can start at the pad or just below an occupant. For each
+  // row, skip directly past boxes that block it instead of probing every pixel.
+  const rows = [...new Set([startY, ...members.map((m) => m.y + m.h + opts.gap).filter((y) => y >= startY)])].sort((a, b) => a - b);
+  for (const y of rows) {
+    let x = startX;
+    while (x + tile.w <= rightLimit) {
+      let blockedUntil = x;
+      for (const m of members) {
+        const vertical = y + tile.h + opts.gap > m.y && m.y + m.h + opts.gap > y;
+        const horizontal = x + tile.w + opts.gap > m.x && m.x + m.w + opts.gap > x;
+        if (vertical && horizontal) blockedUntil = Math.max(blockedUntil, m.x + m.w + opts.gap);
+      }
+      if (blockedUntil === x) return { x, y };
+      x = blockedUntil;
+    }
   }
-  // Wrap: new row below everything, back at the left edge.
-  return { x: startX, y: botY + opts.gap };
+  // The last candidate is below every member and always has room.
+  return { x: startX, y: Math.max(startY, ...members.map((m) => m.y + m.h + opts.gap)) };
+}
+
+/** Reserve a tile's box before React commits the tile and canvas position. */
+export function reserveTileSlot(
+  id: string,
+  origin: { x: number; y: number },
+  members: LayoutRect[],
+  pending: Map<string, LayoutRect>,
+  tile: { w: number; h: number },
+  opts: { padX: number; padTop: number; gap: number; maxRowWidth?: number; near?: LayoutRect },
+): { x: number; y: number } {
+  const slot = nextSlotInFrame(origin, [...members, ...[...pending.values()].filter((r) => r.id !== id)], tile, opts);
+  pending.set(id, { id, ...slot, ...tile });
+  return slot;
 }
 
 // ── opt-in arrange (Columns / Rows / Grid) ──────────────────────────────────
@@ -314,7 +334,9 @@ function tileBox(f: FrameGeom, mem: MemberRect[] | undefined, k: FrameLayoutCons
   return {
     x: Math.round(minX - k.pad),
     y: Math.round(minY - k.header),
-    w: Math.round(maxR - minX + k.pad * 2),
+    // Never narrower than an empty frame: its header's chrome needs that much, and a small
+    // member (a sticky note) would otherwise squeeze it out of the frame.
+    w: Math.max(k.emptyW, Math.round(maxR - minX + k.pad * 2)),
     h: Math.round(maxB - minY + k.header + k.pad),
   };
 }

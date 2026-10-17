@@ -25,6 +25,8 @@ can *declare*, if it also says how it is done:
   files `session.resume` names, how many of each file's first lines hold them (`lines`)
 - **a turn signal** and **brokering permission prompts** need the manifest to wire the
   agent to the control plane: `launch.hcp` plus the hook file it ships beside it
+- **a hook entry that reports** (`emit:`) needs `launch.hcp`: each report is signed in with
+  the tile's own token, which only that launch gives the agent
 
 A manifest that claims one of those without saying how is refused when Hivemind reads it.
 A capability that is claimed but never delivered is worse than one that is missing: the
@@ -109,7 +111,7 @@ Hivemind adds it at startup and says so — no questions. The notice says what t
 do, with a Remove button. It only adds when the files match their checksums, the manifest
 names the CLI that was found, and that CLI answers `--version` like one; and it can never
 replace an agent you already have. Remove one and it stays removed. Switch this off under
-**Settings ▸ Agents ▸ Add agents found on this machine**. Adding the listing itself is a
+**Settings ▸ Plugins ▸ Agents ▸ Add agents found on this machine**. Adding the listing itself is a
 pull request to [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).
 
 ## Install, list and remove
@@ -127,10 +129,11 @@ next start.
 
 ## Turn agents on and off
 
-**Settings ▸ Agents** lists every agent Hivemind found, grouped into the ones this
+**Settings ▸ Plugins** lists every agent Hivemind found, grouped into the ones this
 machine has, the ones it does not (each saying which command it needs), and the ones you
 switched off. The control on a row makes that agent the default; open a row for its
-launch options, or to switch it off. Turning one off removes it from
+launch options, its README, or to switch it off (`hive plugins disable agent:<id>` does the
+same). Turning one off removes it from
 every picker and from `hive ctl spawn`; turning it back on restores it. Agents HiveHub
 added can be turned off too, or removed for good.
 
@@ -172,6 +175,143 @@ of the screen with `scope: { kind: tail, n: 20 }`.
 pattern can freeze the window: `(a+)+$` against 41 characters takes about a second, and
 Hivemind checks every agent's screen every 1.2 seconds. Every test above runs in time
 proportional to the line it reads.
+
+## Allow and Deny from your phone
+
+When an agent asks permission on its screen, your phone can show **Allow** and **Deny** on
+the notification and in its list, if the agent's file says which keys answer that prompt:
+
+```yaml
+answer:
+  permission:
+    allow: ['1']        # the keys that allow what it asks
+    deny: [escape]      # the keys that deny it
+```
+
+Each list is one to four keys, written as `hive ctl keys` takes them: a word such as
+`enter`, `escape`, `up` or `tab`, or anything else typed as it is. Quote a digit (`'1'`),
+or YAML reads it as a number. Hivemind types the keys into the agent's terminal one after
+another, only while the agent still waits on that same prompt, and only once.
+
+Read the keys from the real program, not from memory: a wrong key answers the wrong way.
+Claude Code, for example, takes a digit as that option of its chooser, and its first option
+is always "Yes"; Esc is "No, and tell Claude what to do differently". An agent whose file
+says nothing here is answered on your phone as on its screen, with a line of text.
+
+When the agent keeps a conversation your phone can read ("The conversation on your phone"),
+the prompt shows the tool it waits to use and what that is about, whole: the exact command, the
+file, the address.
+
+### Questions with options
+
+When the agent asks you a question with options to choose from (Claude Code's AskUserQuestion),
+your phone shows the question and each option, never Allow and Deny, if the agent's
+conversation maps the tool's questions (`asks`, below). Tapping an option types the keys that
+choose it, if the agent's file says which keys those are:
+
+```yaml
+choose: ['{n}']         # {n} is the option's number, counting from 1
+```
+
+One to four keys, written as for `answer`, one of them with `{n}` in it. Claude Code 2.1.296
+takes a digit as that option and sends it, for one question with one answer. A question that
+allows several answers, several questions, or an agent whose file says nothing here, is
+answered with a line of text, the options listed above it.
+
+### Screens that ask something else
+
+Some screens ask permission for something other than a tool: Claude Code's "Is this a project
+you trust?" when it opens a new folder, say. Its keys are not a tool prompt's. Give the rule that
+reads the screen a name with `says`, and its keys under that name:
+
+```yaml
+detect:
+  rules:
+    - when: { all: [{ contains: "Yes, I trust this folder" }, { contains: "Enter to confirm" }] }
+      then: permission
+      says: trust
+answer:
+  trust:
+    allow: [down, enter]   # "No, exit" is selected first
+    deny: [escape]
+```
+
+The name is lowercase letters, digits and `-`, and only a rule that waits (`permission`,
+`question`, `blocked`) may give one. Your phone and the agents list show which screen it
+is, and Allow and Deny type that screen's keys. A screen with a name and no keys of its own
+is answered with a line of text, never with a tool prompt's keys.
+
+## Stop from your phone
+
+Your phone can stop an agent's turn — interrupt what it is doing, as Esc does at your
+desk — if the agent's file says which keys do that:
+
+```yaml
+interrupt: [escape]     # the keys that interrupt its turn
+```
+
+One to four keys, written as for `answer`. Hivemind types them only while the agent is at
+work or waiting, and its status says it was interrupted. Read the key from the real
+program: Claude Code shows "esc to interrupt" while it works. Some CLIs quit on a second
+Ctrl+C, so never guess. An agent whose file says nothing here has no Stop on your phone;
+you can still close it there.
+
+## The conversation on your phone
+
+Your phone can show what the agent and you say to each other as a conversation, rather than
+its terminal, if Hivemind can read the agent's own session file. Hivemind knows no agent's
+format: the manifest maps it under `session.transcript`, beside `resume.exists`, which says where
+the file is. The file is read one JSON record a line; each rule under `said` says which records
+it reads (`require`: fields equal to these values), whether it reads the record itself or each
+item of a list in it (`each`, the items `item` requires), and what it reads there, exactly one of:
+
+- `text` and `who` (`person` or `agent`): what was said, in markdown;
+- `tool`: a tool the agent used, its `id` and `name`, and `about`, the first of these fields
+  that is text (its first line, at most 120 characters; whole, up to 4,000, on a prompt waiting on
+  you), and `asks`, the questions it asks you: `list`, where they are, and in each its
+  `question`, its `options`, each option's `label` and `description` (what it means, shown under
+  it), and `many`, whether several may be chosen; and `input`, the field holding its input, which your phone shows whole when you open
+  the tool's row (text as it is, anything else as JSON);
+- `result`: what a tool gave back, `of` the use it answers, its `text` (text, or a list whose
+  items' `text` are joined a line each, cut to 2,000 characters in the conversation, whole up to
+  256 KiB when you open the tool's row), and `error` when that field is `true`.
+
+Rules over the same list read it together, each item by the first rule that requires it, in the
+list's order. A record with a value under `skipWhen`, or with no `id` or no `at` (an ISO 8601
+time), says nothing. Claude Code's, as its manifest maps it:
+
+```yaml
+session:
+  resume:
+    exists: '{home}/.claude/projects/*/{id}.jsonl'
+  transcript:
+    id: uuid
+    at: timestamp
+    skipWhen: { isSidechain: true, isMeta: true }
+    said:
+    - { require: { type: user }, text: message.content, who: person }
+    - { require: { type: user }, each: message.content, item: { type: text }, text: text, who: person }
+    - require: { type: user }
+      each: message.content
+      item: { type: tool_result }
+      result: { of: tool_use_id, text: content, error: is_error }
+    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }
+    - require: { type: assistant }
+      each: message.content
+      item: { type: tool_use }
+      tool:
+        id: id
+        name: name
+        about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
+        input: input
+        asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
+```
+
+Hivemind finds the file for the session the agent's tile is in, reads its end, and sends your
+phone each new piece as it is written. `conformance/conversation.json` has cases to check a mapping
+against. When the agent begins another session (Claude Code's `/clear`), your phone moves to it
+once its file is written; for that, the agent's tracker hook (or `launch.hcp`, which gives the
+agent its tile as `$HIVEMIND_TILE`) has to record the new session for its tile.
 
 ## Icons
 

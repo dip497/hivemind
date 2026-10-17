@@ -24,6 +24,9 @@ some agents report a session start mid-turn.
 
 A host may read a session's screen until the session's first event, and only then: from the
 first event the fold alone decides, starting from the initial status, not from what the screen
-last read.
+last read. Two readings of the agent's own screen still count, because no event reports them: a
+chooser shown while the fold says `working` is `waiting` until the screen moves on or an event
+comes, and a `waiting` status ends (`idle`) when the screen moves from a chooser to the agent's
+prompt.
 
 Cases: `../conformance/status.json`.

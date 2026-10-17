@@ -1,0 +1,586 @@
+/**
+ * hive-net's daemon, for this process (R11, M1): started as a child with a local socket this
+ * process listens on (0600; a named pipe on Windows), and spoken to in frames of a u32 big-endian
+ * length and the bytes (`crates/hive-net/src/daemon.rs`), each tagged: a message in JSON, or a frame
+ * on a stream as its bytes. In the daemon's protocol `PROTOCOL`, which each side says it speaks
+ * before anything else. The
+ * network is the daemon's: it finds devices, holds connections and admits only the devices given
+ * to it. What the frames on a connection mean is ours.
+ */
+import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import net from "node:net";
+
+/** Where a device can be reached: its direct addresses, and a relay it uses. */
+export interface Where {
+  addrs: string[];
+  relay: string | null;
+}
+
+/** This device on the network, as the daemon found it. */
+export interface Ready extends Where {
+  id: string;
+  /** The network's lookup server, when it has one: where devices say which workspaces they host
+   *  (M3, spec/host-record.md). */
+  lookup: string | null;
+}
+
+/** Which device hosts a workspace, and how many moves brought it there (spec/host-record.md). */
+export interface HostRecord {
+  host: string;
+  seq: number;
+}
+
+/** A host record as a lookup server keeps it: what it says, and the record itself, signed by the
+ *  workspace's key, to hand on to whoever asks (spec/hosting.md). */
+export interface FoundHost extends HostRecord {
+  record: string;
+}
+
+/** The daemon's protocol: what this process speaks to it (`PROTOCOL` in daemon.rs). 2: a stream is
+ *  known by its id, and a connection carries any number of streams of one name. 3: this process
+ *  ends a stream it opened, and each frame is tagged: a message, or a frame on a stream as its bytes. */
+export const PROTOCOL = 3;
+
+/** A frame's tag: a message, in JSON... */
+const MESSAGE = 0;
+/** ...or a frame on a stream: its connection and stream, each a u64, then its bytes. */
+const ON_STREAM = 1;
+/** The largest frame the daemon takes (`MAX_FRAME` in frames.rs). */
+export const MAX_FRAME = 64 * 1024 * 1024;
+
+/** How many bytes sent on a link may wait for the network to take them before it has no room. */
+export const LINK_ROOM = 512 * 1024;
+
+/** A link with more than this waiting, beyond the largest frame that may still be waiting, is
+ *  closed as too slow: a producer that does not ask for room still cannot hold more. */
+export const WAITING_AT_MOST = 16 * 1024 * 1024;
+
+/** Whether what is sent goes out as fast as it is made: a producer that can send less (the newest
+ *  state in place of each change) asks before it sends, and waits for room to return. */
+export interface Room {
+  /** Fewer than `LINK_ROOM` bytes sent on the link wait for the network. */
+  hasRoom(): boolean;
+  /** Tell `listener` once, when the link has room: soon, if it has now. What this returns stops
+   *  that; so does the link going. */
+  whenRoom(listener: () => void): () => void;
+}
+
+/** One stream of a connection: frames of text, both ways, from when it opens until it ends. Its
+ *  room is its link's: the streams of a connection share its network. */
+export interface Stream extends Room {
+  /** Send `data` on it, after everything sent on it before. */
+  send(data: string): void;
+  /** Hear each frame that arrives on it. */
+  on(listener: (data: string) => void): () => void;
+  /** Resolves, with why, when it ends: the other device ended it, or the connection went. */
+  readonly closed: Promise<string>;
+}
+
+/** A stream this device opened with `Link.open`, which it ends when it is done with it. */
+export interface OpenedStream extends Stream {
+  /** Nothing more goes either way on it: the other device hears it end. */
+  end(): void;
+}
+
+/** One connection to another device, on `hive/ws/1`: frames of text on named streams. The device
+ *  that dialled opens them, as many of a name as it likes (a phone opens an `api` stream for each
+ *  terminal it watches, conversation it follows and call it makes); the other side answers on
+ *  them. */
+export interface Link extends Room {
+  /** The other device's id, as its key proved it. */
+  readonly peer: string;
+  /** Send `data` on `stream`, after everything sent on it before: on the stream of that name this
+   *  device opened, opening it the first time (and again once it ended), when it dialled; else on
+   *  the newest of that name the other device opened, if it opened one. */
+  send(stream: string, data: string): void;
+  /** Hear each frame that arrives on every stream named `stream`. */
+  on(stream: string, listener: (data: string) => void): () => void;
+  /** Each stream named `stream` the other device opens from now on, as it opens it: a stream of
+   *  its own, its frames its own, and answered on alone. */
+  streams(stream: string, listener: (opened: Stream) => void): () => void;
+  /** A new stream named `stream`, opened now beside any others of that name: its frames its own
+   *  (`on` hears them too), and `send` never goes on it. Only the device that dialled opens one. */
+  open(stream: string): OpenedStream;
+  /** Close it, saying why to the other side ("removed", "left", …). */
+  close(reason?: string): void;
+  /** Resolves, with why, when the connection is gone. */
+  readonly closed: Promise<string>;
+}
+
+/** A device on this network, as mDNS found it. */
+export interface Nearby {
+  id: string;
+  /** What it announces; null for nothing. */
+  data: string | null;
+}
+
+export interface HiveNetOptions {
+  /** The daemon's executable. */
+  bin: string;
+  /** The directory holding this device's key (`device.key`). */
+  identity: string;
+  /** Where to listen for the daemon: a path (or a named pipe's name on Windows). */
+  socket: string;
+  /** The network profile to use (what hive-net's `--profile` takes); none: the local network. */
+  profile?: string;
+  /** Someone connected; they are a device the daemon was told to admit. */
+  onIncoming(link: Link): void;
+  /** Someone asks to pair: what to answer them. */
+  onPairRequest(peer: string, hello: unknown): Promise<unknown>;
+  /** The daemon stopped, and why. */
+  onExit?(why: string): void;
+  /** Something went wrong that no caller is told of: a link closed as too slow. */
+  onWarn?(message: string): void;
+}
+
+/** What a link asks of the daemon. */
+interface Daemon {
+  tell(message: Message): void;
+  sendOn(conn: number, stream: number, bytes: Buffer): void;
+  warn(message: string): void;
+}
+
+type Message = Record<string, unknown> & { t: string };
+
+/** A stream of a connection the daemon holds, by its id there. */
+class DaemonStream implements OpenedStream {
+  readonly listeners = new Set<(data: string) => void>();
+  readonly closed: Promise<string>;
+  settle!: (why: string) => void;
+  constructor(readonly id: number, readonly name: string, private readonly link: DaemonLink) {
+    this.closed = new Promise((resolve) => { this.settle = resolve; });
+  }
+  send(data: string): void {
+    this.link.write(this, frameOf(data, this.name));
+  }
+  end(): void {
+    this.link.finish(this);
+  }
+  on(listener: (data: string) => void): () => void {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+  hasRoom(): boolean {
+    return this.link.hasRoom();
+  }
+  whenRoom(listener: () => void): () => void {
+    return this.link.whenRoom(listener);
+  }
+}
+
+class DaemonLink implements Link {
+  /** Its streams open now, by id: given here to those this device opens, when it dialled; by the
+   *  daemon to those the other device opens, when it did. */
+  private readonly live = new Map<number, DaemonStream>();
+  /** The newest stream open of each name: where `send` goes. */
+  private readonly newest = new Map<string, DaemonStream>();
+  private readonly listeners = new Map<string, Set<(data: string) => void>>();
+  private readonly accepting = new Map<string, Set<(opened: Stream) => void>>();
+  private nextStream = 1;
+  /** Bytes sent on it that the daemon has not said the network took. */
+  private waiting = 0;
+  /** No frame still waiting is larger: the largest sent, at most what waits. */
+  private largest = 0;
+  private tooSlow = false;
+  private readonly roomFor = new Set<() => void>();
+  private isGone = false;
+  readonly closed: Promise<string>;
+  private end!: (why: string) => void;
+  constructor(readonly conn: number, readonly peer: string, private readonly dialled: boolean, private readonly daemon: Daemon) {
+    this.closed = new Promise((resolve) => { this.end = resolve; });
+  }
+  send(stream: string, data: string): void {
+    let s = this.newest.get(stream);
+    const bytes = frameOf(data, stream);
+    if (!s) {
+      // The device that dialled opens the streams; the other side answers on those it opened.
+      if (!this.dialled) return;
+      s = this.add(this.nextStream++, stream);
+      this.daemon.tell({ t: "open", conn: this.conn, stream: s.id, name: stream });
+    }
+    this.write(s, bytes);
+  }
+  /** `bytes` on the stream `s`, while it is open: one that ended takes nothing more. */
+  write(s: DaemonStream, bytes: Buffer): void {
+    if (this.live.get(s.id) !== s || this.tooSlow) return;
+    this.waiting += bytes.length;
+    this.largest = Math.max(this.largest, bytes.length);
+    this.daemon.sendOn(this.conn, s.id, bytes);
+    if (this.waiting <= WAITING_AT_MOST + this.largest) return;
+    this.tooSlow = true;
+    const why = `too slow (${Math.round(this.waiting / 1048576)} MB waiting)`;
+    this.daemon.warn(`the link to ${this.peer.slice(0, 8)}… is closed: ${why}`);
+    this.close(why);
+  }
+  hasRoom(): boolean {
+    return this.waiting < LINK_ROOM;
+  }
+  whenRoom(listener: () => void): () => void {
+    if (this.isGone) return () => {};
+    this.roomFor.add(listener);
+    if (this.hasRoom()) queueMicrotask(() => this.roomReturned());
+    return () => { this.roomFor.delete(listener); };
+  }
+  /** The network took `n` bytes of what was sent on it. */
+  took(n: number): void {
+    this.waiting = Math.max(0, this.waiting - n);
+    this.largest = Math.min(this.largest, this.waiting);
+    this.roomReturned();
+  }
+  private roomReturned(): void {
+    if (!this.hasRoom() || this.roomFor.size === 0) return;
+    const told = [...this.roomFor];
+    this.roomFor.clear();
+    for (const l of told) l();
+  }
+  on(stream: string, listener: (data: string) => void): () => void {
+    let set = this.listeners.get(stream);
+    if (!set) this.listeners.set(stream, (set = new Set()));
+    set.add(listener);
+    return () => { set!.delete(listener); };
+  }
+  streams(stream: string, listener: (opened: Stream) => void): () => void {
+    let set = this.accepting.get(stream);
+    if (!set) this.accepting.set(stream, (set = new Set()));
+    set.add(listener);
+    return () => { set!.delete(listener); };
+  }
+  open(stream: string): OpenedStream {
+    if (!this.dialled) throw new Error("only the device that dialled a connection opens streams on it");
+    const s = this.add(this.nextStream++, stream, false);
+    this.daemon.tell({ t: "open", conn: this.conn, stream: s.id, name: stream });
+    return s;
+  }
+  /** This device ends `s`, which it opened, while it is open. */
+  finish(s: DaemonStream): void {
+    if (this.live.get(s.id) !== s) return;
+    this.daemon.tell({ t: "end", conn: this.conn, stream: s.id });
+    this.ended(s.id);
+  }
+  close(reason?: string): void {
+    this.daemon.tell({ t: "close", conn: this.conn, reason });
+  }
+  /** The other device opened the stream `id`, named `name`. */
+  opened(id: number, name: string): void {
+    const s = this.add(id, name);
+    for (const l of this.accepting.get(name) ?? []) l(s);
+  }
+  receive(id: number, data: string): void {
+    const s = this.live.get(id);
+    if (!s) return;
+    for (const l of s.listeners) l(data);
+    for (const l of this.listeners.get(s.name) ?? []) l(data);
+  }
+  /** Nothing more goes either way on the stream `id`. */
+  ended(id: number): void {
+    const s = this.live.get(id);
+    if (!s) return;
+    this.live.delete(id);
+    if (this.newest.get(s.name) === s) this.newest.delete(s.name);
+    s.settle("ended");
+  }
+  gone(why: string): void {
+    this.isGone = true;
+    this.roomFor.clear();
+    for (const s of this.live.values()) s.settle(why);
+    this.live.clear();
+    this.newest.clear();
+    this.end(why);
+  }
+  /** `newest`: `send` goes on it, until a newer one of its name opens. */
+  private add(id: number, name: string, newest = true): DaemonStream {
+    const s = new DaemonStream(id, name, this);
+    this.live.set(id, s);
+    if (newest) this.newest.set(name, s);
+    return s;
+  }
+}
+
+export class HiveNet {
+  private readonly links = new Map<number, DaemonLink>();
+  private readonly waiting = new Map<number, { resolve(m: Message): void; reject(e: Error): void }>();
+  private nextReq = 1;
+  private stopped = false;
+
+  private constructor(
+    private readonly opts: HiveNetOptions,
+    private readonly server: net.Server,
+    private readonly socket: net.Socket,
+    private readonly child: ChildProcess,
+    /** This device on the network. */
+    readonly ready: Ready,
+  ) {}
+
+  /** Start the daemon and wait until it is on the network. */
+  static async start(opts: HiveNetOptions): Promise<HiveNet> {
+    if (process.platform !== "win32") fs.rmSync(opts.socket, { force: true });
+    const server = net.createServer();
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(opts.socket, () => resolve());
+    });
+    if (process.platform !== "win32") fs.chmodSync(opts.socket, 0o600);
+    const args = ["daemon", "--socket", opts.socket, "--identity", opts.identity, ...(opts.profile ? ["--profile", opts.profile] : [])];
+    const child = spawn(opts.bin, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr!.on("data", (d: Buffer) => { stderr = (stderr + d.toString()).slice(-4000); });
+    const exited = new Promise<never>((_, reject) => {
+      child.once("error", reject);
+      child.once("exit", (code) => reject(new Error(`hive-net exited (${code}): ${stderr.trim()}`)));
+    });
+    const socket = await Promise.race([new Promise<net.Socket>((resolve) => server.once("connection", resolve)), exited]);
+    const frames = readFrames(socket);
+    const first = await Promise.race([frames.next(), exited]);
+    exited.catch(() => {});
+    if (first.done || (first.value as Message).t !== "ready") throw new Error("hive-net did not say it was ready");
+    const r = first.value as unknown as Ready & { v?: unknown };
+    // One of another release speaks another protocol: said so, and stopped, rather than half heard.
+    if (r.v !== PROTOCOL) {
+      child.kill();
+      socket.destroy();
+      server.close();
+      throw new Error(`hive-net speaks the daemon's protocol ${typeof r.v === "number" ? r.v : 1}, and this app ${PROTOCOL}: install the app and hive-net from one release`);
+    }
+    child.removeAllListeners("exit");
+    child.removeAllListeners("error");
+    const hn = new HiveNet(opts, server, socket, child, { id: r.id, addrs: r.addrs, relay: r.relay ?? null, lookup: r.lookup ?? null });
+    hn.tell({ t: "hello", v: PROTOCOL });
+    child.once("exit", (code) => hn.gone(`hive-net exited (${code}): ${stderr.trim()}`));
+    child.on("error", (e) => hn.gone(`hive-net: ${e.message}`));
+    void hn.read(frames);
+    return hn;
+  }
+
+  /** Admit exactly these devices from now on; any other loses its connections at once. */
+  admit(devices: string[]): void {
+    this.tell({ t: "admit", devices });
+  }
+
+  /** Connect to the device `peer`, at `where` if given (on the local network it is found by its id). */
+  async dial(peer: string, where: Where = { addrs: [], relay: null }): Promise<Link> {
+    const answer = await this.ask({ t: "dial", peer, addrs: where.addrs, relay: where.relay });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+    return this.linked(answer.conn as number, peer, true);
+  }
+
+  /** Ask the device `peer` to pair, with `hello`; what it answers. */
+  async pair(peer: string, where: Where, hello: unknown): Promise<unknown> {
+    const answer = await this.ask({ t: "pair", peer, addrs: where.addrs, relay: where.relay, hello });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+    return answer.reply;
+  }
+
+  /** Announce `data` to the devices on this network (in this device's mDNS record), or nothing. */
+  advertise(data: string | null): void {
+    this.tell({ t: "advertise", data });
+  }
+
+  /** The devices on this network mDNS has found, with what each announces. */
+  async nearby(): Promise<Nearby[]> {
+    const answer = await this.ask({ t: "nearby" });
+    return Array.isArray(answer.devices) ? (answer.devices as Nearby[]) : [];
+  }
+
+  /** Say at the network's lookup server that this device hosts the person's workspace `workspace`,
+   *  the `seq`th to (spec/host-record.md): the daemon signs it with the workspace's key. */
+  async publishHost(workspace: string, seq: number): Promise<void> {
+    const answer = await this.ask({ t: "host-record", workspace, seq });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+  }
+
+  /** Which device hosts the workspace whose public key is `key`, as the lookup server `lookup` (or
+   *  this network's) has it, its signature checked; null when it names none. */
+  async resolveHost(key: string, lookup?: string | null): Promise<FoundHost | null> {
+    const answer = await this.ask({ t: "resolve-host", key, ...(lookup ? { lookup } : {}) });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+    return typeof answer.host === "string" && typeof answer.seq === "number" && typeof answer.packet === "string"
+      ? { host: answer.host, seq: answer.seq, record: answer.packet }
+      : null;
+  }
+
+  /** A record saying that `host` hosts the person's workspace `workspace`, the `seq`th to, signed by
+   *  the workspace's key here: what a move hands to the people in it (spec/hosting.md). */
+  async signHost(workspace: string, seq: number, host: string): Promise<string> {
+    const answer = await this.ask({ t: "sign-host", workspace, seq, host });
+    if (answer.t === "failed") throw new Error(String(answer.error));
+    return String(answer.packet);
+  }
+
+  /** What a record handed over says, its signature checked against the workspace's key `key`. */
+  async verifyHost(key: string, packet: string): Promise<HostRecord> {
+    const answer = await this.ask({ t: "verify-host", key, packet });
+    if (answer.t === "failed" || typeof answer.host !== "string" || typeof answer.seq !== "number") {
+      throw new Error(answer.t === "failed" ? String(answer.error) : "not a host record");
+    }
+    return { host: answer.host, seq: answer.seq };
+  }
+
+  /** Stop the daemon: it is told by its socket closing, and closes its connections so the devices
+   *  at their other ends hear at once; one still running after a few seconds is killed. */
+  stop(): void {
+    this.stopped = true;
+    this.socket.destroy();
+    this.server.close();
+    const kill = setTimeout(() => this.child.kill(), 3_000);
+    kill.unref();
+    this.child.once("exit", () => clearTimeout(kill));
+  }
+
+  private ask(message: Message): Promise<Message> {
+    const req = this.nextReq++;
+    return new Promise((resolve, reject) => {
+      this.waiting.set(req, { resolve, reject });
+      this.tell({ ...message, req });
+    });
+  }
+
+  private corked = false;
+
+  private tell(message: Message): void {
+    const json = Buffer.from(JSON.stringify(message), "utf8");
+    const head = Buffer.alloc(5);
+    head.writeUInt32BE(json.length + 1);
+    head[4] = MESSAGE;
+    this.write(head, json);
+  }
+
+  private sendOn(conn: number, stream: number, bytes: Buffer): void {
+    const head = Buffer.alloc(21);
+    head.writeUInt32BE(bytes.length + 17);
+    head[4] = ON_STREAM;
+    head.writeBigUInt64BE(BigInt(conn), 5);
+    head.writeBigUInt64BE(BigInt(stream), 13);
+    this.write(head, bytes);
+  }
+
+  /** Frames written in one turn go to the daemon in one write: a moment's frames to every peer are
+   *  one system call, not one each. */
+  private write(head: Buffer, body: Buffer): void {
+    if (this.stopped) return;
+    if (!this.corked) {
+      this.corked = true;
+      this.socket.cork();
+      process.nextTick(() => {
+        this.corked = false;
+        this.socket.uncork();
+      });
+    }
+    this.socket.write(head);
+    this.socket.write(body);
+  }
+
+  /** The connection `conn` to `peer`, which this device `dialled`, or accepted. */
+  private linked(conn: number, peer: string, dialled: boolean): DaemonLink {
+    const link = new DaemonLink(conn, peer, dialled, {
+      tell: (m) => this.tell(m),
+      sendOn: (c, stream, bytes) => this.sendOn(c, stream, bytes),
+      warn: (message) => this.opts.onWarn?.(message),
+    });
+    this.links.set(conn, link);
+    return link;
+  }
+
+  private async read(frames: AsyncGenerator<Message>): Promise<void> {
+    try {
+      await this.take(frames);
+    } catch {
+      // The socket was destroyed while it was read (`stop`), or failed: gone either way.
+    }
+    this.gone("hive-net's socket closed");
+  }
+
+  private async take(frames: AsyncGenerator<Message>): Promise<void> {
+    for await (const m of frames) {
+      switch (m.t) {
+        case "incoming":
+          this.opts.onIncoming(this.linked(m.conn as number, m.peer as string, false));
+          break;
+        case "opened":
+          this.links.get(m.conn as number)?.opened(m.stream as number, m.name as string);
+          break;
+        case "recv":
+          this.links.get(m.conn as number)?.receive(m.stream as number, m.data as string);
+          break;
+        case "took":
+          this.links.get(m.conn as number)?.took(m.n as number);
+          break;
+        case "ended":
+          this.links.get(m.conn as number)?.ended(m.stream as number);
+          break;
+        case "closed": {
+          const link = this.links.get(m.conn as number);
+          this.links.delete(m.conn as number);
+          link?.gone(String(m.reason));
+          break;
+        }
+        case "pair-request": {
+          const req = m.req;
+          this.opts.onPairRequest(m.peer as string, m.hello).then(
+            (reply) => this.tell({ t: "pair-reply", req, reply }),
+            (e: unknown) => this.tell({ t: "pair-reply", req, reply: { ok: false, error: e instanceof Error ? e.message : String(e) } }),
+          );
+          break;
+        }
+        default: {
+          const waiter = this.waiting.get(m.req as number);
+          if (waiter) {
+            this.waiting.delete(m.req as number);
+            waiter.resolve(m);
+          }
+        }
+      }
+    }
+  }
+
+  private gone(why: string): void {
+    if (this.stopped) return;
+    this.stopped = true;
+    for (const w of this.waiting.values()) w.reject(new Error(why));
+    this.waiting.clear();
+    for (const link of this.links.values()) link.gone(why);
+    this.links.clear();
+    this.server.close();
+    this.opts.onExit?.(why);
+  }
+}
+
+/** The daemon's messages, one per frame, a frame on a stream as `recv`. A frame's chunks are joined
+ *  once it is whole, not as each comes: joining what came so far on every chunk is quadratic in the
+ *  frame. */
+async function* readFrames(socket: net.Socket): AsyncGenerator<Message> {
+  let buf = Buffer.alloc(0);
+  const parts: Buffer[] = [];
+  let have = 0;
+  for await (const chunk of socket as AsyncIterable<Buffer>) {
+    parts.push(chunk);
+    have += chunk.length;
+    if (buf.length >= 4 && have < 4 + buf.readUInt32BE(0)) continue;
+    buf = Buffer.concat([buf, ...parts.splice(0)]);
+    while (buf.length >= 4) {
+      const len = buf.readUInt32BE(0);
+      if (buf.length < 4 + len) break;
+      yield messageOf(buf.subarray(4, 4 + len));
+      buf = buf.subarray(4 + len);
+    }
+    have = buf.length;
+  }
+}
+
+/** `data` as the bytes of a frame on the stream `name`. One over `MAX_FRAME` fails here, before its
+ *  stream opens, not in the daemon. */
+function frameOf(data: string, name: string): Buffer {
+  const bytes = Buffer.from(data, "utf8");
+  if (bytes.length + 17 > MAX_FRAME) throw new Error(`a frame of ${bytes.length} bytes on ${name} is over hive-net's limit`);
+  return bytes;
+}
+
+function messageOf(frame: Buffer): Message {
+  if (frame[0] === ON_STREAM) {
+    return { t: "recv", conn: Number(frame.readBigUInt64BE(1)), stream: Number(frame.readBigUInt64BE(9)), data: frame.toString("utf8", 17) };
+  }
+  if (frame[0] === MESSAGE) return JSON.parse(frame.toString("utf8", 1)) as Message;
+  // A daemon of protocol 2 or before tags nothing, whatever its `ready` says: read to say which it speaks.
+  const m = JSON.parse(frame.toString("utf8")) as Message & { v?: unknown };
+  return { ...m, v: Math.min(typeof m.v === "number" ? m.v : 1, 2) } as Message;
+}

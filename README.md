@@ -146,9 +146,6 @@ pnpm --filter @hivemind/desktop run test:unit    # node:test
 pnpm --filter @hivemind/desktop run test:e2e     # playwright under xvfb
 ```
 
-The renderer-only loop (`run dev:bridge -- /path/to/repo`) must run under `tsx`, not bun:
-bun's loader silently drops `@lydell/node-pty` output on Linux.
-
 Issues and pull requests are welcome — `pnpm typecheck` and the unit tests should pass
 first; the e2e suite needs a quiet machine. See
 [contributing](https://hivemind.griiken.com/guide/contributing/) and the

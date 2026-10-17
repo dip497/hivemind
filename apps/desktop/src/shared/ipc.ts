@@ -2,10 +2,113 @@ import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
-import type { ActivityLevel, ShareOutcome, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
+import type { ServiceState } from "@hivemind/host/services";
+import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
+import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
+import type { MachineKind } from "@hivemind/core";
+import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
+import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
+import type { NetworkHealth, NetworkProfile } from "@hivemind/workspace-host/network-profile";
+import type { Grant } from "@hivemind/host/machine-share";
+import type { ClientGrant, NewGrant } from "@hivemind/workspace-api/grants";
+export type { Grant };
+
+/** One of the person's other devices, as Settings → Connect lists it (R14, spec/pairing.md). */
+export interface PairedDeviceSummary {
+  device: string;
+  name: string;
+  /** "host": `hive host`, always on; "app": someone's own computer; "phone": the phone app, which
+   *  runs nothing (spec/pairing.md 0.3). */
+  kind: "app" | "host" | "phone";
+  pairedAt: number;
+}
+
+/** What the person answers a device asking to connect (spec/pairing.md 0.10). */
+export type ConnectAnswer = { as: "me" } | { as: "guest"; role: "view" | "edit" | "terminals" } | { as: "no" };
+
+/** A device asking to connect, as the prompt shows it. */
+export interface ConnectAsking {
+  id: string;
+  name: string;
+  kind: "app" | "host" | "phone";
+  /** Who it says it is: none from a phone. */
+  profile: { name: string; color: string } | null;
+  /** The words its screen shows too. */
+  words: string[];
+  /** The answers it may be given besides no: it's me, and someone else. */
+  me: boolean;
+  guest: boolean;
+  /** Told it's me, and waiting on its own person to say the words match. */
+  confirming: boolean;
+}
+
+/** The offer to connect this app made, while it can be used; the requests; and how the last ended. */
+export interface ConnectState {
+  offer: { code: string; link: string; page?: string; expires: number } | null;
+  requests: ConnectAsking[];
+  last: { name: string; as: "me" | "guest" | "refused" } | null;
+}
+
+/** Using another computer's offer to connect, as this computer's window shows it: that computer's
+ *  name and the words both screens show; and, once it says this computer is its person's, who
+ *  that is, for the person here to say whether the words match. */
+export interface ConnectEntering {
+  name: string;
+  words: string[];
+  theirs: { name: string; color: string } | null;
+}
+
+/** What the join form was given, as `joinPreview` reads it. */
+export type JoinPreview =
+  | { kind: "join"; workspace: string; host: string }
+  | { kind: "connect" | "pair"; name: string }
+  | { kind: "words" }
+  | null;
+
+/** What using an offer came to: this computer is that person's now; or it was let into their
+ *  workspace (its `hive://` name); or the words found a host's code, and it paired as pairEnter. */
+export type ConnectEntered =
+  | { as: "me"; device: PairedDeviceSummary }
+  | { as: "guest"; workspace: string; role: string; names: { workspace: string; host: string } }
+  | { as: "paired"; device: PairedDeviceSummary & { took: boolean } };
+
+/** A workspace one of the person's other devices holds. */
+export interface DeviceWorkspace { workspace: string; name: string; repo: string }
+
+/** Someone on a workspace's access list, as the People panel shows them. */
+export interface SharedPerson {
+  person: string;
+  name: string;
+  color: string;
+  role: string;
+  grantedAt: number;
+  expires: number | null;
+  devices: string[];
+  /** Connected now. */
+  present: boolean;
+}
+
+/** Where the connection to a joined workspace's host is, and what the host last gave. */
+export interface SharedStatus {
+  state: "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";
+  access: string;
+}
+import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
+export type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
+import type { AgentAnswer, AgentChange, AgentEvent, AgentItem, Answerer, PipeChange, SleepAnswer, SpawnChange, StatusChange, TileOpened, WakeAnswer } from "@hivemind/workspace-api/agents";
+
+export type { WidgetOption, WidgetPackage } from "@hivemind/core/widget-format";
+import type { WidgetPackage } from "@hivemind/core/widget-format";
+
+export type { ToolPackage } from "@hivemind/core/tool-format";
+import type { ToolPackage } from "@hivemind/core/tool-format";
+/** A tool plugin's tile running a program in its folder: found on PATH, no shell. `maxAgeMs`
+ *  shares one answer that young between tiles asking the same thing. */
+export type ToolRun = { bin: string; args: string[]; cwd: string; maxAgeMs?: number; stdin?: string };
+export type ToolRunResult = { code: number; stdout: string; stderr: string };
 
 // IssuePatch is owned by @hivemind/core/types (node-free) — re-export so renderer
 // modules keep importing it from the IPC contract, with no hand-maintained copy.
@@ -13,6 +116,8 @@ export type { IssuePatch };
 
 /** A registered workspace (subset of the core registry entry — display shape
  *  for the renderer; avoids pulling node-only registry deps into the web tsconfig). */
+export interface WorkspaceSummary { repo: string; title: string; tiles: number; needsYou: number; working: number }
+
 export interface WorkspaceInfo {
   prefix: string;
   root: string;
@@ -20,109 +125,21 @@ export interface WorkspaceInfo {
   title: string;
 }
 
-/** Files above this many bytes are not loaded into the diff viewer — a single
- *  huge/generated/binary blob (a scip index, a lockfile, a bundle) would load
- *  its full contents twice as JS strings and then run an O(n) line-diff, spiking
- *  renderer memory into the GBs. `gitFileContents` returns `${OVERSIZE_SENTINEL}${bytes}`
- *  instead; the diff renders a "too large" placeholder. */
-export const DIFF_MAX_FILE_BYTES = 1_500_000;
-export const OVERSIZE_SENTINEL = "\0HM_OVERSIZE:";
-
-// ── git types (mirror simple-git status v2 + pretty wrappers) ─────────────
-
-export type GitFileStatus =
-  | "modified"
-  | "added"
-  | "deleted"
-  | "renamed"
-  | "copied"
-  | "untracked"
-  | "ignored"
-  | "conflicted";
-
-export interface GitFileEntry {
-  path: string;
-  status: GitFileStatus;
-  /** Has staged changes for this file (index ≠ HEAD). */
-  staged: boolean;
-  /** Has unstaged changes (working tree ≠ index). */
-  unstaged: boolean;
-  /** For renames/copies. */
-  origPath?: string;
-}
-
-export interface GitStatusSnapshot {
-  /** Current branch (or null in detached HEAD). */
-  branch: string | null;
-  /** Tracked-upstream branch, if any. */
-  upstream: string | null;
-  ahead: number;
-  behind: number;
-  files: GitFileEntry[];
-  conflictedFiles: string[];
-  isMerging: boolean;
-  isRebasing: boolean;
-  /** SHA of HEAD. */
-  head: string;
-}
-
-/** Every scope may hide reindent-only changes (`git diff --ignore-all-space`). */
-interface DiffScopeBase { ignoreWhitespace?: boolean }
-
-export type DiffScope =
-  | ({ kind: "working"; staged?: boolean } & DiffScopeBase)
-  // base...head merge-base (3-dot) diff — what `head` adds since it diverged
-  // from `base`, the same semantics GitHub/Azure PRs show. `head` defaults to
-  // HEAD (review another branch against the checkout); set it to review any two
-  // arbitrary branches without a remote PR.
-  | ({ kind: "branch"; base?: string; head?: string } & DiffScopeBase)
-  // Committed-but-not-pushed: the net diff of local commits ahead of the
-  // branch's remote tracking ref (`@{upstream}...HEAD`). Optional `base`
-  // overrides the auto-resolved upstream so this same scope serves future
-  // "ahead of <any ref>" reviews without a new variant.
-  | ({ kind: "unpushed"; base?: string } & DiffScopeBase)
-  | ({ kind: "commit"; sha: string } & DiffScopeBase);
-
-export interface DiffPayload {
-  /** Unified-diff patch text (`git diff` output). */
-  patch: string;
-  /** SHA-style cache key so Pierre's worker can cache the AST. */
-  cacheKey: string;
-}
-
-/** Branch inventory for the diff tile's base/head pickers. */
-export interface GitBranchList {
-  /** Current local branch, or null when detached. */
-  current: string | null;
-  /** Local branch names (`refs/heads`). */
-  local: string[];
-  /** Remote-tracking refs, e.g. `origin/main` (`origin/HEAD` filtered out). */
-  remote: string[];
-}
-
-// ── worktree types ───────────────────────────────────────────────────────
-
-export interface WorktreeEntry {
-  path: string;
-  branch: string | null;
-  head: string;
-  locked: boolean;
-  prunable: boolean;
-  bare: boolean;
-}
-
-export interface WorktreeCreateOpts {
-  /** Branch name to create the worktree on (will be created if missing). */
-  branch: string;
-  /** Directory to place the worktree (relative or absolute). Default: under repo .hivemind-worktrees/<branch-slug>/. */
-  path?: string;
-  /** Sparse-checkout cone roots (empty = full checkout). */
-  sparse?: string[];
-  /** Apply `--filter=blob:none` partial clone. Default: true. */
-  partial?: boolean;
-  /** Files/globs to copy from main worktree (e.g. .env). Read from .worktreeinclude if not given. */
-  includeFiles?: string[];
-}
+// git and worktrees: what the workspace API's `git.*` and `worktree.*` answer.
+export { DIFF_MAX_FILE_BYTES, OVERSIZE_SENTINEL } from "@hivemind/workspace-api/git";
+export type {
+  DiffPayload,
+  DiffScope,
+  GitBranchList,
+  GitFileEntry,
+  GitFileStatus,
+  GitRevision,
+  GitStatusSnapshot,
+  WorktreeCreateOpts,
+  WorktreeEntry,
+} from "@hivemind/workspace-api/git";
+import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
+import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -150,15 +167,24 @@ export interface MachineInfo {
   target: string;
   enabled: boolean;
   platform?: string;
+  /** What kind of computer it said it is when last checked. */
+  kind?: MachineKind;
   hivePath?: string;
   /** What its frames' ssh:// uris resolve to. */
   hostId: string;
 }
 export interface MachinesSnapshot {
   machines: MachineInfo[];
-  /** By host id, including hosts of frames that are not saved machines. */
+  /** What kind of computer this one is, when it says. */
+  thisComputerKind?: MachineKind;
+  /** By host id, including hosts of frames that are not saved machines, and the person's devices
+   *  frames run on (`device:<id>`, M3). */
   status: Record<string, MachineStatus>;
   catalogError?: string;
+  /** The person's other devices, where a frame can run too (M3); the window adds them. */
+  devices?: PairedDeviceSummary[];
+  /** This device's id, which a frame on it in a workspace hosted elsewhere names (M3). */
+  self?: string;
 }
 export interface MachineProbe {
   platform: string;
@@ -210,20 +236,22 @@ export interface UpdateStatus {
    *  False on offline / timeout / rate-limit — the renderer must NOT treat a
    *  false-ok result as "up to date" or persist it over a known-good state. */
   ok: boolean;
+  /** The check is off (Settings → About and updates): nothing was asked. */
+  off?: boolean;
   /** A version already downloaded and waiting for a restart to become the one that
    *  runs (the installer could not replace a live app), when it is newer than this one.
    *  Restarting is then the whole of what is left to do — never another download. */
   staged: string | null;
 }
 
-import type { Settings } from "@hivemind/core/settings-schema";
+import type { Appearance, Settings } from "@hivemind/core/settings-schema";
 import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
 export interface ViewPackageInfo {
   id: string;
   dir: string;
-  source: "user" | "repo";
+  source: "user" | "repo" | "app" | "host";
   manifest: ViewManifest | null;
   error: string | null;
   url: string | null;
@@ -231,7 +259,61 @@ export interface ViewPackageInfo {
 
 // ── full IPC surface ──────────────────────────────────────────────────────
 
+/** Settings → Advanced → In a browser: whether the app is served, at which link, or why not. */
+/** `url` is this computer's link; `others`, the same key at each of the person's other names. */
+export interface BrowserAppStatus { on: boolean; url: string | null; others: string[]; error: string | null }
+
 export interface HiveIpc {
+  // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──
+  /** The workspace's core layout blob (frames, tiles, membership, names, tabs), or null. */
+  workspaceCoreSync(repo: string): CoreLayout | null;
+  /** One view's stored layout, or null. */
+  workspaceViewSync(repo: string, viewId: string): ViewLayout | null;
+  /** Replace the core layout blob, made from `base` (what this window last read or wrote), so only
+   *  what it changed is written. Synchronous, so a write made while the window unloads is kept. */
+  workspaceSetCoreSync(repo: string, core: unknown, base?: unknown): void;
+  /** Replace one view's layout. Synchronous for the same reason. */
+  /** `base`: the layout this window last read or wrote (null: none): only what changed from it is written. */
+  workspaceSetViewSync(repo: string, viewId: string, layout: ViewLayout, base?: ViewLayout | null): void;
+  /** Offer this window's old localStorage layout; the store keeps only what it lacks. */
+  workspaceImportSync(repo: string, legacy: LegacyLayout): void;
+  /** The board's objects, a framed one's position relative to its frame; none when there are none. */
+  workspaceObjectsSync(repo: string): BoardObject[] | null;
+  /** The board's objects with these ids, by id (null: not there). */
+  workspaceObjectsWithIdsSync(repo: string, ids: string[]): Record<string, BoardObject | null> | null;
+  /** Write the objects this window changed, each with the one it changed it from. Synchronous, so a
+   *  write made while the window unloads is kept. */
+  workspaceEditObjectsSync(repo: string, edit: BoardEdit): void;
+  /** Take back the last board edit; false when there is none. */
+  workspaceUndoSync(repo: string): boolean | null;
+  /** Make again the last board edit undo took back; false when there is none. */
+  workspaceRedoSync(repo: string): boolean | null;
+  /** Another writer (the control plane, another window) changed a workspace. */
+  onWorkspaceChanged(cb: (change: Pick<WorkspaceChange, "repo" | "part" | "objects">) => void): () => void;
+  /** The workspace this window shows now (null: none), and the frame the user is in there, for
+   *  the control plane to act on when its caller is in no tile. */
+  workspaceShown(repo: string | null, frame: string | null): void;
+  /** Where this window's person is in the workspace `repo` (M1): their pointer on the board and
+   *  what they have selected; null: they left it. */
+  boardPresenceSet(repo: string, state: PresenceState | null): void;
+  /** Who is in a workspace now, each as they last said, as it changes: every workspace's. */
+  onBoardPresence(cb: (repo: string, people: Participant[]) => void): () => void;
+  /** The widget `id` in `repo` drew `tree` (its code runs in this window). */
+  widgetDraw(repo: string, id: string, tree: unknown): void;
+  /** What each widget in `repo` last drew, by id. */
+  widgetsDrawn(repo: string): Promise<Record<string, unknown>>;
+  onWidgetDrawn(cb: (repo: string, id: string, tree: unknown) => void): () => void;
+  /** A widget pressed where its code does not run: told to the window that runs it. */
+  widgetPress(repo: string, id: string, press: { action: unknown } | { click: true }): void;
+  onWidgetPressed(cb: (repo: string, id: string, press: { action?: unknown; click?: true }) => void): () => void;
+  /** Whether this window runs `repo`'s widgets (one window per workspace does). */
+  widgetRun(repo: string): Promise<boolean>;
+  /** The widgets installed where `repo` is hosted (its host's, for one joined from elsewhere). */
+  widgetPackagesOf(repo: string): Promise<WidgetPackage[]>;
+  widgetRelease(repo: string): void;
+  /** Nobody runs `repo`'s widgets now. */
+  onWidgetRunner(cb: (repo: string) => void): () => void;
+
   // ── settings.json (main owns it; see main/settings-store.ts) ──
   /** The whole settings object, synchronously (boot: no theme flash). */
   settingsSync(): Settings;
@@ -251,6 +333,13 @@ export interface HiveIpc {
   /** Installed view packages (user dir + this repo's .hivemind/views), each
    *  with its load URL or the reason it will not load. Rescans on every call. */
   listViews(repoRoot: string | null): Promise<ViewPackageInfo[]>;
+  viewOpen(id: string, workspace: string, screen: ViewScreen): Promise<{ session: string }>;
+  viewPost(session: string, message: PluginMessage, workspace: string): void;
+  viewScreen(session: string, screen: ViewScreen, workspace: string): void;
+  viewClose(session: string, workspace: string): Promise<{ closed: boolean }>;
+  onViewSaid(cb: (session: string, message: HostMessage) => void): () => void;
+  onViewRects(cb: (session: string, rects: SurfaceRect[]) => void): () => void;
+  onViewEnded(cb: (session: string, why: string) => void): () => void;
   /** Agent providers on disk. Only manifests cross — a def carries detect(). */
   listAgents(repoRoot: string | null): Promise<{
     agents: Array<{ id: string; file: string; source: "user" | "repo"; manifest: unknown; error: string | null; disabled: boolean }>;
@@ -262,18 +351,65 @@ export interface HiveIpc {
   verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string; searchedPath?: string }>;
   /** The values each of an agent's options takes, read from its CLI. Cached per binary version. */
   agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
-  previewViewInstall(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
+  previewViewInstall?(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
+  /** A plugin's README: from its folder here (`dir`), or from the catalog for one not installed. */
+  pluginReadme(from: { dir: string } | { catalog: { type: CatalogEntry["type"]; id: string } }): Promise<string | null>;
+  /** The widget packages installed on this machine. */
+  listWidgets(): Promise<WidgetPackage[]>;
+  /** Add a widget package from a folder the person picks; null when they pick none. */
+  installWidget?(): Promise<{ id: string; name: string } | null>;
+  removeWidget(id: string): Promise<void>;
+  /** An image of the widget package `widget`, as the host of `repo` has it: for a guest without it. */
+  widgetAsset(repo: string, widget: string, name: string): Promise<string | null>;
+  /** The agents in the workspace at `repo`, and the feed's position (the workspace API's `agent.list`). */
+  agentList(repo: string): Promise<{ seq: number; agents: AgentItem[] }>;
+  /** What `repo`'s agent readers were told after `seq`; null: list again. */
+  agentSince(repo: string, seq: number): Promise<{ seq: number; changes: AgentChange[]; events: AgentEvent[] } | null>;
+  /** Answer what the agent in `tile` waits on, the wait that began at `since`: a plan, a
+   *  supervised tool use, its screen. `answered` false: it waits on that no more, or someone
+   *  answered first (`by`). */
+  agentAnswer(tile: string, since: number, answer: AgentAnswer): Promise<{ answered: boolean; by?: Answerer }>;
+  /** Put to sleep the agents of `target` in the workspace at `repo` (a tile or a frame; none: all). */
+  agentSleep(repo: string, target?: string, force?: boolean): Promise<SleepAnswer>;
+  /** Wake the sleeping agents of `target` in the workspace at `repo` (none: all). */
+  agentWake(repo: string, target?: string): Promise<WakeAnswer>;
+  onAgentChanged(cb: (repo: string, change: AgentChange) => void): () => void;
+  onAgentEvent(cb: (repo: string, event: AgentEvent) => void): () => void;
+  /** The installed widget packages changed. */
+  onWidgetsChanged(cb: () => void): () => void;
+  /** The tool plugins installed here, and whether the app started in safe mode (every one off). */
+  toolPackages(): Promise<{ packages: ToolPackage[]; safeMode: boolean }>;
+  /** What each host module a tool plugin imports exports, by name (once, before the first loads). */
+  toolHostExports(map: Record<string, string[]>): Promise<void>;
+  /** Add a tool plugin from a folder the person picks; null when they pick none. */
+  installToolPackage?(): Promise<{ id: string; name: string } | null>;
+  removeToolPackage(id: string): Promise<void>;
+  /** A tool plugin's tile running a program in its folder. */
+  toolRun(call: ToolRun): Promise<ToolRunResult>;
+  /** The installed tool plugins changed. */
+  onToolsChanged(cb: () => void): () => void;
+  /** The folders of the workspaces on this machine: what a program's grant may name. */
+  hostWorkspaces(): Promise<string[]>;
+  /** How each tool plugin's service is. */
+  services(): Promise<ServiceState[]>;
+  /** The end of what a tool plugin's service printed. */
+  serviceLog(plugin: string): Promise<string>;
+  /** A service started, stopped or is starting again. */
+  onServicesChanged(cb: () => void): () => void;
   /** Ids of installed agents whose manifest differs from the one the catalog lists. */
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
-   *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`. */
+   *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`, a widget with
+   *  `installCatalogWidget(token)`. */
   reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
     | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
     | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
+    | { type: "widget"; token: string; id: string; name: string; permissions: string[]; code: boolean; replaces: boolean }
   >;
   installCatalogAgent(token: string): Promise<void>;
+  installCatalogWidget(token: string): Promise<void>;
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
   /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
@@ -283,18 +419,125 @@ export interface HiveIpc {
   removeViewPackage(id: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
+  // ── identity (R3) ─────────────────────────────────────────
+  /** This device's id and the id of the person it is, made the first time they are asked for,
+   *  and the name to offer while the profile has none (git's `user.name`, else the account's). */
+  identity(): Promise<{ deviceId: string; personId: string; suggestedName: string }>;
+  // ── sharing and joining (M1) ──────────────────────────────
+  /** An invite link to the workspace `repo` for `role`, for `expiresIn` ms, used once unless `reusable`. */
+  share(repo: string, role: "view" | "edit" | "terminals", expiresIn: number, reusable: boolean): Promise<string>;
+  /** What an invite link offers, to show before joining; null when the text is not one. */
+  /** What `text` is, before using it: an invite link (whose workspace), another computer's offer
+   *  to connect or a host's pairing link (the device's name), six words, or nothing to use. */
+  joinPreview(text: string): Promise<JoinPreview>;
+  /** Ask the host a link names to let this person in: the role they were given, or why not. */
+  join(text: string): Promise<{ ok: true; role: string; workspace: string } | { ok: false; error: string; message?: string }>;
+  /** Someone asks to join a workspace of this person's (`repo`: as this window names it): answer
+   *  with `answerJoin`. */
+  onJoinRequest(cb: (r: { repo: string; req: number; profile: { name: string; color: string }; role: string; workspace: string }) => void): () => void;
+  /** A question about someone asking to join was answered, here or at another of the person's
+   *  devices, or nobody answered it in time. */
+  onJoinAnswered(cb: (repo: string, req: number) => void): () => void;
+  answerJoin(repo: string, req: number, allow: boolean): void;
+  /** Who is on the workspace `repo`'s access list, under the names they joined with, and whether
+   *  each is connected now. */
+  people(repo: string): Promise<SharedPerson[]>;
+  /** Give someone on `repo`'s list another role; they are reconnected under it. */
+  setRole(repo: string, person: string, role: string): Promise<void>;
+  /** Take someone off `repo`'s list: they are disconnected, and their link spent. */
+  removePerson(repo: string, person: string): Promise<void>;
+  /** The programs let drive workspaces here (the drive socket). */
+  grants(): Promise<ClientGrant[]>;
+  /** Let a program drive workspaces here: its grant, and its token, shown this once. */
+  grantCreate(grant: NewGrant): Promise<{ grant: ClientGrant; token: string }>;
+  /** Take a program's grant back; its connections close. */
+  grantRevoke(id: string): Promise<{ revoked: boolean }>;
+  /** The workspaces this person joined elsewhere, newest first. */
+  joined(): Promise<Array<{ workspace: string; names: { workspace: string; host: string }; role: string; joinedAt: number; ended?: "left" | "removed" }>>;
+  /** How the joined workspace `workspace` is: whose, and where its connection is. */
+  sharedStatus(workspace: string): Promise<({ names: { workspace: string; host: string } } & SharedStatus) | null>;
+  /** A joined workspace's connection changed. */
+  onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
+  /** How the joined workspace `workspace`'s host looks, checked; null before it says. */
+  sharedLooks(workspace: string): Promise<Appearance | null>;
+  /** A joined workspace's host changed how it looks. */
+  onSharedLooks(cb: (workspace: string, appearance: Appearance) => void): () => void;
+  /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
+  leave(workspace: string): Promise<void>;
+  /** What this person lets the people in the joined workspace `workspace` do on this computer, in
+   *  frames of theirs here (M4): watch, type into what runs here, or run agents here too. */
+  machineGrant(workspace: string): Promise<Grant>;
+  /** Let them do `grant` here from now on; the workspace's host is told at once. */
+  setMachineGrant(workspace: string, grant: Grant): Promise<void>;
+  /** Hand off the branch checked out in this person's frame `uri` on this computer to the host of
+   *  the joined workspace `workspace` (M4): the branch it landed as there, which a Diff tile on the
+   *  board shows against the host's. */
+  handOff(workspace: string, uri: string): Promise<HandedOff>;
+  // ── your devices (R14, M3, spec/pairing.md) ───────────────
+  /** The person's devices this app paired with. */
+  /** The app in a browser: served or not, and the link that signs a tab in. */
+  browserAppStatus(): Promise<BrowserAppStatus>;
+  onBrowserAppChanged(cb: (status: BrowserAppStatus) => void): () => void;
+  devices(): Promise<PairedDeviceSummary[]>;
+  /** A device was paired with, or forgotten. */
+  onDevicesChanged(cb: () => void): () => void;
+  /** Offer to connect (spec/pairing.md 0.10), from the window showing `repo` (null: Home): a code,
+   *  its link and the phone page's address for it. Whoever uses it only asks; the person answers
+   *  each request with `connectAnswer`. A new offer voids the last. */
+  connectOffer(repo: string | null): Promise<NonNullable<ConnectState["offer"]>>;
+  connectCancel(): Promise<void>;
+  connectState(): Promise<ConnectState>;
+  onConnectChanged(cb: (state: ConnectState) => void): () => void;
+  connectAnswer(id: string, answer: ConnectAnswer): Promise<void>;
+  /** Use another computer's offer, its link or its words (the words of a host's code pair with
+   *  it, as pairEnter): `onConnectEntering` says what to show meanwhile, and `connectSure` is the
+   *  person's word that the words match, once that computer says this one is its person's. */
+  connectEnter(text: string): Promise<ConnectEntered>;
+  onConnectEntering(cb: (entering: ConnectEntering | null) => void): () => void;
+  connectSure(yes: boolean): Promise<void>;
+  /** The hash of the phone page at `page`, worked out from what its server serves, and of the
+   *  page this build goes with (null: a build made without one). */
+  phonePage(page: string): Promise<{ served: string; shipped: string | null }>;
+  /** Enter the code or link another of your devices shows: a host takes your person; another
+   *  computer gives its own, and this computer becomes that person (`took`). */
+  pairEnter(text: string): Promise<PairedDeviceSummary & { took: boolean }>;
+  /** Forget one of your devices: it is no longer you here. */
+  unpair(device: string): Promise<void>;
+  /** The workspaces each of your other devices holds; null for one that does not answer. */
+  deviceWorkspaces(): Promise<Array<{ device: string; name: string; workspaces: DeviceWorkspace[] | null }>>;
+  /** Open a workspace another of your devices holds, as yours: its `hive://` name, to open. */
+  openDeviceWorkspace(device: string, workspace: string, name: string): Promise<string>;
+  /** Move the workspace `repo`, hosted here, to another of your devices (M3): whoever is in it
+   *  follows, and its frames here stay here. Its `hive://` name, to open it by from now on. */
+  moveHosting(repo: string, device: string): Promise<string>;
+  /** This computer's folder of `workspace`, when it was moved from here to another of your devices
+   *  (M3); null for any other. */
+  folderHere(workspace: string): Promise<string | null>;
+  /** Move `workspace`, moved from here, back from the device hosting it (M3): whoever is in it
+   *  follows. Its folder, to open it by again. */
+  moveHostingHere(workspace: string): Promise<string>;
+  /** Host `workspace`, moved from here, on this computer again from the copy kept here, while the
+   *  device hosting it cannot be reached (M3): whoever is in it finds it here. Its folder. */
+  takeOver(workspace: string): Promise<string>;
+  // ── this device's network (R16) ───────────────────────────
+  /** The network profile in use: a built-in one (`local`, `hosted`) or one its admin signed. */
+  network(): Promise<NetworkProfile>;
+  /** Whether its relays answer this device. */
+  networkHealth(): Promise<NetworkHealth>;
+  /** Use another network: a built-in's name, a network link, or a signed profile. */
+  useNetwork(given: string): Promise<NetworkProfile>;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;
   /** Check the latest GitHub release and compare to the running version. Done
    *  in MAIN (renderer CSP blocks the github.com fetch). Never rejects — a
    *  failed check resolves with `latest: null`. */
-  checkForUpdate(): Promise<UpdateStatus>;
+  checkForUpdate?(): Promise<UpdateStatus>;
   /** Run the official installer (the same `install.sh` flow `hivemind upgrade`
    *  uses) and resolve with its exit status. Does NOT quit — the renderer shows
    *  the result and then calls `relaunchApp()` to restart into the new version.
    *  `ok` is true iff the installer exited 0. */
-  runUpgrade(): Promise<{ ok: boolean; code: number | null }>;
+  runUpgrade?(): Promise<{ ok: boolean; code: number | null }>;
   /** Live installer output during `runUpgrade` — the last non-empty line of each
    *  stdout/stderr chunk, so the UI can show real progress instead of a frozen
    *  button. Returns an unsubscribe fn. */
@@ -312,7 +555,7 @@ export interface HiveIpc {
    *  null if the user cancelled. The renderer should then re-invoke
    *  resolveProject(picked) to repoint the canvas + sidebar at the chosen
    *  workspace without restarting the app. */
-  pickProjectFolder(): Promise<string | null>;
+  pickProjectFolder?(): Promise<string | null>;
   /** Create a .hivemind/ workspace in `dir` with the given issue prefix.
    *  Returns the new root path. Renderer should re-resolve afterwards. */
   initWorkspace(dir: string, prefix: string): Promise<{ root: string }>;
@@ -345,6 +588,11 @@ export interface HiveIpc {
   // ── cross-repo (registry + transfer + links) ───────────────
   /** Every registered workspace (other repos) whose root still exists. */
   listWorkspaces(): Promise<WorkspaceInfo[]>;
+  /** Every workspace here, with how many tiles it has and how many of them need you or work. */
+  workspaceSummaries(): Promise<WorkspaceSummary[]>;
+  /** Delete the board of the workspace at `repo` from this computer; its folder stays. Refused
+   *  while a terminal of it runs. */
+  removeWorkspace(repo: string): Promise<void>;
   /** Resolve the `.hivemind` root that owns an issue id (via its prefix), or
    *  null if its workspace isn't registered. Used to open a cross-repo link. */
   resolveIssueRoot(id: string): Promise<{ root: string | null }>;
@@ -403,7 +651,7 @@ export interface HiveIpc {
   fileWrite(repoPath: string, relPath: string, contents: string): Promise<void>;
   /** Open a path clicked in the terminal with the OS default app (xdg-open).
    *  Resolves relatives against `cwd`; must exist; refuses `.desktop` + remote. */
-  openPathInApp(cwd: string, target: string): Promise<{ ok: boolean; error?: string }>;
+  openPathInApp?(cwd: string, target: string): Promise<{ ok: boolean; error?: string }>;
 
   /** Append one diagnostics line to userData/render-diag.log (auto-rotated).
    *  Used by the terminal render-quality probe so blurry-text reports can be
@@ -418,8 +666,8 @@ export interface HiveIpc {
   machineCheck(id: string): Promise<MachineProbe>;
   machineInstall(id: string): Promise<MachineProbe>;
   machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
-  /** Change where a machine is (tested before it is saved). `oldHostId`: re-point the frames that ran there. */
-  machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo; oldHostId: string }>;
+  /** Change where a machine is (tested before it is saved). The frames on it follow: they name the machine. */
+  machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo }>;
   /** View protocol 1.3: status ledger lines (see workspace/view-events.ts). */
   viewLedgerAppend(lines: unknown[]): void;
   viewLedgerSnapshot(): Promise<LedgerSince[]>;
@@ -433,8 +681,8 @@ export interface HiveIpc {
   onPtyActivity(cb: (levels: Record<string, ActivityLevel>) => void): () => void;
   presenceNow(): Promise<ViewPresence>;
   onPresence(cb: (p: ViewPresence) => void): () => void;
-  viewSharePrepare(png: ArrayBuffer): Promise<SharePrepared>;
-  viewShareCommit(token: string, action: "copy" | "save" | "cancel", suggestedName: string): Promise<ShareOutcome>;
+  viewSharePrepare?(png: ArrayBuffer): Promise<SharePrepared>;
+  viewShareCommit?(token: string, action: "copy" | "save" | "cancel", suggestedName: string): Promise<ShareOutcome>;
   machineRemove(id: string): Promise<void>;
   /** Store a password for a machine; false when the OS keychain is unavailable (kept in memory only). */
   machineSetPassword(id: string, password: string): Promise<boolean>;
@@ -454,33 +702,21 @@ export interface HiveIpc {
   worktreePrune(repoPath: string): Promise<{ removed: string[] }>;
 
   // ── PTY ───────────────────────────────────────────────────
-  ptySpawn(opts: {
-    tileId: string;
-    cwd: string;
-    cmd: string;
-    args?: string[];
-    cols: number;
-    rows: number;
-    env?: Record<string, string>;
-    /** A claude spawn's INITIAL task (▶ Work / spawn-with-work). Delivered as
-     *  claude's positional argv (which auto-submits), NOT typed into the booting
-     *  TUI — see applyInitialPrompt / HIVE_INITIAL_PROMPT. */
-    initialPrompt?: string;
-    /** `tileId` names an existing daemon session to show; never start one. */
-    attachOnly?: boolean;
-    /** With attachOnly: a running session only, not one saved before a reboot. */
-    liveOnly?: boolean;
-  }): Promise<{ pid: number }>;
+  ptySpawn(opts: TerminalOpts): Promise<{ pid: number; /** Another window started it: this one only shows it. */ joined?: boolean; /** It sleeps: nothing was started. */ asleep?: true }>;
+  /** What the agent in `tileId`, put to sleep, last showed, with its newest `lines`; null when it does not sleep. */
+  ptySaved(tileId: string, lines?: number): Promise<string | null>;
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;
   /** `paste`: a message handed to the TUI as one block, not keystrokes. */
   ptyWrite(tileId: string, data: string, paste?: boolean): void;
-  /** The names tiles were given (renames, spawners' names), whole, each time they change. */
-  tileNames(names: Record<string, string>): void;
   /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
   ptyInterest(tileId: string, shown: boolean): void;
+  /** Send this terminal's screen again with `lines` of its scrollback. */
+  ptyHistory(tileId: string, lines: number): void;
   ptyResize(tileId: string, cols: number, rows: number): void;
+  /** Size the session to this window's `cols` × `rows` now, as typing here would. */
+  ptyFit(tileId: string, cols: number, rows: number): void;
   ptyKill(tileId: string): void;
   /** Window closed / tile unmounted: keep the session alive (daemon mode) or
    *  kill it (in-process mode). Distinct from ptyKill, which always terminates. */
@@ -490,13 +726,31 @@ export interface HiveIpc {
    *  it on xterm's write-queue watermarks so a flood (`cat hugefile`, a runaway
    *  build log) can't outrun the parser and balloon renderer memory. */
   ptyFlow(tileId: string, paused: boolean): void;
-  /** True when HIVEMIND_PTY_DAEMON=1 — terminals persist across window close. */
-  persistentPty: boolean;
+  /** Ask for a terminal's keyboard (M2): whoever holds it is asked. */
+  keyboardAsk(tileId: string): void;
+  /** Give a terminal's keyboard, held here (or its host's, from a host's window), to `to`, who asked. */
+  keyboardGive(tileId: string, to: string): void;
+  /** Take a terminal's keyboard back: its host's windows only. */
+  keyboardTake(tileId: string): void;
+  /** Who holds a terminal's keyboard now: null while its host does. */
+  onKeyboard(cb: (tileId: string, holder: Typist | null) => void): () => void;
+  /** Someone asks this window for a terminal's keyboard, which it holds (or its host does). */
+  onKeyboardAsked(cb: (tileId: string, asker: Typist) => void): () => void;
+  /** A terminal's session took a size: a window whose own differs draws it at that size. */
+  onTerminalSize(cb: (tileId: string, cols: number, rows: number) => void): () => void;
+  /** Someone types into a terminal this window shows: at most once a second while they type on. */
+  onTyping(cb: (tileId: string, by: Typist) => void): () => void;
 
   // ── notifications ─────────────────────────────────────────
   /** Forward a notable agent-status transition to the main process, which fires
    *  a native OS notification IF the window is unfocused. Fire-and-forget. */
-  notifyAgent(notice: AgentNotice): void;
+  notifyAgent?(notice: AgentNotice): void;
+  /** What the Layers panel shows of the workspace in `repo`: its tiles in the order listed, and
+   *  the pinned ones (the person's phone's Home lists them so). */
+  layersShown(repo: string, shown: { order: string[]; pinned: string[] }): void;
+  /** The folders the person opened lately, here and on saved machines (`machine://`), newest
+   *  first: their phone starts agents there. */
+  recentFolders(folders: string[]): void;
   /** Read the persisted notification preferences (normalized onto defaults). */
   getNotificationSettings(): Promise<NotificationSettings>;
   /** Persist + apply notification preferences live (no relaunch needed). */
@@ -506,32 +760,24 @@ export interface HiveIpc {
   /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
    *  and current URL) so the main process can attach the debugger AND write the
    *  discovery file the `hive-browser` skill reads. Called on dom-ready + on nav. */
-  browserRegister(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
-  /** Tile unmounted — drop the guest mapping. */
-  browserUnregister(tileId: string): void;
+  browserRegister?(tileId: string, webContentsId: number, frameId: string | null, url: string): void;
   /** Send a raw Chrome DevTools Protocol command to the tile's guest page
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */
-  browserCdp(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
+  browserCdp?(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
   /** Agent-browser bridge settings for the in-app toggle. `active` = live this
    *  session; `enabled` = persisted choice (applies on next launch). */
-  getBrowserSettings(): Promise<{ active: boolean; enabled: boolean; port: string }>;
+  getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;
   /** Persist the agent-browser bridge on/off choice (applies after relaunch). */
-  setBrowserCdpEnabled(enabled: boolean): Promise<{ ok: true }>;
+  setBrowserCdpEnabled?(enabled: boolean): Promise<{ ok: true }>;
   /** Restart the app so a settings change that needs a fresh launch takes hold. */
-  relaunchApp(): Promise<void>;
+  relaunchApp?(): Promise<void>;
 
-  /** Resolve a blocked plan-review hook. allow → the agent proceeds with the
-   *  plan; deny + feedback → the agent stays in plan mode and revises. */
-  planReviewDecide(
-    requestId: string,
-    decision: "allow" | "deny",
-    feedback?: string,
-  ): Promise<void>;
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
-   *  canvas, e.g. tile.spawn_agent). `id` correlates with the pushed command. */
-  hcpResult(id: string, ok: boolean, result?: unknown, errorMessage?: string): Promise<void>;
+   *  canvas, e.g. plugin.open). `id` correlates with the pushed command. */
+  /** `code`: why it failed, as the workspace API says it (`NOT_FOUND`, `TIMEOUT` …); another is FAILED. */
+  hcpResult?(id: string, ok: boolean, result?: unknown, errorMessage?: string, code?: string): Promise<void>;
 }
 
 /** A control-plane verb main asks the renderer to execute (request-id correlated
@@ -542,32 +788,14 @@ export interface HcpCommand {
   params: unknown;
 }
 
-/** Pushed main→renderer when an agent pipe is created/removed, so the canvas can
- *  draw/erase the animated "data flow" edge. `dst` is null when ALL of src's
- *  pipes were removed. */
-export interface HcpPipeEvent {
-  src: string;
-  dst: string | null;
-  connected: boolean;
-}
-
-/** Pushed main→renderer when an agent SPAWNS another agent (tile.spawn_agent /
- *  workflow), so the canvas can draw a persistent parentage "wire" from parent to
- *  child — ALWAYS, independent of the report/data pipe (`hcp:pipe`). `parent` is
- *  null with connected:false to drop every spawn link touching `child` (on close). */
-export interface HcpSpawnEvent {
-  child: string;
-  parent: string | null;
-  connected: boolean;
-}
-
-/** Pushed main→renderer on every change to an agent session's status (the host's status
- *  store: packages/agent-host/src/status-store.ts). `tileId` is the bare tile id. */
-export interface HcpStatusEvent {
-  seq: number;
-  tileId: string;
-  status: SessionStatus;
-}
+// Agents' status and links: the workspace API's `status.changed`, `link.pipe`, `link.spawn` and
+// `tile.opened` events, under the names the window has always used.
+export type {
+  PipeChange as HcpPipeEvent,
+  SpawnChange as HcpSpawnEvent,
+  TileOpened as HcpSpawnedEvent,
+  StatusChange as HcpStatusEvent,
+} from "@hivemind/workspace-api/agents";
 
 /** Where a tile's current status began, as main remembers it across a renderer reload. */
 export interface LedgerSince { id: string; bucket: ViewStatus; since: number; exact: boolean }
@@ -575,17 +803,6 @@ export interface LedgerSince { id: string; bucket: ViewStatus; since: number; ex
 /** A PNG a view asked to share, checked and re-encoded by main, awaiting the user's choice. */
 export interface SharePrepared { token: string; preview: string; width: number; height: number }
 
-/** Pushed main→renderer when an agent hands off a plan (PreToolUse/ExitPlanMode).
- *  The renderer opens a PlanReviewTile and later calls `planReviewDecide`. */
-export interface PlanReviewOpen {
-  requestId: string;
-  /** The agent tile that produced the plan (so the review opens beside it). */
-  tileId: string;
-  /** The plan markdown (Claude Code's `tool_input.plan`). */
-  plan: string;
-  /** The agent's cwd at handoff. */
-  cwd: string;
-}
 
 /** A notable agent-status transition worth a native OS notification. */
 export interface AgentNotice {
@@ -621,8 +838,61 @@ export interface AppErrorEvent {
   source: string;
 }
 
-export type IpcChannel =
-  | keyof HiveIpc
-  | `pty:data:${string}`
-  | `pty:exit:${string}`
-  | `fs:changed:${string}`;
+/** `window.hive`: the IPC surface, and what only a window has. */
+export type HiveApi = HiveIpc & {
+  /** Host OS, exposed synchronously so the first canvas can pick a shell. */
+  platform: NodeJS.Platform;
+  /** Main asks the renderer to run a control-plane canvas verb (HCP). */
+  onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
+  /** An agent pipe was created/removed → draw/erase the data-flow edge. */
+  onHcpPipe: (cb: (e: PipeChange) => void) => () => void;
+  /** An agent spawned another → draw/erase the dashed parentage wire. */
+  onHcpSpawn: (cb: (e: SpawnChange) => void) => () => void;
+  /** The control plane is opening a tile: its prompt, and whether to bring it forward. */
+  onHcpSpawned: (cb: (e: TileOpened) => void) => () => void;
+  /** An agent session's status changed (the host's status store). */
+  onHcpStatus: (cb: (e: StatusChange) => void) => () => void;
+  /** Every agent session's status now — what a (re)loaded window starts from. */
+  hcpStatusAll: () => Promise<Array<{ tileId: string; status: StatusChange["status"] }>>;
+  /** The agent pipes and spawn wires there are now — what a (re)loaded window starts from. */
+  hcpLinks: () => Promise<{ pipes: Array<{ src: string; dst: string }>; spawns: Array<{ parent: string; child: string }> }>;
+  /** A background subsystem hit a non-fatal error → surface as a toast. */
+  onAppError: (cb: (e: AppErrorEvent) => void) => () => void;
+  onPtyData: (tileId: string, cb: (data: string) => void) => () => void;
+  onPtyExit: (
+    tileId: string,
+    /** `slept`: it was put to sleep, and is not gone. */
+    cb: (info: { code: number; signal?: number; slept?: true }) => void
+  ) => () => void;
+  onFsChanged: (
+    repoPath: string,
+    cb: (info: { paths: string[] }) => void
+  ) => () => void;
+  /** Path passed on the CLI (`hivemind .` / `hivemind /repo`), or null. */
+  getLaunchTarget?: () => Promise<string | null>;
+  /** Another window, on the workspace this one shows. */
+  newWindow?: () => Promise<void>;
+  /** A second `hivemind <path>` invocation asks the running window to switch. */
+  onOpenProject: (cb: (path: string) => void) => () => void;
+  onMenuToggleLayers?: (cb: () => void) => () => void;
+  /** Ctrl/Cmd+Shift+F → toggle the selected terminal's fit-to-screen overlay. */
+  onMenuFitOverlay?: (cb: () => void) => () => void;
+  /** Ctrl/Cmd+Shift+0 → reset the selected terminal's scale to the screen best. */
+  onMenuResetScale?: (cb: () => void) => () => void;
+  /** Ctrl/Cmd+. → focus the selected tile (plain `.` is eaten by xterm). */
+  onMenuFocusTile?: (cb: () => void) => () => void;
+  onMenuShortcut?: (cb: (action: string) => void) => () => void;
+  /** Resolve a picked File's absolute path (persistent video wallpaper). */
+  getPathForFile?: (file: File) => string;
+  /** Where this window loads a URL of the app's schemes (a view, a tool's module, a wallpaper):
+   *  the URL itself in an app window, a path on the browser server in a tab. */
+  resourceUrl(url: string): string;
+  /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
+  importWallpaper?: (srcPath: string) => Promise<string | null>;
+  /** Pick a custom media file for a canvas layer (background/overlay) → copied
+   *  into userData/media and served via the sandboxed hivemedia:// protocol. */
+  pickMedia?: (slot: string) => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;
+  /** A BrowserTile guest requested a popup/new window (target=_blank,
+   *  window.open) — the owning tile opens it as a new tab. */
+  onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
+};

@@ -1,0 +1,617 @@
+/**
+ * The host end of one community view's channel. Pure logic: validates every inbound message
+ * (protocol.ts), enforces the permission the manifest was granted, counts what it refuses, and
+ * disables the view past a threshold. No DOM and no Node: the window runs it for the view in its
+ * iframe (CommunityView.tsx owns the DOM there), and a device runs it for a view on a remote
+ * screen, its messages carried over the workspace API (`@hivemind/host/views`); the unit tests
+ * drive it with a fake port.
+ *
+ * Disable rules (any one trips it, `onDisable(reason)` fires once):
+ *   • ≥ LIMITS.malformed refused messages (malformed, unknown, before `ready`,
+ *     and what the protocol's `refusal` refuses: a command without its
+ *     permission, one naming a tile that does not exist, …);
+ *   • > LIMITS.messagesPerSecond inbound messages in one second (a flood);
+ *   • > LIMITS.longTaskMsPerWindow ms of main-thread long tasks attributed to
+ *     the plugin's iframe within LIMITS.windowMs (a runaway render loop). The
+ *     component feeds these in from a PerformanceObserver.
+ *
+ * What a host cannot do at all is not held against a view, which could not have known: a remote
+ * screen has no live surfaces to place (`surfaceRects`), no folder picker (`openFolder`) and no
+ * tiles but agents' to start. Those are refused as UNSUPPORTED and not counted.
+ */
+import {
+  ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
+  type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
+  type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
+  type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary,
+} from "@hivemind/view-sdk/protocol";
+import type { TileKind } from "@hivemind/workspace-doc/shapes";
+import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
+import { bucketTileStatus } from "./status.js";
+
+/** What the link asks of the workspace it shows: the protocol's commands, and each tile's status.
+ *  A host leaves out what it cannot do (a remote screen: tiles other than agents', frames, folder
+ *  pickers), and a view asking for it is told UNSUPPORTED. */
+export interface LinkCommands {
+  selectTile: (id: string | null) => void;
+  selectFrame: (id: string | null) => void;
+  focusTile: (id: string, opts?: { exact?: boolean }) => void;
+  closeTile: (id: string) => void;
+  spawnTile?: (kind: TileKind, frameId: string | null) => unknown;
+  spawnVis?: (which: "tree" | "shell" | "issues") => void;
+  /** Starts the person's default agent, whichever that is. */
+  spawnClaude: () => void;
+  addFrame?: () => void;
+  /** Start an agent by catalog id (null = the person's default); false when no such agent is installed. */
+  spawnAgent: (agent: string | null, frameId: string | null, opts?: { prompt?: string; name?: string; resume?: string }) => boolean;
+  /** Rename a tile; "" goes back to its own name. */
+  renameTile: (id: string, name: string) => void;
+  openFolder?: (frameId: string) => void;
+  /** A tile's status: the last known one now, then each change, until the returned function is called. */
+  subscribeTileStatus: (tileId: string, cb: (status: TileStatusKind) => void) => () => void;
+}
+
+export const LIMITS = {
+  malformed: 8,
+  messagesPerSecond: 600,
+  longTaskMsPerWindow: 1500,
+  windowMs: 3000,
+};
+
+/** The 1.3 sources a host wired. A feature is advertised in `hello` only when its source is here. */
+export interface LinkServices {
+  sinceOf?: (tileId: string) => { since: number; exact: boolean } | undefined;
+  /** A listener returns whether the event matched its subscription. */
+  events?: { subscribe(l: (e: ViewEvent, target?: string) => boolean): () => void; replay(since: number, accept: (e: ViewEvent) => boolean, viewId: string): ViewEvent[] };
+  activity?: { level(tileId: string): ActivityLevel; subscribe(cb: (changed: Record<string, ActivityLevel>) => void): () => void; watch(owner: object, tileIds: string[]): void };
+  /** Replays the current state to a new subscriber. */
+  presence?: { subscribe(cb: (p: ViewPresence) => void): () => void };
+  history?: (day: string) => Promise<ViewHistoryDay>;
+  share?: (png: ArrayBuffer, suggestedName?: string) => Promise<ShareOutcome>;
+  /** 1.4: an agent tile's full status; the current one now, then each change. */
+  agentStatus?: (tileId: string, cb: (s: ViewAgentStatus) => void) => () => void;
+  agents?: () => ViewAgent[];
+  /** A frame's folder's past sessions. Rejects with `{ code: "UNSUPPORTED" }` for a frame it cannot list. */
+  sessions?: (agent: string, frameId: string) => Promise<ViewSession[]>;
+  /** The host's confirm for a prompt the view wrote: true when the user sends it. */
+  confirmPrompt?: (req: { agent: string | null; tileId?: string; frameId: string | null; text: string }) => Promise<boolean>;
+  /** Type a confirmed prompt into an agent tile. Rejects with `{ code: "BAD_REQUEST" }` for a tile that is not one. */
+  sendPrompt?: (tileId: string, text: string) => Promise<void>;
+  /** 1.5: everyone else in the workspace, whatever they point at and select; the current ones now,
+   *  then each change. The link keeps to the view's own tiles and frames. */
+  participants?: { subscribe(cb: (people: ViewParticipant[]) => void): () => void };
+  /** 1.8: every widget in the workspace, now and on each change; and a press of one, as the
+   *  person's where it is drawn. */
+  widgets?: { subscribe(cb: (widgets: ViewWidget[]) => void): () => void; press(id: string, press: { action: unknown } | { click: true }): void };
+  /** 1.9: the issues of the workspace the view shows, now and on each change; and one of its
+   *  issue methods, called for the view (the link has checked what writes). */
+  issues?: { subscribe(cb: (issues: ViewIssueSummary[]) => void): () => void; call(call: IssueCall, args: unknown[]): Promise<unknown> };
+}
+
+export const SHARE_DECLINES_MAX = 3;
+/** Tiles announced to a view that the link remembers, newest kept. */
+const ANNOUNCED_KEPT = 4096;
+export const PROMPT_DECLINES_MAX = 3;
+
+/** What `hello.features` says: each source the host wired (1.3), and (1.6) `surfaces` when it places
+ *  the live surfaces a view asks for. */
+export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeature[] {
+  const f: ViewFeature[] = [];
+  if (s.sinceOf) f.push("since");
+  if (s.events) f.push("events");
+  if (s.activity) f.push("activity");
+  if (s.presence) f.push("presence");
+  if (s.history) f.push("history");
+  if (s.share) f.push("share");
+  if (s.agentStatus) f.push("agentStatus");
+  if (s.agents) f.push("agents");
+  if (s.sessions) f.push("sessions");
+  if (s.confirmPrompt && s.sendPrompt) f.push("prompt");
+  if (s.participants) f.push("participants");
+  if (s.widgets) f.push("widgets");
+  if (s.issues) f.push("issues");
+  f.push("invoke");
+  if (placesSurfaces) f.push("surfaces");
+  return f;
+}
+
+export interface LinkDeps {
+  pluginId: string;
+  capabilities: ViewPermission[];
+  commands: LinkCommands;
+  /** Whether a tile of `kind` can be started here: the host's tile plugins say. Absent: any kind
+   *  the host's `spawnTile` takes. */
+  canSpawn?: (kind: string) => boolean;
+  /** Ids the plugin may name in commands (the current tiles). */
+  hasTile: (id: string) => boolean;
+  hasFrame: (id: string) => boolean;
+  onReady: () => void;
+  /** Where the view wants live surfaces, said to it as the feature `surfaces` (1.6); none: this host
+   *  places none (a remote screen that does not place its own). */
+  onSurfaceRects?: (rects: SurfaceRect[]) => void;
+  onLayout: (data: unknown) => void;
+  onFramesDrawn: (count: number) => void;
+  onError: (message: string) => void;
+  onDisable: (reason: string) => void;
+  now?: () => number;
+  services?: LinkServices;
+  schedule?: (fn: () => void, ms: number) => unknown;
+}
+
+export interface LinkStats {
+  received: number;
+  refused: number;
+  ready: boolean;
+  disabled: string | null;
+  framesDrawn: number;
+  statusSubscriptions: number;
+}
+
+/** The link's end of the channel to the view: a MessagePort in the window, a session's relay on a
+ *  device (which hands what the view posts to `handle`). */
+export interface PortLike { postMessage(msg: unknown): void; onmessage: ((e: MessageEvent) => void) | null; start?: () => void; close?: () => void }
+
+export class CommunityLink {
+  readonly stats: LinkStats = { received: 0, refused: 0, ready: false, disabled: null, framesDrawn: 0, statusSubscriptions: 0 };
+  private port: PortLike | null = null;
+  private statusUnsubs = new Map<string, () => void>();
+  private windowStart = 0;
+  private windowCount = 0;
+  private longTasks: Array<{ t: number; ms: number }> = [];
+  private reveals = new Map<number, (rect: ViewRect | null) => void>();
+  private nextRequest = 1;
+  private readonly now: () => number;
+  private readonly services: LinkServices;
+  private readonly schedule: (fn: () => void, ms: number) => unknown;
+  readonly features: ViewFeature[];
+  private visible = true;
+  private eventSub: { kinds: Set<ViewEventKind>; custom: string[] } | null = null;
+  private eventUnsub: (() => void) | null = null;
+  private eventQueue: ViewEvent[] = [];
+  private watched = new Set<string>();
+  private activityUnsub: (() => void) | null = null;
+  private activityPending: Record<string, ActivityLevel> = {};
+  private activityTimer = false;
+  private lastActivitySent = -Infinity;
+  private presenceUnsub: (() => void) | null = null;
+  private historyBusy = false;
+  private sharePending = false;
+  private shareDeclines = 0;
+  private promptPending = false;
+  private promptDeclines = 0;
+  /** Every tile a `structure` named to the view, lately: a rect for one closed since is a race. */
+  private announced = new Set<string>();
+  private readonly scope: HostScope;
+  private participantsUnsub: (() => void) | null = null;
+  private widgetsUnsub: (() => void) | null = null;
+  private issuesUnsub: (() => void) | null = null;
+  private people: ViewParticipant[] | null = null;
+  private lastParticipants = "";
+  /** What this host cannot do that the view asked for, said once each. */
+  private unsupportedSaid = new Set<string>();
+
+  constructor(private deps: LinkDeps) {
+    this.now = deps.now ?? (() => performance.now());
+    this.services = deps.services ?? {};
+    this.schedule = deps.schedule ?? ((fn, ms) => setTimeout(fn, ms));
+    this.features = linkFeatures(this.services, deps.onSurfaceRects !== undefined);
+    this.scope = {
+      capabilities: deps.capabilities, features: this.features,
+      hasTile: (id) => deps.hasTile(id), hasFrame: (id) => deps.hasFrame(id), announced: (id) => this.announced.has(id),
+    };
+  }
+
+  /** The view's document was hidden or shown: activity pauses while hidden and catches up after. */
+  setVisible(visible: boolean): void {
+    if (visible === this.visible) return;
+    this.visible = visible;
+    if (!visible || this.watched.size === 0 || !this.services.activity) return;
+    for (const id of this.watched) this.activityPending[id] = this.services.activity.level(id);
+    this.queueActivity();
+  }
+
+  private invokes = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+  private nextInvoke = 0;
+
+  /** 1.10: run one of the plugin's commands; what its handler returned, or why it failed. */
+  invoke(name: string, args: unknown, timeoutMs = 30_000): Promise<unknown> {
+    if (this.stats.disabled || !this.port) return Promise.reject(new Error("the plugin is not running"));
+    const invokeId = ++this.nextInvoke;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { this.invokes.delete(invokeId); reject(new Error(`it did not answer "${name}" in ${timeoutMs / 1000}s`)); }, timeoutMs);
+      this.invokes.set(invokeId, { resolve, reject, timer });
+      this.send({ type: "invoke", invokeId, name, args });
+    });
+  }
+
+  attach(port: PortLike): void {
+    this.port = port;
+    port.onmessage = (e) => this.handle(e.data);
+    port.start?.();
+  }
+
+  send(msg: HostMessage): void {
+    if (this.stats.disabled || !this.port) return;
+    try { this.port.postMessage(msg); } catch { /* port gone */ }
+    if (msg.type !== "structure") return;
+    for (const t of msg.tiles) { this.announced.delete(t.id); this.announced.add(t.id); }
+    for (const id of this.announced) { if (this.announced.size <= ANNOUNCED_KEPT) break; this.announced.delete(id); }
+    // What others select is kept to the tiles the view knows, which just changed.
+    this.sendParticipants();
+  }
+
+  /** Ask the plugin where a tile is (its rect in the plugin viewport, or null). */
+  reveal(tileId: string, timeoutMs = 2000): Promise<ViewRect | null> {
+    if (this.stats.disabled || !this.stats.ready) return Promise.resolve(null);
+    const requestId = this.nextRequest++;
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { this.reveals.delete(requestId); resolve(null); }, timeoutMs);
+      this.reveals.set(requestId, (rect) => { clearTimeout(timer); resolve(rect); });
+      this.send({ type: "reveal", requestId, tileId });
+    });
+  }
+
+  /** Feed a main-thread long task attributed to the plugin's iframe. */
+  noteLongTask(ms: number): void {
+    if (this.stats.disabled) return;
+    const t = this.now();
+    this.longTasks.push({ t, ms });
+    const cutoff = t - LIMITS.windowMs;
+    while (this.longTasks.length && this.longTasks[0]!.t < cutoff) this.longTasks.shift();
+    const total = this.longTasks.reduce((a, b) => a + b.ms, 0);
+    if (total > LIMITS.longTaskMsPerWindow) this.disable(`runaway: ${Math.round(total)} ms of long tasks in ${LIMITS.windowMs / 1000} s`);
+  }
+
+  dispose(): void {
+    for (const p of this.invokes.values()) { clearTimeout(p.timer); p.reject(new Error("the plugin stopped")); }
+    this.invokes.clear();
+    this.eventUnsub?.(); this.eventUnsub = null;
+    this.activityUnsub?.(); this.activityUnsub = null;
+    if (this.services.activity && this.watched.size) this.services.activity.watch(this, []);
+    this.watched.clear();
+    this.presenceUnsub?.(); this.presenceUnsub = null;
+    this.participantsUnsub?.(); this.participantsUnsub = null;
+    this.widgetsUnsub?.(); this.widgetsUnsub = null;
+    this.issuesUnsub?.(); this.issuesUnsub = null;
+    for (const u of this.statusUnsubs.values()) u();
+    this.statusUnsubs.clear();
+    this.stats.statusSubscriptions = 0;
+    const port = this.port;
+    this.port = null;
+    if (!port) return;
+    if (this.stats.disabled) { port.onmessage = null; port.close?.(); return; }
+    // A layout the view sent before it was let go may still be on its way from its frame: keep it.
+    port.onmessage = (e) => { if ((e.data as { type?: unknown } | null)?.type === "layout") this.handle(e.data); };
+  }
+
+  private disable(reason: string) {
+    if (this.stats.disabled) return;
+    this.stats.disabled = reason;
+    this.dispose();
+    this.deps.onDisable(reason);
+  }
+
+  private refuse(why: string) {
+    this.stats.refused++;
+    console.warn(`[hivemind] view "${this.deps.pluginId}" refused: ${why}`);
+    if (this.stats.refused >= LIMITS.malformed) this.disable(`${this.stats.refused} malformed or unauthorised messages (last: ${why})`);
+  }
+
+  /** What this host cannot do at all: refused, but not counted against the view. */
+  private unsupported(what: string) {
+    if (this.unsupportedSaid.has(what)) return;
+    this.unsupportedSaid.add(what);
+    console.warn(`[hivemind] view "${this.deps.pluginId}": ${what} is UNSUPPORTED here`);
+  }
+
+  /** What the view sent: the port handler routes here, and so does a device for a view on a
+   *  remote screen. */
+  handle(raw: unknown): void {
+    if (this.stats.disabled) return;
+    this.stats.received++;
+    const t = this.now();
+    if (t - this.windowStart >= 1000) { this.windowStart = t; this.windowCount = 0; }
+    if (++this.windowCount > LIMITS.messagesPerSecond) { this.disable(`message flood: >${LIMITS.messagesPerSecond} messages in one second`); return; }
+    const r = parsePluginMessage(raw);
+    if (!r.ok) { this.refuse(r.reason); return; }
+    const m: PluginMessage = r.msg;
+    if (!this.stats.ready) {
+      if (m.type !== "ready") { this.refuse(`${m.type} before ready`); return; }
+      if (m.v !== PROTOCOL_VERSION) { this.disable(`protocol version ${m.v} is not supported (host speaks ${PROTOCOL_VERSION})`); return; }
+      this.stats.ready = true;
+      this.deps.onReady();
+      return;
+    }
+    if (m.type === "ready") { this.refuse("duplicate ready"); return; }
+    const no = refusal(m, this.scope);
+    if (no) {
+      this.refuse(no.why);
+      if (!no.partly) return;
+    }
+    switch (m.type) {
+      case "command": this.command(m.name, m.args); return;
+      case "subscribeStatus": {
+        if (this.statusUnsubs.has(m.tileId)) return;
+        const tileId = m.tileId;
+        let bucket: ViewStatus | null = null;
+        let agent: ViewAgentStatus | undefined;
+        const push = () => {
+          if (bucket === null) return;
+          const s = this.services.sinceOf?.(tileId);
+          this.send({ type: "status", tileId, status: bucket, ...(s ? { since: s.since, exact: s.exact } : {}), ...(agent ? { agent } : {}) });
+        };
+        const offBus = this.deps.commands.subscribeTileStatus(tileId, (status) => { bucket = bucketTileStatus(status); push(); });
+        const offAgent = this.services.agentStatus?.(tileId, (a) => {
+          if (agent && JSON.stringify(agent) === JSON.stringify(a)) return;
+          agent = a;
+          push();
+        });
+        this.statusUnsubs.set(tileId, () => { offBus(); offAgent?.(); });
+        this.stats.statusSubscriptions = this.statusUnsubs.size;
+        return;
+      }
+      case "unsubscribeStatus": {
+        this.statusUnsubs.get(m.tileId)?.();
+        this.statusUnsubs.delete(m.tileId);
+        this.stats.statusSubscriptions = this.statusUnsubs.size;
+        return;
+      }
+      case "surfaceRects": {
+        const place = this.deps.onSurfaceRects;
+        if (!place) { this.unsupported("surfaceRects"); return; }
+        place(m.rects.filter((r) => this.deps.hasTile(r.tileId)));
+        return;
+      }
+      case "revealed": {
+        const cb = this.reveals.get(m.requestId);
+        if (!cb) { this.refuse(`revealed: unknown requestId ${m.requestId}`); return; }
+        this.reveals.delete(m.requestId);
+        cb(m.rect);
+        return;
+      }
+      case "framesDrawn": this.stats.framesDrawn = m.count; this.deps.onFramesDrawn(m.count); return;
+      case "layout": this.deps.onLayout(m.data); return;
+      case "error": this.deps.onError(m.message); return;
+      case "subscribeEvents": this.subscribeEvents(m.kinds, m.custom ?? [], m.replaySince); return;
+      case "unsubscribeEvents": this.eventUnsub?.(); this.eventUnsub = null; this.eventSub = null; return;
+      case "watchActivity": this.watchActivity(m.tileIds); return;
+      case "subscribePresence": {
+        if (!this.presenceUnsub) this.presenceUnsub = this.services.presence!.subscribe((presence) => this.send({ type: "presence", presence }));
+        return;
+      }
+      case "unsubscribePresence": this.presenceUnsub?.(); this.presenceUnsub = null; return;
+      case "subscribeParticipants": {
+        if (!this.participantsUnsub) this.participantsUnsub = this.services.participants!.subscribe((people) => { this.people = people; this.sendParticipants(); });
+        return;
+      }
+      case "unsubscribeParticipants":
+        this.participantsUnsub?.(); this.participantsUnsub = null;
+        this.people = null; this.lastParticipants = "";
+        return;
+      case "subscribeWidgets": {
+        if (!this.widgetsUnsub) this.widgetsUnsub = this.services.widgets!.subscribe((widgets) => this.send({ type: "widgets", widgets }));
+        return;
+      }
+      case "unsubscribeWidgets": this.widgetsUnsub?.(); this.widgetsUnsub = null; return;
+      case "subscribeIssues": {
+        if (!this.issuesUnsub) this.issuesUnsub = this.services.issues!.subscribe((issues) => this.send({ type: "issues", issues }));
+        return;
+      }
+      case "unsubscribeIssues": this.issuesUnsub?.(); this.issuesUnsub = null; return;
+      case "invokeResult": {
+        const p = this.invokes.get(m.invokeId);
+        if (!p) return;
+        this.invokes.delete(m.invokeId);
+        clearTimeout(p.timer);
+        if (m.ok) p.resolve(m.result); else p.reject(new Error(m.error));
+        return;
+      }
+      case "pressWidget": this.services.widgets!.press(m.id, m.click ? { click: true } : { action: m.action }); return;
+      case "request": this.request(m); return;
+    }
+  }
+
+  /** Everyone else here as the view may see them, on its own tiles and frames: sent when that changes. */
+  private sendParticipants() {
+    if (!this.people) return;
+    const participants = this.people.map((p) => ({
+      ...p,
+      cursor: p.cursor && this.deps.hasTile(p.cursor.tileId) ? p.cursor : null,
+      selection: p.selection.filter((id) => this.deps.hasTile(id) || this.deps.hasFrame(id)),
+    }));
+    const key = JSON.stringify(participants);
+    if (key === this.lastParticipants) return;
+    this.lastParticipants = key;
+    this.send({ type: "participants", participants });
+  }
+
+  private subscribeEvents(kinds: ViewEventKind[], custom: string[], replaySince: number | undefined) {
+    const events = this.services.events!;
+    const sub = { kinds: new Set(kinds), custom };
+    this.eventSub = sub;
+    const wants = (e: ViewEvent) => sub.kinds.has(e.kind) && (e.kind !== "custom" || customNameMatches(sub.custom, e.name));
+    if (!this.eventUnsub) {
+      this.eventUnsub = events.subscribe((e, target) => {
+        const s = this.eventSub;
+        if (target && target !== this.deps.pluginId) return false;
+        if (!s || !s.kinds.has(e.kind) || (e.kind === "custom" && !customNameMatches(s.custom, e.name))) return false;
+        if (this.eventQueue.push(e) === 1) queueMicrotask(() => this.flushEvents());
+        return true;
+      });
+    }
+    if (replaySince !== undefined) {
+      const replay = events.replay(replaySince, wants, this.deps.pluginId).slice(-EVENT_REPLAY_MAX);
+      if (replay.length) this.send({ type: "events", events: replay, replay: true });
+    }
+  }
+
+  // Everything emitted in one task goes out as one message.
+  private flushEvents() {
+    const events = this.eventQueue;
+    this.eventQueue = [];
+    if (events.length) this.send({ type: "events", events });
+  }
+
+  private watchActivity(tileIds: string[]) {
+    const activity = this.services.activity!;
+    const known = tileIds.filter((id) => this.deps.hasTile(id));
+    const next = new Set(known);
+    for (const id of next) if (!this.watched.has(id)) this.activityPending[id] = activity.level(id);
+    for (const id of Object.keys(this.activityPending)) if (!next.has(id)) delete this.activityPending[id];
+    this.watched = next;
+    activity.watch(this, known);
+    if (next.size && !this.activityUnsub) {
+      this.activityUnsub = activity.subscribe((changed) => {
+        let any = false;
+        for (const [id, l] of Object.entries(changed)) if (this.watched.has(id)) { this.activityPending[id] = l; any = true; }
+        if (any) this.queueActivity();
+      });
+    } else if (!next.size) { this.activityUnsub?.(); this.activityUnsub = null; }
+    this.queueActivity();
+  }
+
+  // At most one activity message per ACTIVITY_MIN_INTERVAL_MS, none while hidden.
+  private queueActivity() {
+    if (this.activityTimer || !this.visible || Object.keys(this.activityPending).length === 0) return;
+    const wait = Math.max(0, this.lastActivitySent + ACTIVITY_MIN_INTERVAL_MS - this.now());
+    this.activityTimer = true;
+    this.schedule(() => {
+      this.activityTimer = false;
+      if (!this.visible) return;
+      const levels = this.activityPending;
+      this.activityPending = {};
+      if (Object.keys(levels).length === 0) return;
+      this.lastActivitySent = this.now();
+      this.send({ type: "activity", levels });
+    }, wait);
+  }
+
+  private request(m: Extract<PluginMessage, { type: "request" }>) {
+    const reply = (p: Promise<unknown>) => p.then(
+      (result) => this.send({ type: "response", requestId: m.requestId, ok: true, result }),
+      (e: unknown) => {
+        const code = (e as { code?: unknown })?.code;
+        this.fail(m.requestId, code === "UNSUPPORTED" || code === "BAD_REQUEST" ? code : "INTERNAL", (e as Error)?.message ?? String(e));
+      },
+    );
+    const granted = (p: ViewPermission) => (this.deps.capabilities.includes(p) ? true : (this.fail(m.requestId, "DECLINED", `${m.name} needs permission "${p}"`), false));
+    if (m.name === "issue") {
+      const issues = this.services.issues;
+      if (!issues) { this.fail(m.requestId, "UNSUPPORTED", "this host has no issues"); return; }
+      void reply(issues.call(m.args[0].call, m.args[0].args));
+      return;
+    }
+    if (m.name === "agents") {
+      const agents = this.services.agents;
+      if (!agents) { this.fail(m.requestId, "UNSUPPORTED", "agents are not listed here"); return; }
+      void reply(Promise.resolve().then(() => ({ agents: agents() })));
+      return;
+    }
+    if (m.name === "sessions") {
+      const sessions = this.services.sessions;
+      if (!sessions) { this.fail(m.requestId, "UNSUPPORTED", "sessions are not listed here"); return; }
+      if (!granted("workspace:sessions")) return;
+      if (!this.deps.hasFrame(m.args[0].frameId)) { this.fail(m.requestId, "BAD_REQUEST", `unknown frame ${m.args[0].frameId}`); return; }
+      void reply(sessions(m.args[0].agent, m.args[0].frameId).then((list) => ({ sessions: list })));
+      return;
+    }
+    if (m.name === "prompt") {
+      const { confirmPrompt, sendPrompt } = this.services;
+      if (!confirmPrompt || !sendPrompt) { this.fail(m.requestId, "UNSUPPORTED", "prompts are not available"); return; }
+      if (!granted("workspace:prompt")) return;
+      const { tileId, text } = m.args[0];
+      if (!this.deps.hasTile(tileId)) { this.fail(m.requestId, "BAD_REQUEST", `unknown tile ${tileId}`); return; }
+      const why = this.promptBlocked();
+      if (why) { this.fail(m.requestId, why.code, why.message); return; }
+      this.promptPending = true;
+      void reply(confirmPrompt({ agent: null, tileId, frameId: null, text }).then(async (ok) => {
+        if (!ok) { this.promptDeclines++; return { outcome: "cancelled" }; }
+        await sendPrompt(tileId, text);
+        return { outcome: "sent" };
+      }).finally(() => { this.promptPending = false; }));
+      return;
+    }
+    if (m.name === "history") {
+      const history = this.services.history;
+      if (!history) { this.fail(m.requestId, "UNSUPPORTED", "history is not available"); return; }
+      if (this.historyBusy) { this.fail(m.requestId, "BUSY", "a history request is already running"); return; }
+      this.historyBusy = true;
+      void reply(history(m.args[0].day).finally(() => { this.historyBusy = false; }));
+      return;
+    }
+    const share = this.services.share;
+    if (!share) { this.fail(m.requestId, "UNSUPPORTED", "sharing is not available"); return; }
+    if (this.shareDeclines >= SHARE_DECLINES_MAX) { this.fail(m.requestId, "DECLINED", "the user declined to share"); return; }
+    if (this.sharePending || !this.visible) { this.fail(m.requestId, "BUSY", this.sharePending ? "a share is already waiting" : "the view is hidden"); return; }
+    this.sharePending = true;
+    void reply(share(m.args[0].png, m.args[0].suggestedName).then((outcome) => {
+      if (outcome === "cancelled") this.shareDeclines++;
+      return { outcome };
+    }).finally(() => { this.sharePending = false; }));
+  }
+
+  /** Why a prompt cannot be shown now: one at a time, not while hidden, not after the user said no three times. */
+  private promptBlocked(): { code: RequestErrorCode; message: string } | null {
+    if (this.promptDeclines >= PROMPT_DECLINES_MAX) return { code: "DECLINED", message: "the user declined this view's prompts" };
+    if (this.promptPending || !this.visible) return { code: "BUSY", message: this.promptPending ? "a prompt is already waiting" : "the view is hidden" };
+    return null;
+  }
+
+  private fail(requestId: number, code: RequestErrorCode, message: string) {
+    this.send({ type: "response", requestId, ok: false, error: { code, message } });
+  }
+
+  /** A tile closed: drop its subscription silently (the plugin will hear it in `structure`). */
+  dropTile(tileId: string): void {
+    if (this.watched.delete(tileId)) { delete this.activityPending[tileId]; this.services.activity?.watch(this, [...this.watched]); }
+    this.statusUnsubs.get(tileId)?.();
+    if (this.statusUnsubs.delete(tileId)) this.stats.statusSubscriptions = this.statusUnsubs.size;
+  }
+
+  /** A command `refusal` let through: its permission is granted and what it names is there. */
+  private command(name: CommandName, args: unknown[]) {
+    const c = this.deps.commands;
+    switch (name) {
+      case "selectTile": c.selectTile(args[0] as string | null); return;
+      case "selectFrame": c.selectFrame(args[0] as string | null); return;
+      case "focusTile": c.focusTile(args[0] as string, args[1] as { exact?: boolean } | undefined); return;
+      case "closeTile": c.closeTile(args[0] as string); return;
+      case "spawnTile":
+        if (this.deps.canSpawn && !this.deps.canSpawn(args[0] as string)) { this.refuse(`spawnTile: unknown kind ${String(args[0])}`); return; }
+        if (!c.spawnTile) { this.unsupported("spawnTile"); return; }
+        c.spawnTile(args[0] as TileKind, args[1] as string | null);
+        return;
+      case "spawnVis":
+        if (!c.spawnVis) { this.unsupported("spawnVis"); return; }
+        c.spawnVis(args[0] as "tree" | "shell" | "issues");
+        return;
+      case "spawnClaude": c.spawnClaude(); return;
+      case "addFrame":
+        if (!c.addFrame) { this.unsupported("addFrame"); return; }
+        c.addFrame();
+        return;
+      case "spawnAgent": {
+        const opts = args[2] as { prompt?: string; name?: string; resume?: string } | undefined;
+        const go = () => {
+          if (!c.spawnAgent(args[0] as string | null, args[1] as string | null, opts)) this.refuse(`spawnAgent: no agent ${String(args[0] ?? "installed")}`);
+        };
+        if (opts?.prompt === undefined) { go(); return; }
+        // The prompt is what the agent will do: the user reads it first.
+        const confirm = this.services.confirmPrompt;
+        if (!confirm) { this.refuse("spawnAgent: prompts are not available"); return; }
+        const why = this.promptBlocked();
+        if (why) { this.refuse(`spawnAgent: ${why.message}`); return; }
+        this.promptPending = true;
+        void confirm({ agent: args[0] as string | null, frameId: args[1] as string | null, text: opts.prompt })
+          .then((ok) => { if (ok) go(); else this.promptDeclines++; }, () => { /* no dialog: nothing runs */ })
+          .finally(() => { this.promptPending = false; });
+        return;
+      }
+      case "renameTile": c.renameTile(args[0] as string, args[1] as string); return;
+      case "openFolder":
+        if (!c.openFolder) { this.unsupported("openFolder"); return; }
+        c.openFolder(args[0] as string);
+        return;
+    }
+  }
+}

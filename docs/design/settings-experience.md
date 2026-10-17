@@ -7,14 +7,19 @@ column. Appearance has one implementation: presets, accent, wallpaper, glass, sc
 surfaces, and overlays. Terminal palette and theme import/export are advanced controls.
 The toolbar's Theme action opens this page.
 
-Views selects the active renderer and configures the toolbar for that view. Automatic
-uses the view's declared position; the user can override it. A matrix of every view's
-positions made a simple choice harder to understand.
+Plugins is one page for every kind (agents, views, widgets, tools), yours or HiveHub's, and
+each plugin has one page with Settings, Read me and What it can do. One record per plugin in
+settings.json holds whether it is on and what it is set to; see
+[plugin-settings-2026-10-07.md](plugin-settings-2026-10-07.md), which replaced the per-kind
+pages this note first described.
 
-Extensions owns installation, enable/disable, and removal. Installation uses a native
-folder picker followed by a package/permission review. Replacements stage and validate
-before replacing the existing package. Load reports update through subscriptions.
-There is no marketplace or remote package installer in this change.
+A view's page selects it and configures its toolbar. Automatic uses the view's declared
+position; the user can override it. A matrix of every view's positions made a simple choice
+harder to understand.
+
+Installation from a folder uses a native folder picker followed by a package/permission review.
+Replacements stage and validate before replacing the existing package. Load reports update
+through subscriptions.
 
 ## Verified behavior
 

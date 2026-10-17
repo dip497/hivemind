@@ -28,6 +28,8 @@ export interface SettingsCoordinator<T> {
   mutate(apply: () => Promise<T>): Promise<T>;
   /** Operations queued or running. */
   depth(): number;
+  /** Settles when every operation queued so far has finished, failed ones included. */
+  idle(): Promise<void>;
 }
 
 export function createSettingsCoordinator<T>(io: {
@@ -59,5 +61,6 @@ export function createSettingsCoordinator<T>(io: {
     reload: () => run(io.read),
     mutate: (apply) => run(apply),
     depth: () => depth,
+    idle: () => queue.then(() => undefined),
   };
 }

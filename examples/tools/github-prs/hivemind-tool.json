@@ -1,0 +1,46 @@
+{
+  "id": "dip497/github-prs",
+  "name": "Pull requests",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "git",
+  "description": "The repository's GitHub pull requests: read the conversation and the diff, comment, approve or merge.",
+  "entry": "index.js",
+  "permissions": [],
+  "settings": [
+    {
+      "id": "state",
+      "label": "Show",
+      "type": "choice",
+      "values": [
+        "open",
+        "closed",
+        "merged",
+        "all"
+      ],
+      "labels": [
+        "Open",
+        "Closed",
+        "Merged",
+        "All"
+      ],
+      "default": "open"
+    }
+  ],
+  "tools": [
+    {
+      "key": "prs",
+      "label": "Pull requests",
+      "description": "The repository's pull requests, through gh.",
+      "tileKind": "github-prs",
+      "size": {
+        "width": 1100,
+        "height": 760
+      },
+      "needsRepo": true,
+      "singleton": true,
+      "glyph": "⇅",
+      "icon": "icon.svg"
+    }
+  ]
+}

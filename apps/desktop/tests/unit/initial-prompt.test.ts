@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { deliversPromptViaArgv } from "../../src/shared/agent-io.ts";
+import { deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { applyInitialPrompt, INITIAL_PROMPT_ENV, stripInitialPrompt } from "@hivemind/agent-host/initial-prompt";
 import { useAuthoredAgents } from "./authored-agents.ts";
 

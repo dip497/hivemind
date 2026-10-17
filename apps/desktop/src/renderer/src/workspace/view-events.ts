@@ -8,7 +8,7 @@
  */
 import type { JsonValue, NeedsInputReason, TurnOutcome, ViewEvent, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
-import { bucketTileStatus } from "./tile-status-bucket";
+import { bucketTileStatus } from "@hivemind/view-host/status";
 
 export interface HubTile {
   id: string;
@@ -24,9 +24,9 @@ export interface HubTile {
 
 export interface SinceInfo { bucket: ViewStatus; since: number; exact: boolean }
 
-/** One ledger line. `k` is the workspace's layout key. */
+/** One ledger line. `k` is the workspace's layout key; `c` and `g`, an exit's code and signal. */
 export type LedgerLine =
-  | { t: number; k: string; e: "s"; id: string; s: ViewStatus; x: boolean }
+  | { t: number; k: string; e: "s"; id: string; s: ViewStatus; x: boolean; c?: number; g?: number }
   | { t: number; k: string; e: "o" | "i"; id: string; f: string | null; ft?: string; tk: string; a?: string; n: string }
   | { t: number; k: string; e: "c"; id: string; n: string }
   | { t: number; k: string; e: "t"; id: string }
@@ -66,6 +66,8 @@ export class ViewEventHub {
   private openedThisRun = new Set<string>();
   private hookTurns = new Set<string>();
   private failed = new Set<string>();
+  /** Tiles whose exit line says how the process ended. */
+  private exitTold = new Set<string>();
   private subagents = new Map<string, number>();
   private subagentPending = new Map<string, number>();
   private listeners = new Set<Listener>();
@@ -93,7 +95,17 @@ export class ViewEventHub {
 
     const bucket = bucketTileStatus(e.status);
     const cur = this.sinceMap.get(e.tileId);
-    if (cur?.bucket === bucket) return;
+    // How a process ended is kept with its exit: nothing else records it once its tile is gone.
+    const how = e.status === "exited" ? { ...(e.exitCode !== undefined ? { c: e.exitCode } : {}), ...(e.signal !== undefined ? { g: e.signal } : {}) } : {};
+    const told = Object.keys(how).length > 0;
+    if (cur?.bucket === bucket) {
+      // The host's bare "exited" came first: the tile's own, which knows how, is kept at the same moment.
+      if (told && bucket === "exited" && !this.exitTold.has(e.tileId)) {
+        this.exitTold.add(e.tileId);
+        this.line({ t: cur.since, e: "s", id: e.tileId, s: bucket, x: cur.exact, ...how });
+      }
+      return;
+    }
     if (cur?.bucket === "working" && bucket === "idle" && !e.synthetic && !this.hookTurns.has(e.tileId) && this.isAgent(e.tileId)) {
       this.emit({ kind: "turn", tileId: e.tileId, inferred: true }, t);
     }
@@ -105,7 +117,9 @@ export class ViewEventHub {
       next = seed?.bucket === bucket ? seed : { bucket, since: t, exact: this.openedThisRun.has(e.tileId) };
     }
     this.sinceMap.set(e.tileId, next);
-    this.line({ t: next.since, e: "s", id: e.tileId, s: bucket, x: next.exact });
+    if (told) this.exitTold.add(e.tileId);
+    else this.exitTold.delete(e.tileId);
+    this.line({ t: next.since, e: "s", id: e.tileId, s: bucket, x: next.exact, ...how });
   }
 
   /** What main remembered before this renderer loaded (a reload keeps exact times). */
@@ -249,6 +263,7 @@ export class ViewEventHub {
     this.raw.delete(id);
     this.hookTurns.delete(id);
     this.failed.delete(id);
+    this.exitTold.delete(id);
     this.subagents.delete(id);
     this.openedThisRun.delete(id);
   }

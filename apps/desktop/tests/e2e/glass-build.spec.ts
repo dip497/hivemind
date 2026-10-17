@@ -21,7 +21,7 @@ test("the built app frosts the chrome and keeps tiles clear", async () => {
   const app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox", `--user-data-dir=${dir}/ud`],
     cwd: APP_DIR,
-    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), HIVEMIND_PTY_DAEMON: "0" },
+    env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg") },
   });
   try {
     const page = await app.firstWindow();

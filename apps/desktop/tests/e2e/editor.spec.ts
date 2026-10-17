@@ -3,13 +3,14 @@
 // the Explorer (which mounts the workbench), clicks the file in the embedded
 // tree, and asserts the embedded editor renders the file's content. Then types
 // and asserts dirty. Saving-to-disk is verified as a bonus after ⌘S.
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { launchWindow, type AppWindow } from "./helpers/window";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 
-let app: ElectronApplication;
+let app: AppWindow;
 let page: Page;
 let repo: string;
 const FILE = "hello.ts";
@@ -35,11 +36,8 @@ test.beforeAll(async () => {
   git("add", "-A");
   git("commit", "-q", "-m", "seed");
 
-  app = await electron.launch({
-    args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=/tmp/hm-editor-ud-${Date.now()}`],
-    cwd: repo,
-  });
-  page = await app.firstWindow();
+  app = await launchWindow({ cwd: repo, args: [`--user-data-dir=/tmp/hm-editor-ud-${Date.now()}`] });
+  page = app.page;
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.waitForTimeout(400);

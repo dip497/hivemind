@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { findGitRoot, computeRepoPath } from "../../src/main/workspace-paths.ts";
+import { findGitRoot, computeRepoPath, projectDir } from "../../src/main/workspace-paths.ts";
 
 function git(cwd: string, ...args: string[]): void {
   execFileSync("git", args, { cwd, stdio: "pipe" });
@@ -76,6 +76,21 @@ test("findGitRoot stops at $HOME (no dotfiles-repo hijack)", async () => {
     mkdirSync(sub);
     // Walking up from a subdir must NOT return $HOME.
     assert.equal(await findGitRoot(sub, home), null);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("a project since moved or deleted opens as the folder the app was started in", async () => {
+  const { home, umbrella, childRepo } = scaffold();
+  try {
+    assert.equal(await projectDir(childRepo, umbrella), childRepo);
+    assert.equal(await projectDir(undefined, umbrella), umbrella);
+    const file = path.join(umbrella, "notes.txt");
+    writeFileSync(file, "not a folder");
+    assert.equal(await projectDir(file, umbrella), umbrella);
+    rmSync(childRepo, { recursive: true, force: true });
+    assert.equal(await projectDir(childRepo, umbrella), umbrella);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
