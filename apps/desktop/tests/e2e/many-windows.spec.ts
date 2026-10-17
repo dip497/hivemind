@@ -289,7 +289,10 @@ test("two windows share where tiles and notes are, and each keeps its own camera
   await note(page, "from the first");
   for (const w of windows) await expect.poll(() => notes(w)).toEqual(["from the first"]);
   // So does a save of the board from before the note.
-  await second.evaluate(([r, b]) => window.hive.workspaceSetObjectsSync(r, b as never, b as never), [repo, olderBoard] as const);
+  await second.evaluate(([r, b]) => {
+    const objects = Object.fromEntries((b as Array<{ id: string }>).map((o) => [o.id, o]));
+    window.hive.workspaceEditObjectsSync(r, { objects, base: objects } as never);
+  }, [repo, olderBoard] as const);
   await page.waitForTimeout(300);
   for (const w of windows) expect(await notes(w)).toEqual(["from the first"]);
   await note(second, "from the second");

@@ -8,10 +8,18 @@ import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore, type LegacyLayout, type ViewLayout } from "@hivemind/workspace-host/store";
 import { newSeed } from "@hivemind/workspace-host/identity";
+import { boardEdit } from "@hivemind/workspace-doc/board-edit";
+import type { BoardEdit, BoardObject } from "@hivemind/workspace-doc/shapes";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ws-client-"));
 const store = new WorkspaceStore({ dir, person: newSeed() });
 const ls = new Map<string, string>();
+/** Each board edit a window sent, as it sent it. */
+const edits: BoardEdit[] = [];
+/** The boards read whole, by repo. */
+const wholeReads: string[] = [];
+/** Another window's write of the board: what it changed from the board as stored. */
+const theirs = (repo: string, next: BoardObject[]) => store.editObjects(repo, boardEdit(store.getObjects(repo), next), { writer: "window:9" });
 
 (globalThis as unknown as { window: unknown }).window = {
   localStorage: {
@@ -27,8 +35,9 @@ const ls = new Map<string, string>();
     workspaceSetCoreSync: (repo: string, core: unknown, base?: unknown) => store.setCore(repo, core, { base }),
     workspaceSetViewSync: (repo: string, viewId: string, layout: ViewLayout, base?: unknown) => store.setView(repo, viewId, layout, { base }),
     workspaceImportSync: (repo: string, legacy: LegacyLayout) => store.importLegacy(repo, legacy),
-    workspaceObjectsSync: (repo: string) => store.getObjects(repo),
-    workspaceSetObjectsSync: (repo: string, objects: unknown, base?: unknown) => store.setObjects(repo, objects, { base }),
+    workspaceObjectsSync: (repo: string) => { wholeReads.push(repo); return store.getObjects(repo); },
+    workspaceObjectsWithIdsSync: (repo: string, ids: string[]) => store.getObjectsWithIds(repo, ids),
+    workspaceEditObjectsSync: (repo: string, edit: BoardEdit) => { edits.push(structuredClone(edit)); store.editObjects(repo, edit); },
     workspaceUndoSync: (repo: string) => store.undo(repo),
     workspaceRedoSync: (repo: string) => store.redo(repo),
     onWorkspaceChanged: () => () => {}, // no other writer here
@@ -142,7 +151,7 @@ test("the canvas's places and the board are saved from what the window last read
   assert.deepEqual(store.getView("/views", "canvas")?.data, places({ t1: at(10, 10), t2: at(150, 50) }));
 
   writeBoard("/views", [note("n1", "draft")]);
-  store.setObjects("/views", [note("n1", "draft"), note("n2", "theirs")], { base: store.getObjects("/views"), writer: "window:9" });
+  theirs("/views", [note("n1", "draft"), note("n2", "theirs")]);
   writeBoard("/views", [note("n1", "drafted")]);
   assert.deepEqual(readBoard("/views"), [note("n1", "drafted"), note("n2", "theirs")]);
 });
@@ -183,7 +192,7 @@ test("what is one person's own is kept on this device, starting from what the wo
 
 test("another window's change to the board comes in over what the window has not saved, which stays", () => {
   writeBoard("/board", [note("n1", "draft"), note("n2", "old")]);
-  store.setObjects("/board", [note("n1", "draft"), note("n3", "theirs")], { base: store.getObjects("/board"), writer: "window:9" });
+  theirs("/board", [note("n1", "draft"), note("n3", "theirs")]);
   // This window, not yet saved: n1 retyped. n2, deleted since, stays deleted.
   const merged = reloadBoardObjects("/board", [])([note("n1", "drafted"), note("n2", "old")]);
   assert.deepEqual(merged, [note("n1", "drafted"), note("n3", "theirs")]);
@@ -191,9 +200,9 @@ test("another window's change to the board comes in over what the window has not
 
 test("what the window reads is what its next save is made from", () => {
   writeBoard("/read", [note("n1", "a")]);
-  store.setObjects("/read", [note("n1", "a"), note("n2", "b")], { base: store.getObjects("/read"), writer: "window:9" });
+  theirs("/read", [note("n1", "a"), note("n2", "b")]);
   const board = readBoard("/read");
-  store.setObjects("/read", [note("n1", "a")], { base: store.getObjects("/read"), writer: "window:9" });
+  theirs("/read", [note("n1", "a")]);
   writeBoard("/read", board);
   assert.deepEqual(readBoard("/read"), [note("n1", "a")], "n2, deleted after this window read it, stays deleted");
 
@@ -203,4 +212,24 @@ test("what the window reads is what its next save is made from", () => {
   store.setView("/read", "canvas", { v: 1, data: places({ t1: at(0) }) }, { base: store.getView("/read", "canvas"), writer: "window:9" });
   saveViewLayout(CANVAS_LAYOUT, "/read", view);
   assert.deepEqual(store.getView("/read", "canvas")?.data, places({ t1: at(0) }), "t2, taken off after this window read it, stays off");
+});
+
+test("a save sends only the objects the window changed, each with the one it changed it from; a save that changed nothing sends nothing", () => {
+  writeBoard("/edits", [note("n1", "a"), note("n2", "b"), note("n3", "c")]);
+  const board = readBoard("/edits");
+  edits.length = 0;
+  writeBoard("/edits", board.map((o) => (o.id === "n2" ? note("n2", "b, retyped") : o)).filter((o) => o.id !== "n3"));
+  assert.deepEqual(edits, [{ objects: { n2: note("n2", "b, retyped"), n3: null }, base: { n2: board[1], n3: board[2] } }]);
+  writeBoard("/edits", readBoard("/edits"));
+  assert.equal(edits.length, 1);
+});
+
+test("a window told which objects another changed reads those alone, over what it last read", () => {
+  writeBoard("/ids", [note("n1", "a"), note("n2", "b")]);
+  readBoard("/ids");
+  theirs("/ids", [note("n1", "a"), note("n2", "theirs"), note("n3", "new")]);
+  wholeReads.length = 0;
+  const merged = reloadBoardObjects("/ids", [], ["n2", "n3"])([note("n1", "mine"), note("n2", "b")]);
+  assert.deepEqual(merged, [note("n1", "mine"), note("n2", "theirs"), note("n3", "new")]);
+  assert.deepEqual(wholeReads, []);
 });

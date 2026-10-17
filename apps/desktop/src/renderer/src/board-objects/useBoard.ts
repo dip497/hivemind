@@ -55,9 +55,9 @@ export interface Board {
   redo: () => void;
   /** Show another workspace's board, placed by that workspace's frames. */
   reload: (persistKey: string | null, frames: FrameState[]) => void;
-  /** Another writer changed this board (another window): take it as stored, keeping what this
-   *  window changed since it last read or wrote. */
-  merge: () => void;
+  /** Another writer changed this board (another window): take it as stored (`objects`: those
+   *  alone changed), keeping what this window changed since it last read or wrote. */
+  merge: (objects?: readonly string[]) => void;
 }
 
 /**
@@ -65,8 +65,8 @@ export interface Board {
  * canvas coordinates, placed by `frames`), which keeps what the window changed since it last read
  * or wrote, as `reloadLayout` does the core.
  */
-export function reloadBoardObjects(repo: string, frames: FrameState[]): (mine: BoardObject[]) => BoardObject[] {
-  const { base, board } = rereadBoard(repo);
+export function reloadBoardObjects(repo: string, frames: FrameState[], objects?: readonly string[]): (mine: BoardObject[]) => BoardObject[] {
+  const { base, board } = rereadBoard(repo, objects);
   return (mine) => toCanvas(rebaseBoard(base, toStored(mine, frames), board), frames);
 }
 
@@ -245,10 +245,10 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
   const redo = useCallback(() => history(redoBoard), [history]);
 
   // What this window has yet to save is written first, so its base is what it last wrote.
-  const merge = useCallback(() => {
+  const merge = useCallback((objects?: readonly string[]) => {
     if (!persistKey) return;
     flush();
-    set(reloadBoardObjects(persistKey, framesRef.current));
+    set(reloadBoardObjects(persistKey, framesRef.current, objects));
   }, [persistKey, flush, set, framesRef]);
 
   const reload = useCallback((key: string | null, nextFrames: FrameState[]) => {

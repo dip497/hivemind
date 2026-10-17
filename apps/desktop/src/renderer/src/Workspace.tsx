@@ -481,7 +481,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // The canvas's places and the board merge the same way (another window moved a tile, added a note).
   const { flush: flushGeometry } = useDebouncedSave(persistKey, geometry, useCallback((key: string, v: typeof geometry) => saveViewLayout(CANVAS_LAYOUT, key, v), []));
   const { merge: mergeBoard } = board;
-  useEffect(() => onStoreChange(({ repo, part }) => {
+  useEffect(() => onStoreChange(({ repo, part, objects }) => {
     if (repo !== persistKey) return;
     if (part === "core") {
       flushCore();
@@ -498,7 +498,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       setPositions(stored.positions);
       setSizes(stored.sizes);
     } else if (part === "board") {
-      mergeBoard();
+      mergeBoard(objects);
     }
   }), [persistKey, flushCore, flushGeometry, mergeBoard, closeTile, setFrames, setTiles, setFrameOf, setPositions, setSizes]);
   const { schedule: saveCamera } = useDebouncedSave(persistKey, loadedCamera, useCallback((key: string, v: Viewport) => saveViewLayout(CANVAS_CAMERA, key, v), []));

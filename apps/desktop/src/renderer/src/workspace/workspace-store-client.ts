@@ -22,12 +22,13 @@
  * same keys, with no undo. Everything here is best-effort: a failure reads as "nothing stored".
  */
 import { isViewLayout, type BoardObject, type ViewLayout } from "@hivemind/workspace-doc/shapes";
+import { boardEdit, withObjects } from "@hivemind/workspace-doc/board-edit";
 import type { LegacyLayout } from "@hivemind/workspace-host/layout";
 import type { HiveIpc } from "../../../shared/ipc";
 
 const BRIDGE = [
   "workspaceCoreSync", "workspaceViewSync", "workspaceSetCoreSync", "workspaceSetViewSync", "workspaceImportSync",
-  "workspaceObjectsSync", "workspaceSetObjectsSync", "workspaceUndoSync", "workspaceRedoSync", "onWorkspaceChanged",
+  "workspaceObjectsSync", "workspaceObjectsWithIdsSync", "workspaceEditObjectsSync", "workspaceUndoSync", "workspaceRedoSync", "onWorkspaceChanged",
   "workspaceShown",
 ] as const;
 type Bridge = Pick<HiveIpc, (typeof BRIDGE)[number]>;
@@ -132,7 +133,7 @@ export function writeCore(repo: string, core: unknown): void {
 }
 
 /** Another writer changed a workspace: the control plane, another window. None without the bridge. */
-export function onStoreChange(cb: (change: { repo: string; part: string }) => void): () => void {
+export function onStoreChange(cb: (change: { repo: string; part: string; objects?: string[] }) => void): () => void {
   const b = bridge();
   return b ? b.onWorkspaceChanged(cb) : () => {};
 }
@@ -197,17 +198,29 @@ export function readBoard(repo: string): BoardObject[] {
   return board;
 }
 
-/** The board stored for `repo` again, now that another writer changed it, and the one this window
- *  last read or wrote before (none: empty): what the window's board was made from. */
-export function rereadBoard(repo: string): { base: BoardObject[]; board: BoardObject[] } {
+/** The board stored for `repo` again, now that another writer changed it (`ids`: those objects
+ *  alone; none: any), and the one this window last read or wrote before (none: empty): what the
+ *  window's board was made from. */
+export function rereadBoard(repo: string, ids?: readonly string[]): { base: BoardObject[]; board: BoardObject[] } {
   const base = boardBase.get(repo) ?? [];
-  return { base, board: readBoard(repo) };
+  const b = bridge();
+  if (!b || !ids || !boardBase.has(repo)) return { base, board: readBoard(repo) };
+  let changed: Record<string, BoardObject | null> | null = null;
+  try { changed = b.workspaceObjectsWithIdsSync(repo, [...ids]); } catch { /* read it whole */ }
+  if (!changed) return { base, board: readBoard(repo) };
+  const board = withObjects(base, changed);
+  boardBase.set(repo, board);
+  return { base, board };
 }
 
+/** Write the board this window has now: only the objects it changed since it last read or wrote. */
 export function writeBoard(repo: string, objects: BoardObject[]): void {
   const b = bridge();
   if (!b) return writeJson(boardKey(repo), objects);
-  try { b.workspaceSetObjectsSync(repo, objects, boardBase.get(repo)); } catch { /* best-effort */ }
+  const edit = boardEdit(boardBase.get(repo) ?? [], objects);
+  if (Object.keys(edit.objects).length > 0) {
+    try { b.workspaceEditObjectsSync(repo, edit); } catch { /* best-effort */ }
+  }
   boardBase.set(repo, objects);
 }
 
