@@ -77,10 +77,15 @@ jobs:
           run_install: false
           cache: true
 
-      - uses: Swatinem/rust-cache@v2
+      # ci.yml's phone-page cache, read and never saved: main's is the one a tag's run can see.
+      # The path list must stay ci.yml's, which is part of the cache's identity.
+      - uses: actions/cache/restore@v6
         with:
-          workspaces: crates
-          key: release-phone-page
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: hive-web-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
@@ -136,10 +141,15 @@ jobs:
           run_install: false
           cache: true
 
-      - uses: Swatinem/rust-cache@v2
+      # ci.yml's phone-page cache, read and never saved: main's is the one a tag's run can see.
+      # The path list must stay ci.yml's, which is part of the cache's identity.
+      - uses: actions/cache/restore@v6
         with:
-          workspaces: crates
-          key: release-phone-page
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: hive-web-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock') }}
 
       - name: pnpm install (workspace)
         run: pnpm install --frozen-lockfile
