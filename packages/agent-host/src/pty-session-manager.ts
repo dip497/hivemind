@@ -2,8 +2,8 @@
  * SessionManager — the persistence core for tmux-style terminal survival.
  *
  * Owns a set of long-lived PTY sessions keyed by a STABLE id (`repo:tileId`).
- * Each session feeds output into BOTH the connected client AND a server-side
- * headless xterm.js instance — replay on reattach is `SerializeAddon.serialize()`
+ * Each session feeds output into BOTH the connected client AND a headless xterm.js
+ * instance in the screen worker (screen-worker.ts) — replay on reattach is `SerializeAddon.serialize()`
  * (a coalesced VT-escape string that reproduces the current visible screen +
  * scrollback). This is the Mosh-style "current state, not raw byte tail" model:
  * reopening a tile after hours of idle shows the LAST screen, correctly handling
@@ -26,24 +26,21 @@
  *                (cwd/cmd/env). PTY itself can't survive reboot — but the
  *                user sees their last visible state + a working fresh shell.
  */
-// Namespace import: bundlers disagree on whether these expose `.default` or named ESM exports.
-import * as HeadlessXtermNS from "@xterm/headless";
-import { bracketedPaste, mouseEncodingSeq } from "./replay-modes.js";
 import { pasteText } from "./paste.js";
-import * as SerializeAddonNS from "@xterm/addon-serialize";
 import { NothingAsleep, type SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
 import { splitAtBoundary } from "./vt-boundary.js";
-type HeadlessCtor = typeof import("@xterm/headless").Terminal;
-type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
-const pick = <T>(ns: unknown, name: string): T => {
-  const m = ns as Record<string, unknown> & { default?: Record<string, unknown> };
-  return (m[name] ?? m.default?.[name] ?? m.default) as T;
-};
-export const HeadlessTerminal = pick<HeadlessCtor>(HeadlessXtermNS, "Terminal");
-const SerializeAddon = pick<SerializeCtor>(SerializeAddonNS, "SerializeAddon");
-type HeadlessTerminalInstance = InstanceType<typeof HeadlessTerminal>;
-type SerializeAddonInstance = InstanceType<typeof SerializeAddon>;
+import { ScreenThread } from "./screen-thread.js";
+
+/** Whether process `pid` is still running (signal 0 only checks). */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
 
 export interface ManagedPty {
   readonly pid: number;
@@ -100,12 +97,18 @@ export type { SessionInfo };
 interface Session {
   id: string;
   pty: ManagedPty;
-  /** Headless xterm fed every byte the PTY emits. `serializer.serialize()` on
-   *  this produces the replay payload — Mosh-style coalesced visible state. */
-  term: HeadlessTerminalInstance;
   /** The end of the last read when it stopped inside an escape sequence (vt-boundary.ts). */
   carry: string;
-  serializer: SerializeAddonInstance;
+  /** How far the screen worker's terminal has taken in this session's output. */
+  parsed: number;
+  /** Paused because the screen worker is HOLD_CHARS behind: the memory a flood may take. */
+  parseHeld: boolean;
+  /** Output positions of screens being taken: the ring keeps what came after each until it arrives. */
+  pinned: number[];
+  /** Polls a paused PTY's process: one that ended is let go, or its last output is lost. */
+  pauseWatch?: ReturnType<typeof setInterval>;
+  /** Whether the app running here turned bracketed paste on, as the screen worker last read it. */
+  bracketed: boolean;
   spec: SpawnSpec;
   /** What its starter asked for, before the agent's launch made it `spec`: what a restore
    *  launches from, with the agent's manifest as it is then. Unknown for a snapshot of before. */
@@ -135,7 +138,7 @@ interface Session {
   /** Whether the manager already exhausted its one retry for this session. */
   retried?: boolean;
   /** Latest OSC 0/2 window title the process set (an agent's live "session name"),
-   *  captured from the headless term. SerializeAddon does NOT serialize the title,
+   *  as the screen worker read it. SerializeAddon does NOT serialize the title,
    *  so a reattach's replay would otherwise lose it — we re-emit it (see
    *  `withTitle`) so the client's xterm re-fires onTitleChange on reattach. */
   lastTitle?: string;
@@ -151,12 +154,20 @@ interface Session {
   /** Output emitted so far; positions only mean something within one `epoch`. */
   seq: number;
   epoch: string;
-  /** Recent output as chunks ending at `end`, capped at RING_CHARS. */
+  /** Recent output as chunks ending at `end`, capped at RING_CHARS, or longer while a screen
+   *  being taken needs more of it. */
   ring: { end: number; data: string }[];
   ringChars: number;
-  /** The last screen serialized: the output it covers up to, and its lines of scrollback. */
-  lastScreen?: { at: number; lines: number; text: string };
 }
+
+/** Unparsed output that pauses a session's PTY, and the level that lets it go again: met only by a
+ *  flood the screen worker cannot keep up with. It bounds memory and the output a screen carries
+ *  after it, which the I/O thread frames for the viewer. */
+const HOLD_CHARS = 256 * 1024;
+const RELEASE_CHARS = 64 * 1024;
+/** How often a paused PTY's process is checked: node-pty drops an ended one's unread output 200 ms
+ *  after it ends. */
+const PAUSE_WATCH_MS = 50;
 
 
 const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
@@ -280,6 +291,8 @@ export class SessionManager {
   private frozen = new Map<string, Frozen>();
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private snapshotTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Saves waiting for their screen or their write, also of sessions ended since: a stop waits for them. */
+  private saving = new Set<Promise<void>>();
   private readonly scrollback: number;
   private readonly idleMs: number;
   private readonly onEmpty?: () => void;
@@ -295,6 +308,13 @@ export class SessionManager {
   private readonly onTitle?: (id: string, title: string) => void;
   private readonly onEnd?: (id: string, asleep?: boolean) => void;
   private readonly restoreRetryMs: number;
+  private readonly screens = new ScreenThread({
+    parsed: (id, epoch, at) => { const s = this.current(id, epoch); if (s) this.parsedTo(s, at); },
+    paste: (id, epoch, on) => { const s = this.current(id, epoch); if (s) s.bracketed = on; },
+    title: (id, epoch, title) => { const s = this.current(id, epoch); if (s) { s.lastTitle = title; this.onTitle?.(id, title); } },
+    stopped: () => { for (const s of this.sessions.values()) this.release(s); },
+    restarted: () => this.reopenScreens(),
+  });
 
   constructor(
     private readonly factory: PtyFactory,
@@ -331,17 +351,10 @@ export class SessionManager {
     return Array.from(this.frozen.keys());
   }
 
-  /** Spawn a new session, or attach to an existing one and replay its buffer.
-   *  ASYNC because xterm.js `write` is async — `serialize()` only sees data
-   *  once the write queue drains. We await a no-op write callback before
-   *  serializing so the replay carries the latest bytes (not a stale snapshot
-   *  that misses output emitted in the same tick). */
   /** Re-emit the session's last OSC window title ahead of the replay so the
    *  client's xterm re-fires onTitleChange on reattach. */
   private withTitle(s: Session, replay: string): string {
-    // The mouse encoding goes after the replay: SerializeAddon restores the tracking mode but
-    // not the encoding, and an app that asked for SGR ignores anything else (see replay-modes).
-    return titled(s.lastTitle, replay + mouseEncodingSeq(s.term));
+    return titled(s.lastTitle, replay);
   }
 
   /** `view`: the client only watches (M4): a running session keeps its size and its pauses.
@@ -358,7 +371,9 @@ export class SessionManager {
       existing.clients.add(client);
       if (!view) this.interacts(existing, client, spec.cols, spec.rows);
       this.cancelIdle();
-      const snap = await this.serializeDrained(existing, 3, lines);
+      const snap = this.screenOrRecent(existing, await this.screenNow(existing, lines));
+      // Ended or killed while its screen was taken: the viewer was told, and a reply now would say it runs.
+      if (this.sessions.get(id) !== existing || existing.exited) throw new Error(`session '${id}' ended`);
       return { pid: existing.pty.pid, isNew: false, replay: this.withTitle(existing, snap.replay), seq: snap.seq, epoch: existing.epoch, cols: existing.spec.cols, rows: existing.spec.rows };
     }
 
@@ -398,25 +413,17 @@ export class SessionManager {
       effectiveSpec = this.transformSpecOnSpawn(effectiveSpec, id);
     }
     const p = this.factory(effectiveSpec);
-    const term = new HeadlessTerminal({
-      cols: effectiveSpec.cols,
-      rows: effectiveSpec.rows,
-      scrollback: this.scrollback,
-      allowProposedApi: true,
-    });
-    const serializer = new SerializeAddon();
-    term.loadAddon(serializer);
-    if (frozenSnap?.replay) {
-      // Seed the headless term with the pre-reboot screen so the replay sent
-      // back to the client carries that history forward.
-      term.write(frozenSnap.replay);
-    }
+    // Seed the screen with the pre-reboot one so the replays sent later carry that history forward.
+    const epoch = randomUUID();
+    this.screens.send({ t: "open", id, epoch, cols: effectiveSpec.cols, rows: effectiveSpec.rows, scrollback: this.scrollback, seed: frozenSnap?.replay ?? "", parsed: 0 });
     const session: Session = {
       id,
       pty: p,
-      term,
       carry: "",
-      serializer,
+      parsed: 0,
+      parseHeld: false,
+      pinned: [],
+      bracketed: false,
       spec: effectiveSpec,
       ...(asked ? { asked } : {}),
       exited: false,
@@ -424,7 +431,7 @@ export class SessionManager {
       sizes: new Map([[client, { cols: effectiveSpec.cols, rows: effectiveSpec.rows }]]),
       pausedBy: new Set(),
       seq: 0,
-      epoch: randomUUID(),
+      epoch,
       ring: [],
       ringChars: 0,
       dirty: !!frozenSnap, // restored sessions should re-persist with their new PTY's first activity
@@ -437,10 +444,6 @@ export class SessionManager {
       lastTitle: frozenSnap?.title,
     };
     this.sessions.set(id, session);
-    // Capture the OSC 0/2 window title the headless term parses. SerializeAddon
-    // omits it from the replay, so without this a reattach shows the generic
-    // spawn label instead of the agent's live task summary.
-    try { session.term.onTitleChange((t) => { session.lastTitle = t; this.onTitle?.(id, t); }); } catch { /* headless build w/o title API */ }
     if (session.lastTitle) this.onTitle?.(id, session.lastTitle);
     p.onData((d) => {
       // Stale-pty guard: after a retry respawn, the old pty may still flush a
@@ -452,13 +455,8 @@ export class SessionManager {
     // the kill-induced exit arrives AFTER the replacement and must not delete the retried session.
     p.onExit((code, signal) => { if (session.pty === p) this.ended(session, code, signal); });
     this.cancelIdle();
-    // For frozen snapshots the replay is the persisted VT string (and we
-    // already wrote it into the headless term above, so re-serializing would
-    // duplicate it). For brand-new sessions there's nothing to replay yet —
-    // serialize() returns the empty initial buffer cheaply.
-    const snap = frozenSnap?.replay
-      ? { replay: frozenSnap.replay, seq: session.seq }
-      : await this.serializeDrained(session);
+    // A new PTY has printed nothing yet: the replay is the saved screen, if any.
+    const snap = { replay: frozenSnap?.replay ?? "", seq: session.seq };
     // `isNew` = a fresh PTY was just spawned (vs attached to a live one). Both
     // brand-new sessions AND reboot-restored ones produce a new PTY — the only
     // !isNew path is the early-return up top for a still-live existing session.
@@ -482,14 +480,13 @@ export class SessionManager {
     // amnesia).
     const banner =
       "\r\n\x1b[33m[hivemind] previous session could not be resumed — starting fresh with the same id\x1b[0m\r\n";
-    session.term.write(banner);
-    this.emit(session, banner);
+    this.take(session, banner);
     this.respawnInPlace(session, retrySpec);
     return true;
   }
 
   /** Replace a dead session's PTY with a fresh one using `retrySpec`. Keeps
-   *  the same id, headless term, serializer, and client — the user sees a
+   *  the same id, screen and client — the user sees a
    *  continuous tile that just spawned a different process underneath. Used
    *  by the quick-fail retry path on restored sessions whose first spawn
    *  hard-failed (a resume whose session was gone). */
@@ -501,6 +498,7 @@ export class SessionManager {
     session.spec = retrySpec;
     session.exited = false;
     session.spawnedAt = Date.now();
+    this.applyPause(session);
     p.onData((d) => {
       // Ignore output from a pty that's already been replaced by a later retry.
       if (session.pty !== p) return;
@@ -536,9 +534,12 @@ export class SessionManager {
       if (!kept) this.onTitle?.(id, "");
       for (const c of session.clients) c.onExit(code, signal, kept || undefined);
     }
-    if (this.sessions.get(id) === session) this.sessions.delete(id);
+    // A killed session is gone already, and a new one may have its id.
+    if (this.sessions.get(id) === session) {
+      this.sessions.delete(id);
+      this.screens.send({ t: "close", id, epoch: session.epoch });
+    }
     if (kept) {
-      try { session.term.dispose(); } catch { /* ignore */ }
       const info = this.infoOf(session);
       this.frozen.set(id, { load: () => this.loadSnapshot!(id), asleep: true, info: { ...info, state: "frozen", pid: null, viewers: 0, asleep: true } });
     }
@@ -557,10 +558,11 @@ export class SessionManager {
     if (!s || s.exited) return s ? Promise.resolve(false) : this.markAsleep(id);
     let settle!: (kept: boolean) => void;
     s.sleeping = { done: new Promise<boolean>((r) => { settle = r; }), settle };
-    const at = s.seq;
-    s.term.write("", () => {
+    const whole = this.screenNow(s, this.scrollback);
+    const recent = this.screenNow(s, Math.min(RECENT_LINES, this.scrollback));
+    void Promise.all([whole, recent]).then(([whole, recent]) => {
       if (s.exited) return;
-      s.sleepScreen = { replay: this.screenText(s, at, this.scrollback), recent: s.serializer.serialize({ scrollback: Math.min(RECENT_LINES, this.scrollback) }) };
+      s.sleepScreen = { replay: this.screenOrRecent(s, whole).replay, recent: this.screenOrRecent(s, recent).replay };
       // Its output is read as it ends, or an agent writing as it exits waits for the SIGKILL.
       s.pausedBy.clear();
       this.applyPause(s);
@@ -596,32 +598,29 @@ export class SessionManager {
     return titled(snap.title, recent ?? snap.replay);
   }
 
-  /** Wait for the xterm.js write queue to drain, then serialize. xterm batches
-   *  writes via setTimeout(0); calling serialize() before drain returns "". */
-  private serializeDrained(s: Session, tries = 3, lines = this.scrollback): Promise<{ replay: string; seq: number }> {
-    return new Promise((resolve) => {
-      // The screen covers output up to `at`; output that arrived while it drained follows it raw.
-      const at = s.seq;
-      s.term.write("", () => {
-        const screen = this.screenText(s, at, Math.min(lines, this.scrollback));
-        const tail = this.ringSince(s, at);
-        if (tail !== null) resolve({ replay: screen + tail, seq: s.seq });
-        // ponytail: a flood that outruns the ring between drains ends with a gap after three tries.
-        else if (tries > 1) void this.serializeDrained(s, tries - 1, lines).then(resolve);
-        else resolve({ replay: screen, seq: s.seq });
-      });
-    });
+  /** The screen now, with at most `lines` of scrollback, or null when the worker gave none. The
+   *  worker takes it once it has read every chunk sent before the ask, so it covers the output up to
+   *  `at`; the ring keeps what came after until it arrives. The mouse encoding goes between: the
+   *  serialized screen restores the tracking mode but not the encoding (see screen-worker). */
+  private async screenNow(s: Session, lines = this.scrollback): Promise<{ replay: string; seq: number } | null> {
+    const at = s.seq;
+    s.pinned.push(at);
+    let shot: Awaited<ReturnType<ScreenThread["screen"]>>;
+    try {
+      shot = await this.screens.screen(s.id, s.epoch, Math.min(lines, this.scrollback));
+    } finally {
+      s.pinned.splice(s.pinned.indexOf(at), 1);
+    }
+    const tail = this.ringSince(s, at);
+    if (shot.text === null || tail === null) return null;
+    return { replay: shot.text + shot.mouse + tail, seq: s.seq };
   }
 
-  /** The screen as VT text with `lines` of scrollback, once the term has taken the output up to
-   *  `at`. Serializing walks every cell of the scrollback, so the last one is kept and given again
-   *  while no output or resize has changed the screen since. */
-  private screenText(s: Session, at: number, lines: number): string {
-    const kept = s.lastScreen;
-    if (kept && kept.at === at && kept.lines === lines) return kept.text;
-    const text = s.serializer.serialize({ scrollback: lines });
-    s.lastScreen = { at, lines, text };
-    return text;
+  /** A viewer's screen when the worker gave none: the output the ring holds, said in the log. */
+  private screenOrRecent(s: Session, snap: { replay: string; seq: number } | null): { replay: string; seq: number } {
+    if (snap) return snap;
+    console.error(`[pty-daemon] screen of ${s.id} is only its recent output`);
+    return { replay: this.ringSince(s, s.seq - s.ringChars) ?? "", seq: s.seq };
   }
 
   /** Output after `seq`, or null when the ring no longer holds all of it. */
@@ -640,20 +639,55 @@ export class SessionManager {
   private output(session: Session, d: string, flush = false): void {
     const [ready, held] = flush ? [session.carry + d, ""] : splitAtBoundary(session.carry + d);
     session.carry = held;
-    if (!ready) return;
-    session.term.write(ready);
-    session.dirty = true;
-    this.scheduleSnapshot(session);
-    this.emit(session, ready);
+    if (ready) this.take(session, ready);
   }
 
-  private emit(s: Session, d: string): void {
+  /** Output the session produced: to its viewers first, then its ring and its screen. */
+  private take(s: Session, d: string): void {
     this.onOutput?.(s.id);
     s.seq += d.length;
     s.ring.push({ end: s.seq, data: d });
     s.ringChars += d.length;
-    while (s.ringChars > RING_CHARS && s.ring.length > 1) s.ringChars -= s.ring.shift()!.data.length;
+    const keep = s.pinned.length ? Math.min(...s.pinned) : Infinity;
+    while (s.ringChars > RING_CHARS && s.ring.length > 1 && s.ring[0]!.end <= keep) s.ringChars -= s.ring.shift()!.data.length;
     for (const c of s.clients) c.onData(d, s.seq);
+    this.screens.send({ t: "write", id: s.id, epoch: s.epoch, data: d, end: s.seq });
+    // No worker, nothing to wait for: held then, a session would stay paused until one starts.
+    if (!s.parseHeld && this.screens.running && s.seq - s.parsed > HOLD_CHARS) { s.parseHeld = true; this.applyPause(s); }
+    s.dirty = true;
+    this.scheduleSnapshot(s);
+  }
+
+  /** The live session `id` if it is still the instance `epoch` names. */
+  private current(id: string, epoch: string): Session | undefined {
+    const s = this.sessions.get(id);
+    return s && s.epoch === epoch ? s : undefined;
+  }
+
+  private parsedTo(s: Session, at: number): void {
+    s.parsed = at;
+    if (s.seq - at <= RELEASE_CHARS) this.release(s);
+  }
+
+  private release(s: Session): void {
+    if (!s.parseHeld) return;
+    s.parseHeld = false;
+    this.applyPause(s);
+  }
+
+  /** A new screen worker: every live session's screen is rebuilt from the output its ring holds,
+   *  and its program asked to draw itself again. */
+  private reopenScreens(): void {
+    for (const s of this.sessions.values()) {
+      if (s.exited) continue;
+      const kept = this.ringSince(s, s.seq - s.ringChars) ?? "";
+      if (s.seq > s.ringChars) console.error(`[pty-daemon] screen of ${s.id} rebuilt from its last ${s.ringChars} chars of output`);
+      // The paste mode main keeps may have been set before what the ring still holds.
+      const seed = (s.bracketed ? "\x1b[?2004h" : "") + kept;
+      this.screens.send({ t: "open", id: s.id, epoch: s.epoch, cols: s.spec.cols, rows: s.spec.rows, scrollback: this.scrollback, seed, parsed: s.seq });
+      s.parsed = s.seq;
+      this.repaint(s.id);
+    }
   }
 
   /** Re-attach a returning viewer with only the output it missed; null when that can't be exact
@@ -683,7 +717,7 @@ export class SessionManager {
   async snapshot(id: string, lines?: number): Promise<{ replay: string; seq: number; epoch: string } | null> {
     const s = this.sessions.get(id);
     if (!s || s.exited) return null;
-    const snap = await this.serializeDrained(s, 3, lines);
+    const snap = this.screenOrRecent(s, await this.screenNow(s, lines));
     return { replay: this.withTitle(s, snap.replay), seq: snap.seq, epoch: s.epoch };
   }
 
@@ -693,7 +727,7 @@ export class SessionManager {
     if (!s) return;
     // A message, not keystrokes: hand it over the way a terminal hands over a paste, using
     // whether the app running here turned bracketed paste on.
-    if (paste) data = pasteText(data, bracketedPaste(s.term));
+    if (paste) data = pasteText(data, s.bracketed);
     const own = client && s.sizes.get(client);
     if (own) {
       this.touch(s, client!, own);
@@ -723,7 +757,7 @@ export class SessionManager {
     this.applyPause(s);
   }
   private applyPause(s: Session): void {
-    const paused = s.pausedBy.size > 0;
+    const paused = s.pausedBy.size > 0 || s.parseHeld;
     if (!!s.paused === paused) return;
     s.paused = paused;
     try {
@@ -732,6 +766,22 @@ export class SessionManager {
     } catch {
       /* pty already gone */
     }
+    if (paused) this.watchPaused(s);
+  }
+
+  /** A paused PTY whose process has ended is read to its end: there is nothing left to hold back,
+   *  and unread, its last output (often the error that ended it) would be lost. */
+  private watchPaused(s: Session): void {
+    if (s.pauseWatch) return;
+    const p = s.pty;
+    s.pauseWatch = setInterval(() => {
+      const gone = s.pty !== p || !s.paused || !alive(p.pid);
+      if (!gone) return;
+      clearInterval(s.pauseWatch);
+      s.pauseWatch = undefined;
+      if (s.pty === p && s.paused) try { p.resume?.(); } catch { /* pty already gone */ }
+    }, PAUSE_WATCH_MS);
+    s.pauseWatch.unref?.();
   }
 
   /** Resizing is interacting: that viewer's size wins. */
@@ -765,18 +815,13 @@ export class SessionManager {
   }
   private applySize(s: Session, cols: number, rows: number): void {
     const changed = cols !== s.spec.cols || rows !== s.spec.rows;
-    if (changed) s.lastScreen = undefined;
     s.spec = { ...s.spec, cols, rows };
     try {
       s.pty.resize(cols, rows);
     } catch {
       /* resize on a dying pty — ignore */
     }
-    try {
-      s.term.resize(cols, rows);
-    } catch {
-      /* ignore */
-    }
+    if (changed) this.screens.send({ t: "resize", id: s.id, epoch: s.epoch, cols, rows });
     // Every viewer is told: one that only watches draws the session at its size.
     if (changed) for (const c of s.clients) c.onSize?.(cols, rows);
   }
@@ -825,9 +870,7 @@ export class SessionManager {
       } catch {
         /* already gone */
       }
-      try {
-        s.term.dispose();
-      } catch { /* ignore */ }
+      this.screens.send({ t: "close", id, epoch: s.epoch });
       this.sessions.delete(id);
     }
     // Also evict from frozen + on disk — kill ≠ detach.
@@ -851,14 +894,19 @@ export class SessionManager {
     return this.sessions.get(id)?.spec.cmd;
   }
 
-  /** The visible rows of a live session's screen as text, and the command it runs. */
-  viewport(id: string): { cmd: string; screen: string } | undefined {
-    const s = this.sessions.get(id);
-    if (!s || s.exited) return undefined;
-    const buf = s.term.buffer.active;
-    const rows: string[] = [];
-    for (let y = 0; y < s.term.rows; y++) rows.push(buf.getLine(buf.baseY + y)?.translateToString(true) ?? "");
-    return { cmd: s.spec.cmd, screen: rows.join("\n") };
+  /** The visible rows of each live session's screen as text, and the command it runs. */
+  /** Null when the screen worker gave no answer: unknown, not gone. */
+  async viewports(ids: string[]): Promise<Map<string, { cmd: string; screen: string }> | null> {
+    const live = ids.filter((id) => this.hasLive(id));
+    const out = new Map<string, { cmd: string; screen: string }>();
+    if (!live.length) return out;
+    const rows = await this.screens.rows(live);
+    if (!rows) return null;
+    for (const [id, screen] of rows) {
+      const s = this.sessions.get(id);
+      if (s && !s.exited) out.set(id, { cmd: s.spec.cmd, screen });
+    }
+    return out;
   }
 
   info(): SessionInfo[] {
@@ -908,12 +956,11 @@ export class SessionManager {
   /** Force a snapshot of every live session — call on graceful daemon shutdown.
    *  RETURNS a Promise that resolves AFTER every snapshot is flushed to disk.
    *  Process-exit handlers MUST `await` this before `process.exit(0)`; without
-   *  the await, the xterm write callbacks never fire (event loop dead) and the
+   *  the await, the screens never arrive (event loop dead) and the
    *  debounce window's worth of state is silently lost on every graceful stop. */
   flushAll(): Promise<void> {
-    const all: Promise<void>[] = [];
-    for (const s of this.sessions.values()) all.push(this.flushSnapshot(s));
-    return Promise.all(all).then(() => undefined);
+    for (const s of this.sessions.values()) void this.flushSnapshot(s);
+    return Promise.all(this.saving).then(() => undefined);
   }
 
   // ── snapshot scheduling ────────────────────────────────────────────────────
@@ -940,44 +987,32 @@ export class SessionManager {
     this.cancelSnapshotTimer(s.id);
     s.dirty = false;
     s.savedLines = lines;
-    return new Promise<void>((resolve) => {
-      const at = s.seq;
-      // Drain the xterm write queue before serializing — without this, the
-      // snapshot misses output emitted in the same tick as the flush trigger.
-      s.term.write("", () => {
-        // Killed while the queue drained: writing now would resurrect it on the next boot.
-        if (s.killed) { resolve(); return; }
-        let r: void | Promise<void>;
-        try {
-          r = this.onSnapshot?.(s.id, {
-            id: s.id,
-            spec: s.spec,
-            ...(s.asked ? { asked: s.asked } : {}),
-            replay: s.sleepScreen?.replay ?? this.screenText(s, at, lines),
-            ...(s.sleepScreen ? { recentReplay: s.sleepScreen.recent } : {}),
-            // Asked to sleep, it is asleep, even if it ended by itself before its screen was read.
-            ...(s.sleeping ? { sleeping: true as const } : {}),
-            title: s.lastTitle,
-            savedAt: Date.now(),
-          });
-        } catch {
-          // Disk write failed — re-dirty so a later attempt retries.
-          s.dirty = true;
-          resolve();
-          return;
-        }
-        // Async persist: settle only once the bytes are on disk (flushAll on
-        // SIGTERM awaits this); a rejection re-dirties for a later retry.
-        if (r && typeof (r as Promise<void>).then === "function") {
-          (r as Promise<void>).then(
-            () => resolve(),
-            () => { s.dirty = true; resolve(); },
-          );
-        } else {
-          resolve();
-        }
-      });
+    const screen = s.sleepScreen ? Promise.resolve(s.sleepScreen) : this.screenNow(s, lines);
+    const saved = screen.then(async (snap) => {
+      // Killed while the screen was taken: writing now would resurrect it on the next boot.
+      if (s.killed) return;
+      // No screen from the worker: the save on disk stays as it was, and a later one tries again.
+      if (!snap) { s.dirty = true; return; }
+      try {
+        await this.onSnapshot?.(s.id, {
+          id: s.id,
+          spec: s.spec,
+          ...(s.asked ? { asked: s.asked } : {}),
+          replay: snap.replay,
+          ...(s.sleepScreen ? { recentReplay: s.sleepScreen.recent } : {}),
+          // Asked to sleep, it is asleep, even if it ended by itself before its screen was read.
+          ...(s.sleeping ? { sleeping: true as const } : {}),
+          title: s.lastTitle,
+          savedAt: Date.now(),
+        });
+      } catch {
+        // Disk write failed — re-dirty so a later attempt retries.
+        s.dirty = true;
+      }
     });
+    this.saving.add(saved);
+    void saved.finally(() => this.saving.delete(saved));
+    return saved;
   }
   private cancelSnapshotTimer(id: string): void {
     const t = this.snapshotTimers.get(id);

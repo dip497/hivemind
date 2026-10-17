@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { SessionManager, type ManagedPty, type SessionClient, type SpawnSpec } from "@hivemind/agent-host/pty-session-manager";
 
 class FakePty implements ManagedPty {
-  readonly pid = 4242;
+  // A live pid, as a running program has: a paused pty whose program has ended is resumed.
+  readonly pid = process.pid;
   size: [number, number];
   written: string[] = [];
   paused = false;
@@ -91,7 +92,7 @@ test("info() lists live sessions with viewers, size and command", async () => {
   const { mgr, viewer } = setup();
   await mgr.createOrAttach("t1", spec(80, 24), viewer().c);
   const [row] = mgr.info();
-  assert.deepEqual(row, { id: "t1", state: "live", cmd: "bash", args: ["-l"], cwd: "/r", pid: 4242, viewers: 1, cols: 80, rows: 24 });
+  assert.deepEqual(row, { id: "t1", state: "live", cmd: "bash", args: ["-l"], cwd: "/r", pid: process.pid, viewers: 1, cols: 80, rows: 24 });
 });
 
 test("frozen snapshots show as frozen with no pid", () => {

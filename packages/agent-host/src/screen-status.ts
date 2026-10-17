@@ -53,8 +53,9 @@ export class ScreenWatcher {
   private lines = new Map<string, string>();
 
   constructor(private readonly o: {
-    /** The session's screen and what it runs, or undefined when it is gone. */
-    read: (id: string) => { cmd: string; screen: string } | undefined;
+    /** Each session's screen and what it runs; a session that is gone is left out. Null: the
+     *  screens could not be read this time, which says nothing about the sessions. */
+    read: (ids: string[]) => Promise<Map<string, { cmd: string; screen: string }> | null>;
     /** The agent's own detector for what it runs; undefined for a program that is not an agent. */
     detect: (cmd: string, screen: string) => ScreenReading | undefined;
     report: (id: string, reading: ScreenReading) => void;
@@ -73,11 +74,20 @@ export class ScreenWatcher {
 
   forget(id: string): void { this.dirty.delete(id); this.seen.delete(id); this.lines.delete(id); }
 
-  tick(): void {
+  /** A tick that starts while the last one waits for its screens is skipped: the screens it would
+   *  read are still dirty for the next. */
+  private reading = false;
+
+  async tick(): Promise<void> {
+    if (this.reading || this.dirty.size === 0) return;
     const ids = [...this.dirty];
     this.dirty.clear();
+    this.reading = true;
+    let got: Map<string, { cmd: string; screen: string }> | null;
+    try { got = await this.o.read(ids); } finally { this.reading = false; }
+    if (!got) { for (const id of ids) this.dirty.add(id); return; }
     for (const id of ids) {
-      const s = this.o.read(id);
+      const s = got.get(id);
       if (!s) { this.seen.delete(id); continue; }
       const line = lastLine(s.screen);
       if (line && this.o.line && this.lines.get(id) !== line) {

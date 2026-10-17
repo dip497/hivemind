@@ -81,3 +81,14 @@ test("a viewer that stops reading during a flood is sent the screen instead of e
   await wait(200);
   c.s.destroy();
 });
+
+test("a paused session whose program ends still gets its last output to its viewer", { skip: !unix, timeout: 30000 }, async () => {
+  const c = client();
+  c.send({ t: "attach", reqId: "1", id: "p1", spec: spec("sh", ["-c", "sleep 0.5; echo LAST-$((6*7))"]) });
+  await c.until((m): m is Extract<ServerMsg, { t: "attached" }> => m.t === "attached");
+  // Paused before it prints, as a window that has fallen behind pauses it.
+  c.send({ t: "pause", id: "p1" });
+  await c.until((m): m is Extract<ServerMsg, { t: "exit" }> => m.t === "exit" && m.id === "p1", 20000);
+  assert.ok(c.text("p1").includes("LAST-42"), `its last words arrive: ${JSON.stringify(c.text("p1"))}`);
+  c.s.destroy();
+});

@@ -364,7 +364,7 @@ statuses?.subscribe(({ tileId, status }) => { for (const push of eventViewers) p
 // Every agent session's screen, read here where the screen is kept, for the status of an
 // agent whose hooks have not reported. Viewers take it as `agent.screen`.
 const screens = new ScreenWatcher({
-  read: (id) => manager.viewport(id),
+  read: (ids) => manager.viewports(ids),
   detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
   report: (id, { status: state, says }) => {
     statuses?.screen(id, state, says);
@@ -373,7 +373,7 @@ const screens = new ScreenWatcher({
   line: (id, line) => { for (const push of eventViewers) push({ t: "event", topic: "tile.line", data: { tileId: id, line } }); },
 });
 setInterval(() => {
-  screens.tick();
+  void screens.tick();
   // An agent installed or repaired while sessions run: one stat, and the titles and screen
   // rules it brings take effect without waiting for the next spawn.
   void ensureAgentsCurrent();
@@ -657,18 +657,20 @@ const server = net.createServer((sock) => {
         const { reqId, id } = msg;
         const lines = linesOf(msg.lines);
         if (msg.saved) { void manager.savedScreen(id, lines).then((replay) => send({ t: "screen", reqId, id, replay })); break; }
-        // What is buffered for this viewer is older than the screen: send it first, so the
-        // screen is the line between bytes it already covers and bytes that follow it.
-        outBuf.flush(id);
-        void manager.snapshot(id, lines).then((snap) => send({ t: "screen", reqId, id, replay: snap?.replay ?? null }));
+        // What is buffered for this viewer when the screen arrives is older than it: sent first, so
+        // the screen is the line between bytes it already covers and bytes that follow it.
+        void manager.snapshot(id, lines).then((snap) => { outBuf.flush(id); send({ t: "screen", reqId, id, replay: snap?.replay ?? null }); });
         break;
       }
       case "resume":
         manager.resume(msg.id, viewers.get(msg.id));
         break;
-      case "viewport":
-        send({ t: "viewport", reqId: msg.reqId, id: msg.id, text: manager.viewport(msg.id)?.screen ?? null });
+      case "viewport": {
+        const { reqId, id } = msg;
+        // Unread (no screen worker) is an empty screen: null would say the session is not running.
+        void manager.viewports([id]).then((rows) => send({ t: "viewport", reqId, id, text: rows ? rows.get(id)?.screen ?? null : manager.hasLive(id) ? "" : null }));
         break;
+      }
       case "list":
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list(), ...(msg.detail ? { detail: manager.info() } : {}) });
         break;

@@ -27,6 +27,11 @@ class FakePty implements ManagedPty {
   exit(code = 0, signal?: number) { this.exitCb?.(code, signal); }
 }
 
+/** Screens are read on the manager's screen worker: wait for what it brings, up to a deadline. */
+async function until(done: () => boolean, ms = 20_000): Promise<void> {
+  for (const end = Date.now() + ms; !done() && Date.now() < end; ) await new Promise((r) => setTimeout(r, 10));
+}
+
 function makeManager(opts = {}) {
   const created: FakePty[] = [];
   const mgr = new SessionManager((spec) => {
@@ -159,10 +164,9 @@ test("snapshot+restore: reboot path replays prior screen + spawns fresh PTY", as
   const spec: SpawnSpec = { cwd: "/r", cmd: "bash", args: [], cols: 80, rows: 24 };
   await mgr1.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
   made1[0]!.emit("hello from before reboot\r\n");
-  // Force flush via detach — flushSnapshot drains xterm's write queue via a
-  // callback, so the snapshot lands in the next macrotask. Wait one tick.
+  // Force flush via detach — the snapshot lands once the screen worker has read the output.
   mgr1.detach("repo:t1");
-  await new Promise((r) => setTimeout(r, 5));
+  await until(() => !!lastSnap);
   assert.ok(lastSnap, "onSnapshot must fire after detach flushes");
   assert.match(lastSnap!.replay, /hello from before reboot/);
   void persisted;
@@ -212,7 +216,7 @@ test("kill before pty onExit: no orphan snapshot resurrection, no disposed-term 
   await mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
   made[0]!.emit("data\r\n");
   // Drain debounce so a snapshot IS persisted.
-  await new Promise((r) => setTimeout(r, 20));
+  await until(() => !!saved);
   assert.ok(saved);
 
   // Now kill — must evict from disk.
@@ -223,10 +227,11 @@ test("kill before pty onExit: no orphan snapshot resurrection, no disposed-term 
   // Then simulate the async pty exit that fires AFTER kill (node-pty real
   // behavior — SIGHUP → process exit fires later). The onExit handler must
   // NOT crash on the disposed term AND must NOT re-create the snapshot.
+  await mgr.createOrAttach("repo:t2", spec, { onData: () => {}, onExit: () => {} });
   let crashed = false;
   try { made[0]!.exit(0); } catch { crashed = true; }
-  // Let any pending xterm callbacks settle.
-  await new Promise((r) => setTimeout(r, 20));
+  // Answered after every screen the exit asked for: any save it started has been decided.
+  await mgr.snapshot("repo:t2");
   assert.equal(crashed, false, "onExit must not throw after kill");
   assert.equal(saved, undefined, "snapshot must not be resurrected post-kill");
 });
@@ -285,7 +290,7 @@ test("a session that keeps printing is saved with its last 500 lines of scrollba
   const { mgr, created, spec } = makeManager({ onSnapshot: (_id: string, snap: { replay: string }) => { saves.push(snap.replay); }, snapshotDebounceMs: 1 });
   await mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
   created[0]!.emit(Array.from({ length: 3000 }, (_, i) => `L${String(i).padStart(4, "0")}.\r\n`).join(""));
-  for (let waited = 0; saves.length === 0 && waited < 5000; waited += 10) await new Promise((r) => setTimeout(r, 10));
+  await until(() => saves.length > 0);
   assert.deepEqual([saves[0]!.includes("L2999."), saves[0]!.includes("L2500."), saves[0]!.includes("L2000.")], [true, true, false]);
   await mgr.flushAll();
   assert.deepEqual([saves.length, saves[1]!.includes("L0000."), saves[1]!.includes("L2999.")], [2, true, true]);
@@ -323,13 +328,13 @@ test("a session that never goes quiet is still written: a daemon killed mid-turn
   );
   const spec: SpawnSpec = { cwd: "/r", cmd: "claude", args: [], cols: 80, rows: 24 };
   await mgr.createOrAttach("repo:busy", spec, { onData: () => {}, onExit: () => {} });
-  // A spinner: output every 10 ms, for ten times the debounce.
-  const until = Date.now() + 400;
-  while (Date.now() < until) {
+  // A spinner: output every 10 ms, well past the debounce, until a save lands.
+  const deadline = Date.now() + 20_000;
+  while (writes.length === 0 && Date.now() < deadline) {
     made[0]!.emit("⠋\r");
     await new Promise((r) => setTimeout(r, 10));
   }
-  assert.ok(writes.length > 0 && writes[0]! < until, "written while it was still printing");
+  assert.ok(writes.length > 0, "written while it was still printing");
 });
 
 test("two independent sessions track state separately", async () => {
@@ -372,7 +377,7 @@ test("snapshot carries the OSC title; reboot-restored attach re-emits it", async
   await mgr1.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
   made1[0]!.emit("\x1b]0;Refactor the parser\x07\r\n");
   mgr1.detach("repo:t1");
-  await new Promise((r) => setTimeout(r, 5));
+  await until(() => !!snap);
   assert.equal(snap!.title, "Refactor the parser", "snapshot must persist the title");
 
   // Reboot: fresh manager, restore snapshot, attach → replay must re-emit title.
@@ -444,7 +449,7 @@ test("async onSnapshot: flushAll waits for the write; a rejection re-dirties for
   assert.equal(calls, 1);
   let settled = false;
   const p = mgr.flushAll().then(() => { settled = true; });
-  await new Promise((r) => setTimeout(r, 5));
+  await until(() => calls === 2);
   assert.equal(calls, 2, "the rejected snapshot is retried");
   assert.equal(settled, false, "flushAll waits for the async write");
   resolveWrite!();
