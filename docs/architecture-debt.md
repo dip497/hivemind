@@ -87,3 +87,28 @@ Steps:    `report()` → `hookLines(...)` lines → run the file → revert the 
 Size:     1 test file | none
 When:     next change to the daemon's control socket
 ```
+
+## Every e2e spec shares one profile and runs alone (2026-10-17)
+
+```
+Architecture: wrong
+What:     playwright.config.ts gives the whole run one XDG_CONFIG_HOME, one display and one socket folder, with workers: 1
+Why:      a spec that fails before restoring what it saved poisons every spec after it (one failure became 24 on 2026-10-17: frame.spec registered the real repo, hcp-cross-provider left the Windows view selected) → and 398 tests run one at a time, ~45 min
+Refactor: each spec file launches with its own fresh profile (seeded agents copied in) and socket folder; then N workers, each with its own Xvfb display
+Shape:    66 specs call electron.launch with process.env → one helper launchApp(testInfo, opts) that builds the env per file; e2e.sh starts N displays, playwright workers: N
+Steps:    add the helper → move specs to it (no behaviour change, run once) → workers: 4 with a display per worker → delete "isolate or restore what you persist" from the config comment
+Size:     66 spec files, 2 helpers, e2e.sh, the config | none for the reader
+When:     next round, before the suite grows further: expected ~12-15 min a run and no cross-spec leaks
+```
+
+## The phone apps cannot see that a forgotten computer still pushes (2026-10-17)
+
+```
+Architecture: acceptable now
+What:     `hive-phone unpair` reports stillPushes / pushError and exits 2, but hive-phone-ffi's unpair returns only `told`, so Android and iOS drop it
+Why:      the person forgets a computer on the phone and is not told it can still send them notifications
+Refactor: the FFI result carries still_pushes and the error; both apps say so after unpair
+Steps:    extend the FFI record → regenerate bindings (Swift/Kotlin) → show it in each app → conformance case
+Size:     hive-phone-ffi, 2 apps, bindings | a look at the wording
+When:     next phone round
+```
