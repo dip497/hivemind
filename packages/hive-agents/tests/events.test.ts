@@ -95,7 +95,7 @@ describe("an entry that answers what it reports", () => {
   test("runs the generic script told to wait for the answer", () => {
     const hooks: AgentHooks = { arg: "--settings", events: { PermissionRequest: { emit: "input.requested", kind: "permission", timeout: 3600, answer: ANSWER } } };
     const cmd = ((renderHookEvents(hooks, req())!.PermissionRequest![0] as { hooks: Array<{ command: string }> }).hooks[0]!).command;
-    expect(cmd).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/app/hive' '/ud/hcp-event-hook.cjs' '/ud/hcp.sock'");
+    expect(cmd).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,hook_event_name,tool_name,tool_input' ELECTRON_RUN_AS_NODE=1 '/app/hive' '/ud/hcp-event-hook.cjs' '/ud/hcp.sock'");
   });
 });
 
@@ -114,7 +114,7 @@ describe("rendering", () => {
     const ctx = { execPath: "/app/hive", trackerPath: "/ud/t.cjs", tileSessionsDir: "/ud/ts", eventHookPath: "/ud/hcp-event-hook.cjs", hcpSock: "/ud/hcp.sock", hookBin: "/app/hive-net", hookDoor: "/ud/hook-door.sock" };
     const native = req({ paths: { ...req().paths, hooks: hookPathsFor(def, ctx) } });
     const cmd = ((renderHookEvents(hooks, native)!.PermissionRequest![0] as { hooks: Array<{ command: string }> }).hooks[0]!).command;
-    expect(cmd).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' '/app/hive-net' 'hook' '/ud/hook-door.sock'");
+    expect(cmd).toBe("env HIVEMIND_TILE='tile-1' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,hook_event_name,tool_name,tool_input' '/app/hive-net' 'hook' '/ud/hook-door.sock'");
     const { hookBin: _b, ...noDoor } = ctx;
     expect(hookPathsFor(def, noDoor).event, "no hive-net: the script").toEqual({ path: "/ud/hcp-event-hook.cjs", arg: "/ud/hcp.sock" });
   });

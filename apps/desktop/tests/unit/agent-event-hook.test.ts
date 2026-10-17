@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { agentEventHookSource } from "@hivemind/agent-host/hooks/agent-event-hook-source";
 import { startHookDoor } from "@hivemind/agent-host/hooks/hook-door";
+import { EVENT_ENV, keptFields } from "@hivemind/agents";
 
 interface Case { name: string; env: Record<string, string>; payload: unknown; expect: unknown; forbidden?: string[] }
 const casesFile = fileURLToPath(new URL("../../../../conformance/hook-reports.json", import.meta.url));
@@ -22,8 +23,9 @@ type Via = "script" | "native";
 const VIAS: Via[] = ["script", "native"];
 
 /** The agent's hook, run through `via` with `env` in front of it and `payload` on stdin, reporting
- *  to the host on `sock`. */
-async function hook(via: Via, sock: string, env: Record<string, string>, payload: unknown) {
+ *  to the host on `sock`. It is told the payload's keys to keep as a launch tells it. */
+async function hook(via: Via, sock: string, entryEnv: Record<string, string>, payload: unknown) {
+  const env = { [EVENT_ENV.keep]: keptFields({ answer: entryEnv[EVENT_ENV.answer] === "1" }), ...entryEnv };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "evh-"));
   const door = via === "native" ? await startHookDoor({ path: path.join(dir, "door.sock"), sock }) : undefined;
   const script = path.join(dir, "hook.cjs");

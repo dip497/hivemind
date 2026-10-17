@@ -229,6 +229,53 @@ fn a_hook_passes_its_payload_and_its_tile_to_the_door_and_prints_the_answer() {
     );
 }
 
+/// A hook sends the door only the payload's keys the host named, each as the agent wrote it, so
+/// a tool's output never reaches the host; a payload it cannot read goes whole, ids and all.
+#[cfg(unix)]
+#[test]
+fn a_hook_sends_only_the_keys_the_host_named_and_a_payload_it_cannot_read_whole() {
+    use std::{io::Write, os::unix::net::UnixListener};
+    let said = |payload: &[u8]| -> serde_json::Value {
+        let sock = temp().join("door.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let door = thread::spawn(move || {
+            let (c, _) = listener.accept().unwrap();
+            let mut line = String::new();
+            BufReader::new(&c).read_line(&mut line).unwrap();
+            line
+        });
+        let mut hook = Command::new(BIN)
+            .args(["hook", sock.to_str().unwrap()])
+            .env_clear()
+            .envs([
+                ("HIVEMIND_TILE", "hm:t1"),
+                ("HIVE_EVENT", "input.resolved"),
+                ("HIVE_EVENT_KEEP", "session_id,agent_id,tool_input"),
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        hook.stdin.take().unwrap().write_all(payload).unwrap();
+        hook.wait().unwrap();
+        let line = door.join().unwrap();
+        fs::remove_file(&sock).unwrap();
+        serde_json::from_str::<serde_json::Value>(&line).unwrap()["stdin"].clone()
+    };
+    let output = "y".repeat(1 << 20);
+    let payload = format!(
+        r#"{{"session_id":"s-1","tool_input":{{"command":"cat é"}},"tool_response":{{"stdout":"{output}"}}}}"#
+    );
+    let kept = said(payload.as_bytes());
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(kept.as_str().unwrap()).unwrap(),
+        serde_json::json!({ "session_id": "s-1", "tool_input": { "command": "cat \u{e9}" } })
+    );
+    // A payload cut short is not an object this reads.
+    let cut = r#"{"session_id":"s-2","tool_response":"y"#;
+    assert_eq!(said(cut.as_bytes()), serde_json::Value::String(cut.into()));
+}
+
 /// With no host to reach, a hook prints nothing and succeeds, so the agent goes on.
 #[cfg(unix)]
 #[test]

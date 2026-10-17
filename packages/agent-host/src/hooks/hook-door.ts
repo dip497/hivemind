@@ -26,8 +26,9 @@ export function startHookDoor(o: { path: string; sock: string }): Promise<HookDo
     conn.on("close", () => held?.destroy());
     conn.on("data", (d: string) => {
       if (up) return;
+      const at = d.indexOf("\n");
+      const nl = at < 0 ? -1 : buf.length + at;
       buf += d;
-      const nl = buf.indexOf("\n");
       if (nl < 0) { if (buf.length > MAX_LINE) conn.destroy(); return; }
       let said: { env?: Record<string, string>; stdin?: string } = {};
       try { said = JSON.parse(buf.slice(0, nl)) ?? {}; } catch { /* nothing to report */ }

@@ -13,6 +13,7 @@ for that answer, and exits 0 printing nothing when the host is not there.
 | `HCP_TOKEN` | the agent's spawn env | authorizes requests |
 | `HIVE_EVENT`, `HIVE_EVENT_OUTCOME`, `HIVE_EVENT_KIND` | `emit:` entries | the canonical event the generic script reports |
 | `HIVE_EVENT_ANSWER` | `emit:` entries with `answer:` | `1`: the script waits for the answer and prints it |
+| `HIVE_EVENT_KEEP` | the spawn env of an agent with hooks; `emit:` entries with `answer:` | the payload's keys the native hook passes on, comma separated |
 | `HIVE_SDK` | a plugin's own scripts; the spawn env of an agent with `launch.hcp`, for a plugin that runs inside it | path of the SDK to `require` |
 | `HIVE_HOOK_SOCK` | the same | the host socket |
 | `HIVE_PLAN_SOCK` | a plugin's own scripts | the plan-review socket |
@@ -41,7 +42,9 @@ Where the daemon has hive-net, an `emit:` entry runs `hive-net hook` instead of 
 a pipe with no logic of its own, which starts no runtime. It reads stdin to its end, connects to the
 pty daemon's hook door (a 0600 unix socket, `hook-door.sock` beside `hcp.sock`), and sends one line,
 `{"env": {…}, "stdin": "<the agent's payload>"}`, where `env` holds `HIVEMIND_TILE`, `HCP_TOKEN` and
-the `HIVE_EVENT*` variables and nothing else. It prints whatever the door sends back before closing.
+the `HIVE_EVENT*` variables and nothing else. `stdin` holds only the payload's keys `HIVE_EVENT_KEEP`
+names, each as the agent wrote it, so a tool's output never reaches the door; all of it when nothing
+is named or the payload is not a JSON object. It prints whatever the door sends back before closing.
 
 The door says on `HIVE_HOOK_SOCK` what the script would have (`hook-lines.ts` builds both), and
 sends back the answer's `stdout` for an entry that answers, nothing otherwise. A hook that asks for

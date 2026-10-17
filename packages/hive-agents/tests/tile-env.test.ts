@@ -15,6 +15,8 @@ test("an agent is launched knowing its tile, its own token, and both of this mac
     paths: { private: "/ud/agents/codex", execPath: "/app/hive", tileSessionsDir: "/ud/tile-sessions", home: "/home/u", hooks: {}, hcpSock: "/ud/hcp.sock", driveSock: "/ud/drive.sock", hcpToken: (tile) => `token-of-${tile}` },
   });
   expect(plan.env).toMatchObject({ HIVEMIND_TILE: "hm:a", HCP_TOKEN: "token-of-hm:a", HIVE_HCP_SOCK: "/ud/hcp.sock", HIVE_DRIVE_SOCK: "/ud/drive.sock" });
+  // Its hooks pass on only the ids of what the agent tells them, never a tool's output.
+  expect(plan.env!.HIVE_EVENT_KEEP).toBe("session_id,agent_id,background_tasks");
 });
 
 test("this machine's control-plane credentials are taken out of what goes to another machine, and nothing else", () => {

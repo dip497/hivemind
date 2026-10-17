@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import { shq } from "./shq.js";
 import type { AgentHookEntry, AgentHooks, AgentProviderDef } from "./types.js";
 import type { HookScript, LaunchRequest } from "./runtime.js";
-import { EVENT_ENV, EVENT_HOOK } from "./events.js";
+import { EVENT_ENV, EVENT_HOOK, keptFields } from "./events.js";
 
 /** What the generic script reports for an `emit` entry. */
 function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
@@ -25,7 +25,8 @@ function emitEnv(entry: AgentHookEntry | undefined): Record<string, string> {
     [EVENT_ENV.event]: entry.emit,
     ...(entry.outcome ? { [EVENT_ENV.outcome]: entry.outcome } : {}),
     ...(entry.kind ? { [EVENT_ENV.kind]: entry.kind } : {}),
-    ...(entry.answer ? { [EVENT_ENV.answer]: "1" } : {}),
+    // The ids alone come from the agent's environment, so most commands stay as they were.
+    ...(entry.answer ? { [EVENT_ENV.answer]: "1", [EVENT_ENV.keep]: keptFields(entry) } : {}),
   };
 }
 

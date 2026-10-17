@@ -61,3 +61,27 @@ test.skipIf(!fs.existsSync(HIVE_NET))("a held hook is answered through the door,
   host.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("a hook's line that arrives in pieces is reported whole, as a large payload arrives", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "door-"));
+  const got: unknown[] = [];
+  const host = net.createServer((c) => {
+    c.setEncoding("utf8");
+    c.on("data", (d: string) => { for (const l of d.split("\n").filter(Boolean)) got.push(JSON.parse(l)); });
+  });
+  await new Promise<void>((r) => host.listen(path.join(dir, "hcp.sock"), r));
+  const door = await startHookDoor({ path: path.join(dir, "door.sock"), sock: path.join(dir, "hcp.sock") });
+  const line = `${JSON.stringify({ env: { HIVEMIND_TILE: "hm:t1", HIVE_EVENT: "turn.ended" }, stdin: JSON.stringify({ session_id: "s-1", out: "y".repeat(200_000) }) })}\n`;
+  const c = net.connect(door.path);
+  await new Promise((r) => c.once("connect", r));
+  for (const piece of [line.slice(0, 1000), line.slice(1000, -3), line.slice(-3)]) {
+    c.write(piece);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  await until(() => got.length > 0);
+  expect(got).toEqual([{ jsonrpc: "2.0", method: "agent.event", params: { tileId: "hm:t1", event: "turn.ended", sessionId: "s-1" } }]);
+  c.destroy();
+  door.close();
+  host.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});

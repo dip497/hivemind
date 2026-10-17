@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { findSession, sessionExists, sessionListed } from "./session.js";
 import { readTrackedSession } from "./tile-session-store.js";
 import { hookCommand, renderHookDocument, stableHookEnv } from "./hooks.js";
-import { EVENT_HOOK, isAgentEventName } from "./events.js";
+import { EVENT_ENV, EVENT_HOOK, isAgentEventName, keptFields } from "./events.js";
 import { homePaths, seedHome } from "./home-overlay.js";
 import { SDK_ENV } from "@hivemind/agent-sdk";
 import { NO_PLAN, validatePlan, type AgentRuntime, type LaunchPlan, type LaunchRequest, type RuntimePaths } from "./runtime.js";
@@ -78,7 +78,7 @@ const perTileName = (name: string, tileId: string): string => {
 
 /** What says which tile a process is and how it reaches the control plane: each tile's own, given
  *  at its launch, so never taken from the environment its sessions start from. */
-export const TILE_ENV = ["HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH", SDK_ENV.sdk, SDK_ENV.sock, SDK_ENV.planSock] as const;
+export const TILE_ENV = ["HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH", SDK_ENV.sdk, SDK_ENV.sock, SDK_ENV.planSock, EVENT_ENV.keep] as const;
 
 /** `env` without this machine's control-plane credentials, which never go to another machine. */
 export function withoutControl(env?: Record<string, string>): Record<string, string> | undefined {
@@ -156,6 +156,7 @@ export function manifestRuntime(
       if (def.launch?.hcp && req.paths.hcpSock && req.paths.hcpToken) Object.assign(env, hcpEnv(def, req));
       if (def.home) env[def.home.env] = homePaths(def.home, req.paths.private).root;
       Object.assign(env, stableHookEnv(def, req));
+      if (def.hooks || def.assets?.length) env[EVENT_ENV.keep] = keptFields();
       for (const [k, v] of Object.entries(def.launch?.env ?? {})) env[k] = resolve(v, req, def, ESCAPE_NONE, assetFile);
       if (Object.keys(env).length) plan.env = env;
 
