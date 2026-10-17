@@ -110,6 +110,8 @@ export default defineConfig({
         input: {
           index: path.resolve("src/main/index.ts"),
           "pty-daemon": path.resolve("../../packages/agent-host/src/pty-daemon.ts"),
+          // The daemon's screens run on a worker thread, which loads this file beside it.
+          "screen-worker": path.resolve("../../packages/agent-host/src/screen-worker.ts"),
         },
       },
     },
