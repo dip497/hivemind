@@ -78,7 +78,7 @@ kept, and it is started again from that description.
 
 | View | Worry | Answer |
 |---|---|---|
-| User | Resume silently starts a blank agent | Sleep refuses an agent whose manifest cannot resume; a wake whose resume fell back says so (`resumed: false`, and the restore retry's banner) |
+| User | Resume silently starts a blank agent | Sleep refuses an agent whose manifest cannot resume; a wake whose resume fell back says so on the tile (the restore retry's banner) |
 | User | Sleeping kills a turn in flight | `sleep` skips a tile that is working or waiting on someone, unless `--force`, and lists it |
 | User | The tile loses its name | A sleep is not an exit: the title is not cleared and the status is not set `exited`; the saved screen carries the title too |
 | Data | Who says it sleeps | Two facts, one direction (below): the daemon's sleep mark decides whether a process may start; the layout flag decides what views draw. Only the control plane writes either, in a fixed order |
@@ -124,7 +124,7 @@ rule is re-implemented in the window instead of the manifest.
 hive ctl / menu / phone ──agent.sleep(target)──▶ control plane (host)
    1. store: tile.sleeping = true              ──sync──▶ windows, phone, guests
    2. backend.sleep(pty) ──▶ daemon: screen taken → SIGHUP(group) → exit{slept} → saved, marked
-   3. control.slept(tile): status "sleeping", waiters told, links kept
+   3. the slept exit: status kept (a turn in flight interrupted), waiters told, links kept
 window: tile.sleeping ? <SleepingTile> (terminal.saved → dimmed static screen + Resume)
                       : <TerminalTile> (attach; "asleep" → draws SleepingTile)
 wake: terminals.own(tile, wake) ──▶ daemon restore → --resume <id>; then store: sleeping off
@@ -185,7 +185,8 @@ must be taken before the signal, and the grace must be long.
    - Signals go to the process group (`-pid`): SIGHUP, then SIGKILL after `SLEEP_GRACE_MS` = 15 s;
      when the leader has ended, SIGKILL to what is left of its group (an MCP server ignoring
      SIGHUP is not left behind). Windows: the pty's own kill.
-   - Retention skips sleeping snapshots (only the files past 30 days are read to tell).
+   - Retention keeps sleeping snapshots 90 days, not 30 (only the files past 30 days are read to
+     tell): by then an agent has usually let go of the conversation itself.
    - `info()` keeps each frozen session's `SessionInfo` once read; a sleep records it with no read.
    Kept from before: the screen is taken before the signal (whole, and the newest 1000 lines);
    `exit{slept}`; `slept` answered once on disk; `screen {saved, lines}` read with `fs.promises`,
@@ -199,7 +200,7 @@ must be taken before the signal, and the grace must be long.
    devices (hive-net). Refused, with the reason in the answer: a tile on a participant's machine
    (theirs to run), an ssh machine without a daemon (an in-app `ssh -tt` cannot keep a session).
 3. **Layout.** `TileRecord.sleeping?: string`, the folder it slept in (a tile moved to a frame on
-   another machine still wakes, shows and ends where its session is);
+   another machine still wakes, shows and ends where its session is), written by the owner only;
    `WorkspaceStore.setSleeping(tileId, folder | null, from)`, one field, like `renameTile`.
    `sleeping` joins the fields a board-edit guest may not change. A frame or workspace has no
    flag: it sleeps when its agent tiles do.
@@ -259,12 +260,34 @@ must be taken before the signal, and the grace must be long.
 | 9 | A parent's inbox doorbell rings into no session; nothing rings again on wake | Ring the inbox on wake (piece 4) |
 | minor | Quick-fail retry after `resumed: true`; quit mid-wake leaves flag on and `saved` null; wake at fixed size; plugin uninstalled while asleep; ambiguous name; group SIGKILL gives children no extra grace; Windows hard kill | `resumed` is best effort, the retry banner is the truth; `SleepingTile` with no saved screen attaches `liveOnly` and, live, asks the control plane to clear the flag; size accepted (resized at once); wake refused with "no agent X installed"; ambiguous name refused; children got the SIGHUP with the leader, so the leader's exit time is their grace; Windows accepted |
 
+## Review round 3 (a fresh reviewer, 5 material points)
+
+| # | Point | Answer |
+|---|---|---|
+| 1 | The daemon's snapshot write swallows errors, so a failed save is answered `slept`; a lost mark or snapshot lets an attach start the agent afresh; `wake` on an id with nothing asleep spawns fresh; viewers are told `slept` before the save | Built: the write rejects to the manager; viewers get `exit{slept}` only once it is on disk (else a plain exit); the in-memory mark survives an unreadable snapshot and such a sleeper is never started; `wake` with nothing asleep is refused ("nothing asleep as X", listed in `skipped`); a wake during the grace waits and restores. Tests in `sleep.test.ts` |
+| 2 | An `agents` guest may write any tile field (`edit-rules.ts`: `drives` returns early), so a forged `sleeping` folder would route a wake or read to another machine | `sleeping` is owner-only, checked before the `drives` return; an edit-rules row for an `agents` guest |
+| 3 | `sleep(tile)` routes by "attached here", so a detached device or ssh tile goes to the local daemon | `sleep(tile, cwd)` routes by folder like `saved` and `kill`; the host test sleeps a detached session |
+| 4 | The wake attach's 6 s timer counts ssh connect and load: a slow wake runs unseen with the flag on | The wake attach waits 30 s, like a sleep; on no answer the tile stays asleep and is listed "no answer"; pressing Resume again attaches with `wake` and joins it, since a wake on a live session is a plain attach |
+| 5 | Resuming a sleeper's conversation in a new tile, then waking the sleeper, puts two processes on one conversation | `agent.start({resume})` refuses an id that a sleeping tile on this machine holds ("asleep in tile X: wake it"); ceiling: a sleeper on another machine is not checked |
+| minor | Doc said status "sleeping"; client-chosen folders; `saved` with no timeout; >128 wakes overflow the pacer; orphan snapshots of tiles removed by sync; wake in the grace | Status is kept (piece 4); folders from the host (built); `saved` gives up after 10 s (null); a refused start is listed in `skipped`; orphan sweep is a ceiling (disk only, ~12 KB each); the grace wake is built |
+
+## Review round 4 (a fresh reviewer, 5 material points)
+
+| # | Point | Answer |
+|---|---|---|
+| 1 | Windows: the pty's `kill(signal)` throws, both signals are swallowed, the sleep never ends and every attach waits on it | Built: a pty that refuses a signal is ended outright (`sleep-no-signals.test.ts`) |
+| 2 | The 30 s timers stop the host waiting, not the daemon: a wake goes on unseen, a sleep finishes with no flag and a blank tile | A sleep or wake that times out is asked again once: both are idempotent at the daemon (a sleep in flight answers when done; a wake on a live session attaches). Each tile's flag is set as its own sleep resolves. `terminal.saved` uses the tile's folder: where it slept, else its frame's (built). `SleepingTile` fetches again when the flag lands and never caches a null |
+| 3 | An ssh wake with no daemon falls back to plain ssh: a fresh agent, the conversation left on the remote | Built: a wake there is refused ("what slept there cannot be woken") |
+| 4 | The phone builds its list from Home rows, which carry no `sleeping`, and drops a tile with no state; its agent screen attaches live only | Step 7 widened: `sleeping` in `HomeTile`, `homeRows`, the phone's `TileRow`, `LayerTile` and `status_of`; a sleeper with no status is `idle`; the phone's agent screen shows `terminal.saved` for a sleeper |
+| 5 | A sleeping ssh or device tile closed through sync, or by the control plane after it removed the tile, is killed on the wrong daemon and kept forever | The control plane reads the flag's folder before removing the tile and passes it to the end; a window's close finds it while the tile is still in the host's layout; one closed through sync is left to retention, now 90 days for a sleeper (built), not forever |
+| minor | `resumed` has no channel; a paused session sleeps at SIGKILL; an unreadable sleeper after a restart is not known asleep; adopted tiles; bare ids; `folderOf` not wired; HTML from agent output; pipes into a sleeper; the store still writes `true` | `resumed` dropped (the banner says it); paused: built (host test, under node); unreadable after a restart: ceiling, as for any corrupt snapshot; adopted tiles skipped like close skips them; ids normalised (built); wiring and the store's folder in step 5; the screen is built from escaped text nodes, styles only from the palette; a pipe into a sleeper is dropped: ceiling, listed in the answer |
+
 ## Pre-mortem (a year on, it failed)
 
 1. **"Resume brought back a blank agent."** The transcript was pruned by the agent, or the agent
    has no resume rule. Changed: sleep refuses an agent with no `session.resume`; sleepers are
-   exempt from our retention; the restore's `vanished` check (runtime-manifest.ts) and retry
-   banner, and `wake --json` reports `resumed: false`. Ceiling: Claude deletes transcripts after
+   kept 90 days by our retention; the restore's `vanished` check (runtime-manifest.ts) and retry
+   banner on the tile. Ceiling: Claude deletes transcripts after
    `cleanupPeriodDays` (30 by default); past it the conversation is gone wherever we keep the
    screen. Upgrade: show the sleep's age on the tile, and warn past 25 days.
 2. **"Two agents wrote one conversation."** Changed: only a `wake` attach restores; the session
