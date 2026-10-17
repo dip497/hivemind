@@ -11,7 +11,7 @@ import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import fs from "node:fs";
 import { conversationStart, followConversation, lastSaid, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
-import { runsIn, type HeldBoard } from "./needs.js";
+import { runsIn, tileOn, type HeldBoard } from "./needs.js";
 
 /** A session an agent keeps its conversation in: its id (empty while none is known), its file
  *  (null until the agent writes it), and how the file's records say what was said, as its manifest
@@ -39,7 +39,7 @@ const SESSION_CHECK_MS = 1000;
  *  the one its manifest would resume. */
 export function transcriptOf(held: HeldBoard[], tile: string, tileSessionsDir: string, home?: string): Transcript | null {
   const bare = toBareId(tile);
-  const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare) as { cmd?: string; args?: string[] } | undefined;
+  const record = tileOn(held, bare)?.record as { cmd?: string; args?: string[] } | undefined;
   const def = agentForCmd(record?.cmd);
   if (!record || !def || !keepsConversation(def)) return null;
   const exists = def.session!.resume!.exists!;

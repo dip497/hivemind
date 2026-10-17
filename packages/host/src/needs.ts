@@ -99,31 +99,57 @@ export interface HeldBoard {
   core: KeptCore | null;
 }
 
-/** The workspaces `store` holds, with their boards. */
+/** What each store held when last asked: its folders, the core of each, and the boards they made. */
+const kept = new WeakMap<object, { repos: string[]; cores: Array<KeptCore | null>; boards: HeldBoard[] }>();
+
+const same = <T>(a: readonly T[], b: readonly T[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** The workspaces `store` holds, with their boards: the same frozen list until one of them changes,
+ *  which the store says by giving another core (whose a workspace is changes its core too). */
 export function heldBoards(store: Pick<WorkspaceStore, "repos" | "ownership" | "getCore">): HeldBoard[] {
-  return store.repos().flatMap((repo) => {
+  const repos = store.repos();
+  const cores = repos.map((repo) => store.getCore(repo));
+  const was = kept.get(store);
+  if (was && same(was.repos, repos) && same(was.cores, cores)) return was.boards;
+  const boards = Object.freeze(repos.flatMap((repo, i) => {
     const workspace = store.ownership(repo)?.workspaceId;
-    return workspace ? [{ workspace, name: path.basename(repo), repo, core: store.getCore(repo) }] : [];
-  });
+    return workspace ? [Object.freeze({ workspace, name: path.basename(repo), repo, core: cores[i]! })] : [];
+  })) as HeldBoard[];
+  kept.set(store, { repos, cores, boards });
+  return boards;
+}
+
+type KeptTile = KeptCore["tiles"][number];
+
+/** Each tile of a list of boards, by its id, with its board: made once per list. */
+const tilesOn = new WeakMap<readonly HeldBoard[], Map<string, { board: HeldBoard; record: KeptTile }>>();
+
+/** The tile `tile` of `held` and the board it is on (the first, should two say it); undefined for
+ *  a tile on none of them. */
+export function tileOn(held: readonly HeldBoard[], tile: string): { board: HeldBoard; record: KeptTile } | undefined {
+  let tiles = tilesOn.get(held);
+  if (!tiles) {
+    tiles = new Map();
+    for (const board of held) for (const record of board.core?.tiles ?? []) if (!tiles.has(record.id)) tiles.set(record.id, { board, record });
+    tilesOn.set(held, tiles);
+  }
+  return tiles.get(toBareId(tile));
 }
 
 /** Which agent of `held` the tile `tileId` is: its workspace, and what it is called (what the
  *  person named its tile, else what it says it is doing, `title`, else what it was started to do,
  *  else its tile's label); null for a tile in none of them. */
 export function agentOf(held: HeldBoard[], tileId: string, title?: string): { workspace: string; name: string; tile: string; agent: string } | null {
-  const tile = toBareId(tileId);
-  const board = held.find((h) => h.core?.tiles.some((t) => t.id === tile));
-  const record = board?.core?.tiles.find((t) => t.id === tile);
-  if (!board || !record) return null;
-  return { workspace: board.workspace, name: board.name, tile, agent: board.core?.tileNames?.[tile] || title || record.task || record.label };
+  const on = tileOn(held, tileId);
+  if (!on) return null;
+  const { board, record } = on;
+  return { workspace: board.workspace, name: board.name, tile: record.id, agent: board.core?.tileNames?.[record.id] || title || record.task || record.label };
 }
 
 /** The manifest of the agent the tile `tile` of `held` runs; undefined for a tile on none of
  *  them, and for a command no manifest here names. */
 export function manifestOf(held: HeldBoard[], tile: string): AgentProviderDef | undefined {
-  const bare = toBareId(tile);
-  const record = held.flatMap((h) => h.core?.tiles ?? []).find((t) => t.id === bare);
-  return agentForCmd(record?.cmd);
+  return agentForCmd(tileOn(held, tile)?.record.cmd);
 }
 
 /** The keys that allow and deny a permission the agent of `tile` asks, as its manifest says: by
@@ -144,9 +170,8 @@ export function folderOf(board: HeldBoard, tile: string): string {
 /** The folder the agent of `tile` runs in, on whichever board of `held` it is; null for a tile on
  *  none of them. */
 export function runsIn(held: HeldBoard[], tile: string): string | null {
-  const bare = toBareId(tile);
-  const board = held.find((h) => h.core?.tiles.some((t) => t.id === bare));
-  return board ? folderOf(board, bare) : null;
+  const on = tileOn(held, tile);
+  return on ? folderOf(on.board, on.record.id) : null;
 }
 
 /** Whose computer `device` is among the people let into a workspace here (M4): the name of the one
@@ -186,7 +211,7 @@ export function needsOf(held: HeldBoard[], statuses: WaitingStatus[], machines: 
     const at = agentOf(held, tileId, status.title);
     if (!at) continue;
     const plan = status.kind === "plan" ? facts.wait?.(at.tile)?.plan : undefined;
-    const board = held.find((h) => h.workspace === at.workspace)!;
+    const { board } = tileOn(held, at.tile)!;
     const machine = machineCalled(folderOf(board, at.tile), machines);
     const { kind, ...on } = waitOn(at.tile, { kind: status.kind, says: status.says, since: status.since }, facts);
     needs.push({ ...at, kind, ...(status.says ? { says: status.says } : {}), since: status.since, ...(plan === undefined ? {} : { plan }), machine, ...on });

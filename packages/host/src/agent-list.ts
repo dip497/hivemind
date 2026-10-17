@@ -10,7 +10,7 @@ import type { InputKind } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import { askingOf, keepsConversation } from "./conversations.js";
-import { agentOf, answerKeys, folderOf, manifestOf, waitOn, type Decides, type HeldBoard, type WaitingStatus } from "./needs.js";
+import { agentOf, answerKeys, folderOf, manifestOf, tileOn, waitOn, type Decides, type HeldBoard, type WaitingStatus } from "./needs.js";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import type { Wait } from "./waits.js";
 
@@ -62,7 +62,7 @@ export function agentsOf(held: HeldBoard[], statuses: WaitingStatus[], machines:
   for (const { tileId, status } of statuses) {
     const at = agentOf(held, tileId, status.title);
     if (!at) continue;
-    const board = held.find((h) => h.workspace === at.workspace)!;
+    const { board } = tileOn(held, at.tile)!;
     const program = facts.program(at.tile);
     let waiting: AgentItem["waiting"];
     if (status.state === "waiting" && status.kind) {

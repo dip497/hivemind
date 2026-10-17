@@ -13,7 +13,8 @@ import { fileURLToPath } from "node:url";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { certifyDevice, idOf, newSeed, newWorkspaceId } from "@hivemind/workspace-host/identity";
 import { AGENT_MANIFEST_VERSION, defFromManifest, setCatalog } from "@hivemind/agents";
-import { answerKeys, needsOf, participantNamed, workingIn, type HeldBoard, type WaitingStatus } from "../src/needs.ts";
+import { agentOf, answerKeys, heldBoards, manifestOf, needsOf, participantNamed, workingIn, type HeldBoard, type WaitingStatus } from "../src/needs.ts";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { Wait } from "../src/waits.ts";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
@@ -81,5 +82,40 @@ test("the keys for a permission an agent asks are its manifest's for what its sc
     assert.equal(answerKeys(held, "t2", { kind: "permission" }), undefined);
   } finally {
     setCatalog([]);
+  }
+});
+
+test("the boards held are the store's as it is now, after every kind of change: a tile's program, a workspace made, one whose owner arrives with a replica's import, one forgotten; and the same list while nothing changed", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "needs-held-"));
+  setCatalog(["acme", "zeta"].map((id) => defFromManifest({
+    manifestVersion: AGENT_MANIFEST_VERSION, id, label: id, bin: id,
+    caps: { promptDelivery: "typed", turnSignal: false, resume: "none", supervise: "human", blockedDetection: false },
+  })));
+  try {
+    const host = new WorkspaceStore({ dir: path.join(dir, "host"), person: newSeed() });
+    const layout = (cmd: string) => ({ frames: [], tiles: [{ id: "t1", kind: "claude", label: "Agent", cmd }] });
+    host.setCore("/w/api", layout("acme"));
+    const first = heldBoards(host);
+    assert.equal(manifestOf(first, "hm:t1")?.id, "acme");
+    assert.equal(heldBoards(host), first, "nothing changed: the same list");
+    host.setCore("/w/api", layout("zeta"));
+    assert.equal(manifestOf(heldBoards(host), "t1")?.id, "zeta", "the tile's program changed");
+    host.setCore("/w/web", { frames: [], tiles: [{ id: "t2", kind: "claude", label: "Web", cmd: "acme" }] });
+    assert.deepEqual(heldBoards(host).map((b) => b.name), ["api", "web"]);
+    assert.equal(agentOf(heldBoards(host), "t2")?.workspace, host.ownership("/w/web")!.workspaceId);
+
+    // A replica keeps no person: its copy says whose it is only once the host's document is in.
+    const replica = new WorkspaceStore({ dir: path.join(dir, "replica") });
+    assert.equal(replica.getCore("/w/api"), null);
+    assert.deepEqual(heldBoards(replica), [], "no owner yet: not held");
+    replica.importFrom("/w/api", host.exportSince("/w/api", null));
+    assert.deepEqual(heldBoards(replica).map((b) => [b.workspace, b.name]), [[host.ownership("/w/api")!.workspaceId, "api"]]);
+
+    host.forget("/w/web");
+    assert.deepEqual(heldBoards(host).map((b) => b.name), ["api"]);
+    assert.equal(agentOf(heldBoards(host), "t2"), null);
+  } finally {
+    setCatalog([]);
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
