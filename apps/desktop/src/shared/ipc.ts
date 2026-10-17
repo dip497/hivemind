@@ -95,7 +95,7 @@ export interface SharedStatus {
   state: "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";
   access: string;
 }
-import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { NotificationSettings };
 export type { AgentChange, AgentEvent, AgentItem } from "@hivemind/workspace-api/agents";
 import type { AgentAnswer, AgentChange, AgentEvent, AgentItem, Answerer, PipeChange, SpawnChange, StatusChange, TileOpened } from "@hivemind/workspace-api/agents";
@@ -279,15 +279,17 @@ export interface HiveIpc {
   workspaceImportSync(repo: string, legacy: LegacyLayout): void;
   /** The board's objects, a framed one's position relative to its frame; none when there are none. */
   workspaceObjectsSync(repo: string): BoardObject[] | null;
-  /** Replace the board. Synchronous, so a write made while the window unloads is kept. */
-  /** `base`: the board this window last read or wrote (null: none): only what changed from it is written. */
-  workspaceSetObjectsSync(repo: string, objects: BoardObject[], base?: BoardObject[] | null): void;
+  /** The board's objects with these ids, by id (null: not there). */
+  workspaceObjectsWithIdsSync(repo: string, ids: string[]): Record<string, BoardObject | null> | null;
+  /** Write the objects this window changed, each with the one it changed it from. Synchronous, so a
+   *  write made while the window unloads is kept. */
+  workspaceEditObjectsSync(repo: string, edit: BoardEdit): void;
   /** Take back the last board edit; false when there is none. */
   workspaceUndoSync(repo: string): boolean | null;
   /** Make again the last board edit undo took back; false when there is none. */
   workspaceRedoSync(repo: string): boolean | null;
   /** Another writer (the control plane, another window) changed a workspace. */
-  onWorkspaceChanged(cb: (change: Pick<WorkspaceChange, "repo" | "part">) => void): () => void;
+  onWorkspaceChanged(cb: (change: Pick<WorkspaceChange, "repo" | "part" | "objects">) => void): () => void;
   /** The workspace this window shows now (null: none), and the frame the user is in there, for
    *  the control plane to act on when its caller is in no tile. */
   workspaceShown(repo: string | null, frame: string | null): void;
