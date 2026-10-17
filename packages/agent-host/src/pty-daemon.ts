@@ -23,7 +23,7 @@ import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { ipcPath } from "@hivemind/core/ipc";
 import { repairShellSpec } from "./shell-spec.js";
 import {
-  fileNameForId, listSnapshotFiles, readSnapshot, redactSnapshot, rehydrateSnapshot, secureDir,
+  fileNameForId, listSnapshotFiles, parseSnapshot, readSnapshot, redactSnapshot, rehydrateSnapshot, secureDir,
   staleSnapshotIds, type SnapshotEntry,
 } from "./session-snapshot-store.js";
 import { applyInitialPrompt, stripInitialPrompt } from "./initial-prompt.js";
@@ -282,6 +282,11 @@ function loadSnapshot(id: string): SessionSnapshot | undefined {
   const snap = readSnapshot(snapshotPath(id), id);
   return snap ? rehydrateSnapshot(snap, tileToken(installToken, id)) : undefined;
 }
+async function readSnapshotFile(id: string): Promise<SessionSnapshot | undefined> {
+  const body = await fs.promises.readFile(snapshotPath(id), "utf8").catch(() => undefined);
+  const snap = body === undefined ? undefined : parseSnapshot(body, id);
+  return snap ? rehydrateSnapshot(snap, tileToken(installToken, id)) : undefined;
+}
 function registerSnapshots(): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
   for (const entry of listSnapshotFiles(sessionsDir)) {
@@ -399,6 +404,7 @@ const manager = new SessionManager(factory, {
   },
   onSnapshot: persistSnapshot,
   loadSnapshot,
+  readSnapshot: readSnapshotFile,
   onSnapshotEvict: evictSnapshot,
   // Each agent's manifest says how it binds, tracks and resumes a session (hive-agents
   // runtime-manifest.ts); composed across every agent, each leaving specs it does not own alone.
@@ -637,8 +643,8 @@ const server = net.createServer((sock) => {
         break;
       case "screen": {
         const { reqId, id } = msg;
-        if (msg.saved) { send({ t: "screen", reqId, id, replay: manager.savedScreen(id) }); break; }
         const lines = linesOf(msg.lines);
+        if (msg.saved) { void manager.savedScreen(id, lines).then((replay) => send({ t: "screen", reqId, id, replay })); break; }
         // What is buffered for this viewer is older than the screen: send it first, so the
         // screen is the line between bytes it already covers and bytes that follow it.
         outBuf.flush(id);

@@ -72,9 +72,18 @@ export function listSnapshotFiles(dir: string): SnapshotEntry[] {
 /** Sync on purpose: an await in the attach path would let a second attach spawn fresh. */
 export function readSnapshot(file: string, expectedId?: string): SessionSnapshot | undefined {
   try {
-    const snap = JSON.parse(fs.readFileSync(file, "utf8")) as SessionSnapshot;
+    return parseSnapshot(fs.readFileSync(file, "utf8"), expectedId);
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseSnapshot(body: string, expectedId?: string): SessionSnapshot | undefined {
+  try {
+    const snap = JSON.parse(body) as SessionSnapshot;
     if (!snap || typeof snap.id !== "string" || typeof snap.replay !== "string" || !snap.spec) return undefined;
     if (expectedId !== undefined && snap.id !== expectedId) return undefined;
+    if (snap.recentReplay !== undefined && typeof snap.recentReplay !== "string") return undefined;
     return snap;
   } catch {
     return undefined;

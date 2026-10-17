@@ -145,6 +145,9 @@ interface Session {
   killed?: boolean;
   /** Set by sleep: `done` settles once its process has ended and its screen is saved. */
   sleeping?: { done: Promise<boolean>; settle: (kept: boolean) => void };
+  /** Its screen when it was put to sleep, all of it and its newest RECENT_LINES: what is saved,
+   *  as a program may clear its screen as it ends. */
+  sleepScreen?: { replay: string; recent: string };
   /** Output emitted so far; positions only mean something within one `epoch`. */
   seq: number;
   epoch: string;
@@ -160,6 +163,8 @@ const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
 // Serializing walks every cell, so saving all of a printing session's scrollback every few seconds
 // froze every terminal for up to a second. A stop, a detach and an exit still save all of it.
 const SAVED_SCROLLBACK = 500;
+/** The scrollback a viewer of a sleeping session is first shown, as a window opens a terminal with. */
+export const RECENT_LINES = 1000;
 /** A program still running this long after it was told to end for sleep is ended outright. */
 const SLEEP_GRACE_MS = 5000;
 
@@ -191,6 +196,8 @@ export interface SessionManagerOptions {
   onSnapshot?: (id: string, snapshot: SessionSnapshot) => void | Promise<void>;
   /** Reads back what `onSnapshot` saved: how a session put to sleep is restored. */
   loadSnapshot?: (id: string) => SessionSnapshot | undefined;
+  /** The same, off the caller's thread: what a viewer of a sleeping session is shown. */
+  readSnapshot?: (id: string) => Promise<SessionSnapshot | undefined>;
   /** OPTIONAL — invoked when a session is explicitly killed so the daemon can
    *  unlink its on-disk snapshot file. */
   onSnapshotEvict?: (id: string) => void;
@@ -229,6 +236,8 @@ export interface SessionSnapshot {
   asked?: SpawnSpec;
   /** Output of SerializeAddon.serialize() — a VT-escape string. */
   replay: string;
+  /** Put to sleep: the screen again with only its newest RECENT_LINES of scrollback, for a viewer. */
+  recentReplay?: string;
   /** Last OSC window title (SerializeAddon omits it) so a reboot-restored
    *  session re-emits the agent's name ahead of its replay, same as a live
    *  reattach — the daemon is the single source of truth for the title. */
@@ -252,6 +261,7 @@ export class SessionManager {
   private readonly onSnapshot?: (id: string, snap: SessionSnapshot) => void | Promise<void>;
   private readonly onSnapshotEvict?: (id: string) => void;
   private readonly loadSnapshot?: (id: string) => SessionSnapshot | undefined;
+  private readonly readSnapshot?: (id: string) => Promise<SessionSnapshot | undefined>;
   private readonly snapshotDebounceMs: number;
   private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   private readonly transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
@@ -271,6 +281,7 @@ export class SessionManager {
     this.onSnapshot = opts.onSnapshot;
     this.onSnapshotEvict = opts.onSnapshotEvict;
     this.loadSnapshot = opts.loadSnapshot;
+    this.readSnapshot = opts.readSnapshot;
     this.onOutput = opts.onOutput;
     this.onEnd = opts.onEnd;
     this.onTitle = opts.onTitle;
@@ -478,6 +489,7 @@ export class SessionManager {
     this.onTitle?.(id, ""); // a process that has ended is doing nothing
     const slept = !!session.sleeping;
     for (const c of session.clients) c.onExit(code, signal, slept || undefined);
+    if (slept) session.dirty = true; // its screen at sleep is saved even when nothing printed since
     const saved = this.flushSnapshot(session); // last write before drop
     if (slept) await saved;
     const kept = slept && !session.killed && !session.dirty && !!this.loadSnapshot;
@@ -501,18 +513,26 @@ export class SessionManager {
     if (!s || s.exited) return Promise.resolve(!s && this.frozen.has(id));
     let settle!: (kept: boolean) => void;
     s.sleeping = { done: new Promise<boolean>((r) => { settle = r; }), settle };
-    // Saved after it ends, not before: what it prints as it goes is on its last screen.
-    try { s.pty.kill(); } catch { /* already gone */ }
-    const stubborn = setTimeout(() => { if (!s.exited) try { s.pty.kill("SIGKILL"); } catch { /* gone, or no signals here */ } }, SLEEP_GRACE_MS);
-    stubborn.unref?.();
+    const at = s.seq;
+    s.term.write("", () => {
+      if (s.exited) return;
+      s.sleepScreen = { replay: this.screenText(s, at, this.scrollback), recent: s.serializer.serialize({ scrollback: Math.min(RECENT_LINES, this.scrollback) }) };
+      try { s.pty.kill(); } catch { /* already gone */ }
+      const stubborn = setTimeout(() => { if (!s.exited) try { s.pty.kill("SIGKILL"); } catch { /* gone, or no signals here */ } }, SLEEP_GRACE_MS);
+      stubborn.unref?.();
+    });
     return s.sleeping.done;
   }
 
-  /** What a frozen session saved as its screen (title first); null when it is not frozen. */
-  savedScreen(id: string): string | null {
-    if (this.sessions.has(id)) return null;
-    const snap = this.frozen.get(id)?.();
-    return snap ? titled(snap.title, snap.replay) : null;
+  /** What a frozen session saved as its screen (title first), with its newest RECENT_LINES of
+   *  scrollback unless `lines` asks for more (none: all of it); null when it is not frozen. */
+  async savedScreen(id: string, lines?: number): Promise<string | null> {
+    const load = this.frozen.get(id);
+    if (!load || this.sessions.has(id)) return null;
+    const snap = this.readSnapshot ? await this.readSnapshot(id) : load();
+    if (!snap || !this.frozen.has(id) || this.sessions.has(id)) return null;
+    const recent = lines !== undefined && lines <= RECENT_LINES ? snap.recentReplay : undefined;
+    return titled(snap.title, recent ?? snap.replay);
   }
 
   /** Wait for the xterm.js write queue to drain, then serialize. xterm batches
@@ -867,7 +887,8 @@ export class SessionManager {
             id: s.id,
             spec: s.spec,
             ...(s.asked ? { asked: s.asked } : {}),
-            replay: this.screenText(s, at, lines),
+            replay: s.sleepScreen?.replay ?? this.screenText(s, at, lines),
+            ...(s.sleepScreen ? { recentReplay: s.sleepScreen.recent } : {}),
             title: s.lastTitle,
             savedAt: Date.now(),
           });
