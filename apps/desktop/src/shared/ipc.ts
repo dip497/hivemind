@@ -402,14 +402,17 @@ export interface HiveIpc {
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
    *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`, a widget with
-   *  `installCatalogWidget(token)`. */
+   *  `installCatalogWidget(token)`, a tool with `installCatalogTool(token)`. */
   reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
     | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
     | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
     | { type: "widget"; token: string; id: string; name: string; permissions: string[]; code: boolean; replaces: boolean }
+    | { type: "tool"; token: string; id: string; name: string; permissions: string[]; tools: string[]; service?: string; replacesVersion: string | null }
   >;
   installCatalogAgent(token: string): Promise<void>;
   installCatalogWidget(token: string): Promise<void>;
+  /** Installed off, as every tool plugin is until switched on. */
+  installCatalogTool(token: string): Promise<void>;
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
   /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */

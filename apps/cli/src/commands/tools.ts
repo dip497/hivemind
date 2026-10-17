@@ -5,7 +5,7 @@
  * (`hive plugins enable tool:<id>`). Nothing here runs one.
  *
  *   hive tools list [--json]
- *   hive tools install <dir>     a folder holding hivemind-tool.json, copied into ~/.config/hivemind/tools
+ *   hive tools install <dir|owner/name>  a folder holding hivemind-tool.json, or one from HiveHub; copied into ~/.config/hivemind/tools
  *   hive tools remove <id>       tiles of it stay on their boards, showing it is missing
  *   hive tools new <name>        a starter in ./<name>, id <your GitHub login>/<name>
  */
@@ -16,13 +16,14 @@ import { defineCommand } from "citty";
 import { readSettings } from "@hivemind/core";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { createToolRegistry } from "@hivemind/core/tool-registry";
-import { TOOL_API_VERSION } from "@hivemind/core/tool-format";
+import { TOOL_API_VERSION, isToolId } from "@hivemind/core/tool-format";
 import { installToolPackage, listToolPackages, removeToolPackage, TOOL_MANIFEST } from "@hivemind/core/tool-packages";
 import { toolPreferences, type ToolsSettings } from "@hivemind/core/settings-schema";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { githubLogin } from "./views.js";
 import { pluginBrief } from "../plugin-brief.js";
+import { stageFromRegistry } from "../registry.js";
 
 const NO_PLUGINS: ToolsSettings = { enabledPlugins: [], disabledTools: [] };
 
@@ -69,16 +70,24 @@ const listCmd = defineCommand({
   },
 });
 const installCmd = defineCommand({
-  meta: { name: "install", description: "Add a tool plugin from a folder" },
-  args: { source: { type: "positional", required: true, description: `a folder holding ${TOOL_MANIFEST}` }, json: { type: "boolean" } },
+  meta: { name: "install", description: "Add a tool plugin from a folder, or from HiveHub by owner/name" },
+  args: { source: { type: "positional", required: true, description: `a folder holding ${TOOL_MANIFEST}, or owner/name` }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    const source = String(args.source);
+    let staged: string | null = null;
+    // Errors exit the process (`err` does), so a `finally` would never run: discard by hand.
+    const discard = async () => { if (staged) await rm(staged, { recursive: true, force: true }).catch(() => {}); };
     try {
-      const t = await installToolPackage(path.resolve(String(args.source)));
+      // owner/name reads as a folder too: one that exists is the folder, as with agents.
+      const fromHub = isToolId(source) && !existsSync(source);
+      if (fromHub) staged = (await stageFromRegistry(source, "tool")).dir;
+      const t = await installToolPackage(staged ?? path.resolve(source), fromHub ? source : undefined);
+      await discard();
       const rescanned = await rescanApp();
       return ok(ctx, { id: t.id, name: t.name, dir: t.dir, rescanned },
         () => `installed ${t.id} (${t.name}) → ${t.dir}; ${afterNote(rescanned)}\nIt is off: \`hive plugins enable tool:${t.id}\` if you trust who wrote it.`);
-    } catch (e) { return fail(ctx, e, "install_failed"); }
+    } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
   },
 });
 
