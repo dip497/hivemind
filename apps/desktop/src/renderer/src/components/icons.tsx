@@ -13,7 +13,7 @@ import {
   FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareIcon, GlobeIcon, GripVerticalIcon,
   HistoryIcon, Home01Icon, Image01Icon, InboxIcon, InfoIcon, Key01Icon, KeyboardIcon, LaptopIcon,
   LayoutGridIcon, LayoutListIcon, ListTodoIcon, LoaderCircleIcon, LogInIcon, LogOutIcon, Mail01Icon,
-  MailOpenIcon, Maximize01Icon, MessageSquareIcon, MessagesSquareIcon, MonitorIcon, MonitorSmartphoneIcon,
+  MailOpenIcon, Maximize01Icon, MessageSquareIcon, MessagesSquareIcon, MonitorIcon, MonitorSmartphoneIcon, Moon02Icon,
   MoveUpRightIcon, NetworkIcon, PaletteIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PanelsTopLeftIcon, PencilIcon, PinIcon,
   PinOffIcon, PlayIcon, PlusIcon, PuzzleIcon, RefreshCwIcon, RotateCwIcon,
   Search01Icon, ServerIcon, ServerOffIcon, Settings01Icon, Settings02Icon, DashboardSquareAddIcon, SlidersHorizontalIcon,
@@ -103,6 +103,7 @@ export const MessageSquare = icon("message-square", MessageSquareIcon);
 export const MessagesSquare = icon("messages-square", MessagesSquareIcon);
 export const Monitor = icon("monitor", MonitorIcon);
 export const MonitorSmartphone = icon("monitor-smartphone", MonitorSmartphoneIcon);
+export const Moon = icon("moon", Moon02Icon);
 export const MoveUpRight = icon("move-up-right", MoveUpRightIcon);
 export const Network = icon("network", NetworkIcon);
 export const Palette = icon("palette", PaletteIcon);

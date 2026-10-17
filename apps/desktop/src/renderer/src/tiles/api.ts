@@ -36,6 +36,10 @@ export interface TileHostState {
   openFileFromTerminal: (sourceTileId: string, path: string) => void;
   closeTabInTile: (tileId: string, file: string) => void;
   renameTile: (id: string, name: string) => void;
+  /** Put the agent in a tile to sleep; resolves once it sleeps, or says why it did not. */
+  sleepTile: (id: string) => Promise<void>;
+  /** Wake the agent asleep in a tile; rejects with why when it did not wake. */
+  wakeTile: (id: string) => Promise<void>;
 }
 
 export interface TileKindSpec {

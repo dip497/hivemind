@@ -20,7 +20,7 @@ import { publishStatus, clearStatus, setLabel, statusOf, subscribeTileStatus, ty
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { SUBMIT_DELAY_MS, deliversPromptViaArgv } from "@hivemind/agent-host/agent-io";
 import { AgentStart, START_TICK_MS } from "@hivemind/agent-host/agent-start";
-import { Pencil, GripVertical } from "./components/icons";
+import { Pencil, GripVertical, Moon } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Skeleton } from "./components/ui/skeleton";
@@ -161,9 +161,13 @@ interface Props {
    *  this tile's header next to close — no floating chip. */
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
+  /** Put its agent to sleep; absent where it cannot sleep (a shell, a session started elsewhere). */
+  onSleep?: () => Promise<void>;
+  /** Its session sleeps, as an exit or an open says: the tile shows it asleep. */
+  onAsleep?: () => void;
 }
 
-export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin }: Props) {
+export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, given, onRename, onOpenInBrowser, onOpenInEditor, onClose, selected, pinned, onTogglePin, onSleep, onAsleep }: Props) {
   // Editable header name: starts in display mode; double-click opens input.
   // Persists via onRename → Canvas tileNames → the workspace store (canvas-persistence.ts).
   const [editing, setEditing] = useState(false);
@@ -197,6 +201,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   const openLink = (uri: string) => { const web = webUrlForInternalBrowser(uri); if (web) openInBrowserRef.current?.(web); };
   const openInEditorRef = useRef(onOpenInEditor);
   openInEditorRef.current = onOpenInEditor;
+  const asleepRef = useRef(onAsleep);
+  asleepRef.current = onAsleep;
   // Live cwd so the terminal file-link provider resolves relative paths against
   // the tile's CURRENT cwd even after a frame rebind.
   const cwdRef = useRef(cwd);
@@ -758,8 +764,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       if (agent) agentDirty = true;
       else markActivity();
     });
-    unsubExit = window.hive.onPtyExit(ptyId, ({ code, signal }) => {
+    unsubExit = window.hive.onPtyExit(ptyId, ({ code, signal, slept }) => {
       releaseBoot();
+      if (slept) {
+        // Not ended: it waits for Resume, which the sleeping tile shows.
+        exited = true;
+        if (idleTimer.current) clearTimeout(idleTimer.current);
+        if (agentPoll) { clearInterval(agentPoll); agentPoll = undefined; }
+        asleepRef.current?.();
+        return;
+      }
       term.writeln(
         `\r\n\x1b[2m[hivemind] exited code=${code} signal=${signal ?? ""} — press Enter to restart\x1b[0m`,
       );
@@ -887,6 +901,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           // liveOnly: a session saved before a reboot restores on attach, which is the
           // start this queue is for; it must wait its turn like any other.
           const probe = await window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true, ...historyAsked() });
+          if (probe.asleep) { asleepRef.current?.(); return; }
           if (probe.pid !== -1) attachedPid = probe.pid;
           if (attachedPid === undefined && !cancelled) {
             bootRelease = await acquireBoot(tileId);
@@ -894,7 +909,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           }
         }
         attachedRef.current = true;
-        const { pid, joined } = attachedPid !== undefined ? { pid: attachedPid, joined: false } : await window.hive.ptySpawn({
+        const { pid, joined, asleep } = attachedPid !== undefined ? { pid: attachedPid, joined: false, asleep: undefined } : await window.hive.ptySpawn({
           tileId: ptyId,
           tile: tileId,
           cwd,
@@ -914,6 +929,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           if (session) window.hive.ptyDetach(ptyId);
           else if (killOnUnmountRef.current) window.hive.ptyKill(ptyId);
           else if (!liveMounts.get(ptyId)) window.hive.ptyDetach(ptyId);
+          return;
+        }
+        if (asleep) {
+          attachedRef.current = false;
+          asleepRef.current?.();
           return;
         }
         // Another window started this session and gave it its task: this one only shows it.
@@ -1368,6 +1388,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             starting
           </span>
         </span>
+        {onSleep && (
+          <Button variant="ghost" size="icon-micro" className="nodrag" aria-label="put agent to sleep" title="Sleep: end its process, keep its screen and conversation" onClick={() => void onSleep().catch(() => {})}>
+            <Moon />
+          </Button>
+        )}
         {/* Pin toggle — docked in the header next to close (not a floating chip). */}
         <HeaderPinButton tileId={tileId} pinned={pinned} onToggle={onTogglePin} />
         {/* nodrag — react-flow ignores drag from elements with this class so

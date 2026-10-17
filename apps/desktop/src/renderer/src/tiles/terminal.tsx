@@ -22,6 +22,11 @@ export type TerminalTileData = {
   onClose?: () => void;
   pinned?: boolean;
   onTogglePin?: (id: string, rect: PinRect) => void;
+  /** Its layout says its agent sleeps. */
+  sleeping?: boolean;
+  /** Absent where it cannot sleep: a shell, a session started elsewhere. */
+  onSleep?: () => Promise<void>;
+  onWake: () => Promise<void>;
 };
 
 /** Auto-derive a short tile name from the command. Uses identifyAgent for known
@@ -60,6 +65,9 @@ export const terminalTile: TilePlugin<TerminalTileData> = {
       onOpenInEditor: (path: string) => h.openFileFromTerminal(t.id, path),
       onClose: s.onClose,
       ...s.pin,
+      ...(t.sleeping ? { sleeping: true } : {}),
+      ...(t.kind === AGENT_TILE_KIND && !t.session ? { onSleep: () => h.sleepTile(t.id) } : {}),
+      onWake: () => h.wakeTile(t.id),
     };
   },
   lazy: true,

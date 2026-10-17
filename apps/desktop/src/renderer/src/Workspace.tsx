@@ -197,6 +197,18 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       return { ...m, [id]: trimmed };
     });
   }, []);
+  // The host sleeps and wakes agents, and says so in the layout once done; asked of a tile, it
+  // sleeps even while it works.
+  const sleepTile = useCallback(async (id: string) => {
+    if (!persistKey) return;
+    const { slept, skipped } = await window.hive.agentSleep(persistKey, id, true);
+    if (!slept.length && skipped[0]) toast(`Not put to sleep: ${skipped[0].why}`);
+  }, [persistKey]);
+  const wakeTile = useCallback(async (id: string) => {
+    if (!persistKey) return;
+    const { woke, skipped } = await window.hive.agentWake(persistKey, id);
+    if (!woke.length && skipped[0]) throw new Error(skipped[0].why);
+  }, [persistKey]);
   // What each agent says it is doing, as the host reports it (its session record's title).
   // Not persisted here: the host keeps it. A name someone gave the tile takes precedence.
   const [agentTitles, setAgentTitles] = useState<Record<string, string>>({});
@@ -1188,11 +1200,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const buildSurfaces = useMemo(() => createTileSurfaceBuilder(), [persistKey, tilesVersion]);
   const surfaces = useMemo(() => buildSurfaces({
     repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile,
     onTogglePin: togglePin,
   }), [
     buildSurfaces, repoPath, root, cwd, tiles, frames, frameOf, pinnedIds, editorTabs, browserOpenReqs, tileNames, agentTitles,
-    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, togglePin,
+    openFileInTile, openUrlInBrowser, openFileFromTerminal, closeTabInTile, closeTile, renameTile, sleepTile, wakeTile, togglePin,
   ]);
 
   // What the person here has selected, for the others in the workspace to see, whichever view

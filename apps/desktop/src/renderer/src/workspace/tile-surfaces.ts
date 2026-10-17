@@ -77,7 +77,7 @@ export function createTileSurfaceBuilder(): (ctx: TileSurfaceCtx) => TileSurface
         ctx.pinnedIds.has(tile.id), ctx.editorTabs[tile.id],
         ctx.browserOpenReqs[tile.id], ctx.tileNames[tile.id], ctx.agentTitles[tile.id],
         ctx.openFileInTile, ctx.openUrlInBrowser, ctx.openFileFromTerminal,
-        ctx.closeTabInTile, ctx.closeTile, ctx.renameTile, ctx.onTogglePin,
+        ctx.closeTabInTile, ctx.closeTile, ctx.renameTile, ctx.onTogglePin, ctx.sleepTile, ctx.wakeTile,
       ];
       const cached = previous.get(tile.id);
       const entry = cached && inputs.every((value, i) => Object.is(value, cached.inputs[i]))
