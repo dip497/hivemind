@@ -96,6 +96,9 @@ interface Workspace {
   hostHas?: VersionVector;
   /** What is on disk of it: the next write appends what changed since. Null: written whole next. */
   stored: StoredDoc["stored"];
+  /** A copy of `doc` a guest's change is tried on before it is taken (`importFrom`), brought up
+   *  to date with what changed since each time; none until one is checked. */
+  trial?: LoroDoc;
 }
 
 /** Updates on disk past this many bytes, and past the snapshot's own size, are folded into a new
@@ -391,17 +394,26 @@ export class WorkspaceStore {
    *  document's. `check`, when given, sees the core layout as it is and as the changes would make
    *  it, first: a reason it gives refuses them (`RefusedImport`), and nothing is taken. */
   importFrom(repo: string, bytes: Uint8Array, from: Writer = {}, check?: (before: CoreLayout | null, after: CoreLayout | null) => string | null): void {
-    const { doc } = this.workspace(repo);
+    const workspace = this.workspace(repo);
+    const { doc } = workspace;
     if (check) {
-      const trial = doc.fork();
-      let why: string | null;
+      const trial = this.trialOf(workspace);
+      const tried = trial.frontiers();
+      let why: string | null = null;
       try {
         trial.import(bytes);
-        why = check(readCore(doc), readCore(trial));
-      } finally {
-        trial.free();
+        // Whose the workspace is is its owner's to say; the layout's rules apply where it changed.
+        if (!sameJson(readOwnership(doc), readOwnership(trial))) why = "whose the workspace is is the owner's to say";
+        else if (partsChanged(trial, tried).some((p) => p.part === "core")) why = check(readCore(doc), readCore(trial));
+      } catch (e) {
+        this.dropTrial(workspace);
+        throw e;
       }
-      if (why) throw new RefusedImport(why);
+      // What was refused is in the trial now: the next check starts from a fresh copy.
+      if (why) {
+        this.dropTrial(workspace);
+        throw new RefusedImport(why);
+      }
     }
     const before = doc.frontiers();
     doc.import(bytes);
@@ -441,6 +453,7 @@ export class WorkspaceStore {
     const doc = new LoroDoc();
     doc.import(bytes);
     for (const history of old.histories.values()) history.free();
+    this.dropTrial(old);
     this.workspaces.set(repo, { doc, histories: new Map(), hostHas: VersionVector.decode(hostVersion), stored: null });
     this.tiles.delete(repo);
     this.cores.delete(repo);
@@ -467,6 +480,8 @@ export class WorkspaceStore {
   forget(repo: string): void {
     clearTimeout(this.folds.get(repo));
     this.folds.delete(repo);
+    const workspace = this.workspaces.get(repo);
+    if (workspace) this.dropTrial(workspace);
     this.workspaces.delete(repo);
     this.tiles.delete(repo);
     this.cores.delete(repo);
@@ -591,6 +606,18 @@ export class WorkspaceStore {
       this.unsaved.add(repo);
       this.warn(`cannot write the layout for ${repo} (${e instanceof Error ? e.message : String(e)}); kept in memory until the next write`);
     }
+  }
+
+  /** `workspace`'s trial copy, up to date with it: what changed since its last use is all it takes. */
+  private trialOf(workspace: Workspace): LoroDoc {
+    if (!workspace.trial) return (workspace.trial = workspace.doc.fork());
+    workspace.trial.import(workspace.doc.export({ mode: "update", from: workspace.trial.oplogVersion() }));
+    return workspace.trial;
+  }
+
+  private dropTrial(workspace: Workspace): void {
+    workspace.trial?.free();
+    workspace.trial = undefined;
   }
 
   private foldWhenQuiet(repo: string): void {

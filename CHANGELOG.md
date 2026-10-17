@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- A guest's edit is checked on a copy of the workspace kept up to date, not on a fresh copy of the whole document each time: a guest's typed character takes about 9 ms on the host at 5000 board objects instead of 600 ms.
 - **Breaking:** Workspace API 0.28. A board edit costs what it changed: a window sends only the objects it changed, each with the one it changed it from (`store.editObjects`, which replaces `store.setObjects`), `store.changed` names the board's objects that changed, and the other windows read those alone (`store.objectsWithIds`). A typed character in a 5000-object board takes about 15 ms instead of 2 s, and another window's read of it under 1 ms instead of 360 ms.
 - Saving a workspace after an edit costs what the edit changed: the change is added beside the saved board (`<workspace>.loro.updates`) and folded into it when the workspace goes quiet, instead of the whole board written again. A typed character in a 5000-object board takes 0.9 ms on disk instead of 600 ms.
 - Opening the app or a window no longer sends every terminal's 5000 lines of history. Each terminal gets its newest 1000 lines and fetches the rest when you scroll to the top, keeping the line you were reading in place. With 30 terminals that is 4.6M characters instead of 22M, and about a quarter of the terminal daemon's time.
@@ -72,6 +73,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A guest who may edit a shared workspace can no longer change whose it is: the owner's host refuses that change.
 - A guest who edited a shared workspace while away, while its owner's app restarted, no longer parts from it for good: on reconnecting it takes the owner's board and sends its own edits on top, instead of the owner dropping every change it sends from then on.
 - The phone no longer fails to save, or silently loses, what your computers last told it when two of them answer at once, or when you unpair one while it is connected.
 - `hive ctl plugin call` and `open` exit with the code their failure has: 5 when the plugin is not running or has no such command, 4 when it did not answer in time, 2 when it runs twice and no `--tile` says which; before, every one exited 1. A slow command now ends with the plugin's own reason, not the CLI's timeout, which used to come first.

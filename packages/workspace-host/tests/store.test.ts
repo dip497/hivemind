@@ -4,7 +4,9 @@ import { test, expect, beforeEach, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { WorkspaceStore, type WorkspaceChange } from "../src/store.ts";
+import { LoroDoc } from "loro-crdt";
+import { RefusedImport, WorkspaceStore, type CoreLayout, type WorkspaceChange } from "../src/store.ts";
+import { refusedEdit } from "../src/edit-rules.ts";
 import { writeBoard } from "./board.ts";
 import { readDoc } from "../src/doc-file.ts";
 import { idOf, newSeed, workspaceSeed } from "../src/identity.ts";
@@ -670,3 +672,65 @@ test("changes taken from another copy are told with the objects they changed", (
   copy.importFrom("/a", s.exportSince("/a", seen), { writer: "peer" });
   expect(told).toEqual([{ repo: "/a", part: "board", writer: "peer", objects: ["n0000", "n0002"] }]);
 });
+
+/** A guest's change to `repo`: its copy of the host's document, changed by `edit`, as updates. */
+function guestChange(s: WorkspaceStore, repo: string, edit: (copy: LoroDoc) => void): Uint8Array {
+  const copy = new LoroDoc();
+  copy.import(s.exportSince(repo, null));
+  const seen = copy.oplogVersion();
+  edit(copy);
+  copy.commit();
+  return copy.export({ mode: "update", from: seen });
+}
+const asEditor = (before: unknown, after: unknown) => refusedEdit(before as never, after as never, "edit");
+
+test("a guest's change to whose the workspace is is refused, and nothing of it is taken", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  const owner = s.ownership("/a");
+  const change = guestChange(s, "/a", (copy) => {
+    copy.getMap("meta").set("owner", "someone else");
+    copy.getMap("views").set("canvas", 1);
+  });
+  expect(() => s.importFrom("/a", change, { writer: "peer" }, asEditor)).toThrow(RefusedImport);
+  expect(s.ownership("/a")).toEqual(owner);
+  expect(s.getView("/a", "canvas")).toBeNull();
+});
+
+test("after a guest's change is refused, its next one is checked against the workspace as it is, not with the refused one in it", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  /** A guest's change to the core layout, made from `copy` (the host's document as it read it). */
+  const changing = (copy: LoroDoc, name: string, change: (core: CoreLayout) => CoreLayout) => {
+    const other = new WorkspaceStore({ dir: path.join(dir, name) });
+    other.importFrom("/g", copy.export({ mode: "snapshot" }));
+    const read = other.getCore("/g")!;
+    const seen = other.version("/g");
+    other.setCore("/g", change(read), { base: read });
+    return other.exportSince("/g", seen);
+  };
+  const read = new LoroDoc();
+  read.import(s.exportSince("/a", null));
+  const shell = changing(read, "shell", (c) => ({ ...c, tiles: [...c.tiles, { id: "t9", kind: "shell", label: "sh", cmd: "/bin/sh" }] }));
+  expect(() => s.importFrom("/a", shell, { writer: "peer" }, asEditor)).toThrow(RefusedImport);
+  s.importFrom("/a", changing(read, "named", (c) => ({ ...c, tileNames: { t1: "build" } })), { writer: "peer" }, asEditor);
+  expect(s.getCore("/a")).toMatchObject({ tiles: [{ id: "t1" }], tileNames: { t1: "build" } });
+});
+
+test("a guest's change made after the host's own is checked with the host's in it", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  const named = guestChange(s, "/a", (copy) => copy.getMap("views").set("canvas", 1));
+  s.importFrom("/a", named, { writer: "peer" }, asEditor);
+  // The host's own window, since: a second frame. The guest, having it, says where it runs.
+  const read = s.getCore("/a")!;
+  s.setCore("/a", { ...read, frames: [...read.frames, { id: "f2", title: "web" }] }, { base: read });
+  const other = new WorkspaceStore({ dir: path.join(dir, "guest") });
+  other.importFrom("/g", s.exportSince("/a", null));
+  const theirs = other.getCore("/g")!;
+  const seen = other.version("/g");
+  other.setCore("/g", { ...theirs, frames: theirs.frames.map((f) => (f.id === "f2" ? { ...f, workspacePath: "/" } : f)) }, { base: theirs });
+  expect(() => s.importFrom("/a", other.exportSince("/g", seen), { writer: "peer" }, asEditor)).toThrow(/where frame f2 runs is the owner's/);
+  expect(s.getCore("/a")!.frames.find((f) => f.id === "f2")).toEqual({ id: "f2", title: "web" });
+});
+
