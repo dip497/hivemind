@@ -74,6 +74,7 @@ function reconcile(): void {
   }
 
   const keep = new Set<string>();
+  const order: WebglSlotClient[] = [];
   let n = 0;
 
   const wanters = all
@@ -90,13 +91,14 @@ function reconcile(): void {
   for (const { c } of wanters) {
     if (n >= BUDGET) break;
     keep.add(c.id);
+    order.push(c);
     n++;
   }
   if (n < BUDGET) {
     for (const c of all) {
       if (n >= BUDGET) break;
       if (domForced.has(c.id)) continue;
-      if (c._hasSlot && !keep.has(c.id)) { keep.add(c.id); n++; }
+      if (c._hasSlot && !keep.has(c.id)) { keep.add(c.id); order.push(c); n++; }
     }
   }
 
@@ -108,12 +110,14 @@ function reconcile(): void {
       try { c.release(); } catch { /* already gone */ }
     }
   }
-  for (const c of all) {
-    if (keep.has(c.id) && !c._hasSlot) {
-      c._hasSlot = true;
-      try { c.acquire(); } catch { /* swap failed — leave on DOM */ c._hasSlot = false; }
-    }
-  }
+  // One new context a frame, highest priority first: each costs tens to hundreds of ms on the UI
+  // thread, so ten terminals opened at once were one long task.
+  const waiting = order.filter((c) => !c._hasSlot);
+  const next = waiting[0];
+  if (!next) return;
+  next._hasSlot = true;
+  try { next.acquire(); } catch { /* swap failed — leave on DOM */ next._hasSlot = false; return; }
+  if (waiting.length > 1) reconcileWebglSlots();
 }
 
 export function registerWebglSlotClient(client: WebglSlotClient): void {

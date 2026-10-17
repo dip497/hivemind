@@ -2,6 +2,23 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots, type WebglSlotClient } from "../../src/renderer/src/webgl-slots";
 const flush = () => new Promise<void>((resolve) => queueMicrotask(resolve));
+const settle = async () => { for (let i = 0; i < 20; i++) await flush(); };
+
+test("terminals opened together get their contexts one a pass, the focused one first", async () => {
+  let passes = 0;
+  const acquired: [string, number][] = [];
+  const clients: WebglSlotClient[] = ["a", "b", "c", "focused"].map((id) => ({
+    id, priority: () => { if (id === "a") passes++; return id === "focused" ? 2 : 1; }, acquire: () => { acquired.push([id, passes]); }, release: () => {},
+  }));
+  try {
+    clients.forEach(registerWebglSlotClient);
+    await settle();
+    assert.deepEqual(acquired, [["focused", 1], ["a", 2], ["b", 3], ["c", 4]]);
+  } finally {
+    clients.forEach((c) => unregisterWebglSlotClient(c.id));
+    await flush();
+  }
+});
 
 test("a surface commit reads each client's final priority once", async () => {
   let reads = 0, acquired = 0, released = 0, priority = 1;
@@ -19,8 +36,9 @@ test("a surface commit reads each client's final priority once", async () => {
     assert.equal(acquired, 0);
     priority = 1;
     for (let i = 0; i < 8; i++) reconcileWebglSlots();
-    await flush();
-    assert.equal(reads, 16);
+    await settle();
+    // One pass for each of the eight contexts, each reading every client once.
+    assert.equal(reads, 8 + 8 * 8);
     assert.equal(acquired, 8);
     priority = 0;
     reconcileWebglSlots();
@@ -55,17 +73,17 @@ test("budget replacement releases before acquiring and DOM opt-in frees its slot
   }));
   try {
     clients.forEach(registerWebglSlotClient);
-    await flush();
+    await settle();
     assert.equal(active, 12);
     events.length = 0;
     focused = true;
     reconcileWebglSlots();
-    await flush();
+    await settle();
     assert.deepEqual(events, ["-12", "+0"]);
     assert.equal(peak, 12);
     dom = true;
     reconcileWebglSlots();
-    await flush();
+    await settle();
     assert.equal(clients[0]._hasSlot, false);
     assert.equal(active, 12);
     unregisterWebglSlotClient(clients[1].id);
