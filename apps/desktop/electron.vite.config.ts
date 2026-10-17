@@ -176,6 +176,7 @@ export default defineConfig({
         // (shiki/core, shiki/wasm, shiki/engine/*) are untouched so the
         // Pierre worker keeps working.
         { find: /^shiki$/, replacement: path.resolve("src/renderer/src/shiki-slim.ts") },
+        { find: /^@xterm\/headless$/, replacement: "@xterm/headless/lib-headless/xterm-headless.mjs" },
       ],
     },
     server: {
