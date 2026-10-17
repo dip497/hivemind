@@ -44,7 +44,7 @@
  */
 import { StringDecoder } from "node:string_decoder";
 import type { Duplex } from "node:stream";
-import type { Link, Stream } from "@hivemind/workspace-host/hive-net";
+import type { Link, Room, Stream } from "@hivemind/workspace-host/hive-net";
 import type { AccessLists } from "@hivemind/workspace-host/access";
 import { parseSync, serveReplica, type Changes } from "@hivemind/workspace-host/doc-sync";
 import { serveList } from "@hivemind/workspace-host/list-sync";
@@ -108,11 +108,13 @@ function opened(text: string): { workspace: string; squeeze: boolean } | null {
   }
 }
 
-/** A link's named stream as a channel of text frames. */
-export const streamOf = (link: Link, stream: string): TextChannel => ({
+/** A link's named stream as a channel of text frames, with its link's room. */
+export const streamOf = (link: Link, stream: string): TextChannel & Room => ({
   send: (text) => link.send(stream, text),
   on: (listener) => link.on(stream, listener),
   closed: link.closed,
+  hasRoom: () => link.hasRoom(),
+  whenRoom: (listener) => link.whenRoom(listener),
 });
 
 export interface PeerLinksOptions {

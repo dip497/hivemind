@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use iroh::endpoint::EndpointHooks;
 use iroh::{
     address_lookup::{PkarrPublisher, PkarrResolver},
-    endpoint::{presets, Builder, RelayMode},
+    endpoint::{presets, Builder, QuicTransportConfig, RelayMode},
     tls::CaTlsConfig,
     Endpoint, EndpointAddr, EndpointId, RelayMap, RelayUrl, SecretKey,
 };
@@ -61,10 +61,19 @@ pub fn trusted() -> CaTlsConfig {
     CaTlsConfig::embedded()
 }
 
+/// What a connection may have sent and not yet had acknowledged, over all its streams: what a peer
+/// that does not keep up costs this device at most, and how far behind the newest it can be.
+pub const SEND_WINDOW: u64 = 1024 * 1024;
+
 /// An endpoint of this device, on `reach`'s relays and lookup server; mDNS is added by the caller,
 /// which keeps hold of it.
 pub fn builder(key: SecretKey, reach: &Reach) -> Builder {
     let mut builder = Endpoint::builder(presets::Minimal)
+        .transport_config(
+            QuicTransportConfig::builder()
+                .send_window(SEND_WINDOW)
+                .build(),
+        )
         .secret_key(key)
         .ca_tls_config(trusted())
         .relay_mode(RelayMode::Custom(RelayMap::from_iter(

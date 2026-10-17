@@ -4,12 +4,13 @@
 // no longer admitted is cut off, and the host hears it go; a link closed saying why is read so on
 // the other side, and a device that stops is heard going at once. And a daemon of another release,
 // speaking another protocol, is refused, saying so. A frame of many megabytes costs main no more than
-// the same bytes in small frames.
+// the same bytes in small frames. A link to a device that stops taking what it is sent has no room
+// once a little waits, and room again once it takes it.
 import { test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HiveNet, PROTOCOL, type Link } from "../src/hive-net.ts";
+import { HiveNet, LINK_ROOM, PROTOCOL, type Link } from "../src/hive-net.ts";
 
 const BIN = path.join(import.meta.dir, "../../../crates/hive-net/target/debug/hive-net");
 const built = fs.existsSync(BIN);
@@ -102,6 +103,60 @@ test.skipIf(!built)("a link closed saying why is read so on the other side; a de
     fs.rmSync(root, { recursive: true, force: true });
   }
 }, 30_000);
+
+/** The daemon started for the device whose socket is `socket`, as the system lists it. */
+function daemonOf(socket: string): number {
+  for (const pid of fs.readdirSync("/proc").filter((d) => /^\d+$/.test(d))) {
+    let cmd = "";
+    try { cmd = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"); } catch { continue; }
+    if (cmd.includes("daemon") && cmd.includes(socket)) return Number(pid);
+  }
+  throw new Error(`no daemon for ${socket}`);
+}
+
+test.skipIf(!built || process.platform !== "linux")("a link to a device that stops taking has no room once a little waits, and room again once it takes it", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-room-"));
+  let stopped = 0;
+  try {
+    let incoming!: (l: Link) => void;
+    const arrived = next<Link>((r) => { incoming = r; });
+    const host = await device(root, "host", { incoming: (l) => incoming(l) });
+    const guest = await device(root, "guest");
+    host.admit([guest.ready.id]);
+    const link = await guest.dial(host.ready.id, { addrs: host.ready.addrs, relay: null });
+    let heard = 0;
+    link.on("api", (t) => { heard += t.length; });
+    link.send("api", "hello");
+    const there = await arrived;
+    await next<string>((r) => there.on("api", r));
+    expect(there.hasRoom()).toBe(true);
+
+    // The guest's network stops: nothing it is sent is acknowledged.
+    stopped = daemonOf(path.join(root, "guest", "net.sock"));
+    process.kill(stopped, "SIGSTOP");
+    const chunk = "x".repeat(64 * 1024);
+    const roomWithin = (ms: number) => Promise.race([new Promise<boolean>((r) => there.whenRoom(() => r(true))), Bun.sleep(ms).then(() => false)]);
+    let sent = 0;
+    for (;;) {
+      while (there.hasRoom()) { there.send("api", chunk); sent += chunk.length; }
+      if (!(await roomWithin(3_000))) break;
+      if (sent > 64 * 1024 * 1024) throw new Error(`room for ${sent} bytes to a device that takes none`);
+    }
+    // What the network holds for it unacknowledged (1 MB) and the link's room: no more waits.
+    expect(sent).toBeGreaterThanOrEqual(LINK_ROOM);
+    expect(sent).toBeLessThan(4 * 1024 * 1024);
+    expect(there.hasRoom()).toBe(false);
+
+    process.kill(stopped, "SIGCONT");
+    stopped = 0;
+    expect(await roomWithin(20_000)).toBe(true);
+    for (const until = Date.now() + 20_000; heard < sent && Date.now() < until;) await Bun.sleep(50);
+    expect(heard).toBe(sent);
+  } finally {
+    if (stopped) process.kill(stopped, "SIGCONT");
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 90_000);
 
 test.skipIf(!built)("a device announces what it wants found, and the devices nearby find it with that, then without it", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-nearby-"));

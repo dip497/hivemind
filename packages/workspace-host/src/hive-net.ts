@@ -40,8 +40,22 @@ export interface FoundHost extends HostRecord {
  *  known by its id, and a connection carries any number of streams of one name. */
 export const PROTOCOL = 2;
 
-/** One stream of a connection: frames of text, both ways, from when it opens until it ends. */
-export interface Stream {
+/** How many bytes sent on a link may wait for the network to take them before it has no room. */
+export const LINK_ROOM = 512 * 1024;
+
+/** Whether what is sent goes out as fast as it is made: a producer that can send less (the newest
+ *  state in place of each change) asks before it sends, and waits for room to return. */
+export interface Room {
+  /** Fewer than `LINK_ROOM` bytes sent on the link wait for the network. */
+  hasRoom(): boolean;
+  /** Tell `listener` once, when the link has room: soon, if it has now. What this returns stops
+   *  that; so does the link going. */
+  whenRoom(listener: () => void): () => void;
+}
+
+/** One stream of a connection: frames of text, both ways, from when it opens until it ends. Its
+ *  room is its link's: the streams of a connection share its network. */
+export interface Stream extends Room {
   /** Send `data` on it, after everything sent on it before. */
   send(data: string): void;
   /** Hear each frame that arrives on it. */
@@ -54,7 +68,7 @@ export interface Stream {
  *  that dialled opens them, as many of a name as it likes (a phone opens an `api` stream for each
  *  terminal it watches, conversation it follows and call it makes); the other side answers on
  *  them. */
-export interface Link {
+export interface Link extends Room {
   /** The other device's id, as its key proved it. */
   readonly peer: string;
   /** Send `data` on `stream`, after everything sent on it before: on the stream of that name this
@@ -113,6 +127,12 @@ class DaemonStream implements Stream {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
   }
+  hasRoom(): boolean {
+    return this.link.hasRoom();
+  }
+  whenRoom(listener: () => void): () => void {
+    return this.link.whenRoom(listener);
+  }
 }
 
 class DaemonLink implements Link {
@@ -124,6 +144,10 @@ class DaemonLink implements Link {
   private readonly listeners = new Map<string, Set<(data: string) => void>>();
   private readonly accepting = new Map<string, Set<(opened: Stream) => void>>();
   private nextStream = 1;
+  /** Bytes sent on it that the daemon has not said the network took. */
+  private waiting = 0;
+  private readonly roomFor = new Set<() => void>();
+  private isGone = false;
   readonly closed: Promise<string>;
   private end!: (why: string) => void;
   constructor(readonly conn: number, readonly peer: string, private readonly dialled: boolean, private readonly tell: (m: Message) => void) {
@@ -141,7 +165,29 @@ class DaemonLink implements Link {
   }
   /** `data` on the stream `s`, while it is open: one that ended takes nothing more. */
   write(s: DaemonStream, data: string): void {
-    if (this.open.get(s.id) === s) this.tell({ t: "send", conn: this.conn, stream: s.id, data });
+    if (this.open.get(s.id) !== s) return;
+    this.waiting += Buffer.byteLength(data);
+    this.tell({ t: "send", conn: this.conn, stream: s.id, data });
+  }
+  hasRoom(): boolean {
+    return this.waiting < LINK_ROOM;
+  }
+  whenRoom(listener: () => void): () => void {
+    if (this.isGone) return () => {};
+    this.roomFor.add(listener);
+    if (this.hasRoom()) queueMicrotask(() => this.roomReturned());
+    return () => { this.roomFor.delete(listener); };
+  }
+  /** The network took `n` bytes of what was sent on it. */
+  took(n: number): void {
+    this.waiting = Math.max(0, this.waiting - n);
+    this.roomReturned();
+  }
+  private roomReturned(): void {
+    if (!this.hasRoom() || this.roomFor.size === 0) return;
+    const told = [...this.roomFor];
+    this.roomFor.clear();
+    for (const l of told) l();
   }
   on(stream: string, listener: (data: string) => void): () => void {
     let set = this.listeners.get(stream);
@@ -178,6 +224,8 @@ class DaemonLink implements Link {
     s.end("ended");
   }
   gone(why: string): void {
+    this.isGone = true;
+    this.roomFor.clear();
     for (const s of this.open.values()) s.end(why);
     this.open.clear();
     this.newest.clear();
@@ -376,6 +424,9 @@ export class HiveNet {
           break;
         case "recv":
           this.links.get(m.conn as number)?.receive(m.stream as number, m.data as string);
+          break;
+        case "took":
+          this.links.get(m.conn as number)?.took(m.n as number);
           break;
         case "ended":
           this.links.get(m.conn as number)?.ended(m.stream as number);

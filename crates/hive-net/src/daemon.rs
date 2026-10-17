@@ -21,12 +21,17 @@
 //!   another network is dialled through the relay its link names.
 //! - daemon → main: `ready {v, id, addrs, relay, lookup}`, `incoming {conn, peer}`, `dialed {req,
 //!   conn}`, `failed {req, error}`, `opened {conn, stream, name}` (the other device opened a stream
-//!   named `name`, by the id the daemon gives it), `recv {conn, stream, data}`, `ended {conn,
-//!   stream}` (the other device finished the stream or stopped reading it, or it could not be
-//!   opened: nothing more goes either way on it), `closed {conn, reason}`, `pair-request {req,
+//!   named `name`, by the id the daemon gives it), `recv {conn, stream, data}`, `took {conn,
+//!   stream, n}` (`n` bytes of frames main sent on the stream wait here no more: the network took
+//!   them, or the stream ended), `ended {conn, stream}` (the other device finished the stream or
+//!   stopped reading it, or it could not be opened: nothing more goes either way on it), `closed
+//!   {conn, reason}`, `pair-request {req,
 //!   peer, hello}`, `paired {req, reply}`, `nearby {req, devices}`, `published {req}`, `signed
 //!   {req, packet}` and `host {req, host, seq, packet}` (null for all when no record is kept;
 //!   `packet`, the record as one device hands it to another, only from a lookup server).
+//!
+//! Each stream is written from a task of its own, so one the other device stops reading holds up
+//! no other; what main sent waits here until the network takes it, and main counts it by `took`.
 //!
 //! A stream is named by its first frame and opened by the device that dialled, as many of one name
 //! as it likes: a phone opens an `api` stream for each terminal it watches, conversation it follows
@@ -59,7 +64,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::{mpsc, oneshot, Mutex},
+    sync::{mpsc, oneshot},
 };
 use tokio_stream::StreamExt;
 
@@ -196,6 +201,13 @@ enum ToMain {
         stream: u64,
         data: String,
     },
+    /// `n` bytes of the frames main sent on a stream wait here no more: the network took them, or
+    /// the stream ended and nothing will.
+    Took {
+        conn: u64,
+        stream: u64,
+        n: usize,
+    },
     /// Nothing more goes either way on a stream.
     Ended {
         conn: u64,
@@ -241,29 +253,36 @@ struct NearbyDevice {
     data: Option<String>,
 }
 
-/// One peer connection: the queue its frames are written from, in order, and who opens its
-/// streams.
+/// One peer connection: each open stream's frames, by id, to the task that writes them, and who
+/// opens its streams.
 struct Link {
-    out: mpsc::UnboundedSender<Out>,
+    connection: Connection,
+    streams: HashMap<u64, mpsc::UnboundedSender<Vec<u8>>>,
     /// Whether this device dialled it: then main opens its streams, and the other device never.
     dialled: bool,
+    /// Held by each stream's writer: a close waits until every one has written what it has.
+    writing: mpsc::Sender<()>,
+    written: mpsc::Receiver<()>,
+    /// Held by each stream's reader: main is told the connection closed once every one has
+    /// handed it what arrived before.
+    reading: mpsc::Sender<()>,
+    read: mpsc::Receiver<()>,
 }
 
-/// What goes out on a connection, in the order main said it.
-enum Out {
-    /// A stream main opens, by the id it gives it, and its name.
-    Open(u64, String),
-    /// A frame on a stream, by its id.
-    Frame(u64, Vec<u8>),
-    /// Close it, saying why, once everything before has reached the other side.
-    Close(String),
-}
+/// A stream's queue of frames from main, and what its writer and its reader hold while they run.
+type Queued = (
+    mpsc::UnboundedReceiver<Vec<u8>>,
+    mpsc::Sender<()>,
+    mpsc::Sender<()>,
+);
 
-/// A connection's open streams, by id: the half each one's frames go out on.
-type Streams = Arc<Mutex<HashMap<u64, SendStream>>>;
-
-/// How long a close waits for what went before it to be taken by the other side.
+/// How long a close waits, while nothing more is written, for what went before it to be taken by
+/// the other side.
 const CLOSE_WAIT: Duration = Duration::from_secs(2);
+
+/// A stream's writer writes at most about this much at once, so that main hears it taken, and a
+/// close sees it move, as it goes.
+const WRITE_AT_MOST: usize = 256 * 1024;
 
 #[derive(Clone)]
 struct Daemon {
@@ -287,129 +306,125 @@ impl Daemon {
         let _ = self.to_main.send(message);
     }
 
-    /// Keep `connection` as a link, and write its frames from a task of its own, in order: on the
-    /// streams main opens, when this device `dialled` it; else on those the other device opened.
-    fn register(&self, connection: Connection, dialled: bool) -> (u64, Streams) {
+    /// Keep `connection` as a link: its streams are main's to open, when this device `dialled` it;
+    /// else the other device's.
+    fn register(&self, connection: Connection, dialled: bool) -> u64 {
         let conn = self.next.fetch_add(1, Ordering::Relaxed);
-        let streams: Streams = Arc::default();
-        let (out, mut queue) = mpsc::unbounded_channel::<Out>();
-        self.links
-            .lock()
-            .unwrap()
-            .insert(conn, Link { out, dialled });
-        let daemon = self.clone();
-        let writers = streams.clone();
+        let (writing, written) = mpsc::channel(1);
+        let (reading, read) = mpsc::channel(1);
+        self.links.lock().unwrap().insert(
+            conn,
+            Link {
+                connection,
+                streams: HashMap::new(),
+                dialled,
+                writing,
+                written,
+                reading,
+                read,
+            },
+        );
+        conn
+    }
+
+    /// A queue for the stream `stream` of the link `conn`, which its writer takes frames from; and
+    /// what its writer and its reader hold while they run. None when the link is gone.
+    fn queue(&self, conn: u64, stream: u64) -> Option<Queued> {
+        let mut links = self.links.lock().unwrap();
+        let link = links.get_mut(&conn)?;
+        let (frames, queue) = mpsc::unbounded_channel();
+        link.streams.insert(stream, frames);
+        Some((queue, link.writing.clone(), link.reading.clone()))
+    }
+
+    /// Open the stream `name` on `connection`, which this device dialled, as main's `stream`, and
+    /// write main's frames on it; the other device's come back to main. Main is told it ended when
+    /// it cannot be opened.
+    fn open(&self, conn: u64, connection: Connection, stream: u64, name: String) {
+        let Some((queue, writing, reading)) = self.queue(conn, stream) else {
+            return;
+        };
+        let d = self.clone();
         tokio::spawn(async move {
-            while let Some(first) = queue.recv().await {
-                // What main sent meanwhile goes in the same write, each stream's frames in order:
-                // one packet for a moment's frames, not one for each. The streams main opened
-                // meanwhile open first; a close ends it, after them.
-                let mut opens: Vec<(u64, String)> = Vec::new();
-                let mut writes: Vec<(u64, Vec<u8>)> = Vec::new();
-                let mut closing = None;
-                let mut next = Some(first);
-                while let Some(item) = next.take() {
-                    match item {
-                        Out::Open(stream, name) => opens.push((stream, name)),
-                        Out::Frame(stream, bytes) => {
-                            if let Ok(frame) = framed(&bytes) {
-                                match writes.iter_mut().find(|(s, _)| *s == stream) {
-                                    Some((_, buf)) => buf.extend_from_slice(&frame),
-                                    None => writes.push((stream, frame)),
-                                }
-                            }
-                        }
-                        Out::Close(reason) => {
-                            closing = Some(reason);
-                            break;
-                        }
-                    }
-                    next = queue.try_recv().ok();
+            match ws::open(&connection, &name).await {
+                Ok((send, recv)) => {
+                    let reader = d.clone();
+                    tokio::spawn(async move { reader.read_stream(conn, stream, recv, reading).await });
+                    d.write_stream(conn, stream, send, queue, writing).await;
                 }
-                for (stream, name) in opens {
-                    daemon.open(conn, &connection, &writers, stream, name).await;
-                }
-                let mut open = writers.lock().await;
-                for (stream, bytes) in writes {
-                    // One that ended takes nothing more: main was told.
-                    let Some(send) = open.get_mut(&stream) else {
-                        continue;
-                    };
-                    if send.write_all(&bytes).await.is_err() {
-                        open.remove(&stream);
-                        daemon.ended(conn, &connection, stream);
-                    }
-                }
-                if let Some(reason) = closing {
-                    // What went before the close reaches the other side first: each stream
-                    // finished and taken there (or given up on after a moment), then closed.
-                    let _ = tokio::time::timeout(CLOSE_WAIT, async {
-                        for send in open.values_mut() {
-                            let _ = send.finish();
-                        }
-                        for send in open.values_mut() {
-                            let _ = send.stopped().await;
-                        }
-                    })
-                    .await;
-                    connection.close(0u32.into(), reason.as_bytes());
-                    break;
+                Err(_) => {
+                    d.end(conn, stream);
+                    d.drop_queued(conn, stream, queue);
                 }
             }
         });
-        (conn, streams)
-    }
-
-    /// Open the stream `name` on `connection`, which this device dialled, as main's `stream`: its
-    /// frames go out on it, and the other device's come back to main. Main is told it ended when
-    /// it cannot be opened.
-    async fn open(
-        &self,
-        conn: u64,
-        connection: &Connection,
-        streams: &Streams,
-        stream: u64,
-        name: String,
-    ) {
-        // Only this connection's writer opens its streams, one after another.
-        if streams.lock().await.contains_key(&stream) {
-            eprintln!("hive-net: stream {stream} is open on connection {conn} already");
-            return;
-        }
-        match ws::open(connection, &name).await {
-            Ok((send, recv)) => {
-                streams.lock().await.insert(stream, send);
-                let (reader, streams, connection) =
-                    (self.clone(), streams.clone(), connection.clone());
-                tokio::spawn(async move {
-                    reader
-                        .read_stream(conn, &connection, &streams, stream, recv)
-                        .await
-                });
-            }
-            Err(_) => self.ended(conn, connection, stream),
-        }
     }
 
     /// A stream the other device opened on `connection`, which this device accepted: named by its
-    /// first frame, given an id that main is told with its name, and read until it ends.
-    async fn take_stream(
-        &self,
-        conn: u64,
-        connection: &Connection,
-        streams: &Streams,
-        send: SendStream,
-        mut recv: RecvStream,
-    ) {
+    /// first frame, given an id that main is told with its name, written from a task of its own,
+    /// and read until it ends.
+    async fn take_stream(&self, conn: u64, send: SendStream, mut recv: RecvStream) {
         let Ok(Some(name)) = read_frame(&mut recv).await else {
             return;
         };
         let name = String::from_utf8_lossy(&name).into_owned();
         let stream = self.next.fetch_add(1, Ordering::Relaxed);
-        streams.lock().await.insert(stream, send);
+        let Some((queue, writing, reading)) = self.queue(conn, stream) else {
+            return;
+        };
+        let writer = self.clone();
+        tokio::spawn(async move { writer.write_stream(conn, stream, send, queue, writing).await });
         self.tell(ToMain::Opened { conn, stream, name });
-        self.read_stream(conn, connection, streams, stream, recv)
-            .await;
+        self.read_stream(conn, stream, recv, reading).await;
+    }
+
+    /// Write the frames main queues for `stream`, in order, each moment's in one write, telling
+    /// main how many bytes of them the network took. When the queue ends (main closed the link, or
+    /// the other device finished reading) the stream is finished once what it has is written.
+    async fn write_stream(
+        &self,
+        conn: u64,
+        stream: u64,
+        mut send: SendStream,
+        mut queue: mpsc::UnboundedReceiver<Vec<u8>>,
+        writing: mpsc::Sender<()>,
+    ) {
+        while let Some(first) = queue.recv().await {
+            let mut took = 0;
+            let mut bytes = Vec::new();
+            let mut next = Some(first);
+            while let Some(frame) = next.take() {
+                took += frame.len();
+                if let Ok(framed) = framed(&frame) {
+                    bytes.extend_from_slice(&framed);
+                }
+                if bytes.len() < WRITE_AT_MOST {
+                    next = queue.try_recv().ok();
+                }
+            }
+            let wrote = send.write_all(&bytes).await.is_ok();
+            self.tell(ToMain::Took { conn, stream, n: took });
+            let _ = writing.try_send(());
+            if !wrote {
+                self.end(conn, stream);
+                return self.drop_queued(conn, stream, queue);
+            }
+        }
+        let _ = send.finish();
+        let _ = send.stopped().await;
+    }
+
+    /// The frames still queued for a stream that ended: main is told they are taken, as nothing
+    /// will take them.
+    fn drop_queued(&self, conn: u64, stream: u64, mut queue: mpsc::UnboundedReceiver<Vec<u8>>) {
+        queue.close();
+        let mut n = 0;
+        while let Ok(frame) = queue.try_recv() {
+            n += frame.len();
+        }
+        if n > 0 {
+            self.tell(ToMain::Took { conn, stream, n });
+        }
     }
 
     /// Hand main each frame that arrives on `stream`, until the other device finishes it or it
@@ -417,10 +432,9 @@ impl Daemon {
     async fn read_stream(
         &self,
         conn: u64,
-        connection: &Connection,
-        streams: &Streams,
         stream: u64,
         mut recv: RecvStream,
+        _reading: mpsc::Sender<()>,
     ) {
         while let Ok(Some(frame)) = read_frame(&mut recv).await {
             self.tell(ToMain::Recv {
@@ -429,24 +443,38 @@ impl Daemon {
                 data: String::from_utf8_lossy(&frame).into_owned(),
             });
         }
-        // Its other half, finished as it goes: nothing more is sent on it.
-        if streams.lock().await.remove(&stream).is_some() {
-            self.ended(conn, connection, stream);
-        }
+        self.end(conn, stream);
     }
 
-    /// `stream` ended, its half out let go: main is told, unless the connection is going, which
-    /// main is told of instead.
-    fn ended(&self, conn: u64, connection: &Connection, stream: u64) {
-        if connection.close_reason().is_none() {
+    /// `stream` ended: its writer finishes once what is queued is written, and main is told, once,
+    /// unless the connection is going, which main is told of instead.
+    fn end(&self, conn: u64, stream: u64) {
+        let mut links = self.links.lock().unwrap();
+        let Some(link) = links.get_mut(&conn) else {
+            return;
+        };
+        if link.streams.remove(&stream).is_some() && link.connection.close_reason().is_none() {
             self.tell(ToMain::Ended { conn, stream });
         }
     }
 
-    fn forget(&self, conn: u64, reason: String) {
-        if self.links.lock().unwrap().remove(&conn).is_some() {
-            self.tell(ToMain::Closed { conn, reason });
-        }
+    /// The other device closed `conn`, or it was lost: main is told, after each stream's reader
+    /// has handed it what arrived before (or a moment passes).
+    async fn forget(&self, conn: u64, reason: String) {
+        let Some(link) = self.links.lock().unwrap().remove(&conn) else {
+            return;
+        };
+        let Link {
+            connection,
+            streams,
+            writing,
+            reading,
+            mut read,
+            ..
+        } = link;
+        drop((connection, streams, writing, reading));
+        let _ = tokio::time::timeout(CLOSE_WAIT, read.recv()).await;
+        self.tell(ToMain::Closed { conn, reason });
     }
 
     async fn dial(&self, req: u64, peer: String, addrs: Vec<String>, relay: Option<String>) {
@@ -456,10 +484,10 @@ impl Daemon {
         };
         match connected.await {
             Ok(connection) => {
-                let (conn, _) = self.register(connection.clone(), true);
+                let conn = self.register(connection.clone(), true);
                 self.tell(ToMain::Dialed { req, conn });
                 let reason = connection.closed().await;
-                self.forget(conn, reason.to_string());
+                self.forget(conn, reason.to_string()).await;
             }
             Err(e) => self.tell(ToMain::Failed {
                 req,
@@ -513,7 +541,9 @@ impl Daemon {
                     return;
                 };
                 if link.dialled {
-                    let _ = link.out.send(Out::Open(stream, name));
+                    let connection = link.connection.clone();
+                    drop(links);
+                    self.open(conn, connection, stream, name);
                 } else {
                     // The device that dialled opens the streams: this one only answers on them.
                     eprintln!(
@@ -523,16 +553,29 @@ impl Daemon {
                 }
             }
             FromMain::Send { conn, stream, data } => {
-                if let Some(link) = self.links.lock().unwrap().get(&conn) {
-                    let _ = link.out.send(Out::Frame(stream, data.into_bytes()));
+                let links = self.links.lock().unwrap();
+                let Some(link) = links.get(&conn) else {
+                    return;
+                };
+                let n = data.len();
+                // A stream that ended takes nothing more: main is told it is not waiting.
+                let queued = link
+                    .streams
+                    .get(&stream)
+                    .is_some_and(|frames| frames.send(data.into_bytes()).is_ok());
+                if !queued {
+                    self.tell(ToMain::Took { conn, stream, n });
                 }
             }
             FromMain::Close { conn, reason } => {
                 let link = self.links.lock().unwrap().remove(&conn);
                 if let Some(link) = link {
                     let reason = reason.unwrap_or_else(|| "closed".into());
-                    let _ = link.out.send(Out::Close(reason.clone()));
-                    self.tell(ToMain::Closed { conn, reason });
+                    self.tell(ToMain::Closed {
+                        conn,
+                        reason: reason.clone(),
+                    });
+                    tokio::spawn(close(link, reason));
                 }
             }
             FromMain::Pair {
@@ -681,6 +724,22 @@ impl Daemon {
     }
 }
 
+/// Close `link`, saying why, once what went before has reached the other side: each stream's
+/// writer writes what it has and finishes, and the other side takes it (or a moment passes with
+/// nothing more written).
+async fn close(link: Link, reason: String) {
+    let Link {
+        connection,
+        streams,
+        writing,
+        mut written,
+        ..
+    } = link;
+    drop((streams, writing));
+    while let Ok(Some(())) = tokio::time::timeout(CLOSE_WAIT, written.recv()).await {}
+    connection.close(0u32.into(), reason.as_bytes());
+}
+
 /// Keep `nearby` to the devices mDNS finds on the local network, and what each announces.
 async fn watch_nearby(
     lookup: MdnsAddressLookup,
@@ -717,7 +776,7 @@ impl std::fmt::Debug for WsHost {
 impl ProtocolHandler for WsHost {
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
         let d = &self.0;
-        let (conn, streams) = d.register(connection.clone(), false);
+        let conn = d.register(connection.clone(), false);
         d.tell(ToMain::Incoming {
             conn,
             peer: connection.remote_id().to_string(),
@@ -726,13 +785,11 @@ impl ProtocolHandler for WsHost {
             match connection.accept_bi().await {
                 // Each stream on its own: one whose name is slow to come holds up no other.
                 Ok((send, recv)) => {
-                    let (d, connection, streams) = (d.clone(), connection.clone(), streams.clone());
-                    tokio::spawn(async move {
-                        d.take_stream(conn, &connection, &streams, send, recv).await
-                    });
+                    let d = d.clone();
+                    tokio::spawn(async move { d.take_stream(conn, send, recv).await });
                 }
                 Err(e) => {
-                    d.forget(conn, e.to_string());
+                    d.forget(conn, e.to_string()).await;
                     return Ok(());
                 }
             }

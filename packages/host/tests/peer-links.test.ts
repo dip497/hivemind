@@ -44,6 +44,16 @@ function linkPair(device: string, computer: string) {
   let close!: (why: string) => void;
   const closed = new Promise<string>((r) => { close = r; });
   const later = (f: () => void) => void setImmediate(f);
+  // The computer's room to send on the link, and who waits for it.
+  let room = true;
+  const roomFor = new Set<() => void>();
+  const hasRoom = () => room;
+  const tell = () => later(() => { if (room) for (const f of [...roomFor]) { roomFor.delete(f); f(); } });
+  const whenRoom = (l: () => void) => {
+    roomFor.add(l);
+    if (room) tell();
+    return () => { roomFor.delete(l); };
+  };
   /** A stream, as each end hears it. */
   interface Both { name: string; open: boolean; atDevice: Set<(t: string) => void>; atComputer: Set<(t: string) => void>; end(why: string): void; closed: Promise<string> }
   const all: Both[] = [];
@@ -59,6 +69,8 @@ function linkPair(device: string, computer: string) {
     send: (data) => later(() => { if (b.open) for (const l of b.atDevice) l(data); }),
     on: (l) => { b.atComputer.add(l); return () => { b.atComputer.delete(l); }; },
     closed: b.closed,
+    hasRoom,
+    whenRoom,
   });
   /** The device opens a stream named `name`: told to the computer, then its frames. */
   const opening = (name: string): Both => {
@@ -96,6 +108,8 @@ function linkPair(device: string, computer: string) {
     streams: (name, l) => listen(accepting, name, l),
     close: (why = "closed") => later(() => close(why)),
     closed,
+    hasRoom,
+    whenRoom,
   };
   const deviceEnd = {
     peer: computer,
@@ -116,6 +130,8 @@ function linkPair(device: string, computer: string) {
     },
     close: (why = "closed") => later(() => close(why)),
     closed,
+    /** Whether the computer has room to send to it: as when its network stops taking, and starts again. */
+    room: (has: boolean) => { room = has; if (has) tell(); },
   };
   return [computerEnd, deviceEnd] as const;
 }
@@ -249,7 +265,7 @@ function computer() {
       s.on((t) => said.push(t));
       return { send: (m: unknown) => s.send(JSON.stringify(m)), heard: said, end: s.end };
     };
-    return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), open, closed: computerEnd.closed, hangUp: () => deviceEnd.close("done") };
+    return { heard, send: (stream: string, m: unknown) => deviceEnd.send(stream, JSON.stringify(m)), open, closed: computerEnd.closed, hangUp: () => deviceEnd.close("done"), room: deviceEnd.room };
   };
   return { repo, workspace, phone, laptop, person: idOf(person), daemons, links, shown, lines, watched, typed, answered, sent, keyed, driven, viewed, subscribed, unpaired, introduced, forgot, guests, host, connect, statusChanged, output, another };
 }

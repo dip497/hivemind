@@ -8,6 +8,8 @@ Count, per link, the bytes main handed the hive-net daemon that the network has 
 and give each link and stream two plain questions: **`hasRoom()`** (fewer than `LINK_ROOM`,
 512 KB, wait) and **`whenRoom(listener)`** (told once, when room returns). Bound what "taken" means
 by lowering QUIC's `send_window` to 1 MB, so taken is within 1 MB of what the peer acknowledged.
+What the peer acknowledged and its app has not read is held by the peer, up to its own windows
+(1.25 MB a stream, `receive_window` 2 MB a connection), not by the host.
 Then each producer uses room by what it sends:
 
 1. **State** (the agents list, Home, the document): while there is no room nothing is made; when
@@ -222,8 +224,11 @@ iroh's transport config.
   or writer sees it first.
 - **`took {conn, stream, n}`**: bytes of frames no longer waiting in the daemon: written to QUIC, or
   dropped because the stream ended or was never open. Main's count always comes back down.
-- **`Close`** drops every stream's queue; each writer writes what it has, finishes, and the
-  connection closes once they are done or after `CLOSE_WAIT`, as today.
+- **`Close`** drops every stream's queue; each writer writes what it has, at most 256 KB at a
+  time, finishes, and the connection closes once they are done, or once `CLOSE_WAIT` (2 s) passes
+  with nothing more written. A fixed 2 s in all lost the tail of 6.4 MB sent before a close at
+  load 80, since the 1 MB window paces the writes too; a peer that takes nothing still holds a
+  close only 2 s.
 - **An inbound budget per connection.** A frame's length is read, then `min(len, 1 MB)` permits of
   the connection's semaphore are taken before its body is, and given back once the frame is
   written to main's socket. While main is behind, the daemon stops reading that peer and QUIC stops

@@ -55,6 +55,8 @@ function linkPair(): [host: Link, machine: Link] {
     streams: () => () => {},
     close: (why = "closed") => close(why),
     closed,
+    hasRoom: () => true,
+    whenRoom: (l) => { setImmediate(l); return () => {}; },
   });
   return [end(0, PRIYA), end(1, HOST)];
 }

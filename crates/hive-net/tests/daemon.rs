@@ -386,6 +386,90 @@ async fn a_device_that_opens_many_streams_of_one_name_on_its_connection_has_each
     fs::remove_dir_all(root).unwrap();
 }
 
+/// The bytes the daemon says the network took on `stream` of `conn`, within `wait`: what main still
+/// counts as waiting comes down by them.
+async fn took_on(main: &mut Main, conn: &Value, stream: u64, wait: Duration) -> u64 {
+    let mut took = 0;
+    let deadline = Instant::now() + wait;
+    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+        let Some(m) = main.within("took", left).await else {
+            break;
+        };
+        if m["conn"] == *conn && m["stream"] == stream {
+            took += m["n"].as_u64().unwrap();
+        } else {
+            main.held.push_back(m);
+            break;
+        }
+    }
+    took
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stream_the_other_device_stops_reading_holds_up_no_other_and_the_network_takes_only_what_it_can(
+) {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    // A phone watches a terminal on one `api` stream and follows a conversation on another, and
+    // stops reading the first (its screen went to the background).
+    let (mut watch_out, mut watch_in) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut watch_out, b"watch t1").await.unwrap();
+    let (mut talk_out, mut talk_in) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut talk_out, b"talk t1").await.unwrap();
+    let conn = host.next("incoming").await["conn"].clone();
+    let mut asked = HashMap::new();
+    for _ in 0..2 {
+        let recv = host.next("recv").await;
+        asked.insert(
+            recv["data"].as_str().unwrap().to_string(),
+            recv["stream"].as_u64().unwrap(),
+        );
+    }
+    let (watch, talk) = (asked["watch t1"], asked["talk t1"]);
+
+    // Far more output than the network holds for a reader that does not read.
+    let chunk = "x".repeat(64 * 1024);
+    let frames = 128;
+    for _ in 0..frames {
+        host.send_on(&conn, watch, &chunk).await;
+    }
+    let sent = (frames * chunk.len()) as u64;
+    let took = took_on(&mut host, &conn, watch, Duration::from_secs(5)).await;
+    assert!(
+        took < sent / 2,
+        "the network took {took} of {sent} bytes for a stream nobody reads"
+    );
+
+    // The conversation still flows, both ways, and a stream the phone opens now is told to main.
+    host.send_on(&conn, talk, "what t1 said").await;
+    assert_eq!(frame_of(&mut talk_in).await, "what t1 said");
+    assert_eq!(
+        took_on(&mut host, &conn, talk, Duration::from_secs(10)).await,
+        "what t1 said".len() as u64
+    );
+    let (mut call_out, _call_in) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut call_out, b"send t1").await.unwrap();
+    let opened = host.next("opened").await;
+    assert_eq!(opened["conn"], conn);
+
+    // Read again, the stream gets all of it, and main is told all of it was taken.
+    let reading = tokio::spawn(async move {
+        for _ in 0..frames {
+            frame_of(&mut watch_in).await;
+        }
+    });
+    let mut all = took;
+    let until = Instant::now() + Duration::from_secs(30);
+    while all < sent && Instant::now() < until {
+        all += took_on(&mut host, &conn, watch, Duration::from_secs(1)).await;
+    }
+    reading.await.unwrap();
+    assert_eq!(all, sent);
+    drop(talk_out);
+    fs::remove_dir_all(root).unwrap();
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn an_app_that_speaks_another_protocol_is_told_so_and_the_daemon_stops() {
     let root = temp();

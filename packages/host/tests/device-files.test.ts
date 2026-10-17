@@ -41,6 +41,8 @@ function linkPair(a: string, b: string): [Link, Link] {
     streams: () => () => {},
     close: (why = "closed") => close(why),
     closed,
+    hasRoom: () => true,
+    whenRoom: (l) => { setImmediate(l); return () => {}; },
   });
   // `a`'s end hears from `b` (its peer), and the other way.
   return [end(0, b), end(1, a)];
