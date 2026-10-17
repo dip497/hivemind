@@ -5,12 +5,13 @@
 // the other side, and a device that stops is heard going at once. And a daemon of another release,
 // speaking another protocol, is refused, saying so. A frame of many megabytes costs main no more than
 // the same bytes in small frames. A link to a device that stops taking what it is sent has no room
-// once a little waits, and room again once it takes it.
+// once a little waits, and room again once it takes it; one that falls far behind is closed, saying
+// so, though one big frame alone does not.
 import { test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HiveNet, LINK_ROOM, PROTOCOL, type Link } from "../src/hive-net.ts";
+import { HiveNet, LINK_ROOM, MAX_FRAME, PROTOCOL, WAITING_AT_MOST, type Link } from "../src/hive-net.ts";
 
 const BIN = path.join(import.meta.dir, "../../../crates/hive-net/target/debug/hive-net");
 const built = fs.existsSync(BIN);
@@ -19,7 +20,7 @@ if (!built) console.warn(`hive-net.test.ts skipped: build the daemon first (carg
 const running: HiveNet[] = [];
 afterEach(() => { for (const n of running.splice(0)) n.stop(); });
 
-async function device(root: string, name: string, on: { incoming?: (l: Link) => void; pair?: (peer: string, hello: unknown) => Promise<unknown> } = {}) {
+async function device(root: string, name: string, on: { incoming?: (l: Link) => void; pair?: (peer: string, hello: unknown) => Promise<unknown>; warn?: (m: string) => void } = {}) {
   const dir = path.join(root, name);
   fs.mkdirSync(path.join(dir, "identity"), { recursive: true });
   fs.writeFileSync(path.join(dir, "identity", "device.key"), `${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex")}\n`);
@@ -29,6 +30,7 @@ async function device(root: string, name: string, on: { incoming?: (l: Link) => 
     socket: path.join(dir, "net.sock"),
     onIncoming: on.incoming ?? (() => {}),
     onPairRequest: on.pair ?? (async () => ({ ok: false })),
+    onWarn: on.warn,
   });
   running.push(n);
   return n;
@@ -191,6 +193,112 @@ test.skipIf(!built)("a stream the dialling device opens beside another of its na
   }
 }, 30_000);
 
+test.skipIf(!built || process.platform !== "linux")("a link to a device that stops taking is not closed for one big frame, and is closed as too slow, saying so, once far more waits", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-ceiling-"));
+  let stopped = 0;
+  try {
+    let incoming!: (l: Link) => void;
+    const arrived = next<Link>((r) => { incoming = r; });
+    const warned: string[] = [];
+    const host = await device(root, "host", { incoming: (l) => incoming(l), warn: (m) => warned.push(m) });
+    const guest = await device(root, "guest");
+    host.admit([guest.ready.id]);
+    const link = await guest.dial(host.ready.id, { addrs: host.ready.addrs, relay: null });
+    link.send("api", "hello");
+    const there = await arrived;
+    await next<string>((r) => there.on("api", r));
+    let closed: string | null = null;
+    void there.closed.then((why) => { closed = why; });
+
+    stopped = daemonOf(path.join(root, "guest", "net.sock"));
+    process.kill(stopped, "SIGSTOP");
+    // A welcome of 32 MB to a device that takes nothing for now: it waits, and the link stays.
+    there.send("api", "w".repeat(32 * 1024 * 1024));
+    await Bun.sleep(2_000);
+    expect(closed).toBeNull();
+
+    // Then more than the link may hold beyond it, in small frames: closed, saying why.
+    const chunk = "x".repeat(1024 * 1024);
+    for (let i = 0; i * chunk.length <= WAITING_AT_MOST + 2 * chunk.length; i++) there.send("api", chunk);
+    for (const until = Date.now() + 10_000; closed === null && Date.now() < until;) await Bun.sleep(50);
+    expect(closed).toMatch(/^too slow \(\d+ MB waiting\)$/);
+    expect(warned).toEqual([`the link to ${guest.ready.id.slice(0, 8)}… is closed: ${closed}`]);
+  } finally {
+    if (stopped) process.kill(stopped, "SIGCONT");
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 60_000);
+
+/** A fake daemon that answers a dial, says the network took all but 256 KB of any frame over 8 MB
+ *  it is sent, and writes each message main tells it to `heard`, one a line. */
+function takingDaemon(root: string): string {
+  fs.writeFileSync(path.join(root, "taking-daemon.mjs"), [
+    "import net from 'node:net';",
+    "import fs from 'node:fs';",
+    `const heard = ${JSON.stringify(path.join(root, "heard"))};`,
+    "const framed = (body) => { const head = Buffer.alloc(4); head.writeUInt32BE(body.length); return Buffer.concat([head, body]); };",
+    "const frame = (m) => framed(Buffer.concat([Buffer.from([0]), Buffer.from(JSON.stringify(m))]));",
+    "const s = net.connect(process.argv[process.argv.indexOf('--socket') + 1], () => {",
+    `  s.write(frame({ t: 'ready', v: ${PROTOCOL}, id: 'a'.repeat(64), addrs: [], relay: null, lookup: null }));`,
+    "});",
+    "let parts = [], have = 0;",
+    "s.on('data', (d) => {",
+    "  parts.push(d); have += d.length;",
+    "  let buf = Buffer.concat(parts); parts = [buf];",
+    "  while (buf.length >= 4 && buf.length >= 4 + buf.readUInt32BE(0)) {",
+    "    const body = buf.subarray(4, 4 + buf.readUInt32BE(0));",
+    "    buf = buf.subarray(4 + body.length); parts = [buf];",
+    "    if (body[0] === 0) {",
+    "      const m = JSON.parse(body.toString('utf8', 1));",
+    "      fs.appendFileSync(heard, JSON.stringify(m) + '\\n');",
+    "      if (m.t === 'dial') s.write(frame({ t: 'dialed', req: m.req, conn: 2 }));",
+    "    } else if (body.length - 17 > 8 * 1024 * 1024) {",
+    "      s.write(frame({ t: 'took', conn: Number(body.readBigUInt64BE(1)), stream: Number(body.readBigUInt64BE(9)), n: body.length - 17 - 256 * 1024 }));",
+    "    }",
+    "  }",
+    "});",
+    "s.on('close', () => process.exit(0));",
+  ].join("\n"));
+  const bin = path.join(root, "hive-net");
+  fs.writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${path.join(root, "taking-daemon.mjs")}" "$@"\n`, { mode: 0o755 });
+  fs.mkdirSync(path.join(root, "identity"));
+  return bin;
+}
+
+test("once the network took most of one big frame, a link holds no more than the ceiling beyond what still waits of it", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-took-"));
+  try {
+    const warned: string[] = [];
+    const net = await HiveNet.start({ bin: takingDaemon(root), identity: path.join(root, "identity"), socket: path.join(root, "net.sock"), onIncoming: () => {}, onPairRequest: async () => ({}), onWarn: (m) => warned.push(m) });
+    running.push(net);
+    const link = await net.dial("b".repeat(64), { addrs: [], relay: null });
+    link.send("api", "w".repeat(32 * 1024 * 1024));
+    // All but 256 KB of it is taken: the link has room again.
+    await new Promise<void>((resolve) => link.whenRoom(resolve));
+    const chunk = "x".repeat(1024 * 1024);
+    for (let i = 0; i * chunk.length <= WAITING_AT_MOST + 2 * chunk.length; i++) link.send("api", chunk);
+    expect(warned).toEqual([`the link to bbbbbbbb… is closed: too slow (17 MB waiting)`]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 60_000);
+
+test("a frame over the daemon's limit fails as it is sent, and its stream is not opened", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-over-"));
+  try {
+    const net = await HiveNet.start({ bin: takingDaemon(root), identity: path.join(root, "identity"), socket: path.join(root, "net.sock"), onIncoming: () => {}, onPairRequest: async () => ({}) });
+    running.push(net);
+    const link = await net.dial("b".repeat(64), { addrs: [], relay: null });
+    expect(() => link.send("files", "f".repeat(MAX_FRAME))).toThrow(`a frame of ${MAX_FRAME} bytes on files is over hive-net's limit`);
+    link.send("api", "after it");
+    for (const until = Date.now() + 10_000; !fs.readFileSync(path.join(root, "heard"), "utf8").includes('"api"') && Date.now() < until;) await Bun.sleep(20);
+    const opened = fs.readFileSync(path.join(root, "heard"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((m) => m.t === "open");
+    expect(opened.map((m) => m.name)).toEqual(["api"]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test.skipIf(!built)("a device announces what it wants found, and the devices nearby find it with that, then without it", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-nearby-"));
   try {
@@ -212,14 +320,17 @@ test.skipIf(!built)("a device announces what it wants found, and the devices nea
   }
 }, 60_000);
 
-test("a daemon of an earlier release, whose ready says no protocol, is refused, saying which each speaks", async () => {
+test.each([
+  ["no protocol", "", 1],
+  ["protocol 3, untagged as protocol 2 sent it", ", v: 3", 2],
+])("a daemon of an earlier release, whose ready says %s, is refused, saying which each speaks", async (_, v, speaks) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-old-"));
   try {
-    // It connects where it is told to, and says it is ready as one of protocol 1 did.
+    // It connects where it is told to, and says it is ready as one before protocol 3 did: untagged.
     fs.writeFileSync(path.join(root, "old-daemon.mjs"), [
       "import net from 'node:net';",
       "const s = net.connect(process.argv[process.argv.indexOf('--socket') + 1], () => {",
-      "  const body = Buffer.from(JSON.stringify({ t: 'ready', id: 'a'.repeat(64), addrs: [], relay: null, lookup: null }));",
+      `  const body = Buffer.from(JSON.stringify({ t: 'ready'${v}, id: 'a'.repeat(64), addrs: [], relay: null, lookup: null }));`,
       "  const head = Buffer.alloc(4); head.writeUInt32BE(body.length);",
       "  s.write(Buffer.concat([head, body]));",
       "});",
@@ -229,7 +340,7 @@ test("a daemon of an earlier release, whose ready says no protocol, is refused, 
     fs.writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${path.join(root, "old-daemon.mjs")}" "$@"\n`, { mode: 0o755 });
     fs.mkdirSync(path.join(root, "identity"));
     const started = HiveNet.start({ bin, identity: path.join(root, "identity"), socket: path.join(root, "net.sock"), onIncoming: () => {}, onPairRequest: async () => ({}) });
-    await expect(started).rejects.toThrow(`hive-net speaks the daemon's protocol 1, and this app ${PROTOCOL}`);
+    await expect(started).rejects.toThrow(`hive-net speaks the daemon's protocol ${speaks}, and this app ${PROTOCOL}`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -243,8 +354,10 @@ test("a frame of many megabytes from the daemon is read as fast as the same byte
     // welcome comes so.
     fs.writeFileSync(path.join(root, "big-daemon.mjs"), [
       "import net from 'node:net';",
-      "const frame = (m) => { const body = Buffer.from(JSON.stringify(m)); const head = Buffer.alloc(4); head.writeUInt32BE(body.length); return Buffer.concat([head, body]); };",
-      "const recv = (mb) => frame({ t: 'recv', conn: 1, stream: 7, data: 'x'.repeat(mb * 1024 * 1024) });",
+      "const framed = (body) => { const head = Buffer.alloc(4); head.writeUInt32BE(body.length); return Buffer.concat([head, body]); };",
+      "const frame = (m) => framed(Buffer.concat([Buffer.from([0]), Buffer.from(JSON.stringify(m))]));",
+      "const ids = Buffer.alloc(17); ids[0] = 1; ids.writeBigUInt64BE(1n, 1); ids.writeBigUInt64BE(7n, 9);",
+      "const recv = (mb) => framed(Buffer.concat([ids, Buffer.from('x'.repeat(mb * 1024 * 1024))]));",
       "const small = recv(1), big = recv(32);",
       "const s = net.connect(process.argv[process.argv.indexOf('--socket') + 1], () => {",
       `  s.write(frame({ t: 'ready', v: ${PROTOCOL}, id: 'a'.repeat(64), addrs: [], relay: null, lookup: null }));`,

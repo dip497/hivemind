@@ -129,7 +129,9 @@ resort (NATS, Redis).
 - NATS `const.go` — `MAX_PENDING_SIZE` 64 MB per client, then a slow consumer is closed. Redis
   `client-output-buffer-limit pubsub 32mb 8mb 60`.
 - Tokio `Semaphore` — `acquire_many` is FIFO; a byte budget is permits taken before a frame goes on
-  and given back once it is written.
+  and given back once it is written. Taken before a body arrives, permits deadlock a connection
+  whose other streams fill the receive window; the budget here is a gate on beginning a frame
+  instead (`tokio::sync::watch`).
 
 ## Looked at from each side
 
@@ -229,16 +231,52 @@ iroh's transport config.
   with nothing more written. A fixed 2 s in all lost the tail of 6.4 MB sent before a close at
   load 80, since the 1 MB window paces the writes too; a peer that takes nothing still holds a
   close only 2 s.
-- **An inbound budget per connection.** A frame's length is read, then `min(len, 1 MB)` permits of
-  the connection's semaphore are taken before its body is, and given back once the frame is
-  written to main's socket. While main is behind, the daemon stops reading that peer and QUIC stops
-  crediting it. One frame always fits. A stream's name (its first frame) is at most 256 bytes.
+- **An inbound budget per connection.** What is handed to main counts until it is written to
+  main's socket; while more than 1 MB counts, no stream of that connection begins a new frame, and
+  QUIC stops crediting the peer. A frame already begun is read to its end, so one frame always
+  fits and no budget is held while a body is still on the network. A stream's name (its first
+  frame) is at most 256 bytes.
 - **QUIC's windows** on every endpoint's transport config (net.rs, so phones' too): `send_window`
   1 MB, `receive_window` 2 MB, `max_concurrent_uni_streams` 0 (nothing uses them).
 - **Frames as bytes.** Every frame between main and the daemon starts with a tag byte: `0` JSON,
   `1` a frame on a stream (connection u64, stream u64, its bytes). `send` and `recv` go as `1`, the
   rest as `0`. `PROTOCOL` becomes 3. Main checks a frame against `MAX_FRAME` before it sends it:
   an oversize frame from main fails that send, not the daemon.
+
+### Protocol 3: main and the daemon
+
+The contract both sides build to (`PROTOCOL` 3 in daemon.rs and hive-net.ts).
+
+- **Frame:** a u32 big-endian length `L`, then `L` bytes. `L` is at most `MAX_FRAME`
+  (64 MiB, frames.rs). The first byte of the body is a tag.
+- **Tag 0, a message:** JSON, tagged by `t`. These are every message of protocol 2 except `send`
+  and `recv`.
+- **Tag 1, a frame on a stream:** connection (u64 BE), stream (u64 BE), then the frame's bytes.
+  The 17-byte header counts in `L`. Main sends `send` like this, and the daemon hands main `recv`
+  like this. Main encodes the text as UTF-8 once, and it is not escaped again.
+- **Version check:** the daemon says `ready {v: 3}` (tag 0) first, and main says `hello {v: 3}`
+  (tag 0) first. Each side reads an untagged first frame (`{`) as protocol 2 or before, whatever
+  `v` it carries, only to say which protocol the other speaks and stop.
+- **Oversize:** main throws in `send` when `17 + bytes > MAX_FRAME`, before it opens the stream.
+  The daemon refuses a length over `MAX_FRAME` on main's socket. On a stream it takes at most
+  `MAX_FRAME - 17` (what still fits main's socket with its header): a longer frame ends that
+  stream, both ways, and the others go on.
+- **Stream name:** the first frame of a stream the other device opens. At most `NAME_AT_MOST`
+  (256) bytes; a longer one is not opened, and main hears nothing of it.
+- **Inbound budget:** `BUDGET` (1 MiB) per connection, a gate rather than permits. A frame handed
+  to main counts until it is written to main's socket. A stream's reader begins no new frame while
+  more than `BUDGET` counts; a frame it has begun it reads to the end. Holding budget while a body
+  is still on its way deadlocks: other streams' unread bytes fill the receive window, and the
+  body's tail never comes. While main is behind, the daemon begins no more frames of that
+  connection. Ceiling: the frames begun when the gate shuts, at most one per stream.
+- **`closed`** (the other side closed, or the connection was lost) reaches main only after every
+  stream's reader has handed over what arrived before it.
+- **QUIC windows** (net.rs, every endpoint): `send_window` 1 MiB, `receive_window` 2 MiB,
+  `max_concurrent_uni_streams` 0.
+- **Main's ceiling:** when a link's `waiting` passes `WAITING_AT_MOST` (16 MiB) plus the largest
+  frame that may still wait (the largest sent, at most `waiting` once the network takes some),
+  main closes the link `too slow (N MB waiting)`, warns
+  (`onWarn`), and sends nothing more on it.
 
 ### Main (packages/workspace-host/src/hive-net.ts)
 

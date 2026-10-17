@@ -593,6 +593,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
           o.onWarn(`hive-net: ${why}; starting it again`);
           again = setTimeout(() => void startNet(), 2_000);
         },
+        onWarn: (message) => o.onWarn(`hive-net: ${message}`),
       });
       if (stopping) return started.stop();
       started.admit(lists.admitted());

@@ -8,6 +8,14 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
 
 pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> Result<Option<Vec<u8>>> {
+    match read_len(r).await? {
+        Some(len) => Ok(Some(read_body(r, len).await?)),
+        None => Ok(None),
+    }
+}
+
+/// A frame's length, read before its bytes are: None at the end.
+pub async fn read_len<R: AsyncRead + Unpin>(r: &mut R) -> Result<Option<usize>> {
     let mut len = [0u8; 4];
     match r.read_exact(&mut len).await {
         Ok(_) => {}
@@ -18,9 +26,17 @@ pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> Result<Option<Vec<u8
     if len > MAX_FRAME {
         bail!("a frame of {len} bytes is over the limit");
     }
-    let mut buf = vec![0u8; len];
-    r.read_exact(&mut buf).await?;
-    Ok(Some(buf))
+    Ok(Some(len))
+}
+
+/// A frame's bytes, once its length is read: held as they arrive, not as the length says.
+pub async fn read_body<R: AsyncRead + Unpin>(r: &mut R, len: usize) -> Result<Vec<u8>> {
+    let mut buf = Vec::with_capacity(len.min(64 * 1024));
+    r.take(len as u64).read_to_end(&mut buf).await?;
+    if buf.len() < len {
+        bail!("a frame of {len} bytes ended after {}", buf.len());
+    }
+    Ok(buf)
 }
 
 /// `bytes` as a frame: its length, then it.

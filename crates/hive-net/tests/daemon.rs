@@ -25,7 +25,7 @@ use tokio::net::{UnixListener, UnixStream};
 
 use hive_net::{
     daemon::PROTOCOL,
-    frames::{read_frame, write_frame},
+    frames::{read_frame, write_frame, MAX_FRAME},
     net::{self, Reach},
     ws,
 };
@@ -113,7 +113,15 @@ impl Main {
         main
     }
 
+    /// A message, tagged as one.
     async fn send(&mut self, message: Value) {
+        let mut frame = vec![0];
+        serde_json::to_writer(&mut frame, &message).unwrap();
+        write_frame(&mut self.stream, &frame).await.unwrap();
+    }
+
+    /// A message as an app of protocol 2 or before sent it: JSON, with no tag.
+    async fn send_untagged(&mut self, message: Value) {
         write_frame(&mut self.stream, &serde_json::to_vec(&message).unwrap())
             .await
             .unwrap();
@@ -137,7 +145,7 @@ impl Main {
                 .await
                 .ok()?
                 .unwrap()?;
-            let message: Value = serde_json::from_slice(&frame).unwrap();
+            let message = message_of(&frame);
             if message["t"] == t {
                 return Some(message);
             }
@@ -164,7 +172,7 @@ impl Main {
                 .unwrap_or_else(|_| panic!("no {ts:?} message"))
                 .unwrap()
                 .unwrap();
-            self.held.push_back(serde_json::from_slice(&frame).unwrap());
+            self.held.push_back(message_of(&frame));
         }
     }
 
@@ -181,8 +189,25 @@ impl Main {
     }
 
     async fn send_on(&mut self, conn: &Value, stream: u64, data: &str) {
-        self.send(json!({ "t": "send", "conn": conn, "stream": stream, "data": data }))
-            .await;
+        let mut frame = vec![1];
+        frame.extend_from_slice(&conn.as_u64().unwrap().to_be_bytes());
+        frame.extend_from_slice(&stream.to_be_bytes());
+        frame.extend_from_slice(data.as_bytes());
+        write_frame(&mut self.stream, &frame).await.unwrap();
+    }
+}
+
+/// A frame from the daemon as a message: a frame that arrived on a stream as `recv`.
+fn message_of(frame: &[u8]) -> Value {
+    match frame.split_first() {
+        Some((0, json)) => serde_json::from_slice(json).unwrap(),
+        Some((1, on)) => json!({
+            "t": "recv",
+            "conn": u64::from_be_bytes(on[..8].try_into().unwrap()),
+            "stream": u64::from_be_bytes(on[8..16].try_into().unwrap()),
+            "data": String::from_utf8_lossy(&on[16..]),
+        }),
+        _ => panic!("a frame of no kind: {frame:?}"),
     }
 }
 
@@ -261,7 +286,21 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
     // Main closes a connection saying why, and the other side reads it, after everything sent
     // before the close (a workspace's host says where it moved, then closes: M3): more than goes
     // out at once, so some of it is still on its way when main asks.
+    // The guest's main reads as it arrives, as main does.
     let pad = "x".repeat(128 * 1024);
+    let size = "last 00 ".len() + pad.len();
+    let reading = tokio::spawn(async move {
+        let mut last = vec![];
+        loop {
+            let m = guest.next_of(&["recv", "closed"]).await;
+            if m["t"] == "closed" {
+                return (last, m);
+            }
+            let data = m["data"].as_str().unwrap();
+            assert_eq!(data.len(), size);
+            last.push(data[..7].to_string());
+        }
+    });
     for i in 0..50 {
         host.send_on(&host_conn, named["sync"], &format!("last {i:02} {pad}"))
             .await;
@@ -269,16 +308,7 @@ async fn an_admitted_device_connects_frames_pass_both_ways_in_order_and_main_clo
     host.send(json!({ "t": "close", "conn": host_conn, "reason": "removed" }))
         .await;
     assert_eq!(host.next("closed").await["reason"], json!("removed"));
-    let mut last = vec![];
-    let closed = loop {
-        let m = guest.next_of(&["recv", "closed"]).await;
-        if m["t"] == "closed" {
-            break m;
-        }
-        let data = m["data"].as_str().unwrap();
-        assert_eq!(data.len(), "last 00 ".len() + pad.len());
-        last.push(data[..7].to_string());
-    };
+    let (last, closed) = reading.await.unwrap();
     assert_eq!(
         last,
         (0..50).map(|i| format!("last {i:02}")).collect::<Vec<_>>()
@@ -528,17 +558,202 @@ async fn main_ends_a_stream_it_opened_and_the_other_device_hears_it_end_while_th
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn many_streams_nobody_reads_together_cost_the_host_no_more_than_the_windows() {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    let mut kept = Vec::new();
+    for i in 0..8 {
+        let (mut out, recv) = ws::open(&connection, "api").await.unwrap();
+        write_frame(&mut out, format!("watch t{i}").as_bytes())
+            .await
+            .unwrap();
+        kept.push((out, recv));
+    }
+    let conn = host.next("incoming").await["conn"].clone();
+    let mut streams = Vec::new();
+    for _ in 0..8 {
+        streams.push(host.next("recv").await["stream"].as_u64().unwrap());
+    }
+
+    // Each stream alone is held by what the phone lets it be sent; together they are held by the
+    // phone's receive window and the host's send window, however many streams the link has.
+    let chunk = "x".repeat(64 * 1024);
+    for &stream in &streams {
+        for _ in 0..32 {
+            host.send_on(&conn, stream, &chunk).await;
+        }
+    }
+    let mut took = 0;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+        let Some(m) = host.within("took", left).await else {
+            break;
+        };
+        assert_eq!(m["conn"], conn);
+        took += m["n"].as_u64().unwrap();
+    }
+    assert!(
+        took < 4 * 1024 * 1024,
+        "the network took {took} bytes for eight streams nobody reads"
+    );
+    drop(kept);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_device_that_closes_once_its_frames_arrived_is_heard_closing_only_after_main_has_them_all(
+) {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    let (mut out, _recv) = ws::open(&connection, "api").await.unwrap();
+    // 2 MB: as much as the host holds for a main that reads nothing meanwhile (its budget, and
+    // its network's receive window); the phone could send no more until main reads.
+    let pad = "x".repeat(40 * 1024);
+    for i in 0..50 {
+        write_frame(&mut out, format!("last {i:02} {pad}").as_bytes())
+            .await
+            .unwrap();
+    }
+    // The host's network has all of it, though main has not: then the phone hangs up.
+    out.finish().unwrap();
+    out.stopped().await.unwrap();
+    connection.close(0u32.into(), b"done");
+    let mut last = vec![];
+    loop {
+        let m = host.next_of(&["recv", "closed"]).await;
+        if m["t"] == "closed" {
+            break;
+        }
+        last.push(m["data"].as_str().unwrap()[..7].to_string());
+    }
+    assert_eq!(
+        last,
+        (0..50).map(|i| format!("last {i:02}")).collect::<Vec<_>>()
+    );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frame_larger_than_a_connections_budget_reaches_main_whole_and_in_order() {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    let (mut out, _recv) = ws::open(&connection, "api").await.unwrap();
+    let big = "b".repeat(4 * 1024 * 1024);
+    write_frame(&mut out, big.as_bytes()).await.unwrap();
+    write_frame(&mut out, b"after").await.unwrap();
+    let first = host.next("recv").await;
+    assert_eq!(first["data"].as_str().unwrap().len(), big.len());
+    assert_eq!(host.next("recv").await["data"], "after");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stream_whose_name_is_too_long_is_not_opened_and_one_after_it_is() {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    let (mut long_out, _long_in) = ws::open(&connection, &"n".repeat(257)).await.unwrap();
+    write_frame(&mut long_out, b"hello").await.unwrap();
+    let (mut api_out, _api_in) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut api_out, b"hello").await.unwrap();
+    assert_eq!(host.next("opened").await["name"], "api");
+    assert!(host.within("opened", Duration::from_secs(2)).await.is_none());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frame_too_large_to_hand_main_ends_its_stream_and_main_still_hears_the_others() {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    // As large as a frame between devices may be: with its header, too large for main's socket.
+    let (mut huge, mut huge_in) = ws::open(&connection, "api").await.unwrap();
+    let sending = tokio::spawn(async move {
+        let _ = write_frame(&mut huge, &vec![b'x'; MAX_FRAME]).await;
+    });
+    tokio::time::timeout(Duration::from_secs(60), sending)
+        .await
+        .expect("the huge frame is written or refused")
+        .unwrap();
+    // Its stream ends, both ways.
+    let ended = tokio::time::timeout(Duration::from_secs(20), read_frame(&mut huge_in))
+        .await
+        .expect("the stream ends in time");
+    assert!(
+        matches!(ended, Ok(None)),
+        "{:?}",
+        ended.map(|f| f.map(|f| f.len()))
+    );
+    let (mut out, _recv) = ws::open(&connection, "api").await.unwrap();
+    write_frame(&mut out, b"still heard").await.unwrap();
+    assert_eq!(host.next("recv").await["data"], "still heard");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_frame_larger_than_the_budget_arrives_while_other_streams_wait_for_main() {
+    let root = temp();
+    let mut host = Main::start(&root, "host").await;
+    let (_phone, connection) = phone_of(&mut host).await;
+    // A welcome begins on one stream; then four others send more than the network holds unread;
+    // then the welcome's rest. Main reads nothing for a while, and then all of it.
+    let (mut welcome, _w) = ws::open(&connection, "sync").await.unwrap();
+    let len = 1536 * 1024;
+    welcome.write_all(&(len as u32).to_be_bytes()).await.unwrap();
+    welcome.write_all(&vec![b'w'; 100 * 1024]).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let mut busy = Vec::new();
+    for name in ["pty", "api", "pty", "api"] {
+        let (mut out, recv) = ws::open(&connection, name).await.unwrap();
+        busy.push(tokio::spawn(async move {
+            for _ in 0..20 {
+                write_frame(&mut out, &vec![b'b'; 64 * 1024]).await.unwrap();
+            }
+            (out, recv)
+        }));
+    }
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let rest = tokio::spawn(async move {
+        welcome.write_all(&vec![b'w'; len - 100 * 1024]).await.unwrap();
+        welcome
+    });
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let (mut big, mut small) = (0, 0);
+    while big + small < 81 {
+        let data = host.next("recv").await["data"].as_str().unwrap().len();
+        if data == len {
+            big += 1;
+        } else if data == 64 * 1024 {
+            small += 1;
+        }
+    }
+    assert_eq!((big, small), (1, 80));
+    let _ = (rest.await, busy);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn an_app_that_speaks_another_protocol_is_told_so_and_the_daemon_stops() {
     let root = temp();
-    // An app of an earlier release says nothing of its protocol: it admits devices first. One of a
-    // later release says it speaks another.
+    // An app of the first release says nothing of its protocol: it admits devices first; one of
+    // the second says hello, untagged. One of a later release says it speaks another.
     let firsts = [
-        (json!({ "t": "admit", "devices": [] }), 1),
-        (json!({ "t": "hello", "v": PROTOCOL + 1 }), PROTOCOL + 1),
+        (json!({ "t": "admit", "devices": [] }), 1, false),
+        (json!({ "t": "hello", "v": 2 }), 2, false),
+        // Untagged is protocol 2 or before, whatever it says.
+        (json!({ "t": "hello", "v": PROTOCOL }), 2, false),
+        (json!({ "t": "hello", "v": PROTOCOL + 1 }), PROTOCOL + 1, true),
     ];
-    for (i, (first, speaks)) in firsts.into_iter().enumerate() {
+    for (i, (first, speaks, tagged)) in firsts.into_iter().enumerate() {
         let mut main = Main::launch(&root, &format!("app{i}"), &[], Stdio::piped()).await;
-        main.send(first).await;
+        if tagged {
+            main.send(first).await;
+        } else {
+            main.send_untagged(first).await;
+        }
         let deadline = Instant::now() + Duration::from_secs(10);
         let status = loop {
             if let Some(status) = main.daemon.try_wait().unwrap() {

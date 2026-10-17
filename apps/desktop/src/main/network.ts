@@ -329,6 +329,7 @@ export function network(): Promise<HiveNet> {
         return sharingOf().answer(peer, hello);
       },
       onExit: (why) => { current = null; records?.stop(); records = null; console.warn(`[network] ${why}`); },
+      onWarn: (message) => console.warn(`[network] ${message}`),
     });
     hn.admit(accessLists().admitted());
     records?.stop();

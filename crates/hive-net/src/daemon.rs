@@ -1,17 +1,18 @@
 //! `hive-net daemon`: this device on the network, for the app (R11, M1). Main listens on a local
 //! socket (0600; a named pipe on Windows), starts the daemon with its path, and the daemon
-//! connects there; when main goes, so does it. Both ways, each message is JSON in a frame
-//! (`frames.rs`), tagged by `t`, in the daemon's protocol `PROTOCOL`: the daemon says which it
-//! speaks in `ready`, and main in `hello`, before anything else. The app and hive-net ship
+//! connects there; when main goes, so does it. Both ways, each frame (`frames.rs`) starts with a
+//! tag: `0`, a message in JSON tagged by `t`; `1`, a frame on a stream, its connection and stream
+//! (each a u64, big-endian) then its bytes, which is how main sends (`send`) and the daemon hands
+//! main (`recv`) what goes between devices. In the daemon's protocol `PROTOCOL`: the daemon says
+//! which it speaks in `ready`, and main in `hello`, before anything else. The app and hive-net ship
 //! together; a daemon told another protocol, or anything before `hello`, stops, saying so.
 //!
 //! - main → daemon: `hello {v}`, then `admit {devices}` (the devices the access lists let in, which
 //!   the gate enforces), `dial {req, peer, addrs, relay}` (a workspace's host, on `hive/ws/1`),
 //!   `open {conn, stream, name}` (a stream named `name` on a connection main dialled, by the id main
-//!   gives it), `send {conn, stream, data}`, `end {conn, stream}` (nothing more goes on a stream
-//!   main opened, once what it sent is written: the other side hears it end), `close {conn,
-//!   reason?}`, `pair {req, peer, addrs,
-//!   relay, hello}` (first contact with a host), `pair-reply {req, reply}` (the answer to someone's
+//!   gives it), `send` (tag 1), `end {conn, stream}` (nothing more goes on a stream main opened,
+//!   once what it sent is written: the other side hears it end), `close {conn, reason?}`, `pair
+//!   {req, peer, addrs, relay, hello}` (first contact with a host), `pair-reply {req, reply}` (the answer to someone's
 //!   `pair-request`), `advertise {data}` (what this device announces to the devices nearby, by
 //!   mDNS; null for nothing), `nearby {req}` (the devices nearby, and what each announces),
 //!   `host-record {req, workspace, seq}` (this device hosts the person's workspace `workspace`:
@@ -23,7 +24,7 @@
 //!   another network is dialled through the relay its link names.
 //! - daemon → main: `ready {v, id, addrs, relay, lookup}`, `incoming {conn, peer}`, `dialed {req,
 //!   conn}`, `failed {req, error}`, `opened {conn, stream, name}` (the other device opened a stream
-//!   named `name`, by the id the daemon gives it), `recv {conn, stream, data}`, `took {conn,
+//!   named `name`, by the id the daemon gives it), `recv` (tag 1), `took {conn,
 //!   stream, n}` (`n` bytes of frames main sent on the stream wait here no more: the network took
 //!   them, or the stream ended), `ended {conn, stream}` (the other device finished the stream or
 //!   stopped reading it, or it could not be opened: nothing more goes either way on it), `closed
@@ -34,14 +35,17 @@
 //!
 //! Each stream is written from a task of its own, so one the other device stops reading holds up
 //! no other; what main sent waits here until the network takes it, and main counts it by `took`.
+//! What arrives is read while main keeps up: while more than `BUDGET` of what arrived on a
+//! connection waits to be written to main, no new frame of it is read, so QUIC stops crediting the
+//! other device. A frame begun is read to its end: one stream waiting for room never holds up
+//! another's frame.
 //!
 //! A stream is named by its first frame and opened by the device that dialled, as many of one name
 //! as it likes: a phone opens an `api` stream for each terminal it watches, conversation it follows
 //! and call it makes, all on its one connection. Each is its own from its opening to its end, by
 //! its id: its frames go to it alone, both ways. The device that opens a connection's streams
 //! names them, so their ids never meet: main for a connection it dialled, the daemon for one it
-//! accepted. `data` is the frame's bytes as text, which is all main sends. What the frames mean is
-//! main's.
+//! accepted. What the frames mean is main's.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -66,12 +70,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    sync::{mpsc, oneshot},
+    sync::{mpsc, oneshot, watch},
 };
 use tokio_stream::StreamExt;
 
 use crate::{
-    frames::{framed, read_frame, write_frame},
+    frames::{framed, read_body, read_frame, read_len, write_frame, MAX_FRAME},
     gate::Gate,
     host_record::{self, HostRecord},
     key,
@@ -83,7 +87,7 @@ use crate::{
 
 /// The protocol main and the daemon speak. 2: a stream is known by its id, and a connection carries
 /// any number of streams of one name (1, before it, knew a stream by its name: one of each). 3: main
-/// ends a stream it opened.
+/// ends a stream it opened, and every frame is tagged: a message, or a frame on a stream as bytes.
 pub const PROTOCOL: u32 = 3;
 
 /// How long a host's person has to answer someone asking to join.
@@ -112,11 +116,6 @@ enum FromMain {
         conn: u64,
         stream: u64,
         name: String,
-    },
-    Send {
-        conn: u64,
-        stream: u64,
-        data: String,
     },
     /// A stream main opened ends, after what was sent on it before.
     End {
@@ -204,11 +203,6 @@ enum ToMain {
         stream: u64,
         name: String,
     },
-    Recv {
-        conn: u64,
-        stream: u64,
-        data: String,
-    },
     /// `n` bytes of the frames main sent on a stream wait here no more: the network took them, or
     /// the stream ended and nothing will.
     Took {
@@ -254,6 +248,41 @@ enum ToMain {
     },
 }
 
+/// What goes to main: a message, or a frame that arrived on a stream, counted in its connection's
+/// budget until it is written.
+enum ToMainFrame {
+    Message(ToMain),
+    OnStream {
+        conn: u64,
+        stream: u64,
+        data: Vec<u8>,
+        _counted: Handed,
+    },
+}
+
+impl ToMainFrame {
+    /// Its bytes on main's socket, after its length.
+    fn bytes(&self) -> Vec<u8> {
+        match self {
+            ToMainFrame::Message(message) => {
+                let mut bytes = vec![MESSAGE];
+                serde_json::to_writer(&mut bytes, message).expect("messages serialize");
+                bytes
+            }
+            ToMainFrame::OnStream {
+                conn, stream, data, ..
+            } => {
+                let mut bytes = Vec::with_capacity(17 + data.len());
+                bytes.push(ON_STREAM);
+                bytes.extend_from_slice(&conn.to_be_bytes());
+                bytes.extend_from_slice(&stream.to_be_bytes());
+                bytes.extend_from_slice(data);
+                bytes
+            }
+        }
+    }
+}
+
 /// A device on the local network, as mDNS found it: its id, and what it announces.
 #[derive(Debug, Clone, Serialize)]
 struct NearbyDevice {
@@ -275,14 +304,55 @@ struct Link {
     /// handed it what arrived before.
     reading: mpsc::Sender<()>,
     read: mpsc::Receiver<()>,
+    /// The bytes that arrived from the other device and wait to be written to main.
+    budget: Budget,
 }
 
-/// A stream's queue of frames from main, and what its writer and its reader hold while they run.
-type Queued = (
-    mpsc::UnboundedReceiver<Vec<u8>>,
-    mpsc::Sender<()>,
-    mpsc::Sender<()>,
-);
+/// What a stream's writer and reader take from its link: the queue of main's frames for it, what
+/// each holds while it runs, and the link's budget for what arrives.
+struct ForStream {
+    queue: mpsc::UnboundedReceiver<Vec<u8>>,
+    writing: mpsc::Sender<()>,
+    reading: mpsc::Sender<()>,
+    budget: Budget,
+}
+
+/// While more than this of what arrived on a connection waits to be written to main, no new frame
+/// of it is read, and QUIC stops letting the other device send.
+const BUDGET: usize = 1024 * 1024;
+
+/// The bytes of a connection that wait to be written to main.
+type Budget = Arc<watch::Sender<usize>>;
+
+/// A frame handed to main, counted in its connection's budget until it is dropped: once written.
+struct Handed {
+    budget: Budget,
+    n: usize,
+}
+
+impl Handed {
+    fn new(budget: Budget, n: usize) -> Handed {
+        budget.send_modify(|waiting| *waiting += n);
+        Handed { budget, n }
+    }
+}
+
+impl Drop for Handed {
+    fn drop(&mut self) {
+        self.budget.send_modify(|waiting| *waiting -= self.n);
+    }
+}
+
+/// The largest frame a stream may carry: with its header, it is a frame on main's socket.
+const STREAM_FRAME_AT_MOST: usize = MAX_FRAME - 17;
+
+/// The longest stream name: its first frame.
+const NAME_AT_MOST: usize = 256;
+
+/// A frame between main and the daemon starts with a tag: JSON, a message tagged by `t`...
+const MESSAGE: u8 = 0;
+/// ...or a frame on a stream: its connection and stream, each a u64, then its bytes.
+const ON_STREAM: u8 = 1;
 
 /// How long a close waits, while nothing more is written, for what went before it to be taken by
 /// the other side.
@@ -296,7 +366,7 @@ const WRITE_AT_MOST: usize = 256 * 1024;
 struct Daemon {
     endpoint: Endpoint,
     gate: Gate,
-    to_main: mpsc::UnboundedSender<ToMain>,
+    to_main: mpsc::UnboundedSender<ToMainFrame>,
     links: Arc<std::sync::Mutex<HashMap<u64, Link>>>,
     next: Arc<AtomicU64>,
     pairs: Arc<std::sync::Mutex<HashMap<u64, oneshot::Sender<Value>>>>,
@@ -311,7 +381,18 @@ struct Daemon {
 
 impl Daemon {
     fn tell(&self, message: ToMain) {
-        let _ = self.to_main.send(message);
+        let _ = self.to_main.send(ToMainFrame::Message(message));
+    }
+
+    /// Hand main a frame that arrived on `stream`, counted in `budget` until it is written.
+    fn hand(&self, conn: u64, stream: u64, data: Vec<u8>, budget: &Budget) {
+        let counted = Handed::new(budget.clone(), data.len());
+        let _ = self.to_main.send(ToMainFrame::OnStream {
+            conn,
+            stream,
+            data,
+            _counted: counted,
+        });
     }
 
     /// Keep `connection` as a link: its streams are main's to open, when this device `dialled` it;
@@ -330,6 +411,7 @@ impl Daemon {
                 written,
                 reading,
                 read,
+                budget: Arc::new(watch::channel(0).0),
             },
         );
         conn
@@ -337,19 +419,30 @@ impl Daemon {
 
     /// A queue for the stream `stream` of the link `conn`, which its writer takes frames from; and
     /// what its writer and its reader hold while they run. None when the link is gone.
-    fn queue(&self, conn: u64, stream: u64) -> Option<Queued> {
+    fn queue(&self, conn: u64, stream: u64) -> Option<ForStream> {
         let mut links = self.links.lock().unwrap();
         let link = links.get_mut(&conn)?;
         let (frames, queue) = mpsc::unbounded_channel();
         link.streams.insert(stream, frames);
-        Some((queue, link.writing.clone(), link.reading.clone()))
+        Some(ForStream {
+            queue,
+            writing: link.writing.clone(),
+            reading: link.reading.clone(),
+            budget: link.budget.clone(),
+        })
     }
 
     /// Open the stream `name` on `connection`, which this device dialled, as main's `stream`, and
     /// write main's frames on it; the other device's come back to main. Main is told it ended when
     /// it cannot be opened.
     fn open(&self, conn: u64, connection: Connection, stream: u64, name: String) {
-        let Some((queue, writing, reading)) = self.queue(conn, stream) else {
+        let Some(ForStream {
+            queue,
+            writing,
+            reading,
+            budget,
+        }) = self.queue(conn, stream)
+        else {
             return;
         };
         let d = self.clone();
@@ -357,7 +450,11 @@ impl Daemon {
             match ws::open(&connection, &name).await {
                 Ok((send, recv)) => {
                     let reader = d.clone();
-                    tokio::spawn(async move { reader.read_stream(conn, stream, recv, reading).await });
+                    tokio::spawn(async move {
+                        reader
+                            .read_stream(conn, stream, recv, reading, budget)
+                            .await
+                    });
                     d.write_stream(conn, stream, send, queue, writing).await;
                 }
                 Err(_) => {
@@ -372,18 +469,27 @@ impl Daemon {
     /// first frame, given an id that main is told with its name, written from a task of its own,
     /// and read until it ends.
     async fn take_stream(&self, conn: u64, send: SendStream, mut recv: RecvStream) {
-        let Ok(Some(name)) = read_frame(&mut recv).await else {
+        let Ok(Some(len @ ..=NAME_AT_MOST)) = read_len(&mut recv).await else {
+            return;
+        };
+        let Ok(name) = read_body(&mut recv, len).await else {
             return;
         };
         let name = String::from_utf8_lossy(&name).into_owned();
         let stream = self.next.fetch_add(1, Ordering::Relaxed);
-        let Some((queue, writing, reading)) = self.queue(conn, stream) else {
+        let Some(ForStream {
+            queue,
+            writing,
+            reading,
+            budget,
+        }) = self.queue(conn, stream)
+        else {
             return;
         };
         let writer = self.clone();
         tokio::spawn(async move { writer.write_stream(conn, stream, send, queue, writing).await });
         self.tell(ToMain::Opened { conn, stream, name });
-        self.read_stream(conn, stream, recv, reading).await;
+        self.read_stream(conn, stream, recv, reading, budget).await;
     }
 
     /// Write the frames main queues for `stream`, in order, each moment's in one write, telling
@@ -435,6 +541,23 @@ impl Daemon {
         }
     }
 
+    /// Queue main's frame `data` for `stream` of `conn`. A stream that ended takes nothing more:
+    /// main is told it is not waiting.
+    fn send(&self, conn: u64, stream: u64, data: Vec<u8>) {
+        let links = self.links.lock().unwrap();
+        let Some(link) = links.get(&conn) else {
+            return;
+        };
+        let n = data.len();
+        let queued = link
+            .streams
+            .get(&stream)
+            .is_some_and(|frames| frames.send(data).is_ok());
+        if !queued {
+            self.tell(ToMain::Took { conn, stream, n });
+        }
+    }
+
     /// Hand main each frame that arrives on `stream`, until the other device finishes it or it
     /// fails: then it ends, both ways.
     async fn read_stream(
@@ -443,13 +566,17 @@ impl Daemon {
         stream: u64,
         mut recv: RecvStream,
         _reading: mpsc::Sender<()>,
+        budget: Budget,
     ) {
-        while let Ok(Some(frame)) = read_frame(&mut recv).await {
-            self.tell(ToMain::Recv {
-                conn,
-                stream,
-                data: String::from_utf8_lossy(&frame).into_owned(),
-            });
+        let mut room = budget.subscribe();
+        while let Ok(Some(len @ ..=STREAM_FRAME_AT_MOST)) = read_len(&mut recv).await {
+            if room.wait_for(|waiting| *waiting < BUDGET).await.is_err() {
+                break;
+            }
+            let Ok(frame) = read_body(&mut recv, len).await else {
+                break;
+            };
+            self.hand(conn, stream, frame, &budget);
         }
         self.end(conn, stream);
     }
@@ -467,7 +594,7 @@ impl Daemon {
     }
 
     /// The other device closed `conn`, or it was lost: main is told, after each stream's reader
-    /// has handed it what arrived before (or a moment passes).
+    /// has handed it what arrived before. They end once main takes it: nothing more arrives.
     async fn forget(&self, conn: u64, reason: String) {
         let Some(link) = self.links.lock().unwrap().remove(&conn) else {
             return;
@@ -481,7 +608,7 @@ impl Daemon {
             ..
         } = link;
         drop((connection, streams, writing, reading));
-        let _ = tokio::time::timeout(CLOSE_WAIT, read.recv()).await;
+        read.recv().await;
         self.tell(ToMain::Closed { conn, reason });
     }
 
@@ -558,21 +685,6 @@ impl Daemon {
                         "hive-net: connection {conn} was not dialled here; {name} not opened"
                     );
                     self.tell(ToMain::Ended { conn, stream });
-                }
-            }
-            FromMain::Send { conn, stream, data } => {
-                let links = self.links.lock().unwrap();
-                let Some(link) = links.get(&conn) else {
-                    return;
-                };
-                let n = data.len();
-                // A stream that ended takes nothing more: main is told it is not waiting.
-                let queued = link
-                    .streams
-                    .get(&stream)
-                    .is_some_and(|frames| frames.send(data.into_bytes()).is_ok());
-                if !queued {
-                    self.tell(ToMain::Took { conn, stream, n });
                 }
             }
             FromMain::End { conn, stream } => {
@@ -873,7 +985,7 @@ pub async fn run(socket: &Path, identity: &Path, key: SecretKey, reach: Reach) -
     if let Some(lookup) = lookup {
         tokio::spawn(watch_nearby(lookup, nearby.clone()));
     }
-    let (to_main, mut outbox) = mpsc::unbounded_channel::<ToMain>();
+    let (to_main, mut outbox) = mpsc::unbounded_channel::<ToMainFrame>();
     let daemon = Daemon {
         endpoint: endpoint.clone(),
         gate,
@@ -893,9 +1005,8 @@ pub async fn run(socket: &Path, identity: &Path, key: SecretKey, reach: Reach) -
 
     let mut writer = writer;
     let writing = tokio::spawn(async move {
-        while let Some(message) = outbox.recv().await {
-            let bytes = serde_json::to_vec(&message).expect("messages serialize");
-            if write_frame(&mut writer, &bytes).await.is_err() {
+        while let Some(frame) = outbox.recv().await {
+            if write_frame(&mut writer, &frame.bytes()).await.is_err() {
                 break;
             }
         }
@@ -933,18 +1044,33 @@ pub async fn run(socket: &Path, identity: &Path, key: SecretKey, reach: Reach) -
     let mut reader = reader;
     // Main says first which protocol it speaks. An app that says nothing of it speaks the first.
     if let Ok(Some(first)) = read_frame(&mut reader).await {
-        let speaks = match serde_json::from_slice::<FromMain>(&first) {
-            Ok(FromMain::Hello { v }) => v,
-            _ => 1,
+        let speaks = match first.split_first() {
+            Some((&MESSAGE, json)) => match serde_json::from_slice::<FromMain>(json) {
+                Ok(FromMain::Hello { v }) => v,
+                _ => 1,
+            },
+            // An app of protocol 2 or before sends JSON with no tag: `{`.
+            _ => match serde_json::from_slice::<FromMain>(&first) {
+                Ok(FromMain::Hello { v }) => v.min(2),
+                _ => 1,
+            },
         };
         if speaks != PROTOCOL {
             bail!("the app speaks the daemon's protocol {speaks}, and this hive-net {PROTOCOL}: install the app and hive-net from one release");
         }
     }
     while let Ok(Some(frame)) = read_frame(&mut reader).await {
-        match serde_json::from_slice::<FromMain>(&frame) {
-            Ok(message) => daemon.handle(message),
-            Err(e) => eprintln!("hive-net: a message from main was not understood: {e}"),
+        match frame.split_first() {
+            Some((&MESSAGE, json)) => match serde_json::from_slice::<FromMain>(json) {
+                Ok(message) => daemon.handle(message),
+                Err(e) => eprintln!("hive-net: a message from main was not understood: {e}"),
+            },
+            Some((&ON_STREAM, on)) if on.len() >= 16 => {
+                let conn = u64::from_be_bytes(on[..8].try_into().unwrap());
+                let stream = u64::from_be_bytes(on[8..16].try_into().unwrap());
+                daemon.send(conn, stream, on[16..].to_vec());
+            }
+            _ => eprintln!("hive-net: a frame from main was not understood"),
         }
     }
     writing.abort();

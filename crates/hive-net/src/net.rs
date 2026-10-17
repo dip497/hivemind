@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use iroh::endpoint::EndpointHooks;
 use iroh::{
     address_lookup::{PkarrPublisher, PkarrResolver},
-    endpoint::{presets, Builder, QuicTransportConfig, RelayMode},
+    endpoint::{presets, Builder, QuicTransportConfig, RelayMode, VarInt},
     tls::CaTlsConfig,
     Endpoint, EndpointAddr, EndpointId, RelayMap, RelayUrl, SecretKey,
 };
@@ -65,6 +65,10 @@ pub fn trusted() -> CaTlsConfig {
 /// that does not keep up costs this device at most, and how far behind the newest it can be.
 pub const SEND_WINDOW: u64 = 1024 * 1024;
 
+/// What a connection may be sent and not yet read here, over all its streams: what a peer that
+/// sends faster than this device reads costs it at most.
+pub const RECEIVE_WINDOW: u32 = 2 * 1024 * 1024;
+
 /// An endpoint of this device, on `reach`'s relays and lookup server; mDNS is added by the caller,
 /// which keeps hold of it.
 pub fn builder(key: SecretKey, reach: &Reach) -> Builder {
@@ -72,6 +76,9 @@ pub fn builder(key: SecretKey, reach: &Reach) -> Builder {
         .transport_config(
             QuicTransportConfig::builder()
                 .send_window(SEND_WINDOW)
+                .receive_window(VarInt::from_u32(RECEIVE_WINDOW))
+                // Nothing uses them, so nobody may open one.
+                .max_concurrent_uni_streams(VarInt::from_u32(0))
                 .build(),
         )
         .secret_key(key)
