@@ -157,6 +157,7 @@ test("a guest with two windows on the host's shell: one hiding it, letting go of
   await second.close();
   await expect(holder(guest)).toHaveAttribute("data-keyboard-holder", "Adarsh");
   await expect(holder(host)).not.toHaveAttribute("data-keyboard-holder", "Priya");
-  await host.keyboard.type("echo closed-$((6*7))\n");
+  // The host's keys reach its shell again (giving it the keyboard took its terminal's focus).
+  await run(host, `echo closed-$((6*7)) | tee ${repo}/closed`, `${repo}/closed`, /^closed-42$/);
   await expect.poll(() => screen(guest), { timeout: 15_000 }).toContain("closed-42");
 });
