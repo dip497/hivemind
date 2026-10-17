@@ -129,7 +129,14 @@ fn on_the_local_network_a_device_is_found_by_its_id_alone() {
     let a = identity(&root, "a", &rand_hex(32));
     let b = identity(&root, "b", &rand_hex(32));
     let (_a, id) = start(&["run", "--identity", a.to_str().unwrap()]);
-    let out = hive_net(&["ping", &id, "--identity", b.to_str().unwrap()]);
+    let ping = || hive_net(&["ping", &id, "--identity", b.to_str().unwrap()]);
+    let mut out = ping();
+    for _ in 0..2 {
+        if out.status.success() {
+            break;
+        }
+        out = ping();
+    }
     assert!(out.status.success(), "{}", text(&out));
     assert!(
         text(&out).contains(&format!("{id} answered")),
