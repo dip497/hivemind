@@ -13,9 +13,10 @@ import { AUTHORED, authoredYaml, authoredDefs } from "./authored.js";
 function median(runs: number, fn: () => void): number {
   const times: number[] = [];
   for (let i = 0; i < runs; i++) {
-    const t = performance.now();
+    const t = process.cpuUsage();
     fn();
-    times.push(performance.now() - t);
+    const used = process.cpuUsage(t);
+    times.push((used.user + used.system) / 1000);
   }
   return times.sort((a, b) => a - b)[Math.floor(runs / 2)]!;
 }
