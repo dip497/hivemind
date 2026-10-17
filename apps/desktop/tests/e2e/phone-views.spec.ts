@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
 import { connectPage, offerToConnect } from "./helpers/phone";
+import { addFromMenu } from "./helpers/board";
 import { stopDaemons } from "./helpers/daemons";
 
 const WWW = path.resolve("../../crates/hive-web/www");
@@ -94,6 +95,10 @@ test("the phone page lists the computer's phone views and shows one on its own o
   await counter.getByRole("button", { name: "Press" }).click();
   await expect.poll(presses, { timeout: 15_000 }).toBe(1);
   await expect(counter).toHaveAttribute("data-n", "1");
+  // A note written on the computer, which draws nothing of its own: the board's change alone
+  // brings it to the phone.
+  await addFromMenu(desktop, "note", "from the computer");
+  await expect(viewer.locator('[data-widget="note"]')).toHaveAttribute("data-text", "from the computer");
   await page.locator('[data-screen="view"] [data-back]').click();
 
   // The hostile view, twice: nothing of the page's reached, nothing left from the first.
