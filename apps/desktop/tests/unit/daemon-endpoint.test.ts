@@ -17,6 +17,8 @@ function fakeDaemon(sock: string, delta = false, controlError?: string) {
   const got: ClientMsg[] = [];
   const conns = new Set<net.Socket>();
   const server = net.createServer((c) => {
+    // As the daemon does: an endpoint that drops its transport mid-write resets this side.
+    c.on("error", () => {});
     conns.add(c);
     c.on("close", () => conns.delete(c));
     c.on("data", makeLineDecoder((line) => {
@@ -131,6 +133,7 @@ test("a tile that exited is never started again by a re-attach; one gone while a
   const got: ClientMsg[] = [];
   const conns = new Set<net.Socket>();
   const server = net.createServer((c) => {
+    c.on("error", () => {});
     conns.add(c);
     c.on("data", makeLineDecoder((line) => {
       const m = JSON.parse(line) as ClientMsg;
@@ -164,6 +167,7 @@ test("status follows the transport, ping measures the round trip, sessions lists
   const sock = path.join(dir, "s.sock");
   const conns = new Set<net.Socket>();
   const server = net.createServer((c) => {
+    c.on("error", () => {});
     conns.add(c);
     c.on("data", makeLineDecoder((line) => {
       const m = JSON.parse(line) as ClientMsg;
@@ -207,6 +211,7 @@ test("status follows the transport, ping measures the round trip, sessions lists
 test("a login failure stops the retries until asked; retries stay 'reconnecting' without flicker", async () => {
   const sock = path.join(dir, "f.sock");
   const mk = () => net.createServer((c) => {
+    c.on("error", () => {});
     c.on("data", makeLineDecoder((line) => {
       const msg = JSON.parse(line) as ClientMsg;
       if (msg.t === "attach") c.write(frame({ t: "attached", reqId: msg.reqId, id: msg.id, pid: 42, isNew: true, replay: "", seq: 0, epoch: "E" }));
