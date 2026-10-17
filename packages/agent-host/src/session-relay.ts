@@ -22,7 +22,7 @@ import { PtyOutputBuffer } from "./pty-output-buffer.js";
 export interface Viewer {
   /** Output: a batch, or a screen (after `screenPrefix`) that replaces what it shows. */
   data(tileId: string, data: string): void;
-  exit(tileId: string, info: { code: number; signal?: number }): void;
+  exit(tileId: string, info: { code: number; signal?: number; slept?: true }): void;
   /** False once it is gone (a window closed). */
   alive(): boolean;
 }
@@ -99,7 +99,7 @@ export class SessionRelay {
    * runs joins it, the host's screen (`screen`) first. `joined`: another viewer started it, and
    * gave it its first task. A start that fails, or finds no session (pid -1), leaves no viewer.
    */
-  async open(tileId: string, viewer: Viewer, start: () => Promise<{ pid: number }>, screen: () => ReadScreen | null, paced = false): Promise<{ pid: number; joined: boolean }> {
+  async open(tileId: string, viewer: Viewer, start: () => Promise<{ pid: number; asleep?: true }>, screen: () => ReadScreen | null, paced = false): Promise<{ pid: number; joined: boolean; asleep?: true }> {
     for (let wait = this.starting.get(tileId); wait; wait = this.starting.get(tileId)) await wait.catch(() => undefined);
     const pace = paced ? screen : undefined;
     const run = this.running.get(tileId);
@@ -113,10 +113,10 @@ export class SessionRelay {
     const started = start();
     this.starting.set(tileId, started);
     try {
-      const { pid } = await started;
+      const { pid, asleep } = await started;
       if (pid === -1) this.leave(tileId, viewer);
       else this.running.set(tileId, { pid, starter: viewer });
-      return { pid, joined: false };
+      return asleep ? { pid, joined: false, asleep } : { pid, joined: false };
     } catch (e) {
       this.leave(tileId, viewer);
       throw e;
@@ -218,7 +218,7 @@ export class SessionRelay {
   }
 
   /** The session ended: what is pending, then the exit, to every viewer. */
-  exit(tileId: string, info: { code: number; signal?: number }): void {
+  exit(tileId: string, info: { code: number; signal?: number; slept?: true }): void {
     this.out.flush(tileId);
     this.out.forget(tileId);
     for (const viewer of this.viewers.get(tileId)?.keys() ?? []) {

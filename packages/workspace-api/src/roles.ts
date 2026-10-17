@@ -46,6 +46,8 @@ const LEAST: Record<string, Role> = {
   "terminal.ack": "view",
   "terminal.detach": "view",
   "terminal.watchActivity": "view",
+  // Seeing what a sleeping agent last showed.
+  "terminal.saved": "view",
   // Editing the board is the document's own sync (`doc-sync.ts`), where the host takes only what
   // the role allows: the store's writes are the owner's.
   // Typing into a terminal (with the keyboard handed over, R4) and sizing it; asking for its
@@ -86,6 +88,8 @@ const LEAST: Record<string, Role> = {
   "agent.sessions": "view",
   "tool.open": "edit",
   "agent.close": "agents",
+  "agent.sleep": "agents",
+  "agent.wake": "agents",
   "terminal.open": "agents",
   "terminal.close": "agents",
   // A community view on a remote screen (P8): listing them, their files, opening one on the

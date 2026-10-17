@@ -31,7 +31,7 @@ import { fields, flag, text, texts, whole, written } from "@hivemind/workspace-a
 import { emit, named, type Connection, type Domain } from "@hivemind/workspace-api/server";
 import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 import type { EventParams } from "@hivemind/workspace-api/methods";
-import { toBareId } from "@hivemind/workspace-api/tile-id";
+import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import { Keyboards, isHost } from "./keyboard.js";
 
 /** Where a session's output and exit go, as its backend runs it. */
@@ -41,16 +41,23 @@ export const REPAINT_AFTER_MS = 60;
 export interface SessionOutput {
   /** `replay`: a redraw of output already seen, not new output. */
   data(data: string, replay?: boolean): void;
-  exit(code: number, signal?: number): void;
+  /** `slept`: it was put to sleep, not ended. */
+  exit(code: number, signal?: number, slept?: boolean): void;
   /** Its size, as where it runs says it: a session on a participant's machine (M4) is sized there. */
   size?(cols: number, rows: number): void;
 }
 
+/** What the host starts a session with: what a client opens it with, and `wake`, which only the
+ *  host itself asks for (a client's `terminal.open` never carries it): a session put to sleep is
+ *  restored. */
+export type StartOpts = TerminalOpts & { wake?: boolean };
+
 /** How the host runs a session. */
 export interface SessionBackend {
   /** Start `opts`' session, or attach to the one the host holds, its output and exit to `out`.
-   *  The host's own checks and additions happen here: it throws to refuse. */
-  start(opts: TerminalOpts, out: SessionOutput): Promise<{ pid: number }>;
+   *  The host's own checks and additions happen here: it throws to refuse. `asleep`: it sleeps,
+   *  and nothing was started. */
+  start(opts: StartOpts, out: SessionOutput): Promise<{ pid: number; asleep?: true }>;
   write(tile: string, data: string, paste?: boolean): void;
   /** Whether a keystroke's echo comes straight back (a session on this machine), so skips the
    *  batching. */
@@ -60,8 +67,15 @@ export interface SessionBackend {
   repaint(tile: string): void;
   pause(tile: string): void;
   resume(tile: string): void;
-  /** End the session for good, and the host's own teardown for it. */
-  kill(tile: string): void;
+  /** End the session for good, and the host's own teardown for it; `cwd`, the folder it slept in,
+   *  finds one asleep, which nothing here is attached to. */
+  kill(tile: string, cwd?: string): void;
+  /** End the process of the session running in `cwd` but keep it, its screen saved, for a start
+   *  with `wake` to bring back. Rejects with why it cannot. */
+  sleep(tile: string, cwd: string): Promise<void>;
+  /** What a session asleep in `cwd` showed, with its newest 1000 lines when `lines` asks for no
+   *  more; null when it does not sleep. */
+  saved(tile: string, cwd: string, lines?: number): Promise<string | null>;
   /** Nobody shows it any more: a daemon keeps it; a session in this process ends. */
   detach(tile: string): void;
   /** The host's screen of it, with at most `lines` of its scrollback (none: all it keeps), read in
@@ -85,6 +99,9 @@ export interface TerminalsOptions {
    *  there and sizes it, and nobody here types into it until they lend its keyboard. Null: it runs
    *  where the host runs it. Asked as it opens. */
   machineOf?(opts: TerminalOpts): TerminalMachine | null;
+  /** The folder a tile's session runs in: where it slept, as its layout says, else its frame's;
+   *  undefined when no workspace here has it. */
+  folderOf?(tile: string): string | undefined;
 }
 
 /** A participant's machine a session runs on (M4): whose it is, and whether they lend its keyboard
@@ -105,7 +122,7 @@ export const TYPING_EVERY_MS = 1000;
 /** A guest's typing into a session is marked in the audit log again after this long without it. */
 export const TYPED_BURST_MS = 60_000;
 
-type TerminalMethod = "terminal.open";
+type TerminalMethod = "terminal.open" | "terminal.saved";
 type TerminalNotice =
   | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow" | "terminal.ack" | "terminal.fit" | "terminal.history"
   | "terminal.close" | "terminal.detach" | "terminal.watchActivity"
@@ -156,6 +173,11 @@ export class Terminals {
     this.domain = {
       answers: {
         "terminal.open": (from, opts) => this.open(optsOf(opts), from),
+        "terminal.saved": async (_, tile, lines) => {
+          const t = toPtyId(tileOf(tile));
+          const cwd = opts.folderOf?.(toBareId(t));
+          return cwd ? opts.backend.saved(t, cwd, lines == null ? undefined : whole(lines, "lines")) : null;
+        },
       },
       effects: {},
       notices: {
@@ -203,7 +225,7 @@ export class Terminals {
    * while nobody does, and a client that opens it joins it. `watch` hears its output, a batch at a
    * time, and its end.
    */
-  async own(opts: TerminalOpts, watch: { data(data: string): void; exit(): void }): Promise<{ pid: number }> {
+  async own(opts: StartOpts, watch: { data(data: string): void; exit(): void }): Promise<{ pid: number }> {
     const tile = opts.tileId;
     const out = this.outputOf(tile);
     const host: Viewer = { data: (_, data) => watch.data(data), exit: () => watch.exit(), alive: () => true };
@@ -222,14 +244,21 @@ export class Terminals {
     }
   }
 
-  /** End a session for good, as the host asks (the control plane closing its tile). */
-  end(tile: string): void {
+  /** End a session for good, as the host asks (the control plane closing its tile); `cwd`, the
+   *  folder it slept in, finds one asleep once its tile is gone from the layout. */
+  end(tile: string, cwd = this.opts.folderOf?.(toBareId(tile))): void {
     const bare = toBareId(tile);
     this.ended.delete(bare);
     this.ended.add(bare);
     if (this.ended.size > ENDED_KEPT) this.ended.delete(this.ended.values().next().value!);
     this.drop(tile);
-    this.opts.backend.kill(tile);
+    this.opts.backend.kill(tile, cwd);
+  }
+
+  /** Put the session running in `cwd` to sleep, as the host asks: every client showing it is told
+   *  it slept. */
+  sleep(tile: string, cwd: string): Promise<void> {
+    return this.opts.backend.sleep(tile, cwd);
   }
 
   /** Whether a session here is open on another device. */
@@ -298,7 +327,7 @@ export class Terminals {
   private outputOf(tile: string): SessionOutput {
     return {
       data: (data, replay) => { this.relay.push(tile, data); if (replay) this.repaintSoon(tile); },
-      exit: (code, signal) => this.relay.exit(tile, { code, signal }),
+      exit: (code, signal, slept) => this.relay.exit(tile, { code, signal, ...(slept ? { slept: true as const } : {}) }),
       size: (cols, rows) => {
         const was = this.sizes.get(tile);
         if (was?.cols === cols && was.rows === rows) return;

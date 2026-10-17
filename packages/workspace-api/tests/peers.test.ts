@@ -45,7 +45,7 @@ const domain = {
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
-      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus"].map((what) => [
+      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
     // A view opened for the caller: what it is let do there is what the caller may call.
@@ -130,6 +130,25 @@ test("what may be started in its workspace, what an agent changed and a tool it 
     { what: "agent.close", by: driver.actor, args: ["in-1"] },
     { what: "agent.places", by: driver.actor, args: [REPO] },
     { what: "agent.folders", by: driver.actor, args: [REPO] },
+  ]);
+});
+
+test("putting agents to sleep and waking them is driving agents, in its own workspace alone; what a sleeping agent last showed is seen by anyone with access, for its workspace's tiles alone", async () => {
+  const viewer = connect("view");
+  await viewer.client.call("terminal.saved", "in-1", 1000);
+  expect(await code(viewer.client.call("terminal.saved", "out-1", 1000))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("agent.sleep", workspaceUrl(W)))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("agent.wake", workspaceUrl(W)))).toBe("FORBIDDEN");
+  expect(ran).toEqual([{ what: "terminal.saved", by: viewer.actor, args: ["in-1"] }]);
+
+  const driver = connect("agents");
+  await driver.client.call("agent.sleep", workspaceUrl(W), "in-1");
+  await driver.client.call("agent.wake", workspaceUrl(W));
+  expect(await code(driver.client.call("agent.sleep", "/work/other"))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.wake", "/work/other", "out-1"))).toBe("FORBIDDEN");
+  expect(ran).toEqual([
+    { what: "agent.sleep", by: driver.actor, args: [REPO] },
+    { what: "agent.wake", by: driver.actor, args: [REPO] },
   ]);
 });
 

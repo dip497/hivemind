@@ -103,6 +103,12 @@ export interface StartImage {
  *  `true` for the usual ones or `"all"`, each asked as an approval wait (`agent.answer`); a program
  *  that starts it is its starter. `report`: false for a worker gathered in bulk, which its starter
  *  is not told of as it reports. */
+/** What `agent.sleep` did: the agents put to sleep, and those left as they were, and why. */
+export interface SleepAnswer { slept: string[]; skipped: Skipped[] }
+/** What `agent.wake` did: the agents woken, and those left as they were, and why. */
+export interface WakeAnswer { woke: string[]; skipped: Skipped[] }
+export interface Skipped { tile: string; why: string }
+
 export interface StartAgent {
   program: string;
   frame?: string;

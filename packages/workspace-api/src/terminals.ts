@@ -28,8 +28,8 @@ export interface TerminalOpts {
   history?: number;
 }
 
-/** How a session ended. */
-export interface ExitInfo { code: number; signal?: number }
+/** How a session ended. `slept`: it was put to sleep (`agent.sleep`), not ended. */
+export interface ExitInfo { code: number; signal?: number; slept?: true }
 
 /** How busy each watched terminal's output is, 0 (quiet) to 3. Only changes are sent. */
 export type ActivityLevels = Record<string, 0 | 1 | 2 | 3>;

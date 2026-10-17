@@ -164,6 +164,14 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     }
   };
   const on = (tile: string) => tiles.get(tile);
+  /** The daemon of the person's device `cwd` is on, for a session nothing here is attached to (one
+   *  asleep). A participant's machine runs what its person placed there: theirs to put to sleep. */
+  const at = (cwd: string): DaemonEndpoint => {
+    const where = parseDeviceUri(cwd);
+    if (!where) throw new Error(`${cwd} is not a folder on one of your devices`);
+    if (!o.mine(where.device)) throw new Error("this frame runs on someone else's machine: what runs there is theirs");
+    return deviceEndpoint(where.device);
+  };
   return {
     holds: (tile) => tiles.has(tile),
     start: async (opts, out) => {
@@ -184,14 +192,14 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
           ep.spawn(
             {
               tileId: opts.tileId, cwd: at.path, cmd: opts.cmd, args: opts.args, cols: opts.cols, rows: opts.rows, env: withoutControl(env),
-              noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history,
+              noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history, wake: opts.wake,
             },
-            { onData: (data, replay) => out.data(data, replay), onExit: (code, signal) => { tiles.delete(opts.tileId); out.exit(code, signal); } },
+            { onData: (data, replay) => out.data(data, replay), onExit: (code, signal, slept) => { tiles.delete(opts.tileId); out.exit(code, signal, slept); } },
           ),
           turnedAway,
         ]);
         // Nothing to show: let go of it, so a later start is a start.
-        if (r.pid === -1 && opts.attachOnly) { ep.detach(opts.tileId); tiles.delete(opts.tileId); }
+        if (r.pid === -1 && (opts.attachOnly || r.asleep)) { ep.detach(opts.tileId); tiles.delete(opts.tileId); }
         return r;
       } catch (e) {
         tiles.delete(opts.tileId);
@@ -207,7 +215,13 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     repaint: (tile) => on(tile)?.repaint(tile),
     pause: (tile) => on(tile)?.pause(tile),
     resume: (tile) => on(tile)?.resume(tile),
-    kill: (tile) => { on(tile)?.kill(tile); tiles.delete(tile); },
+    kill: (tile, cwd) => {
+      const ep = on(tile) ?? (cwd ? (() => { try { return at(cwd); } catch { return undefined; } })() : undefined);
+      ep?.kill(tile);
+      tiles.delete(tile);
+    },
+    sleep: async (tile, cwd) => at(cwd).sleep(tile),
+    saved: async (tile, cwd, lines) => at(cwd).saved(tile, lines),
     detach: (tile) => { on(tile)?.detach(tile); tiles.delete(tile); },
     screen: (tile, lines) => {
       const ep = on(tile);
@@ -246,6 +260,16 @@ export function participantAt(opts: TerminalOpts, o: {
  */
 export function onDevices(self: string, here: SessionBackend, devices: DeviceSessions): SessionBackend {
   const by = (tile: string): SessionBackend => (devices.holds(tile) ? devices : here);
+  /** Where the folder `cwd` is: another of the devices, or here. */
+  const on = (cwd: string): SessionBackend => {
+    const at = parseDeviceUri(cwd);
+    return at && at.device !== self ? devices : here;
+  };
+  /** `cwd` as `on` takes it: a folder on this device, named by its id, at its path. */
+  const local = (cwd: string): string => {
+    const at = parseDeviceUri(cwd);
+    return at && at.device === self ? at.path : cwd;
+  };
   return {
     start: (opts, out) => {
       const at = parseDeviceUri(opts.cwd);
@@ -258,7 +282,9 @@ export function onDevices(self: string, here: SessionBackend, devices: DeviceSes
     repaint: (tile) => by(tile).repaint(tile),
     pause: (tile) => by(tile).pause(tile),
     resume: (tile) => by(tile).resume(tile),
-    kill: (tile) => by(tile).kill(tile),
+    kill: (tile, cwd) => (devices.holds(tile) || !cwd ? by(tile) : on(cwd)).kill(tile, cwd && local(cwd)),
+    sleep: (tile, cwd) => on(cwd).sleep(tile, local(cwd)),
+    saved: (tile, cwd, lines) => on(cwd).saved(tile, local(cwd), lines),
     detach: (tile) => by(tile).detach(tile),
     screen: (tile, lines) => by(tile).screen(tile, lines),
   };

@@ -117,7 +117,7 @@ export function setDaemonEventSink(fn: (topic: string, data: unknown) => void): 
 // New sessions start from this app's environment, the person's shell's as last read.
 const local = new DaemonEndpoint({ connect: doConnect, onEvent: (topic, data) => eventSink?.(topic, data), env: () => process.env as Record<string, string> });
 
-export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean; history?: number }, cb: Callbacks): Promise<{ pid: number }> {
+export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean; history?: number }, cb: Callbacks): Promise<{ pid: number; asleep?: true }> {
   const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history }, cb);
   if (r.pid === -1 && opts.attachOnly) local.detach(opts.tileId);
   return r;
@@ -160,6 +160,14 @@ export function resumePty(tileId: string): void {
 /** Explicit close (× button): terminate the session in the daemon. */
 export function killPty(tileId: string): void {
   local.kill(tileId);
+}
+/** End the session's process but keep it, its screen saved, for a wake to bring back. */
+export function sleepPty(tileId: string): Promise<void> {
+  return local.sleep(tileId);
+}
+/** What a sleeping session saved as its screen; null when none sleeps as `tileId`. */
+export function savedPty(tileId: string, lines?: number): Promise<string | null> {
+  return local.saved(tileId, lines);
 }
 /** Window closed / tile unmounted: stop streaming but KEEP the session alive. */
 export function detachPty(tileId: string): void {

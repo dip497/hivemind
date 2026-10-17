@@ -6,6 +6,7 @@ import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } 
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
+import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
@@ -104,7 +105,11 @@ export interface WorkspaceMethods {
   "link.list": () => Links;
   /** Show a terminal: the first to open a session starts it; one that opens it after joins it,
    *  its screen first. `joined`: another client started it. Its output and exit are events. */
-  "terminal.open": (opts: TerminalOpts) => { pid: number; joined: boolean };
+  "terminal.open": (opts: TerminalOpts) => { pid: number; joined: boolean; asleep?: true };
+  /** What the agent in `tile`, put to sleep, last showed, with its newest 1000 lines when `lines`
+   *  asks for no more (none: all it saved); null when it does not sleep. `asleep` in
+   *  `terminal.open`'s answer: it sleeps, and nothing was started. */
+  "terminal.saved": (tile: string, lines?: number) => string | null;
   /** Answer what the agent in `tile` waits on, the wait that began at `since` (as `agent.list`
    *  says it): only while it still waits on that, and once; the first answer is the one the agent
    *  gets. `answered` false: it waits on that no more, or someone answered first (`by`). */
@@ -127,6 +132,13 @@ export interface WorkspaceMethods {
   "agent.interrupt": (tile: string) => { interrupted: boolean };
   /** End the session of `tile` and take it off its board. `closed` false: no workspace has it. */
   "agent.close": (tile: string) => { closed: boolean };
+  /** Put to sleep the agents of `target` in the workspace of `repo` (a tile or a frame, by id or
+   *  name; none: all of them): each one's process ends, its last screen and its conversation wait
+   *  for `agent.wake`. One working or waiting on someone is left, unless `force`. */
+  "agent.sleep": (repo: string, target?: string, force?: boolean) => SleepAnswer;
+  /** Wake the sleeping agents of `target` in the workspace of `repo` (none: all of them): each
+   *  starts again in its conversation. */
+  "agent.wake": (repo: string, target?: string) => WakeAnswer;
   /** What the agent in `tile` changed in the folder it runs in, against its last commit. */
   "agent.diff": (tile: string) => AgentChanges;
   /** What the agent in `tile` and the person said to each other, after `cursor` in `session` (none,

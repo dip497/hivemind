@@ -16,11 +16,22 @@ export interface SpawnOpts {
   liveOnly?: boolean;
   /** At most this many lines of scrollback in the replay of a running session. */
   lines?: number;
+  /** A session put to sleep is restored (its agent resumed); without it, one is answered `asleep`. */
+  wake?: boolean;
 }
+
+/** How long a sleep or a wake is waited for: an agent may take seconds to end, or to resume. */
+const WAKE_TIMEOUT_MS = 30_000;
+/** How long a sleeping session's saved screen is waited for. */
+const SAVED_TIMEOUT_MS = 10_000;
+
+/** What an attach came to: `pid` -1 when nothing runs, `asleep` when that is because it sleeps. */
+export interface Attached { pid: number; asleep?: true }
 export interface Callbacks {
   /** `replay`: a redraw of output already seen, not new output. */
   onData: (data: string, replay?: boolean) => void;
-  onExit: (code: number, signal: number | undefined) => void;
+  /** `slept`: it was put to sleep (`sleep`), not ended: an attach brings it back. */
+  onExit: (code: number, signal: number | undefined, slept?: boolean) => void;
   /** The session's size, as its daemon says it on attaching and whenever it changes. */
   onSize?: (cols: number, rows: number) => void;
 }
@@ -54,7 +65,7 @@ export class DaemonEndpoint {
   private connecting: Promise<Duplex> | null = null;
   private readonly cbs = new Map<string, Callbacks>();
   private readonly specs = new Map<string, AttachSpec>();
-  private readonly pending = new Map<string, (r: { pid: number }) => void>();
+  private readonly pending = new Map<string, (r: Attached) => void>();
   /** Where each tile's output stands, so a re-attach asks only for what it missed. */
   private readonly pos = new Map<string, { seq: number; epoch: string }>();
   /** Tiles whose session exists in the daemon: a re-attach must never start them again. */
@@ -84,6 +95,12 @@ export class DaemonEndpoint {
   private handle(msg: ServerMsg): void {
     switch (msg.t) {
       case "attached": {
+        if (msg.asleep) {
+          const cb = this.cbs.get(msg.id);
+          this.forget(msg.id);
+          // It was put to sleep while we were away.
+          if (msg.reqId.startsWith("re")) cb?.onExit(0, undefined, true);
+        }
         if (msg.error && (msg.reqId.startsWith("re") || this.live.has(msg.id))) {
           const cb = this.cbs.get(msg.id);
           this.forget(msg.id);
@@ -98,7 +115,7 @@ export class DaemonEndpoint {
         const redraw = msg.reqId.startsWith("re") && !msg.delta;
         if (msg.replay) this.cbs.get(msg.id)?.onData(redraw ? REATTACH_RESET + msg.replay : msg.replay, true);
         const resolve = this.pending.get(msg.reqId);
-        if (resolve) { this.pending.delete(msg.reqId); resolve({ pid: msg.pid }); }
+        if (resolve) { this.pending.delete(msg.reqId); resolve(msg.asleep ? { pid: msg.pid, asleep: true } : { pid: msg.pid }); }
         break;
       }
       case "data": {
@@ -126,6 +143,7 @@ export class DaemonEndpoint {
         break;
       }
       case "pong":
+      case "slept":
       case "sessions":
       case "control":
       case "viewport": {
@@ -136,7 +154,7 @@ export class DaemonEndpoint {
       case "exit": {
         const cb = this.cbs.get(msg.id);
         this.forget(msg.id);
-        cb?.onExit(msg.code, msg.signal ?? undefined);
+        cb?.onExit(msg.code, msg.signal ?? undefined, msg.slept);
         break;
       }
       default:
@@ -274,19 +292,20 @@ export class DaemonEndpoint {
     return r.detail ?? [];
   }
 
-  async spawn(opts: SpawnOpts, cb: Callbacks): Promise<{ pid: number }> {
+  async spawn(opts: SpawnOpts, cb: Callbacks): Promise<Attached> {
     this.cbs.set(opts.tileId, cb);
     const spec: AttachSpec = { cwd: opts.cwd, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: opts.env };
     this.specs.set(opts.tileId, spec);
     if (opts.noSpawn) this.live.add(opts.tileId);
     const reqId = `a${++this.seq}`;
-    const result = new Promise<{ pid: number }>((resolve) => {
+    const result = new Promise<Attached>((resolve) => {
       this.pending.set(reqId, resolve);
-      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, this.o.attachTimeoutMs ?? 6000);
+      // A wake starts an agent that resumes its conversation: given as long as a sleep.
+      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, Math.max(this.o.attachTimeoutMs ?? 6000, opts.wake ? WAKE_TIMEOUT_MS : 0));
       t.unref?.();
     });
     try {
-      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}) });
+      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}), ...(opts.wake ? { wake: true } : {}) });
     } catch (e) {
       // Unreachable now (e.g. offline): keep retrying so the tile attaches once it is back.
       const msg = e instanceof Error ? e.message : String(e);
@@ -317,6 +336,24 @@ export class DaemonEndpoint {
   async viewport(tileId: string, timeoutMs = 5_000): Promise<string | null> {
     const r = await this.request<Extract<ServerMsg, { t: "viewport" }>>({ t: "viewport", reqId: `v${++this.seq}`, id: tileId }, timeoutMs);
     return r.text;
+  }
+
+  /** End the session's process but keep it, its screen saved, for an attach to bring back. Rejects
+   *  with the daemon's reason. */
+  async sleep(tileId: string, timeoutMs = WAKE_TIMEOUT_MS): Promise<void> {
+    const r = await this.request<Extract<ServerMsg, { t: "slept" }>>({ t: "sleep", reqId: `z${++this.seq}`, id: tileId }, timeoutMs);
+    if (r.error) throw new Error(r.error);
+  }
+
+  /** What a sleeping session saved as its screen, with its newest 1000 lines when `lines` asks for no
+   *  more (none: all of it); null when the daemon keeps it running or not at all. */
+  saved(tileId: string, lines?: number): Promise<string | null> {
+    return new Promise((resolve) => {
+      const reqId = `sv${++this.seq}`;
+      this.screens.set(reqId, resolve);
+      setTimeout(() => { if (this.screens.delete(reqId)) resolve(null); }, SAVED_TIMEOUT_MS).unref?.();
+      this.send({ t: "screen", reqId, id: tileId, saved: true, ...(lines !== undefined ? { lines } : {}) }).catch(() => { this.screens.delete(reqId); resolve(null); });
+    });
   }
 
   /** Terminate the session in the daemon. */

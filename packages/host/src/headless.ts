@@ -224,13 +224,14 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       const supervise = control.supervise.get(bare);
       return sessions.start(supervise ? { ...opts, env: { ...opts.env, HIVE_SUPERVISE: supervise } } : opts, {
         data: (data, replay) => out.data(data, replay),
-        exit: (code, signal) => { out.exit(code, signal); control.exited(opts.tileId); },
+        // Asleep, it is not gone: what waits on it waits on.
+        exit: (code, signal, slept) => { out.exit(code, signal, slept); if (!slept) control.exited(opts.tileId); },
         size: out.size,
       });
     },
     write: (tile, data, paste) => { control.typed(tile, data, paste); },
     // A daemon tells its killer nothing of the exit: what waits on the session is answered now.
-    kill: (tile) => { sessions.kill(tile); control.exited(tile); control.forget(tile); },
+    kill: (tile, cwd) => { sessions.kill(tile, cwd); control.exited(tile); control.forget(tile); },
   };
   const terminals = new Terminals({
     intents,

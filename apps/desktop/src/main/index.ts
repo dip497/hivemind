@@ -41,19 +41,19 @@ import { agentById, agentForCmd, getCatalog, preferredAgent, setCatalog, spawnab
 import { agentPresence, discoverOptions, findBin, verifyAgent } from "@hivemind/agents/discover";
 import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import * as ptyDaemon from "./daemon-client.js";
-import { isRemote, parseDeviceUri } from "@hivemind/core/remote-uri";
+import { isRemote, parseDeviceUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import { savedAuth } from "./remote/saved-hosts.js";
 import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, installOnMachine, linkState, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import { deviceSessions } from "@hivemind/host/device-sessions";
 import { remoteTarget } from "@hivemind/host/remote/targets";
 import {
   spawnRemotePty, writeRemotePty, resizeRemotePty, repaintRemotePty, killRemotePty, hasRemotePty, screenRemotePty, remoteKeepsScreen, viewportRemotePty,
-  pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink,
+  pauseRemotePty, resumeRemotePty, detachRemotePty, setRemoteEventSink, sleepRemotePty, savedRemotePty,
 } from "./remote/pty.js";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { findGitRoot, computeRepoPath, projectDir } from "./workspace-paths.js";
 // Terminal sessions live in a detached daemon and survive the window closing.
-const { spawnPty, writePty, resizePty, repaintPty, killPty, detachPty, hasSession, pausePty, resumePty } = ptyDaemon;
+const { spawnPty, writePty, resizePty, repaintPty, killPty, detachPty, hasSession, pausePty, resumePty, sleepPty, savedPty } = ptyDaemon;
 const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
@@ -90,7 +90,7 @@ import { workspaceDomains } from "@hivemind/host/domains";
 import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
 import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
-import { Terminals, type SessionOutput } from "@hivemind/host/terminals";
+import { Terminals, type SessionOutput, type StartOpts } from "@hivemind/host/terminals";
 import { startSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
@@ -1167,9 +1167,11 @@ const terminals = new Terminals({
     // A daemon tells its killer nothing of the exit, so the teardown runs here: anything waiting on
     // the tile (a parent's read, an approval) is answered now, not at its timeout, and nothing asks
     // after its status or its agent again.
-    kill: (tileId) => {
+    kill: (tileId, cwd) => {
       if (onYourDevices.holds(tileId)) onYourDevices.kill(tileId);
-      else if (hasRemotePty(tileId)) killRemotePty(tileId); else killPty(tileId);
+      else if (hasRemotePty(tileId)) killRemotePty(tileId);
+      else if (cwd) atFolder(cwd, { device: () => onYourDevices.kill(tileId, cwd), ssh: (t) => killRemotePty(tileId, t), here: () => killPty(tileId) });
+      else killPty(tileId);
       onPtyExit(tileId);
       control.forget(tileId);
     },
@@ -1177,12 +1179,22 @@ const terminals = new Terminals({
       if (onYourDevices.holds(tileId)) onYourDevices.detach(tileId);
       else if (hasRemotePty(tileId)) detachRemotePty(tileId); else detachPty(tileId);
     },
+    sleep: (tileId, cwd) => atFolder(cwd, { device: () => onYourDevices.sleep(tileId, cwd), ssh: (t) => sleepRemotePty(tileId, t), here: () => sleepPty(tileId) }),
+    saved: (tileId, cwd, lines) => atFolder(cwd, { device: () => onYourDevices.saved(tileId, cwd, lines), ssh: (t) => savedRemotePty(tileId, t, lines), here: () => savedPty(tileId, lines) }),
     screen: screenOf,
   },
 });
 
+/** Where the session of a tile in folder `cwd` runs, whether or not anything here is attached to
+ *  it (one asleep is not): another of the person's devices, an ssh machine, or this computer. */
+function atFolder<T>(cwd: string, at: { device(): T; ssh(target: RemoteTarget): T; here(): T }): T {
+  const onDevice = parseDeviceUri(cwd);
+  if (onDevice) return onDevice.device === machineIdentity().deviceId ? at.here() : at.device();
+  return isRemote(cwd) ? at.ssh(remoteTarget(cwd)) : at.here();
+}
+
 /** Start (or, with a daemon, attach to) the session a tile runs. */
-async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ pid: number }> {
+async function startSession(opts: StartOpts, out: SessionOutput): Promise<{ pid: number; asleep?: true }> {
   // A tile of a workspace shared from elsewhere runs on this machine only as its person placed it
   // here (M4): never with what the workspace's document says, which its host's owner may change.
   // One someone else put in a frame of theirs here is that one's to start, when they let the
@@ -1222,8 +1234,9 @@ async function startSession(opts: TerminalOpts, out: SessionOutput): Promise<{ p
   const bare = toBareId(opts.tileId);
   const callbacks = {
     onData: (data: string, replay?: boolean) => { out.data(data, replay); if (!replay) ptyActivity.note(bare, data.length); },
-    // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the tile.
-    onExit: (code: number, signal?: number) => { out.exit(code, signal); onPtyExit(opts.tileId); },
+    // What is pending (recorded and shipped), then the exit, BEFORE the HCP teardown forgets the
+    // tile; asleep, it is not gone, and what waits on it waits on.
+    onExit: (code: number, signal?: number, slept?: boolean) => { out.exit(code, signal, slept); if (!slept) onPtyExit(opts.tileId); },
   };
   // A frame on this device named by its id is a frame here, at its path.
   const onDevice = parseDeviceUri(opts.cwd);

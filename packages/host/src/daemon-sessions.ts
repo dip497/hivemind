@@ -30,9 +30,9 @@ export function daemonSessions({ endpoint, pace }: DaemonSessionsOptions): Sessi
       const r = await endpoint.spawn(
         {
           tileId: opts.tileId, cwd: opts.cwd, cmd: opts.cmd, args: opts.args, cols: opts.cols, rows: opts.rows, env,
-          noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history,
+          noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history, wake: opts.wake,
         },
-        { onData: (data, replay) => out.data(data, replay), onExit: (code, signal) => out.exit(code, signal) },
+        { onData: (data, replay) => out.data(data, replay), onExit: (code, signal, slept) => out.exit(code, signal, slept) },
       );
       // Nothing to show: let go of it, so a later start is a start.
       if (r.pid === -1 && opts.attachOnly) endpoint.detach(opts.tileId);
@@ -45,6 +45,11 @@ export function daemonSessions({ endpoint, pace }: DaemonSessionsOptions): Sessi
     pause: (tile) => endpoint.pause(tile),
     resume: (tile) => endpoint.resume(tile),
     kill: (tile) => endpoint.kill(tile),
+    sleep: (tile, cwd) => {
+      if (isRemote(cwd)) return Promise.reject(new Error("this host runs terminals on its own machine only"));
+      return endpoint.sleep(tile);
+    },
+    saved: (tile, cwd, lines) => (isRemote(cwd) ? Promise.resolve(null) : endpoint.saved(tile, lines)),
     detach: (tile) => endpoint.detach(tile),
     // Asked for when read: false once the daemon no longer holds the session.
     screen: (tile, lines) => (endpoint.has(tile) ? (cb) => { if (!endpoint.has(tile)) return false; endpoint.screen(tile, cb, lines); return true; } : null),
