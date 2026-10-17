@@ -237,7 +237,7 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
   // longer stalls the socket.
   snapshotLatest.set(id, JSON.stringify(redactSnapshot(snap)));
   const prev = snapshotWrites.get(id) ?? Promise.resolve();
-  const next = prev
+  const write = prev
     .then(async () => {
       const body = snapshotLatest.get(id);
       if (body === undefined) return; // an earlier task already wrote a newer body
@@ -248,15 +248,16 @@ function persistSnapshot(id: string, snap: SessionSnapshot): Promise<void> {
       const tmp = `${p}.tmp`;
       await fs.promises.writeFile(tmp, body, { encoding: "utf8", mode: 0o600 });
       await fs.promises.rename(tmp, p);
-    })
-    .catch(() => {
-      /* disk full / readonly fs — session loses reboot survival, that's it */
-    })
+    });
+  // Disk full or read-only: the session loses reboot survival, and a later save tries again.
+  const next = write
+    .catch(() => {})
     .finally(() => {
       if (snapshotWrites.get(id) === next) snapshotWrites.delete(id);
     });
   snapshotWrites.set(id, next);
-  return next;
+  // The manager is told it failed: it saves again later, and a sleep is not answered as kept.
+  return write;
 }
 function evictSnapshot(id: string): void {
   // Chain the unlink behind any in-flight write for this id: with async

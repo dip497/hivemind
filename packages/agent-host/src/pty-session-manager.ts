@@ -346,8 +346,8 @@ export class SessionManager {
    *  to sleep is restored; without it, the attach throws `Asleep`. */
   async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient, view = false, lines?: number, wake = false): Promise<AttachResult> {
     const existing = this.sessions.get(id);
-    // Going to sleep: it is restored from what it saves, not started afresh beside it.
-    if (existing?.exited && existing.sleeping) {
+    // Going to sleep: it is restored from what it saves, not joined as it ends nor started beside it.
+    if (existing?.sleeping) {
       await existing.sleeping.done;
       return this.createOrAttach(id, spec, client, view, lines, wake);
     }
@@ -367,9 +367,13 @@ export class SessionManager {
     const kept = this.frozen.get(id);
     const frozenSnap = kept ? kept.load() : undefined;
     if (kept) {
-      kept.asleep = !!frozenSnap?.sleeping;
+      kept.asleep ||= !!frozenSnap?.sleeping;
       if (kept.asleep && !wake) throw new Asleep(id);
+      // Started afresh, its conversation would be lost: it stays asleep until its screen reads.
+      if (kept.asleep && !frozenSnap) throw new Error(`'${id}' sleeps, but what it saved cannot be read`);
       this.frozen.delete(id);
+    } else if (wake) {
+      throw new Error(`nothing asleep as '${id}'`);
     }
     // Spec from the snapshot wins over the caller's (cwd/cmd/env are what the
     // user had); only cols/rows from the live attach apply (window dims).
@@ -514,14 +518,21 @@ export class SessionManager {
     const sinceSpawn = Date.now() - session.spawnedAt;
     if (!session.sleeping && code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return false;
     const slept = !!session.sleeping;
-    if (!slept) this.onTitle?.(id, ""); // a process that has ended is doing nothing; one asleep keeps its name
-    for (const c of session.clients) c.onExit(code, signal, slept || undefined);
+    if (!slept) {
+      this.onTitle?.(id, ""); // a process that has ended is doing nothing
+      for (const c of session.clients) c.onExit(code, signal);
+    }
     if (slept) session.dirty = true; // its screen at sleep is saved even when nothing printed since
     const saved = this.flushSnapshot(session); // last write before drop
     if (slept) await saved;
     // What is left of its process group (a child that ignored the hangup) goes with it.
     if (slept) signalGroup(session.pty, "SIGKILL");
     const kept = slept && !session.killed && !session.dirty && !!this.loadSnapshot;
+    // Asleep only once it is on disk; a save that failed is an end like any other.
+    if (slept) {
+      if (!kept) this.onTitle?.(id, "");
+      for (const c of session.clients) c.onExit(code, signal, kept || undefined);
+    }
     if (this.sessions.get(id) === session) this.sessions.delete(id);
     if (kept) {
       try { session.term.dispose(); } catch { /* ignore */ }

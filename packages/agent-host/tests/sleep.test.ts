@@ -2,13 +2,15 @@
 // and keeps the screen it showed when it was put to sleep, though it clears its screen as it ends.
 // Only an attach that wakes it restores it, from that screen, also after the daemon restarts; any
 // other is told it is asleep. Its viewer is shown the newest lines only. Asleep, it keeps its name
-// and is not counted as exited.
+// and is not counted as exited. A sleep is kept only once it is on disk, and nothing starts a
+// sleeper afresh: not a wake while it is still ending, not one after its save is lost.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "../src/pty-protocol.ts";
+import { fileNameForId } from "../src/session-snapshot-store.ts";
 
 const DAEMON = path.join(import.meta.dir, "../src/pty-daemon.ts");
 const dir = fs.mkdtempSync("/tmp/hsl-");
@@ -159,3 +161,61 @@ test.skipIf(!unix)("asleep stays asleep when the daemon restarts, and a session 
   for (const id of ["t3", "t4"]) after.send({ t: "kill", id });
   after.c.destroy();
 }, 30_000);
+
+const loop = (word: string) => ({ cwd: dir, cmd: "sh", args: ["-c", `trap 'sleep 1; exit 0' HUP; echo ${word}; while :; do sleep 0.1; done`], cols: 80, rows: 24 });
+const sessions = path.join(dir, "sessions");
+
+test.skipIf(!unix)("a sleep that cannot be saved is an end, and a wake then finds nothing asleep", async () => {
+  const v = await connect();
+  v.send({ t: "attach", reqId: "a", id: "t5", spec: loop("UNSAVED") });
+  for (let i = 0; i < 200 && !v.out().includes("UNSAVED"); i++) await new Promise((r) => setTimeout(r, 25));
+  fs.chmodSync(sessions, 0o500);
+  try {
+    v.send({ t: "sleep", reqId: "s", id: "t5" });
+    expect((await v.reply("slept"))?.error).toBeDefined();
+    expect((await v.reply("exit"))?.slept).toBeUndefined();
+  } finally {
+    fs.chmodSync(sessions, 0o700);
+  }
+  v.got.length = 0;
+  v.send({ t: "attach", reqId: "w", id: "t5", spec: loop("UNSAVED"), wake: true });
+  const woke = await v.reply("attached");
+  expect(woke?.error).toContain("nothing asleep");
+  expect(woke?.pid).toBe(-1);
+  v.c.destroy();
+}, 20_000);
+
+test.skipIf(!unix)("a wake while it is still ending waits, and restores it rather than joining what ends", async () => {
+  const v = await connect();
+  v.send({ t: "attach", reqId: "a", id: "t6", spec: loop("ENDING") });
+  const first = await v.reply("attached");
+  for (let i = 0; i < 200 && !v.out().includes("ENDING"); i++) await new Promise((r) => setTimeout(r, 25));
+  v.send({ t: "sleep", reqId: "s", id: "t6" });
+  const waker = await connect();
+  waker.send({ t: "attach", reqId: "w", id: "t6", spec: loop("ENDING"), wake: true });
+  const woke = await waker.reply("attached");
+  expect(woke?.isNew).toBe(true);
+  expect(woke?.pid).not.toBe(first?.pid);
+  expect(alive(woke!.pid)).toBe(true);
+  waker.send({ t: "kill", id: "t6" });
+  for (const c of [v, waker]) c.c.destroy();
+}, 20_000);
+
+test.skipIf(!unix)("a sleeper whose saved screen is lost stays asleep: nothing starts it afresh", async () => {
+  const v = await connect();
+  v.send({ t: "attach", reqId: "a", id: "t7", spec: loop("LOST") });
+  for (let i = 0; i < 200 && !v.out().includes("LOST"); i++) await new Promise((r) => setTimeout(r, 25));
+  v.send({ t: "sleep", reqId: "s", id: "t7" });
+  expect((await v.reply("slept"))?.error).toBeUndefined();
+  fs.writeFileSync(path.join(sessions, fileNameForId("t7")), "not a snapshot");
+  v.got.length = 0;
+  v.send({ t: "attach", reqId: "b", id: "t7", spec: loop("LOST") });
+  expect((await v.reply("attached"))?.asleep).toBe(true);
+  v.got.length = 0;
+  v.send({ t: "attach", reqId: "w", id: "t7", spec: loop("LOST"), wake: true });
+  const woke = await v.reply("attached");
+  expect(woke?.pid).toBe(-1);
+  expect(woke?.error).toContain("cannot be read");
+  v.send({ t: "kill", id: "t7" });
+  v.c.destroy();
+}, 20_000);
