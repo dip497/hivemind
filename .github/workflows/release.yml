@@ -569,10 +569,12 @@ jobs:
         shell: pwsh
         run: |
           cd desktop-deploy
-          # package.json's compression "maximum" took 23 min on this zip (run 37036151192); normal is fast and keeps most of the saving.
+          # package.json's compression "maximum" took 23 min on this zip (run 37036151192), and
+          # "normal" is 7-Zip Deflate level 7, three passes; the level set below (one pass) overrides it.
           pnpm exec electron-builder --win zip --config.directories.output=dist-electron --config.compression=normal
         env:
           PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: "5"
 
       - name: Verify the bundle is x64 with a win32 pty
         # Same class of check as the macOS job: nothing fails the build when the
