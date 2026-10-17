@@ -34,12 +34,18 @@ function linesBetween(file: string, start: number, end: number): { lines: string
   }
 }
 
+/** Where a conversation of a session file `size` bytes long is read from: after `cursor`, of the
+ *  last 1 MiB. */
+export function conversationStart(size: number, cursor?: number): number {
+  return cursor !== undefined && cursor <= size ? Math.max(cursor, size - TAIL_BYTES) : Math.max(0, size - TAIL_BYTES);
+}
+
 /** What the session file `file`, read as `format` maps it, says after `cursor`, of what came after
  *  it the last 1 MiB; with no cursor, the last 200 entries of its last 1 MiB. */
 export function readConversation(file: string, format: AgentTranscript, cursor?: number): Said {
   let size: number;
   try { size = fs.statSync(file).size; } catch { return { entries: [], cursor: cursor ?? 0 }; }
-  const from = cursor !== undefined && cursor <= size ? Math.max(cursor, size - TAIL_BYTES) : Math.max(0, size - TAIL_BYTES);
+  const from = conversationStart(size, cursor);
   const { lines, through } = linesBetween(file, from, size);
   // Read from inside the file, the first line is a piece of one: never a record.
   const whole = from === cursor || from === 0 ? lines : lines.slice(1);
@@ -101,16 +107,17 @@ export const TOOL_MAX = 256 * 1024;
 /** How much of a session file is read at a time looking for a tool use, from its end. */
 const TOOL_CHUNK = 4 * 1024 * 1024;
 
-/** The lines of `file` that name `named`, read back from its end a chunk at a time, in the file's
- *  order: from the last chunk back to the first that gives what `enough` asks of them. */
-function linesNaming(file: string, named: Buffer, enough: (lines: string[]) => boolean): string[] {
+/** The lines of `file` after byte `floor` that name `named`, read back from its end a chunk at a
+ *  time, in the file's order: from the last chunk back to the first that gives what `enough` asks. */
+function linesNaming(file: string, named: Buffer, enough: (lines: string[]) => boolean, floor: number): string[] {
   const fd = fs.openSync(file, "r");
   try {
     const found: string[] = [];
     // The start of the line the chunk after this one began inside of.
     let carry = Buffer.alloc(0);
-    for (let end = fs.fstatSync(fd).size; end > 0; ) {
-      const start = Math.max(0, end - TOOL_CHUNK);
+    for (let end = fs.fstatSync(fd).size; end > floor; ) {
+      // From the byte before the floor, which says whether a whole line starts there.
+      const start = Math.max(floor && floor - 1, end - TOOL_CHUNK);
       const bytes = Buffer.alloc(end - start + carry.length);
       fs.readSync(fd, bytes, 0, end - start, start);
       carry.copy(bytes, end - start);
@@ -137,14 +144,14 @@ function linesNaming(file: string, named: Buffer, enough: (lines: string[]) => b
 }
 
 /** The tool use `use` in the session file `file`, read as `format` maps it, unfolded: the records
- *  that name it, read whole, back from the end of the file to the one that says it was used;
- *  undefined when none says it was. */
-export function toolUse(file: string, format: AgentTranscript, use: string): ToolUse | undefined {
+ *  that name it, read whole, back from the end of the file to the one that says it was used, not
+ *  before byte `from`; undefined when none says it was. */
+export function toolUse(file: string, format: AgentTranscript, use: string, from = 0): ToolUse | undefined {
   const named = Buffer.from(JSON.stringify(use));
   const usedIn = (lines: string[]) => transcriptEntries(format, lines, { full: true })
     .find((e): e is Extract<TranscriptEntry, { tool: unknown }> => "tool" in e && e.tool.id === use)?.tool;
   let lines: string[];
-  try { lines = linesNaming(file, named, (l) => !!usedIn(l)); } catch { return undefined; }
+  try { lines = linesNaming(file, named, (l) => !!usedIn(l), from); } catch { return undefined; }
   const entries = transcriptEntries(format, lines, { full: true });
   const tool = entries.find((e): e is Extract<TranscriptEntry, { tool: unknown }> => "tool" in e && e.tool.id === use)?.tool;
   if (!tool) return undefined;

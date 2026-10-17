@@ -10,7 +10,7 @@ import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import fs from "node:fs";
-import { followConversation, lastSaid, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
+import { conversationStart, followConversation, lastSaid, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
 import { runsIn, type HeldBoard } from "./needs.js";
 
 /** A session an agent keeps its conversation in: its id (empty while none is known), its file
@@ -99,6 +99,10 @@ export interface ConversationsOptions {
 export function conversations(o: ConversationsOptions): Domain<"agent.conversation" | "agent.tool"> {
   /** What each caller follows, by tile: how to stop it. */
   const following = new WeakMap<Connection, Map<string, () => void>>();
+  /** Where each caller's view of each agent's conversation begins, in which session: a tool use
+   *  it opens is one it was shown, so it is looked for after that. */
+  const shown = new WeakMap<Connection, Map<string, { session?: string; from: number }>>();
+  const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
   return {
     answers: {
       "agent.conversation": (from, tile, cursor, session) => {
@@ -110,7 +114,12 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         if (!now) return { entries: [], cursor: 0 };
         // A cursor counts in the session it was given in, and only there. No file yet (the agent
         // has said nothing): nothing so far, and its session is followed once its file is there.
-        const first = now.file ? readConversation(now.file, now.format, session === now.session ? (cursor ?? undefined) : undefined) : { entries: [], cursor: 0 };
+        const since = session === now.session ? (cursor ?? undefined) : undefined;
+        if (now.file) {
+          if (!shown.has(from)) shown.set(from, new Map());
+          shown.get(from)!.set(bare, { session: now.session, from: conversationStart(sizeOf(now.file), since) });
+        }
+        const first = now.file ? readConversation(now.file, now.format, since) : { entries: [], cursor: 0 };
         let mine = following.get(from);
         if (!mine) following.set(from, (mine = new Map()));
         mine.get(bare)?.();
@@ -118,9 +127,13 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         return now.file ? { ...first, session: now.session } : first;
       },
       // One tool use of its session now, unfolded: asked for when the person opens its row.
-      "agent.tool": (_from, tile, use) => {
-        const now = o.transcriptOf(toBareId(text(tile, "tile")));
-        const found = now?.file ? toolUse(now.file, now.format, text(use, "use")) : undefined;
+      "agent.tool": (from, tile, use) => {
+        const bare = toBareId(text(tile, "tile"));
+        const now = o.transcriptOf(bare);
+        const seen = shown.get(from)?.get(bare);
+        const found = now?.file
+          ? toolUse(now.file, now.format, text(use, "use"), seen && seen.session === now.session ? seen.from : conversationStart(sizeOf(now.file)))
+          : undefined;
         if (!found) throw new ApiError("NOT_FOUND", "no such tool use in what this agent said");
         return found;
       },

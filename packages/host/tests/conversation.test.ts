@@ -363,3 +363,26 @@ test("for Home, what each agent last said is read again only when its file grows
   fs.writeFileSync(path.join(project, "s3.jsonl"), `${JSON.stringify({ type: "permission-mode", uuid: "m1", timestamp: new Date(1_790_000_000_000).toISOString() })}\n`);
   assert.equal(last.line(held, "t3"), "", "only what it writes for itself");
 });
+
+test("a tool use is looked for only in what the caller was shown of the conversation, from a whole line, never the whole session file", async () => {
+  const line = (rid: string, kind: string, payload: unknown) => JSON.stringify({ rid, ts: "2026-10-02T08:00:00.000Z", kind, payload });
+  const use = (id: string) => [line(`${id}a`, "call", { call_id: id, name: "shell", args: { cmd: id } }), line(`${id}b`, "output", { call_id: id, output: "ok" })];
+  const filler = Array.from({ length: 1200 }, (_, i) => line(`f${i}`, "note", { text: "x".repeat(1000) }));
+  const long = sessionFile(`${[...use("old"), ...filler, ...use("new")].join("\n")}\n`);
+  const head = `${use("a").join("\n")}\n`;
+  const short = sessionFile(`${head}${use("b").join("\n")}\n`);
+  let file = long;
+  const { server, client } = served(() => ({ session: "s1", file, format: conformance.mapped.transcript }));
+  const phone = client();
+  const found = async (id: string) => "result" in (await server.answer("agent.tool", ["t1", id], phone));
+  try {
+    assert.deepEqual([await found("new"), await found("old")], [true, false]);
+    await server.answer("agent.conversation", ["t1"], phone);
+    assert.deepEqual([await found("new"), await found("old")], [true, false]);
+    file = short;
+    await server.answer("agent.conversation", ["t1", Buffer.byteLength(head), "s1"], phone);
+    assert.deepEqual([await found("b"), await found("a")], [true, false]);
+  } finally {
+    phone.go();
+  }
+});
