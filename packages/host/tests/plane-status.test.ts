@@ -7,6 +7,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { evictTrackedSession, readTrackedSession, TILE_SESSIONS_DIR } from "@hivemind/agents/node";
+import net from "node:net";
+import { readOrCreateToken, tileToken } from "@hivemind/agent-host/hooks/token";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
 
 const plane = (o: Partial<ControlPlaneOptions> = {}) => new ControlPlane({
@@ -81,4 +83,26 @@ test("the session an agent's hooks name is recorded for its tile to resume: a ne
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("on the control-plane socket a tile speaks for itself: what it says of another tile is dropped, what it says of its own is heard", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plane-sock-"));
+  const p = plane({ dir: () => dir });
+  const sock = path.join(dir, "hcp.sock");
+  const server = p.listen(sock);
+  for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 10));
+  const c = net.connect(sock);
+  await new Promise((r) => c.once("connect", r));
+  const say = (m: Record<string, unknown>) => c.write(`${JSON.stringify({ jsonrpc: "2.0", ...m })}\n`);
+  say({ id: 1, method: "initialize", params: { token: tileToken(readOrCreateToken(dir), "hm:t2") } });
+  say({ method: "tile.line", params: { tileId: "hm:t1", line: "forged" } });
+  say({ method: "agent.screen", params: { tileId: "t1", state: "permission" } });
+  say({ method: "tile.line", params: { tileId: "hm:t2", line: "its own" } });
+  for (let i = 0; i < 200 && !p.lines.has("t2"); i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(p.lines.get("t2"), "its own");
+  assert.equal(p.lines.get("t1"), undefined);
+  assert.equal(p.status.get("t1"), undefined);
+  c.destroy();
+  server.close();
+  fs.rmSync(dir, { recursive: true, force: true });
 });

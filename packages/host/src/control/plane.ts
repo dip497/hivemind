@@ -404,7 +404,12 @@ export class ControlPlane {
       ...(onError ? { onListenError: onError } : {}),
       rendererUp: () => this.o.windowsUp(),
       dispatch: (method, params, call) => this.agentChannel(method, params, call),
-      onEvent: (method, params) => this.event(method, params),
+      onEvent: (method, params, from) => {
+        // A tile speaks for itself: what it says of another is dropped.
+        const named = (params as { tileId?: unknown } | null)?.tileId;
+        if (from?.kind === "tile" && (typeof named !== "string" || toBareId(named) !== from.tile)) return;
+        this.event(method, params);
+      },
     });
   }
 
