@@ -11,7 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { LoroDoc } from "loro-crdt";
+import { LoroDoc, type Frontiers } from "loro-crdt";
 
 const FORMAT = "hivemind-workspace";
 const VERSION = 1;
@@ -95,12 +95,15 @@ export function removeDoc(dir: string, repo: string): void {
   fs.rmSync(workspaceFile(dir, repo), { force: true });
 }
 
-/** Replace the stored document: a private temp file renamed over the old one. Throws when it cannot. */
-export function writeDoc(dir: string, repo: string, doc: LoroDoc): void {
+/**
+ * Replace the stored document: a private temp file renamed over the old one. It keeps the history
+ * since `since` (none given: the state alone; none at all: every change). Throws when it cannot.
+ */
+export function writeDoc(dir: string, repo: string, doc: LoroDoc, since: Frontiers = doc.oplogFrontiers()): void {
   const file = workspaceFile(dir, repo);
   const tmp = `${file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
   const header = Buffer.from(`${JSON.stringify({ format: FORMAT, v: VERSION, repo })}\n`, "utf8");
-  const body = doc.export({ mode: "shallow-snapshot", frontiers: doc.oplogFrontiers() });
+  const body = since.length === 0 ? doc.export({ mode: "snapshot" }) : doc.export({ mode: "shallow-snapshot", frontiers: since });
   try {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     fs.writeFileSync(tmp, Buffer.concat([header, body]), { mode: 0o600 });

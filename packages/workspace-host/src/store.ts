@@ -27,11 +27,12 @@
  * as one — so edits made a moment apart are never taken back together. A history lasts until its
  * writer is gone (`forgetWriter`: a window closed).
  */
-import { UndoManager, VersionVector, type LoroDoc } from "loro-crdt";
+import { LoroDoc, UndoManager, VersionVector, decodeImportBlobMeta, type Frontiers } from "loro-crdt";
 import { addFrame, addTile, hasCore, readCore, removeFrame, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
 import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
+import { sameJson } from "@hivemind/workspace-doc/rebase";
 import { partsChanged, readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, FrameRecord, Frozen, KeptCore, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
@@ -77,6 +78,24 @@ interface Workspace {
   doc: LoroDoc;
   /** Each writer's board edits, by writer. */
   histories: Map<string, UndoManager>;
+  /** For a replica, the version its host last said it has: the file keeps the history since what
+   *  the two share, so what was written here since can be written again (`startOver`). */
+  hostHas?: VersionVector;
+}
+
+/** The versions both `a` and `b` include: each peer's changes up to the fewer of the two. */
+function shared(a: VersionVector, b: VersionVector): VersionVector {
+  const both = new Map<`${number}`, number>();
+  for (const [peer, counter] of a.toJSON()) {
+    const theirs = b.get(peer);
+    if (theirs !== undefined) both.set(peer, Math.min(counter, theirs));
+  }
+  return new VersionVector(both);
+}
+
+/** Whether `bytes` (as `exportSince` gives them) are a whole document, not updates. */
+export function isWholeDocument(bytes: Uint8Array): boolean {
+  return decodeImportBlobMeta(bytes, false).mode.includes("snapshot");
 }
 
 /** What `importFrom` throws for changes its check refused: nothing of them was taken. */
@@ -366,6 +385,53 @@ export class WorkspaceStore {
     for (const part of parts) this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
   }
 
+  /**
+   * As a replica of `repo`, take the host's whole document (`bytes`, a snapshot) when this one
+   * already holds changes: a snapshot cannot be merged into a document that lacks history it
+   * starts after, and the host cannot take changes built on history it no longer keeps. So this
+   * starts over from the host's document, and what was written here since the version the two
+   * share (this one's ∩ `hostVersion`) is written again on top, as `from`'s edit, for the replica's
+   * sync to send. Each writer's undo history starts over with it.
+   */
+  startOver(repo: string, bytes: Uint8Array, hostVersion: Uint8Array, from: Writer = {}): void {
+    const old = this.workspace(repo);
+    old.doc.commit();
+    if (old.doc.oplogVersion().length() === 0) return this.importFrom(repo, bytes, from);
+    const read = (d: LoroDoc) => ({ core: readCore(d), views: readViews(d), objects: readObjects(d) });
+    const mine = read(old.doc);
+    let base: ReturnType<typeof read> | null = null;
+    try {
+      old.doc.checkout(old.doc.vvToFrontiers(shared(old.doc.oplogVersion(), VersionVector.decode(hostVersion))));
+      base = read(old.doc);
+    } catch (e) {
+      this.warn(`what was written to ${repo} while away cannot be merged with its host's (${e instanceof Error ? e.message : String(e)}); the host's is kept`);
+    } finally {
+      old.doc.checkoutToLatest();
+    }
+    const doc = new LoroDoc();
+    doc.import(bytes);
+    for (const history of old.histories.values()) history.free();
+    this.workspaces.set(repo, { doc, histories: new Map(), hostHas: VersionVector.decode(hostVersion) });
+    this.tiles.delete(repo);
+    this.cores.delete(repo);
+    this.persist(repo, doc);
+    const writer = from.writer ?? "";
+    const views = new Set([...Object.keys(readViews(doc)), ...Object.keys(mine.views)]);
+    for (const part of ["core", "board", ...[...views].map((v) => `view:${v}` as const)] as const) this.opts.onChange?.({ repo, part, writer });
+    if (!base) return;
+    if (mine.core && !sameJson(base.core, mine.core)) this.setCore(repo, mine.core, { ...from, base: base.core });
+    for (const [viewId, layout] of Object.entries(mine.views)) {
+      if (!sameJson(base.views[viewId], layout)) this.setView(repo, viewId, layout, { ...from, base: base.views[viewId] ?? null });
+    }
+    if (!sameJson(base.objects, mine.objects)) this.setObjects(repo, mine.objects, { ...from, base: base.objects });
+  }
+
+  /** As a replica of `repo`: its host has `hostVersion` (encoded). Its file keeps the history since
+   *  what the two share. */
+  hostHas(repo: string, hostVersion: Uint8Array): void {
+    this.workspace(repo).hostHas = VersionVector.decode(hostVersion);
+  }
+
   /** Forget the workspace at `repo`, here and on disk: a copy of one kept elsewhere that is not
    *  wanted any more (M3: a replica of a workspace that is hosted here again). */
   forget(repo: string): void {
@@ -473,12 +539,20 @@ export class WorkspaceStore {
 
   private persist(repo: string, doc: LoroDoc): void {
     try {
-      writeDoc(this.opts.dir, repo, doc);
+      writeDoc(this.opts.dir, repo, doc, this.keepSince(this.workspaces.get(repo)!));
       this.unsaved.delete(repo);
     } catch (e) {
       this.unsaved.add(repo);
       this.warn(`cannot write the layout for ${repo} (${e instanceof Error ? e.message : String(e)}); kept in memory until the next write`);
     }
+  }
+
+  /** Where the file's history starts: for a replica, at what it shares with its host (or, before
+   *  its host says, where its history starts now), so it can start over (`startOver`); else none. */
+  private keepSince({ doc, hostHas }: Workspace): Frontiers | undefined {
+    if (hostHas) return doc.vvToFrontiers(shared(doc.oplogVersion(), hostHas));
+    if (this.opts.person) return undefined;
+    return doc.isShallow() ? doc.shallowSinceFrontiers() : [];
   }
 
   private readonly warn = (message: string): void => {

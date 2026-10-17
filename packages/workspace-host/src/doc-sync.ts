@@ -12,7 +12,7 @@
 import { ROLES, type Access } from "./access.js";
 import type { KeptCore } from "@hivemind/workspace-doc/shapes";
 import { refusedEdit } from "./edit-rules.js";
-import { RefusedImport, type WorkspaceChange, type WorkspaceStore } from "./store.js";
+import { RefusedImport, isWholeDocument, type WorkspaceChange, type WorkspaceStore } from "./store.js";
 
 /** Text frames, both ways. */
 export interface SyncChannel {
@@ -44,7 +44,7 @@ export function changeHub(onError: (message: string) => void): { tell: (change: 
 export type SyncMessage =
   | { t: "hello"; workspace: string; seen: string | null }
   | { t: "welcome"; access: Access; data: string; seen: string }
-  | { t: "update"; data: string }
+  | { t: "update"; data: string; seen?: string }
   | Moved;
 
 /** The workspace is hosted elsewhere now (M3, spec/hosting.md): by `host`, the `seq`th to, as
@@ -59,7 +59,7 @@ export function parseSync(text: string): SyncMessage | null {
     const m = JSON.parse(text) as Partial<SyncMessage> | null;
     if (m?.t === "hello" && typeof m.workspace === "string") return { t: "hello", workspace: m.workspace, seen: typeof m.seen === "string" ? m.seen : null };
     if (m?.t === "welcome" && typeof m.data === "string" && typeof m.seen === "string") return m as SyncMessage;
-    if (m?.t === "update" && typeof m.data === "string") return m as SyncMessage;
+    if (m?.t === "update" && typeof m.data === "string") return { t: "update", data: m.data, ...(typeof m.seen === "string" ? { seen: m.seen } : {}) };
     if (m?.t === "moved" && typeof m.host === "string" && typeof m.seq === "number" && typeof m.record === "string") return { t: "moved", host: m.host, seq: m.seq, record: m.record };
     return null;
   } catch {
@@ -90,7 +90,8 @@ export function serveReplica(
   const stopChanges = opts.changes(function sendToReplica(change) {
     if (change.repo !== repo || (theirs && b64(theirs) === b64(store.version(repo)))) return;
     try {
-      channel.send(JSON.stringify({ t: "update", data: lacking() }));
+      const data = lacking();
+      channel.send(JSON.stringify({ t: "update", data, seen: b64(store.version(repo)) }));
     } catch (e) {
       opts.onDropped?.(`an update to it could not be sent (${e instanceof Error ? e.message : String(e)})`);
     }
@@ -131,7 +132,11 @@ export function replicate(
     if (m?.t === "moved") return opts.onMoved?.(m);
     if (m?.t !== "welcome" && m?.t !== "update") return;
     try {
-      store.importFrom(repo, fromB64(m.data), { writer: HOST });
+      const data = fromB64(m.data);
+      // A whole document cannot be merged into one that lacks the history it starts after.
+      if (m.t === "welcome" && isWholeDocument(data)) store.startOver(repo, data, fromB64(m.seen), { writer: HOST });
+      else store.importFrom(repo, data, { writer: HOST });
+      if (m.t === "welcome" || m.seen) store.hostHas(repo, fromB64(m.seen!));
     } catch (e) {
       opts.onFailed?.(`the host's change could not be taken (${e instanceof Error ? e.message : String(e)})`);
       return;

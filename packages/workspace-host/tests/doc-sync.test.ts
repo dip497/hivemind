@@ -136,3 +136,50 @@ test("a listener that throws keeps no change from the replica listening after it
   expect(heard.length).toBeGreaterThan(0);
   expect(errors[0]).toContain("brokenNotices failed: boom");
 });
+
+/** A guest edits offline while its host restarts from disk, then connects again; `restartGuest`
+ *  restarts the guest's app too before it does. */
+function offlineAcrossHostRestart(restartGuest: boolean) {
+  const seed = newSeed();
+  const host = storeWith("host", seed);
+  host.store.setCore("/a", core("api"));
+  host.store.setObjects("/a", [note("hello")]);
+  let guest = storeWith("shared");
+  const dropped: string[] = [];
+  const failed: string[] = [];
+  const first = connect(host, guest, "edit", dropped);
+  first.stop();
+
+  const was = guest.store.getObjects("hive://w");
+  const mine = { ...note("from the guest, offline"), id: "n2" };
+  guest.store.setObjects("hive://w", [...was, mine], { writer: "window", base: was });
+  const hosts = host.store.getObjects("/a");
+  host.store.setObjects("/a", [{ ...hosts[0]!, text: "hello from the host" }], { writer: "window", base: hosts });
+
+  const restarted = storeWith("host", seed);
+  if (restartGuest) guest = storeWith("shared");
+  const [h, g] = channel();
+  const off = h.on((text) => {
+    const m = parseSync(text);
+    if (m?.t !== "hello") return;
+    off();
+    serveReplica(restarted.store, "/a", h, { seen: m.seen, access: "edit", changes: restarted.changes, writer: "peer:priya", onDropped: (w) => dropped.push(w) });
+  });
+  replicate(guest.store, "hive://w", g, { workspace: "w", changes: guest.changes, onFailed: (w) => failed.push(w) });
+  return { host: restarted.store, guest: guest.store, dropped, failed };
+}
+
+test.each([
+  ["while its app stays open", false],
+  ["and its app restarts too", true],
+])("a guest that edited offline while its host restarted gets the host's changes and gives it its own, %s", (_name, restartGuest) => {
+  const { host, guest, dropped, failed } = offlineAcrossHostRestart(restartGuest);
+  expect({ dropped, failed }).toEqual({ dropped: [], failed: [] });
+  const texts = (objects: { id: string; text?: string }[]) => objects.map((o) => `${o.id}: ${o.text}`);
+  expect(texts(host.getObjects("/a"))).toEqual(["n1: hello from the host", "n2: from the guest, offline"]);
+  expect(texts(guest.getObjects("hive://w"))).toEqual(texts(host.getObjects("/a")));
+  // And what either writes from then on reaches the other.
+  const now = guest.getObjects("hive://w");
+  guest.setObjects("hive://w", now.map((o) => (o.id === "n2" ? { ...o, text: "and later" } : o)), { writer: "window", base: now });
+  expect(texts(host.getObjects("/a"))).toEqual(["n1: hello from the host", "n2: and later"]);
+});
