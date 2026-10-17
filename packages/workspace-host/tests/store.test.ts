@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { LoroDoc } from "loro-crdt";
+import { readCore, writeCore } from "@hivemind/workspace-doc/core";
 import { RefusedImport, WorkspaceStore, type CoreLayout, type WorkspaceChange } from "../src/store.ts";
 import { refusedEdit } from "../src/edit-rules.ts";
 import { writeBoard } from "./board.ts";
@@ -684,17 +685,27 @@ function guestChange(s: WorkspaceStore, repo: string, edit: (copy: LoroDoc) => v
 }
 const asEditor = (before: unknown, after: unknown) => refusedEdit(before as never, after as never, "edit");
 
-test("a guest's change to whose the workspace is is refused, and nothing of it is taken", () => {
+test("a guest's change to whose the workspace is is refused and undone at once, and its next change, built on it, is taken", () => {
   const s = new WorkspaceStore({ dir, person });
   s.setCore("/a", core("api"));
   const owner = s.ownership("/a");
-  const change = guestChange(s, "/a", (copy) => {
-    copy.getMap("meta").set("owner", "someone else");
-    copy.getMap("views").set("canvas", 1);
-  });
-  expect(() => s.importFrom("/a", change, { writer: "peer" }, asEditor)).toThrow(RefusedImport);
+  const copy = new LoroDoc();
+  copy.import(s.exportSince("/a", null));
+  const start = copy.oplogVersion();
+  copy.getMap("meta").set("owner", "someone else");
+  copy.commit();
+  const claim = copy.export({ mode: "update", from: start });
+  const claimed = copy.oplogVersion();
+  const read = readCore(copy)!;
+  writeCore(copy, { ...read, tileNames: { t1: "build" } }, read);
+  copy.commit();
+  const rename = copy.export({ mode: "update", from: claimed });
+
+  expect(() => s.importFrom("/a", claim, { writer: "peer" }, asEditor)).toThrow(RefusedImport);
   expect(s.ownership("/a")).toEqual(owner);
-  expect(s.getView("/a", "canvas")).toBeNull();
+  s.importFrom("/a", rename, { writer: "peer" }, asEditor);
+  expect(s.getCore("/a")!.tileNames).toEqual({ t1: "build" });
+  expect(s.ownership("/a")).toEqual(owner);
 });
 
 test("after a guest's change is refused, its next one is checked against the workspace as it is, not with the refused one in it", () => {

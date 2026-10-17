@@ -122,7 +122,18 @@ export function isWholeDocument(bytes: Uint8Array): boolean {
   return decodeImportBlobMeta(bytes, false).mode.includes("snapshot");
 }
 
-/** What `importFrom` throws for changes its check refused: nothing of them was taken. */
+/** Write `doc`'s core layout and whose the workspace is back to what `was` says. */
+function undoChecked(doc: LoroDoc, was: LoroDoc): void {
+  const core = readCore(was);
+  const now = readCore(doc);
+  if (core && !sameJson(core, now)) writeCore(doc, core, now);
+  const owner = readOwnership(was);
+  if (owner && !sameJson(owner, readOwnership(doc))) replaceOwnership(doc, owner);
+  doc.commit();
+}
+
+/** What `importFrom` throws for changes its check refused: what they did to the core layout and
+ *  to whose the workspace is was undone. */
 export class RefusedImport extends Error {
   constructor(why: string) {
     super(why);
@@ -406,11 +417,15 @@ export class WorkspaceStore {
   /** Take another replica's changes (updates or a whole document, as `exportSince` gives them) as
    *  `from`'s edit: written, and told like any other change. Throws for bytes that are not a
    *  document's. `check`, when given, sees the core layout as it is and as the changes would make
-   *  it, first: a reason it gives refuses them (`RefusedImport`), and nothing is taken. */
+   *  it, first: a reason it gives refuses them (`RefusedImport`, thrown after). A refused change is
+   *  taken and undone at once: the core layout and whose the workspace is are written back as they
+   *  were, in the same step, so nothing ever sees them changed, and the writer's later changes,
+   *  built on this one, still apply. */
   importFrom(repo: string, bytes: Uint8Array, from: Writer = {}, check?: (before: CoreLayout | null, after: CoreLayout | null) => string | null): void {
     const workspace = this.workspace(repo);
     const { doc } = workspace;
     let taken = bytes;
+    let refused: string | null = null;
     if (check) {
       const trial = this.trialOf(workspace);
       const tried = trial.frontiers();
@@ -424,10 +439,15 @@ export class WorkspaceStore {
         this.dropTrial(workspace);
         throw e;
       }
-      // What was refused is in the trial now: the next check starts from a fresh copy.
       if (why) {
-        this.dropTrial(workspace);
-        throw new RefusedImport(why);
+        undoChecked(trial, doc);
+        // An undo that does not give back what was: nothing is taken, and the next check starts
+        // from a fresh copy.
+        if (!sameJson(readCore(trial), readCore(doc)) || !sameJson(readOwnership(trial), readOwnership(doc))) {
+          this.dropTrial(workspace);
+          throw new RefusedImport(why);
+        }
+        refused = why;
       }
       // What the trial applied and checked, and nothing else: a change that waits on one not
       // sent yet waits there, and is checked when it applies.
@@ -435,14 +455,16 @@ export class WorkspaceStore {
     }
     const before = doc.frontiers();
     doc.import(taken);
-    if (JSON.stringify(doc.frontiers()) === JSON.stringify(before)) return;
-    const parts = partsChanged(doc, before);
-    if (parts.some((p) => p.part === "core")) {
-      this.tiles.delete(repo);
-      this.cores.delete(repo);
+    if (JSON.stringify(doc.frontiers()) !== JSON.stringify(before)) {
+      const parts = partsChanged(doc, before);
+      if (parts.some((p) => p.part === "core")) {
+        this.tiles.delete(repo);
+        this.cores.delete(repo);
+      }
+      this.persist(repo, doc);
+      for (const changed of parts) this.opts.onChange?.({ repo, ...changed, writer: from.writer ?? "" });
     }
-    this.persist(repo, doc);
-    for (const changed of parts) this.opts.onChange?.({ repo, ...changed, writer: from.writer ?? "" });
+    if (refused) throw new RefusedImport(refused);
   }
 
   /**

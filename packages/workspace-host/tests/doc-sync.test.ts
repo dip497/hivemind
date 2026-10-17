@@ -10,6 +10,7 @@ import { writeBoard } from "./board.ts";
 import { changeHub, parseSync, replicate, serveReplica, type SyncChannel } from "../src/doc-sync.ts";
 import type { Access } from "../src/access.ts";
 import { newSeed } from "../src/identity.ts";
+import { sameJson } from "@hivemind/workspace-doc/rebase";
 
 let tmp: string;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "doc-sync-")); });
@@ -263,4 +264,49 @@ test("while the link has no room the host sends a guest nothing; when room retur
   room.free();
   expect(sent.map((t) => parseSync(t)?.t)).toEqual(["welcome", "update"]);
   expect(guest.store.getObjects("hive://w")).toEqual(host.store.getObjects("/a"));
+});
+
+test("a guest whose change is refused still has its next changes taken, and after it connects again", () => {
+  const host = storeWith("host", newSeed());
+  host.store.setCore("/a", core("api"));
+  writeBoard(host.store, "/a", [note("hello")]);
+  const editor = storeWith("editor");
+  const { stop } = connect(host, editor, "edit");
+  const named = editor.store.getCore("hive://w")!;
+  editor.store.setCore("hive://w", { ...named, tiles: [...named.tiles, { id: "t9", kind: "shell", label: "sh", cmd: "/bin/sh" }] }, { writer: "window", base: named });
+  const was = editor.store.getObjects("hive://w");
+  writeBoard(editor.store, "hive://w", [{ ...was[0]!, text: "after the refusal" }], { writer: "window", base: was });
+  const live = (host.store.getObjects("/a")[0] as { text: string }).text;
+  stop();
+  connect(host, editor, "edit");
+  const again = (host.store.getObjects("/a")[0] as { text: string }).text;
+  expect({ live, again }).toEqual({ live: "after the refusal", again: "after the refusal" });
+  expect(host.store.getCore("/a")!.tiles.map((t) => t.id)).toEqual(["t1"]);
+});
+
+test("a refused change is never seen: not by the host's listeners, another guest, or what is on disk at each change", () => {
+  const seenByHost: string[][] = [];
+  const onDisk: string[][] = [];
+  let copies = 0;
+  const host = storeWith("host", newSeed());
+  host.store.setCore("/a", core("api"));
+  host.changes(() => {
+    seenByHost.push(host.store.getCore("/a")!.tiles.map((t) => t.id));
+    const copy = path.join(tmp, `disk-${copies++}`);
+    fs.cpSync(path.join(tmp, "host"), copy, { recursive: true });
+    onDisk.push(new WorkspaceStore({ dir: copy }).getCore("/a")!.tiles.map((t) => t.id));
+  });
+  const other = storeWith("other");
+  connect(host, other, "edit");
+  const seenByOther: string[][] = [];
+  other.changes(() => seenByOther.push(other.store.getCore("hive://w")!.tiles.map((t) => t.id)));
+  const editor = storeWith("editor");
+  connect(host, editor, "edit");
+  const named = editor.store.getCore("hive://w")!;
+  editor.store.setCore("hive://w", { ...named, tiles: [...named.tiles, { id: "t9", kind: "shell", label: "sh", cmd: "/bin/sh" }] }, { writer: "window", base: named });
+
+  expect(seenByHost.length).toBeGreaterThan(0);
+  expect(seenByOther.length).toBeGreaterThan(0);
+  expect([...seenByHost, ...onDisk, ...seenByOther].filter((ids) => !sameJson(ids, ["t1"]))).toEqual([]);
+  expect(editor.store.getCore("hive://w")!.tiles.map((t) => t.id)).toEqual(["t1"]);
 });

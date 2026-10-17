@@ -30,8 +30,8 @@ tests pass.
 
 **Constraints.** Store calls from a window are synchronous IPC to Electron main (a window builds
 its first state in one pass, `workspace-store-ipc.ts`); main and `hive host` run the same
-`WorkspaceStore`; a guest's change is taken only when its role allows it, and nothing of a refused
-change is taken (`edit-rules.ts`); ⌘Z undoes only the writer's own board edits; no data migration
+`WorkspaceStore`; a guest's change is taken only when its role allows it, and what a refused change
+did to the core layout or to whose the workspace is is undone in the same step (`edit-rules.ts`); ⌘Z undoes only the writer's own board edits; no data migration
 (no customer data; `CLAUDE.md`), everyone updates (break the protocol, say **Breaking:**).
 
 **Known problems in disguise.** (1) Delta sync of a record store (tldraw, Figma, Excalidraw). (2)
@@ -199,8 +199,11 @@ The parts of B:
 6. **Guest check on a trial document.** One trial copy per workspace, made on the first guest
    update that needs a check and caught up by `update` exports at each use (cost: what happened
    since). The update is imported into it; if the core containers did not change, there is nothing
-   to check; else `refusedEdit(getCore, readCore(trial))`. A refused update spoils the trial, which
-   is dropped and copied again on the next check (the one O(document) path, paid per refusal).
+   to check; else `refusedEdit(getCore, readCore(trial))`. A refused update is **taken and undone
+   at once**: on the trial, the core layout and whose the workspace is are written back as they
+   were, and the document imports the change and its undo together, before anything is stored,
+   told or sent, so no listener, guest or file ever holds the refused state. Only when the undo
+   does not give back what was is nothing taken and the trial dropped.
 7. **Bounded welcome and start-over** (replaces the "floor" of the first draft, which review
    round 2 broke; see below). The host keeps its whole in-memory history for its uptime (the
    ceiling below), so it can take any change a guest built on it. What it hands out is bounded:
@@ -230,8 +233,8 @@ The parts of B:
      keeps only the state since its last start, so a guest's offline change is mergeable after a
      host restart only through start-over. Tested at the doc-sync boundary: both offline cases
      (guest app open, guest app restarted) in `doc-sync.test.ts`.
-   Written ceiling (accepted): an offline change the host refuses (the guest's role does not
-   allow it) is not written; the guest keeps it until its start-over, which drops it.
+   A change the host refuses (the guest's role does not allow it, offline or not) is taken and
+   undone (part 6): the guest is sent the undo and sees its change go.
 
 8. **No update while the stream has no room** (with perf-links' "has room / room returned" on the
    link streams, which that track adds; it does not touch `doc-sync.ts`). `serveReplica` already
@@ -303,8 +306,8 @@ stands now:
 1. *`hosting.ts` imports bypass the trial document*, so the floor's "the host takes nothing a
    replica could not" did not hold. Answer: no floor; the host takes what it can and a replica
    that cannot asks again (part 7).
-2. *A start-over replays changes its role refused.* Answer: they are refused again, not looped:
-   a refusal is answered with nothing, never with a snapshot (pre-mortem 3).
+2. *A start-over replays changes its role refused.* Answer: a refused change is taken and undone,
+   so the host has it and a start-over has nothing of it to replay (pre-mortem 3).
 3. *Start-over must reset what is on disk* and write the new document whole before anything is
    sent. Answer: built so (`startOver` writes whole, then rewrites).
 4. *Loro roots a shallow snapshot earlier than asked* when changes are concurrent, and *`forkAt`
@@ -325,11 +328,16 @@ stands now:
    Change: records are length-prefixed and a torn tail is dropped on load (and truncated before the
    next append); the snapshot is renamed into place before the records it replaces are removed; a
    records file that does not import is set aside like a bad snapshot, never deleted.
-3. **A guest looped on start-over.** A guest whose rewrite is refused (its role does not allow
-   its offline core change) would be sent a snapshot, write again, be refused again. Change: a
-   refusal is answered with nothing (as now: a role rule, not lost history); only a replica that
-   cannot take what it is sent asks for a snapshot. Written ceiling (accepted): a change the host
-   refuses stays on that guest only until its next start-over.
+3. **A guest looped on start-over, or lost every edit after a refused one.** The first rule, "a
+   refusal is answered with nothing", left the refused change out of the host's document; each
+   later change of that guest builds on it, so it waited on the host for good (live, and after a
+   reconnect, whose answer carries the refused change again), and the guest was never told. Found
+   by the test of the written ceiling "pending changes are dropped with the trial". Change: a
+   refused change is taken and undone at once (part 6): the guest's later changes apply, it is
+   sent the undo, and nothing is refused twice, so there is no loop. Tested in `doc-sync.test.ts`
+   (later edits land live and after a reconnect; no listener, other guest or file on disk sees the
+   refused tile at any change) and `store.test.ts` (an ownership change is undone, the next change
+   lands). Ceiling (c) is fixed by this.
 
 ## Build order (each step leaves the app working, each checked)
 
@@ -342,8 +350,8 @@ stands now:
    Check: workspace-doc/host/api/host tests; bench typed-character and read rows flat.
 3. Window and replica clients send edits and read ids; widget watcher; no-echo rule for core, views
    and board. Check: desktop unit tests (`workspace-store-client`, useBoard merge), replica tests.
-4. Guest check on a trial document. Check: doc-sync and edit-rules tests (refused update takes
-   nothing, a later good one is taken), bench guest row flat.
+4. Guest check on a trial document. Check: doc-sync and edit-rules tests (a refused update is
+   undone at once, a later good one is taken), bench guest row flat.
 5. Start-over (done first, `afa750f`); then the bounded welcome and asking again; `meta` refused
    from guests. Check: doc-sync tests for: an offline guest across a host restart merges both ways
    with nothing doubled (done); a new guest's welcome is the state alone; a guest that cannot take
