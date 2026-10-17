@@ -417,16 +417,23 @@ export class HiveNet {
   }
 }
 
-/** The daemon's messages, one per frame. */
+/** The daemon's messages, one per frame. A frame's chunks are joined once it is whole, not as each
+ *  comes: joining what came so far on every chunk is quadratic in the frame. */
 async function* readFrames(socket: net.Socket): AsyncGenerator<Message> {
   let buf = Buffer.alloc(0);
+  const parts: Buffer[] = [];
+  let have = 0;
   for await (const chunk of socket as AsyncIterable<Buffer>) {
-    buf = Buffer.concat([buf, chunk]);
+    parts.push(chunk);
+    have += chunk.length;
+    if (buf.length >= 4 && have < 4 + buf.readUInt32BE(0)) continue;
+    buf = Buffer.concat([buf, ...parts.splice(0)]);
     while (buf.length >= 4) {
       const len = buf.readUInt32BE(0);
       if (buf.length < 4 + len) break;
       yield JSON.parse(buf.subarray(4, 4 + len).toString("utf8")) as Message;
       buf = buf.subarray(4 + len);
     }
+    have = buf.length;
   }
 }

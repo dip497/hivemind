@@ -3,7 +3,8 @@
 // the host admits connects, and text passes both ways, each frame on the stream it was sent on; one
 // no longer admitted is cut off, and the host hears it go; a link closed saying why is read so on
 // the other side, and a device that stops is heard going at once. And a daemon of another release,
-// speaking another protocol, is refused, saying so.
+// speaking another protocol, is refused, saying so. A frame of many megabytes costs main no more than
+// the same bytes in small frames.
 import { test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
@@ -145,3 +146,48 @@ test("a daemon of an earlier release, whose ready says no protocol, is refused, 
     fs.rmSync(root, { recursive: true, force: true });
   }
 }, 30_000);
+
+test("a frame of many megabytes from the daemon is read as fast as the same bytes in small frames", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-big-"));
+  try {
+    // A daemon that says a device connected and opened a stream, then sends 32 MB on it as 32
+    // frames of 1 MB, and once main has them, as one frame of 32 MB: an answer to a file read or a
+    // welcome comes so.
+    fs.writeFileSync(path.join(root, "big-daemon.mjs"), [
+      "import net from 'node:net';",
+      "const frame = (m) => { const body = Buffer.from(JSON.stringify(m)); const head = Buffer.alloc(4); head.writeUInt32BE(body.length); return Buffer.concat([head, body]); };",
+      "const recv = (mb) => frame({ t: 'recv', conn: 1, stream: 7, data: 'x'.repeat(mb * 1024 * 1024) });",
+      "const small = recv(1), big = recv(32);",
+      "const s = net.connect(process.argv[process.argv.indexOf('--socket') + 1], () => {",
+      `  s.write(frame({ t: 'ready', v: ${PROTOCOL}, id: 'a'.repeat(64), addrs: [], relay: null, lookup: null }));`,
+      "  s.write(frame({ t: 'incoming', conn: 1, peer: 'b'.repeat(64) }));",
+      "  s.write(frame({ t: 'opened', conn: 1, stream: 7, name: 'api' }));",
+      "  for (let i = 0; i < 32; i++) s.write(small);",
+      "});",
+      "s.on('data', () => s.write(big));",
+      "s.on('close', () => process.exit(0));",
+    ].join("\n"));
+    const bin = path.join(root, "hive-net");
+    fs.writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${path.join(root, "big-daemon.mjs")}" "$@"\n`, { mode: 0o755 });
+    fs.mkdirSync(path.join(root, "identity"));
+    // This process's CPU time, so that the fake daemon's own work and the machine's load do not count.
+    const cpu = () => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; };
+    const arrived: Array<{ length: number; at: number }> = [];
+    const net = await HiveNet.start({
+      bin, identity: path.join(root, "identity"), socket: path.join(root, "net.sock"),
+      onIncoming: (link) => link.streams("api", (s) => s.on((data) => arrived.push({ length: data.length, at: cpu() }))),
+      onPairRequest: async () => ({}),
+    });
+    running.push(net);
+    const start = cpu();
+    // Main's hello tells it to send the big one: it goes once the small ones are read.
+    while (arrived.length < 33) await Bun.sleep(20);
+    const smalls = arrived[31]!.at - start;
+    const big = arrived[32]!.at - arrived[31]!.at;
+    expect(arrived.map((a) => a.length)).toEqual([...Array(32).fill(1024 * 1024), 32 * 1024 * 1024]);
+    // Joining what came so far on each chunk made the one frame cost four times the small ones.
+    expect(big).toBeLessThan(2 * smalls);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 120_000);
