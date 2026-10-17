@@ -1,6 +1,7 @@
 # An edit costs what it changed: workspace sync (2026-10-17)
 
-Status: proposed. Track 2 of the root-cause performance round. Owner files: `packages/workspace-doc`,
+Status: accepted (the coordinator, 2026-10-17: start-over from the last shared version is right,
+and the ceiling "a refused offline edit is lost" is acceptable). Track 2 of the root-cause performance round. Owner files: `packages/workspace-doc`,
 `packages/workspace-host`, `packages/workspace-api` (board and layout methods), the renderer's
 board and layout client.
 
@@ -58,9 +59,10 @@ ratios between runs at the same load mean anything. Benches: `bench/` in this tr
 | Loro: shallow-snapshot export (every persist) | | 157 ms | 746 ms |
 | Loro: import + `diff` of what changed (partsChanged) | | 0.15 ms | 0.16 ms |
 
-History growth (Loro 1.16.4, `facts.ts`): 100,000 one-character commits by one peer grew the full
-snapshot to 1.2 KB (consecutive changes of one peer merge) and RSS by 4.6 MB; 100,000 map sets grew
-the full snapshot to 399 KB and RSS by 0.8 MB.
+History growth (Loro 1.16.4, `facts.ts`; corrected by the review): typing random characters keeps
+about 1 byte of history per character (100,000 characters: 200 KB full against 100 KB shallow;
+100,000 copies of one letter compress to 1.2 KB, which is why the first figure misled); 100,000 map
+sets (moves, resizes) grew the full snapshot to 399 KB, about 4 bytes each.
 
 ### Facts (each with its evidence)
 
@@ -199,16 +201,47 @@ The parts of B:
    since). The update is imported into it; if the core containers did not change, there is nothing
    to check; else `refusedEdit(getCore, readCore(trial))`. A refused update spoils the trial, which
    is dropped and copied again on the next check (the one O(document) path, paid per refusal).
-7. **Bounded welcome, and start-over.** The host answers a hello with the updates the guest lacks
-   when its history reaches back to the guest's version and they are smaller than 64 KB or the
-   state, else with a shallow snapshot at its current version (the state). A guest that receives a
-   snapshot, or cannot take an update (fact 1), **starts over**: a new document from the host's
-   snapshot, then its own unsent changes written again on top as an edit made from the version the
-   two last shared (core, each view, the board's changed objects), which reach the host as ordinary
-   changes. A host that cannot take a guest's update because it builds on history the host no
-   longer keeps answers with a snapshot welcome, which makes the guest start over. To know the
-   shared version after its own restart, a replica's file keeps its history back to the version the
-   host last confirmed (each update from the host now carries the host's version; a few bytes).
+7. **Bounded welcome and start-over** (replaces the "floor" of the first draft, which review
+   round 2 broke; see below). The host keeps its whole in-memory history for its uptime (the
+   ceiling below), so it can take any change a guest built on it. What it hands out is bounded:
+   - *Welcome.* A new guest (`seen` null) gets a shallow snapshot at the host's version: the
+     state, no history. A returning guest whose `seen` is within the host's history gets the
+     updates it lacks; any other gets the same snapshot.
+   - *Start-over* (built first, its own commit `afa750f`, because a guest's offline edits were
+     lost for good, fact 4). A replica given a snapshot while its document holds changes cannot
+     take it (fact 2), and the host cannot take changes built on history it does not keep
+     (fact 1). So it starts a new document from the snapshot, and writes again on top what it
+     wrote since the version the two share: its old document checked out at
+     (its version ∩ the host's), which is exact, so nothing the host has is written twice. Undo
+     histories, the core and tile caches and what is stored on disk start over with it; the
+     sync's own "host has" is set from the welcome. The rewrite goes as the welcome's answer,
+     the update since the host's version.
+   - *What the replica keeps.* Each update from the host says the host's version (`seen`). A
+     replica's file keeps the history since (its version ∩ the host's), so after its own app
+     restarts it can still start over; before any host has spoken, it keeps what it loaded.
+   - *A replica that cannot take an update* (its shallow root is after the update's
+     dependencies: another guest's offline change built on history from before this one joined)
+     says `hello` again with no `seen`, ignores updates until the welcome, and starts over from
+     it. The host answers a `hello` in the middle of a stream as at its start.
+   - *Moving a workspace* to another device (`hosting.ts`: `take`, `yieldTo`, `adopt`) keeps
+     today's whole-document export (`exportSince(repo, null)`), not the welcome's.
+   - *Which, as the coordinator asked:* a guest that was offline is **handed a snapshot it
+     actually takes** (it starts over), not kept mergeable by trimming nothing: the host's disk
+     keeps only the state since its last start, so a guest's offline change is mergeable after a
+     host restart only through start-over. Tested at the doc-sync boundary: both offline cases
+     (guest app open, guest app restarted) in `doc-sync.test.ts`.
+   Written ceiling (accepted): an offline change the host refuses (the guest's role does not
+   allow it) is not written; the guest keeps it until its start-over, which drops it.
+
+8. **No update while the stream has no room** (with perf-links' "has room / room returned" on the
+   link streams, which that track adds; it does not touch `doc-sync.ts`). `serveReplica` already
+   sends each update from what that replica was last sent (`theirs`), not from what it confirmed.
+   So while the sync stream has no room it sends nothing and leaves `theirs` as it was; when room
+   returns it sends one update from `theirs`, which holds every change made meanwhile. A slow
+   guest then costs the host one export per time it catches up, whatever was typed meanwhile,
+   and nothing is queued for it. The welcome is sent whatever the room (it is the first frame).
+   Check: a doc-sync test with a channel that has no room for a while: no frame meanwhile, then
+   one update, and the guest ends with every change.
 
 What was surprising: the offline-guest split (fact 4) is not a corner of this round's change but a
 bug since the first host restart; and fact 2, that Loro reports success while dropping a snapshot,
@@ -227,6 +260,60 @@ at roughly 10⁷ edits in one uptime of an always-on `hive host`. **Upgrade path
 compacts to a shallow document when idle; with part 7 every guest older than that start-over is
 already handled.
 
+## Review (a fresh agent asked to break it) and answers
+
+Round 1 found these; each changed the design above or is answered here.
+
+1. *Start-over replays text the host already has* (a stale "confirmed" version as base, and
+   `mergeText` keeps both insertions). Answer: the base is the old document checked out at (its
+   version ∩ the snapshot's version), exact by construction.
+2. *Two snapshot welcomes in flight make a guest start over twice* and Loro keeps both re-writes.
+   Answer: a second start-over's base is the version shared with the second snapshot, which
+   already holds the first rewrite, so the rewrite is not written again; a guest's updates sent
+   before a welcome land on the host before it (one ordered stream).
+3. *A shallow welcome makes later new guests fail on an offline guest's old change*, and a guest
+   has no message to ask again. Answer: it says `hello` again with no `seen` and starts over
+   (part 7).
+4. *Starting over swaps the document under live undo histories, caches, the trial document and
+   the sync's version.* Answer: all reset with it (part 7).
+5. *Skipping the check when "core" is untouched leaves a hole: `partsChanged` counts `meta` as
+   core, and `refusedEdit` never looks at `meta`, so a guest at edit can already rewrite the owner.*
+   Answer: true today; a guest's change that touches `meta` is refused (only the owner's devices
+   may), and the role check runs only when frames, tiles or order changed.
+6. *Callers left O(board)*: `index.ts`/`headless.ts` forward only `{repo, part}`; `host/widgets.ts`
+   reads the whole board and stringifies it per change of any part; `useBoard` stringifies the
+   stored board per edit; `toStored`/`toCanvas` make a new object for every framed box, so the
+   identity scan degrades to a deep compare; a fold is an O(document) export on main. Answers:
+   ids pass through both publishers; the widget watchers read only changed ids on board changes;
+   `useBoard` drops the stringify; `toStored`/`toCanvas` keep each object's identity while its box
+   and frame did not move; a fold runs after two idle seconds (or on flush), not inside a write.
+7. *Frames*: a frame's removal leaves its boxes with frame-relative positions, and another
+   window's frame move may write its boxes back shifted. Answer: not caused by this design; to be
+   checked with a test in step 3 and fixed there if real, else listed as found.
+8. *`hosting.ts` uses `exportSince(repo, null)`*: a shallow export there would lose changes in a
+   move. Answer: the welcome gets its own export; `exportSince` keeps its whole-document meaning.
+9. Minor: a bad record keeps the good ones before it (it does: they are imported, then the next
+   write is whole); `removeDoc` takes the updates file too (it does); fact 1 is thrown as a
+   string, so "builds on history before the floor" is told by the trial import failing on bytes
+   whose header decodes (`decodeImportBlobMeta`), not by the message; the growth figure corrected.
+
+Round 2 found these, against the "floor" of the first draft, which is dropped for part 7 as it
+stands now:
+
+1. *`hosting.ts` imports bypass the trial document*, so the floor's "the host takes nothing a
+   replica could not" did not hold. Answer: no floor; the host takes what it can and a replica
+   that cannot asks again (part 7).
+2. *A start-over replays changes its role refused.* Answer: they are refused again, not looped:
+   a refusal is answered with nothing, never with a snapshot (pre-mortem 3).
+3. *Start-over must reset what is on disk* and write the new document whole before anything is
+   sent. Answer: built so (`startOver` writes whole, then rewrites).
+4. *Loro roots a shallow snapshot earlier than asked* when changes are concurrent, and *`forkAt`
+   is not supported on a shallow document.* Answer: nothing depends on the root being exact; the
+   base is a `checkout`, which works on a shallow document at or after its root.
+5. *Welcome numbers are per connection.* Answer: no numbers (point 2 above).
+6. *A guest window loses its undo across a start-over.* Answer: accepted; the document it would
+   undo in is gone.
+
 ## Pre-mortem (a year later it failed; why)
 
 1. **Two windows lost each other's edits to one note.** A per-object base that is wrong (the window
@@ -238,12 +325,11 @@ already handled.
    Change: records are length-prefixed and a torn tail is dropped on load (and truncated before the
    next append); the snapshot is renamed into place before the records it replaces are removed; a
    records file that does not import is set aside like a bad snapshot, never deleted.
-3. **A guest looped on start-over.** A guest whose start-over writes are refused (its role does
-   not allow its offline core change) would get a snapshot, write again, be refused again. Change:
-   a refused change is answered with nothing (as now: a refusal is a role rule, not lost history);
-   only "builds on history the host no longer keeps" answers with a snapshot, and a guest starts
-   over at most once per welcome it is given. The written ceiling: an offline guest's change that
-   the host refuses is lost on the guest at its next start-over.
+3. **A guest looped on start-over.** A guest whose rewrite is refused (its role does not allow
+   its offline core change) would be sent a snapshot, write again, be refused again. Change: a
+   refusal is answered with nothing (as now: a role rule, not lost history); only a replica that
+   cannot take what it is sent asks for a snapshot. Written ceiling (accepted): a change the host
+   refuses stays on that guest only until its next start-over.
 
 ## Build order (each step leaves the app working, each checked)
 
@@ -258,9 +344,11 @@ already handled.
    and board. Check: desktop unit tests (`workspace-store-client`, useBoard merge), replica tests.
 4. Guest check on a trial document. Check: doc-sync and edit-rules tests (refused update takes
    nothing, a later good one is taken), bench guest row flat.
-5. Bounded welcome and start-over, replica keeps history back to the confirmed version. Check:
-   doc-sync tests for: new guest welcome is the state; offline guest across a host restart merges
-   both ways; guest that cannot take an update starts over; bench welcome row.
+5. Start-over (done first, `afa750f`); then the bounded welcome and asking again; `meta` refused
+   from guests. Check: doc-sync tests for: an offline guest across a host restart merges both ways
+   with nothing doubled (done); a new guest's welcome is the state alone; a guest that cannot take
+   another's relayed change asks again and ends with both; a guest at edit cannot change the
+   owner; bench welcome row.
 6. CHANGELOG, plan status, the e2e specs to run listed in the report.
 
 ## Unknown
