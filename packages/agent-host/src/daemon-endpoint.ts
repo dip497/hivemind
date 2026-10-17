@@ -14,6 +14,8 @@ export interface SpawnOpts {
   noSpawn?: boolean;
   /** With noSpawn: a running session only; one saved before a reboot is not restored. */
   liveOnly?: boolean;
+  /** At most this many lines of scrollback in the replay of a running session. */
+  lines?: number;
 }
 export interface Callbacks {
   /** `replay`: a redraw of output already seen, not new output. */
@@ -284,7 +286,7 @@ export class DaemonEndpoint {
       t.unref?.();
     });
     try {
-      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(opts.liveOnly ? { liveOnly: true } : {}) });
+      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}) });
     } catch (e) {
       // Unreachable now (e.g. offline): keep retrying so the tile attaches once it is back.
       const msg = e instanceof Error ? e.message : String(e);

@@ -68,6 +68,7 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     ptySpawn: (opts) => workspace.call("terminal.open", opts),
     ptyWrite: (tile, data, paste) => workspace.notice("terminal.write", tile, data, paste),
     ptyInterest: (tile, shown) => workspace.notice("terminal.show", tile, shown),
+    ptyHistory: (tile, lines) => workspace.notice("terminal.history", tile, lines),
     ptyResize: (tile, cols, rows) => workspace.notice("terminal.resize", tile, cols, rows),
     ptyFit: (tile, cols, rows) => workspace.notice("terminal.fit", tile, cols, rows),
     ptyKill: (tile) => workspace.notice("terminal.close", tile),

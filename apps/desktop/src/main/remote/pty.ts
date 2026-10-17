@@ -30,6 +30,8 @@ interface SpawnOpts {
   initialPrompt?: string;
   /** Show an existing session (`tileId` is its id); never start one. */
   attachOnly?: boolean;
+  /** At most this many lines of scrollback in the replay of a running session. */
+  history?: number;
 }
 
 interface Callbacks {
@@ -232,7 +234,7 @@ async function spawnThroughDaemon(opts: SpawnOpts, target: RemoteTarget, cb: Cal
   if (ep) {
     daemonTiles.set(opts.tileId, ep);
     const r = await ep.spawn(
-      { tileId: opts.tileId, cwd: target.path, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: withoutControl(opts.env), noSpawn: opts.attachOnly },
+      { tileId: opts.tileId, cwd: target.path, cmd: opts.cmd, args: opts.args ?? [], cols: opts.cols, rows: opts.rows, env: withoutControl(opts.env), noSpawn: opts.attachOnly, lines: opts.history },
       { onData: cb.onData, onExit: (code, signal) => { daemonTiles.delete(opts.tileId); cb.onExit(code, signal); } },
     );
     // A session that could not be opened is let go, so nothing streams into a tile that says it failed.

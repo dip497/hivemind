@@ -117,8 +117,8 @@ export function setDaemonEventSink(fn: (topic: string, data: unknown) => void): 
 // New sessions start from this app's environment, the person's shell's as last read.
 const local = new DaemonEndpoint({ connect: doConnect, onEvent: (topic, data) => eventSink?.(topic, data), env: () => process.env as Record<string, string> });
 
-export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean }, cb: Callbacks): Promise<{ pid: number }> {
-  const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly }, cb);
+export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean; history?: number }, cb: Callbacks): Promise<{ pid: number }> {
+  const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history }, cb);
   if (r.pid === -1 && opts.attachOnly) local.detach(opts.tileId);
   return r;
 }

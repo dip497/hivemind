@@ -704,6 +704,8 @@ export interface HiveIpc {
   ptyWrite(tileId: string, data: string, paste?: boolean): void;
   /** Whether any view shows this terminal: bytes reach the renderer only while one does. */
   ptyInterest(tileId: string, shown: boolean): void;
+  /** Send this terminal's screen again with `lines` of its scrollback. */
+  ptyHistory(tileId: string, lines: number): void;
   ptyResize(tileId: string, cols: number, rows: number): void;
   /** Size the session to this window's `cols` × `rows` now, as typing here would. */
   ptyFit(tileId: string, cols: number, rows: number): void;

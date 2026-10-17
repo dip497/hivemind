@@ -51,6 +51,18 @@ function hive(args: string[], env: Record<string, string> = {}) {
 const screenOf = (w: Page, tile: string) => w.evaluate((id) =>
   (document.querySelector(`.react-flow__node[data-id="${id}"] .xterm`)?.parentElement as (HTMLElement & { __hmScreen?: () => string }) | null)?.__hmScreen?.() ?? "", tile);
 
+/** Start the app on this spec's profile and repo, its stand-in agents on PATH. */
+async function launch(): Promise<void> {
+  app = await electron.launch({
+    args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"],
+    cwd: repo,
+    // HIVEMIND_SHELL_ENV=0 keeps this PATH (the stand-ins first), not the login shell's.
+    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
+  });
+  page = await app.firstWindow();
+  await page.waitForSelector(".react-flow", { timeout: 15_000 });
+}
+
 test.beforeAll(async () => {
   test.setTimeout(180_000);
   repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-windows-"));
@@ -61,14 +73,7 @@ test.beforeAll(async () => {
     fs.writeFileSync(shim, `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} ${name} "$@"\n`);
     fs.chmodSync(shim, 0o755);
   }
-  app = await electron.launch({
-    args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"],
-    cwd: repo,
-    // HIVEMIND_SHELL_ENV=0 keeps this PATH (the stand-ins first), not the login shell's.
-    env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>,
-  });
-  page = await app.firstWindow();
-  await page.waitForSelector(".react-flow", { timeout: 15_000 });
+  await launch();
   lastProject = await page.evaluate(() => localStorage.getItem("hivemind:last-project"));
   const userData = path.join(XDG, "hivemind-dev");
   await expect.poll(() => fs.existsSync(path.join(userData, "hcp.token")) && fs.existsSync(path.join(userData, "drive.sock")), { timeout: 20_000 }).toBe(true);
@@ -137,6 +142,56 @@ test("a second window on the workspace shows its terminals live and the wires dr
   await expect.poll(() => screenOf(page, parent), { timeout: 15_000 }).toContain("after-close");
   for (const tile of [child, parent]) hive(["ctl", "close", tile]);
   fs.rmSync(elsewhere, { recursive: true, force: true });
+});
+
+test("a window opening a long terminal is sent its newest history, and the rest once scrolled to the top, keeping its place", async () => {
+  test.setTimeout(150_000);
+  const tile: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "long-history", "--prompt", 'seq -f "HI""ST%g" 1 3000', "--json"]).json.tile;
+  await expect.poll(() => screenOf(page, tile), { timeout: 40_000 }).toContain("HIST3000");
+  const [second] = await Promise.all([app.waitForEvent("window"), page.evaluate(() => window.hive.newWindow())]);
+  await second.waitForSelector(".react-flow", { timeout: 15_000 });
+  await expect.poll(() => screenOf(second, tile), { timeout: 15_000 }).toContain("HIST3000");
+  // Selected, then clicked into, its terminal takes the keys.
+  const node = second.locator(`.react-flow__node[data-id="${tile}"]`);
+  await node.locator(".tile-drag-handle").first().click();
+  await node.locator(".xterm-screen").click();
+  /** A page up at a time until one moves nothing: the top of what the terminal holds. */
+  const toTop = async () => {
+    let last = await top();
+    for (let i = 0; i < 300; i++) {
+      await second.keyboard.press("Shift+PageUp");
+      const now = await top();
+      if (now === last) return now;
+      last = now;
+    }
+    return last;
+  };
+  const top = async () => /HIST\d+/.exec(await screenOf(second, tile))?.[0] ?? "";
+  // To the top of what it was sent: the newest 1000 lines, so not the first.
+  const reading = await toTop();
+  expect(reading).toMatch(/^HIST(19|20)\d\d$/);
+  // The rest arrives, and the line it was reading stays where it was.
+  await second.waitForTimeout(1_500);
+  expect(await top()).toBe(reading);
+  await expect.poll(toTop, { timeout: 30_000 }).toBe("HIST1");
+  await second.close();
+  // The app started again attaches to it in the terminal daemon, which kept it: the newest history too.
+  await page.evaluate((p) => localStorage.setItem("hivemind:last-project", p), repo);
+  await app.close();
+  await launch();
+  await expect.poll(() => screenOf(page, tile), { timeout: 15_000 }).toContain("HIST3000");
+  const again = page.locator(`.react-flow__node[data-id="${tile}"]`);
+  await again.locator(".tile-drag-handle").first().click();
+  await again.locator(".xterm-screen").click();
+  let last = "";
+  for (let i = 0; i < 300; i++) {
+    await page.keyboard.press("Shift+PageUp");
+    const now = /HIST\d+/.exec(await screenOf(page, tile))?.[0] ?? "";
+    if (now === last) break;
+    last = now;
+  }
+  expect(last).toMatch(/^HIST(19|20)\d\d$/);
+  hive(["ctl", "close", tile]);
 });
 
 /** Where `w` shows `tile` on the canvas (world coordinates, whatever that window's camera). */

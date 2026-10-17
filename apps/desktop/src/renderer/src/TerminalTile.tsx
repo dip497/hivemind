@@ -74,6 +74,13 @@ const BOOT_MIN_MS = 8000;
 const BOOT_CAP_MS = 12_000;
 /** How long a terminal no view shows keeps its stream before it stops receiving bytes. */
 const INTEREST_HIDE_MS = 1000;
+/** Lines of scrollback a terminal keeps. */
+const SCROLLBACK = 5000;
+/** Lines of scrollback a terminal is sent when it opens; scrolled to the top of them, it asks for
+ *  the rest. */
+const FIRST_HISTORY = 1000;
+/** What starts a screen the host sends in place of what a terminal shows. */
+const SCREEN_RESET = "\x1bc";
 
 // The terminal palette comes from settings.appearance.terminal (the ubuntu
 // preset is the historical Ubuntu / GNOME Terminal palette, byte-identical —
@@ -329,7 +336,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       const buf = term.buffer.active;
       const out: string[] = [];
       for (let y = 0; y < term.rows; y++) {
-        const line = buf.getLine(buf.baseY + y);
+        const line = buf.getLine(buf.viewportY + y);
         out.push(line ? line.translateToString(true) : "");
       }
       return out.join("\n");
@@ -352,7 +359,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // the canvas never feels fully still/crisp (perpetual GPU compositing
       // across all tiles). Cursor stays solid + visible; zero idle repaint.
       cursorBlink: false,
-      scrollback: 5000,
+      scrollback: SCROLLBACK,
       allowProposedApi: true,
       // Render perf + UX tuning
       fastScrollSensitivity: 5,           // Alt-wheel jumps 5x faster
@@ -610,12 +617,24 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     };
     // A remount (a view switch) picks the stream back up if main had stopped sending it.
     window.hive.ptyInterest(ptyId, true);
+    // Opened with the newest FIRST_HISTORY lines of scrollback. Scrolled to the top of them, it asks
+    // for all of it, and keeps the line it was reading in place when that screen arrives.
+    let history: number | undefined = FIRST_HISTORY;
+    let keepPlace: number | undefined;
+    const historyAsked = () => (history === undefined ? {} : { history });
+    term.onScroll(() => {
+      const buf = term.buffer.active;
+      if (history === undefined || buf.viewportY > 0 || buf.baseY < history) return;
+      history = undefined;
+      keepPlace = buf.baseY;
+      window.hive.ptyHistory(ptyId, SCROLLBACK);
+    });
     // Back in touch with the host of a workspace joined from elsewhere: show its session again,
     // from the host's screen, at this window's size if its keys reach it.
     reattachRef.current = () => {
       attachedRef.current = true;
       exited = false;
-      window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true })
+      window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, ...historyAsked() })
         .then(({ pid }) => { if (pid === -1) attachedRef.current = false; }, () => { attachedRef.current = false; });
       if (interested) window.hive.ptyInterest(ptyId, true);
       sentSizeRef.current = null;
@@ -729,6 +748,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         flowPending -= d.length;
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
       });
+      if (keepPlace !== undefined && d.startsWith(SCREEN_RESET)) {
+        const had = keepPlace;
+        keepPlace = undefined;
+        term.write("", () => term.scrollToLine(Math.max(0, term.buffer.active.baseY - had)));
+      }
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
       // An agent tile's status comes from the host; a plain shell uses the cheap heuristic.
       if (agent) agentDirty = true;
@@ -862,7 +886,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         if (agent && !session && isRestored(tileId) && !isRemote(cwd)) {
           // liveOnly: a session saved before a reboot restores on attach, which is the
           // start this queue is for; it must wait its turn like any other.
-          const probe = await window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true });
+          const probe = await window.hive.ptySpawn({ tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows, attachOnly: true, liveOnly: true, ...historyAsked() });
           if (probe.pid !== -1) attachedPid = probe.pid;
           if (attachedPid === undefined && !cancelled) {
             bootRelease = await acquireBoot(tileId);
@@ -880,6 +904,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           rows: term.rows,
           ...(initialPrompt ? { initialPrompt } : {}),
           ...(session ? { attachOnly: true } : {}),
+          ...historyAsked(),
         });
         if (cancelled) {
           // An adopted session is someone's running job: an abandoned mount only lets go of it.

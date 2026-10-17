@@ -146,7 +146,7 @@ async function machine(placed: string[], framed: Record<string, string[]> = {}) 
   assert.ok(await until(() => offered), "the machine is shown to the host");
   /** The host's window opens tile `id`'s terminal, as it would start it (with `env`, and a task
    *  for an agent), or only to show it (`attachOnly`): what it is shown. */
-  const watch = (id: string, o: { env?: Record<string, string>; initialPrompt?: string; attachOnly?: boolean } = {}) => {
+  const watch = (id: string, o: { env?: Record<string, string>; initialPrompt?: string; attachOnly?: boolean; history?: number } = {}) => {
     const seen = { data: "", sizes: [] as Array<[number, number]>, exits: [] as number[] };
     const started = host.start(
       { tileId: id, tile: id.slice(3), cwd: `machine://${PRIYA}/home/priya/api`, cmd: "/bin/sh", args: ["-c", "touch host-cmd-ran"], cols: 50, rows: 10, ...o },
@@ -185,6 +185,23 @@ test("the host watches what this machine's person placed here, as it runs and at
   assert.deepEqual(w.seen.sizes[1], [120, 40]);
   m.own.write("hm:shell", "echo two-$((40+2))\n");
   assert.ok(await until(() => w.seen.data.includes("two-42")), "as it runs");
+});
+
+test("the host is shown as much of a session's scrollback as it asks for, watching it and asking for its screen again", { skip: !unix, timeout: 60_000 }, async () => {
+  const m = await machine(["hm:long"]);
+  const own = await m.run("hm:long", "/bin/sh", ["-c", "i=0; while [ $i -lt 100 ]; do echo LINE$i; i=$((i+1)); done; while :; do sleep 1; done"]);
+  assert.ok(await until(() => own.data.includes("LINE99")));
+  const w = m.watch("hm:long", { attachOnly: true, history: 5 });
+  assert.ok((await w.started).pid > 0);
+  assert.ok(await until(() => w.seen.data.includes("LINE99")));
+  // 30 rows here show LINE71 to LINE99 and the cursor's line; the five above them are LINE66 to LINE70.
+  assert.match(w.seen.data, /LINE66\b/);
+  assert.doesNotMatch(w.seen.data, /LINE65\b/);
+  const screen = (lines?: number) => new Promise<string | null>((done) => { assert.ok(m.host.screen("hm:long", lines)?.(done)); });
+  const few = await screen(5);
+  assert.match(few ?? "", /LINE66\b/);
+  assert.doesNotMatch(few ?? "", /LINE65\b/);
+  assert.match((await screen()) ?? "", /LINE0\b/);
 });
 
 test("what the host sends to type into a session, size it, hold it back or end it goes nowhere, nor is anything else it asks of the daemon done: no session started, listed or restored, no control plane, no shutdown", { skip: !unix, timeout: 60_000 }, async () => {

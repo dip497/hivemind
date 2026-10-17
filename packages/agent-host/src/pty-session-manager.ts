@@ -296,14 +296,15 @@ export class SessionManager {
     return t ? `\x1b]0;${t}\x07${withMouse}` : withMouse;
   }
 
-  /** `view`: the client only watches (M4): a running session keeps its size and its pauses. */
-  async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient, view = false): Promise<AttachResult> {
+  /** `view`: the client only watches (M4): a running session keeps its size and its pauses.
+   *  `lines`: at most that much scrollback in the replay of a running session. */
+  async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient, view = false, lines?: number): Promise<AttachResult> {
     const existing = this.sessions.get(id);
     if (existing && !existing.exited) {
       existing.clients.add(client);
       if (!view) this.interacts(existing, client, spec.cols, spec.rows);
       this.cancelIdle();
-      const snap = await this.serializeDrained(existing);
+      const snap = await this.serializeDrained(existing, 3, lines);
       return { pid: existing.pty.pid, isNew: false, replay: this.withTitle(existing, snap.replay), seq: snap.seq, epoch: existing.epoch, cols: existing.spec.cols, rows: existing.spec.rows };
     }
 

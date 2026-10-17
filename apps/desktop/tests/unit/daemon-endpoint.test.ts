@@ -47,7 +47,7 @@ test("spawn streams, a dropped transport re-attaches with a reset replay, close 
   let connects = 0;
   const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { connects++; const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), retryInitialMs: 20 });
   let out = "";
-  const r = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: (x) => { out += x; }, onExit: () => {} });
+  const r = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24, lines: 5 }, { onData: (x) => { out += x; }, onExit: () => {} });
   assert.equal(r.pid, 42);
   assert.equal(out, "SCREEN", "first attach replay is not reset");
   ep.write("t1", "ls");
@@ -57,6 +57,8 @@ test("spawn streams, a dropped transport re-attaches with a reset replay, close 
   assert.ok(await until(() => out.endsWith(REATTACH_RESET + "SCREEN")), "re-attach replays onto a reset screen");
   assert.equal(connects, 2);
   assert.equal(d.got.filter((m) => m.t === "attach").length, 2);
+  // Its first replay is as much scrollback as it asked for; a reset one, all of it.
+  assert.deepEqual(d.got.filter((m) => m.t === "attach").map((m) => m.t === "attach" && m.lines), [5, undefined]);
 
   ep.detach("t1");
   assert.ok(await until(() => d.got.some((m) => m.t === "detach")));

@@ -144,7 +144,7 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
     const env = opts.initialPrompt ? { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } : opts.env;
     try {
       const r = await ep.spawn(
-        { tileId: opts.tileId, cwd: "", cmd: opts.cmd, cols: opts.cols, rows: opts.rows, ...(opts.attachOnly ? { noSpawn: true, liveOnly: true } : { env: withoutControl(env) }) },
+        { tileId: opts.tileId, cwd: "", cmd: opts.cmd, cols: opts.cols, rows: opts.rows, lines: opts.history, ...(opts.attachOnly ? { noSpawn: true, liveOnly: true } : { env: withoutControl(env) }) },
         {
           onData: (data, replay) => out.data(data, replay),
           onExit: (code, signal) => { tiles.delete(opts.tileId); out.exit(code, signal); },
@@ -184,7 +184,7 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
           ep.spawn(
             {
               tileId: opts.tileId, cwd: at.path, cmd: opts.cmd, args: opts.args, cols: opts.cols, rows: opts.rows, env: withoutControl(env),
-              noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly,
+              noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history,
             },
             { onData: (data, replay) => out.data(data, replay), onExit: (code, signal) => { tiles.delete(opts.tileId); out.exit(code, signal); } },
           ),

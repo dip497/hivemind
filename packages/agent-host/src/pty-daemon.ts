@@ -585,7 +585,7 @@ const server = net.createServer((sock) => {
         // The spawn/restore checkpoint: an agent installed after boot is wired here,
         // before its spec is transformed.
         void ensureAgentsCurrent()
-          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view))
+          .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view, linesOf(msg.lines)))
           .then((r) => {
             ready = true;
             send({ t: "attached", reqId: msg.reqId, id: msg.id, pid: r.pid, isNew: r.isNew, replay: r.replay, seq: r.seq, epoch: r.epoch, cols: r.cols, rows: r.rows });
@@ -630,7 +630,7 @@ const server = net.createServer((sock) => {
         break;
       case "screen": {
         const { reqId, id } = msg;
-        const lines = Number.isSafeInteger(msg.lines) && msg.lines! >= 0 ? msg.lines : undefined;
+        const lines = linesOf(msg.lines);
         // What is buffered for this viewer is older than the screen: send it first, so the
         // screen is the line between bytes it already covers and bytes that follow it.
         outBuf.flush(id);
@@ -810,3 +810,8 @@ const bootGuard = setTimeout(() => {
   }
 }, 30000);
 bootGuard.unref?.();
+
+/** A client's "at most this many lines of scrollback", when it is one. */
+function linesOf(lines: unknown): number | undefined {
+  return Number.isSafeInteger(lines) && (lines as number) >= 0 ? (lines as number) : undefined;
+}

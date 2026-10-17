@@ -30,7 +30,7 @@ export function daemonSessions({ endpoint, pace }: DaemonSessionsOptions): Sessi
       const r = await endpoint.spawn(
         {
           tileId: opts.tileId, cwd: opts.cwd, cmd: opts.cmd, args: opts.args, cols: opts.cols, rows: opts.rows, env,
-          noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly,
+          noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history,
         },
         { onData: (data, replay) => out.data(data, replay), onExit: (code, signal) => out.exit(code, signal) },
       );

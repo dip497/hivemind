@@ -88,8 +88,11 @@ interface Asked {
   size: { cols: number; rows: number };
   env: { env?: Record<string, string> };
   since: { since?: { seq: number; epoch: string } };
+  /** At most this much scrollback in its replay. */
+  lines: { lines?: number };
   until: number;
 }
+const linesOf = (v: unknown): { lines?: number } => (Number.isSafeInteger(v) && (v as number) >= 0 ? { lines: v as number } : {});
 const position = (v: unknown): { seq: number; epoch: string } | null => {
   const p = v as Fields | null;
   return p && typeof p === "object" && Number.isInteger(p.seq) && isText(p.epoch) ? { seq: p.seq as number, epoch: p.epoch } : null;
@@ -154,10 +157,10 @@ export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: Machi
   const attachOf = (reqId: string, asked: Asked): ClientMsg | null => {
     const run = startable(asked.id);
     if (!run && !o.shows(asked.id)) return null;
-    const { id, size, since } = asked;
+    const { id, size, since, lines } = asked;
     return run && asked.starts
-      ? { t: "attach", reqId, id, spec: { ...run, ...size, ...asked.env }, view: true, ...since }
-      : { t: "attach", reqId, id, spec: { cwd: "", cmd: "", args: [], ...size }, noSpawn: true, liveOnly: true, view: true, ...since };
+      ? { t: "attach", reqId, id, spec: { ...run, ...size, ...asked.env }, view: true, ...since, ...lines }
+      : { t: "attach", reqId, id, spec: { cwd: "", cmd: "", args: [], ...size }, noSpawn: true, liveOnly: true, view: true, ...since, ...lines };
   };
   /** Ask the daemon for the attach `reqId` waits on. One the host starts may be on its way to this
    *  machine's copy of the workspace: waited for, as long as the host may start it. */
@@ -202,6 +205,7 @@ export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: Machi
           size: { cols: sizeOr(spec.cols, 80), rows: sizeOr(spec.rows, 24) },
           env: envOf(spec.env),
           since: since ? { since } : {},
+          lines: linesOf(m.lines),
           until: Date.now() + SHOWN_WAIT_MS,
         });
         return ask(m.reqId);
@@ -212,7 +216,7 @@ export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: Machi
       case "screen": {
         if (!isText(m.reqId) || !isText(m.id)) return;
         const none = (): void => toHost({ t: "screen", reqId: m.reqId as string, id: m.id as string, replay: null });
-        return watched.has(m.id) ? toDaemon({ t: "screen", reqId: m.reqId, id: m.id }, none) : none();
+        return watched.has(m.id) ? toDaemon({ t: "screen", reqId: m.reqId, id: m.id, ...linesOf(m.lines) }, none) : none();
       }
       case "viewport": {
         if (!isText(m.reqId) || !isText(m.id)) return;
