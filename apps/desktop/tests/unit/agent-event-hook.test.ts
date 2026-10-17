@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 import { agentEventHookSource } from "@hivemind/agent-host/hooks/agent-event-hook-source";
 import { startHookDoor } from "@hivemind/agent-host/hooks/hook-door";
 import { EVENT_ENV, keptFields } from "@hivemind/agents";
+import { ControlPlane, type ControlPlaneOptions } from "@hivemind/host/control/plane";
+import { readOrCreateToken, tileToken } from "@hivemind/agent-host/hooks/token";
 
 interface Case { name: string; env: Record<string, string>; payload: unknown; expect: unknown; forbidden?: string[] }
 const casesFile = fileURLToPath(new URL("../../../../conformance/hook-reports.json", import.meta.url));
@@ -25,7 +27,7 @@ const VIAS: Via[] = ["script", "native"];
 /** The agent's hook, run through `via` with `env` in front of it and `payload` on stdin, reporting
  *  to the host on `sock`. It is told the payload's keys to keep as a launch tells it. */
 async function hook(via: Via, sock: string, entryEnv: Record<string, string>, payload: unknown) {
-  const env = { [EVENT_ENV.keep]: keptFields({ answer: entryEnv[EVENT_ENV.answer] === "1" }), ...entryEnv };
+  const env = { [EVENT_ENV.keep]: keptFields({ answer: entryEnv[EVENT_ENV.answer] === "1", reply: entryEnv[EVENT_ENV.reply] }), ...entryEnv };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "evh-"));
   const door = via === "native" ? await startHookDoor({ path: path.join(dir, "door.sock"), sock }) : undefined;
   const script = path.join(dir, "hook.cjs");
@@ -130,5 +132,30 @@ for (const via of VIAS) {
     await until(() => h.closed() > 0);
     assert.equal(h.closed(), 1);
     h.close();
+  });
+}
+
+for (const via of VIAS) {
+  test(`a turn end hands over the turn's reply ahead of it, as its own tile, so the turn it ends carries it; one with no reply ends with none (${via})`, { skip: via === "native" && noHiveNet }, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "evh-"));
+    const plane = new ControlPlane({ dir: () => dir, publish: () => {}, write: () => true, spawned: () => {}, methods: () => { throw new Error("no methods here"); }, windowsUp: () => false } as unknown as ControlPlaneOptions);
+    const sock = path.join(dir, "hcp.sock");
+    const server = plane.listen(sock);
+    await until(() => fs.existsSync(sock));
+    const env = { HIVEMIND_TILE: "hm:t1", HCP_TOKEN: tileToken(readOrCreateToken(dir), "hm:t1"), HIVE_EVENT: "turn.ended", HIVE_EVENT_REPLY: "last_assistant_message" };
+    const turnEnd = async (payload: unknown) => {
+      const ended = plane.turns.currentSeq("hm:t1") + 1;
+      assert.equal(await (await hook(via, sock, env, payload)).exited, 0);
+      await until(() => plane.turns.currentSeq("hm:t1") === ended);
+    };
+    try {
+      await turnEnd({ session_id: "s-1", transcript_path: "/h/x.jsonl", last_assistant_message: "All done." });
+      assert.equal(plane.turns.lastReply("hm:t1"), "All done.");
+      await turnEnd({ session_id: "s-1", last_assistant_message: 42 });
+      assert.equal(plane.turns.lastReply("hm:t1"), null);
+    } finally {
+      server.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 }

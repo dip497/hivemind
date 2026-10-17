@@ -268,6 +268,9 @@ export interface AgentHookEntry {
   when?: "supervised";
   /** `input.requested` only: the hook can carry the answer, and holds until it has one. */
   answer?: HookAnswer;
+  /** `turn.ended` only: the field of the agent's payload that holds the turn's reply, handed to
+   *  the host ahead of the turn's end. */
+  reply?: string;
 }
 
 /** What a hook prints to answer what its agent asks: a map each, filled. `{message}` is the

@@ -39,7 +39,7 @@ export function startHookDoor(o: { path: string; sock: string }): Promise<HookDo
       let e: Record<string, unknown> = {};
       try { e = JSON.parse(said.stdin ?? "") || {}; } catch { /* reported without its ids */ }
       const answer = env[EVENT_ENV.answer] === "1";
-      const lines = hookLines({ event, kind: env[EVENT_ENV.kind], outcome: env[EVENT_ENV.outcome], answer }, tile, env.HCP_TOKEN ?? "", e);
+      const lines = hookLines({ event, kind: env[EVENT_ENV.kind], outcome: env[EVENT_ENV.outcome], answer, reply: env[EVENT_ENV.reply] }, tile, env.HCP_TOKEN ?? "", e);
       const c = up = net.connect(o.sock, () => {
         c.write(lines.map((l) => JSON.stringify(l) + "\n").join(""));
         if (!answer) { c.end(); conn.end(); }

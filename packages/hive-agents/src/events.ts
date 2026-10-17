@@ -39,14 +39,16 @@ export const AGENT_EVENT_METHOD = "agent.event";
 
 /** The script an `emit` entry runs, and the environment that tells it what to report. */
 export const EVENT_HOOK = "event";
-export const EVENT_ENV = { event: "HIVE_EVENT", outcome: "HIVE_EVENT_OUTCOME", kind: "HIVE_EVENT_KIND", answer: "HIVE_EVENT_ANSWER", keep: "HIVE_EVENT_KEEP" } as const;
+export const EVENT_ENV = { event: "HIVE_EVENT", outcome: "HIVE_EVENT_OUTCOME", kind: "HIVE_EVENT_KIND", answer: "HIVE_EVENT_ANSWER", reply: "HIVE_EVENT_REPLY", keep: "HIVE_EVENT_KEEP" } as const;
 
 /** The payload's keys the host reads for an event, the only ones the native hook passes on: the
  *  ids every event carries, and what an entry that answers asks about. A tool's output is never
  *  among them, so its size costs the host nothing. */
-export function keptFields(entry?: { answer?: unknown }): string {
+export function keptFields(entry?: { answer?: unknown; reply?: string }): string {
   const ids = ["session_id", "agent_id", "background_tasks"];
-  return (entry?.answer ? [...ids, "hook_event_name", "tool_name", "tool_input"] : ids).join(",");
+  if (entry?.answer) ids.push("hook_event_name", "tool_name", "tool_input");
+  if (entry?.reply) ids.push(entry.reply.split(".")[0]!);
+  return ids.join(",");
 }
 
 /** Every canonical event an agent's hooks can produce: its `emit` entries, and what the

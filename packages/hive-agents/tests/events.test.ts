@@ -50,6 +50,26 @@ describe("manifest emit entries", () => {
   });
 });
 
+describe("an entry that hands over the turn's reply", () => {
+  test("names the payload's field on a turn end, and its command is told it with the key kept", () => {
+    const def = defFromManifest(manifest({ Stop: { emit: "turn.ended", reply: "last_assistant_message" } }));
+    expect(def.hooks!.events.Stop).toEqual({ emit: "turn.ended", reply: "last_assistant_message" });
+    const cmd = (renderHookEvents(def.hooks!, req()).Stop as Array<{ hooks: Array<{ command: string }> }>)[0]!.hooks[0]!.command;
+    expect(cmd).toContain("HIVE_EVENT_REPLY='last_assistant_message' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,last_assistant_message'");
+  });
+
+  test("refused: on another event, a script or something not a field path; and without the launch that gives the agent its token", () => {
+    const bad: Array<[string, Record<string, unknown>]> = [
+      ["another event", { UserPromptSubmit: { emit: "turn.started", reply: "prompt" } }],
+      ["a script", { Stop: { hook: "stop", reply: "last_assistant_message" } }],
+      ["no field path", { Stop: { emit: "turn.ended", reply: "../x" } }],
+    ];
+    for (const [why, events] of bad) expect(() => defFromManifest(manifest(events)), why).toThrow();
+    const { launch: _l, ...unlaunched } = manifest({ Stop: { emit: "turn.ended", reply: "last_assistant_message" } });
+    expect(() => defFromManifest({ ...unlaunched, caps: { ...base.caps, turnSignal: false, supervise: "none" } })).toThrow(/reply needs launch.hcp/);
+  });
+});
+
 /** What Claude Code's PermissionRequest hook prints to answer, as its entry declares it. */
 const ANSWER = {
   allow: { hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } } },

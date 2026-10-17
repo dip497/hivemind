@@ -139,22 +139,26 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    `input.resolved` too (e.g. `PostToolUse`), or a tile answered in the agent stays
    "needs you" until the turn ends. One generic script reports
    them and never forwards text the agent wrote. Map an event only after seeing the real
-   binary fire it, and inject per launch — never write the user's global config.
+   binary fire it, and inject per launch — never write the user's global config. When the
+   agent's turn-end payload carries the turn's reply (Claude's and Codex's
+   `last_assistant_message`), name that field with `reply:` on the `turn.ended` entry (it needs
+   `launch.hcp`): the same generic hook hands it over before the turn end, natively, with no
+   script of the plugin's.
 
    Anything data cannot say is a script **the plugin ships**, never code in the host: list it
    in `assets` with a `hook:` name (and `produces:` for the events it reports), and name that
    hook in `events`. It loads the host's SDK — `const hive = require(process.env.HIVE_SDK)` —
    for `payload()`, `emit()`, `reportReply()`, `requestApproval()` and `openPlanReview()`
    (`packages/agent-sdk`, wire format in `spec/hook-protocol.md`). The reply `hive ctl read`
-   returns comes only from `reportReply` — from the payload if the agent puts it there
-   (Claude's `last_assistant_message`), else from the agent's own transcript (Droid). An agent
+   returns comes from `reply:` when the payload carries it, else from `reportReply` reading the
+   agent's own transcript (Droid). An agent
    whose hook config is a file of its own shape uses `{emit:turn.ended}` / `{hookCmd:<name>}`
    placeholders inside that asset.
 
    ```yaml
    events:
      UserPromptSubmit: { emit: turn.started }
-     Stop: { hook: turnEnd }          # the plugin's script: reportReply, then emit turn.ended
+     Stop: { hook: turnEnd }          # the plugin's script: reads the reply, reportReply, then emit turn.ended
      StopFailure: { emit: turn.ended, outcome: failed }
      PermissionRequest: { emit: input.requested, kind: permission }
    assets:

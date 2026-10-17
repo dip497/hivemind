@@ -347,6 +347,7 @@ function validateHooks(raw: unknown): AgentHooks {
         req(entry.emit === "input.requested", `${at}.answer is for emit: input.requested`);
         validateHookAnswer(entry.answer, `${at}.answer`);
       }
+      if (entry.reply !== undefined) req(entry.emit === "turn.ended" && typeof entry.reply === "string" && DOT_PATH_RE.test(entry.reply), `${at}.reply is for emit: turn.ended, a field path`);
       return entry as unknown as AgentHookEntry;
     });
     events[event] = Array.isArray(spec) ? list : list[0]!;
@@ -631,6 +632,10 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   // that does the talking.
   const wiredToControlPlane = !!(m.launch as { hcp?: unknown } | undefined)?.hcp
     && ((Array.isArray(m.assets) && m.assets.length > 0) || !!m.hooks || !!m.home);
+  // A reply is handed over as the agent's own tile, with the token only a launch gives it.
+  const replies = isObj(m.hooks) && isObj((m.hooks as Record<string, unknown>).events)
+    && Object.values((m.hooks as { events: Record<string, unknown> }).events).flat().some((e) => isObj(e) && (e as { reply?: unknown }).reply !== undefined);
+  if (replies) req((m.launch as { hcp?: unknown } | undefined)?.hcp === true, "hooks: an entry with reply needs launch.hcp: true");
   if (!wiredToControlPlane) {
     req(m.caps.turnSignal === false,
       "caps.turnSignal must be false: nothing here sends it — a daemon half, or `launch.hcp` with the asset that talks to it");

@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Added
 
+- An agent manifest's `turn.ended` entry can name the payload field that holds the turn's reply (`reply: last_assistant_message`): the generic hook hands it over before the turn end, with `hive-net` natively, so an agent whose payload carries its reply needs no script of its own for `hive ctl read`. It needs `launch.hcp`.
 - Agents drive the plugins in the app as one lifecycle: `hive ctl plugin list` shows every tool tile, widget with code and view running, each starting, ready or failed (with why), and the views there are; `hive ctl plugin open` answers once what it opened can be called, so a `call` right after it works; a call to a plugin still starting waits for it; `hive ctl plugin close` closes a tool's tile, takes a widget off the board or leaves a view. Workspace API 0.27 (`plugin.list`, `plugin.close`).
 - The hivemind skill covers every `hive ctl` verb (sessions and `spawn --resume`, rename, tools, plugin commands, view events) and points to networks, sharing, grants, machines, hosts and push. The hive skills now follow the app: starting an agent in a workspace brings the skills it has up to this version, and `hive add skill` replaces older copies, edits too; keep a skill of your own under another name.
 - Remove a workspace from this computer from the Layers panel's title menu: hover it and press ×, or press Delete. Its board here goes; its folder and files stay. A workspace with a terminal still running says so and stays.

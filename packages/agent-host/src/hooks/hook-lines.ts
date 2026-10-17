@@ -4,7 +4,7 @@
  * an entry that answers, the request for the answer. One owner for the event script and the hook
  * door (hook-door.ts), so both functions are self-contained: the script carries their source.
  */
-export interface HookSpec { event: string; kind?: string; outcome?: string; answer?: boolean }
+export interface HookSpec { event: string; kind?: string; outcome?: string; answer?: boolean; reply?: string }
 
 export function hookLines(spec: HookSpec, tileId: string, token: string, e: Record<string, any>): Array<Record<string, unknown>> {
   const out: Record<string, unknown> = { tileId: tileId, event: spec.event };
@@ -17,6 +17,12 @@ export function hookLines(spec: HookSpec, tileId: string, token: string, e: Reco
     if (running > 0) out.background = running;
   }
   const lines: Array<Record<string, unknown>> = [{ jsonrpc: "2.0", method: "agent.event", params: out }];
+  // The turn's reply, ahead of its end, which carries it; said as the agent's own tile.
+  let said: any = spec.reply ? e : undefined;
+  for (const key of spec.reply ? spec.reply.split(".") : []) said = said && typeof said === "object" && Object.prototype.hasOwnProperty.call(said, key) ? said[key] : undefined;
+  if (typeof said === "string" && said) {
+    lines.unshift({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: token } }, { jsonrpc: "2.0", method: "agent.reply", params: { tileId: tileId, text: said } });
+  }
   if (!spec.answer) return lines;
   const ask: Record<string, unknown> = { callerTile: tileId, hook: e.hook_event_name, tool: e.tool_name, input: e.tool_input };
   if (out.agentId) ask.agentId = out.agentId;

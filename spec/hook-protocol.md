@@ -13,6 +13,7 @@ for that answer, and exits 0 printing nothing when the host is not there.
 | `HCP_TOKEN` | the agent's spawn env | authorizes requests |
 | `HIVE_EVENT`, `HIVE_EVENT_OUTCOME`, `HIVE_EVENT_KIND` | `emit:` entries | the canonical event the generic script reports |
 | `HIVE_EVENT_ANSWER` | `emit:` entries with `answer:` | `1`: the script waits for the answer and prints it |
+| `HIVE_EVENT_REPLY` | `emit: turn.ended` entries with `reply:` | the payload's field that holds the turn's reply |
 | `HIVE_EVENT_KEEP` | the spawn env of an agent with hooks; `emit:` entries with `answer:` | the payload's keys the native hook passes on, comma separated |
 | `HIVE_SDK` | a plugin's own scripts; the spawn env of an agent with `launch.hcp`, for a plugin that runs inside it | path of the SDK to `require` |
 | `HIVE_HOOK_SOCK` | the same | the host socket |
@@ -26,7 +27,10 @@ for that answer, and exits 0 printing nothing when the host is not there.
   drops fields outside the schema.
 - **Requests** need the connection introduced first: `initialize {"token": HCP_TOKEN}`, then
   - `agent.reply {"tileId","text"}` → `{"ok":true}`. The turn's reply for `hive ctl read`, sent
-    before the `turn.ended` it belongs to. Never forwarded on the event stream or to push.
+    before the `turn.ended` it belongs to. Never forwarded on the event stream or to push. A hook
+    for an entry with `reply:` sends it as a notification after `initialize`, then the event, on
+    one connection: the host handles notifications in order, so the turn end carries it. A tile
+    names only itself; what it says of another tile is refused or dropped.
   - `agent.await_approval {"callerTile","tool_name","tool_input"}` →
     `{"decision":"allow"|"deny"|"ask","reason"?}`. `ask`: nobody decided; the script falls
     back to the agent's own prompt, or refuses if the agent has none.

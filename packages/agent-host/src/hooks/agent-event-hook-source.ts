@@ -33,7 +33,7 @@ process.stdin.on("end", () => {
   try { e = JSON.parse(input) || {}; } catch (x) {}
   // An entry that answers waits for the answer, however long: the agent's own prompt runs meanwhile.
   const answers = ${env("answer")} === "1";
-  const lines = hookLines({ event: name, kind: ${env("kind")}, outcome: ${env("outcome")}, answer: answers }, tileId, env.HCP_TOKEN || "", e);
+  const lines = hookLines({ event: name, kind: ${env("kind")}, outcome: ${env("outcome")}, answer: answers, reply: ${env("reply")} }, tileId, env.HCP_TOKEN || "", e);
   let settled = false;
   const fin = () => { if (settled) return; settled = true; done(); };
   if (!answers) { const t = setTimeout(fin, 1500); if (t.unref) t.unref(); }
