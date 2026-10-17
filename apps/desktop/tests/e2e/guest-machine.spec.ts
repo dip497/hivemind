@@ -103,6 +103,8 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   // its keyboard is the guest's machine's, which nobody takes from the host.
   await guest.keyboard.type("echo watched-$((6*7))\n");
   await expect.poll(() => tiles(host), { timeout: 15_000 }).toContain(shell);
+  // A terminal out of view gets no output, so the host looks at it first.
+  await focusTile(host, shell);
   await expect.poll(() => screenOf(host, shell), { timeout: 30_000 }).toContain("watched-42");
   const watched = host.locator(`.react-flow__node-terminal[data-id="${shell}"]`);
   await expect(watched.locator("[data-keyboard-holder]")).toHaveAttribute("data-keyboard-holder", "Priya");
