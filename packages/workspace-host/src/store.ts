@@ -30,18 +30,18 @@
  */
 import { LoroDoc, UndoManager, VersionVector, decodeImportBlobMeta, type Frontiers } from "loro-crdt";
 import { addFrame, addTile, hasCore, readCore, removeFrame, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
-import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
-import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
+import { checkedEdit, editObjects, readObjects, readObjectsWithIds } from "@hivemind/workspace-doc/objects";
+import { boardEdit } from "@hivemind/workspace-doc/board-edit";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { sameJson } from "@hivemind/workspace-doc/rebase";
 import { partsChanged, readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
-import type { BoardObject, CoreLayout, FrameRecord, Frozen, KeptCore, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardEdit, BoardObject, CoreLayout, FrameRecord, Frozen, KeptCore, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { appendUpdate, readStoredDoc, removeDoc, storedKeys, writeDoc, type StoredDoc } from "./doc-file.js";
 import { idOf, newWorkspaceId, workspaceSeed, type Seed } from "./identity.js";
 
 export type { LegacyLayout, WorkspaceChange } from "./layout.js";
-export type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+export type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 export type { KeptCore } from "@hivemind/workspace-doc/shapes";
 
 function freeze<T>(value: T): Frozen<T> {
@@ -57,18 +57,30 @@ function freeze<T>(value: T): Frozen<T> {
 const boardOf = (writer: string): string => `board:${encodeURIComponent(writer)};`;
 const WIDGETS = "sys:widgets";
 
-/** `objects` with each widget's `state` as `kept` has it. */
-function drawnAsKept(objects: unknown, kept: BoardObject[]): unknown {
-  if (!Array.isArray(objects)) return objects;
-  const byId = new Map(kept.map((o) => [o.id, o]));
-  return objects.map((o: unknown) => {
-    const x = o as { id?: unknown; kind?: unknown; state?: unknown };
-    if (typeof o !== "object" || o === null || x.kind !== "widget") return o;
-    const was = byId.get(String(x.id)) as { state?: unknown } | undefined;
-    if (!was) return o; // another writer's widget: what it keeps stays as it is
-    const { state: _s, ...rest } = x;
-    return was.state !== undefined ? { ...rest, state: was.state } : rest;
-  });
+/** The edit's objects with each widget's `state` as `held` has it: what a widget keeps is written
+ *  apart from the edit, so undo takes back only edits. A widget not held yet keeps its own. */
+function statesAsHeld(objects: Record<string, BoardObject | null>, held: Record<string, BoardObject | null>): Record<string, BoardObject | null> {
+  return Object.fromEntries(Object.entries(objects).map(([id, o]) => {
+    const was = held[id];
+    if (o === null || o.kind !== "widget" || !was) return [id, o];
+    const { state: _state, ...rest } = o;
+    return [id, was.kind === "widget" && was.state !== undefined ? { ...rest, state: was.state } : rest];
+  }));
+}
+
+/** The written widgets whose state the writer changed from the one it read (or which it wrote as
+ *  given), with that state. */
+function statesChanged(edit: Required<BoardEdit>, written: Record<string, BoardObject | null>): Record<string, BoardObject | null> {
+  const states: Record<string, BoardObject | null> = {};
+  for (const [id, mine] of Object.entries(edit.objects)) {
+    const now = written[id];
+    if (mine?.kind !== "widget" || now?.kind !== "widget") continue;
+    const base = edit.base[id];
+    if (id in edit.base && sameJson(base?.kind === "widget" ? base.state : undefined, mine.state)) continue;
+    const { state: _state, ...rest } = now;
+    states[id] = mine.state !== undefined ? { ...rest, state: mine.state } : rest;
+  }
+  return states;
 }
 const LAYOUT = "sys:layout";
 const VIEW = "sys:view";
@@ -215,6 +227,12 @@ export class WorkspaceStore {
     return readObjects(this.workspace(repo).doc);
   }
 
+  /** The board's objects with these ids, by id (null: not there): what a reader reads when told
+   *  which changed. A fresh copy each call. */
+  getObjectsWithIds(repo: string, ids: readonly string[]): Record<string, BoardObject | null> {
+    return readObjectsWithIds(this.workspace(repo).doc, ids);
+  }
+
   /**
    * Make `core` the core layout. Malformed entries are dropped; what cannot be a layout is refused.
    * Given `base`, the layout `core` was made from (null: none was read), only what changed from
@@ -230,21 +248,22 @@ export class WorkspaceStore {
     this.write(repo, `view:${viewId}`, VIEW, from, (doc) => writeView(doc, viewId, layout, from.base));
   }
 
-  /** Make `objects` the board. A malformed object is dropped; what is not a list is refused. Given
-   *  `base`, the board it was made from (null: none was read), only what changed from it is
-   *  written. */
-  setObjects(repo: string, objects: unknown, from: Writer & { base?: unknown } = {}): void {
+  /**
+   * Write `edit`: the objects a writer changed, each merged with what others changed in it since
+   * the one the writer read, or taken away (`BoardEdit`). It costs what it changed, whatever the
+   * board's size. A malformed object is dropped; what is not an edit is refused.
+   */
+  editObjects(repo: string, edit: unknown, from: Writer = {}): void {
+    const checked = checkedEdit(edit);
     const writer = from.writer ?? "";
     this.history(repo, writer);
     // What widgets keep is committed apart, under `sys:`, so undo takes back only edits.
     this.write(repo, "board", WIDGETS, from, (doc) => {
-      const held = readObjects(doc);
-      const board = writeObjects(doc, drawnAsKept(objects, held), from.base, held);
+      const held = readObjectsWithIds(doc, Object.keys(checked.objects));
+      const written = editObjects(doc, { objects: statesAsHeld(checked.objects, held), base: checked.base }, held);
       doc.commit({ origin: boardOf(writer) });
-      // A widget's state too is this writer's only where it changed it from the board it read.
-      const mine = Array.isArray(objects) ? objects as BoardObject[] : [];
-      const states = from.base === undefined ? mine : rebaseBoard(Array.isArray(from.base) ? from.base as BoardObject[] : [], mine, board);
-      writeObjects(doc, drawnAsKept(board, states), undefined, board);
+      // A widget's state too is this writer's only where it changed it from the one it read.
+      editObjects(doc, { objects: statesChanged(checked, written) }, written);
     });
   }
 
@@ -388,12 +407,12 @@ export class WorkspaceStore {
     doc.import(bytes);
     if (JSON.stringify(doc.frontiers()) === JSON.stringify(before)) return;
     const parts = partsChanged(doc, before);
-    if (parts.includes("core")) {
+    if (parts.some((p) => p.part === "core")) {
       this.tiles.delete(repo);
       this.cores.delete(repo);
     }
     this.persist(repo, doc);
-    for (const part of parts) this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
+    for (const changed of parts) this.opts.onChange?.({ repo, ...changed, writer: from.writer ?? "" });
   }
 
   /**
@@ -434,7 +453,7 @@ export class WorkspaceStore {
     for (const [viewId, layout] of Object.entries(mine.views)) {
       if (!sameJson(base.views[viewId], layout)) this.setView(repo, viewId, layout, { ...from, base: base.views[viewId] ?? null });
     }
-    if (!sameJson(base.objects, mine.objects)) this.setObjects(repo, mine.objects, { ...from, base: base.objects });
+    this.editObjects(repo, boardEdit(base.objects, mine.objects), from);
   }
 
   /** As a replica of `repo`: its host has `hostVersion` (encoded). Its file keeps the history since
@@ -539,16 +558,18 @@ export class WorkspaceStore {
    */
   private write(repo: string, part: WorkspaceChange["part"], origin: string, from: Writer, edit: (doc: LoroDoc) => void): void {
     const { doc } = this.workspace(repo);
-    const before = JSON.stringify(doc.frontiers());
+    const before = doc.frontiers();
     edit(doc);
     doc.commit({ origin });
-    if (JSON.stringify(doc.frontiers()) === before) return;
+    if (JSON.stringify(doc.frontiers()) === JSON.stringify(before)) return;
     if (part === "core") {
       this.tiles.delete(repo);
       this.cores.delete(repo);
     }
     this.persist(repo, doc);
-    this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
+    // Which objects changed, from the change itself: a reader reads only those.
+    const objects = part === "board" ? partsChanged(doc, before).find((p) => p.part === "board")?.objects : undefined;
+    this.opts.onChange?.({ repo, part, writer: from.writer ?? "", ...(objects ? { objects } : {}) });
   }
 
   private persist(repo: string, doc: LoroDoc): void {

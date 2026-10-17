@@ -17,7 +17,7 @@ import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
 import type { PluginList } from "./plugins.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
-import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { Appearance } from "@hivemind/core/settings-schema";
@@ -232,11 +232,15 @@ export interface WorkspaceMethods {
   "store.core": (repo: string) => CoreLayout | null;
   "store.view": (repo: string, viewId: string) => ViewLayout | null;
   "store.objects": (repo: string) => BoardObject[];
+  /** (0.28) The board's objects with these ids, by id (null: not there): what a client reads when
+   *  `store.changed` names the objects that changed. */
+  "store.objectsWithIds": (repo: string, ids: string[]) => Record<string, BoardObject | null>;
   /** Each write names the layout it was made from (`base`; null: none was read), so only what
-   *  the client changed is written and another writer's change is kept. */
+   *  the client changed is written and another writer's change is kept. A board edit (0.28) holds
+   *  only the objects the client changed, each with the one it changed it from. */
   "store.setCore": (repo: string, core: unknown, base?: unknown) => void;
   "store.setView": (repo: string, viewId: string, layout: ViewLayout, base?: ViewLayout | null) => void;
-  "store.setObjects": (repo: string, objects: BoardObject[], base?: BoardObject[] | null) => void;
+  "store.editObjects": (repo: string, edit: BoardEdit) => void;
   /** What a client kept before the store: the store keeps only what it lacks. */
   "store.import": (repo: string, legacy: LegacyLayout) => void;
   /** Take back the client's last board edit, or make it again: whether there was one. */
@@ -323,8 +327,9 @@ export interface WorkspaceEvents {
   "terminal.typing": (tile: string, by: Typist) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
-  /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`. */
-  "store.changed": (change: Pick<WorkspaceChange, "repo" | "part">) => void;
+  /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`; for the
+   *  board, `objects` names the objects that changed (0.28; none: any may have). */
+  "store.changed": (change: Pick<WorkspaceChange, "repo" | "part" | "objects">) => void;
   /** Who is in the workspace `repo` now, each as they last said (`presence.set`). */
   "presence.changed": (repo: string, people: Participant[]) => void;
   /** The widget `id` in `repo` drew `tree` (`widget.draw`). */

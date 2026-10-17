@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore, type WorkspaceChange } from "../src/store.ts";
+import { writeBoard } from "./board.ts";
 import { readDoc } from "../src/doc-file.ts";
 import { idOf, newSeed, workspaceSeed } from "../src/identity.ts";
 
@@ -38,7 +39,7 @@ test("a workspace's layout is kept per repo and is there after a restart, as is 
   s.setCore("/a", core("api"));
   s.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 1, y: 2 } } } });
   s.setView("/a", "windows", { v: 1, data: { tab: "t1" } });
-  s.setObjects("/a", [note("ship it")]);
+  writeBoard(s, "/a", [note("ship it")]);
 
   const again = restart();
   expect(again.getCore("/a")).toEqual(core("api"));
@@ -110,7 +111,7 @@ function ownership(repo: string) {
 test("each workspace says whose it is: an id of its own, this person, and the workspace key they derive; kept from then on", () => {
   const s = new WorkspaceStore({ dir, person });
   s.setCore("/a", core("api"));
-  s.setObjects("/b", [note("ship it")]);
+  writeBoard(s, "/b", [note("ship it")]);
   const a = ownership("/a");
   expect(a.workspaceId).toMatch(/^[0-9a-f]{32}$/);
   expect(ownership("/b").workspaceId).not.toBe(a.workspaceId);
@@ -205,7 +206,7 @@ test("a replica catches up from what it has seen, edits merge both ways, and a r
   // Each side edits; each takes the other's changes since what it last saw.
   const hostSaw = host.version("/a");
   const guestSaw = guest.version(R);
-  guest.setObjects(R, [note("from the guest")]);
+  writeBoard(guest, R, [note("from the guest")]);
   host.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 5, y: 6 } } } });
   host.importFrom("/a", guest.exportSince(R, hostSaw), { writer: "guest" });
   guest.importFrom(R, host.exportSince("/a", guestSaw), { writer: "host" });
@@ -293,9 +294,9 @@ test("an old entry that cannot be a layout is skipped and reported, and the rest
 test("undo takes back board edits one write at a time, never the layout or a view; redo makes them again; both are saved", () => {
   const s = new WorkspaceStore({ dir, person });
   // A window's first save of an empty board changes nothing, so it leaves nothing to take back.
-  s.setObjects("/a", []);
-  s.setObjects("/a", [note("draft"), list("milk")]);
-  s.setObjects("/a", [note("drafted"), list("milk", "eggs")]); // at once, and still a step of its own
+  writeBoard(s, "/a", []);
+  writeBoard(s, "/a", [note("draft"), list("milk")]);
+  writeBoard(s, "/a", [note("drafted"), list("milk", "eggs")]); // at once, and still a step of its own
   s.setCore("/a", core("api"));
   s.setView("/a", "canvas", { v: 1, data: { zoom: 2 } });
 
@@ -320,9 +321,9 @@ test("undo takes back board edits one write at a time, never the layout or a vie
 
 test("each writer undoes and redoes its own board edits, never another's", () => {
   const s = new WorkspaceStore({ dir, person });
-  s.setObjects("/a", [note("draft")], { writer: "window:1" });
-  s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:12", base: [note("draft")] });
-  s.setObjects("/a", [note("drafted"), list("milk")], { writer: "window:1", base: [note("draft"), list("milk")] });
+  writeBoard(s, "/a", [note("draft")], { writer: "window:1" });
+  writeBoard(s, "/a", [note("draft"), list("milk")], { writer: "window:12", base: [note("draft")] });
+  writeBoard(s, "/a", [note("drafted"), list("milk")], { writer: "window:1", base: [note("draft"), list("milk")] });
   expect(s.undo("/a", { writer: "window:12" })).toBe(true);
   expect(s.getObjects("/a")).toEqual([note("drafted")]);
   expect(s.undo("/a", { writer: "window:12" })).toBe(false);
@@ -337,9 +338,9 @@ test("each writer undoes and redoes its own board edits, never another's", () =>
 test("a writer that is gone takes its board history with it; what it wrote stays, and the others keep theirs", () => {
   const s = new WorkspaceStore({ dir, person });
   s.getObjects("/b"); // another open workspace, where the writer never wrote
-  s.setObjects("/a", [note("draft")], { writer: "window:1" });
-  s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:2", base: [note("draft")] });
-  s.setObjects("/c", [note("elsewhere")], { writer: "window:1" });
+  writeBoard(s, "/a", [note("draft")], { writer: "window:1" });
+  writeBoard(s, "/a", [note("draft"), list("milk")], { writer: "window:2", base: [note("draft")] });
+  writeBoard(s, "/c", [note("elsewhere")], { writer: "window:1" });
   s.forgetWriter("window:1");
   s.forgetWriter("window:9"); // never wrote: nothing to forget
   expect(s.undo("/a", { writer: "window:1" })).toBe(false);
@@ -354,13 +355,13 @@ test("a view or a board another window changed keeps that change when a window t
   const s = new WorkspaceStore({ dir, person });
   const canvas = (positions: object) => ({ v: 1, data: { positions } });
   s.setView("/a", "canvas", canvas({ t1: { x: 0, y: 0 }, t2: { x: 100, y: 0 } }), { writer: "window:1" });
-  s.setObjects("/a", [note("draft")], { writer: "window:1" });
+  writeBoard(s, "/a", [note("draft")], { writer: "window:1" });
   const view = s.getView("/a", "canvas");
   const board = s.getObjects("/a");
   s.setView("/a", "canvas", canvas({ t1: { x: 0, y: 0 }, t2: { x: 150, y: 50 } }), { writer: "window:2", base: view });
-  s.setObjects("/a", [note("draft"), list("milk")], { writer: "window:2", base: board });
+  writeBoard(s, "/a", [note("draft"), list("milk")], { writer: "window:2", base: board });
   s.setView("/a", "canvas", canvas({ t1: { x: 10, y: 10 }, t2: { x: 100, y: 0 } }), { writer: "window:1", base: view });
-  s.setObjects("/a", [note("drafted")], { writer: "window:1", base: board });
+  writeBoard(s, "/a", [note("drafted")], { writer: "window:1", base: board });
   expect(restart().getView("/a", "canvas")).toEqual(canvas({ t1: { x: 10, y: 10 }, t2: { x: 150, y: 50 } }));
   expect(restart().getObjects("/a")).toEqual([list("milk"), note("drafted")]);
 });
@@ -373,7 +374,7 @@ test("bad input is refused with a TypeError and stores nothing", () => {
     () => s.getCore(undefined as never),
     () => s.setCore("/a", "not a layout"),
     () => s.setView("/a", "canvas", { data: {} } as never),
-    () => s.setObjects("/a", { n1: note("not a list") }),
+    () => writeBoard(s, "/a", { n1: note("not a list") }),
     () => s.undo(""),
     () => s.importLegacy("/a", 42 as never),
   ];
@@ -398,21 +399,21 @@ test("a write the disk refuses is kept, reported, and written by flush once it c
   expect(new WorkspaceStore({ dir: blockedDir, person }).getCore("/a")).toEqual(core("kept"));
 });
 
-test("each change is told, with who made it; a write that changes nothing is not", () => {
+test("each change is told, with who made it and, for the board, which objects it changed; a write that changes nothing is not", () => {
   const told: unknown[] = [];
   const s = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c) });
   s.setCore("/a", core("api"), { writer: "window:1" });
   s.setCore("/a", core("api"), { writer: "window:1" });
   s.setView("/a", "canvas", { v: 1, data: { positions: {} } }, { writer: "window:2" });
-  s.setObjects("/a", [note("ship it")], { writer: "window:1" });
+  writeBoard(s, "/a", [note("ship it")], { writer: "window:1" });
   s.undo("/a", { writer: "window:2" }); // nothing of its own to take back
   s.undo("/a", { writer: "window:1" });
   expect(s.renameTile("t1", "reviewer", { writer: "control" })).toBe("/a");
   expect(told).toEqual([
     { repo: "/a", part: "core", writer: "window:1" },
     { repo: "/a", part: "view:canvas", writer: "window:2" },
-    { repo: "/a", part: "board", writer: "window:1" },
-    { repo: "/a", part: "board", writer: "window:1" },
+    { repo: "/a", part: "board", writer: "window:1", objects: ["n1"] },
+    { repo: "/a", part: "board", writer: "window:1", objects: ["n1"] },
     { repo: "/a", part: "core", writer: "control" },
   ]);
 });
@@ -498,23 +499,23 @@ test("what a widget keeps is written by the client that changed it: another's ed
   const s = new WorkspaceStore({ dir, person });
   const widget = (state: unknown) => ({ id: "w1", kind: "widget", z: 0, widget: "counter", placement: "board", x: 0, y: 0, w: 100, h: 80, state });
   const board = [note("draft"), widget({ n: 1 })];
-  s.setObjects("/a", board as never);
-  s.setObjects("/a", [note("draft"), widget({ n: 2 })] as never, { writer: "window:1", base: board });
+  writeBoard(s, "/a", board as never);
+  writeBoard(s, "/a", [note("draft"), widget({ n: 2 })] as never, { writer: "window:1", base: board });
   // A tab that has not yet read that press edits the note, from the board it holds.
-  s.setObjects("/a", [note("drafted"), widget({ n: 1 })] as never, { writer: "tab:1", base: board });
+  writeBoard(s, "/a", [note("drafted"), widget({ n: 1 })] as never, { writer: "tab:1", base: board });
   expect(s.getObjects("/a")).toEqual([note("drafted"), widget({ n: 2 })] as never);
   // A client that does change what it keeps still writes it, from whatever board it held.
-  s.setObjects("/a", [note("drafted"), widget({ n: 3 })] as never, { writer: "tab:1", base: board });
+  writeBoard(s, "/a", [note("drafted"), widget({ n: 3 })] as never, { writer: "tab:1", base: board });
   expect(s.getObjects("/a")).toEqual([note("drafted"), widget({ n: 3 })] as never);
 });
 
 test("what a widget keeps is never an undo step: undo takes back the edit before it", () => {
   const s = new WorkspaceStore({ dir, person });
   const widget = (fields: Record<string, unknown>) => ({ id: "w1", kind: "widget", z: 0, widget: "counter", ...fields });
-  s.setObjects("/a", [widget({})]);
-  s.setObjects("/a", [widget({ z: 5 })]);
-  s.setObjects("/a", [widget({ z: 5, state: { n: 1 } })]);
-  s.setObjects("/a", [widget({ z: 5, state: { n: 2 } })]);
+  writeBoard(s, "/a", [widget({})]);
+  writeBoard(s, "/a", [widget({ z: 5 })]);
+  writeBoard(s, "/a", [widget({ z: 5, state: { n: 1 } })]);
+  writeBoard(s, "/a", [widget({ z: 5, state: { n: 2 } })]);
   expect(s.undo("/a")).toBe(true);
   expect(s.getObjects("/a")).toEqual([widget({ z: 0, state: { n: 2 } })] as never);
 });
@@ -526,7 +527,7 @@ test("a replica taking another's changes is told only the parts they changed", (
   host.setCore("/a", core("api"));
   host.setView("/a", "canvas", { v: 2, data: { positions: {} } });
   host.setView("/a", "windows", { v: 1, data: { tab: "t1" } });
-  host.setObjects("/a", [note("ship it")]);
+  writeBoard(host, "/a", [note("ship it")]);
   replica.importFrom("/a", host.exportSince("/a", null));
   const after = (edit: () => void): WorkspaceChange["part"][] => {
     const seen = host.version("/a");
@@ -535,18 +536,18 @@ test("a replica taking another's changes is told only the parts they changed", (
     replica.importFrom("/a", host.exportSince("/a", seen));
     return [...told].sort();
   };
-  expect(after(() => host.setObjects("/a", [note("ship it now")]))).toEqual(["board"]);
+  expect(after(() => writeBoard(host, "/a", [note("ship it now")]))).toEqual(["board"]);
   expect(after(() => host.renameTile("t1", "reviewer"))).toEqual(["core"]);
   expect(after(() => host.setView("/a", "windows", { v: 1, data: { tab: "t2" } }))).toEqual(["view:windows"]);
   expect(after(() => host.setView("/a", "board", { v: 1, data: {} }))).toEqual(["view:board"]);
-  expect(after(() => { host.setCore("/a", core("renamed")); host.setObjects("/a", []); })).toEqual(["board", "core"]);
+  expect(after(() => { host.setCore("/a", core("renamed")); writeBoard(host, "/a", []); })).toEqual(["board", "core"]);
 });
 
 test("a replica taking a workspace whole from a host restarted from disk is told every part", () => {
   const first = new WorkspaceStore({ dir, person });
   first.setCore("/a", core("api"));
   first.setView("/a", "canvas", { v: 2, data: { positions: {} } });
-  first.setObjects("/a", [note("ship it")]);
+  writeBoard(first, "/a", [note("ship it")]);
   first.flush();
   const host = restart();
   const told: WorkspaceChange["part"][] = [];
@@ -562,10 +563,10 @@ const fileOf = (name: string) => path.join(dir, name);
 
 test("a change to a big board adds what it changed to the disk, leaves the snapshot as it was, and is there after a restart", () => {
   const s = new WorkspaceStore({ dir, person });
-  s.setObjects("/work/api", notes(800));
+  writeBoard(s, "/work/api", notes(800));
   const snapshot = fs.readFileSync(fileOf(`${API}.loro`));
-  s.setObjects("/work/api", notes(800, "!"), { base: notes(800) });
-  s.setObjects("/work/api", notes(800, "!?"), { base: notes(800, "!") });
+  writeBoard(s, "/work/api", notes(800, "!"), { base: notes(800) });
+  writeBoard(s, "/work/api", notes(800, "!?"), { base: notes(800, "!") });
 
   expect(fs.readFileSync(fileOf(`${API}.loro`)).equals(snapshot)).toBe(true);
   expect(fs.statSync(fileOf(`${API}.loro.updates`)).size).toBeLessThan(1024);
@@ -575,23 +576,23 @@ test("a change to a big board adds what it changed to the disk, leaves the snaps
 
 test("a crash that cut the last change short on disk loses that change alone, and the next change after a restart is kept", () => {
   const s = new WorkspaceStore({ dir, person });
-  s.setObjects("/work/api", notes(3));
-  s.setObjects("/work/api", notes(3, " one"), { base: notes(3) });
-  s.setObjects("/work/api", notes(3, " one two"), { base: notes(3, " one") });
+  writeBoard(s, "/work/api", notes(3));
+  writeBoard(s, "/work/api", notes(3, " one"), { base: notes(3) });
+  writeBoard(s, "/work/api", notes(3, " one two"), { base: notes(3, " one") });
   const updates = fileOf(`${API}.loro.updates`);
   fs.truncateSync(updates, fs.statSync(updates).size - 3);
 
   const again = restart();
   expect(again.getObjects("/work/api")).toEqual(notes(3, " one"));
-  again.setObjects("/work/api", notes(3, " one three"), { base: notes(3, " one") });
+  writeBoard(again, "/work/api", notes(3, " one three"), { base: notes(3, " one") });
   expect(restart().getObjects("/work/api")).toEqual(notes(3, " one three"));
 });
 
 test("a change on disk that does not load is set aside and reported, the changes before it are kept, and the next write is whole", () => {
   const s = new WorkspaceStore({ dir, person });
-  s.setObjects("/work/api", notes(3));
-  s.setObjects("/work/api", notes(3, " one"), { base: notes(3) });
-  s.setObjects("/work/api", notes(3, " one two"), { base: notes(3, " one") });
+  writeBoard(s, "/work/api", notes(3));
+  writeBoard(s, "/work/api", notes(3, " one"), { base: notes(3) });
+  writeBoard(s, "/work/api", notes(3, " one two"), { base: notes(3, " one") });
   const updates = fileOf(`${API}.loro.updates`);
   const bytes = fs.readFileSync(updates);
   const second = 4 + bytes.readUInt32BE(0);
@@ -605,7 +606,7 @@ test("a change on disk that does not load is set aside and reported, the changes
   const aside = fs.readdirSync(dir).filter((f) => f.startsWith(`${API}.loro.updates.corrupt-`));
   expect(aside.map((f) => fs.readFileSync(path.join(dir, f)).equals(bytes))).toEqual([true]);
 
-  again.setObjects("/work/api", notes(3, " one three"), { base: notes(3, " one") });
+  writeBoard(again, "/work/api", notes(3, " one three"), { base: notes(3, " one") });
   expect(fs.existsSync(updates)).toBe(false);
   expect(restart().getObjects("/work/api")).toEqual(notes(3, " one three"));
 });
@@ -613,11 +614,11 @@ test("a change on disk that does not load is set aside and reported, the changes
 test("changes on disk past the snapshot's size are folded into a new snapshot once the workspace is quiet, and every one is there after a restart", async () => {
   const s = new WorkspaceStore({ dir, person });
   let board = notes(1);
-  s.setObjects("/work/api", board);
+  writeBoard(s, "/work/api", board);
   const updates = fileOf(`${API}.loro.updates`);
   for (let i = 1; i <= 300; i++) {
     const added = { ...note(`${i} `.repeat(250)), id: `n${String(i).padStart(4, "0")}` };
-    s.setObjects("/work/api", [...board, added], { base: board });
+    writeBoard(s, "/work/api", [...board, added], { base: board });
     board = [...board, added];
   }
   expect(fs.statSync(updates).size).toBeGreaterThan(256 * 1024);
@@ -630,14 +631,42 @@ test("changes on disk past the snapshot's size are folded into a new snapshot on
 test("updates on disk far past the snapshot's size are folded at once, however busy the workspace", () => {
   const s = new WorkspaceStore({ dir, person });
   const kept = (i: number) => [{ ...note("a widget that keeps a lot"), id: "w1", state: { log: `${i} `.repeat(3000).slice(0, 12000) } }];
-  s.setObjects("/work/api", kept(0));
+  writeBoard(s, "/work/api", kept(0));
   const updates = fileOf(`${API}.loro.updates`);
   let largest = 0;
   for (let i = 1; i <= 160; i++) {
-    s.setObjects("/work/api", kept(i));
+    writeBoard(s, "/work/api", kept(i));
     largest = Math.max(largest, fs.existsSync(updates) ? fs.statSync(updates).size : 0);
   }
   expect(largest).toBeGreaterThan(4 * 256 * 1024 - 64 * 1024);
   expect(largest).toBeLessThan(4 * 256 * 1024 + 64 * 1024);
   expect(restart().getObjects("/work/api")).toEqual(kept(160));
+});
+
+test("a board edit writes only the objects it names, each merged with what others changed in it since its writer read it", () => {
+  const s = new WorkspaceStore({ dir, person });
+  writeBoard(s, "/a", notes(3));
+  const read = s.getObjects("/a");
+  // Another window, since: retypes the first note and takes the third away.
+  writeBoard(s, "/a", [{ ...read[0]!, text: "theirs" }, read[1]!], { writer: "window:2" });
+  // This one, from what it read: moves the first and retypes the second. The third, taken away, stays away.
+  s.editObjects("/a", {
+    objects: { n0000: { ...read[0]!, x: 99 }, n0001: { ...read[1]!, text: "mine" } },
+    base: { n0000: read[0]!, n0001: read[1]! },
+  }, { writer: "window:1" });
+  expect(s.getObjects("/a")).toEqual([{ ...read[0]!, text: "theirs", x: 99 }, { ...read[1]!, text: "mine" }]);
+  expect(s.getObjectsWithIds("/a", ["n0001", "n0002"])).toEqual({ n0001: { ...read[1]!, text: "mine" }, n0002: null });
+});
+
+test("changes taken from another copy are told with the objects they changed", () => {
+  const told: WorkspaceChange[] = [];
+  const s = new WorkspaceStore({ dir, person });
+  writeBoard(s, "/a", notes(3));
+  const copy = new WorkspaceStore({ dir: path.join(dir, "copy"), onChange: (c) => told.push(c) });
+  copy.importFrom("/a", s.exportSince("/a", null));
+  const seen = s.version("/a");
+  writeBoard(s, "/a", notes(3).filter((o) => o.id !== "n0002").map((o) => (o.id === "n0000" ? { ...o, text: "retyped" } : o)));
+  told.length = 0;
+  copy.importFrom("/a", s.exportSince("/a", seen), { writer: "peer" });
+  expect(told).toEqual([{ repo: "/a", part: "board", writer: "peer", objects: ["n0000", "n0002"] }]);
 });

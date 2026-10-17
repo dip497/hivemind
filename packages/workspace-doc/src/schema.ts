@@ -14,7 +14,7 @@
  * The §8 container without a writer yet, `machines` (R9), arrives with it: a root container
  * added later needs no migration.
  */
-import { LoroDoc, type Frontiers } from "loro-crdt";
+import { LoroDoc, type ContainerID, type Frontiers } from "loro-crdt";
 
 export const META = "meta";
 export const FRAMES = "frames";
@@ -83,22 +83,39 @@ export function stampOwnership(doc: LoroDoc, ownership: () => Ownership): void {
 /** The parts of a workspace's layout: the core layout, the board, one view's layout. */
 export type LayoutPart = "core" | "board" | `view:${string}`;
 
-/** The parts that changed in `doc` since `before`, by the root container each change lies under. */
-export function partsChanged(doc: LoroDoc, before: Frontiers): LayoutPart[] {
-  let diffs: ReturnType<LoroDoc["diff"]>;
+/** A part that changed; for the board, the ids of the objects that did, when they are known. */
+export interface PartChanged {
+  part: LayoutPart;
+  objects?: string[];
+}
+
+/** The parts that changed in `doc` since `before`, by the root container each change lies under:
+ *  read from the changes alone (their operations, not a diff of the states), so it costs what
+ *  changed, whatever the document's size. */
+export function partsChanged(doc: LoroDoc, before: Frontiers): PartChanged[] {
+  let changes: ReturnType<LoroDoc["exportJsonUpdates"]>["changes"];
   try {
-    diffs = doc.diff(before, doc.frontiers(), false);
+    changes = doc.exportJsonUpdates(doc.frontiersToVV(before), doc.oplogVersion(), false).changes;
   } catch (e) {
     if (!doc.isShallow()) throw e;
-    return ["core", "board", ...[...doc.getMap(VIEWS).keys()].map((viewId) => `view:${viewId}` as const)];
+    return [{ part: "core" }, { part: "board" }, ...[...doc.getMap(VIEWS).keys()].map((viewId) => ({ part: `view:${viewId}` as const }))];
   }
   const parts = new Set<LayoutPart>();
-  for (const [id, diff] of diffs) {
-    const [root, viewId] = doc.getPathToContainer(id) ?? [];
-    if (root === OBJECTS) parts.add("board");
-    else if (root !== VIEWS) parts.add("core");
-    else if (viewId !== undefined) parts.add(`view:${viewId}`);
-    else if (diff.type === "map") for (const key of Object.keys(diff.updated)) parts.add(`view:${key}`);
+  const objects = new Set<string>();
+  const paths = new Map<string, ReturnType<LoroDoc["getPathToContainer"]>>();
+  for (const { ops } of changes) {
+    for (const { container, content } of ops) {
+      if (!paths.has(container)) paths.set(container, doc.getPathToContainer(container as ContainerID));
+      // A container taken away since has no path: what was in it shows nowhere.
+      const [root, key] = paths.get(container) ?? [];
+      if (root === undefined) continue;
+      const entry = key ?? (content as { key?: string }).key;
+      if (root === OBJECTS) {
+        parts.add("board");
+        if (entry !== undefined) objects.add(String(entry));
+      } else if (root !== VIEWS) parts.add("core");
+      else if (entry !== undefined) parts.add(`view:${entry}`);
+    }
   }
-  return [...parts];
+  return [...parts].map((part) => (part === "board" ? { part, objects: [...objects].sort() } : { part }));
 }

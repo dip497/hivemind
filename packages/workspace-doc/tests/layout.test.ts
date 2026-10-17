@@ -6,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { LoroDoc } from "loro-crdt";
 import { readCore, writeCore } from "../src/core.ts";
-import { readObjects, writeObjects } from "../src/objects.ts";
+import { editObjects, readObjects } from "../src/objects.ts";
+import { boardEdit } from "../src/board-edit.ts";
 import { readView, writeView } from "../src/views.ts";
 import { mulberry32 } from "./random.ts";
 
@@ -190,7 +191,7 @@ test("a document made by another copy of loro-crdt is read and written the same"
   const board = [{ id: "c1", kind: "widget", widget: "checklist", placement: "board", x: 0, y: 0, w: 240, h: 200, text: "today", items: [{ id: "i1", text: "ship", done: true }] }];
   writeCore(doc, LAYOUT);
   writeView(doc, "canvas", { v: 1, data: { positions: { t1: { x: 1, y: 2 } } } });
-  writeObjects(doc, board);
+  editObjects(doc, boardEdit([], board as never));
   expect(readCore(doc)).toEqual(LAYOUT);
   expect(readView(doc, "canvas")).toEqual({ v: 1, data: { positions: { t1: { x: 1, y: 2 } } } });
   expect(readObjects(doc)).toEqual(board as never);

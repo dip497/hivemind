@@ -13,10 +13,11 @@
  */
 import type { WorkspaceClient } from "./client.js";
 import type { StoreSnapshot } from "./methods.js";
-import type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import { withObjects } from "@hivemind/workspace-doc/board-edit";
+import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 
-type Change = Pick<WorkspaceChange, "repo" | "part">;
+type Change = Pick<WorkspaceChange, "repo" | "part" | "objects">;
 type Part = Change["part"];
 
 const copy = <T>(value: T): T => (value === null || value === undefined ? value : structuredClone(value));
@@ -66,6 +67,14 @@ export class StoreReplica {
     return copy(this.snapshot(repo)?.objects ?? []);
   }
 
+  objectsWithIds(repo: string, ids: readonly string[]): Record<string, BoardObject | null> {
+    const objects = this.snapshot(repo)?.objects ?? [];
+    const asked = new Set(ids);
+    const found: Record<string, BoardObject | null> = Object.fromEntries(ids.map((id) => [id, null]));
+    for (const o of objects) if (asked.has(o.id)) found[o.id] = copy(o);
+    return found;
+  }
+
   setCore(repo: string, core: unknown, base?: unknown): void {
     const held = this.held.get(repo);
     if (held) held.core = copy(core) as CoreLayout;
@@ -78,10 +87,10 @@ export class StoreReplica {
     this.write(repo, `view:${viewId}`, () => this.client.call("store.setView", repo, viewId, layout, base));
   }
 
-  setObjects(repo: string, objects: BoardObject[], base?: BoardObject[] | null): void {
+  editObjects(repo: string, edit: BoardEdit): void {
     const held = this.held.get(repo);
-    if (held) held.objects = copy(objects);
-    this.write(repo, "board", () => this.client.call("store.setObjects", repo, objects, base));
+    if (held) held.objects = withObjects(held.objects, copy(edit.objects));
+    this.write(repo, "board", () => this.client.call("store.editObjects", repo, edit));
   }
 
   /** What this client kept before the store: the host keeps what it lacks, and says so. */
@@ -128,13 +137,13 @@ export class StoreReplica {
       if (!this.held.has(change.repo)) return;
       const read = (): Promise<unknown> => {
         if (change.part === "core") return this.client.call("store.core", change.repo);
-        if (change.part === "board") return this.client.call("store.objects", change.repo);
+        if (change.part === "board") return change.objects ? this.client.call("store.objectsWithIds", change.repo, change.objects) : this.client.call("store.objects", change.repo);
         return this.client.call("store.view", change.repo, change.part.slice("view:".length));
       };
       const hold = (value: unknown) => {
         const held = this.held.get(change.repo)!;
         if (change.part === "core") held.core = value as CoreLayout | null;
-        else if (change.part === "board") held.objects = value as BoardObject[];
+        else if (change.part === "board") held.objects = Array.isArray(value) ? value as BoardObject[] : withObjects(held.objects, value as Record<string, BoardObject | null>);
         else if (value) held.views[change.part.slice("view:".length)] = value as ViewLayout;
         else delete held.views[change.part.slice("view:".length)];
         this.tell(change);

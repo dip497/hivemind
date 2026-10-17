@@ -12,6 +12,7 @@ import path from "node:path";
 import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { WorkspaceStore, type WorkspaceChange } from "../src/store.ts";
+import { writeBoard } from "./board.ts";
 import { parseSync, replicate, serveReplica, type SyncChannel } from "../src/doc-sync.ts";
 import { newSeed } from "../src/identity.ts";
 
@@ -70,7 +71,7 @@ class Window {
     units.splice(Math.floor(at * (units.length + 1)), 0, token);
     const text = units.join("");
     this.board = this.board.map((o) => (o.id === "n1" ? ({ ...o, text } as BoardObject) : o));
-    this.store.setObjects(this.repo, this.board, { writer: this.writer, base: this.base });
+    writeBoard(this.store, this.repo, this.board, { writer: this.writer, base: this.base });
     this.base = this.board;
   }
   read(): void {
@@ -86,7 +87,7 @@ class Window {
 function typeTogether(seed: number, late: boolean) {
   const rnd = random(seed);
   const host = storeWith(`host-${seed}-${late}`, newSeed());
-  host.store.setObjects("/a", [note("")]);
+  writeBoard(host.store, "/a", [note("")]);
   const pending: Array<Array<() => void>> = [];
   const people = [{ store: host.store, repo: "/a", changes: host.changes }];
   for (const g of [1, 2]) {

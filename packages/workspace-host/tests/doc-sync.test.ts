@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceStore, type WorkspaceChange } from "../src/store.ts";
+import { writeBoard } from "./board.ts";
 import { changeHub, parseSync, replicate, serveReplica, type SyncChannel } from "../src/doc-sync.ts";
 import type { Access } from "../src/access.ts";
 import { newSeed } from "../src/identity.ts";
@@ -56,7 +57,7 @@ test("a replica catches up when it connects, and each side's changes reach the o
   expect(welcomed).toEqual(["edit"]);
   expect(guest.store.getCore("hive://w")).toEqual(core("api"));
 
-  guest.store.setObjects("hive://w", [note("from the guest")], { writer: "window" });
+  writeBoard(guest.store, "hive://w", [note("from the guest")], { writer: "window" });
   expect(host.store.getObjects("/a")).toEqual([note("from the guest")]);
   host.store.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 5, y: 6 } } } });
   expect(guest.store.getView("hive://w", "canvas")).toEqual({ v: 2, data: { positions: { t1: { x: 5, y: 6 } } } });
@@ -70,7 +71,7 @@ test("a viewer's changes never reach the host", () => {
   host.store.setCore("/a", core("api"));
   const dropped: string[] = [];
   connect(host, guest, "view", dropped);
-  guest.store.setObjects("hive://w", [note("not mine to write")], { writer: "window" });
+  writeBoard(guest.store, "hive://w", [note("not mine to write")], { writer: "window" });
   expect(host.store.getObjects("/a")).toEqual([]);
   expect(dropped).toEqual(["a viewer's change"]);
   // The host's own changes still reach the viewer.
@@ -84,12 +85,12 @@ test("a replica that connects again gets what it missed, and what it wrote meanw
   host.store.setCore("/a", core("api"));
   connect(host, guest, "edit").stop();
   host.store.setCore("/a", core("api, while away"));
-  guest.store.setObjects("hive://w", [note("written offline")], { writer: "window" });
+  writeBoard(guest.store, "hive://w", [note("written offline")], { writer: "window" });
   connect(host, guest, "edit");
   expect(guest.store.getCore("hive://w")).toEqual(core("api, while away"));
   expect(host.store.getObjects("/a")).toEqual([note("written offline")]);
   // And both carry on from there.
-  guest.store.setObjects("hive://w", [note("written offline"), { ...note("and after"), id: "n2" }], { writer: "window" });
+  writeBoard(guest.store, "hive://w", [note("written offline"), { ...note("and after"), id: "n2" }], { writer: "window" });
   expect(host.store.getObjects("/a").map((o) => o.id).sort()).toEqual(["n1", "n2"]);
   expect(guest.store.version("hive://w")).toEqual(host.store.version("/a"));
 });
@@ -143,7 +144,7 @@ function offlineAcrossHostRestart(restartGuest: boolean) {
   const seed = newSeed();
   const host = storeWith("host", seed);
   host.store.setCore("/a", core("api"));
-  host.store.setObjects("/a", [note("hello")]);
+  writeBoard(host.store, "/a", [note("hello")]);
   let guest = storeWith("shared");
   const dropped: string[] = [];
   const failed: string[] = [];
@@ -152,9 +153,9 @@ function offlineAcrossHostRestart(restartGuest: boolean) {
 
   const was = guest.store.getObjects("hive://w");
   const mine = { ...note("from the guest, offline"), id: "n2" };
-  guest.store.setObjects("hive://w", [...was, mine], { writer: "window", base: was });
+  writeBoard(guest.store, "hive://w", [...was, mine], { writer: "window", base: was });
   const hosts = host.store.getObjects("/a");
-  host.store.setObjects("/a", [{ ...hosts[0]!, text: "hello from the host" }], { writer: "window", base: hosts });
+  writeBoard(host.store, "/a", [{ ...hosts[0]!, text: "hello from the host" }], { writer: "window", base: hosts });
 
   const restarted = storeWith("host", seed);
   if (restartGuest) guest = storeWith("shared");
@@ -180,6 +181,6 @@ test.each([
   expect(texts(guest.getObjects("hive://w"))).toEqual(texts(host.getObjects("/a")));
   // And what either writes from then on reaches the other.
   const now = guest.getObjects("hive://w");
-  guest.setObjects("hive://w", now.map((o) => (o.id === "n2" ? { ...o, text: "and later" } : o)), { writer: "window", base: now });
+  writeBoard(guest, "hive://w", now.map((o) => (o.id === "n2" ? { ...o, text: "and later" } : o)), { writer: "window", base: now });
   expect(texts(host.getObjects("/a"))).toEqual(["n1: hello from the host", "n2: and later"]);
 });

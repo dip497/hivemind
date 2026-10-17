@@ -11,6 +11,7 @@ const LEAST: Record<string, Role> = {
   "store.core": "view",
   "store.view": "view",
   "store.objects": "view",
+  "store.objectsWithIds": "view",
   "store.shown": "view",
   "status.all": "view",
   "link.list": "view",

@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- **Breaking:** Workspace API 0.28. A board edit costs what it changed: a window sends only the objects it changed, each with the one it changed it from (`store.editObjects`, which replaces `store.setObjects`), `store.changed` names the board's objects that changed, and the other windows read those alone (`store.objectsWithIds`). A typed character in a 5000-object board takes about 15 ms instead of 2 s, and another window's read of it under 1 ms instead of 360 ms.
 - Saving a workspace after an edit costs what the edit changed: the change is added beside the saved board (`<workspace>.loro.updates`) and folded into it when the workspace goes quiet, instead of the whole board written again. A typed character in a 5000-object board takes 0.9 ms on disk instead of 600 ms.
 - Opening the app or a window no longer sends every terminal's 5000 lines of history. Each terminal gets its newest 1000 lines and fetches the rest when you scroll to the top, keeping the line you were reading in place. With 30 terminals that is 4.6M characters instead of 22M, and about a quarter of the terminal daemon's time.
 - Coming back to a terminal you scrolled past or switched away from no longer asks for its whole screen. It is sent only what it missed, up to 256 KB; it used to be sent all 5000 lines, which held up every terminal while the screen was rebuilt.

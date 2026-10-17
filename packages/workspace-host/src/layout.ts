@@ -17,4 +17,6 @@ export interface WorkspaceChange {
   part: "core" | "board" | `view:${string}`;
   /** Whoever wrote it said so (a window, the control plane); "" when it did not. */
   writer: string;
+  /** For the board, the ids of the objects that changed; none: any may have. */
+  objects?: string[];
 }

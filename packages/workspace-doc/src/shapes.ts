@@ -148,5 +148,13 @@ export interface ArrowObject extends BoardObjectFields { kind: "arrow"; from: Ar
  */
 export type BoardObject = ArrowObject | WidgetObject;
 
+/** Some of the board's objects as a writer changed them, by id (null: it took the object away),
+ *  and each as it was when the writer made the change (null: it was not there). An object without
+ *  one there is written as given. */
+export interface BoardEdit {
+  objects: Record<string, BoardObject | null>;
+  base?: Record<string, BoardObject | null>;
+}
+
 /** The most a widget's `state`, or what it draws, may take, as JSON. */
 export const WIDGET_FIELD_BYTES = 16_384;

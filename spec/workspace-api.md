@@ -1,4 +1,4 @@
-# Workspace API (0.27)
+# Workspace API (0.28)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -59,7 +59,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.27", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.28", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -278,9 +278,10 @@ Nobody answering within 170 s is a no. A workspace whose rule is `invite` asks n
 | `store.core` | `repo` | the core layout (frames, tiles, their names), or null | read |
 | `store.view` | `repo`, `viewId` | `{v, data}`, or null | read |
 | `store.objects` | `repo` | the board's objects | read |
+| `store.objectsWithIds` | `repo`, `ids` | `{[id]: object or null}`: the board's objects with these ids, null for one not there; what a client reads when `store.changed` names them (0.28) | read |
 | `store.setCore` | `repo`, `core`, `base`? | `null` | not an intent: the document's own edit, by its writer |
 | `store.setView` | `repo`, `viewId`, `{v, data}`, `base`? | `null` | likewise |
-| `store.setObjects` | `repo`, `objects`, `base`? | `null` | likewise |
+| `store.editObjects` | `repo`, `{objects: {[id]: object or null}, base?: {[id]: object or null}}` | `null`: writes the objects the client changed (null: took it away), each merged with what others changed in it since the one in `base` it changed it from (null: it was not there); the rest of the board is not touched, so an edit costs what it changed. Replaces `store.setObjects` (0.28) | likewise |
 | `store.import` | `repo`, `{core?, views?}` | `null`: what the client kept before the store; the host keeps only what it lacks | likewise |
 | `store.undo` | `repo` | whether the client's last board edit was taken back | likewise |
 | `store.redo` | `repo` | whether it was made again | likewise |
@@ -361,7 +362,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size (on a participant's machine, as that machine says it), and to one that opens it: a client whose own differs draws it at this size |
 | `terminal.typing` | `tile`, `{id, person, name}` | to each client that opened the terminal but the one typing, as someone types into it: at most once a second while the same one types on. A client says so on the terminal for a moment, and does not draw that person's pointer meanwhile |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
-| `store.changed` | `{repo, part}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts |
+| `store.changed` | `{repo, part, objects?}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts; for the board, `objects` names the objects that changed (0.28; none: any may have) |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, over, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
 | `appearance.changed` | `appearance` | to every client, when what `appearance.get` answers changes (0.17); a client checks it as settings are, whoever sent it |
 | `people.asked` | `repo`, `{req, workspace, profile, role}` | to the owner's clients, as someone asks to join with a link: `workspace` the workspace's name, `profile` `{name, color}` as they gave it, `role` the link's |
@@ -430,7 +431,7 @@ own reads from them, so it never waits on the network to draw:
 
 - A write changes what it holds at once, and goes to the host after every earlier one, with its
   `base`.
-- On `store.changed` it reads that part again once its own earlier writes have landed, so what it
+- On `store.changed` it reads that part again (of the board, the objects it names alone) once its own earlier writes have landed, so what it
   holds has both; and if it writes that part again while the reading is on its way, the reading is
   thrown away and made again after the write. It tells its window of the change only once it holds
   it.

@@ -80,6 +80,16 @@ export function rebaseBoard<T extends { id: string }>(base: readonly T[], next: 
   return rebaseRecords(base, next, current, (before, mine, theirs) => mergeRecord(before as Fields, mine as Fields, theirs as Fields) as T);
 }
 
+/**
+ * One object of the board, as `rebaseBoard` merges each (null: not there). One the writer added is
+ * its own; one it took away goes; one another writer took away since stays gone.
+ */
+export function rebaseObject<T extends { id: string }>(base: T | null, mine: T | null, current: T | null): T | null {
+  if (base === null) return mine ?? current;
+  if (mine === null || current === null) return null;
+  return mergeRecord(base as Fields, mine as Fields, current as Fields) as T;
+}
+
 const TEXTS = ["text", "label"];
 
 function mergeRecord(before: Fields, mine: Fields, theirs: Fields): Fields {

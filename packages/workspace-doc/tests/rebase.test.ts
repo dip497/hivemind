@@ -4,7 +4,8 @@
 import { expect, test } from "bun:test";
 import { LoroDoc } from "loro-crdt";
 import { addFrame, addTile, readCore, removeFrame, removeTile, writeCore, writeTileName } from "../src/core.ts";
-import { readObjects, writeObjects } from "../src/objects.ts";
+import { editObjects, readObjects } from "../src/objects.ts";
+import { boardEdit } from "../src/board-edit.ts";
 import { readView, writeView } from "../src/views.ts";
 import type { BoardObject } from "../src/shapes.ts";
 import { rebaseFields, rebaseRecords } from "../src/rebase.ts";
@@ -139,15 +140,18 @@ const note = (id: string, text: string, fields: Fields = {}) => {
 };
 const arrow = (id: string, from: string, to: string) => ({ id, kind: "arrow", from: { id: from, side: "right" }, to: { id: to, side: "left" }, label: "" }) as BoardObject;
 
+/** Make `doc`'s board `next`, as a writer that read it just now: the edit from what it holds. */
+const writeBoard = (doc: LoroDoc, next: readonly unknown[]) => editObjects(doc, boardEdit(readObjects(doc), next as BoardObject[]));
+
 test("a board written from an older reading changes what its writer changed, field by field, and keeps what others changed since", () => {
   const doc = new LoroDoc();
-  writeObjects(doc, [note("n1", "ship R15"), note("n2", "tests"), arrow("a1", "n1", "n2")]);
+  writeBoard(doc, [note("n1", "ship R15"), note("n2", "tests"), arrow("a1", "n1", "n2")]);
   const read = readObjects(doc);
   // Another writer, since: retypes n1, deletes n2 and adds n3.
-  writeObjects(doc, [note("n1", "ship R5"), arrow("a1", "n1", "n2"), note("n3", "docs")]);
+  writeBoard(doc, [note("n1", "ship R5"), arrow("a1", "n1", "n2"), note("n3", "docs")]);
   // The window, still on what it read: moves n1, recolours n2 and deletes the arrow. n2, deleted
   // since, stays deleted.
-  writeObjects(doc, [note("n1", "ship R15", { x: 40 }), note("n2", "tests", { color: "pink" })], read);
+  editObjects(doc, boardEdit(read, [note("n1", "ship R15", { x: 40 }), note("n2", "tests", { color: "pink" })]));
   expect(readObjects(doc)).toEqual([note("n1", "ship R5", { x: 40 }), note("n3", "docs")]);
 });
 
