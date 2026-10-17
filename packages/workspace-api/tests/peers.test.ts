@@ -453,6 +453,11 @@ test("while events stream a peer is sent a frame at most every 25 ms, each heard
   const start = Date.now();
   for (let n = 0; n < 20; n++) {
     server.publish("terminal.data", "in-1", `${n}`);
+    if (n === 0) {
+      // After a quiet spell the first goes at once: here before any timer has run, however busy the machine.
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(frames.length).toBe(1);
+    }
     await Bun.sleep(5);
   }
   const streamed = Date.now() - start;
@@ -463,7 +468,6 @@ test("while events stream a peer is sent a frame at most every 25 ms, each heard
   expect(frames.length).toBeGreaterThanOrEqual(3);
   expect(frames.length).toBeLessThanOrEqual(2 * Math.ceil(streamed / PEER_FRAME_MS) + 1);
   expect(frames.length).toBeLessThan(20);
-  expect(frames[0]! - start).toBeLessThan(15);
   expect(heard).toEqual(Array.from({ length: 20 }, (_, n) => `${n}`));
 });
 
