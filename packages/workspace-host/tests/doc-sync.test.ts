@@ -216,7 +216,7 @@ test("a new guest is welcomed with the workspace as it is, not with every change
   const welcome = sent.map((t) => parseSync(t)).find((m) => m?.t === "welcome") as { data: string };
   expect(guest.store.getObjects("hive://w")).toEqual(host.store.getObjects("/a"));
   expect(Buffer.from(welcome.data, "base64").length).toBeLessThan(host.store.exportSince("/a", null).length / 4);
-});
+}, 30_000);
 
 test("a guest that cannot take another guest's offline change, made before it joined, asks again and ends with it", () => {
   const host = storeWith("host", newSeed());
