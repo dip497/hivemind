@@ -62,3 +62,28 @@ Why:      two conventions grew in two command families → a script parses each 
 Refactor: one shape (the result itself; errors as `{ok:false, code, message}`), with **Breaking:** in the CHANGELOG
 When:     at the next breaking CLI change, together
 ```
+
+## Who may report is tied to a flag, not to reporting (2026-10-17)
+
+```
+Architecture: acceptable now, wrong at the first manifest that reports only through `{emit:…}`
+What:     a hook signs in with HCP_TOKEN, which only `launch.hcp` gives; `emit:` entries require the flag, the `{emit:<event>}` placeholder in an asset, template or home file does not
+Why:      two routes to the same generic hook, one rule checked on one of them → such a manifest validates and every event it reports is dropped unsigned
+Refactor: the manifest says whether it reports once (any `emit:` entry or `{emit:` text), and that one fact both requires `launch.hcp` and is shown in the disclosure
+Shape:    manifest.ts `reports` reads hooks.events only → a `reportsEvents(def, assetSource)` in runtime-manifest.ts that also scans asset/home/template text, called by load-time validation
+Steps:    add the check where assets are read at load → refuse with the same message → test: an asset with `{emit:turn.ended}` and no hcp is refused
+Size:     2 files, 1 test | none for the reader
+When:     before HiveHub accepts a manifest whose assets carry `{emit:`; none do today (faux and the bundled ones set hcp)
+```
+
+## The daemon's sign-in form is proven only where hive-net is built (2026-10-17)
+
+```
+Architecture: acceptable
+What:     the standalone daemon taking `initialize` as a notification (how hooks sign in) is exercised only by the native-door test, which skips without crates/hive-net built; the other daemon tests sign in with an id
+Why:      a revert of that branch would pass CI and drop every hook event on a remote machine
+Refactor: the test helper `report()` in daemon-standalone-events.test.ts sends what hookLines builds (sign-in with no id), so every daemon test uses the hooks' own form
+Steps:    `report()` → `hookLines(...)` lines → run the file → revert the daemon branch and see it fail
+Size:     1 test file | none
+When:     next change to the daemon's control socket
+```
