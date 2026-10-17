@@ -309,6 +309,21 @@ Found while building round 5: a sleep cleared the turn before the status said so
 never heard the turn end and held a woken agent's messages until its next turn. The mailbox now
 owns the sleeper's state (asleep, waking) and the test drives it through the control plane.
 
+## Review round 6 (a fresh reviewer, 3 material points)
+
+| # | Point | Answer |
+|---|---|---|
+| 1 | Only Claude's conversation is pinned: an agent found by its folder (codex, pi, cursor, droid) wakes into the folder's newest conversation, and the two-process guards never fire for an agent whose transcript we do not read | Built: at sleep the daemon records the tile's conversation, resolved as the restore resolves it, and the restore reads that record for every agent. A sleep is refused when no conversation is found, or when only the folder finds it and another session of that agent shares the folder. The host's guards read the same record, once per sleeper; a conversation being woken is claimed first, so two sleepers in one conversation do not both wake |
+| 2 | After a wake, messages wait on `session.started`, which most agents never send, or are typed into an agent still booting after a restart | Built: they go at `session.started`, else when the screen settles (the rule a spawned agent's first task uses), else after 60 s. The in-memory "managed" rule is gone |
+| 3 | `hive ctl read` of a sleeper, or of one put to sleep while it waits, runs to its 120 s timeout | Built: answered at once, `finalStatus: "asleep"`, exit 7 (0.29) |
+| minor | Keys and pipes into a sleeper; a wake during a sleep in flight; a restore that fails to spawn drops the sleeper; a guest naming a nested workspace; the tile's Sleep button always forced; queued work dropped | Keys refused like a message; pipes were already held by the mailbox. A wake waits for the sleep and says so if it failed. A failed restore keeps it asleep. A guest's `agent.sleep`/`agent.wake` must name the workspace it joined (`agent.list`, `agent.since`, `agent.start`, `agent.startable`, `plan.list` share the looser rule: listed, not changed here). The Sleep button forces only after a confirm. Queued work goes only to a new tile id, which no sleep holds: no change |
+
+Ceilings from round 6: the host's guards read this machine's tile records, so a sleeper on an ssh
+machine or another device is pinned there but its conversation is not guarded here; two sessions of
+a folder-found agent in one folder cannot sleep (said with why); a folder-found agent woken keeps
+its pinned conversation even if the person started another inside it, unless the agent reports its
+session id; a woken agent that never says it is up waits for its screen to settle, at most ~9.6 s.
+
 ## Pre-mortem (a year on, it failed)
 
 1. **"Resume brought back a blank agent."** The transcript was pruned by the agent, or the agent
