@@ -17,12 +17,15 @@ async function host(dir: string, name: string, answer: (m: Line) => Line | null)
   const got: Line[] = [];
   const server = net.createServer((c) => {
     let buf = "";
+    // As the control plane: nothing said before signing in is heard.
+    let signedIn = false;
     c.on("data", (d) => {
       buf += d;
       let nl;
       while ((nl = buf.indexOf("\n")) >= 0) {
         const m = JSON.parse(buf.slice(0, nl)) as Line; buf = buf.slice(nl + 1);
-        if (m.method === "initialize") { c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
+        if (m.method === "initialize") { signedIn = true; c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
+        if (m.jsonrpc && !signedIn) continue;
         got.push(m);
         const res = answer(m);
         if (res) c.write(JSON.stringify(m.jsonrpc ? { jsonrpc: "2.0", id: m.id, ...res } : res) + "\n");
@@ -52,7 +55,7 @@ async function run(body: string, env: Record<string, string>, payload: unknown =
 
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), "sdkh-")); dirs.push(d); return d; };
 
-test("payload, emit and reportReply reach the host in order, attributed to the tile", async () => {
+test("payload, emit and reportReply reach the host in order, signed in as the tile", async () => {
   const h = await host(tmp(), "hcp.sock", (m) => (m.id ? { result: { ok: true } } : null));
   const out = await run(
     `const p = await hive.payload(); const ok = await hive.reportReply("the reply"); await hive.emit("turn.ended", { background: 2 }); process.stdout.write(JSON.stringify({ p, ok }));`,

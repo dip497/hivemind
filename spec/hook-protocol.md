@@ -22,15 +22,20 @@ for that answer, and exits 0 printing nothing when the host is not there.
 
 ## Messages (JSON-RPC 2.0, one per line, on `HIVE_HOOK_SOCK`)
 
+Every connection signs in first: `initialize {"token": HCP_TOKEN}`, the tile's own token. The host
+hears nothing else from a connection that has not, notifications included. A tile's token speaks
+only for its tile: a notification naming another tile is dropped, a request refused with
+`FORBIDDEN`. The person's token may name any tile. The standalone daemon (`hive host` with no app)
+keeps the same rule on its own socket.
+
 - **Event** — the notification `{"jsonrpc":"2.0","method":"agent.event","params":{…}}`, `params`
-  per `agent-event.schema.json`. No token: the socket is the owner's alone. No reply. The host
-  drops fields outside the schema.
-- **Requests** need the connection introduced first: `initialize {"token": HCP_TOKEN}`, then
+  per `agent-event.schema.json`, after `initialize`. No reply. The host drops fields outside the
+  schema.
+- **Requests**, after `initialize`:
   - `agent.reply {"tileId","text"}` → `{"ok":true}`. The turn's reply for `hive ctl read`, sent
     before the `turn.ended` it belongs to. Never forwarded on the event stream or to push. A hook
     for an entry with `reply:` sends it as a notification after `initialize`, then the event, on
-    one connection: the host handles notifications in order, so the turn end carries it. A tile
-    names only itself; what it says of another tile is refused or dropped.
+    one connection: the host handles notifications in order, so the turn end carries it.
   - `agent.await_approval {"callerTile","tool_name","tool_input"}` →
     `{"decision":"allow"|"deny"|"ask","reason"?}`. `ask`: nobody decided; the script falls
     back to the agent's own prompt, or refuses if the agent has none.

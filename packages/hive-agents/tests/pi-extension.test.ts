@@ -83,15 +83,17 @@ test("a result printed with a failing exit is the answer; a failure says why", a
   expect(closed.content[0]!.text).toBe("hive error: no agent runs in tile ghost");
 });
 
-test("a turn's reply goes to the control plane on the tile's token, then the turn end", async () => {
+test("every connection signs in with the tile's token first; a turn's reply goes before the turn end", async () => {
   await handlers.agent_start!({});
   await handlers.message_end!({ message: { role: "assistant", content: [{ type: "text", text: "all done" }] } });
   await handlers.agent_end!({});
   for (let i = 0; i < 100 && !heard.some((l) => l.includes("turn.ended")); i++) await new Promise((r) => setTimeout(r, 10));
   expect(heard.map((l) => JSON.parse(l)).map((m) => [m.method, m.params])).toEqual([
+    ["initialize", { token: "tok" }],
     ["agent.event", { tileId: "hm:me", event: "turn.started" }],
     ["initialize", { token: "tok" }],
     ["agent.reply", { tileId: "hm:me", text: "all done" }],
+    ["initialize", { token: "tok" }],
     ["agent.event", { tileId: "hm:me", event: "turn.ended" }],
   ]);
 });

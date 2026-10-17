@@ -81,7 +81,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Security
 
-- An agent speaks on the control-plane socket only for its own tile: a reply, a screen reading or a screen line it sends about another tile is refused or dropped, so an agent cannot put words in another's `hive ctl read` or change its status.
+- **Breaking:** an agent is heard on the control-plane socket only once it signs in with its tile's token, and only about its own tile: an event, a reply, a screen reading or a screen line sent unsigned or about another tile is dropped or refused, on the desktop, `hive host` and a remote machine's daemon, so one agent cannot change another's status or put words in its `hive ctl read`. A plugin's script that sends `agent.event` must call `initialize` first; the SDK's `emit` does.
 - An agent manifest, from HiveHub or anywhere, can no longer change what every object in the app holds through a field path such as `__proto__.x` in its session mapping: a field path reads and writes a record's own fields only.
 - A computer, phone or browser no longer becomes yours by entering a pairing code first: today's pairing gave the person key to whoever proved the code first, asking nobody. Connect asks you, shows three words on both screens, and the device is yours only after a yes on each side.
 

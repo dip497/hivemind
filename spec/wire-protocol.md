@@ -16,8 +16,9 @@ reading, closing, naming, pipes, tools — is the workspace API on the drive soc
    of its own, `<tile>.<MAC>`, which names its tile. A call made with a tile's token is that
    tile's: a `callerTile` naming another tile is refused with `FORBIDDEN`, and one naming none
    is taken as the tile's own. The person may name any tile.
-2. Requests and notifications, in any order. A hook's `agent.event` notification needs no
-   `initialize` (see `hook-protocol.md`).
+2. Then requests and notifications, in any order. A notification from a connection that has not
+   signed in is dropped, a hook's `agent.event` too (see `hook-protocol.md`), and so is one from a
+   tile's token that names another tile.
 
 ## Errors
 

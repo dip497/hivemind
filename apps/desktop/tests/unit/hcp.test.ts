@@ -521,16 +521,18 @@ test("hcp-server: a call still running when its caller goes is told that nobody 
   srv.close();
 });
 
-test("hcp-server: a hook's agent.event needs no token; any other unauthenticated notification is dropped", async () => {
+test("hcp-server: nothing said before initialize is heard, a hook's agent.event too; once signed in it is heard with who said it", async () => {
   const sock = tmpSock();
   const got: unknown[] = [];
-  const srv = startHcpServer(sock, { authenticate: knownTokens, rendererUp: () => true, dispatch: async () => ({}), onEvent: (m, p) => { got.push([m, p]); } });
+  const srv = startHcpServer(sock, { authenticate: knownTokens, rendererUp: () => true, dispatch: async () => ({}), onEvent: (m, p, from) => { got.push([m, p, from]); } });
   await new Promise((r) => setTimeout(r, 50));
   const s = await session(sock);
-  s.notify("agent.event", { tileId: "hm:t1", event: "turn.ended" });
+  s.notify("agent.event", { tileId: "hm:t1", event: "turn.started" });
   s.notify("agent.reply", { tileId: "hm:t1", text: "forged" });
+  await s.call("initialize", { token: "t1-token" });
+  s.notify("agent.event", { tileId: "hm:t1", event: "turn.ended" });
   await new Promise((r) => setTimeout(r, 50));
-  assert.deepEqual(got, [["agent.event", { tileId: "hm:t1", event: "turn.ended" }]]);
+  assert.deepEqual(got, [["agent.event", { tileId: "hm:t1", event: "turn.ended" }, fromTile("t1").actor]]);
   s.close();
   srv.close();
 });

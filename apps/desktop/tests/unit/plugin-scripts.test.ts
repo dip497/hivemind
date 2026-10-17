@@ -20,6 +20,8 @@ async function run(agent: string, file: string, payload: unknown, answer: (m: Li
   const got: Line[] = [];
   const server = net.createServer((c) => {
     let buf = "";
+    // A hook goes once it has said its piece, as the control plane allows.
+    c.on("error", () => {});
     c.on("data", (d) => {
       buf += d;
       let nl;

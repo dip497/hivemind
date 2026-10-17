@@ -78,12 +78,13 @@ const until = async (ok: () => boolean) => { for (let i = 0; i < 500 && !ok(); i
 for (const via of VIAS) for (const c of cases) {
   test(`${c.name} (${via})`, { skip: via === "native" && noHiveNet }, async () => {
     const h = await host();
-    const r = await hook(via, h.sock, c.env, c.payload);
+    const r = await hook(via, h.sock, { ...c.env, HCP_TOKEN: "tok" }, c.payload);
     assert.equal(await r.exited, 0, "a hook always exits 0 so the agent never waits on us");
     await new Promise((res) => setTimeout(res, 50));
     h.close();
     assert.equal(r.printed(), "", "an event that asks for nothing prints nothing");
-    assert.deepEqual(h.got, c.expect === null ? [] : [{ jsonrpc: "2.0", method: "agent.event", params: c.expect }]);
+    // Signed in as its tile, then the event: the host hears nothing else.
+    assert.deepEqual(h.got, c.expect === null ? [] : [{ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: "tok" } }, { jsonrpc: "2.0", method: "agent.event", params: c.expect }]);
     for (const f of c.forbidden ?? []) assert.ok(!JSON.stringify(h.got).includes(f), `"${f}" must not leave the hook`);
   });
 }
@@ -103,13 +104,13 @@ async function answering(via: Via, reply: { result: unknown } | { error: unknown
 
 for (const via of VIAS) {
   const skip = via === "native" && noHiveNet;
-  test(`a hook that answers reports its event, then asks for the answer on the same connection, as its tile, and prints what the host answers (${via})`, { skip }, async () => {
+  test(`a hook that answers signs in as its tile, reports its event, then asks for the answer on the same connection, and prints what the host answers (${via})`, { skip }, async () => {
     const printed = '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}';
     const r = await answering(via, { result: { stdout: printed } });
     assert.equal(r.printed, printed);
-    assert.deepEqual(r.got.map((m) => m.method), ["agent.event", "initialize", "agent.await_answer"]);
-    assert.deepEqual(r.got[0]!.params, { tileId: "hm:t1", event: "input.requested", kind: "permission", sessionId: "s1" });
-    assert.deepEqual(r.got[1]!.params, { token: "tok" });
+    assert.deepEqual(r.got.map((m) => m.method), ["initialize", "agent.event", "agent.await_answer"]);
+    assert.deepEqual(r.got[0]!.params, { token: "tok" });
+    assert.deepEqual(r.got[1]!.params, { tileId: "hm:t1", event: "input.requested", kind: "permission", sessionId: "s1" });
     assert.deepEqual(r.got[2]!.params, { callerTile: "hm:t1", hook: "PermissionRequest", tool: "Bash", input: { command: "npm test" } });
   });
 

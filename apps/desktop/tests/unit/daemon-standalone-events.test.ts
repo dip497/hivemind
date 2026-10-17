@@ -59,6 +59,12 @@ function hook(hcp: string, msg: unknown, awaitReply = false, replies = 1): Promi
   });
 }
 
+/** An agent's event as its hook says it: signed in with its tile's token, then reported. */
+function report(d: { dir: string; hcp: string }, params: { tileId: string }): Promise<string> {
+  const token = tileToken(fs.readFileSync(path.join(d.dir, "hcp.token"), "utf8").trim(), params.tileId);
+  return hook(d.hcp, [{ jsonrpc: "2.0", id: "init", method: "initialize", params: { token } }, { jsonrpc: "2.0", method: "agent.event", params }]);
+}
+
 test("standalone: hook events reach event viewers, requests are answered at once, pushes are sent and throttled", { skip: !unix, timeout: 60000 }, async () => {
   const { pushes, srv, url } = await pushServer();
   const d = await startDaemon(true);
@@ -73,16 +79,16 @@ test("standalone: hook events reach event viewers, requests are answered at once
   await wait(200);
 
   const needsYou = { tileId: "tile-1", event: "input.requested", kind: "permission" };
-  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: needsYou });
+  await report(d, needsYou);
   for (let t = 0; t < 5000 && (events.length === 0 || pushes.length === 0); t += 25) await wait(25);
   assert.deepEqual(events[0], { t: "event", topic: "agent.event", data: needsYou });
   assert.equal(pushes.length, 1);
   assert.match(pushes[0]!.body, /needs your input/);
   assert.match(pushes[0]!.title ?? "", /^hivemind - /);
 
-  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: needsYou });
-  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: "tile-1", event: "turn.ended" } });
-  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: "tile-1", event: "not.an.event" } });
+  await report(d, needsYou);
+  await report(d, { tileId: "tile-1", event: "turn.ended" });
+  await report(d, { tileId: "tile-1", event: "not.an.event" });
   await wait(500);
   assert.equal(pushes.length, 1, "same session again within the window, and an event not asked for: no push");
   assert.equal(events.length, 3, "viewers get every valid event, nothing else");
@@ -125,7 +131,7 @@ test("standalone: named a hive-net that has `hook`, the daemon opens the hook do
   await new Promise((r) => viewer.once("connect", r));
   viewer.write(frame({ t: "hello", caps: ["events"] }));
   await wait(200);
-  const agent = spawn(HIVE_NET, ["hook", door], { env: { HIVEMIND_TILE: "tile-1", HIVE_EVENT: "turn.ended" }, stdio: ["pipe", "ignore", "ignore"] });
+  const agent = spawn(HIVE_NET, ["hook", door], { env: { HIVEMIND_TILE: "tile-1", HCP_TOKEN: tileToken(fs.readFileSync(path.join(d.dir, "hcp.token"), "utf8").trim(), "tile-1"), HIVE_EVENT: "turn.ended" }, stdio: ["pipe", "ignore", "ignore"] });
   agent.stdin!.end(JSON.stringify({ session_id: "s1" }));
   assert.equal(await new Promise((r) => agent.on("exit", r)), 0);
   for (let t = 0; t < 5000 && events.length === 0; t += 25) await wait(25);
@@ -165,7 +171,7 @@ test("standalone: the machine keeps each session's status, and every desktop wat
   const a = await statusViewer(d.sock);
   // A session that outlives a Ctrl+C, as an agent's TUI does.
   a.c.write(frame({ t: "attach", reqId: "r1", id, spec: { cwd: d.dir, cmd: "bash", args: ["-c", "trap '' INT; sleep 30"], cols: 80, rows: 24 } }));
-  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: id, event: "turn.started" } });
+  await report(d, { tileId: id, event: "turn.started" });
   await until(() => a.stateOf(id) === "working");
   assert.equal(a.stateOf(id), "working");
   const b = await statusViewer(d.sock);
@@ -254,7 +260,7 @@ test("standalone: a control plane that takes the socket answers on it; the daemo
   // A hook's event reaches the control plane, and through this daemon the other viewers and the
   // phone; the control plane is not told again what it heard itself.
   const needsYou = { tileId: "tile-1", event: "input.requested", kind: "permission" };
-  await hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: needsYou });
+  await report(d, needsYou);
   await until(() => plane.heard.length > 0 && other.events.some((e) => e.topic === "agent.event") && phone.pushes.length > 0);
   assert.deepEqual(plane.heard, [{ method: "agent.event", params: needsYou }]);
   assert.deepEqual(other.events.filter((e) => e.topic === "agent.event"), [{ topic: "agent.event", tileId: "tile-1" }]);
@@ -311,7 +317,7 @@ test("inside the desktop the daemon leaves the control-plane socket to the app",
   host.c.destroy();
 });
 
-test("standalone: an agent speaks for its own tile only: a reply or event another tile's token names it with is refused or dropped, and reaches no desktop; its own reply, sent ahead of its turn end, is heard", { skip: !unix, timeout: 60000 }, async () => {
+test("standalone: an agent speaks for its own tile only: a reply or event from a connection not signed in, or one another tile's token names it with, is refused or dropped, and reaches no desktop; its own, by either of its ids, and its reply, sent ahead of its turn end, are heard", { skip: !unix, timeout: 60000 }, async () => {
   const d = await startDaemon(true);
   const token = fs.readFileSync(path.join(d.dir, "hcp.token"), "utf8").trim();
   const v = await statusViewer(d.sock);
@@ -320,11 +326,14 @@ test("standalone: an agent speaks for its own tile only: a reply or event anothe
   const asB = { jsonrpc: "2.0", id: "init", method: "initialize", params: { token: tileToken(token, b) } };
   const forged = await hook(d.hcp, [asB, { jsonrpc: "2.0", id: "r1", method: "agent.reply", params: { tileId: a, text: "forged" } }], true, 2);
   assert.equal(JSON.parse(forged.trim().split("\n").at(-1)!).error.data.code, "FORBIDDEN");
-  await hook(d.hcp, [asB, { jsonrpc: "2.0", method: "agent.reply", params: { tileId: a, text: "forged too" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: a, event: "turn.started" } }]);
-  await hook(d.hcp, [asB, { jsonrpc: "2.0", method: "agent.reply", params: { tileId: b, text: "mine" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: b, event: "turn.ended" } }]);
+  await hook(d.hcp, [asB, { jsonrpc: "2.0", method: "agent.reply", params: { tileId: a, text: "forged too" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: a, event: "turn.started" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: "tile-a", event: "turn.started" } }]);
+  // Nobody signed in: nothing is heard.
+  await hook(d.hcp, [{ jsonrpc: "2.0", method: "agent.reply", params: { tileId: a, text: "unsigned" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: a, event: "turn.started" } }]);
+  // Its own tile by either of its ids.
+  await hook(d.hcp, [asB, { jsonrpc: "2.0", method: "agent.event", params: { tileId: "tile-b", event: "turn.started" } }, { jsonrpc: "2.0", method: "agent.reply", params: { tileId: b, text: "mine" } }, { jsonrpc: "2.0", method: "agent.event", params: { tileId: b, event: "turn.ended" } }]);
   await until(() => v.events.some((e) => e.topic === "agent.event" && e.tileId === b));
   await wait(300);
-  assert.deepEqual(v.events.filter((e) => e.topic !== "agent.status"), [{ topic: "agent.reply", tileId: b }, { topic: "agent.event", tileId: b }]);
+  assert.deepEqual(v.events.filter((e) => e.topic !== "agent.status"), [{ topic: "agent.event", tileId: "tile-b" }, { topic: "agent.reply", tileId: b }, { topic: "agent.event", tileId: b }]);
   v.c.destroy();
 });
 
@@ -335,7 +344,7 @@ test("standalone: the session an agent reports is its tile's: a new one replaces
   const [kept, closed] = ["hm:tile-s", "hm:tile-k"];
   for (const id of [kept, closed]) v.c.write(frame({ t: "attach", reqId: `a-${id}`, id, spec: { cwd: d.dir, cmd: "bash", args: ["-c", "sleep 30"], cols: 80, rows: 24 } }));
   await wait(500);
-  const said = (id: string, sessionId: string) => hook(d.hcp, { jsonrpc: "2.0", method: "agent.event", params: { tileId: id, event: "turn.started", sessionId } });
+  const said = (id: string, sessionId: string) => report(d, { tileId: id, event: "turn.started", sessionId });
   await said(kept, "s1");
   await until(() => readTrackedSession(sessions, kept) === "s1");
   await said(kept, "s2");

@@ -11,11 +11,14 @@ export default function (pi) {
   const token = process.env.HCP_TOKEN;
   if (!sock || !tile) return; // not spawned by hivemind → stay a plain pi session
 
-  // ── lifecycle bridge: fire-and-forget JSON-RPC notification (connect, write one line, close) ──
+  // ── lifecycle bridge: fire-and-forget JSON-RPC notification, signed in with the tile's token ──
   const post = (method, params) => {
     try {
       const c = net.connect(sock, () => {
-        try { c.write(JSON.stringify({ jsonrpc: "2.0", method: method, params: params }) + "\n"); } catch (e) {}
+        try {
+          c.write(JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: token } }) + "\n"
+            + JSON.stringify({ jsonrpc: "2.0", method: method, params: params }) + "\n");
+        } catch (e) {}
         try { c.end(); } catch (e) {}
       });
       c.on("error", () => {});

@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { ipcPath } from "@hivemind/core/ipc";
+import { toBareId } from "@hivemind/core/tile-id";
 
 /** The token a tile's agent is given: `<tile>.<MAC of the tile under the install's token>`. */
 export function tileToken(installToken: string, tile: string): string {
@@ -32,6 +33,15 @@ export function holderOf(installToken: string, token: unknown): { person: true }
   if (dot <= 0) return null;
   const tile = token.slice(0, dot);
   return same(token, tileToken(installToken, tile)) ? { tile } : null;
+}
+
+/** Whether `who`, whoever a token names, may speak for the tile `tileId`: one signed in as a tile
+ *  for that tile only, by either of its ids; anyone else signed in for any tile; nobody not signed
+ *  in. */
+export function speaksFor(who: object | null | undefined, tileId: unknown): boolean {
+  if (!who) return false;
+  const own = (who as { tile?: unknown }).tile;
+  return typeof own !== "string" || (typeof tileId === "string" && toBareId(tileId) === toBareId(own));
 }
 
 function same(a: string, b: string): boolean {

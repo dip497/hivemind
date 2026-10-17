@@ -7,6 +7,7 @@
  *     pipes, and the machine's own methods. The API records each effect, as its caller's; a
  *     window's work (view.emit, plugin.*, tile.focus, rescans) goes to `deps.callRenderer`.
  */
+import { speaksFor } from "@hivemind/agent-host/hooks/token";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import { PLUGIN_CALL_HOST_MS, type PluginList } from "@hivemind/workspace-api/plugins";
@@ -717,7 +718,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // person may act for any tile.
     if (call.actor.kind === "tile") {
       const named = tileOf(p.callerTile);
-      if (named && named !== call.actor.tile) return effect(call, { verb: method, target: named, onlyBy: named }, async () => undefined);
+      if (named && !speaksFor(call.actor, named)) return effect(call, { verb: method, target: named, onlyBy: named }, async () => undefined);
       if (!named) p = { ...p, callerTile: ptyId(call.actor.tile) }; // as `hive ctl` names it: $HIVEMIND_TILE
     }
     switch (method) {
@@ -757,7 +758,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const text = typeof p.text === "string" ? p.text : "";
         if (!tileId || !text) throw new ApiError("BAD_REQUEST", "tileId and text required");
         // A tile hands over its own reply, never another's.
-        if (call.actor.kind === "tile" && bareOf(tileId) !== call.actor.tile) return effect(call, { verb: method, target: bareOf(tileId), onlyBy: bareOf(tileId) }, async () => undefined);
+        if (!speaksFor(call.actor, tileId)) return effect(call, { verb: method, target: bareOf(tileId), onlyBy: bareOf(tileId) }, async () => undefined);
         deps.turns.recordReply(ptyId(tileId), text);
         return { ok: true };
       }

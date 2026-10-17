@@ -85,24 +85,36 @@ test("the session an agent's hooks name is recorded for its tile to resume: a ne
   }
 });
 
-test("on the control-plane socket a tile speaks for itself: what it says of another tile is dropped, what it says of its own is heard", async () => {
+test("on the control-plane socket nothing is heard before a connection signs in, and a tile speaks for itself: what it says of another tile is dropped, what it says of its own is heard", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plane-sock-"));
   const p = plane({ dir: () => dir });
   const sock = path.join(dir, "hcp.sock");
   const server = p.listen(sock);
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 10));
-  const c = net.connect(sock);
-  await new Promise((r) => c.once("connect", r));
-  const say = (m: Record<string, unknown>) => c.write(`${JSON.stringify({ jsonrpc: "2.0", ...m })}\n`);
-  say({ id: 1, method: "initialize", params: { token: tileToken(readOrCreateToken(dir), "hm:t2") } });
-  say({ method: "tile.line", params: { tileId: "hm:t1", line: "forged" } });
-  say({ method: "agent.screen", params: { tileId: "t1", state: "permission" } });
-  say({ method: "tile.line", params: { tileId: "hm:t2", line: "its own" } });
-  for (let i = 0; i < 200 && !p.lines.has("t2"); i++) await new Promise((r) => setTimeout(r, 10));
-  assert.equal(p.lines.get("t2"), "its own");
-  assert.equal(p.lines.get("t1"), undefined);
-  assert.equal(p.status.get("t1"), undefined);
-  c.destroy();
-  server.close();
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    const line = (m: Record<string, unknown>) => `${JSON.stringify({ jsonrpc: "2.0", ...m })}\n`;
+    // Said on a connection of its own, which ends once the host has read it.
+    const said = async (...m: Array<Record<string, unknown>>) => {
+      const c = net.connect(sock);
+      c.on("data", () => {});
+      await new Promise((r) => c.once("connect", r));
+      c.end(m.map(line).join(""));
+      await new Promise((r) => c.once("close", r));
+    };
+    const as = (tile: string) => ({ id: "init", method: "initialize", params: { token: tileToken(readOrCreateToken(dir), tile) } });
+    await said({ method: "agent.event", params: { tileId: "hm:t1", event: "turn.started" } }, { method: "tile.line", params: { tileId: "hm:t1", line: "unsigned" } });
+    await said(as("hm:t2"),
+      { method: "agent.event", params: { tileId: "hm:t1", event: "turn.started" } },
+      { method: "tile.line", params: { tileId: "hm:t1", line: "forged" } },
+      { method: "agent.screen", params: { tileId: "t1", state: "permission" } },
+      { method: "tile.line", params: { tileId: "hm:t2", line: "its own" } });
+    assert.equal(p.lines.get("t2"), "its own");
+    assert.equal(p.lines.get("t1"), undefined);
+    assert.equal(p.status.get("t1"), undefined);
+    await said(as("hm:t1"), { method: "agent.event", params: { tileId: "hm:t1", event: "turn.started" } });
+    assert.equal(p.status.get("t1")?.state, "working");
+  } finally {
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

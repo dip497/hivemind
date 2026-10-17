@@ -18,8 +18,8 @@ export interface HcpServerDeps {
   onListenError?: (err: Error) => void;
   rendererUp: () => boolean;
   dispatch: (method: string, params: unknown, call: HcpCall) => Promise<unknown>;
-  /** A hook's `agent.event`, or anything a remote machine's daemon passes on; `from`, whoever's
-   *  token the connection gave, when it gave one. */
+  /** A hook's `agent.event`, from `from`, whoever's token the connection gave; or anything a
+   *  remote machine's daemon passes on, with no `from`. */
   onEvent: (method: string, params: unknown, from?: Actor) => void;
 }
 
@@ -28,9 +28,6 @@ export interface HcpServer {
   /** Handle a notification that arrived some other way (a remote machine's daemon). */
   injectEvent: (method: string, params: unknown) => void;
 }
-
-/** The one notification accepted before `initialize`: a hook reporting. */
-const HOOK_NOTIFICATIONS = new Set(["agent.event"]);
 
 
 export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer {
@@ -73,8 +70,8 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
       const params = (m.params ?? {}) as Record<string, unknown>;
 
       if (id === null) {
-        // A notification: a hook reporting. No reply, whatever happens.
-        if (HOOK_NOTIFICATIONS.has(m.method) || actor) { try { deps.onEvent(m.method, m.params, actor ?? undefined); } catch { /* ignore */ } }
+        // A notification: a hook reporting, heard only once it signed in. No reply, whatever happens.
+        if (actor) { try { deps.onEvent(m.method, m.params, actor); } catch { /* ignore */ } }
         return;
       }
       if (m.method === "initialize") {

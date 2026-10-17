@@ -37,7 +37,7 @@ import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
 import { StatusStore } from "./status-store.js";
 import { cleanName } from "@hivemind/agents";
-import { driveSockPath, holderOf, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
+import { driveSockPath, holderOf, speaksFor, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
@@ -766,15 +766,15 @@ if (STANDALONE) {
   const lines = (answer: ((id: unknown, body: Record<string, unknown>) => void) | null, heard?: (m: ServerMsg) => void) => {
     /** Whose token signed this connection in: a tile's speaks only for that tile. */
     let who: ReturnType<typeof holderOf> = null;
-    const mine = (params: unknown): boolean => !who || !("tile" in who) || (params as { tileId?: unknown } | null)?.tileId === who.tile;
+    const mine = (params: unknown): boolean => speaksFor(who, (params as { tileId?: unknown } | null)?.tileId);
     return (line: string): void => {
       let m: { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: unknown };
       try { m = JSON.parse(line); } catch { return; }
       if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return;
       const params = (m.params ?? {}) as Record<string, unknown>;
       if (m.id === undefined) {
-        // A reply, ahead of the turn end it belongs to, from a hook signed in on this connection.
-        if ((m.method === AGENT_EVENT_METHOD || (who && m.method === "agent.reply")) && mine(m.params)) reported(m.method, m.params, heard);
+        // An event, or a reply ahead of the turn end it belongs to, from a hook signed in here.
+        if ((m.method === AGENT_EVENT_METHOD || m.method === "agent.reply") && mine(m.params)) reported(m.method, m.params, heard);
         return;
       }
       if (m.method === "initialize") {

@@ -14,7 +14,7 @@ import { AGENT_EVENT_METHOD, cleanName, parseAgentEvent } from "@hivemind/agents
 import { TILE_SESSIONS_DIR, writeTrackedSession } from "@hivemind/agents/node";
 import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
-import { holderOf, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
+import { holderOf, readOrCreateToken, speaksFor } from "@hivemind/agent-host/hooks/token";
 import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
@@ -430,8 +430,7 @@ export class ControlPlane {
       dispatch: (method, params, call) => this.agentChannel(method, params, call),
       onEvent: (method, params, from) => {
         // A tile speaks for itself: what it says of another is dropped.
-        const named = (params as { tileId?: unknown } | null)?.tileId;
-        if (from?.kind === "tile" && (typeof named !== "string" || toBareId(named) !== from.tile)) return;
+        if (from && !speaksFor(from, (params as { tileId?: unknown } | null)?.tileId)) return;
         this.event(method, params);
       },
     });
