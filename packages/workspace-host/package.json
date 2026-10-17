@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/workspace-host",
-  "version": "2026.9.8",
+  "version": "2026.10.2",
   "private": true,
   "type": "module",
   "exports": {
