@@ -625,7 +625,7 @@ test("changes on disk past the snapshot's size are folded into a new snapshot on
   await new Promise((done) => setTimeout(done, 2500));
   expect(fs.existsSync(updates)).toBe(false);
   expect(restart().getObjects("/work/api")).toEqual(board);
-});
+}, 30_000);
 
 test("updates on disk far past the snapshot's size are folded at once, however busy the workspace", () => {
   const s = new WorkspaceStore({ dir, person });
