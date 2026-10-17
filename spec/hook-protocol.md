@@ -35,7 +35,9 @@ keeps the same rule on its own socket.
   - `agent.reply {"tileId","text"}` → `{"ok":true}`. The turn's reply for `hive ctl read`, sent
     before the `turn.ended` it belongs to. Never forwarded on the event stream or to push. A hook
     for an entry with `reply:` sends it as a notification after `initialize`, then the event, on
-    one connection: the host handles notifications in order, so the turn end carries it.
+    one connection: the host handles notifications in order, so the turn end carries it. A line
+    longer than the host takes (1 MB) ends the connection, turn end and all, so the hook cuts the
+    reply to its first 256 KB as written.
   - `agent.await_approval {"callerTile","tool_name","tool_input"}` →
     `{"decision":"allow"|"deny"|"ask","reason"?}`. `ask`: nobody decided; the script falls
     back to the agent's own prompt, or refuses if the agent has none.

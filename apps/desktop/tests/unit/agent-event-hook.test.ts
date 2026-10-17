@@ -137,7 +137,7 @@ for (const via of VIAS) {
 }
 
 for (const via of VIAS) {
-  test(`a turn end hands over the turn's reply ahead of it, as its own tile, so the turn it ends carries it; one with no reply ends with none (${via})`, { skip: via === "native" && noHiveNet }, async () => {
+  test(`a turn end hands over the turn's reply ahead of it, as its own tile, so the turn it ends carries it; one with no reply ends with none, and one too long for a line is cut (${via})`, { skip: via === "native" && noHiveNet }, async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "evh-"));
     const plane = new ControlPlane({ dir: () => dir, publish: () => {}, write: () => true, spawned: () => {}, methods: () => { throw new Error("no methods here"); }, windowsUp: () => false } as unknown as ControlPlaneOptions);
     const sock = path.join(dir, "hcp.sock");
@@ -148,12 +148,17 @@ for (const via of VIAS) {
       const ended = plane.turns.currentSeq("hm:t1") + 1;
       assert.equal(await (await hook(via, sock, env, payload)).exited, 0);
       await until(() => plane.turns.currentSeq("hm:t1") === ended);
+      assert.equal(plane.turns.currentSeq("hm:t1"), ended, "the turn ended");
     };
     try {
       await turnEnd({ session_id: "s-1", transcript_path: "/h/x.jsonl", last_assistant_message: "All done." });
       assert.equal(plane.turns.lastReply("hm:t1"), "All done.");
       await turnEnd({ session_id: "s-1", last_assistant_message: 42 });
       assert.equal(plane.turns.lastReply("hm:t1"), null);
+      // Longer than a line the host takes: the turn still ends, with the reply's start.
+      await turnEnd({ session_id: "s-1", last_assistant_message: "y".repeat(1536 * 1024) });
+      const cut = plane.turns.lastReply("hm:t1") ?? "";
+      assert.ok(/^y+$/.test(cut) && cut.length > 200 * 1024 && cut.length <= 256 * 1024, `${cut.length}`);
     } finally {
       server.close();
       fs.rmSync(dir, { recursive: true, force: true });

@@ -22,7 +22,13 @@ export function hookLines(spec: HookSpec, tileId: string, token: string, e: Reco
   // The turn's reply, ahead of its end, which carries it.
   let said: any = spec.reply ? e : undefined;
   for (const key of spec.reply ? spec.reply.split(".") : []) said = said && typeof said === "object" && Object.prototype.hasOwnProperty.call(said, key) ? said[key] : undefined;
-  if (typeof said === "string" && said) lines.push({ jsonrpc: "2.0", method: "agent.reply", params: { tileId: tileId, text: said } });
+  if (typeof said === "string" && said) {
+    // The turn end follows on this connection, which a line longer than the host takes would end:
+    // a longer reply is cut to its start.
+    const most = 256 * 1024;
+    for (let size = JSON.stringify(said).length; size > most; size = JSON.stringify(said).length) said = said.slice(0, Math.floor(said.length * most / size) - 1);
+    lines.push({ jsonrpc: "2.0", method: "agent.reply", params: { tileId: tileId, text: said } });
+  }
   lines.push({ jsonrpc: "2.0", method: "agent.event", params: out });
   if (!spec.answer) return lines;
   const ask: Record<string, unknown> = { callerTile: tileId, hook: e.hook_event_name, tool: e.tool_name, input: e.tool_input };
