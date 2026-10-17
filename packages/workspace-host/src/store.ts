@@ -29,7 +29,7 @@
  * writer is gone (`forgetWriter`: a window closed).
  */
 import { LoroDoc, UndoManager, VersionVector, decodeImportBlobMeta, type Frontiers } from "loro-crdt";
-import { addFrame, addTile, hasCore, readCore, removeFrame, removeTile, tileIds, writeCore, writeTileName } from "@hivemind/workspace-doc/core";
+import { addFrame, addTile, hasCore, readCore, removeFrame, removeTile, tileIds, writeCore, writeTileName, writeTileSleeping } from "@hivemind/workspace-doc/core";
 import { checkedEdit, editObjects, readObjects, readObjectsWithIds } from "@hivemind/workspace-doc/objects";
 import { boardEdit } from "@hivemind/workspace-doc/board-edit";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
@@ -293,6 +293,14 @@ export class WorkspaceStore {
   renameTile(tileId: string, name: string, from: Writer = {}): string | null {
     const repo = this.workspaceOf(tileId);
     if (repo !== null) this.write(repo, "core", LAYOUT, from, (doc) => writeTileName(doc, tileId, name));
+    return repo;
+  }
+
+  /** Mark the tile `tileId` asleep, or awake, in the workspace that holds it. That workspace, or
+   *  null. */
+  setSleeping(tileId: string, sleeping: boolean, from: Writer = {}): string | null {
+    const repo = this.workspaceOf(tileId);
+    if (repo !== null) this.write(repo, "core", LAYOUT, from, (doc) => writeTileSleeping(doc, tileId, sleeping));
     return repo;
   }
 

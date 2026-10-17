@@ -432,6 +432,20 @@ test("a tile named by the control plane keeps its name when a window then writes
   expect(restart().getCore("/a")).toEqual({ ...core("moved"), tileNames: { t1: "reviewer" } });
 });
 
+test("a tile put to sleep by the control plane stays asleep when a window then writes what it read before, and after a restart; woken, it is not", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  const read = s.getCore("/a");
+  expect(s.setSleeping("t1", true, { writer: "control" })).toBe("/a");
+  expect(s.setSleeping("nowhere", true)).toBeNull();
+  s.setCore("/a", core("moved"), { base: read });
+  const asleep = restart().getCore("/a");
+  expect(asleep?.tiles.find((t) => t.id === "t1")?.sleeping).toBe(true);
+  expect(asleep?.frames[0]?.title).toBe("moved");
+  s.setSleeping("t1", false, { writer: "control" });
+  expect(restart().getCore("/a")?.tiles.find((t) => t.id === "t1")?.sleeping).toBeUndefined();
+});
+
 test("a tile closed by the control plane is gone after a restart, and stays closed when a window then writes what it read before", () => {
   const told: unknown[] = [];
   const s = new WorkspaceStore({ dir, person, onChange: (c) => told.push(c) });

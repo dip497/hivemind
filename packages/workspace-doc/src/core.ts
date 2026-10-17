@@ -135,6 +135,15 @@ export function writeTileName(doc: LoroDoc, tileId: string, name: string): boole
   return true;
 }
 
+/** Put the tile `tileId` to sleep, or wake it. False when `doc` has no such tile. */
+export function writeTileSleeping(doc: LoroDoc, tileId: string, sleeping: boolean): boolean {
+  const record = doc.getMap(TILES).get(tileId);
+  if (!isMap(record)) return false;
+  if (sleeping) record.set("sleeping", true);
+  else record.delete("sleeping");
+  return true;
+}
+
 /** The ids of the tiles `doc` holds. */
 export function tileIds(doc: LoroDoc): string[] {
   const tiles = doc.getMap(TILES);
