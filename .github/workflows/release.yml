@@ -841,10 +841,13 @@ jobs:
           fi
           rustup toolchain install
 
+      # Saved by the nightly only: a cache saved under a tag is seen by no later run, and main's is
+      # what a tag's run restores.
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/hive-net
           key: release-${{ matrix.asset }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build
         run: |
