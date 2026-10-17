@@ -23,6 +23,7 @@
 import type { Duplex } from "node:stream";
 import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
 import type { TextChannel } from "@hivemind/workspace-api/peers";
+import type { Room } from "@hivemind/workspace-host/hive-net";
 
 /** What opens the `machine` stream, and opens it again once this machine's daemon is back: what the
  *  host watched before is to be attached afresh. */
@@ -100,7 +101,7 @@ const position = (v: unknown): { seq: number; epoch: string } | null => {
 
 /** Serve this machine's sessions to the host at the other end of `channel`, its `machine` stream,
  *  through the filter, until the function it returns is called. */
-export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: MachineShareOptions): () => void {
+export function serveMachine(channel: Pick<TextChannel, "send" | "on"> & Room, o: MachineShareOptions): () => void {
   let daemon: Duplex | null = null;
   let opening: Promise<Duplex> | null = null;
   let stopped = false;
@@ -124,7 +125,15 @@ export function serveMachine(channel: Pick<TextChannel, "send" | "on">, o: Machi
       opening = null;
       if (stopped) { d.destroy(); throw new Error("no longer shown"); }
       daemon = d;
-      d.on("data", makeLineDecoder(fromDaemon, () => d.destroy()));
+      // While the link has no room the daemon is not read: it sends a screen in place of what the
+      // host missed.
+      const lines = makeLineDecoder(fromDaemon, () => d.destroy());
+      d.on("data", (chunk: Buffer | string) => {
+        lines(chunk);
+        if (channel.hasRoom()) return;
+        d.pause();
+        channel.whenRoom(() => d.resume());
+      });
       d.on("error", () => {});
       d.on("close", () => {
         if (daemon !== d) return;

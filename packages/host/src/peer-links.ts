@@ -64,6 +64,7 @@ import { agentById } from "@hivemind/agents";
 import { boardStructure } from "./board-structure.js";
 import type { Links } from "@hivemind/workspace-api/agents";
 import type { ViewFrameMachine } from "@hivemind/view-sdk/protocol";
+import type { HomeMessage } from "@hivemind/workspace-api/home";
 import { HomeFeed, homeLines, homeRows, type LayersShown } from "./home.js";
 import type { KnownMachines } from "@hivemind/core/remote-uri";
 import type { PairedWith } from "@hivemind/workspace-host/pairing";
@@ -303,9 +304,11 @@ export class PeerLinks {
   /** The links whose app shows its machine's sessions here (M4), the workspace each is for, and
    *  what its person lets the people here do on it. */
   private readonly machines = new Map<Link, { workspace: string; grant: Grant }>();
-  /** The streams on which the owner's devices follow every agent here (spec/agents.md), and the
-   *  list each was last sent. */
-  private readonly following = new Map<Stream, string>();
+  /** The streams on which the owner's devices follow every agent here (spec/agents.md): the list
+   *  each was last sent, and whether it waits for room to be sent the newest. */
+  private readonly following = new Map<Stream, { sent: string; waiting: boolean }>();
+  /** The newest list, as JSON. */
+  private newestList = "";
   /** While the list went out within the last 100 ms: whether it changed since. */
   private held: { changed: boolean } | null = null;
   /** Home, made once a device first follows it. */
@@ -421,10 +424,28 @@ export class PeerLinks {
     let asked: { t?: unknown } | null;
     try { asked = JSON.parse(text) as { t?: unknown } | null; } catch { return; }
     if (asked?.t !== "follow" || this.following.has(on)) return;
-    const list = JSON.stringify(this.agentList());
-    this.following.set(on, list);
-    on.send(list);
+    this.newestList = JSON.stringify(this.agentList());
+    const follower = { sent: "", waiting: false };
+    this.following.set(on, follower);
+    this.sendList(on, follower);
     void on.closed.then(() => this.following.delete(on));
+  }
+
+  /** Send `on` the newest list, if it was not sent it. A follower whose link has no room is sent
+   *  nothing now, and the newest list once room returns: never each list it missed. */
+  private sendList(on: Stream, follower: { sent: string; waiting: boolean }): boolean {
+    if (follower.sent === this.newestList || follower.waiting) return false;
+    if (!on.hasRoom()) {
+      follower.waiting = true;
+      on.whenRoom(() => {
+        follower.waiting = false;
+        if (this.following.get(on) === follower) this.sendList(on, follower);
+      });
+      return false;
+    }
+    follower.sent = this.newestList;
+    on.send(this.newestList);
+    return true;
   }
 
   /** Follow Home on `on` for the device on `link` (spec/home.md): answered what it has not
@@ -436,9 +457,32 @@ export class PeerLinks {
     if (asked?.t !== "follow" || this.homeFollowed.has(on)) return;
     const at = (v: unknown) => (typeof v === "number" ? v : undefined);
     const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines() }));
-    on.send(JSON.stringify(home.answer({ layout: at(asked.layout), lines: at(asked.lines) })));
+    // Where the follower is in each of Home's two feeds, as it was last sent them, and whether it
+    // missed a change for want of room: then it is sent nothing until room returns, and then what
+    // came after where it is.
+    const follower = { layout: at(asked.layout), lines: at(asked.lines), behind: false };
+    const send = (m: HomeMessage): void => {
+      if (m.t === "home") [follower.layout, follower.lines] = [m.layout.seq, m.lines.seq];
+      if (m.t === "changes" && m.layout) follower.layout = m.layout.seq;
+      if (m.t === "changes" && m.lines) follower.lines = m.lines.seq;
+      on.send(JSON.stringify(m));
+    };
+    const catchUp = (): void => {
+      if (!this.homeFollowed.has(on)) return;
+      if (!on.hasRoom()) return void on.whenRoom(catchUp);
+      // Still behind while Home is worked out, so the change that tells is not sent twice.
+      const m = home.answer({ layout: follower.layout, lines: follower.lines });
+      follower.behind = false;
+      if (m.t === "home" || m.layout?.changes.length || m.lines?.changes.length) send(m);
+    };
+    send(home.answer({ layout: follower.layout, lines: follower.lines }));
     this.homeFollowed.add(on);
-    const stop = home.follow((m) => on.send(JSON.stringify(m)));
+    const stop = home.follow((m) => {
+      if (follower.behind) return;
+      if (on.hasRoom()) return send(m);
+      follower.behind = true;
+      on.whenRoom(catchUp);
+    });
     void on.closed.then(() => {
       stop();
       this.homeFollowed.delete(on);
@@ -483,14 +527,9 @@ export class PeerLinks {
       this.held.changed = true;
       return;
     }
-    const list = JSON.stringify(this.agentList());
+    this.newestList = JSON.stringify(this.agentList());
     let sent = false;
-    for (const [on, last] of this.following) {
-      if (last === list) continue;
-      this.following.set(on, list);
-      on.send(list);
-      sent = true;
-    }
+    for (const [on, follower] of this.following) sent = this.sendList(on, follower) || sent;
     if (!sent) return;
     const held = (this.held = { changed: false });
     setTimeout(() => {
@@ -610,10 +649,15 @@ export class PeerLinks {
       this.o.daemon().then((d) => {
         daemon = d;
         // The daemon's bytes go on as text: one character split across two reads stays whole.
+        // While the link has no room it is not read: the daemon sends a screen in place of what
+        // its viewer there missed.
         const utf8 = new StringDecoder("utf8");
         d.on("data", (chunk: Buffer | string) => {
           const out = typeof chunk === "string" ? chunk : utf8.write(chunk);
           if (out) link.send("pty", out);
+          if (link.hasRoom()) return;
+          d.pause();
+          link.whenRoom(() => d.resume());
         });
         d.on("error", () => {});
         d.on("close", () => link.close("this machine's terminals went"));

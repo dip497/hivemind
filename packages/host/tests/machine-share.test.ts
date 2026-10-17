@@ -38,9 +38,13 @@ const until = async (done: () => boolean, ms = 10_000) => { for (let t = 0; t < 
 const read = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : "");
 
 /** Two ends of one connection, as hive-net gives each device its own: frames arrive in order, a
- *  moment after they are sent. */
-function linkPair(): [host: Link, machine: Link] {
+ *  moment after they are sent; and whether the machine has room to send (as when the network stops
+ *  taking what it sends, and starts again). */
+function linkPair(): [host: Link, machine: Link, room: (has: boolean) => void] {
   const heard = [new Map<string, Set<(t: string) => void>>(), new Map<string, Set<(t: string) => void>>()];
+  let room = true;
+  const roomFor = new Set<() => void>();
+  const tell = () => setImmediate(() => { if (room) for (const l of [...roomFor]) { roomFor.delete(l); l(); } });
   let close!: (why: string) => void;
   const closed = new Promise<string>((r) => { close = r; });
   const end = (i: number, peer: string): Link => ({
@@ -55,10 +59,14 @@ function linkPair(): [host: Link, machine: Link] {
     streams: () => () => {},
     close: (why = "closed") => close(why),
     closed,
-    hasRoom: () => true,
-    whenRoom: (l) => { setImmediate(l); return () => {}; },
+    hasRoom: () => i === 0 || room,
+    whenRoom: (l) => {
+      roomFor.add(l);
+      if (room || i === 0) tell();
+      return () => { roomFor.delete(l); };
+    },
   });
-  return [end(0, PRIYA), end(1, HOST)];
+  return [end(0, PRIYA), end(1, HOST), (has) => { room = has; if (has) tell(); }];
 }
 
 /** What a shell runs: `script`. */
@@ -111,7 +119,7 @@ async function machine(placed: string[], framed: Record<string, string[]> = {}) 
   const own = new DaemonEndpoint({ connect });
   stops.push(() => own.close());
 
-  const [hostEnd, machineEnd] = linkPair();
+  const [hostEnd, machineEnd, room] = linkPair();
   const shown = new Set(placed);
   const inFrames = new Map(Object.entries(framed).map(([id, run]) => [id, { run, cwd: "" }]));
   let granted: Grant = "watch";
@@ -169,7 +177,7 @@ async function machine(placed: string[], framed: Record<string, string[]> = {}) 
   const size = async (id: string) => { const s = (await own.sessions()).find((x) => x.id === id); return s && [s.cols, s.rows]; };
   /** What the host was told this machine grants, in turn. */
   const told = () => heard.map(grantOf).filter((g) => g !== null);
-  return { dir, own, host, watch, run, raw, size, replace, grant, frame, told, heard, events };
+  return { dir, own, host, watch, run, raw, size, replace, grant, frame, told, heard, events, room };
 }
 
 test("the host watches what this machine's person placed here, as it runs and at the size it has here: its attach starts, sizes and holds back nothing, and a size given here reaches it", { skip: !unix, timeout: 60_000 }, async () => {
@@ -244,6 +252,25 @@ test("what the host sends to type into a session, size it, hold it back or end i
   assert.ok(await until(() => answer("x1") !== undefined, SHOWN_WAIT_MS + 5_000));
   assert.equal(answer("x1")?.pid, -1);
   assert.deepEqual((await m.own.sessions()).map((x) => x.id).sort(), ["hm:other", "hm:shell"]);
+});
+
+test("while the link has no room this machine's daemon is not read for the host: what it misses meanwhile it is sent as a screen, not byte by byte, and then it is sent output again", { skip: !unix, timeout: 90_000 }, async () => {
+  const m = await machine(["hm:loud"]);
+  const own = await m.run("hm:loud", "/bin/sh", ["-c", "while [ ! -f go ]; do sleep 0.1; done; head -c 8000000 /dev/zero | tr '\\0' x; echo; echo END-$((40+2)); while :; do sleep 1; done"]);
+  const w = m.watch("hm:loud", { attachOnly: true });
+  assert.ok((await w.started).pid > 0);
+  const bytes = () => m.heard.reduce((n, t) => n + t.length, 0);
+  const before = bytes();
+  m.room(false);
+  fs.writeFileSync(path.join(m.dir, "go"), "");
+  // All of it printed, as this machine's own window sees it, while the host's link had no room.
+  assert.ok(await until(() => own.data.includes("END-42"), 45_000), "printed here");
+  const meanwhile = bytes() - before;
+  m.room(true);
+  assert.ok(await until(() => w.seen.data.includes("END-42")), "output again once there is room");
+  assert.ok(meanwhile < 2_000_000, `sent ${meanwhile} bytes with no room`);
+  assert.ok(bytes() - before < 4_000_000, `sent ${bytes() - before} bytes for 8 MB printed`);
+  assert.ok(m.heard.some((t) => t.includes('"t":"resync"')), "sent a screen in place of what it missed");
 });
 
 test("a session placed here that does not run yet is waited for, never started from the host: it is shown once this machine starts it", { skip: !unix, timeout: 60_000 }, async () => {

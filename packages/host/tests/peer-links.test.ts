@@ -301,6 +301,23 @@ test("a phone is answered which workspaces its computer holds and what waits on 
   assert.equal(c.daemons.length, 1, "no connection to the daemon for the phone");
 });
 
+test("while an owner's device's link has no room, this machine's terminal daemon is not read for it, and is read again once room returns: nothing lost", async () => {
+  const c = computer();
+  const laptop = c.connect(c.laptop);
+  laptop.room(false);
+  laptop.send("pty", "first ");
+  await until(() => laptop.heard.get("pty")!.length === 1);
+  laptop.send("pty", "second ");
+  laptop.send("pty", "third");
+  await wait(300);
+  assert.deepEqual(laptop.heard.get("pty"), ['"first "']);
+  assert.ok(c.daemons[0]!.readableLength > 0, "what the daemon sent waits in its socket");
+
+  laptop.room(true);
+  await until(() => laptop.heard.get("pty")!.join("") === '"first ""second ""third"');
+  assert.equal(c.daemons[0]!.readableLength, 0);
+});
+
 test("a phone that reads deflated frames is sent its long ones deflated, in the order they were sent; one that does not, and the short ones, as they are", async () => {
   const c = computer();
   const phone = c.connect(c.phone);
@@ -625,6 +642,63 @@ test("the owner's devices follow every agent here: sent the list at once, and ag
   stranger.send("agents", { t: "follow" });
   assert.equal(await Promise.race([stranger.closed, wait(2_000).then(() => "still open")]), "removed");
   assert.deepEqual(lists(stranger), []);
+});
+
+test("an owner's device whose link has no room is sent no list of agents, however many changes come, and the newest once room returns; another is sent each as before", async () => {
+  const c = computer();
+  const [phone, laptop] = [c.connect(c.phone), c.connect(c.laptop)];
+  const lists = (d: ReturnType<typeof c.connect>) => d.heard.get("agents")!.map((m) => JSON.parse(m) as { agents: Array<{ state: string }> });
+  phone.send("agents", { t: "follow" });
+  laptop.send("agents", { t: "follow" });
+  await until(() => lists(phone).length === 1 && lists(laptop).length === 1);
+
+  phone.room(false);
+  for (let n = 1; n <= 3; n++) {
+    c.statusChanged("t1", { state: n % 2 ? "working" : "idle", since: T + n, title: `step ${n}` });
+    await wait(150);
+  }
+  await until(() => lists(laptop).length === 4);
+  assert.equal(lists(phone).length, 1);
+
+  phone.room(true);
+  await until(() => lists(phone).length === 2);
+  await wait(200);
+  assert.equal(lists(phone).length, 2);
+  assert.deepEqual(lists(phone)[1], lists(laptop).at(-1));
+});
+
+test("an owner's device whose link has no room is sent nothing of Home, and once room returns, what came after where it was, in one message; then each change as before", async () => {
+  const c = computer();
+  c.lines.set("t1", "Allow edit to Nav.tsx?");
+  const phone = c.connect(c.phone);
+  const heard = () => phone.heard.get("home")!.map((m) => JSON.parse(m) as HomeMessage);
+  phone.send("home", { t: "follow" });
+  await until(() => heard().length === 1);
+  const [t1, t2] = [`t:${c.workspace}/t1`, `t:${c.workspace}/t2`];
+
+  phone.room(false);
+  c.lines.set("t2", "Compiling…");
+  c.links.homeChanged();
+  await wait(300);
+  c.lines.set("t2", "Compiled");
+  c.lines.delete("t1");
+  c.links.homeChanged();
+  await wait(300);
+  assert.equal(heard().length, 1);
+
+  phone.room(true);
+  await until(() => heard().length === 2);
+  await wait(100);
+  assert.equal(heard().length, 2);
+  assert.deepEqual(heard()[1], { t: "changes", layout: { seq: 3, changes: [] }, lines: { seq: 4, changes: [
+    { seq: 2, key: t2, row: "Compiling…" }, { seq: 3, key: t2, row: "Compiled" }, { seq: 4, key: t1, gone: true },
+  ] } });
+
+  await wait(300);
+  c.lines.set("t1", "Done");
+  c.links.homeChanged();
+  await until(() => heard().length === 3);
+  assert.deepEqual(heard()[2], { t: "changes", lines: { seq: 5, changes: [{ seq: 5, key: t1, row: "Done" }] } });
 });
 
 test("the owner's devices follow Home: sent both sequences whole, then each change as it comes, the board's and the last lines' apart; a device that comes back with its positions is sent only what it missed; anyone else is cut off", async () => {
