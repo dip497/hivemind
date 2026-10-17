@@ -734,3 +734,28 @@ test("a guest's change made after the host's own is checked with the host's in i
   expect(s.getCore("/a")!.frames.find((f) => f.id === "f2")).toEqual({ id: "f2", title: "web" });
 });
 
+
+test("a guest's change that waits on one not sent yet is checked when it can apply, even after a refusal in between", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setCore("/a", core("api"));
+  const other = new WorkspaceStore({ dir: path.join(dir, "guest") });
+  other.importFrom("/g", s.exportSince("/a", null));
+  const start = other.version("/g");
+  const read = other.getCore("/g")!;
+  other.setCore("/g", { ...read, tileNames: { t1: "build" } }, { base: read });
+  const named = other.version("/g");
+  const first = other.exportSince("/g", start);
+  const withName = other.getCore("/g")!;
+  other.setCore("/g", { ...withName, tiles: [...withName.tiles, { id: "t9", kind: "shell", label: "sh", cmd: "/bin/sh" }] }, { base: withName });
+  const shell = other.exportSince("/g", named);
+  // The shell first: it waits on the rename. Then a change that is refused. Then the rename.
+  s.importFrom("/a", shell, { writer: "peer" }, asEditor);
+  const placing = new WorkspaceStore({ dir: path.join(dir, "placing") });
+  placing.importFrom("/g", s.exportSince("/a", null));
+  const seen = placing.version("/g");
+  const at = placing.getCore("/g")!;
+  placing.setCore("/g", { ...at, frames: [{ ...at.frames[0]!, workspacePath: "/" }] }, { base: at });
+  expect(() => s.importFrom("/a", placing.exportSince("/g", seen), { writer: "peer" }, asEditor)).toThrow(RefusedImport);
+  try { s.importFrom("/a", first, { writer: "peer" }, asEditor); } catch (e) { expect(e).toBeInstanceOf(RefusedImport); }
+  expect(s.getCore("/a")!.tiles.map((t) => t.id)).toEqual(["t1"]);
+});

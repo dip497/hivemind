@@ -396,6 +396,7 @@ export class WorkspaceStore {
   importFrom(repo: string, bytes: Uint8Array, from: Writer = {}, check?: (before: CoreLayout | null, after: CoreLayout | null) => string | null): void {
     const workspace = this.workspace(repo);
     const { doc } = workspace;
+    let taken = bytes;
     if (check) {
       const trial = this.trialOf(workspace);
       const tried = trial.frontiers();
@@ -414,9 +415,12 @@ export class WorkspaceStore {
         this.dropTrial(workspace);
         throw new RefusedImport(why);
       }
+      // What the trial applied and checked, and nothing else: a change that waits on one not
+      // sent yet waits there, and is checked when it applies.
+      taken = trial.export({ mode: "update", from: doc.oplogVersion() });
     }
     const before = doc.frontiers();
-    doc.import(bytes);
+    doc.import(taken);
     if (JSON.stringify(doc.frontiers()) === JSON.stringify(before)) return;
     const parts = partsChanged(doc, before);
     if (parts.some((p) => p.part === "core")) {

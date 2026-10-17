@@ -73,6 +73,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A guest's change that its role does not allow can no longer reach the host by being sent before a change it waits on.
 - A guest who may edit a shared workspace can no longer change whose it is: the owner's host refuses that change.
 - A guest who edited a shared workspace while away, while its owner's app restarted, no longer parts from it for good: on reconnecting it takes the owner's board and sends its own edits on top, instead of the owner dropping every change it sends from then on.
 - The phone no longer fails to save, or silently loses, what your computers last told it when two of them answer at once, or when you unpair one while it is connected.
