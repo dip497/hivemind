@@ -104,8 +104,16 @@ jobs:
             crates/hive-net/target
           key: hive-net-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'crates/hive-net/Cargo.lock') }}
 
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # The test binaries side by side: one after another they took 160 s, mostly waiting on the
+      # network. nextest runs no doc tests, so they run after.
       - name: Test
-        run: cargo test --locked
+        run: |
+          cargo nextest run --locked
+          cargo test --locked --doc
 
       - name: A device's side alone, without the server roles (what a phone links)
         run: cargo check --locked --no-default-features --all-targets
