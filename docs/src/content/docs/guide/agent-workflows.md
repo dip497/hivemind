@@ -63,6 +63,7 @@ Practical rules:
   call `read` again to collect the turn. A worker closed while you wait exits 5 with
   `finalStatus:"closed"` at once: it is gone, so do not read it again. A worker that stops to
   wait on an answer exits 8 with `finalStatus:"waiting"` at once, and what it waits on.
+  A worker that is asleep exits 7 with `finalStatus:"asleep"` at once: wake it first.
 - What other agents send you (replies, reports, waits, approvals) waits in your inbox:
   `hive ctl inbox` (`--wait 90s` to block for one). Your terminal is only told to read it, at your
   prompt; nothing an agent wrote is typed into it.

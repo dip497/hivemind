@@ -325,6 +325,7 @@ export class ControlPlane {
     this.mailbox.sleep(toPtyId(tileId));
     this.inTurn.delete(bare);
     this.status.slept(bare);
+    this.made?.asleep(bare);
   }
 
   /** The session of `tileId` was woken: what waited for it is told once it is up. */

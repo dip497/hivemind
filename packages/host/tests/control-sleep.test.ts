@@ -4,7 +4,8 @@
 // a shell are left, each with why; a name two tiles share is refused; a sleep that fails leaves its
 // tile awake. Asleep, an agent keeps its name and what was sent it, and nothing is typed into it; a
 // wake brings back the sleepers where they slept, rings what waited, and asks once more a wake
-// given no answer; one whose saved session is gone is no longer kept asleep. Its conversation is
+// given no answer; one whose saved session is gone is no longer kept asleep. A read of its turn is
+// answered that it is asleep. Its conversation is
 // not started again in another tile. Closed, a sleeper is ended where it sleeps. How sessions sleep and wake is the session layer's (sleep.test.ts).
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
@@ -235,6 +236,19 @@ test("a sleeper's conversation is not started again in another tile, however it 
   assert.equal(p.conversationAsleep("hm:a1", ["--resume", conversation]), undefined);
   assert.equal(p.conversationAsleep("hm:n1", ["--resume", "6f1d0c2e-1111-4c55-9f43-2a8f6f2b9c11"]), undefined);
   assert.deepEqual(await api.wake(REPO, "a1"), { woke: [], skipped: [{ tile: "a1", why: "tile a2 runs this conversation now" }] });
+});
+
+test("a read of an agent's turn is answered at once that it is asleep, one already waiting as it is put to sleep too", async () => {
+  const { p } = plane();
+  const api = await p.api();
+  const reading = api.read("a1", 10_000);
+  await new Promise((r) => setTimeout(r, 50));
+  await api.sleep(REPO, "a1", false);
+  const asleep = { text: null, finalStatus: "asleep", truncated: false, note: "it is asleep: no turn will come until hive ctl wake a1" };
+  const started = Date.now();
+  assert.deepEqual(await reading, asleep);
+  assert.ok(Date.now() - started < 1000, "not left to run out of time");
+  assert.deepEqual(await api.read("a1", 10_000), asleep);
 });
 
 test("a sleeper closed is ended where it sleeps", async () => {

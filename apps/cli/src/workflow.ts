@@ -26,7 +26,7 @@ export async function readTurn(d: Pick<Drive, "call">, tile: string, totalMs: nu
 export interface WorkerResult {
   item: string;
   tile: string | null;
-  status: "turn" | "timeout" | "closed" | "waiting" | "error";
+  status: AgentRead["finalStatus"] | "error";
   text: string | null;
 }
 

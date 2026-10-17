@@ -180,10 +180,11 @@ export interface AgentChanges {
 
 /** An agent's reply to the turn after the last message it was sent (0.23): `text` null when the
  *  turn carried none (`note` says why), it is still working (`timeout`), it stopped to wait on an
- *  answer (`waiting`, what on, 0.26), or its tile closed or its agent exited (`closed`). */
+ *  answer (`waiting`, what on, 0.26), its tile closed or its agent exited (`closed`), or it is
+ *  asleep (`asleep`, 0.28). */
 export interface AgentRead {
   text: string | null;
-  finalStatus: "turn" | "timeout" | "closed" | "waiting";
+  finalStatus: "turn" | "timeout" | "closed" | "waiting" | "asleep";
   truncated: boolean;
   note?: string;
   waiting?: NonNullable<AgentItem["waiting"]>;

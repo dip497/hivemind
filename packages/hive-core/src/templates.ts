@@ -280,6 +280,7 @@ hive ctl read <tileId> --timeout 90s --json
 # still working → exit 4 and {"text":null,"finalStatus":"timeout",…}; call again, nothing is lost.
 # stopped to wait on an answer → exit 8 and {"finalStatus":"waiting","waiting":{"kind","asks",…}}; answer it, then read again.
 # closed, or its agent exited → exit 5 and {"text":null,"finalStatus":"closed",…}; do not read it again.
+# asleep → exit 7 and {"text":null,"finalStatus":"asleep",…}; hive ctl wake <tileId> first.
 hive ctl read <tileId> --poll --json              # never blocks: current state, exit 0
 hive ctl stream <tileId> --snapshot               # the last 40 lines it printed (ANSI-stripped)
 \`\`\`

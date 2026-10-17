@@ -278,6 +278,8 @@ export interface Dispatcher {
   labelOf: (tileId: string) => string;
   /** The tile asleep in a conversation that `args`, started in `tile`, would resume. */
   conversationAsleep: (tile: string, args: readonly string[]) => string | undefined;
+  /** A tile's session was put to sleep: a read waiting on its turn is answered so. */
+  asleep: (tileId: string) => void;
   /** Spawn an agent, without recording it: the caller has (M5). */
   spawn: (opts: {
     agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
@@ -451,9 +453,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // Workers whose current wait their parent has been told about.
   const waitTold = new Set<string>();
-  // The `hive ctl read`s waiting on each tile, told when it stops to wait on an answer or its
-  // agent exits instead.
-  const readers = new Map<string, Set<(state: "waiting" | "exited") => void>>();
+  // The `hive ctl read`s waiting on each tile, told when it stops to wait on an answer, its agent
+  // exits or it is put to sleep instead.
+  const readers = new Map<string, Set<(state: "waiting" | "exited" | "asleep") => void>>();
 
   // Drop ALL per-tile HCP state (pid-keyed: turns/recorder/epochs; bare-keyed:
   // pipes/parent/depth/supervision/approvals). Runs on EVERY teardown path — the
@@ -874,6 +876,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
   };
 
+  const asleepRead = (bare: string): AgentRead =>
+    ({ text: null, finalStatus: "asleep", truncated: false, note: `it is asleep: no turn will come until hive ctl wake ${bare}` });
+
   // A tile no open workspace holds, running no session main holds, is gone.
   const requireOpen = (tile: string): void => {
     if (deps.workspaces.workspaceOf(bareOf(tile)) === null && !deps.sessionHeld(ptyId(tile))) throw new ApiError("NOT_FOUND", `no tile ${bareOf(tile)} is open`);
@@ -909,6 +914,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // Say a gone tile is gone now, rather than wait out the timeout for a turn that cannot
       // come. A tile still starting is in its workspace already.
       requireOpen(tile);
+      const bare = bareOf(tile);
+      if (recordOf(bare)?.sleeping) return asleepRead(bare);
       // A send may still be queued behind the turn in flight; its epoch is armed when
       // it is typed, so wait for that before deciding which turn this read wants.
       // One budget for the whole read: waiting for a held send to be typed must not
@@ -917,11 +924,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       const pending = pendingSend.get(pid);
       if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
       const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
-      const bare = bareOf(tile);
       // It cannot end its turn while it waits on an answer, or once its agent has exited: say so
       // instead of running out of time. A turn it already ended comes first.
       const stopped = new AbortController();
-      const waited = new Promise<"waiting" | "exited">((resolve) => {
+      const waited = new Promise<"waiting" | "exited" | "asleep">((resolve) => {
         const now = deps.status.get(bare)?.state;
         if (now === "waiting" || now === "exited") return resolve(now);
         const set = readers.get(bare) ?? new Set();
@@ -942,6 +948,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // A tile that died under us is not "still working" — say so, and keep the read's
       // shape so a caller parsing finalStatus does not have to special-case an error.
       if (rec === "exited") return { text: null, finalStatus: "closed", truncated: false, note: "its agent exited: no turn will come" };
+      if (rec === "asleep") return asleepRead(bare);
       if (rec && rec.seq === -1) return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
       // Consume this turn: without advancing the epoch the NEXT read returns the same
       // turn instantly, so a poll loop can never tell a new answer from the old one.
@@ -1039,5 +1046,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   return {
     agentChannel, api, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
     parentOf, onStatus, conversationAsleep,
+    asleep: (tileId) => { for (const told of readers.get(bareOf(tileId)) ?? []) told("asleep"); },
   };
 }
