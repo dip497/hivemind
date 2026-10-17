@@ -3,6 +3,8 @@
  * terminal is named by its session id (`hm:<tile>`). Node-free.
  */
 
+export type { SavedScreen } from "@hivemind/agent-host/pty-protocol";
+
 export interface TerminalOpts {
   /** The session's id: `hm:<tile>`, or one of its own for a window's session in this process. */
   tileId: string;

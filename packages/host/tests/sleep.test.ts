@@ -1,7 +1,7 @@
 // Agents put to sleep on the host (terminals.ts over daemon-sessions.ts), with this machine's real
 // PTY daemon (from source): a session nobody shows can be put to sleep by its folder, and its
-// process ends; a client showing one is told it slept, not that it ended; the screen it saved is
-// read by its tile, from the folder the layout says it slept in; a client's open, even one asking
+// process ends; a client showing one is told it slept, not that it ended; the screen it saved, and
+// its size, are read by its tile, from the folder the layout says it slept in; a client's open, even one asking
 // to wake it, starts nothing and is told it sleeps; the host wakes it, and a client then joins it;
 // a client whose connection to the daemon dropped while it slept is told it slept once back; a start
 // that would resume a conversation another tile sleeps in is refused, whoever starts it; and a wake
@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DaemonEndpoint } from "@hivemind/agent-host/daemon-endpoint";
-import { NothingAsleep, frame, makeLineDecoder, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
+import { NothingAsleep, frame, makeLineDecoder, type SavedScreen, type ServerMsg } from "@hivemind/agent-host/pty-protocol";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
@@ -85,7 +85,7 @@ async function host() {
   const saved = async (from: Connection, tile: string) => {
     const answer = await server.answer("terminal.saved", [tile, 1000], from);
     if ("error" in answer) throw new Error(answer.error.message);
-    return answer.result as string | null;
+    return answer.result as SavedScreen | null;
   };
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
   const exits = (c: { received: EventMessage[] }, tile: string) => c.received.filter((m) => m.event === "terminal.exit" && m.params[0] === tile).map((m) => m.params[1]);
@@ -113,7 +113,9 @@ test("a session nobody shows is put to sleep by its folder; its saved screen is 
   const reader = h.client();
   assert.equal(await h.saved(reader, "hm:s1"), null, "in no workspace here: nothing to read");
   h.slept.set("s1", dir);
-  assert.match((await h.saved(reader, "s1")) ?? "", /AWAKE/, "named as the layout names it");
+  const shown = await h.saved(reader, "s1");
+  assert.match(shown?.replay ?? "", /AWAKE/, "named as the layout names it");
+  assert.deepEqual({ cols: shown?.cols, rows: shown?.rows }, { cols: 80, rows: 24 }, "with the size it was drawn at");
 
   // A client cannot start it again, nor forge a wake.
   assert.deepEqual(await h.open(reader, "hm:s1", "AWAKE"), { pid: -1, joined: false, asleep: true });

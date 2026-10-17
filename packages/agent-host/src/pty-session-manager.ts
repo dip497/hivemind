@@ -27,7 +27,7 @@
  *                user sees their last visible state + a working fresh shell.
  */
 import { pasteText } from "./paste.js";
-import { NothingAsleep, type SessionInfo } from "./pty-protocol.js";
+import { NothingAsleep, type SavedScreen, type SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
 import { splitAtBoundary } from "./vt-boundary.js";
 import { ScreenThread } from "./screen-thread.js";
@@ -592,13 +592,13 @@ export class SessionManager {
 
   /** What a frozen session saved as its screen (title first), with its newest RECENT_LINES of
    *  scrollback unless `lines` asks for more (none: all of it); null when it is not frozen. */
-  async savedScreen(id: string, lines?: number): Promise<string | null> {
+  async savedScreen(id: string, lines?: number): Promise<SavedScreen | null> {
     const kept = this.frozen.get(id);
     if (!kept || this.sessions.has(id)) return null;
     const snap = this.readSnapshot ? await this.readSnapshot(id) : kept.load();
     if (!snap || !this.frozen.has(id) || this.sessions.has(id)) return null;
     const recent = lines !== undefined && lines <= RECENT_LINES ? snap.recentReplay : undefined;
-    return titled(snap.title, recent ?? snap.replay);
+    return { replay: titled(snap.title, recent ?? snap.replay), cols: snap.spec.cols, rows: snap.spec.rows };
   }
 
   /** The screen now, with at most `lines` of scrollback, or null when the worker gave none. The

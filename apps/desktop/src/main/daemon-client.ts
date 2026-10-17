@@ -8,7 +8,7 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
-import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
+import { type SavedScreen, type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { reachDaemon } from "@hivemind/agent-host/daemon-start";
 import { ipcPath } from "./platform.js";
@@ -165,8 +165,8 @@ export function killPty(tileId: string): void {
 export function sleepPty(tileId: string): Promise<void> {
   return local.sleep(tileId);
 }
-/** What a sleeping session saved as its screen; null when none sleeps as `tileId`. */
-export function savedPty(tileId: string, lines?: number): Promise<string | null> {
+/** What a sleeping session saved as its screen, and its size; null when none sleeps as `tileId`. */
+export function savedPty(tileId: string, lines?: number): Promise<SavedScreen | null> {
   return local.saved(tileId, lines);
 }
 /** Window closed / tile unmounted: stop streaming but KEEP the session alive. */

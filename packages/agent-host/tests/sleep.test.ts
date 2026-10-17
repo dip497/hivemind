@@ -1,5 +1,6 @@
 // The real daemon: a session put to sleep ends its process and its children, says so in its exit,
-// and keeps the screen it showed when it was put to sleep, though it clears its screen as it ends.
+// and keeps the screen it showed when it was put to sleep, and its size, though it clears its screen
+// as it ends.
 // Only an attach that wakes it restores it, from that screen, also after the daemon restarts; any
 // other is told it is asleep. Its viewer is shown the newest lines only. Asleep, it keeps its name
 // and is not counted as exited. A sleep is kept only once it is on disk, and nothing starts a
@@ -69,6 +70,8 @@ test.skipIf(!unix)("a session put to sleep ends with its children, keeps its las
   first.send({ t: "attach", reqId: "a", id: "t1", spec });
   const started = await first.reply("attached");
   for (let i = 0; i < 200 && !first.out().includes("WORKING"); i++) await new Promise((r) => setTimeout(r, 25));
+  // Its tile grew after it started: its screen is that size now.
+  first.send({ t: "resize", id: "t1", cols: 132, rows: 41 });
 
   first.send({ t: "sleep", reqId: "s", id: "t1" });
   const slept = await first.reply("slept");
@@ -87,6 +90,7 @@ test.skipIf(!unix)("a session put to sleep ends with its children, keeps its las
   const saved = await first.reply("screen");
   expect(saved?.replay).toContain("WORKING");
   expect(saved?.replay).not.toContain("CLEARED");
+  expect({ cols: saved?.cols, rows: saved?.rows }).toEqual({ cols: 132, rows: 41 });
 
   const watcher = await connect();
   watcher.send({ t: "attach", reqId: "w", id: "t1", spec, noSpawn: true, liveOnly: true });

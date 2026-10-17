@@ -1,6 +1,6 @@
 /** One PTY daemon connection over any transport: attach, stream, and re-attach live tiles after a drop. */
 import type { Duplex } from "node:stream";
-import { type ClientMsg, type ServerMsg, type SessionInfo, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
+import { type ClientMsg, type SavedScreen, type ServerMsg, type SessionInfo, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
 
 export interface SpawnOpts {
   tileId: string;
@@ -71,7 +71,7 @@ export class DaemonEndpoint {
   /** Tiles whose session exists in the daemon: a re-attach must never start them again. */
   private readonly live = new Set<string>();
   private readonly replies = new Map<string, (msg: ServerMsg) => void>();
-  private readonly screens = new Map<string, (replay: string | null) => void>();
+  private readonly screens = new Map<string, (screen: Extract<ServerMsg, { t: "screen" }> | null) => void>();
   private seq = 0;
   private retry: ReturnType<typeof setTimeout> | null = null;
   /** The socket this process serves the machine's control plane on (`control`): claimed again on
@@ -139,7 +139,7 @@ export class DaemonEndpoint {
         // with this session's bytes exactly here.
         const cb = this.screens.get(msg.reqId);
         this.screens.delete(msg.reqId);
-        cb?.(msg.replay);
+        cb?.(msg);
         break;
       }
       case "pong":
@@ -333,7 +333,7 @@ export class DaemonEndpoint {
    *  show. */
   screen(tileId: string, cb: (replay: string | null) => void, lines?: number): void {
     const reqId = `sc${++this.seq}`;
-    this.screens.set(reqId, cb);
+    this.screens.set(reqId, (screen) => cb(screen?.replay ?? null));
     this.send({ t: "screen", reqId, id: tileId, lines }).catch(() => { this.screens.delete(reqId); cb(null); });
   }
 
@@ -351,12 +351,12 @@ export class DaemonEndpoint {
     if (r.error) throw new Error(r.error);
   }
 
-  /** What a sleeping session saved as its screen, with its newest 1000 lines when `lines` asks for no
-   *  more (none: all of it); null when the daemon keeps it running or not at all. */
-  saved(tileId: string, lines?: number): Promise<string | null> {
+  /** What a sleeping session saved as its screen and its size, with its newest 1000 lines when
+   *  `lines` asks for no more (none: all of it); null when the daemon keeps it running or not at all. */
+  saved(tileId: string, lines?: number): Promise<SavedScreen | null> {
     return new Promise((resolve) => {
       const reqId = `sv${++this.seq}`;
-      this.screens.set(reqId, resolve);
+      this.screens.set(reqId, (s) => resolve(s?.replay != null && s.cols && s.rows ? { replay: s.replay, cols: s.cols, rows: s.rows } : null));
       setTimeout(() => { if (this.screens.delete(reqId)) resolve(null); }, SAVED_TIMEOUT_MS).unref?.();
       this.send({ t: "screen", reqId, id: tileId, saved: true, ...(lines !== undefined ? { lines } : {}) }).catch(() => { this.screens.delete(reqId); resolve(null); });
     });

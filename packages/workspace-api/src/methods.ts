@@ -8,7 +8,7 @@ import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
-import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
+import type { ActivityLevels, ExitInfo, SavedScreen, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { GuestAnswer } from "@hivemind/workspace-host/connect";
 import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
@@ -109,7 +109,7 @@ export interface WorkspaceMethods {
   /** What the agent in `tile`, put to sleep, last showed, with its newest 1000 lines when `lines`
    *  asks for no more (none: all it saved); null when it does not sleep. `asleep` in
    *  `terminal.open`'s answer: it sleeps, and nothing was started. */
-  "terminal.saved": (tile: string, lines?: number) => string | null;
+  "terminal.saved": (tile: string, lines?: number) => SavedScreen | null;
   /** Answer what the agent in `tile` waits on, the wait that began at `since` (as `agent.list`
    *  says it): only while it still waits on that, and once; the first answer is the one the agent
    *  gets. `answered` false: it waits on that no more, or someone answered first (`by`). */

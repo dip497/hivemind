@@ -97,8 +97,9 @@ export type ServerMsg =
   | { t: "slept"; reqId: string; id: string; error?: string }
   | { t: "sessions"; reqId: string; ids: string[]; detail?: SessionInfo[] }
   | { t: "pong"; reqId: string; buildStamp?: number }
-  /** Answers `screen`, in order with the session's data: bytes before it are older than it. */
-  | { t: "screen"; reqId: string; id: string; replay: string | null }
+  /** Answers `screen`, in order with the session's data: bytes before it are older than it. A saved
+   *  screen comes with the size it was drawn at. */
+  | { t: "screen"; reqId: string; id: string; replay: string | null; cols?: number; rows?: number }
   /** Answers `control`; `error` when this daemon serves no control-plane socket (one the app
    *  started: the app serves it). */
   | { t: "control"; reqId: string; error?: string }
@@ -110,6 +111,10 @@ export const SOCKET_NAME = "pty-daemon.sock";
 
 /** Printed by `hive daemon bridge` once connected; anything before it is shell-profile noise. */
 export const BRIDGE_READY = "HIVE-BRIDGE-READY\n";
+
+/** What a session put to sleep last showed, and the size it showed it at: drawn at any other, its
+ *  screen is cut or wrapped. */
+export interface SavedScreen { replay: string; cols: number; rows: number }
 
 /** A wake found nothing asleep: what the session saved is gone, or it never slept there. */
 export class NothingAsleep extends Error {}

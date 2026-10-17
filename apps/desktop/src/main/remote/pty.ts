@@ -14,6 +14,7 @@ import { pasteText } from "@hivemind/agent-host/paste";
 import { shq, withoutControl } from "@hivemind/agents/node";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
+import type { SavedScreen } from "@hivemind/agent-host/pty-protocol";
 import { acceptRemoteEvent } from "./events.js";
 import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
 
@@ -305,8 +306,8 @@ export function sleepRemotePty(tileId: string, target: RemoteTarget): Promise<vo
   if (remotePtys.has(tileId)) return Promise.reject(new Error("this machine has no hive daemon: a session over plain ssh cannot sleep"));
   return onDaemon(target, (d) => d.sleep(tileId));
 }
-/** What a session asleep on `target` saved as its screen; null when none sleeps there. */
-export function savedRemotePty(tileId: string, target: RemoteTarget, lines?: number): Promise<string | null> {
+/** What a session asleep on `target` saved as its screen, and its size; null when none sleeps there. */
+export function savedRemotePty(tileId: string, target: RemoteTarget, lines?: number): Promise<SavedScreen | null> {
   return onDaemon(target, (d) => d.saved(tileId, lines)).catch(() => null);
 }
 /** `use` the daemon on `target`, held open while it does. */

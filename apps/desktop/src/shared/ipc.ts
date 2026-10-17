@@ -139,7 +139,7 @@ export type {
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
 import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
-import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
+import type { SavedScreen, TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -703,8 +703,8 @@ export interface HiveIpc {
 
   // ── PTY ───────────────────────────────────────────────────
   ptySpawn(opts: TerminalOpts): Promise<{ pid: number; /** Another window started it: this one only shows it. */ joined?: boolean; /** It sleeps: nothing was started. */ asleep?: true }>;
-  /** What the agent in `tileId`, put to sleep, last showed, with its newest `lines`; null when it does not sleep. */
-  ptySaved(tileId: string, lines?: number): Promise<string | null>;
+  /** What the agent in `tileId`, put to sleep, last showed, with its newest `lines`, and the size it showed it at; null when it does not sleep. */
+  ptySaved(tileId: string, lines?: number): Promise<SavedScreen | null>;
   /** Install the agentic stack (hive skills + CLAUDE.md section) into a repo so
    *  a spawned agent can actually work issues with `hive`. Idempotent. */
   installAgentic(dir: string): Promise<{ ok: boolean }>;

@@ -159,7 +159,7 @@ does, and answers `{ "closed": true }`; `{ "closed": false }` when no workspace 
 
 `agent.sleep(repo, target?, force?)` puts agents to sleep, as `hive ctl sleep` does: a tile by its
 id or name, else a frame's agents (those of the frames in it too), else every agent of the
-workspace. Each one's process ends; its tile keeps its name, and the folder it
+workspace. Each one's process ends; its tile keeps its name and its last screen, and the folder it
 slept in (`sleeping` in the layout). Left awake, each listed with why: an agent working or waiting on
 someone (unless `force`), one whose manifest says no `session.resume` (it would wake blank), a
 shell, and a session started elsewhere. Nothing is typed into a sleeping agent: `agent.send` to it

@@ -679,7 +679,7 @@ const server = net.createServer((sock) => {
       case "screen": {
         const { reqId, id } = msg;
         const lines = linesOf(msg.lines);
-        if (msg.saved) { void manager.savedScreen(id, lines).then((replay) => send({ t: "screen", reqId, id, replay })); break; }
+        if (msg.saved) { void manager.savedScreen(id, lines).then((saved) => send({ t: "screen", reqId, id, replay: null, ...saved })); break; }
         // What is buffered for this viewer when the screen arrives is older than it: sent first, so
         // the screen is the line between bytes it already covers and bytes that follow it.
         void manager.snapshot(id, lines).then((snap) => { outBuf.flush(id); send({ t: "screen", reqId, id, replay: snap?.replay ?? null }); });

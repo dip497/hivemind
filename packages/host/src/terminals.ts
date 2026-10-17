@@ -29,7 +29,7 @@ import { SessionRelay, type ReadScreen, type SessionRelayOptions, type Viewer } 
 import type { Intents } from "@hivemind/workspace-host/intents";
 import { fields, flag, text, texts, whole, written } from "@hivemind/workspace-api/protocol";
 import { emit, named, type Connection, type Domain } from "@hivemind/workspace-api/server";
-import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
+import type { SavedScreen, TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 import type { EventParams } from "@hivemind/workspace-api/methods";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import { Keyboards, isHost } from "./keyboard.js";
@@ -73,9 +73,9 @@ export interface SessionBackend {
   /** End the process of the session running in `cwd` but keep it, its screen saved, for a start
    *  with `wake` to bring back. Rejects with why it cannot. */
   sleep(tile: string, cwd: string): Promise<void>;
-  /** What a session asleep in `cwd` showed, with its newest 1000 lines when `lines` asks for no
-   *  more; null when it does not sleep. */
-  saved(tile: string, cwd: string, lines?: number): Promise<string | null>;
+  /** What a session asleep in `cwd` showed and its size, with its newest 1000 lines when `lines`
+   *  asks for no more; null when it does not sleep. */
+  saved(tile: string, cwd: string, lines?: number): Promise<SavedScreen | null>;
   /** Nobody shows it any more: a daemon keeps it; a session in this process ends. */
   detach(tile: string): void;
   /** The host's screen of it, with at most `lines` of its scrollback (none: all it keeps), read in

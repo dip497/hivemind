@@ -29,8 +29,9 @@ import { isRemote } from "@hivemind/core/remote-uri";
 import { toPtyId } from "@hivemind/workspace-api/tile-id";
 import { webUrlForInternalBrowser } from "./browser-open";
 import { TILE_KEYBOARD } from "./workspace/workspace-view";
-import { useThemeField, useSurfacePolicy, getTheme, effectiveGlass, type ThemeState } from "./theme-store";
+import { useThemeField, useSurfacePolicy, getTheme } from "./theme-store";
 import { terminalThemeFor } from "@hivemind/core/settings-schema";
+import { DEFAULT_FONT, termBgFor, terminalLook, withScrollbar } from "./terminal-look";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
@@ -40,10 +41,6 @@ import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
 import { useShown } from "./multiplayer/shown";
 
-// Default terminal font size. Each tile remembers its OWN size (useTileFont keyed
-// by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
-// DPR-driven (see terminal-dpr.ts); 15 is the default for comfortable reading.
-const DEFAULT_FONT = 15;
 /**
  * Terminals whose host resized are fitted together, once per frame: every visibility read
  * first, then every fit. Reading visibility inside the ResizeObserver callback forced a
@@ -105,28 +102,6 @@ export function endTileSession(tileId: string, adopted: boolean): void {
 }
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
-const termThemeFor = (t: ThemeState) => withScrollbar(terminalThemeFor(t.terminal));
-
-/** xterm 6 colours its scrollbar from the theme, not CSS; follow the foreground. */
-function withScrollbar(theme: Record<string, string>): Record<string, string> {
-  const fg = theme.foreground ?? "";
-  const hex = /^#([0-9a-f]{3})$/i.test(fg) ? `#${[...fg.slice(1)].map((c) => c + c).join("")}` : fg;
-  if (!/^#[0-9a-f]{6}$/i.test(hex)) return theme;
-  return {
-    ...theme,
-    scrollbarSliderBackground: `${hex}33`,
-    scrollbarSliderHoverBackground: `${hex}59`,
-    scrollbarSliderActiveBackground: `${hex}80`,
-  };
-}
-/** The terminal background: FULLY transparent when content-glass is on, so the
- *  single tint lives on the tile ROOT (.hm-term-root, like every other tile) and
- *  the whole body — including the host's padding band — reads as one uniform tint
- *  (no "gap" frame). Else the opaque aubergine. */
-// Scene views may opt out of glass; otherwise their wallpaper lives in the
-// docked slot. The runtime surface policy determines the terminal background.
-const termBgFor = (t: ThemeState): string =>
-  effectiveGlass(t) && t.contentGlass ? "rgba(0,0,0,0)" : t.terminal.background;
 
 /**
  * WebGL slots are shared across live terminals. Low-DPI terminals can opt into
@@ -352,15 +327,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const host = hostRef.current;
     if (!host) return;
     const term = new Terminal({
-      fontFamily: '"JetBrains Mono", monospace',
-      fontSize: fontSizeRef.current,
-      lineHeight: 1.3,
-      // ONLY when Frost-tile-content is on at mount. allowTransparency disables
-      // subpixel-antialiased text (text goes grayscale → softer/blurrier vs a
-      // native terminal), so opaque terminals must keep it OFF to stay crisp.
-      // (Toggling content-glass later needs a reload to apply to open terminals.)
-      allowTransparency: getTheme().glass && getTheme().contentGlass,
-      theme: { ...termThemeFor(getTheme()), background: termBgFor(getTheme()) },
+      ...terminalLook(fontSizeRef.current, getTheme()),
       // No blink — a blinking cursor repaints EVERY terminal ~2×/s forever, so
       // the canvas never feels fully still/crisp (perpetual GPU compositing
       // across all tiles). Cursor stays solid + visible; zero idle repaint.
@@ -371,20 +338,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       fastScrollSensitivity: 5,           // Alt-wheel jumps 5x faster
       scrollSensitivity: 1,
       smoothScrollDuration: 0,            // no smooth-scroll animation; cuts paints
-      drawBoldTextInBrightColors: true,   // crisper bold rendering on dark bg
-      minimumContrastRatio: 4.5,          // auto-adjust low-contrast cells to WCAG AA
-                                          // (color only — doesn't affect sharpness)
-      letterSpacing: 0,
       // OSC 8 hyperlinks (claude emits these), on Ctrl/⌘+click.
       linkHandler: {
         activate: (e, uri) => { if (followsLink(e)) openLink(uri); },
         ...linkHint(() => term.element),
       },
-      // Rescale glyphs that overflow their cell (powerline, wide Unicode,
-      // ligature-ish forms) instead of letting them clip/smear — sharper edges.
-      rescaleOverlappingGlyphs: true,
-      // box-drawing / block chars drawn as crisp vectors, not font bitmaps.
-      customGlyphs: true,
       // Atlas (glyph cache) — "dynamic" is the default; be explicit.
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });

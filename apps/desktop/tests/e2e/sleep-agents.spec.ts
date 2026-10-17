@@ -1,5 +1,5 @@
 // An agent put to sleep (spec/agents.md "Sleep"): `hive ctl sleep` ends its process, and its tile
-// shows Resume on a black screen; Resume starts it again in the same conversation, live, taking
+// keeps its last screen, dimmed; Resume starts it again in the same conversation, live, taking
 // keys. The stand-in keeps its conversation in a file named by the id the app binds, and shows it
 // again when resumed with that id, as an agent that resumes does.
 import { test, expect, type ElectronApplication } from "@playwright/test";
@@ -53,7 +53,7 @@ function sleepyAgent(): { PATH: string; SLEEPY_TALKS: string } {
 
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-test("an agent put to sleep ends, its tile shows Resume; Resume brings it back in its conversation, taking keys", async () => {
+test("an agent put to sleep ends, its tile keeps its last screen; Resume brings it back in its conversation, taking keys", async () => {
   test.setTimeout(120_000);
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
@@ -81,8 +81,7 @@ test("an agent put to sleep ends, its tile shows Resume; Resume brings it back i
   expect(JSON.parse(r.stdout.trim().split("\n").pop()!)).toEqual({ slept: [tile], skipped: [] });
 
   const sleeping = node.locator("[data-sleeping]");
-  await expect(sleeping.getByRole("button", { name: "resume agent" })).toBeVisible({ timeout: 20_000 });
-  await expect(sleeping).not.toContainText("MARK");
+  await expect(sleeping).toContainText("MARK", { timeout: 20_000 });
   await expect.poll(() => alive(pid), { timeout: 20_000 }).toBe(false);
 
   await sleeping.getByRole("button", { name: "resume agent" }).click();

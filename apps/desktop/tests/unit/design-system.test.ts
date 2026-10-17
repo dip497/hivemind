@@ -173,6 +173,7 @@ const PALETTES: Record<string, string> = {
 /** One literal in one file, where the value is handed to a library that needs a colour string. */
 const LITERALS: Record<string, string[]> = {
   "src/renderer/src/TerminalTile.tsx": ["rgba(0,0,0,0)"],
+  "src/renderer/src/terminal-look.ts": ["rgba(0,0,0,0)"],
 };
 
 test("each check finds what it names, and passes the system's own spelling", () => {

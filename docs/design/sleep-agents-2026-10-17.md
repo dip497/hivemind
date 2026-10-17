@@ -15,12 +15,13 @@ The person keeps agents only for reference: project A has 5 agents, B has 4; the
 stop costing anything while their titles stay, and wake any one later with its conversation.
 
 **Goal.** Sleeping a tile, a frame or a workspace frees each agent's process (CPU and memory); the
-tile keeps its title and shows Resume on a black screen; Resume continues the same
+tile keeps its title and its last screen, dimmed, with Resume; Resume continues the same
 conversation.
 
 **Constraints.**
-- The person chose: a black screen with Resume (a dimmed last screen first, dropped on
-  2026-10-17 as it did not fill the tile); the flag lives in the workspace
+- The person chose: a dimmed last screen (not a small card). On 2026-10-17 it became a black
+  screen with Resume because it did not fill the tile; drawn at its own size since, it does, which
+  brings it back (the person's call); the flag lives in the workspace
   layout so every view sees it.
 - Every surface: `hive ctl sleep|wake <tile|frame|workspace> [--json]`, the canvas tile, the
   Layers panel, the frame and workspace menus, the phone's list, `hive host`.
@@ -232,8 +233,9 @@ must be taken before the signal, and the grace must be long.
    `hive ctl sleep|wake <target> [--force] [--json]` →
    `{ slept|woke: string[], skipped: { tile, why }[] }`.
 5. **Window.** A sleeping tile (flag, or an attach or exit that says so) draws `SleepingTile`: its
-   title, its saved screen (`terminal.saved`, 1000 lines) turned once into static dimmed HTML (no
-   live xterm, no WebGL context), cached per tile until it wakes, "Asleep", Resume.
+   title, its saved screen (`terminal.saved`, 1000 lines, with the cols and rows it was drawn at)
+   drawn once, dimmed, by a terminal that takes no keys, with the live terminal's font and cells at
+   that size (no WebGL context), scaled down like a live one sized elsewhere; "Asleep", Resume.
    `TerminalTile` takes `exit{slept}` quietly: no "press Enter to restart", no "exited" status.
    The flag goes on only after the screen is saved, so `SleepingTile` never fetches an empty one.
    Tile menu, Layers row, frame menu, workspace menu: Sleep / Wake.
@@ -324,6 +326,17 @@ machine or another device is pinned there but its conversation is not guarded he
 a folder-found agent in one folder cannot sleep (said with why); a folder-found agent woken keeps
 its pinned conversation even if the person started another inside it, unless the agent reports its
 session id; a woken agent that never says it is up waits for its screen to settle, at most ~9.6 s.
+
+## Bug after round 6: the screen did not fill the tile
+
+An asleep Claude tile 1100 px wide showed its screen in the bottom 40% and 165 px short of the right
+edge. Claude draws in the alternate screen, which holds exactly its rows and no scrollback; the
+window wrote the saved screen into a 400 × 24 terminal, which kept only the bottom 24 rows, and drew
+them as text at 13 px, not the terminal's 20 px. Measured in the dev app: awake, 26 rows of 26 px
+across 1071 px; asleep, 24 lines of 16.25 px, the widest 931 px. Fixed: `terminal.saved` answers
+`{replay, cols, rows}` (the session's size when it slept, kept by every resize), and the window draws
+it with a terminal at that size and the live terminal's options (`terminal-look.ts`, shared with
+`TerminalTile`). Asleep, the same tile is 26 rows across 1071 × 676 px, as awake.
 
 ## Bug after round 6: an asleep tile lost the agent's title
 
