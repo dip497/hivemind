@@ -50,7 +50,7 @@ test("the title menu lists each workspace here, whatever prefix its issues have"
 });
 
 /** Every board this computer keeps, by file. */
-const boards = (): string[] => fs.readdirSync(env.XDG_CONFIG_HOME!, { recursive: true, encoding: "utf8" }).filter((f) => /(^|\/)workspaces\/[^/]+$/.test(f));
+const boards = (): string[] => fs.readdirSync(env.XDG_CONFIG_HOME!, { recursive: true, encoding: "utf8" }).filter((f) => /(^|\/)workspaces\/[^/]+\.loro$/.test(f));
 
 /** From the title's menu, asks to remove the workspace `name`: the dialog it opens. */
 async function askToRemove(name: string) {
