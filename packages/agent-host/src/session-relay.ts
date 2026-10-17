@@ -6,7 +6,8 @@
  *
  * A viewer that joins a session others already watch is sent the screen as the host keeps it,
  * then live bytes. A viewer none of whose views shows the session is sent nothing for it while
- * the host keeps its screen, and the screen again when it shows it. An exit reaches every viewer.
+ * the host keeps its screen; shown again, it is sent what it missed, or the screen when it missed
+ * more than MISSED_KEPT. An exit reaches every viewer.
  *
  * A session is started once, however many viewers open it at once: the first starts it, the rest
  * wait for that start and join. The one that started it gives it its first task.
@@ -34,6 +35,10 @@ export type ReadScreen = (cb: (screen: string | null) => void) => boolean;
  *  sent in place of what it missed is not counted. */
 export const PACED_WINDOW = 128 * 1024;
 
+/** How much output a hidden viewer is kept, in UTF-16 units: past it, the screen is sent in place
+ *  of what it missed. */
+export const MISSED_KEPT = 256 * 1024;
+
 interface Pace {
   sent: number;
   taken: number;
@@ -52,6 +57,9 @@ interface Watch {
   /** Output went to the others and not to it while it was unseen: shown again, it needs the
    *  screen. Nothing missed, what it shows is the screen still. */
   missed: boolean;
+  /** What it missed, while that stays under MISSED_KEPT and it showed everything before: shown
+   *  again, it is sent this instead of the screen. */
+  kept?: { batches: string[]; size: number };
   pace?: Pace;
 }
 
@@ -150,18 +158,27 @@ export class SessionRelay {
   }
 
   /** Whether any of `viewer`'s views shows `tileId`. Hidden, it is sent nothing while the host
-   *  keeps the screen (`screen`); shown again, it is sent the screen if it missed output, then
-   *  live bytes. */
+   *  keeps the screen (`screen`); shown again, it is sent what it missed, or the screen when that
+   *  was not kept, then live bytes. */
   show(tileId: string, viewer: Viewer, shown: boolean, screen: ReadScreen | null): void {
     const watch = this.viewers.get(tileId)?.get(viewer);
     if (!watch) return;
     if (!shown) {
       watch.awaiting = false;
-      if (screen) watch.unseen = true;
+      if (!screen) return;
+      watch.unseen = true;
+      if (!watch.missed && !watch.pace) watch.kept = { batches: [], size: 0 };
       return;
     }
     if (!watch.unseen || watch.awaiting || !screen) return;
-    if (!watch.missed) { watch.unseen = false; return; }
+    const kept = watch.kept;
+    watch.kept = undefined;
+    if (!watch.missed || kept) {
+      watch.unseen = false;
+      watch.missed = false;
+      if (kept?.size && viewer.alive()) this.deliver(tileId, viewer, watch, kept.batches.join(""));
+      return;
+    }
     watch.awaiting = true;
     this.showScreen(tileId, viewer, watch, screen);
   }
@@ -246,7 +263,7 @@ export class SessionRelay {
   private send(tileId: string, data: string): void {
     this.opts.record(tileId, data);
     for (const [viewer, watch] of this.viewers.get(tileId) ?? []) {
-      if (watch.unseen) watch.missed = true;
+      if (watch.unseen) { watch.missed = true; keep(watch, data); }
       else if (!viewer.alive()) continue;
       else if (watch.pace && ahead(watch.pace, data.length)) {
         watch.pace.behind = true;
@@ -260,6 +277,14 @@ export class SessionRelay {
     viewer.data(tileId, data);
     if (watch.pace) watch.pace.sent += data.length;
   }
+}
+
+function keep(watch: Watch, data: string): void {
+  const kept = watch.kept;
+  if (!kept) return;
+  if (kept.size + data.length > MISSED_KEPT) { watch.kept = undefined; return; }
+  kept.batches.push(data);
+  kept.size += data.length;
 }
 
 function paceOf(screen: (() => ReadScreen | null) | undefined): Pace | undefined {

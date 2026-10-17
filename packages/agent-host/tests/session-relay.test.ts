@@ -1,6 +1,6 @@
 // A session's output to every viewer that shows it (src/session-relay.ts): two windows, one terminal.
 import { expect, test } from "bun:test";
-import { PACED_WINDOW, SessionRelay, type ReadScreen, type Viewer } from "../src/session-relay.js";
+import { MISSED_KEPT, PACED_WINDOW, SessionRelay, type ReadScreen, type Viewer } from "../src/session-relay.js";
 
 const RESET = "<reset>";
 const tick = () => new Promise((r) => setTimeout(r, 40));
@@ -47,22 +47,29 @@ test("a viewer that joins gets the host's screen, then live bytes; output older 
   expect(r.join("t", viewer(), () => false)).toBe(false);
 });
 
-test("a viewer that shows the session nowhere gets nothing while the host keeps its screen, and the screen again when it does", async () => {
+test("a viewer that shows the session nowhere gets nothing while the host keeps its screen; shown again, what it missed, or the screen when it missed too much", async () => {
   const { relay: r } = relay();
-  const a = viewer(), b = viewer(), c = viewer();
-  r.add("t", a); r.add("t", b); r.add("t", c);
+  const a = viewer(), b = viewer(), c = viewer(), d = viewer();
+  r.add("t", a); r.add("t", b); r.add("t", c); r.add("t", d);
   const screen = laterScreen();
   r.show("t", b, false, screen.read);
   r.show("t", c, false, null); // a host that keeps no screen: it must keep up
+  r.show("t", d, false, screen.read);
   r.push("t", "while hidden");
   await tick();
+  expect(b.got).toEqual([]);
   r.show("t", b, true, screen.read);
+  const much = "x".repeat(MISSED_KEPT);
+  r.push("t", much);
+  await tick();
+  r.show("t", d, true, screen.read);
   screen.answer("NOW");
   r.push("t", "after");
   await tick();
-  expect(a.got).toEqual(["while hidden", "after"]);
-  expect(b.got).toEqual([`${RESET}NOW`, "after"]);
-  expect(c.got).toEqual(["while hidden", "after"]);
+  expect(a.got).toEqual(["while hidden", much, "after"]);
+  expect(b.got).toEqual(["while hidden", much, "after"]);
+  expect(c.got).toEqual(["while hidden", much, "after"]);
+  expect(d.got).toEqual([`${RESET}NOW`, "after"]);
 });
 
 test("a viewer shown again that missed nothing keeps what it shows: no screen, and what was held back while it was hidden comes live", async () => {
@@ -82,16 +89,16 @@ test("a viewer shown again that missed nothing keeps what it shows: no screen, a
   await tick();
   expect(asked).toBe(0);
   expect(b.got).toEqual(["pending"]);
-  // Output sent to the others while it was hidden is: the screen, once.
+  // Output sent to the others while it was hidden is: once, and still no screen.
   r.show("t", b, false, screen);
   r.push("t", "gone by");
   await tick();
   r.show("t", b, true, screen);
   r.show("t", b, false, screen);
   r.show("t", b, true, screen);
-  expect(asked).toBe(1);
+  expect(asked).toBe(0);
   expect(a.got).toEqual(["pending", "gone by"]);
-  expect(b.got).toEqual(["pending", `${RESET}SCREEN`]);
+  expect(b.got).toEqual(["pending", "gone by"]);
 });
 
 test("an exit reaches every viewer after the output before it; one that left, or is gone, gets nothing", async () => {
@@ -140,6 +147,20 @@ test("a paced viewer is sent no more than its window ahead of what it took; behi
   await batch("7");
   expect(far.got.slice(2)).toEqual([`${RESET}${big}`, "6", "7"]);
   expect(near.got).toEqual([`1${half.slice(1)}`, half, "3", "4", "5", "6", "7"]);
+});
+
+test("a paced viewer shown again after missing output gets the screen, not what it missed, which could pass its window", async () => {
+  const { relay: r } = relay();
+  const near = viewer(), far = viewer();
+  const screen = laterScreen();
+  r.add("t", near);
+  r.add("t", far, () => screen.read);
+  r.show("t", far, false, screen.read);
+  r.push("t", "missed");
+  await tick();
+  r.show("t", far, true, screen.read);
+  screen.answer("SCREEN");
+  expect(far.got).toEqual([`${RESET}SCREEN`]);
 });
 
 /** A start the test finishes when it likes, counting how often it was asked for. */
