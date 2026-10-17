@@ -116,7 +116,8 @@ test("a press where a widget's code does not run reaches the window that runs it
 test("a view of the workspace's widgets sees each drawn and each changed on the board, and its press reaches the runner", async () => {
   const pkg = { id: "@ada/pet", name: "Pet", options: [], chrome: "none" as const, permissions: [], assets: { "dog.png": "data:image/png;base64,AA==", "big.png": "data:image/png;base64,BB==" }, placement: "screen" as const, size: { w: 200, h: 160 }, code: "…" };
   let board: Array<{ kind: string; id: string; widget: string; text?: string }> = [{ kind: "widget", id: "w1", widget: "@ada/pet" }];
-  const host = widgets(() => server, async () => null, async () => [pkg], () => board);
+  let reads = 0;
+  const host = widgets(() => server, async () => null, async () => [pkg], () => { reads++; return board; });
   const server: WorkspaceServer = new WorkspaceServer([host], new Intents(new AuditLog({ file: path.join(tmp, "audit-4.jsonl") })));
   const told: EventMessage[] = [];
   const runner: Connection = { actor: { kind: "person" }, send: (m) => told.push(m), closed: new AbortController().signal };
@@ -130,6 +131,11 @@ test("a view of the workspace's widgets sees each drawn and each changed on the 
   board = [{ kind: "widget", id: "w1", widget: "@ada/pet", text: "hi" }];
   server.publish("store.changed", { repo: "/api", part: "board" });
   server.publish("store.changed", { repo: "/other", part: "board" });
+  // A change to the layout's core or a view is no reason to read the board.
+  const before = reads;
+  server.publish("store.changed", { repo: "/api", part: "core" });
+  server.publish("store.changed", { repo: "/api", part: "view:canvas" });
+  assert.equal(reads, before);
   assert.deepEqual(seen, [
     [["w1", null, [], null]],
     [["w1", { type: "image", src: "dog.png" }, ["dog.png"], null]],

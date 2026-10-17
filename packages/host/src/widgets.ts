@@ -121,7 +121,10 @@ export function widgets(
       mine.add(told);
       // The board's changes, as every client hears them.
       const stop = new AbortController();
-      server().connect({ actor: { kind: "person" }, closed: stop.signal, send: (m) => { if (m.event === "store.changed" && (m.params[0] as { repo?: unknown } | undefined)?.repo === repo) told(); } });
+      server().connect({ actor: { kind: "person" }, closed: stop.signal, send: (m) => {
+        const change = m.params[0] as { repo?: unknown; part?: unknown } | undefined;
+        if (m.event === "store.changed" && change?.repo === repo && change.part === "board") told();
+      } });
       void installed().then((p) => { packages = p; told(); }, () => told());
       return () => { mine!.delete(told); stop.abort(); };
     },
