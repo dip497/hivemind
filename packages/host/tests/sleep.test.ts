@@ -159,7 +159,7 @@ test("a session a viewer holds back still ends promptly when put to sleep: what 
   const c = await connect();
   const got: ServerMsg[] = [];
   let out = "";
-  c.on("data", makeLineDecoder((line) => { const m = JSON.parse(line) as ServerMsg; got.push(m); if (m.t === "data") out += m.data; }));
+  c.on("data", makeLineDecoder((line) => { const m = JSON.parse(line) as ServerMsg; got.push(m); if (m.t === "attached" && m.replay) out += m.replay; if (m.t === "data") out += m.data; }));
   c.write(frame({ t: "attach", reqId: "a", id: "hm:s4", spec }));
   await until(() => out.includes("HELD"));
   c.write(frame({ t: "pause", id: "hm:s4" }));

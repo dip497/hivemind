@@ -44,6 +44,8 @@ const connect = async () => {
   c.on("data", makeLineDecoder((line) => {
     const m = JSON.parse(line) as ServerMsg;
     got.push(m);
+    // What it wrote before the attach was answered comes in the answer.
+    if (m.t === "attached" && m.replay) out += m.replay;
     if (m.t === "data") out += m.data;
     if (m.t === "attached" && m.replay) out += m.replay;
   }));
