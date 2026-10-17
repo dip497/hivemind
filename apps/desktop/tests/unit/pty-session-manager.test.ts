@@ -280,6 +280,17 @@ test("restore retry: a --resume that fails fast respawns with --session-id, no c
   assert.equal(clientExited, false);
 });
 
+test("a session that keeps printing is saved with its last 500 lines of scrollback, and a stop saves all of it", async () => {
+  const saves: string[] = [];
+  const { mgr, created, spec } = makeManager({ onSnapshot: (_id: string, snap: { replay: string }) => { saves.push(snap.replay); }, snapshotDebounceMs: 1 });
+  await mgr.createOrAttach("repo:t1", spec, { onData: () => {}, onExit: () => {} });
+  created[0]!.emit(Array.from({ length: 3000 }, (_, i) => `L${String(i).padStart(4, "0")}.\r\n`).join(""));
+  for (let waited = 0; saves.length === 0 && waited < 5000; waited += 10) await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual([saves[0]!.includes("L2999."), saves[0]!.includes("L2500."), saves[0]!.includes("L2000.")], [true, true, false]);
+  await mgr.flushAll();
+  assert.deepEqual([saves.length, saves[1]!.includes("L0000."), saves[1]!.includes("L2999.")], [2, true, true]);
+});
+
 test("flushAll resolves AFTER every snapshot is written (SIGTERM safety)", async () => {
   const writes: string[] = [];
   const made: FakePty[] = [];

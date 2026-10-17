@@ -119,6 +119,8 @@ interface Session {
   /** Bytes written to the term since last snapshot — drives the debounced disk
    *  write (skipped while inactive to avoid wasting fs writes on idle sessions). */
   dirty: boolean;
+  /** Lines of scrollback the save on disk holds. */
+  savedLines: number;
   /** Reboot-restore mode: this session was loaded from disk and the PTY behind
    *  it is FRESH. The headless term already contains the pre-reboot screen so
    *  attach replays correctly; the live shell takes over from here. */
@@ -152,6 +154,9 @@ interface Session {
 
 
 const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
+// Serializing walks every cell, so saving all of a printing session's scrollback every few seconds
+// froze every terminal for up to a second. A stop, a detach and an exit still save all of it.
+const SAVED_SCROLLBACK = 500;
 
 export interface SessionManagerOptions {
   /** Scrollback lines kept in each session's headless xterm (replay capacity). */
@@ -360,6 +365,7 @@ export class SessionManager {
       ring: [],
       ringChars: 0,
       dirty: !!frozenSnap, // restored sessions should re-persist with their new PTY's first activity
+      savedLines: this.scrollback,
       frozen: !!frozenSnap,
       frozenSpec: frozenSnap ? frozenSnap.spec : undefined,
       spawnedAt: Date.now(),
@@ -798,16 +804,17 @@ export class SessionManager {
       // Fire-and-forget: the debounced path doesn't need an await chain — the
       // next data event will reschedule if this write is in-flight. flushAll
       // (SIGTERM path) needs the Promise — that's the only awaiting caller.
-      void this.flushSnapshot(s);
+      void this.flushSnapshot(s, Math.min(SAVED_SCROLLBACK, this.scrollback));
     }, this.snapshotDebounceMs);
     t.unref?.();
     this.snapshotTimers.set(s.id, t);
   }
-  private flushSnapshot(s: Session): Promise<void> {
-    if (!this.onSnapshot) return Promise.resolve();
-    if (!s.dirty) return Promise.resolve();
+  private flushSnapshot(s: Session, lines = this.scrollback): Promise<void> {
+    if (!this.onSnapshot || s.killed) return Promise.resolve();
+    if (!s.dirty && s.savedLines >= lines) return Promise.resolve();
     this.cancelSnapshotTimer(s.id);
     s.dirty = false;
+    s.savedLines = lines;
     return new Promise<void>((resolve) => {
       const at = s.seq;
       // Drain the xterm write queue before serializing — without this, the
@@ -821,7 +828,7 @@ export class SessionManager {
             id: s.id,
             spec: s.spec,
             ...(s.asked ? { asked: s.asked } : {}),
-            replay: this.screenText(s, at, this.scrollback),
+            replay: this.screenText(s, at, lines),
             title: s.lastTitle,
             savedAt: Date.now(),
           });

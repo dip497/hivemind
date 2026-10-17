@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- Terminals no longer freeze every two seconds while an agent prints. The saved copy of a busy terminal (what comes back after a crash) keeps its last 500 lines instead of all 5000, which took up to half a second to write and held every terminal's output meanwhile; quitting, closing a window and a program ending still save all of it.
 - Agents changing status no longer slow every window down. The app used to re-read every workspace from disk several times per status change, 16 ms with 6 workspaces and 47 ms with 50; it is now under 1.1 ms.
 - Phones open long conversations and terminal histories faster: the computer sends what is over 16 KB deflated, a third of the bytes or less, to a phone that says it reads it. Older phones and computers keep working with each other as before. Workspace API 0.27.
 - Reopening the app no longer makes the terminal daemon rebuild every terminal's saved screen: it hands back the one it already has, so typing into terminals is not held up while the app starts.
