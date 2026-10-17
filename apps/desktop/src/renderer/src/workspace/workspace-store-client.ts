@@ -23,6 +23,7 @@
  */
 import { isViewLayout, type BoardObject, type ViewLayout } from "@hivemind/workspace-doc/shapes";
 import { boardEdit, withObjects } from "@hivemind/workspace-doc/board-edit";
+import { sameJson } from "@hivemind/workspace-doc/rebase";
 import type { LegacyLayout } from "@hivemind/workspace-host/layout";
 import type { HiveIpc } from "../../../shared/ipc";
 
@@ -128,6 +129,8 @@ export function rereadCore(repo: string): { base: unknown; core: unknown } {
 export function writeCore(repo: string, core: unknown): void {
   const b = bridge();
   if (!b) return writeJson(coreKey(repo), core);
+  // What the window last read or wrote, sent back, would change nothing: a reload's save is not sent.
+  if (coreBase.has(repo) && sameJson(core, coreBase.get(repo))) return;
   try { b.workspaceSetCoreSync(repo, core, coreBase.get(repo)); } catch { /* best-effort */ }
   coreBase.set(repo, core);
 }
@@ -170,6 +173,7 @@ export function writeView(repo: string, viewId: string, layout: ViewLayout): voi
   const b = bridge();
   if (!b) return writeJson(viewKey(viewId, repo), layout);
   const bases = viewBaseOf(repo);
+  if (bases.has(viewId) && sameJson(layout, bases.get(viewId))) return;
   try { b.workspaceSetViewSync(repo, viewId, layout, bases.get(viewId)); } catch { /* best-effort */ }
   bases.set(viewId, layout);
 }

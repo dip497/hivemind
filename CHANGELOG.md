@@ -26,6 +26,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- A window that takes another window's change no longer sends its layout back: what it would save equals what it read, so nothing is sent.
 - A new guest of a shared workspace is sent the workspace as it is, not every change since its owner's app started: 487 KB for a 5000-object board, however long the app has run. A guest that cannot take another guest's offline change asks for the workspace again and keeps its own edits.
 - A guest's edit is checked on a copy of the workspace kept up to date, not on a fresh copy of the whole document each time: a guest's typed character takes about 9 ms on the host at 5000 board objects instead of 600 ms.
 - **Breaking:** Workspace API 0.28. A board edit costs what it changed: a window sends only the objects it changed, each with the one it changed it from (`store.editObjects`, which replaces `store.setObjects`), `store.changed` names the board's objects that changed, and the other windows read those alone (`store.objectsWithIds`). A typed character in a 5000-object board takes about 15 ms instead of 2 s, and another window's read of it under 1 ms instead of 360 ms.

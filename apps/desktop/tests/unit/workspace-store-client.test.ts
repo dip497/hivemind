@@ -16,6 +16,8 @@ const store = new WorkspaceStore({ dir, person: newSeed() });
 const ls = new Map<string, string>();
 /** Each board edit a window sent, as it sent it. */
 const edits: BoardEdit[] = [];
+/** Each core and view write a window sent, as `<part> <repo>`. */
+const writes: string[] = [];
 /** The boards read whole, by repo. */
 const wholeReads: string[] = [];
 /** Another window's write of the board: what it changed from the board as stored. */
@@ -32,8 +34,8 @@ const theirs = (repo: string, next: BoardObject[]) => store.editObjects(repo, bo
   hive: {
     workspaceCoreSync: (repo: string) => store.getCore(repo),
     workspaceViewSync: (repo: string, viewId: string) => store.getView(repo, viewId),
-    workspaceSetCoreSync: (repo: string, core: unknown, base?: unknown) => store.setCore(repo, core, { base }),
-    workspaceSetViewSync: (repo: string, viewId: string, layout: ViewLayout, base?: unknown) => store.setView(repo, viewId, layout, { base }),
+    workspaceSetCoreSync: (repo: string, core: unknown, base?: unknown) => { writes.push(`core ${repo}`); store.setCore(repo, core, { base }); },
+    workspaceSetViewSync: (repo: string, viewId: string, layout: ViewLayout, base?: unknown) => { writes.push(`view:${viewId} ${repo}`); store.setView(repo, viewId, layout, { base }); },
     workspaceImportSync: (repo: string, legacy: LegacyLayout) => store.importLegacy(repo, legacy),
     workspaceObjectsSync: (repo: string) => { wholeReads.push(repo); return store.getObjects(repo); },
     workspaceObjectsWithIdsSync: (repo: string, ids: string[]) => store.getObjectsWithIds(repo, ids),
@@ -232,4 +234,19 @@ test("a window told which objects another changed reads those alone, over what i
   const merged = reloadBoardObjects("/ids", [], ["n2", "n3"])([note("n1", "mine"), note("n2", "b")]);
   assert.deepEqual(merged, [note("n1", "mine"), note("n2", "theirs"), note("n3", "new")]);
   assert.deepEqual(wholeReads, []);
+});
+
+test("a window that takes another writer's change and saves what it then has sends nothing back", () => {
+  const tile = (id: string) => ({ id, kind: "shell" as const, label: id });
+  const saved = { frames: [frame("f1", "api")], tileNames: {}, tiles: [tile("e1")], editorTabs: {}, frameOf: { e1: "f1" } };
+  saveLayout("/echo", saved);
+  saveViewLayout(CANVAS_LAYOUT, "/echo", places({ e1: at(0) }));
+  store.setCore("/echo", { ...saved, tiles: [...saved.tiles, tile("e2")], frameOf: { ...saved.frameOf, e2: "f1" } }, { base: store.getCore("/echo"), writer: "window:9" });
+  store.setView("/echo", "canvas", { v: 1, data: places({ e1: at(0), e2: at(300) }) }, { base: store.getView("/echo", "canvas"), writer: "window:9" });
+  writes.length = 0;
+  const stored = reloadLayout("/echo");
+  saveLayout("/echo", { frames: stored.frames(saved.frames), tileNames: stored.tileNames(saved.tileNames), tiles: stored.tiles(saved.tiles), editorTabs: stored.editorTabs(saved.editorTabs), frameOf: stored.frameOf(saved.frameOf) });
+  const view = reloadCanvasLayout("/echo");
+  saveViewLayout(CANVAS_LAYOUT, "/echo", { positions: view.positions(places({ e1: at(0) }).positions), sizes: view.sizes({}) });
+  assert.deepEqual(writes, []);
 });
