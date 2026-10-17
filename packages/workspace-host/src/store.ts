@@ -17,8 +17,9 @@
  *
  * Reads are synchronous: a repo's document is loaded on first use, then served from memory.
  * Every change is written through at once (the window already debounces), so an app that exits
- * a moment after a change has it on disk. A write that fails stays pending: the repo's next
- * change or `flush()` writes it.
+ * a moment after a change has it on disk: appended as what changed, and now and then folded into
+ * the snapshot (`doc-file.ts`). A write that fails stays pending: the repo's next change or
+ * `flush()` writes the document whole.
  *
  * Undo takes back board edits only, through Loro's UndoManager: the layout, views and imports are
  * committed under `sys:` and never undone (an undo cannot bring back a closed tile's process).
@@ -36,7 +37,7 @@ import { sameJson } from "@hivemind/workspace-doc/rebase";
 import { partsChanged, readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
 import type { BoardObject, CoreLayout, FrameRecord, Frozen, KeptCore, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
-import { readDoc, removeDoc, storedKeys, writeDoc } from "./doc-file.js";
+import { appendUpdate, readStoredDoc, removeDoc, storedKeys, writeDoc, type StoredDoc } from "./doc-file.js";
 import { idOf, newWorkspaceId, workspaceSeed, type Seed } from "./identity.js";
 
 export type { LegacyLayout, WorkspaceChange } from "./layout.js";
@@ -81,7 +82,15 @@ interface Workspace {
   /** For a replica, the version its host last said it has: the file keeps the history since what
    *  the two share, so what was written here since can be written again (`startOver`). */
   hostHas?: VersionVector;
+  /** What is on disk of it: the next write appends what changed since. Null: written whole next. */
+  stored: StoredDoc["stored"];
 }
+
+/** Updates on disk past this many bytes, and past the snapshot's own size, are folded into a new
+ *  snapshot once the workspace is quiet: a load then takes about one snapshot's worth, and no
+ *  change waits on a whole export. Past four times that, at once. */
+const FOLD_UPDATES_AFTER = 256 * 1024;
+const FOLD_WHEN_QUIET_MS = 2000;
 
 /** The versions both `a` and `b` include: each peer's changes up to the fewer of the two. */
 function shared(a: VersionVector, b: VersionVector): VersionVector {
@@ -136,6 +145,8 @@ export class WorkspaceStore {
   private readonly cores = new Map<string, KeptCore | null>();
   /** The repos stored on disk, read once: this store is the only writer of its folder. */
   private stored: Set<string> | null = null;
+  /** Repos whose updates on disk are folded into a snapshot when they go quiet. */
+  private readonly folds = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(private readonly opts: WorkspaceStoreOptions) {}
 
@@ -349,9 +360,9 @@ export class WorkspaceStore {
    */
   adopt(repo: string, bytes: Uint8Array, from: Writer = {}): void {
     if (this.workspaces.has(repo)) return this.importFrom(repo, bytes, from);
-    const doc = readDoc(this.opts.dir, repo, this.warn);
+    const { doc, stored } = readStoredDoc(this.opts.dir, repo, this.warn);
     doc.import(bytes);
-    this.workspaces.set(repo, { doc, histories: new Map() });
+    this.workspaces.set(repo, { doc, histories: new Map(), stored });
     this.persist(repo, doc);
     this.opts.onChange?.({ repo, part: "core", writer: from.writer ?? "" });
   }
@@ -411,7 +422,7 @@ export class WorkspaceStore {
     const doc = new LoroDoc();
     doc.import(bytes);
     for (const history of old.histories.values()) history.free();
-    this.workspaces.set(repo, { doc, histories: new Map(), hostHas: VersionVector.decode(hostVersion) });
+    this.workspaces.set(repo, { doc, histories: new Map(), hostHas: VersionVector.decode(hostVersion), stored: null });
     this.tiles.delete(repo);
     this.cores.delete(repo);
     this.persist(repo, doc);
@@ -435,6 +446,8 @@ export class WorkspaceStore {
   /** Forget the workspace at `repo`, here and on disk: a copy of one kept elsewhere that is not
    *  wanted any more (M3: a replica of a workspace that is hosted here again). */
   forget(repo: string): void {
+    clearTimeout(this.folds.get(repo));
+    this.folds.delete(repo);
     this.workspaces.delete(repo);
     this.tiles.delete(repo);
     this.cores.delete(repo);
@@ -443,8 +456,9 @@ export class WorkspaceStore {
     removeDoc(this.opts.dir, repo);
   }
 
-  /** Write every repo whose last write failed. The embedder calls it on quit. */
+  /** Write every repo whose last write failed, and fold what waits to be. The embedder calls it on quit. */
   flush(): void {
+    for (const repo of [...this.folds.keys()]) this.fold(repo);
     for (const repo of [...this.unsaved]) this.persist(repo, this.workspaces.get(repo)!.doc);
   }
 
@@ -452,7 +466,7 @@ export class WorkspaceStore {
     if (typeof repo !== "string" || repo.length === 0) throw new TypeError("workspace store: repo must be a non-empty string");
     let workspace = this.workspaces.get(repo);
     if (!workspace) {
-      const doc = readDoc(this.opts.dir, repo, this.warn);
+      const { doc, stored } = readStoredDoc(this.opts.dir, repo, this.warn);
       // Stamped before the history starts: a stamp is nobody's edit, so no undo takes it back. It
       // is on disk with the next write.
       const person = this.opts.person;
@@ -464,7 +478,7 @@ export class WorkspaceStore {
         });
         doc.commit();
       }
-      workspace = { doc, histories: new Map() };
+      workspace = { doc, histories: new Map(), stored };
       this.workspaces.set(repo, workspace);
     }
     return workspace;
@@ -538,13 +552,41 @@ export class WorkspaceStore {
   }
 
   private persist(repo: string, doc: LoroDoc): void {
+    const workspace = this.workspaces.get(repo)!;
+    const { stored } = workspace;
     try {
-      writeDoc(this.opts.dir, repo, doc, this.keepSince(this.workspaces.get(repo)!));
+      const foldAt = stored && Math.max(FOLD_UPDATES_AFTER, stored.snapshotBytes);
+      if (stored && stored.updatesBytes <= 4 * foldAt!) {
+        stored.updatesBytes += appendUpdate(this.opts.dir, repo, doc.export({ mode: "update", from: stored.version }));
+        stored.version = doc.oplogVersion();
+        if (stored.updatesBytes > foldAt!) this.foldWhenQuiet(repo);
+      } else {
+        workspace.stored = { version: doc.oplogVersion(), snapshotBytes: writeDoc(this.opts.dir, repo, doc, this.keepSince(workspace)), updatesBytes: 0 };
+      }
       this.unsaved.delete(repo);
     } catch (e) {
+      // What is on disk may end in part of an update: the next write replaces it whole.
+      workspace.stored = null;
       this.unsaved.add(repo);
       this.warn(`cannot write the layout for ${repo} (${e instanceof Error ? e.message : String(e)}); kept in memory until the next write`);
     }
+  }
+
+  private foldWhenQuiet(repo: string): void {
+    clearTimeout(this.folds.get(repo));
+    const timer = setTimeout(() => this.fold(repo), FOLD_WHEN_QUIET_MS);
+    timer.unref?.();
+    this.folds.set(repo, timer);
+  }
+
+  /** Write `repo`'s document whole, its updates on disk folded in. */
+  private fold(repo: string): void {
+    clearTimeout(this.folds.get(repo));
+    this.folds.delete(repo);
+    const workspace = this.workspaces.get(repo);
+    if (!workspace) return;
+    workspace.stored = null;
+    this.persist(repo, workspace.doc);
   }
 
   /** Where the file's history starts: for a replica, at what it shares with its host (or, before

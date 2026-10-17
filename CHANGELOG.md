@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- Saving a workspace after an edit costs what the edit changed: the change is added beside the saved board (`<workspace>.loro.updates`) and folded into it when the workspace goes quiet, instead of the whole board written again. A typed character in a 5000-object board takes 0.9 ms on disk instead of 600 ms.
 - Opening the app or a window no longer sends every terminal's 5000 lines of history. Each terminal gets its newest 1000 lines and fetches the rest when you scroll to the top, keeping the line you were reading in place. With 30 terminals that is 4.6M characters instead of 22M, and about a quarter of the terminal daemon's time.
 - Coming back to a terminal you scrolled past or switched away from no longer asks for its whole screen. It is sent only what it missed, up to 256 KB; it used to be sent all 5000 lines, which held up every terminal while the screen was rebuilt.
 - An edit from someone you share a workspace with is announced only for what it changed. Each one used to announce the layout, the board and every view, so every window read all of them again and saved them back.

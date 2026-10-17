@@ -555,3 +555,89 @@ test("a replica taking a workspace whole from a host restarted from disk is told
   expect(told.sort()).toEqual(["board", "core", "view:canvas"]);
   expect(replica.getCore("/a")!.frames.map((f) => f.title)).toEqual(core("api").frames.map((f) => f.title));
 });
+
+/** `n` notes in the store's order (by id), the second with `typed` added. */
+const notes = (n: number, typed = "") => Array.from({ length: n }, (_, i) => ({ ...note(`note ${i}${i === 1 ? typed : ""}`), id: `n${String(i).padStart(4, "0")}` }));
+const fileOf = (name: string) => path.join(dir, name);
+
+test("a change to a big board adds what it changed to the disk, leaves the snapshot as it was, and is there after a restart", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setObjects("/work/api", notes(800));
+  const snapshot = fs.readFileSync(fileOf(`${API}.loro`));
+  s.setObjects("/work/api", notes(800, "!"), { base: notes(800) });
+  s.setObjects("/work/api", notes(800, "!?"), { base: notes(800, "!") });
+
+  expect(fs.readFileSync(fileOf(`${API}.loro`)).equals(snapshot)).toBe(true);
+  expect(fs.statSync(fileOf(`${API}.loro.updates`)).size).toBeLessThan(1024);
+  expect(snapshot.length).toBeGreaterThan(30 * 1024);
+  expect(restart().getObjects("/work/api")).toEqual(notes(800, "!?"));
+});
+
+test("a crash that cut the last change short on disk loses that change alone, and the next change after a restart is kept", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setObjects("/work/api", notes(3));
+  s.setObjects("/work/api", notes(3, " one"), { base: notes(3) });
+  s.setObjects("/work/api", notes(3, " one two"), { base: notes(3, " one") });
+  const updates = fileOf(`${API}.loro.updates`);
+  fs.truncateSync(updates, fs.statSync(updates).size - 3);
+
+  const again = restart();
+  expect(again.getObjects("/work/api")).toEqual(notes(3, " one"));
+  again.setObjects("/work/api", notes(3, " one three"), { base: notes(3, " one") });
+  expect(restart().getObjects("/work/api")).toEqual(notes(3, " one three"));
+});
+
+test("a change on disk that does not load is set aside and reported, the changes before it are kept, and the next write is whole", () => {
+  const s = new WorkspaceStore({ dir, person });
+  s.setObjects("/work/api", notes(3));
+  s.setObjects("/work/api", notes(3, " one"), { base: notes(3) });
+  s.setObjects("/work/api", notes(3, " one two"), { base: notes(3, " one") });
+  const updates = fileOf(`${API}.loro.updates`);
+  const bytes = fs.readFileSync(updates);
+  const second = 4 + bytes.readUInt32BE(0);
+  bytes.fill(0xff, second + 4);
+  fs.writeFileSync(updates, bytes);
+
+  const warnings: string[] = [];
+  const again = new WorkspaceStore({ dir, person, onWarn: (m) => warnings.push(m) });
+  expect(again.getObjects("/work/api")).toEqual(notes(3, " one"));
+  expect(warnings).toHaveLength(1);
+  const aside = fs.readdirSync(dir).filter((f) => f.startsWith(`${API}.loro.updates.corrupt-`));
+  expect(aside.map((f) => fs.readFileSync(path.join(dir, f)).equals(bytes))).toEqual([true]);
+
+  again.setObjects("/work/api", notes(3, " one three"), { base: notes(3, " one") });
+  expect(fs.existsSync(updates)).toBe(false);
+  expect(restart().getObjects("/work/api")).toEqual(notes(3, " one three"));
+});
+
+test("changes on disk past the snapshot's size are folded into a new snapshot once the workspace is quiet, and every one is there after a restart", async () => {
+  const s = new WorkspaceStore({ dir, person });
+  let board = notes(1);
+  s.setObjects("/work/api", board);
+  const updates = fileOf(`${API}.loro.updates`);
+  for (let i = 1; i <= 300; i++) {
+    const added = { ...note(`${i} `.repeat(250)), id: `n${String(i).padStart(4, "0")}` };
+    s.setObjects("/work/api", [...board, added], { base: board });
+    board = [...board, added];
+  }
+  expect(fs.statSync(updates).size).toBeGreaterThan(256 * 1024);
+
+  await new Promise((done) => setTimeout(done, 2500));
+  expect(fs.existsSync(updates)).toBe(false);
+  expect(restart().getObjects("/work/api")).toEqual(board);
+});
+
+test("updates on disk far past the snapshot's size are folded at once, however busy the workspace", () => {
+  const s = new WorkspaceStore({ dir, person });
+  const kept = (i: number) => [{ ...note("a widget that keeps a lot"), id: "w1", state: { log: `${i} `.repeat(3000).slice(0, 12000) } }];
+  s.setObjects("/work/api", kept(0));
+  const updates = fileOf(`${API}.loro.updates`);
+  let largest = 0;
+  for (let i = 1; i <= 160; i++) {
+    s.setObjects("/work/api", kept(i));
+    largest = Math.max(largest, fs.existsSync(updates) ? fs.statSync(updates).size : 0);
+  }
+  expect(largest).toBeGreaterThan(4 * 256 * 1024 - 64 * 1024);
+  expect(largest).toBeLessThan(4 * 256 * 1024 + 64 * 1024);
+  expect(restart().getObjects("/work/api")).toEqual(kept(160));
+});
