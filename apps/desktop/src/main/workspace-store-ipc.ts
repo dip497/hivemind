@@ -64,9 +64,10 @@ export function installWorkspaceStoreIpc(layouts: Layouts, connection: (window: 
   answer("workspace:core-sync", (e, repo) => answers["store.core"](as(e), repo));
   answer("workspace:view-sync", (e, repo, viewId) => answers["store.view"](as(e), repo, viewId));
   answer("workspace:objects-sync", (e, repo) => answers["store.objects"](as(e), repo));
+  answer("workspace:objects-with-ids-sync", (e, repo, ids) => answers["store.objectsWithIds"](as(e), repo, ids));
   answer("workspace:set-core-sync", (e, repo, core, base) => answers["store.setCore"](as(e), repo, core, base));
   answer("workspace:set-view-sync", (e, repo, viewId, layout, base) => answers["store.setView"](as(e), repo, viewId, layout, base));
-  answer("workspace:set-objects-sync", (e, repo, objects, base) => answers["store.setObjects"](as(e), repo, objects, base));
+  answer("workspace:edit-objects-sync", (e, repo, edit) => answers["store.editObjects"](as(e), repo, edit));
   answer("workspace:import-sync", (e, repo, legacy) => answers["store.import"](as(e), repo, legacy));
   answer("workspace:undo-sync", (e, repo) => answers["store.undo"](as(e), repo));
   answer("workspace:redo-sync", (e, repo) => answers["store.redo"](as(e), repo));
