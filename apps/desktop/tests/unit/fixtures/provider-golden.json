@@ -22,6 +22,7 @@
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks",
         "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
@@ -105,7 +106,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,hook_event_name,tool_name,tool_input' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 3600
                 }
               ]
@@ -232,6 +233,7 @@
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks",
         "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
@@ -315,7 +317,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,hook_event_name,tool_name,tool_input' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 3600
                 }
               ]
@@ -461,6 +463,7 @@
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks",
         "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
@@ -544,7 +547,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,hook_event_name,tool_name,tool_input' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 3600
                 }
               ]
@@ -670,6 +673,7 @@
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks",
         "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
@@ -753,7 +757,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,hook_event_name,tool_name,tool_input' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 3600
                 }
               ]
@@ -879,6 +883,7 @@
         "HIVE_AGENT_ID": "claude",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks",
         "CLAUDE_CODE_FORCE_SESSION_PERSISTENCE": "1"
       },
       "settings": {
@@ -962,7 +967,7 @@
               "hooks": [
                 {
                   "type": "command",
-                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
+                  "command": "env HIVEMIND_TILE='tile-g' HIVE_EVENT='input.requested' HIVE_EVENT_KIND='permission' HIVE_EVENT_ANSWER='1' HIVE_EVENT_KEEP='session_id,agent_id,background_tasks,hook_event_name,tool_name,tool_input' ELECTRON_RUN_AS_NODE=1 '/x/electron' '/x/ud/hcp-event-hook.cjs' '/x/ud/hcp.sock'",
                   "timeout": 3600
                 }
               ]
@@ -1133,7 +1138,8 @@
         "HIVEMIND_HOOK_EVENT_ARG": "/x/ud/hcp.sock",
         "HIVEMIND_HOOK_TURNEND_EXEC": "/x/electron",
         "HIVEMIND_HOOK_TURNEND": "/x/ud/agents/codex/hive-turn-end.cjs",
-        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock"
+        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnSupervised": {
@@ -1167,7 +1173,8 @@
         "HIVEMIND_HOOK_EVENT_ARG": "/x/ud/hcp.sock",
         "HIVEMIND_HOOK_TURNEND_EXEC": "/x/electron",
         "HIVEMIND_HOOK_TURNEND": "/x/ud/agents/codex/hive-turn-end.cjs",
-        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock"
+        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnWithPrompt": {
@@ -1216,7 +1223,8 @@
         "HIVEMIND_HOOK_EVENT_ARG": "/x/ud/hcp.sock",
         "HIVEMIND_HOOK_TURNEND_EXEC": "/x/electron",
         "HIVEMIND_HOOK_TURNEND": "/x/ud/agents/codex/hive-turn-end.cjs",
-        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock"
+        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "restoreAlreadyResuming": {
@@ -1249,7 +1257,8 @@
         "HIVEMIND_HOOK_EVENT_ARG": "/x/ud/hcp.sock",
         "HIVEMIND_HOOK_TURNEND_EXEC": "/x/electron",
         "HIVEMIND_HOOK_TURNEND": "/x/ud/agents/codex/hive-turn-end.cjs",
-        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock"
+        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "retry": {
@@ -1280,7 +1289,8 @@
         "HIVEMIND_HOOK_EVENT_ARG": "/x/ud/hcp.sock",
         "HIVEMIND_HOOK_TURNEND_EXEC": "/x/electron",
         "HIVEMIND_HOOK_TURNEND": "/x/ud/agents/codex/hive-turn-end.cjs",
-        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock"
+        "HIVE_PLAN_SOCK": "/x/ud/plan-bridge.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "superviseSpawn": {
@@ -1326,7 +1336,8 @@
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnSupervised": {
@@ -1341,7 +1352,8 @@
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnWithPrompt": {
@@ -1361,7 +1373,8 @@
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "restoreAlreadyResuming": {
@@ -1378,7 +1391,8 @@
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "retry": {
@@ -1392,7 +1406,8 @@
         "HIVE_AGENT_ID": "droid",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home"
+        "FACTORY_HOME_OVERRIDE": "/x/ud/agents/droid/droid-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "superviseSpawn": {
@@ -1438,7 +1453,8 @@
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnSupervised": {
@@ -1457,7 +1473,8 @@
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnWithPrompt": {
@@ -1485,7 +1502,8 @@
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "restoreAlreadyResuming": {
@@ -1505,7 +1523,8 @@
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "retry": {
@@ -1523,7 +1542,8 @@
         "HIVE_AGENT_ID": "kiro",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
         "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
-        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home"
+        "KIRO_HOME": "/x/ud/agents/kiro/kiro-home",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "superviseSpawn": {
@@ -1571,7 +1591,8 @@
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
-        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnSupervised": {
@@ -1588,7 +1609,8 @@
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
-        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "spawnWithPrompt": {
@@ -1612,7 +1634,8 @@
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
-        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "restoreAlreadyResuming": {
@@ -1630,7 +1653,8 @@
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
-        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "retry": {
@@ -1646,7 +1670,8 @@
         "HIVEMIND_TILE": "tile-g",
         "HIVE_AGENT_ID": "pi",
         "HIVE_SDK": "/x/ud/hive-sdk.cjs",
-        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock"
+        "HIVE_HOOK_SOCK": "/x/ud/hcp.sock",
+        "HIVE_EVENT_KEEP": "session_id,agent_id,background_tasks"
       }
     },
     "superviseSpawn": {
