@@ -85,7 +85,7 @@ test("the keys for a permission an agent asks are its manifest's for what its sc
   }
 });
 
-test("the boards held are the store's as it is now, after every kind of change: a tile's program, a workspace made, one whose owner arrives with a replica's import, one forgotten; and the same list while nothing changed", () => {
+test("the boards held are the store's as it is now, after every kind of change: a tile's program, a workspace made, one whose owner arrives with a replica's import (with a layout or none yet), one forgotten; and the same list while nothing changed", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "needs-held-"));
   setCatalog(["acme", "zeta"].map((id) => defFromManifest({
     manifestVersion: AGENT_MANIFEST_VERSION, id, label: id, bin: id,
@@ -110,9 +110,16 @@ test("the boards held are the store's as it is now, after every kind of change: 
     assert.deepEqual(heldBoards(replica), [], "no owner yet: not held");
     replica.importFrom("/w/api", host.exportSince("/w/api", null));
     assert.deepEqual(heldBoards(replica).map((b) => [b.workspace, b.name]), [[host.ownership("/w/api")!.workspaceId, "api"]]);
+    // A workspace with no layout yet: its owner arriving is the only change.
+    host.setView("/w/notes", "v1", { v: 1, data: {} });
+    assert.equal(replica.getCore("/w/notes"), null);
+    assert.equal(heldBoards(replica).length, 1);
+    replica.importFrom("/w/notes", host.exportSince("/w/notes", null));
+    assert.equal(replica.getCore("/w/notes"), null, "still no layout");
+    assert.deepEqual(heldBoards(replica).map((b) => [b.workspace, b.name]), [[host.ownership("/w/api")!.workspaceId, "api"], [host.ownership("/w/notes")!.workspaceId, "notes"]]);
 
     host.forget("/w/web");
-    assert.deepEqual(heldBoards(host).map((b) => b.name), ["api"]);
+    assert.deepEqual(heldBoards(host).map((b) => b.name), ["api", "notes"]);
     assert.equal(agentOf(heldBoards(host), "t2"), null);
   } finally {
     setCatalog([]);

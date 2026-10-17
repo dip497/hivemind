@@ -99,23 +99,26 @@ export interface HeldBoard {
   core: KeptCore | null;
 }
 
-/** What each store held when last asked: its folders, the core of each, and the boards they made. */
-const kept = new WeakMap<object, { repos: string[]; cores: Array<KeptCore | null>; boards: HeldBoard[] }>();
+/** What each store held when last asked: its folders, the core of each, the owner of each with no
+ *  core, and the boards they made. */
+const kept = new WeakMap<object, { repos: string[]; cores: Array<KeptCore | null>; owners: Array<string | undefined>; boards: HeldBoard[] }>();
 
 const same = <T>(a: readonly T[], b: readonly T[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** The workspaces `store` holds, with their boards: the same frozen list until one of them changes,
- *  which the store says by giving another core (whose a workspace is changes its core too). */
+ *  which the store says by giving another core (whose a workspace is changes its core too). One
+ *  with no layout keeps a null core, so its owner is read instead. */
 export function heldBoards(store: Pick<WorkspaceStore, "repos" | "ownership" | "getCore">): HeldBoard[] {
   const repos = store.repos();
   const cores = repos.map((repo) => store.getCore(repo));
+  const owners = repos.map((repo, i) => cores[i] ? undefined : store.ownership(repo)?.workspaceId);
   const was = kept.get(store);
-  if (was && same(was.repos, repos) && same(was.cores, cores)) return was.boards;
+  if (was && same(was.repos, repos) && same(was.cores, cores) && same(was.owners, owners)) return was.boards;
   const boards = Object.freeze(repos.flatMap((repo, i) => {
-    const workspace = store.ownership(repo)?.workspaceId;
+    const workspace = cores[i] ? store.ownership(repo)?.workspaceId : owners[i];
     return workspace ? [Object.freeze({ workspace, name: path.basename(repo), repo, core: cores[i]! })] : [];
   })) as HeldBoard[];
-  kept.set(store, { repos, cores, boards });
+  kept.set(store, { repos, cores, owners, boards });
   return boards;
 }
 
