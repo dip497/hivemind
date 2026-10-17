@@ -325,6 +325,12 @@ a folder-found agent in one folder cannot sleep (said with why); a folder-found 
 its pinned conversation even if the person started another inside it, unless the agent reports its
 session id; a woken agent that never says it is up waits for its screen to settle, at most ~9.6 s.
 
+## Bug after round 6: an asleep tile lost the agent's title
+
+Claude clears its window title as it ends, which was reported after the sleep had saved its screen,
+so the tile fell back to "claude #1". A session put to sleep keeps the title it had when its screen
+was saved.
+
 ## Pre-mortem (a year on, it failed)
 
 1. **"Resume brought back a blank agent."** The transcript was pruned by the agent, or the agent

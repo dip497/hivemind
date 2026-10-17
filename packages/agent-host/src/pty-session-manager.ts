@@ -311,7 +311,9 @@ export class SessionManager {
   private readonly screens = new ScreenThread({
     parsed: (id, epoch, at) => { const s = this.current(id, epoch); if (s) this.parsedTo(s, at); },
     paste: (id, epoch, on) => { const s = this.current(id, epoch); if (s) s.bracketed = on; },
-    title: (id, epoch, title) => { const s = this.current(id, epoch); if (s) { s.lastTitle = title; this.onTitle?.(id, title); } },
+    // Put to sleep, it keeps the title it had when its screen was saved: what it writes as it ends
+    // is not its name.
+    title: (id, epoch, title) => { const s = this.current(id, epoch); if (s && !s.sleepScreen) { s.lastTitle = title; this.onTitle?.(id, title); } },
     stopped: () => { for (const s of this.sessions.values()) this.release(s); },
     restarted: () => this.reopenScreens(),
   });

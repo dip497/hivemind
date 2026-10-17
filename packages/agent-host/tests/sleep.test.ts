@@ -47,7 +47,6 @@ const connect = async () => {
     // What it wrote before the attach was answered comes in the answer.
     if (m.t === "attached" && m.replay) out += m.replay;
     if (m.t === "data") out += m.data;
-    if (m.t === "attached" && m.replay) out += m.replay;
   }));
   const reply = async <T extends ServerMsg["t"]>(t: T) => {
     for (let i = 0; i < 400 && !got.some((m) => m.t === t); i++) await new Promise((r) => setTimeout(r, 25));
@@ -58,10 +57,10 @@ const connect = async () => {
 
 test.skipIf(!unix)("a session put to sleep ends with its children, keeps its last screen, and only an attach that wakes it brings it back", async () => {
   // The agent, whose title is kept: it starts a child that ignores the hangup, as an agent's
-  // tool server may, and clears its screen as it ends.
+  // tool server may, and clears its title and its screen as it ends.
   const agent = path.join(dir, "bin", "acme");
   fs.mkdirSync(path.dirname(agent), { recursive: true });
-  fs.writeFileSync(agent, "#!/bin/sh\n(trap '' HUP; exec sleep 1000) & echo CHILD=$!\ntrap 'printf \"\\033[2J\\033[3J\\033[H\"; echo CLEARED; exit 0' HUP\nprintf '\\033]0;Named\\007'; echo WORKING\nwhile :; do sleep 0.1; done\n", { mode: 0o755 });
+  fs.writeFileSync(agent, "#!/bin/sh\n(trap '' HUP; exec sleep 1000) & echo CHILD=$!\ntrap 'printf \"\\033]0;\\007\\033[2J\\033[3J\\033[H\"; echo CLEARED; exit 0' HUP\nprintf '\\033]0;Named\\007'; echo WORKING\nwhile :; do sleep 0.1; done\n", { mode: 0o755 });
   const spec = { cwd: dir, cmd: agent, args: [], cols: 80, rows: 24 };
 
   const events = await connect();
