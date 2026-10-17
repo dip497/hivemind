@@ -47,6 +47,9 @@ export type ClientMsg =
   | { t: "repaint"; id: string }
   | { t: "detach"; id: string }
   | { t: "kill"; id: string }
+  /** End its process but keep its screen and spec, as a session saved before a reboot is kept: a
+   *  plain attach brings it back (its agent resumed). Answered by `slept` once its screen is saved. */
+  | { t: "sleep"; reqId: string; id: string }
   /** Flow control (renderer back-pressure): stop reading the child's output
    *  until `resume` — the kernel pty buffer fills and the child blocks on write,
    *  so a `cat hugefile` can't outrun the renderer and balloon memory. */
@@ -56,7 +59,9 @@ export type ClientMsg =
   | { t: "ping"; reqId: string }
   /** The session's screen now, for a viewer about to show it again: `lines`, at most that much of
    *  its scrollback. */
-  | { t: "screen"; reqId: string; id: string; lines?: number }
+  | { t: "screen"; reqId: string; id: string; lines?: number;
+      /** A sleeping (frozen) session's saved screen instead, all of it; null for any other. */
+      saved?: boolean }
   /** The session's screen as text, line by line, as the daemon reads it: for a starter that skips
    *  a startup screen (agent-start.ts) with no terminal of its own. */
   | { t: "viewport"; reqId: string; id: string }
@@ -80,7 +85,11 @@ export type ServerMsg =
   | { t: "resync"; id: string; replay: string; seq: number; epoch: string }
   /** An agent hook event from a daemon running without the desktop, to viewers that asked for "events". */
   | { t: "event"; topic: string; data: unknown }
-  | { t: "exit"; id: string; code: number; signal: number | null }
+  /** slept: it was put to sleep (`sleep`), not ended. */
+  | { t: "exit"; id: string; code: number; signal: number | null; slept?: true }
+  /** Answers `sleep`; `error` when there was nothing running to put to sleep or its screen could
+   *  not be saved. */
+  | { t: "slept"; reqId: string; id: string; error?: string }
   | { t: "sessions"; reqId: string; ids: string[]; detail?: SessionInfo[] }
   | { t: "pong"; reqId: string; buildStamp?: number }
   /** Answers `screen`, in order with the session's data: bytes before it are older than it. */

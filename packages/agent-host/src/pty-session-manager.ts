@@ -73,7 +73,8 @@ export type PtyFactory = (spec: SpawnSpec) => ManagedPty;
 export interface SessionClient {
   /** `seq`: the session's output position after `data` (for resuming a viewer from where it left off). */
   onData: (data: string, seq?: number) => void;
-  onExit: (code: number, signal: number | undefined) => void;
+  /** `slept`: it was put to sleep (`sleep`), not ended: an attach brings it back. */
+  onExit: (code: number, signal: number | undefined, slept?: boolean) => void;
   /** The session's size changed, whoever sized it. */
   onSize?: (cols: number, rows: number) => void;
 }
@@ -142,6 +143,8 @@ interface Session {
   paused?: boolean;
   /** Set by kill: a snapshot serialized after this must not be written. */
   killed?: boolean;
+  /** Set by sleep: `done` settles once its process has ended and its screen is saved. */
+  sleeping?: { done: Promise<boolean>; settle: (kept: boolean) => void };
   /** Output emitted so far; positions only mean something within one `epoch`. */
   seq: number;
   epoch: string;
@@ -157,6 +160,15 @@ const DEFAULT_SCROLLBACK = 5000; // lines of replay scrollback per session
 // Serializing walks every cell, so saving all of a printing session's scrollback every few seconds
 // froze every terminal for up to a second. A stop, a detach and an exit still save all of it.
 const SAVED_SCROLLBACK = 500;
+/** A program still running this long after it was told to end for sleep is ended outright. */
+const SLEEP_GRACE_MS = 5000;
+
+/** The title (OSC 0) ahead of a replay, which SerializeAddon leaves out. Control chars stripped so
+ *  an embedded BEL/ESC can't truncate it. */
+function titled(title: string | undefined, replay: string): string {
+  const t = title?.replace(/[\x00-\x1f\x7f]/g, " ").trim();
+  return t ? `\x1b]0;${t}\x07${replay}` : replay;
+}
 
 export interface SessionManagerOptions {
   /** Scrollback lines kept in each session's headless xterm (replay capacity). */
@@ -177,6 +189,8 @@ export interface SessionManagerOptions {
   /** A session ended: its process exited, or it was killed. */
   onEnd?: (id: string) => void;
   onSnapshot?: (id: string, snapshot: SessionSnapshot) => void | Promise<void>;
+  /** Reads back what `onSnapshot` saved: how a session put to sleep is restored. */
+  loadSnapshot?: (id: string) => SessionSnapshot | undefined;
   /** OPTIONAL — invoked when a session is explicitly killed so the daemon can
    *  unlink its on-disk snapshot file. */
   onSnapshotEvict?: (id: string) => void;
@@ -237,6 +251,7 @@ export class SessionManager {
   private readonly onEmpty?: () => void;
   private readonly onSnapshot?: (id: string, snap: SessionSnapshot) => void | Promise<void>;
   private readonly onSnapshotEvict?: (id: string) => void;
+  private readonly loadSnapshot?: (id: string) => SessionSnapshot | undefined;
   private readonly snapshotDebounceMs: number;
   private readonly transformSpecOnRestore?: (spec: SpawnSpec, id: string, ran?: SpawnSpec) => SpawnSpec;
   private readonly transformSpecOnSpawn?: (spec: SpawnSpec, id: string) => SpawnSpec;
@@ -255,6 +270,7 @@ export class SessionManager {
     this.onEmpty = opts.onEmpty;
     this.onSnapshot = opts.onSnapshot;
     this.onSnapshotEvict = opts.onSnapshotEvict;
+    this.loadSnapshot = opts.loadSnapshot;
     this.onOutput = opts.onOutput;
     this.onEnd = opts.onEnd;
     this.onTitle = opts.onTitle;
@@ -285,21 +301,22 @@ export class SessionManager {
    *  serializing so the replay carries the latest bytes (not a stale snapshot
    *  that misses output emitted in the same tick). */
   /** Re-emit the session's last OSC window title ahead of the replay so the
-   *  client's xterm re-fires onTitleChange on reattach (SerializeAddon drops the
-   *  title). Control chars stripped so an embedded BEL/ESC can't truncate it. */
+   *  client's xterm re-fires onTitleChange on reattach. */
   private withTitle(s: Session, replay: string): string {
     // The mouse encoding goes after the replay: SerializeAddon restores the tracking mode but
     // not the encoding, and an app that asked for SGR ignores anything else (see replay-modes).
-    const withMouse = replay + mouseEncodingSeq(s.term);
-    if (!s.lastTitle) return withMouse;
-    const t = s.lastTitle.replace(/[\x00-\x1f\x7f]/g, " ").trim();
-    return t ? `\x1b]0;${t}\x07${withMouse}` : withMouse;
+    return titled(s.lastTitle, replay + mouseEncodingSeq(s.term));
   }
 
   /** `view`: the client only watches (M4): a running session keeps its size and its pauses.
    *  `lines`: at most that much scrollback in the replay of a running session. */
   async createOrAttach(id: string, spec: SpawnSpec, client: SessionClient, view = false, lines?: number): Promise<AttachResult> {
     const existing = this.sessions.get(id);
+    // Going to sleep: it is restored from what it saves, not started afresh beside it.
+    if (existing?.exited && existing.sleeping) {
+      await existing.sleeping.done;
+      return this.createOrAttach(id, spec, client, view, lines);
+    }
     if (existing && !existing.exited) {
       existing.clients.add(client);
       if (!view) this.interacts(existing, client, spec.cols, spec.rows);
@@ -386,27 +403,9 @@ export class SessionManager {
       if (session.pty !== p) return;
       this.output(session, d);
     });
-    p.onExit((code, signal) => {
-      // Ignore a STALE pty's late exit: tryRestoreRetry kills this pty and
-      // swaps in a fresh one (session.pty), so the kill-induced exit arrives
-      // AFTER the replacement. Without this guard it would delete the live
-      // retried session — turning the missing-session recovery into "tile
-      // vanishes".
-      if (session.pty !== p) return;
-      if (session.carry) this.output(session, "", true); // its last bytes, whole or not
-      session.exited = true;
-      // A restored session that failed within restoreRetryMs could not resume what it was
-      // given (the store check can miss, e.g. an agent pointed at another config dir). Retry
-      // once, fresh. Observed, not guessed from its output.
-      const sinceSpawn = Date.now() - session.spawnedAt;
-      if (code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return;
-      this.onTitle?.(id, ""); // a process that has ended is doing nothing
-      for (const c of session.clients) c.onExit(code, signal);
-      this.flushSnapshot(session); // last write before drop
-      this.sessions.delete(id);
-      this.onEnd?.(id);
-      this.scheduleIdle();
-    });
+    // Ignore a STALE pty's late exit: tryRestoreRetry kills this pty and swaps in a fresh one, so
+    // the kill-induced exit arrives AFTER the replacement and must not delete the retried session.
+    p.onExit((code, signal) => { if (session.pty === p) this.ended(session, code, signal); });
     this.cancelIdle();
     // For frozen snapshots the replay is the persisted VT string (and we
     // already wrote it into the headless term above, so re-serializing would
@@ -462,19 +461,58 @@ export class SessionManager {
       if (session.pty !== p) return;
       this.output(session, d);
     });
-    p.onExit((code, signal) => {
-      // Stale-pty guard (see the spawn path) — a replaced pty's late exit must
-      // not tear down the live session.
-      if (session.pty !== p) return;
-      if (session.carry) this.output(session, "", true); // its last bytes, whole or not
-      session.exited = true;
-      this.onTitle?.(session.id, ""); // a process that has ended is doing nothing
-      for (const c of session.clients) c.onExit(code, signal);
-      this.flushSnapshot(session);
-      this.sessions.delete(session.id);
-      this.onEnd?.(session.id);
-      this.scheduleIdle();
-    });
+    p.onExit((code, signal) => { if (session.pty === p) this.ended(session, code, signal); });
+  }
+
+  /** Its process ended. Put to sleep, its whole screen is saved and it waits frozen, as after a
+   *  reboot; otherwise it is gone. */
+  private async ended(session: Session, code: number, signal: number | undefined): Promise<boolean> {
+    const id = session.id;
+    if (session.carry) this.output(session, "", true); // its last bytes, whole or not
+    session.exited = true;
+    // A restored session that failed within restoreRetryMs could not resume what it was
+    // given (the store check can miss, e.g. an agent pointed at another config dir). Retry
+    // once, fresh. Observed, not guessed from its output.
+    const sinceSpawn = Date.now() - session.spawnedAt;
+    if (!session.sleeping && code !== 0 && sinceSpawn < this.restoreRetryMs && this.tryRestoreRetry(session)) return false;
+    this.onTitle?.(id, ""); // a process that has ended is doing nothing
+    const slept = !!session.sleeping;
+    for (const c of session.clients) c.onExit(code, signal, slept || undefined);
+    const saved = this.flushSnapshot(session); // last write before drop
+    if (slept) await saved;
+    const kept = slept && !session.killed && !session.dirty && !!this.loadSnapshot;
+    if (this.sessions.get(id) === session) this.sessions.delete(id);
+    if (kept) {
+      try { session.term.dispose(); } catch { /* ignore */ }
+      this.frozen.set(id, () => this.loadSnapshot!(id));
+    }
+    this.onEnd?.(id);
+    this.scheduleIdle();
+    session.sleeping?.settle(kept);
+    return kept;
+  }
+
+  /** End its process but keep its screen and spec, frozen as after a reboot: an attach restores it
+   *  (`transformSpecOnRestore`). True once its screen is saved, and for one already frozen; false
+   *  when it is not running or the save failed. */
+  sleep(id: string): Promise<boolean> {
+    const s = this.sessions.get(id);
+    if (s?.sleeping) return s.sleeping.done;
+    if (!s || s.exited) return Promise.resolve(!s && this.frozen.has(id));
+    let settle!: (kept: boolean) => void;
+    s.sleeping = { done: new Promise<boolean>((r) => { settle = r; }), settle };
+    // Saved after it ends, not before: what it prints as it goes is on its last screen.
+    try { s.pty.kill(); } catch { /* already gone */ }
+    const stubborn = setTimeout(() => { if (!s.exited) try { s.pty.kill("SIGKILL"); } catch { /* gone, or no signals here */ } }, SLEEP_GRACE_MS);
+    stubborn.unref?.();
+    return s.sleeping.done;
+  }
+
+  /** What a frozen session saved as its screen (title first); null when it is not frozen. */
+  savedScreen(id: string): string | null {
+    if (this.sessions.has(id)) return null;
+    const snap = this.frozen.get(id)?.();
+    return snap ? titled(snap.title, snap.replay) : null;
   }
 
   /** Wait for the xterm.js write queue to drain, then serialize. xterm batches

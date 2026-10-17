@@ -278,13 +278,14 @@ function evictSnapshot(id: string): void {
   // stale ids behind.
   evictTrackedSession(tileSessionsDir, id);
 }
+function loadSnapshot(id: string): SessionSnapshot | undefined {
+  const snap = readSnapshot(snapshotPath(id), id);
+  return snap ? rehydrateSnapshot(snap, tileToken(installToken, id)) : undefined;
+}
 function registerSnapshots(): SnapshotEntry[] {
   const entries: SnapshotEntry[] = [];
   for (const entry of listSnapshotFiles(sessionsDir)) {
-    manager.restoreLazySnapshot(entry.id, () => {
-      const snap = readSnapshot(entry.file, entry.id);
-      return snap ? rehydrateSnapshot(snap, tileToken(installToken, entry.id)) : undefined;
-    });
+    manager.restoreLazySnapshot(entry.id, () => loadSnapshot(entry.id));
     entries.push(entry);
   }
   return entries;
@@ -397,6 +398,7 @@ const manager = new SessionManager(factory, {
     process.exit(0);
   },
   onSnapshot: persistSnapshot,
+  loadSnapshot,
   onSnapshotEvict: evictSnapshot,
   // Each agent's manifest says how it binds, tracks and resumes a session (hive-agents
   // runtime-manifest.ts); composed across every agent, each leaving specs it does not own alone.
@@ -560,9 +562,9 @@ const server = net.createServer((sock) => {
         const viewer: SessionClient = {
           onData: (data, seq) => { if (seq !== undefined) lastSeq.set(msg.id, seq); if (ready) outBuf.push(msg.id, data); },
           // Final bytes must land before the exit banner.
-          onExit: (code, signal) => {
+          onExit: (code, signal, slept) => {
             outBuf.flush(msg.id);
-            send({ t: "exit", id: msg.id, code, signal: signal ?? null });
+            send({ t: "exit", id: msg.id, code, signal: signal ?? null, ...(slept ? { slept: true as const } : {}) });
             if (viewers.get(msg.id) !== viewer) return;
             viewers.delete(msg.id);
             outBuf.forget(msg.id);
@@ -625,11 +627,17 @@ const server = net.createServer((sock) => {
         manager.kill(msg.id, killer);
         break;
       }
+      case "sleep": {
+        const { reqId, id } = msg;
+        void manager.sleep(id).then((kept) => send({ t: "slept", reqId, id, ...(kept ? {} : { error: `nothing running as '${id}' to put to sleep, or its screen could not be saved` }) }));
+        break;
+      }
       case "pause":
         manager.pause(msg.id, viewers.get(msg.id));
         break;
       case "screen": {
         const { reqId, id } = msg;
+        if (msg.saved) { send({ t: "screen", reqId, id, replay: manager.savedScreen(id) }); break; }
         const lines = linesOf(msg.lines);
         // What is buffered for this viewer is older than the screen: send it first, so the
         // screen is the line between bytes it already covers and bytes that follow it.
