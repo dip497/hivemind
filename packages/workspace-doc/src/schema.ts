@@ -85,8 +85,15 @@ export type LayoutPart = "core" | "board" | `view:${string}`;
 
 /** The parts that changed in `doc` since `before`, by the root container each change lies under. */
 export function partsChanged(doc: LoroDoc, before: Frontiers): LayoutPart[] {
+  let diffs: ReturnType<LoroDoc["diff"]>;
+  try {
+    diffs = doc.diff(before, doc.frontiers(), false);
+  } catch (e) {
+    if (!doc.isShallow()) throw e;
+    return ["core", "board", ...[...doc.getMap(VIEWS).keys()].map((viewId) => `view:${viewId}` as const)];
+  }
   const parts = new Set<LayoutPart>();
-  for (const [id, diff] of doc.diff(before, doc.frontiers(), false)) {
+  for (const [id, diff] of diffs) {
     const [root, viewId] = doc.getPathToContainer(id) ?? [];
     if (root === OBJECTS) parts.add("board");
     else if (root !== VIEWS) parts.add("core");

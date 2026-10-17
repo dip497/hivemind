@@ -541,3 +541,17 @@ test("a replica taking another's changes is told only the parts they changed", (
   expect(after(() => host.setView("/a", "board", { v: 1, data: {} }))).toEqual(["view:board"]);
   expect(after(() => { host.setCore("/a", core("renamed")); host.setObjects("/a", []); })).toEqual(["board", "core"]);
 });
+
+test("a replica taking a workspace whole from a host restarted from disk is told every part", () => {
+  const first = new WorkspaceStore({ dir, person });
+  first.setCore("/a", core("api"));
+  first.setView("/a", "canvas", { v: 2, data: { positions: {} } });
+  first.setObjects("/a", [note("ship it")]);
+  first.flush();
+  const host = restart();
+  const told: WorkspaceChange["part"][] = [];
+  const replica = new WorkspaceStore({ dir: path.join(tmp, "replica"), onChange: (c) => told.push(c.part) });
+  replica.importFrom("/a", host.exportSince("/a", null));
+  expect(told.sort()).toEqual(["board", "core", "view:canvas"]);
+  expect(replica.getCore("/a")!.frames.map((f) => f.title)).toEqual(core("api").frames.map((f) => f.title));
+});
