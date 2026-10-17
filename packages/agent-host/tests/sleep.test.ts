@@ -14,7 +14,10 @@ const dir = fs.mkdtempSync("/tmp/hsl-");
 let daemon: ChildProcess | undefined;
 afterAll(() => { daemon?.kill("SIGKILL"); fs.rmSync(dir, { recursive: true, force: true }); });
 
-const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+const alive = (pid: number) => {
+  try { process.kill(pid, 0); } catch { return false; }
+  try { return fs.readFileSync(`/proc/${pid}/stat`, "utf8").split(") ").at(-1)?.[0] !== "Z"; } catch { return true; }
+};
 const unix = process.platform !== "win32";
 const sock = path.join(dir, "d.sock");
 const start = async () => {
@@ -31,6 +34,7 @@ const connect = async () => {
     const m = JSON.parse(line) as ServerMsg;
     got.push(m);
     if (m.t === "data") out += m.data;
+    if (m.t === "attached" && m.replay) out += m.replay;
   }));
   const reply = async <T extends ServerMsg["t"]>(t: T) => {
     for (let i = 0; i < 400 && !got.some((m) => m.t === t); i++) await new Promise((r) => setTimeout(r, 25));
