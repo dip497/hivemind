@@ -9,7 +9,6 @@ import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
-import type { StatusStore } from "@hivemind/agent-host/status-store";
 import fs from "node:fs";
 import { conversationStart, followConversation, lastSaid, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
 import { runsIn, tileOn, type HeldBoard } from "./needs.js";
@@ -30,10 +29,9 @@ export function keepsConversation(def: AgentProviderDef | undefined): boolean {
   return !!def?.session?.transcript && !!def.session.resume?.exists;
 }
 
-/** A session begun has no file until something is said in it: how often it is looked for then,
- *  and for how long after the agent's status last changed. */
+/** How often a followed agent is looked at for a session it began since: an agent with no hooks
+ *  says nothing of one. */
 const SESSION_CHECK_MS = 1000;
-const SESSION_WAIT_MS = 60_000;
 
 /** The session the agent of `tile` keeps its conversation in now, among the boards `held`, and its
  *  file, as its manifest says it is kept (`session.transcript`, `session.resume.exists`); null
@@ -121,8 +119,6 @@ export interface ConversationsOptions {
   /** The session the agent of `tile` keeps its conversation in now, its file, and how its manifest
    *  maps the file's records; null when no agent there keeps one. */
   transcriptOf(tile: string): Transcript | null;
-  /** The agents' statuses: a followed agent is looked at for another session when its own changes. */
-  status(): Pick<StatusStore, "subscribe">;
 }
 
 export function conversations(o: ConversationsOptions): Domain<"agent.conversation" | "agent.tool"> {
@@ -132,19 +128,6 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
    *  it opens is one it was shown, so it is looked for after that. */
   const shown = new WeakMap<Connection, Map<string, { session?: string; from: number }>>();
   const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
-  /** What looks again at each followed agent, by tile. */
-  const looks = new Map<string, Set<() => void>>();
-  let heard = false;
-  const changed = (bare: string, look: () => void): (() => void) => {
-    if (!heard) o.status().subscribe((c) => { for (const look of looks.get(toBareId(c.tileId)) ?? []) look(); });
-    heard = true;
-    if (!looks.has(bare)) looks.set(bare, new Set());
-    looks.get(bare)!.add(look);
-    return () => {
-      looks.get(bare)?.delete(look);
-      if (!looks.get(bare)?.size) looks.delete(bare);
-    };
-  };
   return {
     answers: {
       "agent.conversation": (from, tile, cursor, session) => {
@@ -165,7 +148,7 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         let mine = following.get(from);
         if (!mine) following.set(from, (mine = new Map()));
         mine.get(bare)?.();
-        mine.set(bare, followAgent(() => o.transcriptOf(bare), now, first.cursor, (said, of) => from.send({ event: "agent.said", params: [bare, said.entries, said.cursor, of] }), (look) => changed(bare, look)));
+        mine.set(bare, followAgent(() => o.transcriptOf(bare), now, first.cursor, (said, of) => from.send({ event: "agent.said", params: [bare, said.entries, said.cursor, of] })));
         return now.file ? { ...first, session: now.session } : first;
       },
       // One tool use of its session now, unfolded: asked for when the person opens its row.
@@ -191,31 +174,22 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
 /** Follow an agent's conversation from `cursor` in the session `at` (its file not written yet:
  *  from when it is): `send` is handed what is written to its file next, as it comes, and, once
  *  `now` says the agent keeps another session whose file there is, the last of that one, then what
- *  is written to it; each with its session. `changed` calls back when the agent's status changes,
- *  as it does when it begins a session. Stop it with what it returns. */
-function followAgent(now: () => Transcript | null, at: Transcript, cursor: number, send: (said: Said, session: string) => void, changed: (look: () => void) => () => void): () => void {
+ *  is written to it; each with its session. Stop it with what it returns. */
+function followAgent(now: () => Transcript | null, at: Transcript, cursor: number, send: (said: Said, session: string) => void): () => void {
   let current: Kept | null = at.file ? (at as Kept) : null;
   const follow = (t: Kept, from: number) => followConversation(t.file, t.format, from, (said) => send(said, t.session));
   let stop = current ? follow(current, cursor) : () => {};
-  let again: ReturnType<typeof setTimeout> | undefined;
-  const look = (since: number): void => {
-    clearTimeout(again);
+  const check = setInterval(() => {
     const next = now();
-    if (!next || next.session === current?.session) return;
-    if (!next.file) {
-      if (Date.now() - since < SESSION_WAIT_MS) again = setTimeout(() => look(since), SESSION_CHECK_MS);
-      return;
-    }
+    if (!next?.file || next.session === current?.session) return;
     stop();
     current = next as Kept;
     const first = readConversation(next.file, next.format);
     send(first, next.session);
     stop = follow(current, first.cursor);
-  };
-  const unsubscribe = changed(() => look(Date.now()));
+  }, SESSION_CHECK_MS);
   return () => {
-    unsubscribe();
-    clearTimeout(again);
+    clearInterval(check);
     stop();
   };
 }

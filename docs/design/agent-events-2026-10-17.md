@@ -14,8 +14,8 @@ Cut the work at its source, then keep every derived answer until what it came fr
    ends) are written ceilings with their cost and upgrade path.
 3. Main answers "which agent is this tile" from a memo keyed on the store's core identity, with a
    tile index, and records sessions in memory: no per-event folder of boards, no per-event file read.
-4. A tile's transcript is looked up when its status changes, not every second, and what its file
-   says it waits on is kept until the file grows.
+4. Where a session's file is, once found, is kept, so the once-a-second look at a followed tile
+   costs a record read and a stat; what its file says it waits on is kept until the file grows.
 
 ## Problem
 
@@ -100,7 +100,7 @@ with change notifications.
 | The tracker must be a script | Habit | It writes one file; the door can (it is in the daemon, like the script's writes) |
 | A turn's reply needs plugin code | Choice | Claude's and Codex's scripts read one field (`last_assistant_message`) |
 | `heldBoards` must be recomputed per call | Habit | Cores are cached and identity-stable (store.ts:115-131); ownership lives in META, which `partsChanged` counts as core, so it never changes without a new core |
-| Session is checked every second | Habit | ca0a4a8 needed "follow into a new session"; a session only changes on a hook event or a spawn, both status changes |
+| Session is checked every second | Fact | ca0a4a8 needed "follow into a new session". Taken for a habit at first ("a session only changes on a hook event or a spawn, both status changes"): wrong for an agent with no hooks, whose status never changes as it begins a session or writes its file (the final e2e's talker, phone-pairing.spec.ts:322, phone-browser.spec.ts:39) |
 | Every event re-reads the tile's session file | Habit | `writeTrackedSession` read-compares; the plane can remember what it wrote |
 
 Dropped for the coordinator to confirm: the whole-stdin pipe, the script tracker, the turn-end
@@ -198,11 +198,11 @@ agent count, set it), while the agent list was quadratic.
    written and read: today any string up to 256 characters reaches `--resume <id>`.
 6. **Transcripts on events** (`conversations.ts`, `conversation.ts`). Where a session's file is
    (`sessionFile`, a folder scan) is kept once found and looked for again only once it is gone from
-   there. `followAgent` re-checks when its agent's status changes (the status store, one
-   subscription per `conversations()`, a map by tile), not every second. A session begun without
-   its file yet is looked for once a second for at most a minute after that change; a later
-   change (the turn's end, written after the file) restarts it. `askingOf` keeps what the file says
-   the agent waits on per tile until the file, its size or its mtime changes.
+   there. `followAgent` still looks every second: a look costs 60 µs CPU with the file found and
+   0.7 ms while it is not written yet (116 project folders, load 12 on 16 CPUs). It looked only on
+   a status change for a while; an agent with no hooks was then never followed into its file.
+   `askingOf` keeps what the file says the agent waits on per tile until the file, its size or its
+   mtime changes.
 7. **Push subscriptions in memory** (`push.ts`). Read once; the class is the file's only writer.
 
 ## Review (fresh reviewer, round 1) and answers
