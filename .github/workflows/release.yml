@@ -94,12 +94,6 @@ jobs:
           crates/hive-web/build.sh
           echo "hash=$(cat crates/hive-web/www/page.sha256)" >> "$GITHUB_OUTPUT"
 
-      - name: Its lists in a phone-sized Chromium
-        working-directory: apps/desktop
-        run: |
-          pnpm exec playwright install --with-deps chromium
-          pnpm exec playwright test tests/e2e/phone-page.spec.ts
-
       - name: Stage release artifacts
         # What the server serves, under phone/: `hive-net serve --phone <dir>/phone`. Not the
         # sources, nor B0's echo probe.
@@ -117,6 +111,51 @@ jobs:
         with:
           name: phone-page
           path: release-assets/
+
+  # The phone page in a phone-sized Chromium, beside the desktop builds rather than before them:
+  # they need only the page's hash, and installing Chromium and running the spec held every one
+  # of them back. Built again here (cached), and published only if this passes.
+  test-phone-page:
+    name: test the phone page
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+          cache: true
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates
+          key: release-phone-page
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          tools=$(crates/hive-web/tools.sh "$RUNNER_TEMP/hive-web-tools")
+          eval "$tools"
+          crates/hive-web/build.sh
+
+      - name: Its lists in a phone-sized Chromium
+        working-directory: apps/desktop
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test tests/e2e/phone-page.spec.ts
 
   build-linux:
     name: build linux x86_64
@@ -841,7 +880,7 @@ jobs:
 
   publish:
     name: publish github release
-    needs: [build-phone-page, build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net]
+    needs: [build-phone-page, test-phone-page, build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net]
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
