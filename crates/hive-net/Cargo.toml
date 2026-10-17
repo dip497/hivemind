@@ -108,4 +108,3 @@ rcgen = "0.14"
 
 [profile.release]
 strip = true
-lto = "thin"
