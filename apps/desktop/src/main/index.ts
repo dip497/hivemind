@@ -1,6 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
-import { workspaceCounts } from "@hivemind/core/layers";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
@@ -62,7 +61,7 @@ import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
-import type { AppErrorEvent, MachineAddRequest, WorkspaceSummary } from "../shared/ipc.js";
+import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
 import { randomUUID } from "node:crypto";
 import { makeSpawnPacer } from "@hivemind/host/spawn-pacer";
@@ -102,6 +101,7 @@ import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
 import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git-adapter";
 import { answers } from "@hivemind/host/answers";
 import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder } from "@hivemind/host/needs";
+import { workspaceSummaries } from "@hivemind/host/home";
 import { agentControl } from "@hivemind/host/agent-control";
 import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
@@ -844,19 +844,10 @@ handleEffect(
 handle("listWorkspaces", wrap(async () => listWorkspaces({ persistPrune: true })));
 // The Layers panel's Projects: every workspace this computer holds, as a phone's Home lists them,
 // and every folder set up for issues here but not opened yet, with what runs in each now.
-handle("workspaceSummaries", wrap(async () => {
-  const held = heldBoards(workspaceStore());
-  const known = (await listWorkspaces({ persistPrune: false }))
-    .filter((w) => !held.some((h) => h.repo === w.repo))
-    .map((w) => ({ repo: w.repo, name: path.basename(w.repo), core: workspaceStore().getCore(w.repo) }));
-  return [...held, ...known].map((h): WorkspaceSummary => {
-    const statuses = (h.core?.tiles ?? []).map((t) => {
-      const s = control.status.get(t.id);
-      return s ? tileStatusOf(s).status : null;
-    });
-    return { repo: h.repo, title: h.name, ...workspaceCounts(statuses) };
-  }).sort((a, b) => a.title.localeCompare(b.title));
-}));
+handle("workspaceSummaries", wrap(async () => workspaceSummaries(workspaceStore(), await listWorkspaces({ persistPrune: false }), (bare) => {
+  const s = control.status.get(bare);
+  return s ? tileStatusOf(s).status : null;
+})));
 // Removing a workspace from this computer deletes its board here, never its folder; one with a
 // terminal still running is refused, so no session is left without a tile, and its stopped ones go
 // with it.

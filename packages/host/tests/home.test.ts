@@ -9,7 +9,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { HomeMessage } from "@hivemind/workspace-api/home";
 import { KeyedFeed } from "../src/keyed-feed.ts";
-import { HomeFeed, homeLines, homeRows, type LayersShown } from "../src/home.ts";
+import os from "node:os";
+import { HomeFeed, homeLines, homeRows, workspaceSummaries, type LayersShown } from "../src/home.ts";
+import { WorkspaceStore } from "@hivemind/workspace-host/store";
+import { newSeed } from "@hivemind/workspace-host/identity";
 import { boardStructure } from "../src/board-structure.ts";
 import type { HeldBoard } from "../src/needs.ts";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
@@ -125,4 +128,20 @@ test("each agent a tile runs is a row of its own, once, keyed by its id: its nam
   assert.deepEqual(agentRows, [["a:acme", { of: "agent", id: "acme", label: "Acme", icon }]]);
   assert.equal((rows.get("t:w1/t1") as { agent?: string }).agent, "acme", "its tile names it");
   assert.equal((rows.get("t:w1/t3") as { agent?: string }).agent, undefined);
+});
+
+test("the Layers panel's Projects list a folder only set up for issues, and leave it out of the workspaces this computer holds", () => {
+  const store = new WorkspaceStore({ dir: fs.mkdtempSync(path.join(os.tmpdir(), "hm-summaries-")), person: newSeed() });
+  const opened = "/work/opened";
+  const issuesOnly = "/work/issues-only";
+  store.setCore(opened, { frames: [], tiles: [{ id: "t1", kind: "claude", label: "claude #1" }], tileNames: {}, editorTabs: {}, frameOf: {} } as never, {});
+
+  const listed = workspaceSummaries(store, [{ repo: opened }, { repo: issuesOnly }], (tile) => (tile === "t1" ? "working" : null));
+
+  assert.deepEqual(listed, [
+    { repo: issuesOnly, title: "issues-only", tiles: 0, needsYou: 0, working: 0 },
+    { repo: opened, title: "opened", tiles: 1, needsYou: 0, working: 1 },
+  ]);
+  // What `hive ctl` is told is open here: run in that folder, it would start its agents there.
+  assert.deepEqual(store.repos(), [opened]);
 });

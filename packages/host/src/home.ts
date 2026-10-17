@@ -5,14 +5,17 @@
  * agent list says. What each tile last printed is a sequence of its own, so a busy terminal never
  * moves the board's.
  */
+import path from "node:path";
 import { isRemote } from "@hivemind/core/remote-uri";
+import { workspaceCounts, type LayerStatus } from "@hivemind/core/layers";
 import type { Structure } from "@hivemind/view-host/structure";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import { GENERIC_AGENT_ICON, type AgentProviderDef } from "@hivemind/agents";
 import type { HomeMessage, HomeRow, HomeTile } from "@hivemind/workspace-api/home";
 import { isTerminalKind, type KeptCore } from "@hivemind/workspace-doc/shapes";
 import { KeyedFeed } from "./keyed-feed.js";
-import type { HeldBoard } from "./needs.js";
+import { heldBoards, type HeldBoard } from "./needs.js";
+import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 
 /** What the window's Layers panel shows of a workspace: its tiles in the order listed, and the
  *  pinned ones. */
@@ -30,6 +33,27 @@ export interface HomeSource {
   shown(repo: string): LayersShown | undefined;
   /** The agent the id `id` names, as its manifest here says. */
   agent?(id: string): AgentProviderDef | undefined;
+}
+
+/** A workspace as the Layers panel's Projects list it: how many tiles it has, how many of them
+ *  need the person and how many work. */
+export interface WorkspaceSummary { repo: string; title: string; tiles: number; needsYou: number; working: number }
+
+/** The Layers panel's Projects: every workspace `store` holds, and every folder set up for issues
+ *  here (`registered`) but not opened yet, with what runs in each now, by name. One not opened has
+ *  nothing running and is not read from the store, which would hold it from then on. */
+export function workspaceSummaries(
+  store: Pick<WorkspaceStore, "repos" | "ownership" | "getCore">,
+  registered: readonly { repo: string }[],
+  statusOf: (tile: string) => LayerStatus | null,
+): WorkspaceSummary[] {
+  const held = heldBoards(store);
+  const known = registered
+    .filter((w) => !held.some((h) => h.repo === w.repo))
+    .map((w) => ({ repo: w.repo, name: path.basename(w.repo), core: null }));
+  return [...held, ...known].map((h): WorkspaceSummary => ({
+    repo: h.repo, title: h.name, ...workspaceCounts((h.core?.tiles ?? []).map((t) => statusOf(t.id))),
+  })).sort((a, b) => a.title.localeCompare(b.title));
 }
 
 const tileKey = (workspace: string, id: string) => `t:${workspace}/${id}`;
