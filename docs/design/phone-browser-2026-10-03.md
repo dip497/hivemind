@@ -158,10 +158,11 @@ Beside it:
 - `examples/echo.rs`, a native host built from hive-net's own `net::endpoint`, `ws::ALPN` and
   `frames`, that sends every frame back on its stream. It lives in hive-web, not in `hive-net`,
   so the product binary gains no test-only role.
-- `www/echo.html`: N round trips of small random frames, checked byte for byte, timed with
+- `www/echo.html`: N round trips of small frames of random letters, checked byte for byte, timed with
   `performance.now()` around `send` + `recv` (so the JS↔wasm crossing is counted), p50/p95/max,
   the dial time, and the `.wasm` size raw and gzipped (`CompressionStream`). It takes `relay`,
-  `host`, `n`, `size` from the query or the fragment, and `run=1` starts it.
+  `host`, `n`, `size` and the device's key `seed` (hex; else a new one) from the query or the
+  fragment, and `run=1` starts it.
 - `build.sh` (cargo, `wasm-bindgen --target web` into `www/pkg`, sizes) and `measure.mjs` (the page
   in headless Chromium through the desktop's Playwright, results as JSON).
 

@@ -55,8 +55,11 @@ async function run() {
   const t0 = performance.now();
   await init();
   const tInit = performance.now();
-  // A new key each run: the echo host admits any device.
-  const device = await Device.start(crypto.getRandomValues(new Uint8Array(32)), [relay]);
+  // A new key each run: the echo host admits any device. A host that admits only those it knows
+  // gives the key (`seed`, hex).
+  const seed = given.get('seed');
+  const key = seed ? Uint8Array.from(seed.match(/../g), (b) => parseInt(b, 16)) : crypto.getRandomValues(new Uint8Array(32));
+  const device = await Device.start(key, [relay]);
   const tStart = performance.now();
   const host = await device.reach(hostId, relay);
   const tDial = performance.now();
@@ -65,7 +68,8 @@ async function run() {
   log(`init ${(tInit - t0).toFixed(1)} ms, start ${(tStart - tInit).toFixed(1)} ms, dial ${(tDial - tStart).toFixed(1)} ms`);
 
   const once = async () => {
-    const frame = crypto.getRandomValues(new Uint8Array(size));
+    // Letters: a host's main takes frames as text.
+    const frame = crypto.getRandomValues(new Uint8Array(size)).map((b) => 97 + (b % 26));
     const t = performance.now();
     await stream.send(frame);
     const back = await stream.recv();
