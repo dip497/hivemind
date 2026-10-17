@@ -101,3 +101,21 @@ Opt in via Settings, then a spawned agent can drive the visible Browser tile ove
 via the `hive-browser` skill (`agent-browser` CLI): navigate, click, fill, screenshot
 the page you are watching. No hidden browser is started; the agent checks
 `$HIVEMIND_BROWSER_TARGETS` and reports if the bridge is off or no tile is open.
+
+## Plugins
+
+An agent drives the plugins in the app the way you would: install one, open it, run its
+commands. A tool arrives switched off, so it is turned on before it opens.
+
+```bash
+hive widgets install @dip497/progress && hive plugins enable widget:@dip497/progress
+hive ctl plugin open widget:@dip497/progress      # waits until its commands can be called
+hive ctl plugin commands                          # what every running plugin lets you run
+hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
+hive ctl plugin call @dip497/progress check '{"index":0}'
+hive ctl plugin list                              # each starting, ready or failed, with why
+```
+
+To make a new one, `hive views new`, `hive widgets new` or `hive tools new` writes a starter and a
+`PROMPT.md` with the whole API. See [Views](../views/), [Widgets](../widgets/) and
+[Tool plugins](../tool-plugins/).

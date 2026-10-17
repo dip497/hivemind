@@ -3,14 +3,11 @@ title: Self-hosting
 description: Run your own network for hivemind — a relay, a lookup server, admission and push, on one machine.
 ---
 
-**Development preview.** `hive-net` is not in a release yet.
-
 A fresh install uses no servers at all: devices on the same network find each other there, and
 nothing leaves it (**Settings → Servers** reads *Local network*). To reach devices elsewhere —
 a teammate at home, your laptop on the train, a server in the cloud — hivemind needs a way
 through, and you choose it once: **your own** network, or one of your devices serving the rest.
-The built-in *Hosted* profile is not available yet: its `*.hivemind.griiken.com` server names do
-not resolve in DNS. This page is about your own network. Everything below is the `hive-net` binary
+There is no hosted network: this page is about running your own. Everything below is the `hive-net` binary
 that `install.sh` puts beside `hive`, MIT-licensed.
 
 ## What a network is

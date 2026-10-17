@@ -16,6 +16,7 @@ const dl = (key: string) => `${base}/download/${key}`;
 // cannot show an agent the registry does not list, or miscount what it carries.
 import icons from '../generated/agent-icons.json';
 const agentCount = icons.total;
+const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
 ---
 <!doctype html>
 <html lang="en">
@@ -27,12 +28,16 @@ const agentCount = icons.total;
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
-  <meta name="theme-color" content="#F7F4EE" />
+  <meta name="theme-color" content="#131516" />
   <link rel="icon" href={link('favicon.svg')} />
   <link rel="alternate" type="text/markdown" href={link('llms.txt')} />
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
   <meta property="og:type" content="website" />
+  <meta property="og:image" content={ogImage} />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" />
@@ -53,6 +58,7 @@ const agentCount = icons.total;
     <nav class="links" aria-label="Main">
       <a href="#how">How it works</a>
       <a href="#views">Views</a>
+      <a href="#phone">Phone</a>
       <a href={HIVEHUB}>Plugins</a>
       <a href={link('guide/')}>Docs</a>
       <a href={repo}>GitHub</a>
@@ -71,8 +77,7 @@ const agentCount = icons.total;
         <p class="eyebrow"><span class="tag">Free &amp; open source</span> MIT licensed</p>
         <h1>Build the workspace your agents work in.</h1>
         <p class="lede">The screen is yours to draw — a queue, a board, a subway map, a Mars base —
-          and we keep the agents, terminals and diffs alive inside it. Every verb is a command, and
-          <code>hive ctl</code> is on every agent's PATH: one agent spawns three more, watches them
+          and we keep the agents, terminals and diffs alive inside it. Every verb is a command, and <code>hive ctl</code> is on every agent's PATH: one agent spawns three more, watches them
           work and approves their tools, while you watch all four.</p>
 
         <div class="cta">
@@ -90,23 +95,23 @@ const agentCount = icons.total;
         </ul>
       </div>
 
-      <!-- The product, not a drawing of it: four real captures of one workspace — nine agents
-           across four repositories — cycling on the wallpaper the app is wearing in them. -->
+      <!-- The product, not a drawing of it: four real captures of one workspace — sixteen agents
+           across five frames (docs/design/demo-scene-2026-09-18.md) — cycling on the wallpaper. -->
       <figure class="hero-shot" style={`--hero-bg:url(${link('shots/hero-bg.webp')})`}>
         <div class="stage">
           {[
+            ['windows', 'Windows — the agent that needs you, in its own window'],
+            ['board', 'Board — doing, needs you, review, done'],
             ['queue', 'Queue — sorted by who needs you'],
-            ['canvas', 'Canvas — frames you drag and arrange'],
-            ['tiled', 'Tiled — every session at once'],
-            ['board', 'Board — doing, review, done'],
+            ['tiled', 'Tiled — one pane per agent, tabbed by frame'],
           ].map(([id, caption], i) => (
             <img class="slide" style={`--i:${i}`} src={link(`shots/view-${id}.webp`)}
-              width="1600" height="1000" loading={i === 0 ? 'eager' : 'lazy'}
+              width="1600" height="1120" loading={i === 0 ? 'eager' : 'lazy'}
               fetchpriority={i === 0 ? 'high' : 'auto'} alt={caption} />
           ))}
         </div>
         <figcaption>
-          <span>Agents across five frames — nothing lands until you answer</span>
+          <span>Sixteen agents across five frames, three waiting on you</span>
           <a href="#walkthrough">Watch the walkthrough →</a>
         </figcaption>
       </figure>
@@ -117,7 +122,7 @@ const agentCount = icons.total;
   <!-- The recording of the real app: asked for, not autoplayed, and with controls. -->
   <dialog id="walkthrough" class="walk">
     <form method="dialog"><button class="walk-close" aria-label="Close">Esc</button></form>
-    <video controls preload="none" playsinline poster={`${base}/shots/poster.webp`} width="1280" height="720">
+    <video controls preload="none" playsinline poster={`${base}/shots/poster.webp`} width="1280" height="800">
       <source src={`${base}/shots/clip.webm`} type="video/webm" />
       <source src={`${base}/shots/clip.mp4`} type="video/mp4" />
     </video>
@@ -239,14 +244,87 @@ detect:
           terminal inside your scene is the real one, still running. A queue if you triage, a board
           if you lead, a subway map where each line is a branch, a Mars base where every agent is a
           module and a stalled one goes dark — anything you can draw in a web page.</p>
-        <p class="sub">Build the room you always wanted to work in, then put it on
-          <a href="https://hivehub.griiken.workers.dev/">HiveHub</a> so everyone else can work in it
-          too. A view decides how the workspace <em>looks</em> — never what runs.</p>
+        <p class="sub">Canvas and Windows come with the app. Queue, Tiled and Board are plugins on <a href={HIVEHUB}>HiveHub</a>, installed like anyone's. Build the room you always wanted
+          to work in and put it there too. A view decides how the workspace <em>looks</em> — never
+          what runs.</p>
       </header>
 
       <ViewGallery />
 
       <p class="after"><a href={link('guide/views/')}>Or have your agent build one — <code>hive views new</code> writes it the brief →</a></p>
+    </div>
+  </section>
+
+  <!-- ─────────── PLUGINS: everything is one, and agents drive them ───────────
+       The shot is site-clip.mjs's scene: a stand-in agent ran the commands in its own tile. -->
+  <section class="band" id="plugins">
+    <div class="wrap">
+      <header class="head">
+        <h2>Your agents build the workspace while they work</h2>
+        <p class="sub">Everything on the screen is a plugin: the agents, the view, the tiles, the
+          boxes above them. <code>hive ctl</code> is on every agent's PATH, so an agent installs a
+          plugin, opens it, and keeps a widget's steps ticked as it goes — no restart, nothing for
+          you to click.</p>
+      </header>
+      <div class="byo">
+        <figure class="shot-frame">
+          <img src={link('shots/agent-plugins.webp')} width="1600" height="1120" loading="lazy" decoding="async"
+            alt="The Windows view with the Progress widget floating above it: Ship 2026.10.3, 3 of 4 done, each step added and ticked by an agent" />
+          <figcaption>An agent installed Progress from HiveHub, opened it, and ticked off its steps as it worked.</figcaption>
+        </figure>
+        <div class="byo-copy">
+          <pre class="cmd"><span class="w">$</span> hive ctl plugin list
+<span class="w">$</span> hive ctl plugin open <span class="s">widget:@dip497/progress</span>
+<span class="w">$</span> hive ctl plugin commands
+<span class="w">$</span> hive ctl plugin call @dip497/progress check <span class="g">'&#123;"index":2&#125;'</span></pre>
+          <p>A <b>tool</b> is a kind of tile your code draws, beside the terminals in every view.
+            On HiveHub now: <b>Worktrees</b> (every worktree, its changes and diffs) and <b>CI runs</b> (a failed job's lines, rerun, hand it to an agent). Install one from
+            Settings → Plugins → Tools or with <code>hive tools install dip497/worktrees</code>; it
+            arrives switched off until you turn it on.</p>
+          <p>A <b>widget</b> is a small live box above the board, and a <b>view</b> draws the whole
+            screen. <code>hive views new</code>, <code>hive widgets new</code> and <code>hive tools new</code> each write a starter and a <code>PROMPT.md</code>: put your
+            idea at the top, hand it to your agent, and it builds and installs the thing.</p>
+          <p class="after"><a href="https://hivehub.griiken.workers.dev/publish">Make your own and list it on HiveHub →</a>
+            &nbsp; <a href={link('guide/tool-plugins/')}>Tools →</a>
+            &nbsp; <a href={link('guide/widgets/')}>Widgets →</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── PHONE ───────────
+       Captured from the phone page by the phone-browser e2e spec, on a phone-sized browser. -->
+  <section class="band alt" id="phone">
+    <div class="wrap">
+      <header class="head">
+        <h2>Answer from your phone</h2>
+        <p class="sub">Your phone's browser opens a page your own network serves: what waits on you
+          first, every agent live, its conversation, and its questions and permission prompts to
+          answer. Allow or Deny reaches the agent on your computer, end-to-end encrypted through
+          your relay.</p>
+      </header>
+      <div class="phones">
+        <figure><img src={link('shots/phone-home.webp')} width="780" height="1688" loading="lazy" decoding="async"
+          alt="The phone page's Home: a permission card for Editing Nav.tsx with Allow and Deny, above the project's agents" />
+          <figcaption>Home: what needs you, first</figcaption></figure>
+        <figure><img src={link('shots/phone-question.webp')} width="780" height="1688" loading="lazy" decoding="async"
+          alt="An agent's conversation on the phone, with its question Which color? and the answers Red and Blue" />
+          <figcaption>An agent's question, answered</figcaption></figure>
+        <figure><img src={link('shots/phone-permission.webp')} width="780" height="1688" loading="lazy" decoding="async"
+          alt="An agent waiting on a permission prompt, on the phone, with Allow and Deny" />
+          <figcaption>A permission prompt</figcaption></figure>
+      </div>
+      <ol class="pair">
+        <li>On the computer, <b>Settings → Connect</b>, and turn on <em>Open in the phone's browser</em>.</li>
+        <li>Scan the code. Both screens show the same three words.</li>
+        <li>Say yes on each side. The phone is yours until you unpair it.</li>
+      </ol>
+      <p class="sub">The same offer lets in another computer of yours, or a person, to one
+        workspace. The page needs your own network's server: <code>hive-net</code> ships with the
+        app. <span class="pill">Preview</span> The iOS and Android apps do the same and are not
+        published yet.</p>
+      <p class="after"><a href={link('guide/phone/')}>Set up the phone page →</a>
+        &nbsp; <a href={link('guide/self-hosting/')}>Run your own network →</a></p>
     </div>
   </section>
 
@@ -259,6 +337,8 @@ detect:
         <article><h3>Issues as Markdown</h3><p>They live in your repository. No tracker, no account — greppable, and reviewable in a diff.</p></article>
         <article><h3>Remote hosts over SSH</h3><p>PTYs on the host, editor over SFTP, in the same canvas as everything local.</p></article>
         <article><h3>Driven from the shell</h3><p>Every verb takes <code>--json</code> and returns a real exit status, so any script can drive it.</p></article>
+        <article><h3>Sleep and wake</h3><p>Put idle agents to sleep to free their memory; waking one continues the same conversation. From Layers, a frame's menu, or <code>hive ctl sleep</code>.</p></article>
+        <article><h3>Your own network</h3><p>A relay and admission on a machine you run, for your phone, your other computers and your team. Nothing of ours in the path.</p></article>
       </div>
     </div>
   </section>
@@ -280,8 +360,9 @@ detect:
         <dd>The CLIs are the ones you already use. Hivemind arranges them, keeps their sessions alive,
           and gives them one command to talk to each other.</dd>
         <dt>How finished is it?</dt>
-        <dd>The canvas is released behaviour. Views-as-plugins and the plugin catalog are development
-          previews — the docs mark which is which.</dd>
+        <dd>Agents, views, tool plugins, widgets, the phone page and your own network are in the
+          release. The iOS and Android apps are not published yet, and the docs mark every
+          preview.</dd>
       </dl>
     </div>
   </section>
@@ -293,8 +374,7 @@ detect:
   <section class="dl plate" id="download">
     <div class="wrap">
       <h2>Download Hivemind</h2>
-      <p class="sub">One command. It installs the app and the <code>hive</code> CLI into
-        <code>~/.hivemind-app</code>, links both into <code>~/.local/bin</code>, and touches nothing else.</p>
+      <p class="sub">One command. It installs the app and the <code>hive</code> CLI into <code>~/.hivemind-app</code>, links both into <code>~/.local/bin</code>, and touches nothing else.</p>
 
       <div class="dl-grid">
         <article class="dl-card" data-os="linux">
@@ -322,10 +402,8 @@ detect:
       <p class="dl-more">
         An Intel mac or a Linux arm64 box builds from source: add <code>--dev</code>.
         A machine you only drive from another desktop needs the CLI alone —
-        <a href={dl('cli-linux-x86_64')}>Linux x86_64</a>, <a href={dl('cli-linux-arm64')}>arm64</a>,
-        <a href={dl('cli-macos-arm64')}>macOS</a>, <a href={dl('cli-windows-x64')}>Windows</a>.
-        Re-run the command to upgrade, or use the app's own button.
-        <a href={dl('notes')}>Release notes and every file</a>.
+        <a href={dl('cli-linux-x86_64')}>Linux x86_64</a>, <a href={dl('cli-linux-arm64')}>arm64</a>, <a href={dl('cli-macos-arm64')}>macOS</a>, <a href={dl('cli-windows-x64')}>Windows</a>.
+        Re-run the command to upgrade, or use the app's own button. <a href={dl('notes')}>Release notes and every file</a>.
       </p>
     </div>
   </section>
@@ -377,8 +455,8 @@ detect:
       try {
         await navigator.clipboard.writeText(b.dataset.copy);
         const was = b.textContent;
-        b.textContent = 'Copied'; b.classList.add('done');
-        setTimeout(() => { b.textContent = was; b.classList.remove('done'); }, 1600);
+        b.textContent = 'Copied'; b.dataset.done = '';
+        setTimeout(() => { b.textContent = was; delete b.dataset.done; }, 1600);
       } catch { /* clipboard blocked — the command is still selectable */ }
     });
   });
@@ -632,6 +710,19 @@ detect:
   .byo-file pre{margin:0;padding:14px;overflow-x:auto}
   .byo-file code{font-family:var(--f-m);font-size:12px;line-height:1.7;color:var(--fg2);white-space:pre}
   .byo-note{margin-top:22px}
+
+  /* ── Plugins + phone: real captures ───────────────────────────────────── */
+  .shot-frame{margin:0}
+  .shot-frame img{width:100%;height:auto;display:block;border:1px solid var(--line2);border-radius:10px}
+  .shot-frame figcaption,.phones figcaption{margin-top:10px;font-family:var(--f-m);font-size:12px;color:var(--fg3)}
+  .byo-copy code{font-size:13px;color:var(--fg2)}
+  .phones{display:grid;grid-template-columns:repeat(3,minmax(0,240px));gap:24px;margin:0 0 26px}
+  .phones figure{margin:0}
+  .phones img{width:100%;height:auto;display:block;border:1px solid var(--line2);border-radius:18px}
+  .pair{margin:0 0 6px;padding-left:20px;font-size:15px;color:var(--fg2);line-height:1.8}
+  .pill{font-family:var(--f-m);font-size:11px;color:var(--fg2);border:1px solid var(--line2);
+    border-radius:4px;padding:1px 6px;margin-right:4px}
+  @media (max-width:640px){ .phones{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px} }
 
   /* ── Views ────────────────────────────────────────────────────────────── */
 

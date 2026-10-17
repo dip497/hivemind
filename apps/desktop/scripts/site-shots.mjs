@@ -27,7 +27,7 @@ const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), p));
 const XDG = tmp("hm-shots-xdg-"), HOME = tmp("hm-shots-home-"), WORK = tmp("hm-shots-work-");
 
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) =>
-  !k.startsWith("CLAUDE") && !["ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "HIVE_HCP_SOCK", "HCP_TOKEN"].includes(k)));
+  !k.startsWith("CLAUDE") && !k.startsWith("HIVE") && !["ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "HCP_TOKEN"].includes(k)));
 Object.assign(env, { XDG_CONFIG_HOME: XDG, HOME, HIVEMIND_SHELL_ENV: "0" });
 
 // Tiles start login shells, which read .bash_profile — not .bashrc.
@@ -66,6 +66,11 @@ for (const [k, v] of [
 const VIEWS = ["queue", "tiled", "board"];
 const published = (name) => `@dip497/${name}`;
 for (const id of VIEWS) cli("views", "install", published(id));
+// A widget from HiveHub and a tool from this repository's examples, added as their guides say.
+const WIDGET = "@dip497/progress";
+cli("widgets", "install", WIDGET);
+cli("tools", "install", path.join(repo, "examples/tools/git-history"));
+for (const id of ["tool:dip497/git-history", `widget:${WIDGET}`]) cli("plugins", "enable", id);
 
 const app = await electron.launch({
   args: [path.join(APP, "out/main/index.js"), "--no-sandbox", "--force-device-scale-factor=2"],
@@ -99,7 +104,7 @@ const userData = await (async () => {
   }
   throw new Error("the app never opened its control socket");
 })();
-hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim(), HIVEMIND_APP_DATA: userData };
 
 // A still wallpaper, imported the way the app's own picker does it.
 const IMAGE = opt("image", null);
@@ -211,6 +216,38 @@ try {
     await page.waitForSelector(`[data-community-view="${published(id)}"][data-community-ready="1"]`, { timeout: 15_000 }).catch(() => {});
     await shot(`${id}-${MODE}`);
   }
+
+  // ── plugins on the canvas: a tool's tile, and a widget an agent keeps up to date ─────
+  await emit("hivemind:set-view-mode", { mode: "canvas" });
+  await wait(1500);
+  const ctl = (...a) => {
+    const r = cli("ctl", ...a, "--json");
+    if (r.status !== 0) console.error(`ctl ${a.join(" ")}: ${r.stderr.trim() || r.stdout.trim()}`);
+    return r;
+  };
+  ctl("plugin", "open", "tool:dip497/git-history");
+  ctl("plugin", "open", `widget:${WIDGET}`);
+  // Its code starts in the window; a command before it is ready finds nothing running.
+  for (let i = 0; i < 40; i++) {
+    const running = JSON.parse(cli("ctl", "plugin", "list", "--json").stdout.trim().split("\n").pop() || "{}");
+    if (running.plugins?.some((p) => p.plugin === WIDGET && p.state === "ready")) break;
+    await wait(500);
+  }
+  // Right after a change a widget can refuse the next command ("does not answer … now"): ask again.
+  const call = async (command, payload) => {
+    for (let i = 0; i < 20; i++) {
+      const r = cli("ctl", "plugin", "call", WIDGET, command, JSON.stringify(payload), "--json");
+      if (r.status === 0) return;
+      await wait(250);
+    }
+    console.error(`widget ${command} was never answered`);
+  };
+  await call("set-title", { title: "Release 2026.10.2" });
+  for (const text of ["Merge the branch", "Run the full e2e", "Tag the release", "Publish the plugins"]) await call("add", { text });
+  for (const index of [0, 1, 2]) await call("check", { index });
+  await wait(2000);
+  await readable(Number(opt("zoom", "3")));
+  await shot(`plugins-${MODE}`);
 } finally {
   const pid = app.process().pid;
   await Promise.race([app.close(), new Promise((r) => setTimeout(r, 8000))]);

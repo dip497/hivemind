@@ -1,23 +1,24 @@
 ---
 /**
- * The views, shown as what they are: real screenshots of the same workspace drawn four ways,
- * and a fifth panel for the one that matters most — the view you write yourself.
+ * The views, shown as what they are: real screenshots of the same workspace drawn five ways,
+ * and a last panel for the one that matters most — the view you write yourself.
  *
  * Nothing loops. You pick a tab and it stays where you put it.
  */
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const views = [
   { id: "canvas", name: "Canvas", note: "An infinite board. Frames are zones you drag, zoom and arrange.", ships: true },
+  { id: "windows", name: "Windows", note: "Each agent a window beside the Layers list, the one you pick up front.", ships: true },
   { id: "tiled", name: "Tiled", note: "One pane per agent, tabbed by frame — for people who live in a terminal.", ships: false },
   { id: "queue", name: "Queue", note: "Ordered by who needs you, with that agent's live terminal docked beside the list.", ships: false },
   { id: "board", name: "Board", note: "Doing, needs you, review, done — a session moves across when you say so.", ships: false },
 ];
 ---
-<div class="gal" data-view="canvas">
+<div class="gal" data-view="windows">
   <div class="gal-tabs" role="tablist" aria-label="Workspace views">
     {views.map((v) => (
-      <button type="button" role="tab" data-tab={v.id} aria-selected={v.id === "canvas" ? "true" : "false"}>
-        {v.name}<em>{v.ships ? "ships" : "a plugin"}</em>
+      <button type="button" role="tab" data-tab={v.id} aria-selected={v.id === "windows" ? "true" : "false"}>
+        {v.name}<em>{v.ships ? "in the app" : "HiveHub"}</em>
       </button>
     ))}
     <button type="button" role="tab" data-tab="yours" aria-selected="false" class="gal-yours">Write your own<em>a folder</em></button>
@@ -26,7 +27,7 @@ const views = [
   <div class="gal-body">
     {views.map((v) => (
       <figure class="gal-panel" data-panel={v.id}>
-        <img src={`${base}/shots/view-${v.id}.webp`} width="1200" height="750" loading="lazy" decoding="async"
+        <img src={`${base}/shots/view-${v.id}.webp`} width="1600" height="1120" loading="lazy" decoding="async"
           alt={`The ${v.name} view: ${v.note}`} />
         <figcaption>{v.note}</figcaption>
       </figure>
@@ -38,7 +39,7 @@ const views = [
           tiles and their status; it draws the workspace however it likes, sandboxed, and asks
           for a live terminal when it wants one.</p>
         <pre class="cmd"><span class="w">$</span> hive views install ./my-view/dist
-<span class="w">$</span> hive agents install ./my-agent</pre>
+<span class="w">$</span> hive views install <span class="s">@dip497/board</span></pre>
         <p class="gal-links"><a href={`${base}/guide/views/`}>Write a view →</a>
           <a href={`${base}/guide/agent-providers/`}>Write an agent →</a></p>
       </div>
@@ -80,6 +81,7 @@ const views = [
     text-transform: uppercase; color: var(--fg3);
   }
   .gal[data-view="canvas"] [data-panel="canvas"],
+  .gal[data-view="windows"] [data-panel="windows"],
   .gal[data-view="tiled"] [data-panel="tiled"],
   .gal[data-view="queue"] [data-panel="queue"],
   .gal[data-view="board"] [data-panel="board"] { display: block; }

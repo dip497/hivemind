@@ -3,8 +3,8 @@ title: Phone and browser
 description: Answer and drive your agents from your phone's browser, or open the whole app in a browser tab.
 ---
 
-**Development preview.** None of this is in a release yet. The iOS and Android apps are not
-published; the page in your phone's browser does what they do.
+**Development preview: the iOS and Android apps.** They are not published yet. The page in your
+phone's browser is in the release and does what they do.
 
 ```mermaid title="How the phone reaches your computer"
 flowchart TB

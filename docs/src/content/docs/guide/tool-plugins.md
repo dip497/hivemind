@@ -3,8 +3,6 @@ title: Tool plugins
 description: Add a kind of tile to the app — a pull request panel, a commit browser — drawn by your own code.
 ---
 
-**Development preview.** Not in a release yet.
-
 A tool plugin adds a kind of tile. Open it from the toolbar's **Add**, a frame's ⋯ → **Add a tool
 or widget…**, or with `hive ctl open-tool <owner>/<name>/<tool>`, and it sits on the board beside
 terminals and the Code tile, in every view. The Browser, Issues and the Code tile are tools that come with the app; the
@@ -25,11 +23,16 @@ The examples are in the repository, in `examples/tools`:
 | `ci-runs` | GitHub Actions runs: a failed job's lines, rerun or cancel, hand the failure to an agent (through `gh`) |
 | `worktrees` | every git worktree: uncommitted changes, ahead and behind the base, its diffs; review one with an agent, remove the merged ones |
 
+On HiveHub today: `dip497/worktrees` and `dip497/ci-runs`. Install one by its id (from 2026.10.3;
+Settings → Plugins lists them under **Tools** too). It arrives switched off, so turn it on:
+
 ```bash
-hive tools install examples/tools/git-history
-hive plugins enable tool:dip497/git-history
-hive ctl open-tool dip497/git-history/history
+hive tools install dip497/worktrees
+hive plugins enable tool:dip497/worktrees
+hive ctl plugin open tool:dip497/worktrees
 ```
+
+The others are folders in this repository: `hive tools install examples/tools/git-history` takes one.
 
 ## Make one
 
