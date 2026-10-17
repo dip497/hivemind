@@ -3,13 +3,19 @@
 // share one user-data-dir + repo cwd. Main's workspace store is where the layout
 // lives (docs/design/multiplayer-2026-09-28.md, R1), so the window's own storage
 // is deleted between the launches.
-import { test, expect, _electron as electron, type ElectronApplication } from "@playwright/test";
+import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync } from "node:child_process";
 import fs, { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-test("open tiles restore after restart (same repo)", async () => {
+/** What the page's terminal shows (it draws on a canvas: its host element reads its screen). */
+const screenOf = (page: Page) => page.locator(".react-flow__node-terminal").first().evaluate((el) => {
+  const host = [el, ...el.querySelectorAll("*")].find((e) => "__hmScreen" in e) as (Element & { __hmScreen(): string }) | undefined;
+  return host?.__hmScreen() ?? "";
+});
+
+test("open tiles restore after restart (same repo), the terminal showing what it printed", async () => {
   const repo = mkdtempSync(path.join(tmpdir(), "hm-persist-"));
   const sh = (c: string) => execSync(c, { cwd: repo, stdio: "pipe" });
   sh("git init -q -b main"); sh('git config user.email t@t.t'); sh('git config user.name t');
@@ -29,6 +35,14 @@ test("open tiles restore after restart (same repo)", async () => {
   await page.waitForTimeout(400);
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 6_000 });
+  const terminal = page.locator(".react-flow__node-terminal").first();
+  await terminal.click();
+  await terminal.locator(".xterm-screen").click();
+  await expect.poll(async () => {
+    const shown = await screenOf(page);
+    if (!shown.includes("persist-42")) await page.keyboard.type("echo persist-$((6*7))\n");
+    return shown;
+  }, { timeout: 20_000, intervals: [1_000] }).toContain("persist-42");
   // The window's debounced save reaches main's store, which writes it to disk before answering.
   await expect.poll(() => page.evaluate((r) => {
     const saved = (window.hive.workspaceCoreSync(r) ?? {}) as { tiles?: { kind: string }[] };
@@ -45,7 +59,7 @@ test("open tiles restore after restart (same repo)", async () => {
   await page.waitForLoadState("domcontentloaded");
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
   await page.waitForSelector(".react-flow__node-terminal", { timeout: 6_000 });
-  expect(await page.locator(".react-flow__node-terminal").count()).toBeGreaterThan(0);
+  await expect.poll(() => screenOf(page), { timeout: 15_000 }).toContain("persist-42");
   await app.close();
 
   try { execSync(`rm -rf ${repo} ${ud}`); } catch { /* ignore */ }
