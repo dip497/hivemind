@@ -90,22 +90,29 @@ test("a supervised worker's question is recorded; one the worker's standing answ
   ]);
 });
 
-test("a tile that names another as its caller is refused, which is recorded, and nothing happens; a person may act for any tile", async () => {
-  const { agentChannel, ws, inbox, writes, lines, worker } = dispatcher();
+test("a tile that names another as its caller, or hands over another's reply, is refused, which is recorded, and nothing happens; a person may act for any tile", async () => {
+  const { agentChannel, ws, inbox, writes, lines, worker, turns } = dispatcher();
   const w = await worker();
   const other = fromTile("tile-other");
   await assert.rejects(agentChannel("agent.report", { callerTile: `hm:${w}`, message: "forged" }, other), { code: "FORBIDDEN" });
   await assert.rejects(agentChannel("review.open", { callerTile: w, plan: "forged" }, other), { code: "FORBIDDEN" });
+  await assert.rejects(agentChannel("agent.reply", { tileId: `hm:${w}`, text: "forged" }, other), { code: "FORBIDDEN" });
+  turns.recordTurn(`hm:${w}`);
+  assert.equal(turns.lastReply(`hm:${w}`), null, "its turn ended with no reply");
   assert.equal(ws.waits.of(w), undefined, "nothing waits");
   assert.deepEqual(writes, [], "nothing was typed");
   assert.deepEqual(inbox.take("tile-lead").messages, [], "nothing was sent");
   // Its own id, however it is spelled, is itself.
   await agentChannel("agent.report", { callerTile: `hm:${w}`, message: "mine" }, fromTile(w));
   await agentChannel("agent.report", { callerTile: w, message: "for it" }, PERSON);
+  await agentChannel("agent.reply", { tileId: w, text: "its own" }, fromTile(w));
+  turns.recordTurn(`hm:${w}`);
+  assert.equal(turns.lastReply(`hm:${w}`), "its own");
 
   assert.deepEqual(lines(), [
     { actor: other.actor, verb: "agent.report", target: w, outcome: "refused" },
     { actor: other.actor, verb: "review.open", target: w, outcome: "refused" },
+    { actor: other.actor, verb: "agent.reply", target: w, outcome: "refused" },
     { actor: { kind: "tile", tile: w }, verb: "agent.report", target: "tile-lead", outcome: "ok" },
     { actor: person, verb: "agent.report", target: "tile-lead", outcome: "ok" },
   ]);

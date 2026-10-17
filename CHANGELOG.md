@@ -73,6 +73,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Security
 
+- An agent's hook hands over only its own agent's reply: one naming another tile is refused and recorded, so an agent cannot put words in another's `hive ctl read`.
 - An agent manifest, from HiveHub or anywhere, can no longer change what every object in the app holds through a field path such as `__proto__.x` in its session mapping: a field path reads and writes a record's own fields only.
 - A computer, phone or browser no longer becomes yours by entering a pairing code first: today's pairing gave the person key to whoever proved the code first, asking nobody. Connect asks you, shows three words on both screens, and the device is yours only after a yes on each side.
 

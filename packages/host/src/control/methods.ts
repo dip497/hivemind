@@ -611,6 +611,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         const tileId = String(p.tileId ?? "");
         const text = typeof p.text === "string" ? p.text : "";
         if (!tileId || !text) throw new ApiError("BAD_REQUEST", "tileId and text required");
+        // A tile hands over its own reply, never another's.
+        if (call.actor.kind === "tile" && bareOf(tileId) !== call.actor.tile) return effect(call, { verb: method, target: bareOf(tileId), onlyBy: bareOf(tileId) }, async () => undefined);
         deps.turns.recordReply(ptyId(tileId), text);
         return { ok: true };
       }
