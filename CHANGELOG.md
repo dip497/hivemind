@@ -25,6 +25,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- Typing in a note on a busy board is faster: each edit wrote every object on the board and read it four times. It now reads it once and writes only what changed, 96 → 21 ms per character with 50 objects, 381 → 192 ms with 800.
 - A change from another window, your phone or an agent no longer redraws every tile in the window. Only the tiles it changed are drawn again: with 100 tiles open, a rename used to rebuild all 100.
 - Opening several agents at once no longer freezes the window for most of a second. Each terminal's GPU drawing is set up in a frame of its own, the focused one first, instead of all of them in one go.
 - Terminals no longer freeze every two seconds while an agent prints. The saved copy of a busy terminal (what comes back after a crash) keeps its last 500 lines instead of all 5000, which took up to half a second to write and held every terminal's output meanwhile; quitting, closing a window and a program ending still save all of it.

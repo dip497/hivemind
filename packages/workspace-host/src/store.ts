@@ -208,12 +208,13 @@ export class WorkspaceStore {
     this.history(repo, writer);
     // What widgets keep is committed apart, under `sys:`, so undo takes back only edits.
     this.write(repo, "board", WIDGETS, from, (doc) => {
-      writeObjects(doc, drawnAsKept(objects, readObjects(doc)), from.base);
+      const held = readObjects(doc);
+      const board = writeObjects(doc, drawnAsKept(objects, held), from.base, held);
       doc.commit({ origin: boardOf(writer) });
       // A widget's state too is this writer's only where it changed it from the board it read.
       const mine = Array.isArray(objects) ? objects as BoardObject[] : [];
-      const states = from.base === undefined ? mine : rebaseBoard(Array.isArray(from.base) ? from.base as BoardObject[] : [], mine, readObjects(doc));
-      writeObjects(doc, drawnAsKept(readObjects(doc), states));
+      const states = from.base === undefined ? mine : rebaseBoard(Array.isArray(from.base) ? from.base as BoardObject[] : [], mine, board);
+      writeObjects(doc, drawnAsKept(board, states), undefined, board);
     });
   }
 

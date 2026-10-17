@@ -107,7 +107,7 @@ export function rebaseView(base: ViewLayout | null, next: ViewLayout, current: V
 }
 
 /** Equal as JSON keeps them: an object key by key in any order, a missing key as undefined. */
-function sameJson(a: unknown, b: unknown): boolean {
+export function sameJson(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
   if (Array.isArray(a)) return a.length === (b as unknown[]).length && a.every((x, i) => sameJson(x, (b as unknown[])[i]));

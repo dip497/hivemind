@@ -14,7 +14,7 @@ import type { LoroDoc, LoroMap } from "loro-crdt";
 import { isContainer, isMap, writeFields } from "./fields.js";
 import { firstOfEachId, isObject, type Fields } from "./input.js";
 import { readOrder, writeOrder } from "./order.js";
-import { rebaseBoard } from "./rebase.js";
+import { rebaseBoard, sameJson } from "./rebase.js";
 import { OBJECTS, stampSchema } from "./schema.js";
 import { BOARD_OBJECT_KINDS, SIDES, WIDGET_FIELD_BYTES, type BoardObject, type ChecklistItem } from "./shapes.js";
 
@@ -30,20 +30,25 @@ const ITEM_CONTAINERS: ReadonlySet<string> = new Set([TEXT]);
  * Make `doc` hold the board `value`. An object or checklist item without what its kind needs is
  * dropped, and a repeated id keeps its first entry; a board that is not a list is refused. Given
  * `base`, the board `value` was made from (null: none was read), only what changed from it is
- * written, object by object and field by field, and the rest stays as `doc` has it now.
+ * written, object by object and field by field, and the rest stays as `doc` has it now. `current`
+ * is the board as `doc` holds it, when the caller has read it. The board as written.
  */
-export function writeObjects(doc: LoroDoc, value: unknown, base?: unknown): void {
+export function writeObjects(doc: LoroDoc, value: unknown, base?: unknown, current: readonly BoardObject[] = readObjects(doc)): BoardObject[] {
   const next = toBoard(value);
-  const board = base === undefined ? next : rebaseBoard(base === null ? [] : toBoard(base), next, readObjects(doc));
+  const board = base === undefined ? next : rebaseBoard(base === null ? [] : toBoard(base), next, current);
   stampSchema(doc);
   const objects = doc.getMap(OBJECTS);
+  const held = new Map(current.map((o) => [o.id, o]));
   const kept = new Set<string>();
   for (const object of board) {
     kept.add(object.id);
-    const current = objects.get(object.id);
-    writeObject(isMap(current) ? current : objects.setContainer(object.id, newMap(objects)), object);
+    // Writing every object made each edit cost the whole board.
+    if (sameJson(held.get(object.id), object)) continue;
+    const record = objects.get(object.id);
+    writeObject(isMap(record) ? record : objects.setContainer(object.id, newMap(objects)), object);
   }
   for (const id of objects.keys()) if (!kept.has(id)) objects.delete(id);
+  return board;
 }
 
 /** The board's objects that have what their kind needs, the first of each id. */
