@@ -146,6 +146,9 @@ test("putting agents to sleep and waking them is driving agents, in its own work
   await driver.client.call("agent.wake", workspaceUrl(W));
   expect(await code(driver.client.call("agent.sleep", "/work/other"))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.wake", "/work/other", "out-1"))).toBe("FORBIDDEN");
+  // A folder in it may be another workspace open here.
+  expect(await code(driver.client.call("agent.sleep", `${workspaceUrl(W)}/sub`))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.wake", `${workspaceUrl(W)}/sub`))).toBe("FORBIDDEN");
   expect(ran).toEqual([
     { what: "agent.sleep", by: driver.actor, args: [REPO] },
     { what: "agent.wake", by: driver.actor, args: [REPO] },

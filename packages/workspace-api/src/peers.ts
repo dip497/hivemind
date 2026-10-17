@@ -60,6 +60,8 @@ const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", mess
 const BY_TILE = /^(terminal\.(saved|write|show|resize|flow|ack|fit|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|send|interrupt|close|diff|conversation|tool|rename|keys|read|output)|link\.(connect|disconnect)|tile\.focus)$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since|sessions)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start|places|folders|sleep|wake)|tool\.open)$/;
+/** Methods that act on a whole workspace: a folder in it, which may be another workspace, is not it. */
+const WHOLE_WORKSPACE = /^agent\.(sleep|wake)$/;
 /** Methods whose second param names the workspace, after what they open there (a view, P8). */
 const BY_WORKSPACE_SECOND = /^view\.open$/;
 /** The workspace a call names, if it names one. A desktop's view listing and files name it
@@ -265,6 +267,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && roots().some((r) => inWorkspace(r, place)))) {
       return "name this workspace by its id: nothing else of the host's is open to you";
     }
+    if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return "name this workspace by its id: nothing else of the host's is open to you";
     if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return "a tile there is not of this workspace";
     if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return `${String(params[1])} is not a tile of this workspace`;
     return null;

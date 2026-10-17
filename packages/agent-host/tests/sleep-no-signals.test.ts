@@ -1,5 +1,6 @@
 // A pty that takes no signals, as on Windows (its kill throws when given one), is still ended by a
-// sleep, and kept to be woken; one that ends by itself as it is put to sleep is kept asleep too.
+// sleep, and kept to be woken; one that ends by itself as it is put to sleep is kept asleep too; one
+// whose wake cannot start it (its folder gone, say) stays asleep, to be woken once it can.
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { SessionManager, type ManagedPty, type SessionSnapshot, type SpawnSpec } from "../src/pty-session-manager.ts";
@@ -44,4 +45,21 @@ test("one that ends by itself as it is put to sleep, before its screen is read, 
   pty.end();
   expect(await slept).toBe(true);
   expect(saved.get("t2")?.sleeping, "after a restart, only a wake starts it").toBe(true);
+}, 5_000);
+
+test("a wake that cannot start it leaves it asleep, to be woken once it can", async () => {
+  const saved = new Map<string, SessionSnapshot>();
+  let fails = false;
+  const manager = new SessionManager((spec) => { if (fails) throw new Error("no such folder"); return new NoSignals(spec); }, {
+    onSnapshot: (id, snap) => { saved.set(id, snap); },
+    loadSnapshot: (id) => saved.get(id),
+  });
+  const spec = { cwd: "/", cmd: "agent", args: [], cols: 80, rows: 24 };
+  const client = { onData: () => {}, onExit: () => {} };
+  await manager.createOrAttach("t3", spec, client);
+  expect(await manager.sleep("t3")).toBe(true);
+  fails = true;
+  await expect(manager.createOrAttach("t3", spec, client, false, undefined, true)).rejects.toThrow("no such folder");
+  fails = false;
+  expect((await manager.createOrAttach("t3", spec, client, false, undefined, true)).isNew).toBe(true);
 }, 5_000);

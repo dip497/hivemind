@@ -2,11 +2,12 @@
 // workspace store: a frame's agents sleep, those in the frames in it too, in the folder each runs
 // in, which its tile then keeps; one at work, one that cannot resume, one another device runs and
 // a shell are left, each with why; a name two tiles share is refused; a sleep that fails leaves its
-// tile awake. Asleep, an agent keeps its name and what was sent it, and nothing is typed into it; a
-// wake brings back the sleepers where they slept, rings what waited, and asks once more a wake
-// given no answer; one whose saved session is gone is no longer kept asleep. A read of its turn is
-// answered that it is asleep. Its conversation is
-// not started again in another tile. Closed, a sleeper is ended where it sleeps. How sessions sleep and wake is the session layer's (sleep.test.ts).
+// tile awake. Asleep, an agent keeps its name and what was sent it, nothing is typed or keyed into
+// it, and a read of its turn is answered that it is asleep. A wake brings back the sleepers where
+// they slept, and a frame's one going to sleep once it has; it rings what waited, and asks once
+// more a wake given no answer; one whose saved session is gone is no longer kept asleep. Its
+// conversation is not started again in another tile. Closed, a sleeper is ended where it sleeps.
+// How sessions sleep and wake is the session layer's (sleep.test.ts).
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -51,7 +52,7 @@ const layout: CoreLayout = {
   frameOf: { a1: "f1", a2: "f1", p1: "f1", x1: "f1", s1: "f1", e1: "f1", a3: "f3", a4: "f2", a5: "f2" },
 };
 
-function plane(o: { sleepFails?: Set<string>; noAnswer?: Set<string>; gone?: Set<string>; sessions?: Record<string, string>; asleep?: Record<string, string> } = {}) {
+function plane(o: { slowSleep?: number; sleepFails?: Set<string>; noAnswer?: Set<string>; gone?: Set<string>; sessions?: Record<string, string>; asleep?: Record<string, string> } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "control-sleep-"));
   after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const workspaces = new WorkspaceStore({ dir, person: newSeed() });
@@ -75,6 +76,7 @@ function plane(o: { sleepFails?: Set<string>; noAnswer?: Set<string>; gone?: Set
       endSession: (pty: string, folder?: string) => { calls.push(`end ${pty} ${folder ?? "-"}`); running.delete(pty); },
       sleepSession: async (pty: string, folder: string) => {
         calls.push(`sleep ${pty} ${folder}`);
+        if (o.slowSleep) await new Promise((r) => setTimeout(r, o.slowSleep));
         if (o.sleepFails?.has(pty)) throw new Error("its machine is not connected");
         running.delete(pty);
       },
@@ -165,6 +167,7 @@ test("asleep, an agent keeps its name and is not counted as ended; nothing is ty
   assert.deepEqual([p.status.get("a1")?.state, p.status.get("a1")?.title], ["interrupted", "Fix the login"]);
 
   assert.throws(() => api.send("a1", "next task"), /tile a1 is asleep: wake it first/);
+  assert.throws(() => api.keys("a1", ["Enter"]), /tile a1 is asleep: wake it first/);
   api.connect("a2", "a1");
   api.connect("a2", "a3");
   p.event("agent.event", { tileId: "hm:a2", event: "turn.started" });
@@ -214,6 +217,23 @@ test("a wake brings back the workspace's sleepers where they slept and asks once
   calls.length = 0;
   assert.deepEqual(await api.wake(REPO, "a4"), { woke: ["a4"], skipped: [] });
   assert.deepEqual(calls, ["wake hm:a4 ssh://me@box/web"]);
+});
+
+test("a wake of a frame asked while one of its agents goes to sleep waits for that, then wakes it; one whose sleep failed is said to be awake", async () => {
+  const { p, calls, asleepIn } = plane({ slowSleep: 200 });
+  const api = await p.api();
+  const sleeping = api.sleep(REPO, "a4", false);
+  assert.deepEqual(await api.wake(REPO, "web"), { woke: ["a4"], skipped: [] });
+  await sleeping;
+  assert.deepEqual(calls, ["sleep hm:a4 ssh://me@box/web", "wake hm:a4 ssh://me@box/web"]);
+  assert.equal(asleepIn("a4"), undefined);
+
+  const failing = plane({ slowSleep: 200, sleepFails: new Set(["hm:a4"]) });
+  const api2 = await failing.p.api();
+  const failed = api2.sleep(REPO, "a4", false);
+  assert.deepEqual(await api2.wake(REPO, "web"), { woke: [], skipped: [{ tile: "a4", why: "awake: it did not go to sleep" }] });
+  await failed;
+  assert.deepEqual(failing.calls, ["sleep hm:a4 ssh://me@box/web", "sleep hm:a4 ssh://me@box/web"]);
 });
 
 test("one whose saved session is gone is no longer kept asleep: shown again, it starts afresh", async () => {

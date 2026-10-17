@@ -599,9 +599,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const { core, tiles } = tilesOf(repo, target);
     const woke: string[] = [];
     const skipped: Skipped[] = [];
-    // A tile named is woken whatever its layout says (its daemon knows); a frame's, those asleep.
+    // A tile named is woken whatever its layout says (its daemon knows); a frame's, those asleep or
+    // going to sleep.
     const named = tiles.length === 1 && !!target && tiles[0]!.id === bareOf(target);
-    await Promise.all(tiles.filter((t) => isTerminalKind(t.kind) && (t.sleeping || named)).map(async (tile) => {
+    await Promise.all(tiles.filter((t) => isTerminalKind(t.kind) && (t.sleeping || named || sleepWork.has(t.id))).map(async (tile) => {
       const def = agentForCmd(tile.cmd);
       if (!def) return void skipped.push({ tile: tile.id, why: `no agent here runs ${tile.cmd ?? "it"}` });
       if (!tile.cmd) return void skipped.push({ tile: tile.id, why: "it runs nothing" });
@@ -612,6 +613,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (twin) return void skipped.push({ tile: tile.id, why: `tile ${twin.id} runs this conversation now` });
       try {
         const { pid } = await oneAtATime(tile.id, async () => {
+          // A sleep it waited for may have left it awake.
+          if (!named && !recordOf(tile.id)?.sleeping) return { pid: 0 };
           // No answer in time is asked again: a wake of what runs now joins it.
           let r = await deps.wakeSession(start);
           if (r.pid === -1) r = await deps.wakeSession(start);
@@ -621,7 +624,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           }
           return r;
         });
-        if (pid === -1) skipped.push({ tile: tile.id, why: "no answer from where it sleeps" });
+        if (pid === 0) skipped.push({ tile: tile.id, why: "awake: it did not go to sleep" });
+        else if (pid === -1) skipped.push({ tile: tile.id, why: "no answer from where it sleeps" });
         else woke.push(tile.id);
       } catch (e) {
         // Kept asleep, it could never be woken: shown again, it starts afresh.
@@ -876,6 +880,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
   };
 
+  const refuseAsleep = (tile: string): void => {
+    if (recordOf(bareOf(tile))?.sleeping) throw new ApiError("FAILED", `tile ${bareOf(tile)} is asleep: wake it first`);
+  };
   const asleepRead = (bare: string): AgentRead =>
     ({ text: null, finalStatus: "asleep", truncated: false, note: `it is asleep: no turn will come until hive ctl wake ${bare}` });
 
@@ -888,7 +895,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     sleep: sleepTiles,
     wake: wakeTiles,
     send(tile, text) {
-      if (recordOf(bareOf(tile))?.sleeping) throw new ApiError("FAILED", `tile ${bareOf(tile)} is asleep: wake it first`);
+      refuseAsleep(tile);
       // Delivered through the mailbox, which types text-then-Enter as separate writes (a bundled
       // newline is dropped by claude's TUI) and HOLDS it while the agent is mid-turn, where it
       // would strand in the composer unread.
@@ -900,6 +907,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     },
 
     keys(tile, keys) {
+      refuseAsleep(tile);
       // Each token maps via KEYMAP (arrows/enter/esc/…) or is sent as literal text, staggered so
       // the TUI registers each key: a bundled arrow+enter write can miss the move.
       const pid = ptyId(tile);

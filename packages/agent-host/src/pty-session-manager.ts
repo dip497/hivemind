@@ -389,7 +389,6 @@ export class SessionManager {
       if (kept.asleep && !wake) throw new Asleep(id);
       // Started afresh, its conversation would be lost: it stays asleep until its screen reads.
       if (kept.asleep && !frozenSnap) throw new Error(`'${id}' sleeps, but what it saved cannot be read`);
-      this.frozen.delete(id);
     } else if (wake) {
       throw new NothingAsleep(`nothing asleep as '${id}'`);
     }
@@ -413,6 +412,8 @@ export class SessionManager {
       effectiveSpec = this.transformSpecOnSpawn(effectiveSpec, id);
     }
     const p = this.factory(effectiveSpec);
+    // Kept until it runs: one that cannot start now stays to be woken later.
+    if (kept) this.frozen.delete(id);
     // Seed the screen with the pre-reboot one so the replays sent later carry that history forward.
     const epoch = randomUUID();
     this.screens.send({ t: "open", id, epoch, cols: effectiveSpec.cols, rows: effectiveSpec.rows, scrollback: this.scrollback, seed: frozenSnap?.replay ?? "", parsed: 0 });
