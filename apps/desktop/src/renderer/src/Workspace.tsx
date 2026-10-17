@@ -30,6 +30,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { DeleteFrameDialog, type FrameDeleteAsk } from "./DeleteFrameDialog";
+import { useSleepAgents } from "./workspace/SleepAgents";
 import { Plus } from "./components/icons";
 import { PickerDialog } from "./picker-dialog";
 import { isPluginVerb, pluginVerb, type PluginVerbHost } from "./workspace/plugin-verbs";
@@ -197,18 +198,6 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       return { ...m, [id]: trimmed };
     });
   }, []);
-  // The host sleeps and wakes agents, and says so in the layout once done; asked of a tile, it
-  // sleeps even while it works.
-  const sleepTile = useCallback(async (id: string) => {
-    if (!persistKey) return;
-    const { slept, skipped } = await window.hive.agentSleep(persistKey, id, true);
-    if (!slept.length && skipped[0]) toast(`Not put to sleep: ${skipped[0].why}`);
-  }, [persistKey]);
-  const wakeTile = useCallback(async (id: string) => {
-    if (!persistKey) return;
-    const { woke, skipped } = await window.hive.agentWake(persistKey, id);
-    if (!woke.length && skipped[0]) throw new Error(skipped[0].why);
-  }, [persistKey]);
   // What each agent says it is doing, as the host reports it (its session record's title).
   // Not persisted here: the host keeps it. A name someone gave the tile takes precedence.
   const [agentTitles, setAgentTitles] = useState<Record<string, string>>({});
@@ -220,6 +209,19 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       return rest;
     });
   }, []);
+  // The host sleeps and wakes agents, and says so in the layout once done.
+  const sleepAgents = useSleepAgents(persistKey, (id) => {
+    const t = tilesRef.current.find((x) => x.id === id);
+    return t && { name: tileName(tileNames, agentTitles, t), agent: t.kind === AGENT_TILE_KIND, sleeping: !!t.sleeping };
+  });
+  const sleepActions = sleepAgents.actions;
+  const sleepTile = sleepActions.sleep;
+  // The tile's own Resume shows why it did not wake.
+  const wakeTile = useCallback(async (id: string) => {
+    if (!persistKey) return;
+    const { woke, skipped } = await window.hive.agentWake(persistKey, id);
+    if (!woke.length && skipped[0]) throw new Error(skipped[0].why);
+  }, [persistKey]);
   const onNodeResizeCommit = useCallback((id: string, width: number, height: number, x?: number, y?: number) => {
     setSizes((s) => {
       const cur = s[id];
@@ -633,7 +635,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       const kind = t.kind;
       const agent = agentOfTile(t);
       const parent = starter.get(t.id);
-      out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent, ...(parent ? { parent } : {}) });
+      out.push({ id: t.id, kind, name: tileName(tileNames, agentTitles, t), frameId: fo[t.id] ?? null, agent, ...(parent ? { parent } : {}), ...(t.sleeping ? { sleeping: true as const } : {}) });
     }
     return out;
   }, [tiles, repoPath, frameOf, frames, tileNames, agentTitles, agentCatalog, spawnLinks]);
@@ -887,13 +889,25 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       window.dispatchEvent(new CustomEvent("hivemind:frame-git", { detail: { frameId } })),
     onPush: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPushMut.mutate({ repoPath: r }); },
     onPull: (frameId: string) => { const r = repoOfFrame(frameId); if (r) gitPullMut.mutate({ repoPath: r }); },
+    onSleep: (frameId: string) => void sleepActions.sleep(frameId),
+    onWake: (frameId: string) => void sleepActions.wake(frameId),
+    agentsIn: (frameId: string) => {
+      const within = new Set([frameId]);
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const f of framesRef.current) if (f.parentFrameId && within.has(f.parentFrameId) && !within.has(f.id)) { within.add(f.id); grew = true; }
+      }
+      const agents = tilesRef.current.filter((t) => t.kind === AGENT_TILE_KIND && within.has(frameOfRef.current[t.id] ?? ""));
+      const asleep = agents.filter((t) => t.sleeping).length;
+      return { awake: agents.length - asleep, asleep };
+    },
     repoPathForFrame: (frameId: string): string | null => {
       const f = framesRef.current.find((x) => x.id === frameId);
       return f?.worktreePath ?? f?.workspacePath ?? repoPath ?? null;
     },
     // Depend on the stable `.mutate` refs, NOT the mutation objects — those are
     // fresh on every isPending tick and would re-render every rail consumer.
-  }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, unbindBranch, unbindWorkspace, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate]);
+  }), [frameOpen, onCreateWorktree, onAttachWorktree, bindWorkspace, arrangeFrame, updateFrameTitle, updateFrameColor, requestDeleteFrame, unbindBranch, unbindWorkspace, repoPath, repoOfFrame, gitPushMut.mutate, gitPullMut.mutate, sleepActions]);
   const openFileFromTerminal = useCallback((sourceTileId: string, path: string) => {
     const sourceFrameId = frameOfRef.current[sourceTileId] ?? selectedFrameIdRef.current;
     const existing = pickEditorTile(tilesRef.current, frameOfRef.current, sourceFrameId);
@@ -1219,8 +1233,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const model: WorkspaceViewModel = useMemo(() => ({
     repoPath, root, cwd, layoutKey: persistKey,
     tiles, frames, frameOf, tileNames, agentTitles, selectedTileId, selectedFrameId,
-    layerTiles, layerFrames, frameActions, links,
-  }), [repoPath, root, cwd, persistKey, tiles, frames, frameOf, tileNames, agentTitles, selectedTileId, selectedFrameId, layerTiles, layerFrames, frameActions, links]);
+    layerTiles, layerFrames, frameActions, sleepActions, links,
+  }), [repoPath, root, cwd, persistKey, tiles, frames, frameOf, tileNames, agentTitles, selectedTileId, selectedFrameId, layerTiles, layerFrames, frameActions, sleepActions, links]);
   const commands: WorkspaceCommands = useMemo(() => ({
     selectTile: setSelectedTileId,
     selectFrame: setSelectedFrameId,
@@ -1322,6 +1336,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       </WorkspacePropsContext.Provider>
 
       <DeleteFrameDialog ask={frameDeleteAsk} onChoose={onFrameDeleteChoice} />
+      {sleepAgents.dialog}
       {/* Where a new tile runs, when 2+ workspaces are open: asked here, so every view spawns alike. */}
       {spawnPick && (
         <PickerDialog

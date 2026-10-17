@@ -16,7 +16,7 @@ import { MachineDot, MachineIcon, machineFacts, statusWords } from "./machines/s
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor } from "./components/icons";
+import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor, Moon, Play } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
 import { FrameMenu, type FrameActions } from "./FrameMenu";
@@ -29,6 +29,7 @@ import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND } from "./tile-kinds";
+import type { SleepActions } from "./workspace/SleepAgents";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
 import { MenuItem } from "./components/ui/menu-item";
@@ -54,6 +55,8 @@ export interface LayerTile {
   agent?: string;
   /** The tile that started it, when an agent did: it is listed under that one. */
   parent?: string;
+  /** Its agent sleeps. */
+  sleeping?: true;
 }
 
 export interface LayerFrame {
@@ -100,6 +103,8 @@ interface Props {
     onClose: (id: string) => void;
     onRename: (id: string, name: string) => void;
   };
+  /** Put agents to sleep and wake them, from a tile's menu and the panel's. */
+  sleepActions?: SleepActions;
 }
 
 // One status, one colour, shared with every other surface (workspace/tile-status-bucket).
@@ -217,7 +222,7 @@ interface RowActions {
 }
 
 /** One tile's row: its mark, its name, and its status when that is worth reading. */
-const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey, until }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number; until?: string }) {
+const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey, until, asleep = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number; until?: string; asleep?: boolean }) {
   const st = t.status;
   const unread = isUnread(t);
   const isPlan = !!tileKind(t.kind).waitsOnPerson;
@@ -274,6 +279,8 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         </kbd>
       ) : until ? (
         <span className={`shrink-0 ${COUNT} group-hover:hidden`} data-layer-until>{until}</span>
+      ) : asleep ? (
+        <span aria-label="asleep" title="Asleep" data-layer-asleep className="shrink-0 grid place-items-center text-[var(--color-fg3)] group-hover:hidden"><Moon size={12} /></span>
       ) : /* A word only for what you must act on; working is the dot on its mark. Only needs-you pulses. */ st !== "idle" && st !== "working" ? (
         <span
           className={`shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
@@ -297,7 +304,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
 });
 
 // Memo: a child of the canvas view, which re-renders on every drag frame.
-export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, canvas = false, folder = null, onResume, frameActions, tileActions }: Props) {
+export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTileId, onFocusTile, onFocusFrame, layoutKey = null, canvas = false, folder = null, onResume, frameActions, tileActions, sleepActions }: Props) {
   // Before the early `hidden` return: hooks run on every render, in the same order.
   useEffect(layersDrawn, []);
   const machineSnap = useMachines();
@@ -450,6 +457,12 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     for (const k of childFramesOf(f.id)) machineOfFrame.set(k.id, key);
   }
 
+  const asleep = useMemo(() => new Set(tiles.filter((t) => t.sleeping).map((t) => t.id)), [tiles]);
+  const agents = useMemo(() => {
+    const all = tiles.filter((t) => t.kind === AGENT_TILE_KIND).length;
+    const sleeping = tiles.filter((t) => t.kind === AGENT_TILE_KIND && t.sleeping).length;
+    return { awake: all - sleeping, asleep: sleeping };
+  }, [tiles]);
   const modelTiles: ModelTile[] = useMemo(() => tiles.map((t) => {
     const waits = !!tileKind(t.kind).waitsOnPerson;
     const st: TileStatusKind = waits ? "question" : (status.get(t.id) ?? "idle");
@@ -599,10 +612,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     }
     const started = view.kids.get(t.id) ?? [];
     const folded = collapsed.has(`tile:${t.id}`);
-    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} jumpKey={key} />;
+    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} jumpKey={key} asleep={asleep.has(t.id)} />;
     return (
       <div key={t.id} role="group" aria-label={`${t.name} and what it started`} data-layer-started={t.id}>
-        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} jumpKey={key} />
+        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} jumpKey={key} asleep={asleep.has(t.id)} />
         {!folded && started.map((k) => renderTile(k, depth + 1))}
       </div>
     );
@@ -731,7 +744,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       <div className="flex-1 min-w-0 flex flex-col">
       {/* Whose it is (and every other workspace, in its menu) and its two quick tools, then the pane. */}
       <header className="flex items-center gap-1 pl-[14px] pr-2 h-12 shrink-0">
-        <PanelMenu title={title} workspaces={projects} here={layoutKey} onHide={() => setHidden(true)}
+        <PanelMenu title={title} workspaces={projects} here={layoutKey} onHide={() => setHidden(true)} agents={agents} sleepActions={sleepActions}
           onRemoved={(repo) => setProjects((list) => list.filter((w) => w.repo !== repo))} />
         <span className="ml-auto" />
         <Button variant="ghost" size="icon-xs" aria-label="Search tiles" title="Search tiles" aria-pressed={searching} data-layers-search-toggle
@@ -807,7 +820,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
               <span className={`ml-auto ${COUNT}`}>{view.snoozed.length}</span>
             </button>
             {!collapsed.has("section:snoozed") && view.snoozed.map((t) => (
-              <TileRow key={t.id} t={t} depth={0} selected={t.id === selectedTileId} actions={rowActions} until={`until ${timeOf(t.snoozedUntil!, now)}`} />
+              <TileRow key={t.id} t={t} depth={0} selected={t.id === selectedTileId} actions={rowActions} until={`until ${timeOf(t.snoozedUntil!, now)}`} asleep={asleep.has(t.id)} />
             ))}
           </section>
         )}
@@ -904,6 +917,9 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           onSnooze={(until) => setSnooze(tileMenu.tile.id, until)}
           onCloseTile={tileActions ? (id) => tileActions.onClose(id) : undefined}
           onRequestRename={tileActions ? (id, draft) => setRenamingTile({ id, draft }) : undefined}
+          {...(sleepActions && tileMenu.tile.kind === AGENT_TILE_KIND
+            ? asleep.has(tileMenu.tile.id) ? { onWake: () => void sleepActions.wake(tileMenu.tile.id) } : { onSleep: () => void sleepActions.sleep(tileMenu.tile.id) }
+            : {})}
           close={() => setTileMenu(null)} />
       )}
       <Dialog open={closingLoose} onOpenChange={setClosingLoose}>
@@ -1006,7 +1022,7 @@ function RailButton({ label, icon, pane, active, onPick, badge = 0 }: { label: s
 }
 
 /** The panel's title: this workspace, every other one to switch to, and the panel itself. */
-function PanelMenu({ title, workspaces, here, onHide, onRemoved }: { title: string; workspaces: WorkspaceSummary[]; here: string | null; onHide: () => void; onRemoved: (repo: string) => void }) {
+function PanelMenu({ title, workspaces, here, onHide, onRemoved, agents, sleepActions }: { title: string; workspaces: WorkspaceSummary[]; here: string | null; onHide: () => void; onRemoved: (repo: string) => void; agents: { awake: number; asleep: number }; sleepActions?: SleepActions }) {
   const [open, setOpen] = useState(false);
   const [removing, setRemoving] = useState<WorkspaceSummary | null>(null);
   const ask = (w: WorkspaceSummary) => { setOpen(false); setRemoving(w); };
@@ -1054,6 +1070,13 @@ function PanelMenu({ title, workspaces, here, onHide, onRemoved }: { title: stri
         <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent"))}><History />Recent folders…</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:open-recent", { detail: { join: true } }))} data-layers-join><LogIn />Join a shared workspace…</DropdownMenuItem>
         <DropdownMenuSeparator />
+        {sleepActions && (agents.awake > 0 || agents.asleep > 0) && (
+          <>
+            {agents.awake > 0 && <DropdownMenuItem onSelect={() => void sleepActions.sleep()} data-layers-sleep-all><Moon />Put agents to sleep</DropdownMenuItem>}
+            {agents.asleep > 0 && <DropdownMenuItem onSelect={() => void sleepActions.wake()} data-layers-resume-all><Play />Resume sleeping agents</DropdownMenuItem>}
+            <DropdownMenuSeparator />
+          </>
+        )}
         <ViewChoices />
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>{MOD}B</DropdownMenuShortcut></DropdownMenuItem>
@@ -1192,7 +1215,7 @@ function HoverCard({ tile, top, left, now, frame, agent }: { tile: ModelTile; to
 interface MachineGroup { key: string; label: string; hostId?: string; machine?: MachineInfo; frames: LayerFrame[] }
 
 /** A tile row's menu (its ⋮, or a right-click): pin, rename, close, each with its key while open. */
-function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTile, onRequestRename, close }: {
+function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTile, onRequestRename, onSleep, onWake, close }: {
   tile: ModelTile;
   x: number;
   y: number;
@@ -1204,6 +1227,9 @@ function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTi
   onSnooze: (until: number | null) => void;
   onCloseTile?: (id: string) => void;
   onRequestRename?: (id: string, draft: string) => void;
+  /** Put its agent to sleep, or wake it: one or the other, on an agent's row. */
+  onSleep?: () => void;
+  onWake?: () => void;
   close: () => void;
 }) {
   const run = (fn?: () => void) => { close(); fn?.(); };
@@ -1250,6 +1276,18 @@ function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTi
               ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+        )}
+        {onSleep && (
+          <DropdownMenuItem onSelect={() => run(onSleep)} data-layers-sleep>
+            <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Moon size={13} /></span>
+            <span className="truncate">Put to sleep</span>
+          </DropdownMenuItem>
+        )}
+        {onWake && (
+          <DropdownMenuItem onSelect={() => run(onWake)} data-layers-resume>
+            <span className="shrink-0 grid place-items-center size-4 text-[var(--color-fg3)]"><Play size={13} /></span>
+            <span className="truncate">Resume</span>
+          </DropdownMenuItem>
         )}
         {onRequestRename && (
           <DropdownMenuItem onSelect={() => run(keys.r)}>

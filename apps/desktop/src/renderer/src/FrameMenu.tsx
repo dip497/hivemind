@@ -5,7 +5,7 @@
  */
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommit, LayoutGrid, Palette, Pencil, Server, ServerOff, SquarePen, Trash, Unlink, AddWidget } from "./components/icons";
+import { ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommit, LayoutGrid, Moon, Palette, Pencil, Play, Server, ServerOff, SquarePen, Trash, Unlink, AddWidget } from "./components/icons";
 import { optionChoices, preferredAgent } from "@hivemind/agents";
 import { AgentIcon, useAgents } from "./agents";
 import { notReady, useAgentPresence } from "./agent-plugins";
@@ -42,6 +42,11 @@ export interface FrameActions {
   onPull: (frameId: string) => void;
   /** The repository a frame's worktrees are listed under, or null for none. */
   repoPathForFrame: (frameId: string) => string | null;
+  /** Put the agents in the frame (and the frames in it) to sleep, or wake those asleep. */
+  onSleep: (frameId: string) => void;
+  onWake: (frameId: string) => void;
+  /** Its agents (and those of the frames in it), awake and asleep. */
+  agentsIn: (frameId: string) => { awake: number; asleep: number };
 }
 
 /** The frame as its menu needs it. */
@@ -84,6 +89,7 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
   const worktree = !!frame.parentFrameId;
   const repo = actions.repoPathForFrame(fid);
   const first = preferredAgent(chosen, (d) => !notReady(presence, d.id))?.id;
+  const { awake, asleep } = actions.agentsIn(fid);
   const ready = agents.filter((a) => a.enabled && !notReady(presence, a.id)).sort((a, b) => Number(b.id === first) - Number(a.id === first));
   // Keys while it is open, as a row's menu has them.
   const keys: Record<string, () => void> = { r: onRename, d: () => actions.onDelete(fid) };
@@ -129,6 +135,8 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
         </Sub>
         {/* Every tool and widget, as Add lists them, going into this frame: no shortlist of its own. */}
         <DropdownMenuItem onSelect={() => actions.onAddInFrame(fid)} data-frame-menu-add><AddWidget />Add a tool or widget…</DropdownMenuItem>
+        {awake > 0 && <DropdownMenuItem onSelect={() => actions.onSleep(fid)} data-frame-menu-sleep><Moon />Put agents to sleep</DropdownMenuItem>}
+        {asleep > 0 && <DropdownMenuItem onSelect={() => actions.onWake(fid)} data-frame-menu-wake><Play />Resume sleeping agents</DropdownMenuItem>}
 
         <DropdownMenuSeparator />
         {worktree ? (

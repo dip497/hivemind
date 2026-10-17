@@ -20,6 +20,7 @@ import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
 import type { FrameActions } from "../FrameMenu";
+import type { SleepActions } from "./SleepAgents";
 import type { TileKind } from "../tile-kinds";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
 
@@ -48,6 +49,8 @@ export interface WorkspaceViewModel {
   layerFrames: LayerFrame[];
   /** Frame-level actions (spawn into / worktree / workspace / git …). */
   frameActions: FrameActions;
+  /** Put agents to sleep and wake them: a tile, a frame, or every agent here. */
+  sleepActions: SleepActions;
   /** Live agent wiring — data-flow pipes (hive_connect) + spawn parentage. */
   links: { pipes: { src: string; dst: string }[]; spawnLinks: { parent: string; child: string }[] };
 }

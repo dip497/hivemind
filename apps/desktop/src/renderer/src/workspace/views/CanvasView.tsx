@@ -577,6 +577,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
             onFocusFrame={focusFrameFromPanel}
             frameActions={frameActions}
             tileActions={{ onClose: closeTile, onRename: commands.renameTile }}
+            sleepActions={model.sleepActions}
           />
         )}
         {/* The native contextmenu listener above suppresses the menu so RIGHT-

@@ -122,6 +122,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           onFocusTile={commands.selectTile}
           onFocusFrame={(id) => { commands.selectFrame(id); commands.selectTile(null); commands.focusTile(id); }}
           frameActions={model.frameActions}
+          sleepActions={model.sleepActions}
           tileActions={{ onClose: commands.closeTile, onRename: commands.renameTile }}
         />
       )}
