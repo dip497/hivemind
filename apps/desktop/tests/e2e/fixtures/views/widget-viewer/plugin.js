@@ -1,5 +1,6 @@
-// A view that shows the workspace's widgets (protocol 1.8): each widget's name and the label of
-// each of its buttons, which press it. Written against the raw protocol, as a phone's view runs.
+// A view that shows the workspace's widgets (protocol 1.8): each widget's name, first number and
+// text, and the label of each of its buttons, which press it. Written against the raw protocol,
+// as a phone's view runs.
 window.addEventListener("message", (e) => {
   const port = e.ports && e.ports[0];
   if (!port || !e.data || e.data.type !== "hivemind-view:port") return;
@@ -9,6 +10,13 @@ window.addEventListener("message", (e) => {
     if (tree && typeof tree === "object") {
       if (tree.type === "button") out.push(tree);
       for (const c of Array.isArray(tree.children) ? tree.children : []) buttons(c, out);
+    }
+    return out;
+  };
+  const numbers = (tree, out = []) => {
+    if (tree && typeof tree === "object") {
+      if (tree.type === "number") out.push(tree);
+      for (const c of Array.isArray(tree.children) ? tree.children : []) numbers(c, out);
     }
     return out;
   };
@@ -25,6 +33,9 @@ window.addEventListener("message", (e) => {
       for (const w of d.widgets) {
         const card = document.createElement("section");
         card.dataset.widget = w.widget;
+        const count = numbers(w.tree)[0];
+        if (count) card.dataset.n = String(count.value);
+        if (typeof w.text === "string") card.dataset.text = w.text;
         card.textContent = w.name + " ";
         for (const b of buttons(w.tree)) {
           const button = document.createElement("button");

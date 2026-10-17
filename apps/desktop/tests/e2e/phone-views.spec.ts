@@ -90,8 +90,10 @@ test("the phone page lists the computer's phone views and shows one on its own o
   await expect(counter).toContainText("Counter", { timeout: 30_000 });
   await expect(viewer.locator("body")).toHaveAttribute("data-capabilities", "workspace:widgets");
   await page.screenshot({ path: testInfo.outputPath("widget-viewer.png") });
+  await expect(counter).toHaveAttribute("data-n", "0");
   await counter.getByRole("button", { name: "Press" }).click();
   await expect.poll(presses, { timeout: 15_000 }).toBe(1);
+  await expect(counter).toHaveAttribute("data-n", "1");
   await page.locator('[data-screen="view"] [data-back]').click();
 
   // The hostile view, twice: nothing of the page's reached, nothing left from the first.
