@@ -14,7 +14,7 @@ import type { Folders, PlaceFolder, Places, StartableProgram, StartImage } from 
 import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 import { mintId } from "@hivemind/workspace-api/tile-id";
-import type { CoreLayout, FrameRecord } from "@hivemind/workspace-doc/shapes";
+import type { KeptCore, FrameRecord } from "@hivemind/workspace-doc/shapes";
 import { remoteConns } from "./remote/conn.js";
 import type { RemoteDirEntry } from "./remote/fs.js";
 import { remoteTarget } from "./remote/targets.js";
@@ -44,7 +44,7 @@ export interface MachineFs {
 const LISTED_WAIT_MS = 1500;
 
 export interface PlacesOptions {
-  core(repo: string): CoreLayout | null;
+  core(repo: string): KeptCore | null;
   repos(): string[];
   machines: KnownMachines;
   /** The agents switched on. */
@@ -112,13 +112,13 @@ export class StartPlaces {
     return machine ? remoteConns.fs(remoteTarget(machineUri(machine))) : Promise.resolve(localFs(this.o.photos));
   }
 
-  private board(repo: string): CoreLayout {
+  private board(repo: string): KeptCore {
     if (!this.o.repos().includes(repo)) throw new ApiError("NOT_FOUND", "no such workspace here");
     return this.o.core(repo) ?? { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   }
 
   /** The workspace's projects: its own folder, then each frame's, as the board orders them. */
-  private projects(repo: string, core: CoreLayout): Array<{ spot: Spot; name: string; frame?: FrameRecord }> {
+  private projects(repo: string, core: KeptCore): Array<{ spot: Spot; name: string; frame?: FrameRecord }> {
     const out: Array<{ spot: Spot; name: string; frame?: FrameRecord }> = [{ spot: { machine: "", path: path.resolve(repo) }, name: path.basename(repo) }];
     for (const f of core.frames) {
       const at = f.worktreePath ?? f.workspacePath;

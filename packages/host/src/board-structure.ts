@@ -7,7 +7,7 @@ import { agentForCmd } from "@hivemind/agents";
 import { isRemote, machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { ViewFrameMachine } from "@hivemind/view-sdk/protocol";
 import { viewStructure, type Structure } from "@hivemind/view-host/structure";
-import { AGENT_TILE_KIND, type CoreLayout, type TileRecord } from "@hivemind/workspace-doc/shapes";
+import { AGENT_TILE_KIND, type KeptCore, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { tileName } from "@hivemind/workspace-doc/tile-list";
 import type { Links } from "@hivemind/workspace-api/agents";
 
@@ -24,7 +24,7 @@ export interface BoardStructureOptions {
 export const agentOf = (t: TileRecord): string | undefined => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined);
 
 /** `core`'s structure, each tile's name, and the titles they were named from. */
-export function boardStructure(core: Pick<CoreLayout, "frames" | "tiles" | "frameOf" | "tileNames">, o: BoardStructureOptions): { structure: Structure; names: Record<string, string>; titles: Record<string, string> } {
+export function boardStructure(core: Pick<KeptCore, "frames" | "tiles" | "frameOf" | "tileNames">, o: BoardStructureOptions): { structure: Structure; names: Record<string, string>; titles: Record<string, string> } {
   const titles: Record<string, string> = {};
   for (const t of core.tiles) {
     const title = o.title(t.id);

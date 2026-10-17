@@ -9,7 +9,7 @@ import type { AgentProviderDef } from "@hivemind/agents";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { StartImage } from "@hivemind/workspace-api/agents";
-import type { CoreLayout, FrameRecord } from "@hivemind/workspace-doc/shapes";
+import type { KeptCore, FrameRecord } from "@hivemind/workspace-doc/shapes";
 import { ApiError, fields, flag, text, written } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -37,7 +37,7 @@ export interface AgentControlOptions {
   /** The agents this device starts: switched on, their command found here. */
   programs(): AgentProviderDef[] | Promise<AgentProviderDef[]>;
   /** The board of the workspace at `repo`; null for one never saved. */
-  core(repo: string): CoreLayout | null;
+  core(repo: string): KeptCore | null;
   /** The workspaces here, by their folder. */
   repos(): string[];
   /** The machines this device knows, by what each is called. */
@@ -82,7 +82,7 @@ function choice(value: unknown, name: string): string | undefined {
 }
 
 /** What starting asks for, checked. */
-function startOf(value: unknown, programs: readonly AgentProviderDef[], core: CoreLayout): Start {
+function startOf(value: unknown, programs: readonly AgentProviderDef[], core: KeptCore): Start {
   const s = fields(value, "start");
   const program = text(s.program, "start.program");
   if (!programs.some((p) => p.id === program)) throw new ApiError("BAD_REQUEST", `${program} is not an agent this device starts`);
@@ -121,7 +121,7 @@ const here = (folder: string): boolean => !/^[a-z][a-z0-9+.-]*:\/\//i.test(folde
 
 export function agentControl(o: AgentControlOptions): Domain<"agent.startable" | "agent.start" | "agent.interrupt" | "agent.close" | "agent.diff"> {
   /** A workspace's board; an empty one when it was never saved. */
-  const board = (repo: string): CoreLayout => {
+  const board = (repo: string): KeptCore => {
     if (!o.repos().includes(repo)) throw new ApiError("NOT_FOUND", "no such workspace here");
     return o.core(repo) ?? { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   };

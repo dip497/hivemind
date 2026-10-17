@@ -6,7 +6,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import type { FrameRecord, CoreLayout } from "@hivemind/workspace-doc/shapes";
+import type { FrameRecord, KeptCore } from "@hivemind/workspace-doc/shapes";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "@hivemind/workspace-api/frames";
 import { ApiError, flag, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
@@ -19,7 +19,7 @@ const FRAMES = { writer: "frames" };
 export interface FramesOptions {
   store(): {
     repos(): string[];
-    getCore(repo: string): CoreLayout | null;
+    getCore(repo: string): KeptCore | null;
     addFrame(repo: string, frame: FrameRecord, from?: { writer?: string }): boolean;
     removeFrame(repo: string, frameId: string, from?: { writer?: string }): string[];
   };
@@ -40,7 +40,7 @@ function real(p: string): string {
 }
 
 /** The folders a workspace's frames run in besides its repo: their worktrees, on this machine. */
-export function frameWorktrees(core: CoreLayout | null): string[] {
+export function frameWorktrees(core: KeptCore | null): string[] {
   return (core?.frames ?? []).flatMap((f) => (typeof f.worktreePath === "string" && path.isAbsolute(f.worktreePath) ? [f.worktreePath] : []));
 }
 
@@ -77,18 +77,18 @@ function specOf(value: unknown): FrameSpec {
 
 export function framesDomain(o: FramesOptions): Domain<"frame.open" | "frame.close"> {
   /** The layout of the workspace at `repo`; an empty one when it was never saved. */
-  const coreOf = (repo: string): CoreLayout => {
+  const coreOf = (repo: string): KeptCore => {
     if (!o.store().repos().includes(repo)) throw new ApiError("NOT_FOUND", `no workspace is open at ${repo}`);
     return o.store().getCore(repo) ?? { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   };
   /** The frame bound to the folder `folder`, if one is. */
-  const boundTo = (core: CoreLayout, folder: string): FrameRecord | undefined =>
+  const boundTo = (core: KeptCore, folder: string): FrameRecord | undefined =>
     core.frames.find((f) => {
       const at = f.worktreePath ?? f.workspacePath;
       return typeof at === "string" && path.isAbsolute(at) && real(at) === real(folder);
     });
   /** The workspace's own frame, the one bound to its repo at the top. */
-  const ownFrame = (core: CoreLayout, repo: string): FrameRecord | undefined =>
+  const ownFrame = (core: KeptCore, repo: string): FrameRecord | undefined =>
     core.frames.find((f) => !f.parentFrameId && typeof f.workspacePath === "string" && real(f.workspacePath) === real(repo));
   /** A program or a guest names only the workspace's folders; the person, any. */
   const mayName = (from: Connection, repo: string, folder: string): boolean => {

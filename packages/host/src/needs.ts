@@ -7,7 +7,7 @@ import path from "node:path";
 import { agentForCmd, type AgentProviderDef, type AnswerKeys, type InputKind } from "@hivemind/agents";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { AccessLists } from "@hivemind/workspace-host/access";
-import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
+import type { KeptCore } from "@hivemind/workspace-doc/shapes";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { Asked, ToolAsked } from "@hivemind/workspace-api/agents";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -96,7 +96,7 @@ export interface HeldBoard {
   workspace: string;
   name: string;
   repo: string;
-  core: CoreLayout | null;
+  core: KeptCore | null;
 }
 
 /** The workspaces `store` holds, with their boards. */

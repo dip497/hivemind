@@ -54,15 +54,37 @@ test("a workspace's layout is kept per repo and is there after a restart, as is 
   expect(restart().getCore("/a")).toEqual(core("renamed"));
 });
 
-test("what callers give and get are copies, so changing one changes nothing stored", () => {
+test("what callers give is copied and what they get cannot be changed, so nothing stored changes", () => {
   const s = new WorkspaceStore({ dir, person });
   const given = core("api");
   s.setCore("/a", given);
   given.frames[0]!.title = "changed after set";
   const got = s.getCore("/a") as ReturnType<typeof core>;
-  got.frames[0]!.title = "changed after get";
+  expect(() => { got.frames[0]!.title = "changed after get"; }).toThrow(TypeError);
   expect(s.getCore("/a")).toEqual(core("api"));
   expect(restart().getCore("/a")).toEqual(core("api"));
+});
+
+test("a layout read before a change is read as it is after the change, whichever way it changed", () => {
+  const changes: [string, (s: WorkspaceStore) => void, (s: WorkspaceStore) => unknown, unknown][] = [
+    ["set", (s) => s.setCore("/a", core("renamed")), (s) => s.getCore("/a")?.frames[0]?.title, "renamed"],
+    ["tile added", (s) => s.addTile("/a", { id: "t2", kind: "shell", label: "shell" }), (s) => s.getCore("/a")?.tiles.map((t) => t.id), ["t1", "t2"]],
+    ["tile named", (s) => s.renameTile("t1", "reviewer"), (s) => s.getCore("/a")?.tileNames?.t1, "reviewer"],
+    ["tile removed", (s) => s.removeTile("t1"), (s) => s.getCore("/a")?.tiles.length, 0],
+    ["forgotten", (s) => s.forget("/a"), (s) => [s.repos(), s.getCore("/a")], [[], null]],
+  ];
+  for (const [what, change, read, expected] of changes) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    const s = new WorkspaceStore({ dir, person });
+    s.setCore("/a", core("api"));
+    expect([what, s.repos(), s.getCore("/a")?.frames[0]?.title]).toEqual([what, ["/a"], "api"]);
+    change(s);
+    expect([what, read(s)]).toEqual([what, expected]);
+  }
+  const old = new WorkspaceStore({ dir: path.join(tmp, "legacy"), person });
+  expect(old.getCore("/a")).toBeNull();
+  old.importLegacy("/a", { core: core("old") });
+  expect(old.getCore("/a")).toEqual(core("old"));
 });
 
 test("a document the first version of the format wrote, under its hashed name, loads", () => {

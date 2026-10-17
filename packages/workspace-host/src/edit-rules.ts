@@ -15,7 +15,7 @@
  */
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { ROLES, type Access } from "./access.js";
-import type { CoreLayout, FrameRecord, TileRecord } from "@hivemind/workspace-doc/shapes";
+import type { KeptCore, FrameRecord, TileRecord } from "@hivemind/workspace-doc/shapes";
 
 /** Tiles that run nothing: they show the workspace's files, history, issues or a plan. */
 const INERT = new Set(["editor", "diff", "issues", "planReview", "workbench"]);
@@ -36,7 +36,7 @@ const records = <T extends { id: string }>(list: unknown): Map<string, T> =>
 /** Why `access` may not make the layout `after` of `before` (null: it may), `device` being the
  *  device they make it from. Someone who may not edit the board at all is not asked about: their
  *  changes are not taken. */
-export function refusedEdit(before: CoreLayout | null, after: CoreLayout | null, access: Access, device?: string): string | null {
+export function refusedEdit(before: KeptCore | null, after: KeptCore | null, access: Access, device?: string): string | null {
   if (access === "owner") return null;
   const was = { frames: records<FrameRecord>(before?.frames), tiles: records<TileRecord>(before?.tiles) };
   const now = { frames: records<FrameRecord>(after?.frames), tiles: records<TileRecord>(after?.tiles) };

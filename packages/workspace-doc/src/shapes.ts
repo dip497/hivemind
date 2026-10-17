@@ -69,6 +69,12 @@ export const isTerminalKind = (kind: string): boolean => kind === AGENT_TILE_KIN
  * The layout every view shares, as the window saves it (canvas-persistence.ts): the frames,
  * the open tiles in order, and each tile's name, editor tabs and frame.
  */
+/** What every reader shares: nothing may change it. */
+export type Frozen<T> = T extends (...args: never[]) => unknown ? T : T extends object ? { readonly [K in keyof T]: Frozen<T[K]> } : T;
+
+/** A core layout as the store keeps it, shared by every reader until the workspace changes. */
+export type KeptCore = Frozen<CoreLayout>;
+
 export interface CoreLayout {
   frames: FrameRecord[];
   tiles: TileRecord[];

@@ -33,13 +33,22 @@ import { readObjects, writeObjects } from "@hivemind/workspace-doc/objects";
 import { rebaseBoard } from "@hivemind/workspace-doc/rebase";
 import { readView, readViews, writeView } from "@hivemind/workspace-doc/views";
 import { readOwnership, replaceOwnership, stampOwnership, stampSchema, type Ownership } from "@hivemind/workspace-doc/schema";
-import type { BoardObject, CoreLayout, FrameRecord, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
+import type { BoardObject, CoreLayout, FrameRecord, Frozen, KeptCore, TileRecord, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "./layout.js";
 import { readDoc, removeDoc, storedKeys, writeDoc } from "./doc-file.js";
 import { idOf, newWorkspaceId, workspaceSeed, type Seed } from "./identity.js";
 
 export type { LegacyLayout, WorkspaceChange } from "./layout.js";
 export type { BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
+export type { KeptCore } from "@hivemind/workspace-doc/shapes";
+
+function freeze<T>(value: T): Frozen<T> {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    for (const inner of Object.values(value)) freeze(inner);
+    Object.freeze(value);
+  }
+  return value as Frozen<T>;
+}
 
 /** Commit origins: undo skips every one that starts with `sys:`, and each writer's history skips
  *  the others' board edits. The writer is encoded, so no writer's origin begins another's. */
@@ -104,12 +113,21 @@ export class WorkspaceStore {
   private readonly tiles = new Map<string, Set<string>>();
   /** Repos whose file is behind their document because a write failed. */
   private readonly unsaved = new Set<string>();
+  /** Each core layout as last read, until its workspace changes: every agent event asks for all of them. */
+  private readonly cores = new Map<string, KeptCore | null>();
+  /** The repos stored on disk, read once: this store is the only writer of its folder. */
+  private stored: Set<string> | null = null;
 
   constructor(private readonly opts: WorkspaceStoreOptions) {}
 
-  /** The core layout, or null when none was ever written. A fresh copy each call. */
-  getCore(repo: string): CoreLayout | null {
-    return readCore(this.workspace(repo).doc);
+  /** The core layout, or null when none was ever written. The same copy until the workspace changes. */
+  getCore(repo: string): KeptCore | null {
+    let core = this.cores.get(repo);
+    if (core === undefined) {
+      core = freeze(readCore(this.workspace(repo).doc));
+      this.cores.set(repo, core);
+    }
+    return core;
   }
 
   /** One view's layout, or null. A fresh copy each call. */
@@ -153,7 +171,8 @@ export class WorkspaceStore {
 
   /** The workspaces this store holds, open or on disk: each one's folder. */
   repos(): string[] {
-    return [...new Set([...storedKeys(this.opts.dir), ...this.workspaces.keys()])];
+    this.stored ??= new Set(storedKeys(this.opts.dir));
+    return [...new Set([...this.stored, ...this.workspaces.keys()])];
   }
 
   /** The folder of the workspace whose id is `workspaceId`, or null when this store holds none. */
@@ -333,6 +352,7 @@ export class WorkspaceStore {
     doc.import(bytes);
     if (JSON.stringify(doc.frontiers()) === before) return;
     this.tiles.delete(repo);
+    this.cores.delete(repo);
     this.persist(repo, doc);
     const parts: WorkspaceChange["part"][] = ["core", "board", ...Object.keys(readViews(doc)).map((v) => `view:${v}` as const)];
     for (const part of parts) this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
@@ -343,7 +363,9 @@ export class WorkspaceStore {
   forget(repo: string): void {
     this.workspaces.delete(repo);
     this.tiles.delete(repo);
+    this.cores.delete(repo);
     this.unsaved.delete(repo);
+    this.stored?.delete(repo);
     removeDoc(this.opts.dir, repo);
   }
 
@@ -413,6 +435,7 @@ export class WorkspaceStore {
   private commit(repo: string, doc: LoroDoc, origin: string): void {
     doc.commit({ origin });
     this.tiles.delete(repo);
+    this.cores.delete(repo);
     this.persist(repo, doc);
   }
 
@@ -432,7 +455,10 @@ export class WorkspaceStore {
     edit(doc);
     doc.commit({ origin });
     if (JSON.stringify(doc.frontiers()) === before) return;
-    if (part === "core") this.tiles.delete(repo);
+    if (part === "core") {
+      this.tiles.delete(repo);
+      this.cores.delete(repo);
+    }
     this.persist(repo, doc);
     this.opts.onChange?.({ repo, part, writer: from.writer ?? "" });
   }

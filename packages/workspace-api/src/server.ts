@@ -3,6 +3,7 @@
  * answers the client's calls, takes its notices, and sends it events. A method with an effect on
  * the workspace or the machine is carried out through the host's intents, which record it.
  */
+import type { Frozen } from "@hivemind/workspace-doc/shapes";
 import type { Actor, Intent, Intents } from "@hivemind/workspace-host/intents";
 import { ApiError, type Answer, type ErrorCode, type EventMessage } from "./protocol.js";
 import type { Event, EventParams, Method, Notice, Result } from "./methods.js";
@@ -34,7 +35,8 @@ export type Asks = Omit<Intent<any>, "verb">;
  *  uses them (with `text`, `texts`, … from the protocol). An effect names what it acts on before
  *  they are checked, so only from text (`named`, `howMany`). */
 export interface Domain<M extends Method, N extends Notice = never> {
-  answers: { [K in M]: (from: Connection, ...params: unknown[]) => Result<K> | Promise<Result<K>> };
+  /** An answer is only sent, never changed, so it may be a copy the host shares. */
+  answers: { [K in M]: (from: Connection, ...params: unknown[]) => Frozen<Result<K>> | Promise<Frozen<Result<K>>> };
   effects: { [K in M]?: (...params: unknown[]) => Asks };
   notices?: { [K in N]: (from: Connection, ...params: unknown[]) => void };
   /** A connection went: let go of what it held. */

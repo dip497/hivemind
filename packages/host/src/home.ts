@@ -10,7 +10,7 @@ import type { Structure } from "@hivemind/view-host/structure";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import { GENERIC_AGENT_ICON, type AgentProviderDef } from "@hivemind/agents";
 import type { HomeMessage, HomeRow, HomeTile } from "@hivemind/workspace-api/home";
-import { isTerminalKind, type CoreLayout } from "@hivemind/workspace-doc/shapes";
+import { isTerminalKind, type KeptCore } from "@hivemind/workspace-doc/shapes";
 import { KeyedFeed } from "./keyed-feed.js";
 import type { HeldBoard } from "./needs.js";
 
@@ -25,7 +25,7 @@ export interface HomeSource {
   held: HeldBoard[];
   /** The agents here, as the agent list has them. */
   agents: AgentItem[];
-  structure(core: Pick<CoreLayout, "frames" | "tiles" | "frameOf" | "tileNames">): Structure;
+  structure(core: Pick<KeptCore, "frames" | "tiles" | "frameOf" | "tileNames">): Structure;
   /** What the window shows of the workspace in `repo`; none: the board's own order, nothing pinned. */
   shown(repo: string): LayersShown | undefined;
   /** The agent the id `id` names, as its manifest here says. */

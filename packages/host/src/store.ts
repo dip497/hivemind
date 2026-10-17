@@ -19,7 +19,7 @@ import { ApiError, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import type { Method } from "@hivemind/workspace-api/methods";
 import type { LegacyLayout, ViewLayout, WorkspaceChange, WorkspaceStore } from "@hivemind/workspace-host/store";
-import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
+import type { KeptCore } from "@hivemind/workspace-doc/shapes";
 
 type StoreMethod = Extract<Method, `store.${string}`>;
 
@@ -30,10 +30,10 @@ export interface LayoutsOptions {
   /** Whether a repo's layouts may be written. */
   mayWrite?(repo: string): boolean;
   /** Why a client may not change a repo's core layout from `before` to `after` here, or null. */
-  refuse?(repo: string, before: CoreLayout | null, after: CoreLayout): string | null;
+  refuse?(repo: string, before: KeptCore | null, after: KeptCore): string | null;
   /** A client changed a repo's core layout: from `before`, as the store had it, to `after`, as it
    *  has it now. */
-  wrote?(repo: string, before: CoreLayout | null, after: CoreLayout): void;
+  wrote?(repo: string, before: KeptCore | null, after: KeptCore): void;
 }
 
 export class Layouts {
@@ -85,7 +85,7 @@ export class Layouts {
           const s = writing(from, r);
           const prior = s.getCore(r);
           // What the client changed: from the layout it read, else the one here.
-          if (refuse(r, (base ?? prior) as CoreLayout | null, core as CoreLayout)) return void putBack(from, r, "core");
+          if (refuse(r, (base ?? prior) as KeptCore | null, core as KeptCore)) return void putBack(from, r, "core");
           refused(() => s.setCore(r, core, { ...as(from), base }));
           // What this write made of the store, not what the client says it read: one that read an
           // older layout still brings nothing in that another writer put there meanwhile.

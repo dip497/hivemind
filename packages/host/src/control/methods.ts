@@ -25,7 +25,7 @@ import { createToolRegistry, type ToolPluginContribution } from "@hivemind/core/
 import type { ToolsSettings } from "@hivemind/core/settings-schema";
 import { customDataProblem, isCustomEventName } from "@hivemind/view-sdk/protocol";
 import { COMMAND_NAME_RE } from "@hivemind/view-sdk/commands";
-import { AGENT_TILE_KIND, isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
+import { AGENT_TILE_KIND, isTerminalKind, type KeptCore, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame, frameFor } from "@hivemind/workspace-doc/tile-list";
 import type { WorkspaceStore } from "@hivemind/workspace-host/store";
 import type { Waits } from "../waits.js";
@@ -489,7 +489,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // The workspace a canvas verb acts on: the one holding the caller's tile, else the one the
   // user's window shows (with the frame the user is in there); null with neither.
-  const workspaceFor = (callerTile: unknown): { repo: string; core: CoreLayout; frame: string | null } | null => {
+  const workspaceFor = (callerTile: unknown): { repo: string; core: KeptCore; frame: string | null } | null => {
     const held = typeof callerTile === "string" && callerTile ? deps.workspaces.workspaceOf(bareOf(callerTile)) : null;
     const shown = deps.shownWorkspace();
     const repo = held ?? shown?.repo ?? null;
@@ -497,12 +497,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     return { repo, core: coreOf(repo), frame: shown?.repo === repo ? shown.frame : null };
   };
   // A workspace the store holds whose window has not laid it out yet is open, with nothing in it.
-  const coreOf = (repo: string): CoreLayout => deps.workspaces.getCore(repo) ?? { frames: [], tiles: [] };
+  const coreOf = (repo: string): KeptCore => deps.workspaces.getCore(repo) ?? { frames: [], tiles: [] };
 
   // Where the control plane opens a tile: the workspace and frame (the one named, else beside the
   // caller, else the one the user is in, else the first; none in a workspace with no frames, where
   // the window that lays it out makes one).
-  type Place = { ws: { repo: string; core: CoreLayout; frame: string | null }; frame: FrameRecord | undefined; caller: string | undefined };
+  type Place = { ws: { repo: string; core: KeptCore; frame: string | null }; frame: FrameRecord | undefined; caller: string | undefined };
   const placeTile = (callerTile: unknown, named: unknown, repo: string | undefined): Place => {
     const ws = repo === undefined ? workspaceFor(callerTile)
       : deps.workspaces.repos().includes(repo) ? { repo, core: coreOf(repo), frame: null } : null;
@@ -519,7 +519,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   };
   // Open the tile there, and tell the windows so.
   const openTile = (
-    { ws, frame, caller }: Place, make: (ws: CoreLayout) => TileRecord, at: { name?: string; prompt?: string; background: boolean },
+    { ws, frame, caller }: Place, make: (ws: KeptCore) => TileRecord, at: { name?: string; prompt?: string; background: boolean },
   ): string => {
     const tile = make(ws.core);
     const near = caller && frame && ws.core.frameOf?.[caller] === frame.id ? caller : undefined;

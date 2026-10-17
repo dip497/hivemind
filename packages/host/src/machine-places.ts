@@ -19,7 +19,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
-import { isTerminalKind, type CoreLayout, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
+import { isTerminalKind, type KeptCore, type FrameRecord, type TileRecord } from "@hivemind/workspace-doc/shapes";
 import { GRANTS, grants, type Grant } from "./machine-share.js";
 
 /** What a tile runs, as its person placed it here. */
@@ -76,7 +76,7 @@ export class MachinePlaces {
 
   /** A window here changed its copy of `workspace` from `before` to `after`: what it placed in a
    *  frame on this machine is this person's; what it took away, or out of this machine, is not. */
-  wrote(workspace: string, before: CoreLayout | null, after: CoreLayout): void {
+  wrote(workspace: string, before: KeptCore | null, after: KeptCore): void {
     const kept = this.read();
     const mine = { ...(kept.placed[workspace] ?? {}) };
     const frames = new Map((Array.isArray(after.frames) ? after.frames : []).map((f: FrameRecord) => [f.id, f]));
@@ -117,7 +117,7 @@ export class MachinePlaces {
    *  where it names none. Null for any other: one this person placed (it runs as they placed it),
    *  one that shows a session it did not start, one that is not a terminal's or an agent's, one in
    *  a frame elsewhere, and any while they do not let them. */
-  othersRun(workspace: string, core: CoreLayout | null, tile: string, shell: { cmd: string; args: string[] }): { cwd: string; cmd: string; args: string[] } | null {
+  othersRun(workspace: string, core: KeptCore | null, tile: string, shell: { cmd: string; args: string[] }): { cwd: string; cmd: string; args: string[] } | null {
     if (!core || !grants(this.grant(workspace), "agents") || this.placed(workspace, tile)) return null;
     const t = (Array.isArray(core.tiles) ? core.tiles : []).find((x: TileRecord) => x.id === tile);
     const frame = (Array.isArray(core.frames) ? core.frames : []).find((f: FrameRecord) => f.id === core.frameOf?.[tile]);

@@ -18,7 +18,7 @@
 import type { Access, AccessLists } from "@hivemind/workspace-host/access";
 import { mayEdit, replicate, type Moved } from "@hivemind/workspace-host/doc-sync";
 import { refusedEdit } from "@hivemind/workspace-host/edit-rules";
-import type { CoreLayout } from "@hivemind/workspace-doc/shapes";
+import type { KeptCore } from "@hivemind/workspace-doc/shapes";
 import { followList } from "@hivemind/workspace-host/list-sync";
 import type { Link } from "@hivemind/workspace-host/hive-net";
 import { peerTransport, workspaceUrl } from "@hivemind/workspace-api/peers";
@@ -258,7 +258,7 @@ export function mayWriteShared(workspace: string): boolean {
 /** Why a window here may not change the layout of its copy of `workspace` from `before` to
  *  `after`, or null: what the host would not take from this person's role there (`edit-rules.ts`),
  *  which would part the copy from the host's. */
-export function refusedShared(workspace: string, before: CoreLayout | null, after: CoreLayout): string | null {
+export function refusedShared(workspace: string, before: KeptCore | null, after: KeptCore): string | null {
   const entry = open.get(workspace);
   return entry ? refusedEdit(before, after, entry.status.access, machineIdentity().deviceId) : "not connected to this workspace's host";
 }
@@ -306,7 +306,7 @@ export function setMachineGrant(workspace: string, grant: Grant): void {
 }
 
 /** A window here changed its copy `repo` from `before` to `after`: what it placed on this machine. */
-export function wroteShared(repo: string, before: CoreLayout | null, after: CoreLayout): void {
+export function wroteShared(repo: string, before: KeptCore | null, after: KeptCore): void {
   const workspace = idOf(repo);
   if (workspace) placesHere().wrote(workspace, before, after);
 }
