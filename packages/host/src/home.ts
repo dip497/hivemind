@@ -112,6 +112,8 @@ export class HomeFeed {
   private readonly followers = new Set<(m: HomeMessage) => void>();
   private due: ReturnType<typeof setTimeout> | null = null;
   private lastAt = -Infinity;
+  /** Changed while no one followed: worked out when someone next asks. */
+  private stale = false;
 
   constructor(private readonly o: HomeFeedOptions) {
     const caps = { ...(o.keep ? { keep: o.keep } : {}), ...(o.bytes ? { bytes: o.bytes } : {}) };
@@ -123,6 +125,10 @@ export class HomeFeed {
 
   /** Something Home shows changed: work it out again, soon. */
   changed(): void {
+    if (this.followers.size === 0) {
+      this.stale = true;
+      return;
+    }
     if (this.due) return;
     const now = this.o.now?.() ?? Date.now();
     const wait = (this.o.every ?? 250) - (now - this.lastAt);
@@ -134,6 +140,7 @@ export class HomeFeed {
   refresh(): void {
     if (this.due) clearTimeout(this.due);
     this.due = null;
+    this.stale = false;
     this.lastAt = this.o.now?.() ?? Date.now();
     const layout = this.layout.set(this.o.rows());
     const lines = this.lines.set(this.o.lines());
@@ -149,7 +156,7 @@ export class HomeFeed {
   /** What a follower that has the sequences up to `at` is answered: what came after, or, when it
    *  has none or is too far behind, both whole. */
   answer(at: { layout?: number; lines?: number }): HomeMessage {
-    if (this.due) this.refresh();
+    if (this.due || this.stale) this.refresh();
     const layout = at.layout === undefined ? null : this.layout.since(at.layout);
     const lines = at.lines === undefined ? null : this.lines.since(at.lines);
     if (!layout || !lines) return { t: "home", layout: this.layout.snapshot(), lines: this.lines.snapshot() };

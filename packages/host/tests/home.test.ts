@@ -72,6 +72,24 @@ test("Home is worked out at most every `every` ms, the first change at once, and
   feed.close();
 });
 
+test("with no one following, Home is not worked out on a change; the next to ask is answered it, caught up", () => {
+  let rows = new Map([["w:w1", { of: "workspace" as const, workspace: "w1", name: "api" }]]);
+  let worked = 0;
+  const feed = new HomeFeed({ rows: () => (worked++, rows), lines: () => new Map(), every: 50 });
+  worked = 0;
+  rows = new Map([...rows, ["w:w2", { of: "workspace", workspace: "w2", name: "web" }]]);
+  feed.changed();
+  feed.changed();
+  assert.equal(worked, 0, "no one follows: nothing worked out");
+  assert.deepEqual(feed.answer({ layout: 1, lines: 0 }), {
+    t: "changes",
+    layout: { seq: 2, changes: [{ seq: 2, key: "w:w2", row: { of: "workspace", workspace: "w2", name: "web" } }] },
+    lines: { seq: 0, changes: [] },
+  });
+  assert.equal(worked, 1);
+  feed.close();
+});
+
 const file = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../conformance/home.json");
 const { computer: cases } = JSON.parse(fs.readFileSync(file, "utf8")) as {
   computer: Array<{ about: string; held: HeldBoard[]; agents: AgentItem[]; titles?: Record<string, string>; spawns?: Array<{ parent: string; child: string }>; shown?: Record<string, LayersShown>; lines?: Record<string, string>; rows: Record<string, unknown>; said: Record<string, string> }>;
