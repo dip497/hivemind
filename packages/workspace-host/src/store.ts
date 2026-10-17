@@ -374,6 +374,20 @@ export class WorkspaceStore {
     return doc.export({ mode: "snapshot" });
   }
 
+  /** What a replica that said it has seen `seen` is sent first: the updates after it, when this
+   *  one keeps the history since; else the document's state alone (a snapshot without history),
+   *  so a welcome is bounded by the state, however long this one has been running. */
+  welcomeFor(repo: string, seen: Uint8Array | null): Uint8Array {
+    const { doc } = this.workspace(repo);
+    const since = seen && VersionVector.decode(seen);
+    // A replica that has nothing is sent the state, not every change that made it.
+    if (since && since.length() > 0) {
+      const kept = doc.isShallow() ? since.compare(doc.shallowSinceVV()) : 1;
+      if (kept !== undefined && kept >= 0) return doc.export({ mode: "update", from: since });
+    }
+    return doc.export({ mode: "shallow-snapshot", frontiers: doc.oplogFrontiers() });
+  }
+
   /**
    * Keep a workspace another of the owner's devices handed over (a move, spec/hosting.md): its
    * document, as `exportSince` gives it, under `repo` here, merged into what is kept for `repo`

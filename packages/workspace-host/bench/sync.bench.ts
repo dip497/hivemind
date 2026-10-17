@@ -63,7 +63,7 @@ for (const n of (process.env.SIZES ?? "50,800,5000").split(",").map(Number)) {
     host.importFrom("/r", update, { writer: "peer" }, (before: unknown, after: unknown) => refusedEdit(before as never, after as never, "edit"));
     taken.push(performance.now() - t);
   }
-  const welcome = host.exportSince("/r", null).length;
+  const welcome = (typeof host.welcomeFor === "function" ? host.welcomeFor("/r", null) : host.exportSince("/r", null)).length;
   console.log(`${String(n).padStart(5)} objects: typed character ${median(typed)} ms · other window's read ${median(read)} ms · guest's character taken ${median(taken)} ms · welcome ${(welcome / 1024).toFixed(1)} KB`);
   fs.rmSync(dir, { recursive: true, force: true });
 }

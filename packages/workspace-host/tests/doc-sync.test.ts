@@ -184,3 +184,45 @@ test.each([
   writeBoard(guest, "hive://w", now.map((o) => (o.id === "n2" ? { ...o, text: "and later" } : o)), { writer: "window", base: now });
   expect(texts(host.getObjects("/a"))).toEqual(["n1: hello from the host", "n2: and later"]);
 });
+
+test("a new guest is welcomed with the workspace as it is, not with every change since its host started", () => {
+  const host = storeWith("host", newSeed());
+  host.store.setCore("/a", core("api"));
+  let board = [note("moved about")];
+  writeBoard(host.store, "/a", board);
+  for (let x = 0; x < 2000; x++) {
+    const next = [{ ...board[0]!, x }];
+    writeBoard(host.store, "/a", next, { base: board });
+    board = next;
+  }
+  const guest = storeWith("shared");
+  const [h, g] = channel();
+  const sent: string[] = [];
+  const spied: SyncChannel = { send: (t) => { sent.push(t); h.send(t); }, on: (l) => h.on(l) };
+  const off = h.on((text) => { const m = parseSync(text); if (m?.t !== "hello") return; off(); serveReplica(host.store, "/a", spied, { seen: m.seen, access: "edit", changes: host.changes, writer: "peer:priya" }); });
+  replicate(guest.store, "hive://w", g, { workspace: "w", changes: guest.changes });
+  const welcome = sent.map((t) => parseSync(t)).find((m) => m?.t === "welcome") as { data: string };
+  expect(guest.store.getObjects("hive://w")).toEqual(host.store.getObjects("/a"));
+  expect(Buffer.from(welcome.data, "base64").length).toBeLessThan(host.store.exportSince("/a", null).length / 4);
+});
+
+test("a guest that cannot take another guest's offline change, made before it joined, asks again and ends with it", () => {
+  const host = storeWith("host", newSeed());
+  host.store.setCore("/a", core("api"));
+  writeBoard(host.store, "/a", [note("hello")]);
+  const early = storeWith("early");
+  connect(host, early, "edit").stop();
+  writeBoard(host.store, "/a", [note("hello from the host")]);
+  const late = storeWith("late");
+  connect(host, late, "edit");
+  const was = early.store.getObjects("hive://w");
+  writeBoard(early.store, "hive://w", [...was, { ...note("from early, offline"), id: "n2" }], { writer: "window", base: was });
+  connect(host, early, "edit");
+
+  const texts = (objects: { id: string; text?: string }[]) => objects.map((o) => `${o.id}: ${o.text}`);
+  expect(texts(host.store.getObjects("/a"))).toEqual(["n1: hello from the host", "n2: from early, offline"]);
+  expect(texts(late.store.getObjects("hive://w"))).toEqual(texts(host.store.getObjects("/a")));
+  const now = late.store.getObjects("hive://w");
+  writeBoard(late.store, "hive://w", now.map((o) => (o.id === "n2" ? { ...o, text: "and from late" } : o)), { writer: "window", base: now });
+  expect(texts(host.store.getObjects("/a"))).toEqual(["n1: hello from the host", "n2: and from late"]);
+});

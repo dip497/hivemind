@@ -96,8 +96,20 @@ export function serveReplica(
       opts.onDropped?.(`an update to it could not be sent (${e instanceof Error ? e.message : String(e)})`);
     }
   });
+  const welcome = (): void => {
+    const data = b64(store.welcomeFor(repo, theirs));
+    theirs = store.version(repo);
+    channel.send(JSON.stringify({ t: "welcome", access: opts.access, data, seen: b64(theirs) }));
+  };
   const stopFrames = channel.on((text) => {
     const m = parseSync(text);
+    // A replica that could not take what it was sent asks for the document (a hello that has
+    // seen nothing): it starts over from it.
+    if (m?.t === "hello") {
+      if (m.seen !== null) return;
+      theirs = null;
+      return welcome();
+    }
     if (m?.t !== "update") return;
     if (!mayEdit(opts.access)) return opts.onDropped?.("a viewer's change");
     try {
@@ -109,8 +121,7 @@ export function serveReplica(
     }
   });
   // Listening before the welcome goes: the replica answers it with what it wrote while away.
-  const data = lacking();
-  channel.send(JSON.stringify({ t: "welcome", access: opts.access, data, seen: b64(store.version(repo)) }));
+  welcome();
   return () => { stopChanges(); stopFrames(); };
 }
 
@@ -127,10 +138,14 @@ export function replicate(
 ): () => void {
   const HOST = "host";
   let hostHas = store.version(repo);
+  /** Asked for the host's document again: its updates wait for the welcome. */
+  let asking = false;
   const stopFrames = channel.on((text) => {
     const m = parseSync(text);
     if (m?.t === "moved") return opts.onMoved?.(m);
     if (m?.t !== "welcome" && m?.t !== "update") return;
+    if (asking && m.t === "update") return;
+    asking = false;
     try {
       const data = fromB64(m.data);
       // A whole document cannot be merged into one that lacks the history it starts after.
@@ -138,6 +153,13 @@ export function replicate(
       else store.importFrom(repo, data, { writer: HOST });
       if (m.t === "welcome" || m.seen) store.hostHas(repo, fromB64(m.seen!));
     } catch (e) {
+      // An update built on history from before this copy's start (another's offline change):
+      // the host's document again, to start over from.
+      if (m.t === "update") {
+        asking = true;
+        channel.send(JSON.stringify({ t: "hello", workspace: opts.workspace, seen: null }));
+        return;
+      }
       opts.onFailed?.(`the host's change could not be taken (${e instanceof Error ? e.message : String(e)})`);
       return;
     }
