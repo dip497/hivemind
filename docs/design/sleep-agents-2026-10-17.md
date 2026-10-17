@@ -80,13 +80,13 @@ kept, and it is started again from that description.
 |---|---|---|
 | User | Resume silently starts a blank agent | Sleep refuses an agent whose manifest cannot resume; a wake whose resume fell back says so (`resumed: false`, and the restore retry's banner) |
 | User | Sleeping kills a turn in flight | `sleep` skips a tile that is working or waiting on someone, unless `--force`, and lists it |
-| User | The tile loses its name | The status keeps its last title while it sleeps; the saved screen carries it too |
+| User | The tile loses its name | A sleep is not an exit: the title is not cleared and the status is not set `exited`; the saved screen carries the title too |
 | Data | Who says it sleeps | Two facts, one direction (below): the daemon's sleep mark decides whether a process may start; the layout flag decides what views draw. Only the control plane writes either, in a fixed order |
 | Data | A window saving a stale layout drops the flag | The store rebases a window's write on its base (`rebaseFields`), so a tile it did not touch keeps the flag (store test). If the flag is lost anyway, nothing wakes: the window's attach is answered "asleep" and it draws the sleeping tile |
 | 3 am | Sleep never finishes | SIGHUP to the process group; SIGKILL to the group after 15 s. Measured: Claude Code ends on SIGHUP in ~4.5 s at load 100 (its exit hooks); SIGTERM and SIGINT did not end it in 6 s |
-| 3 am | Sleep fails half-way (device gone, save failed) | The flag is cleared again and the answer names the tile and why |
+| 3 am | Sleep fails half-way (device gone, save failed) | The flag is set only once the daemon has saved the sleeper, so there is nothing to undo; a process that ended unsaved is an exit like any other, and the answer names the tile and why |
 | 3 am | Daemon restarts while tiles sleep | The mark is in the snapshot: they are asleep again at boot, and exempt from the 30-day retention |
-| Security | A guest wakes the host's agents | `agent.sleep`/`agent.wake` need `agents`; a guest's attach never carries `wake`; `sleeping` is a field a board-edit guest may not change (`edit-rules.ts`, like `cmd`) |
+| Security | A guest wakes the host's agents | `agent.sleep`/`agent.wake` need `agents` and are scoped to the caller's workspace; a guest's attach never carries `wake` (it is not in `TerminalOpts`); `terminal.saved` is scoped by tile and its folder found on the host; `sleeping` is a field a board-edit guest may not change (`edit-rules.ts`, like `cmd`) |
 | Cost | Disk, daemon | One snapshot per sleeping tile (median 12 KB, +the 1000-line screen); the daemon keeps each sleeper's `SessionInfo` once read, so `hive ps` and `hive host`'s start do not re-read every file |
 | Next year | Auto-sleep after N idle hours; sleep on low memory; sleep shells | Each is a caller of the same `sleep`; shells need a "start again in place" resume rule first |
 
@@ -97,8 +97,9 @@ neither can reach the other's: every view (phone, guests) reads the **layout fla
 the document; only the machine running the agent can stop a process from starting, so the
 **daemon's sleep mark** (in the session's snapshot) decides that. They cannot drift into harm:
 
-- Only the control plane writes them. Sleep: flag on → daemon `sleep` → on failure, flag off.
-  Wake: daemon attach with `wake: true` (mark cleared as the session starts) → flag off.
+- Only the control plane writes them, one sleep or wake per tile at a time. Sleep: daemon
+  `sleep` (screen saved, mark on) → flag on. Wake: daemon attach with `wake: true` (mark
+  cleared as the session starts) → flag off. A wake acts on the daemon's mark, flag or not.
 - No other attach restores a marked session (a window, a reconnect, a guest, "press Enter to
   restart"): it is answered `asleep`. A flag lost by mistake shows the sleeping tile, never a
   second process; a flag left on by mistake shows a saved screen with Resume, which wakes it.
@@ -191,33 +192,42 @@ must be taken before the signal, and the grace must be long.
    the 1000-line screen when `lines` ≤ 1000.
 2. **Endpoint and backends.** `DaemonEndpoint.sleep(id)`, `saved(id, lines)`; `spawn({wake})`;
    `onExit(code, signal, slept)`; an `asleep` attach answer. `SessionBackend.sleep(tile)`,
-   `saved(tile, cwd, lines)`, `kill(tile, cwd?)`: a session that is not running is routed by its
-   tile's folder, not by "is it attached here" (a sleeping ssh or device tile is not). Backends:
+   `saved(tile, cwd, lines)`, `kill(tile, cwd?)`: a session that is not running is routed by the
+   folder it slept in (the flag's value), not by "is it attached here" (a sleeping ssh or device
+   tile is not). An `asleep` answer to a reconnect's re-attach is an `exit{slept}`. Backends:
    the local daemon (app and `hive host`), an ssh machine's daemon, another of the person's
    devices (hive-net). Refused, with the reason in the answer: a tile on a participant's machine
    (theirs to run), an ssh machine without a daemon (an in-app `ssh -tt` cannot keep a session).
-3. **Layout.** `TileRecord.sleeping?: true`; `WorkspaceStore.setSleeping(tileId, on, from)`, one
-   field, like `renameTile`. `sleeping` joins the fields a board-edit guest may not change. A frame
-   or workspace has no flag: it sleeps when its agent tiles do.
+3. **Layout.** `TileRecord.sleeping?: string`, the folder it slept in (a tile moved to a frame on
+   another machine still wakes, shows and ends where its session is);
+   `WorkspaceStore.setSleeping(tileId, folder | null, from)`, one field, like `renameTile`.
+   `sleeping` joins the fields a board-edit guest may not change. A frame or workspace has no
+   flag: it sleeps when its agent tiles do.
 4. **Control plane.** `sleepTiles(target, {force})` / `wakeTiles(target)` in
    `packages/host/src/control/methods.ts`, shared by the app and `hive host`. A target resolves to
-   a tile (id or name), else a frame (id or title), else a workspace (path or id). Sleep: agent
-   tiles whose manifest has `session.resume`, not busy unless forced; flag, then `backend.sleep`,
-   flag off again on failure. `control.slept(tile)` instead of `exited`: status `sleeping` with its
-   title kept, a `hive ctl read` waiting is answered "asleep", the spawn record, supervision and
-   pipes are kept; `hive ctl send` to a sleeping tile is refused ("asleep: wake it first").
-   Wake: `terminals.own` with `wake`, then flag off; `resumed` from whether the restore kept the
-   resume. Workspace API: `agent.sleep(target, force?)`, `agent.wake(target)` (permission
-   `agents`); `terminal.saved(tile, cwd, lines?)` (permission `view`).
+   a tile (id or name), else a frame (id or title), else a workspace (path or id), within one
+   workspace; a name that matches more than one is refused. Sleep: agent tiles whose manifest
+   has `session.resume`, not busy unless forced; `backend.sleep`, then the flag. Every exit
+   carries `slept`, and a slept exit never runs `control.exited` (spawn record, supervision,
+   mailbox, inbox and pipes kept); the title is not cleared; a `hive ctl read` waiting is
+   answered "asleep"; `hive ctl send` to a sleeping tile is refused ("asleep: wake it first").
+   Wake: `terminals.own` with `wake`, then flag off, then the inbox is rung if it holds mail (a
+   worker's report sent while its parent slept). Per-tile queue: a wake waits for a sleep in
+   flight. Workspace API: `agent.sleep(workspace, target, force?)`,
+   `agent.wake(workspace, target)` (permission `agents`, scoped like `agent.start`);
+   `terminal.saved(tile, lines?)` (permission `view`, scoped by tile; the host reads the folder).
    `hive ctl sleep|wake <target> [--force] [--json]` →
    `{ slept|woke: string[], skipped: { tile, why }[] }`.
-5. **Window.** A sleeping tile (flag, or an attach answered `asleep`) draws `SleepingTile`: its
+5. **Window.** A sleeping tile (flag, or an attach or exit that says so) draws `SleepingTile`: its
    title, its saved screen (`terminal.saved`, 1000 lines) turned once into static dimmed HTML (no
    live xterm, no WebGL context), cached per tile until it wakes, "Asleep", Resume.
    `TerminalTile` takes `exit{slept}` quietly: no "press Enter to restart", no "exited" status.
+   The flag goes on only after the screen is saved, so `SleepingTile` never fetches an empty one.
    Tile menu, Layers row, frame menu, workspace menu: Sleep / Wake.
-6. **Phone.** `agentsOf` lists a sleeping tile with `state: "sleeping"` (from the flag, even with
-   no status); the row shows it and offers Wake (`agent.wake`).
+6. **Phone.** No new status state (the phone core drops agents in a state it does not know):
+   `agentsOf` lists a sleeping tile with `sleeping: true` beside its state (from the flag, even
+   with no status). The phone core reads it (`only_true`, like its other flags); the row shows
+   "Asleep" and offers Wake (`agent.wake`).
 
 ## Review round 1 (a fresh reviewer, 9 material points)
 
@@ -233,6 +243,21 @@ must be taken before the signal, and the grace must be long.
 | 8 | Retention prunes a sleeper at 30 days and evicts its tracked id; wake then starts blank silently | Sleepers exempt from retention; `resumed: false` from the restore (piece 4) |
 | 9 | `hive host`'s start and `hive ps` read every frozen snapshot | `SessionInfo` kept per frozen session (piece 1) |
 | minor | Title lost; screen refetched on remount; `send` during the grace; ssh without daemon; idle daemon exit | Title kept in status; cached HTML; `send` refused; refused with reason; an idle daemon with only sleepers still exits (they are on disk) and starts again when asked: accepted |
+
+## Review round 2 (a fresh reviewer, 9 material points)
+
+| # | Point | Answer |
+|---|---|---|
+| 1 | `control.exited` still runs from every exit callback before `control.slept`; the daemon clears the title and a standalone daemon sets `exited` | `slept` carried through every `onExit`; a slept exit skips `control.exited`, the title clear and the standalone daemon's `exited` (piece 4) |
+| 2 | Flag first: `SleepingTile` fetches `saved` while the session still runs, gets null, caches it | Flag set after the daemon saved it (Two facts) |
+| 3 | The folder is not known where kill runs; a sleeping tile moved to another machine's frame | The flag holds the folder it slept in; close reads it before removing the tile (piece 3) |
+| 4 | `agent.sleep/wake(target)` cross workspaces; `terminal.saved(tile, cwd)` lets a viewer pick the machine | Workspace-scoped `agent.sleep/wake(workspace, …)`; `terminal.saved(tile, lines?)` scoped by tile, folder from the host (piece 4) |
+| 5 | Resume during a sleep: the endpoint gives up at 6 s, the late attach runs unseen | One sleep or wake per tile at a time; a wake waits (piece 4) |
+| 6 | Rollback cannot make it awake: the process is dead | No rollback needed: flag after success; unsaved = an exit (3 am row) |
+| 7 | Mark on, flag off (link dropped mid-sleep, crash after wake); `asleep` on a re-attach fires nothing | Wake acts on the mark, flag or not; `asleep` on a re-attach is `exit{slept}` (pieces 2, 4) |
+| 8 | A new `sleeping` state is dropped by the phone core and breaks the FFI enum, spec and schema | `sleeping: true` beside the state (piece 6) |
+| 9 | A parent's inbox doorbell rings into no session; nothing rings again on wake | Ring the inbox on wake (piece 4) |
+| minor | Quick-fail retry after `resumed: true`; quit mid-wake leaves flag on and `saved` null; wake at fixed size; plugin uninstalled while asleep; ambiguous name; group SIGKILL gives children no extra grace; Windows hard kill | `resumed` is best effort, the retry banner is the truth; `SleepingTile` with no saved screen attaches `liveOnly` and, live, asks the control plane to clear the flag; size accepted (resized at once); wake refused with "no agent X installed"; ambiguous name refused; children got the SIGHUP with the leader, so the leader's exit time is their grace; Windows accepted |
 
 ## Pre-mortem (a year on, it failed)
 
@@ -250,7 +275,7 @@ must be taken before the signal, and the grace must be long.
 
 Other ceilings: waking 50 tiles at once spawns 50 agents — paced by the existing spawn pacer, each
 taking its resume time. A sleep takes the agent's own exit time (Claude: ~4.5 s at load 100) up to
-15 s; the flag is set first, so the tile dims at once.
+15 s; the tile dims when the flag lands, after the save.
 
 ## Build order
 
@@ -260,16 +285,16 @@ taking its resume time. A sleep takes the agent's own exit time (Claude: ~4.5 s 
    test file: a plain and a `noSpawn` attach are answered `asleep`, a `wake` attach restores; a
    child ignoring SIGHUP does not survive; a marked snapshot past retention stays.
 3. `TileRecord.sleeping` + `WorkspaceStore.setSleeping` + the guest edit rule — store test (done,
-   2 mutants) and an edit-rules row.
+   2 mutants; the value becomes the folder) and an edit-rules row.
 4. Endpoint and backends (local daemon, `hive host`, ssh daemon, devices) — a host test driving
    `Terminals` over a real daemon: sleep ends the process, the exit says slept, `terminal.saved`
    gives the screen, an attach is answered asleep.
 5. Control plane `sleepTiles/wakeTiles`, `control.slept`, `agent.sleep/agent.wake`, `hive ctl
    sleep|wake` — ctl tests over the drive socket (tile/frame/workspace targets, busy skip,
-   rollback, `--json` shape).
+   a slept exit keeps the spawn record, `--json` shape).
 6. Window: `SleepingTile`, quiet slept exit, menus, Layers — unit test of the screen-to-HTML step;
    e2e specs listed for the coordinator.
-7. Phone: `state: "sleeping"` in `agentsOf`; Wake on the rows (Android, iOS).
+7. Phone: `sleeping: true` in `agentsOf` and the phone core; Wake on the rows (Android, iOS).
 8. Bench (`bench-sleep.ts`): 5 real agents, RSS of their trees before / after, no descendant left,
    Resume continues the conversation (the agent recalls a word given before sleep).
 
