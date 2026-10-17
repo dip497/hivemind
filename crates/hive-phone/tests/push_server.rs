@@ -1,18 +1,26 @@
 //! A phone on a network with a push server (push.rs, spec/push.md 0.3): it registers there to be
 //! told by the devices it names, keeping where; registering again, as it does once it unpairs a
 //! device, leaves that device out, so what it posts is not passed on. A phone that registered
-//! nowhere registers nowhere again.
+//! nowhere registers nowhere again. Unpairing the device that let it onto the network, it registers
+//! again before that device can take it off; and `hive-phone unpair` says when the push server
+//! still lets the device tell it.
 
-use std::{net::SocketAddr, path::PathBuf};
+mod support;
+
+use std::{net::SocketAddr, path::PathBuf, process::Command};
 
 use hive_net::{
+    access,
     egress::Allowed,
+    profile::Policy,
     push::{Options as PushOptions, Platform, Service},
     serve::{Options, Serving},
 };
 use hive_phone::push;
 use iroh::SecretKey;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use support::{paired_with, Desk};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
@@ -166,4 +174,144 @@ async fn a_phone_registers_again_without_the_device_it_unpaired_and_what_that_de
             .await
             .unwrap()
     );
+}
+
+/// A network's server on this machine: its access role, which lets on any device that registers,
+/// and its push role beside it, which registers a phone only while the access role lets it on. The
+/// server, its access role's URL and its push role's, and its admin's key.
+async fn network() -> (Serving, String, String, SecretKey) {
+    let (dir, admin) = (tmp("network"), key());
+    let access = access::Service::open(&dir, admin.public(), Policy::OpenPow, 0).unwrap();
+    let push = Service::open(
+        &dir,
+        PushOptions {
+            allowed: Allowed::parse(&["127.0.0.0/8".into()]).unwrap(),
+            admits: Some(access.clone()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let serving = Serving::spawn(Options {
+        bind: "127.0.0.1:0".parse().unwrap(),
+        certificate: None,
+        relay: None,
+        quic_bind: SocketAddr::from(([127, 0, 0, 1], 0)),
+        http_bind: SocketAddr::from(([127, 0, 0, 1], 0)),
+        lookup: None,
+        domain: None,
+        access: Some(access),
+        push: Some(push),
+        pages: None,
+        views: None,
+    })
+    .await
+    .unwrap();
+    let base = format!("http://{}", serving.addr());
+    (
+        serving,
+        format!("{base}/access"),
+        format!("{base}/push"),
+        admin,
+    )
+}
+
+/// A phone in `dir` paired with `desk`, on the network and registered at its push server, naming
+/// the desk: the address the desk tells it at.
+async fn registered(
+    dir: &std::path::Path,
+    desk: &Desk,
+    access_url: &str,
+    push_url: &str,
+) -> String {
+    let phone = paired_with(dir, desk);
+    access::client::register(access_url, phone.key())
+        .await
+        .unwrap();
+    let to = (Platform::Unifiedpush, distributor().await, false);
+    let senders = push::senders(&phone).unwrap();
+    push::register(dir, phone.key(), push_url, (to.0, &to.1, to.2), &senders)
+        .await
+        .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_phone_unpairing_the_device_that_let_it_onto_the_network_registers_again_before_that_device_takes_it_off(
+) {
+    let (_serving, access_url, push_url, admin) = network().await;
+    let desk = Desk::start(41).await;
+    let dir = support::tmp("unpair-on-network");
+    let endpoint = registered(&dir, &desk, &access_url, &push_url).await;
+    assert_eq!(post(&endpoint, &support::key(41)).await, 201);
+
+    // Told, the desk takes the phone off the network at once.
+    let phone = hive_phone::identity::Identity::open(&dir).unwrap();
+    let off = (access_url.clone(), phone.key().public(), admin.clone());
+    desk.on_unpair(std::sync::Arc::new(move || {
+        let (access_url, phone, admin) = off.clone();
+        Box::pin(async move {
+            access::client::revoke(&access_url, &phone, &admin)
+                .await
+                .unwrap();
+        })
+    }));
+    let net = hive_net::net::endpoint(phone.key().clone(), &phone.reach(), vec![])
+        .await
+        .unwrap();
+    let unpaired = phone.unpair_from(&net, &desk.id).await.unwrap();
+    net.close().await;
+
+    assert!(unpaired.told);
+    assert!(
+        unpaired.still_pushes.is_none(),
+        "{:?}",
+        unpaired.still_pushes
+    );
+    assert_eq!(post(&endpoint, &support::key(41)).await, 404);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hive_phone_unpair_says_when_the_push_server_still_lets_the_device_tell_the_phone_and_exits_2(
+) {
+    let (_serving, access_url, push_url, admin) = network().await;
+    let desk = Desk::start(42).await;
+    let dir = support::tmp("unpair-still-pushes");
+    let endpoint = registered(&dir, &desk, &access_url, &push_url).await;
+    // The network let the phone go: its push server takes no registration of it now.
+    let phone = hive_phone::identity::Identity::open(&dir)
+        .unwrap()
+        .key()
+        .public();
+    access::client::revoke(&access_url, &phone, &admin)
+        .await
+        .unwrap();
+
+    let identity = dir.clone();
+    let ran = tokio::task::spawn_blocking(move || {
+        Command::new(env!("CARGO_BIN_EXE_hive-phone"))
+            .args(["unpair", "desk", "--json", "--identity"])
+            .arg(identity)
+            .output()
+            .unwrap()
+    })
+    .await
+    .unwrap();
+    let said: Value = serde_json::from_slice(&ran.stdout).unwrap_or(Value::Null);
+    let stderr = String::from_utf8_lossy(&ran.stderr);
+
+    assert_eq!(
+        (ran.status.code(), said),
+        (
+            Some(2),
+            json!({
+                "device": desk.id, "name": "desk", "told": true, "stillPushes": true,
+                "pushError": format!("{push_url} refused: this phone is not on the network"),
+            })
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("the push server still lets desk tell this phone"),
+        "{stderr}"
+    );
+    assert_eq!(post(&endpoint, &support::key(42)).await, 201);
 }

@@ -184,7 +184,7 @@ test("a phone scans the computer's code and is certified as the person's, by the
 
   // Unpaired from the phone: each forgets the other, and the computer records that the phone did.
   const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", me.deviceId, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
-  expect(unpaired).toEqual({ device: me.deviceId, name: os.hostname(), told: true });
+  expect(unpaired).toEqual({ device: me.deviceId, name: os.hostname(), told: true, stillPushes: false });
   expect(JSON.parse((await run(HIVE_PHONE, ["devices", "--identity", phone, "--json"])).stdout)).toEqual([]);
   await expect.poll(async () => (await desktop.evaluate(() => window.hive.devices())).map((d) => d.device)).toEqual([]);
   const audit = () => fs.readFileSync(path.join(root, "desktop", "hivemind-dev", "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
@@ -608,7 +608,7 @@ test("a computer away is shown with what it last said needed the person, and whe
   // Unpaired from the phone while away: the phone forgets it, and says the computer was not told.
   await apps.pop()!.close();
   const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", os.hostname(), "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
-  expect(unpaired).toEqual({ device: d.me.deviceId, name: os.hostname(), told: false });
+  expect(unpaired).toEqual({ device: d.me.deviceId, name: os.hostname(), told: false, stillPushes: false });
   expect(JSON.parse((await run(HIVE_PHONE, ["devices", "--identity", phone, "--json"])).stdout)).toEqual([]);
 });
 
@@ -669,8 +669,12 @@ test("on a network with a push server, the phone registers there, naming the com
   expect(JSON.parse(allowed.stdout)).toEqual({ answered: true });
   await expect.poll(async () => { const n = await needsOf(phone); return [n.needs.length, n.working]; }, { timeout: 30_000 }).toEqual([0, 1]);
 
-  // Unpaired from the phone: it registers again, and the computer is named no more.
-  const unpaired = JSON.parse((await run(HIVE_PHONE, ["unpair", d.me.deviceId, "--identity", phone, "--json"], { timeout: 30_000 })).stdout) as unknown;
-  expect(unpaired).toMatchObject({ device: d.me.deviceId, told: true });
-  await expect.poll(registrations, { timeout: 10_000 }).toEqual([expect.objectContaining({ device: phoneId, senders: [] })]);
+  // Unpaired from the phone: it registers again, and the computer is named no more. It exits 2,
+  // with `pushError`, when the push server still lets the computer tell it.
+  const unpairing = await run(HIVE_PHONE, ["unpair", d.me.deviceId, "--identity", phone, "--json"], { timeout: 30_000 })
+    .then((r) => ({ ...r, code: 0 }), (e: { stdout: string; stderr: string; code: number }) => e);
+  const said = `hive-phone unpair exited ${unpairing.code}: ${unpairing.stderr}`;
+  const unpaired = unpairing.stdout ? JSON.parse(unpairing.stdout) as unknown : null;
+  expect({ code: unpairing.code, unpaired }, said).toEqual({ code: 0, unpaired: { device: d.me.deviceId, name: os.hostname(), told: true, stillPushes: false } });
+  await expect.poll(registrations, { timeout: 10_000, message: said }).toEqual([expect.objectContaining({ device: phoneId, senders: [] })]);
 });

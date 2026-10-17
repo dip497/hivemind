@@ -14,7 +14,9 @@ hive-phone pair 'hivemind://pair/…'   # the link `hive host pair` prints on a 
 hive-phone devices                    # the person's devices this phone paired with, and whose
                                       # they are (their name and colour, from their app)
 hive-phone network                    # the network it reaches them through (the app's), if any
-hive-phone unpair <device>            # unpair from one (its id or name): each forgets the other
+hive-phone unpair <device>            # unpair from one (its id or name): each forgets the other;
+                                      # exits 2, `"stillPushes": true` and `"pushError"` with --json,
+                                      # when the push server still lets it tell this phone
 hive-phone needs                      # what waits on you on them, the one waiting longest first,
                                       # how many agents are at work, and of a device that is
                                       # away, what it last answered and when
@@ -50,7 +52,9 @@ its own endpoint, on an address your computers reach it at; the apps give a push
 network with a push server (`spec/push.md` 0.3), the phone registers there first, naming the
 devices that may tell it, and gives them the address the server gives it; the server passes each
 notice on to the listener, as a UnifiedPush distributor's part. Where it registered is kept
-(`push-server.json`), so that unpairing a device registers it again without that device.
+(`push-server.json`), so that unpairing a device registers it again without that device, before
+telling the device: told, it may take the phone off the network it let it onto, and the push
+server registers no phone off its network.
 
 ```bash
 cargo test --locked   # conformance/pairing.json, needs.json and push.json (the phone's side), what a phone keeps,

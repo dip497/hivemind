@@ -7,7 +7,9 @@
 #![allow(dead_code)]
 
 use std::{
+    future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex,
@@ -52,6 +54,9 @@ pub struct Session {
     pub id: String,
     pub said: Vec<(u64, Value)>,
 }
+
+/// What the computer does as the phone unpairs itself, before it answers.
+pub type OnUnpair = Arc<dyn Fn() -> Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync>;
 
 /// Where the phone asked to be told a conversation from: the session it names, and how far into
 /// it; none, from the last of it.
@@ -160,6 +165,7 @@ pub struct Desk {
     pub viewed: Arc<Mutex<Vec<Value>>>,
     /// The connections the phone made, while they last.
     connections: Arc<Mutex<Vec<Connection>>>,
+    on_unpair: Arc<Mutex<Option<OnUnpair>>>,
 }
 
 /// What the computer's streams share.
@@ -176,6 +182,7 @@ struct Serving {
     session: watch::Sender<Session>,
     asked_from: Arc<Mutex<Vec<AskedFrom>>>,
     viewed: Arc<Mutex<Vec<Value>>>,
+    on_unpair: Arc<Mutex<Option<OnUnpair>>>,
 }
 
 impl Desk {
@@ -219,6 +226,7 @@ impl Desk {
             asked_from: Arc::default(),
             viewed: Arc::default(),
             connections: Arc::default(),
+            on_unpair: Arc::default(),
         };
         let serving = Serving {
             told: desk.told.clone(),
@@ -232,6 +240,7 @@ impl Desk {
             session: desk.session.clone(),
             asked_from: desk.asked_from.clone(),
             viewed: desk.viewed.clone(),
+            on_unpair: desk.on_unpair.clone(),
         };
         let (dialled, closed) = (desk.dialled.clone(), desk.closed.clone());
         let connections = desk.connections.clone();
@@ -251,6 +260,11 @@ impl Desk {
             }
         });
         desk
+    }
+
+    /// As the phone unpairs itself, the computer does `then` before it answers.
+    pub fn on_unpair(&self, then: OnUnpair) {
+        *self.on_unpair.lock().unwrap() = Some(then);
     }
 
     /// The computer is gone: off, or off the network.
@@ -326,7 +340,13 @@ async fn device(mut send: SendStream, mut recv: RecvStream, serving: &Serving) {
             ] }),
             Some("devices") => json!({ "t": "devices", "devices": [],
                 "profile": { "name": "Priya", "color": "#aa3366" } }),
-            Some("unpair") => json!({ "t": "unpair", "ok": true }),
+            Some("unpair") => {
+                let then = serving.on_unpair.lock().unwrap().clone();
+                if let Some(then) = then {
+                    then().await;
+                }
+                json!({ "t": "unpair", "ok": true })
+            }
             // Where to tell the phone: a subscription is taken, anything else refused.
             Some("push") if asked["endpoint"].is_string() => json!({ "t": "push", "ok": true }),
             Some("push") => {

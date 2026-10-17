@@ -184,7 +184,10 @@ allow (`network-access.md`) is refused.
 
 The phone registers anew, under the same handle, as it starts (a token can change) and whenever
 the devices that may tell it change, before it gives a device it names its subscription: as it
-unpairs one, a device it no longer names posts it nothing more.
+unpairs one, a device it no longer names posts it nothing more. It registers anew before it tells
+the device it unpairs (`pairing.md`, "Unpairing"): that device may take back the admission that
+lets the phone onto the network, and a phone off it is refused here. A phone that could not
+register anew says so: the device it unpaired can still post to it.
 
 ### Posting
 

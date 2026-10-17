@@ -26,6 +26,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- `hive-phone unpair` on a network with a push server registers there again before it tells the computer, which may take the phone off the network as it forgets it and so had the push server refuse; and it no longer hides a failure there: `--json` adds `"stillPushes"` (and `"pushError"` when true), and the command exits 2 while the unpaired computer can still push to the phone.
 - One terminal printing a flood no longer holds up typing in the others. The terminal daemon reads and redraws every session's screen on a thread of its own, and a session whose screen falls 256 K characters behind waits for it alone. Under a 10 MB flood with its screen asked for every half second, another window's key echoes in 3–7 ms, with the slowest at 0.3 s (load 22–50 on 16 CPUs); before, the median was 162 ms and the slowest 4 s (load 49), and the same flood did not finish in 15 minutes. Showing 30 long terminals at once no longer freezes the daemon for 2.3–2.7 s: its longest pause is 11–39 ms (load 12–16).
 - A guest's edits after one the host refuses no longer vanish: the refused change is undone on every copy, and what the guest does next reaches the host.
 - A guest on a slow link is sent nothing while the link has no room; when room returns, one update carries everything changed meanwhile.

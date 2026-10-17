@@ -229,10 +229,11 @@ impl Identity {
     }
 
     /// Unpair this phone from `device`, its id, one it paired with itself (spec/pairing.md,
-    /// "Unpairing"): told on `endpoint`, the device forgets the phone, and the phone forgets the
-    /// device whether it could tell it or not, and the devices it learned of from it alone; the push
-    /// server it registered at, if any, lets that device tell it nothing more. One it learned of
-    /// from an app is unpaired there.
+    /// "Unpairing"): the phone forgets the device, and the devices it learned of from it alone; the
+    /// push server it registered at, if any, lets that device tell it nothing more; then, told on
+    /// `endpoint`, the device forgets the phone. The push server hears first: the device, told, may
+    /// take the phone off the network it let it onto, and that server registers no phone off it.
+    /// One it learned of from an app is unpaired there.
     #[cfg(not(target_family = "wasm"))]
     pub async fn unpair_from(&self, endpoint: &Endpoint, device: &str) -> Result<Unpaired> {
         let all = self.devices();
@@ -258,20 +259,22 @@ impl Identity {
             ))
             .into());
         }
-        let told = self.unpair(endpoint, &paired.with).await?;
+        let device = paired.with.clone();
+        self.forget(&device.device)?;
+        self.learn(&device.device, &[], 0)?;
         let registered =
             async { push::register_again(self.dir(), self.key(), &push::senders(self)?).await };
+        let still_pushes = registered.await.err();
         Ok(Unpaired {
-            told,
-            still_told: registered.await.err(),
+            told: Self::tell_unpaired(endpoint, &device).await,
+            still_pushes,
         })
     }
 
-    /// Unpair this phone from `device`: told on `endpoint`, it forgets the phone, and the phone
-    /// forgets it whether it could tell it or not, and the devices it learned of from it alone.
-    /// Whether it was told: one that was not still lists the phone.
+    /// Tell `device` on `endpoint` that this phone unpaired itself, so it forgets the phone:
+    /// whether it was told; one that was not still lists the phone.
     #[cfg(not(target_family = "wasm"))]
-    async fn unpair(&self, endpoint: &Endpoint, device: &PairedWith) -> Result<bool> {
+    async fn tell_unpaired(endpoint: &Endpoint, device: &PairedWith) -> bool {
         let told = async {
             let at = hive_net::net::addr_of(&device.device, &device.addrs, &device.relay)?;
             let connection = endpoint.connect(at, hive_net::ws::ALPN).await?;
@@ -282,13 +285,10 @@ impl Identity {
             }
             Ok::<_, anyhow::Error>(())
         };
-        let told = matches!(
+        matches!(
             n0_future::time::timeout(ANSWER_WITHIN, told).await,
             Ok(Ok(()))
-        );
-        self.forget(&device.device)?;
-        self.learn(&device.device, &[], 0)?;
-        Ok(told)
+        )
     }
 }
 
@@ -311,7 +311,7 @@ pub struct Unpaired {
     /// Whether the device was told: one that was not still lists the phone.
     pub told: bool,
     /// Why the push server this phone registered at still lets the device tell it, when it does.
-    pub still_told: Option<anyhow::Error>,
+    pub still_pushes: Option<anyhow::Error>,
 }
 
 /// Ask the device on `connection` `message` on its `device` stream: its answer, the first it

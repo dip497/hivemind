@@ -14,7 +14,10 @@
 //!   hive-phone network          the network it reaches them through: the one the app it paired
 //!                               with is on, or the local network alone
 //!   hive-phone unpair <device>  unpair from one of them (by its id or its name): it forgets
-//!                               this phone, and this phone forgets it
+//!                               this phone, and this phone forgets it; with --json,
+//!                               `{"device", "name", "told", "stillPushes"}`, and `"pushError"`
+//!                               when the push server this phone registered at still lets the
+//!                               device tell it, which exits 2
 //!   hive-phone needs            what waits on the person: each agent waiting on them, on the
 //!                               devices this phone paired with, the one waiting longest first,
 //!                               and how many are at work; of a device that is away, what it last
@@ -923,18 +926,15 @@ async fn run(args: Args) -> Result<()> {
             let endpoint = net::endpoint(phone.key().clone(), &phone.reach(), vec![]).await?;
             let unpaired = phone.unpair_from(&endpoint, &device.device).await;
             endpoint.close().await;
-            let Unpaired { told, still_told } = unpaired?;
-            if let Some(e) = still_told {
-                eprintln!(
-                    "hive-phone: the push server still lets {} tell this phone: {e:#}",
-                    device.name
-                );
-            }
+            let Unpaired { told, still_pushes } = unpaired?;
+            let push_error = still_pushes.map(|e| format!("{e:#}"));
             if args.json {
-                println!(
-                    "{}",
-                    json!({ "device": device.device, "name": device.name, "told": told })
-                );
+                let mut said = json!({ "device": device.device, "name": device.name, "told": told,
+                    "stillPushes": push_error.is_some() });
+                if let Some(why) = &push_error {
+                    said["pushError"] = json!(why);
+                }
+                println!("{said}");
             } else if told {
                 println!(
                     "Unpaired from {}: it forgot this phone, and this phone forgot it.",
@@ -945,6 +945,13 @@ async fn run(args: Args) -> Result<()> {
                     "This phone forgot {0}, but {0} is away and still lists this phone: unpair it there too (Settings → Connect).",
                     device.name
                 );
+            }
+            if let Some(why) = push_error {
+                return Err(StillPushes {
+                    device: device.name.clone(),
+                    why,
+                }
+                .into());
             }
         }
         "watch" => {
@@ -1177,6 +1184,28 @@ async fn notices(
     }
 }
 
+/// Unpaired, but the push server this phone registered at still lets the device tell it.
+#[derive(Debug)]
+struct StillPushes {
+    device: String,
+    why: String,
+}
+
+impl std::fmt::Display for StillPushes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self { device, why } = self;
+        write!(
+            f,
+            "the push server still lets {device} tell this phone: {why}"
+        )
+    }
+}
+
+impl std::error::Error for StillPushes {}
+
+/// The exit status of an unpair that left the push server letting the device tell this phone.
+const STILL_PUSHES: u8 = 2;
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let result = match parse(std::env::args().skip(1)) {
@@ -1187,7 +1216,11 @@ async fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("hive-phone: {e:#}");
-            ExitCode::FAILURE
+            if e.is::<StillPushes>() {
+                ExitCode::from(STILL_PUSHES)
+            } else {
+                ExitCode::FAILURE
+            }
         }
     }
 }
