@@ -17,8 +17,9 @@ export function hookLines(spec: HookSpec, tileId: string, token: string, e: Reco
     const running = e.background_tasks.filter((t: any) => t && t.status === "running").length;
     if (running > 0) out.background = running;
   }
-  // Signed in as the agent's own tile first: the host hears nothing from a connection that is not.
-  const lines: Array<Record<string, unknown>> = [{ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: token } }];
+  // Signed in as the agent's own tile first, the host hearing nothing from a connection that is
+  // not; as a notification, so nothing is written back to a hook that reads nothing.
+  const lines: Array<Record<string, unknown>> = [{ jsonrpc: "2.0", method: "initialize", params: { token: token } }];
   // The turn's reply, ahead of its end, which carries it.
   let said: any = spec.reply ? e : undefined;
   for (const key of spec.reply ? spec.reply.split(".") : []) said = said && typeof said === "object" && Object.prototype.hasOwnProperty.call(said, key) ? said[key] : undefined;

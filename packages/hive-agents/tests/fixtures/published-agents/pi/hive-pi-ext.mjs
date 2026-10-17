@@ -16,7 +16,7 @@ export default function (pi) {
     try {
       const c = net.connect(sock, () => {
         try {
-          c.write(JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: token } }) + "\n"
+          c.write(JSON.stringify({ jsonrpc: "2.0", method: "initialize", params: { token: token } }) + "\n"
             + JSON.stringify({ jsonrpc: "2.0", method: method, params: params }) + "\n");
         } catch (e) {}
         try { c.end(); } catch (e) {}

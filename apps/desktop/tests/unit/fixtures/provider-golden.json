@@ -1793,7 +1793,7 @@
     }
   },
   "assets": {
-    "hive-pi-ext.mjs": "0cb6116679908892cd8af9c1c6a6a602cc0138d9f96e6b3baf8318470474f440",
+    "hive-pi-ext.mjs": "01d5891369f6988439a5c7daa795cc2ee86f222140db6ec32b5ef552c8f952f0",
     "hcp-kiro-approval-hook.cjs": "b62f10d5ff6cab616d966756c0bd05fe827bacf589c472c1ce48aaaca8214374",
     "claude/hive-turn-end.cjs": "1077bad09dea98da794d3162dcb7e23b9963bfc5991eea1a5d12dde6db691694",
     "claude/hive-plan-review.cjs": "bc00e18ae13c822fb3b7e312a7e32c7a570a7f9475dd6d43ea31c7c0345f7d8f",

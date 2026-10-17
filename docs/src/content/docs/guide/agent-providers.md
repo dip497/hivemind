@@ -25,6 +25,8 @@ can *declare*, if it also says how it is done:
   files `session.resume` names, how many of each file's first lines hold them (`lines`)
 - **a turn signal** and **brokering permission prompts** need the manifest to wire the
   agent to the control plane: `launch.hcp` plus the hook file it ships beside it
+- **a hook entry that reports** (`emit:`) needs `launch.hcp`: each report is signed in with
+  the tile's own token, which only that launch gives the agent
 
 A manifest that claims one of those without saying how is refused when Hivemind reads it.
 A capability that is claimed but never delivered is worse than one that is missing: the

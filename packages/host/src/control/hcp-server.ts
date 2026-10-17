@@ -69,15 +69,16 @@ export function startHcpServer(sockPath: string, deps: HcpServerDeps): HcpServer
       if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return fail(RPC.invalid, "not a JSON-RPC 2.0 message");
       const params = (m.params ?? {}) as Record<string, unknown>;
 
-      if (id === null) {
-        // A notification: a hook reporting, heard only once it signed in. No reply, whatever happens.
-        if (actor) { try { deps.onEvent(m.method, m.params, actor); } catch { /* ignore */ } }
-        return;
-      }
+      // Signing in as a notification asks for no reply: a hook that reads nothing is told nothing.
       if (m.method === "initialize") {
         actor = deps.authenticate(params.token);
         if (!actor) return fail(RPC.hcp, "bad or missing token", "FORBIDDEN");
         return reply({ protocolVersion: HCP_VERSION, rendererUp: deps.rendererUp(), });
+      }
+      if (id === null) {
+        // A notification: a hook reporting, heard only once it signed in. No reply, whatever happens.
+        if (actor) { try { deps.onEvent(m.method, m.params, actor); } catch { /* ignore */ } }
+        return;
       }
       if (!actor) return fail(RPC.hcp, "call initialize with the token first", "FORBIDDEN");
 

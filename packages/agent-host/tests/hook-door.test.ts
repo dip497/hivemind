@@ -80,7 +80,7 @@ test("a hook's line that arrives in pieces is reported whole, as a large payload
   }
   await until(() => got.length > 1);
   expect(got).toEqual([
-    { jsonrpc: "2.0", id: "init", method: "initialize", params: { token: "tok" } },
+    { jsonrpc: "2.0", method: "initialize", params: { token: "tok" } },
     { jsonrpc: "2.0", method: "agent.event", params: { tileId: "hm:t1", event: "turn.ended", sessionId: "s-1" } },
   ]);
   c.destroy();
@@ -88,3 +88,36 @@ test("a hook's line that arrives in pieces is reported whole, as a large payload
   host.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test("a hook that asks for nothing signs in asking for no reply, so the host is left nothing to write and every connection closes", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "door-"));
+  let closed = 0;
+  const host = net.createServer((c) => {
+    c.setEncoding("utf8");
+    c.on("data", (d: string) => {
+      for (const l of d.split("\n").filter(Boolean)) {
+        const m = JSON.parse(l) as { id?: string; method: string };
+        // As the control plane: a request is answered, a notification never.
+        if (m.method === "initialize" && m.id !== undefined) c.write(`${JSON.stringify({ jsonrpc: "2.0", id: m.id, result: { protocolVersion: 2 } })}\n`);
+      }
+    });
+    c.on("close", () => { closed++; });
+  });
+  await new Promise<void>((r) => host.listen(path.join(dir, "hcp.sock"), r));
+  const door = await startHookDoor({ path: path.join(dir, "door.sock"), sock: path.join(dir, "hcp.sock") });
+  try {
+    for (const event of ["turn.started", "input.resolved", "turn.ended"]) {
+      const c = net.connect(door.path);
+      c.on("data", () => {});
+      await new Promise((r) => c.once("connect", r));
+      c.end(`${JSON.stringify({ env: { HIVEMIND_TILE: "hm:t1", HCP_TOKEN: "tok", HIVE_EVENT: event }, stdin: "{}" })}\n`);
+      await new Promise((r) => c.once("close", r));
+    }
+    await until(() => closed === 3);
+    expect(closed).toBe(3);
+  } finally {
+    door.close();
+    host.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}, 15000);

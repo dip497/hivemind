@@ -10,8 +10,8 @@ reading, closing, naming, pipes, tools — is the workspace API on the drive soc
 
 ## Connection
 
-1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp"}`.
-   Every other request before it is refused with `FORBIDDEN`. The token says who calls: the
+1. `initialize {"token"}` → `{"protocolVersion": 2, "rendererUp"}`; sent as a notification it
+   signs in with no reply. Every other request before it is refused with `FORBIDDEN`. The token says who calls: the
    host's own (`hcp.token`) is the person at the machine; an agent the host started is given one
    of its own, `<tile>.<MAC>`, which names its tile. A call made with a tile's token is that
    tile's: a `callerTile` naming another tile is refused with `FORBIDDEN`, and one naming none

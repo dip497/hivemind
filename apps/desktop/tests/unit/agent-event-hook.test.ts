@@ -60,7 +60,7 @@ async function host(reply?: { result: unknown } | { error: unknown } | null) {
         const m = JSON.parse(buf.slice(0, nl)) as Record<string, unknown>;
         buf = buf.slice(nl + 1);
         got.push(m);
-        if (m.method === "initialize") c.write(`${JSON.stringify({ jsonrpc: "2.0", id: m.id, result: { protocolVersion: 2 } })}\n`);
+        if (m.method === "initialize" && m.id !== undefined) c.write(`${JSON.stringify({ jsonrpc: "2.0", id: m.id, result: { protocolVersion: 2 } })}\n`);
         if (m.method !== "agent.await_answer" || reply === undefined) continue;
         if (reply === null) c.destroy();
         else c.write(`${JSON.stringify({ jsonrpc: "2.0", id: m.id, ...reply })}\n`);
@@ -84,7 +84,7 @@ for (const via of VIAS) for (const c of cases) {
     h.close();
     assert.equal(r.printed(), "", "an event that asks for nothing prints nothing");
     // Signed in as its tile, then the event: the host hears nothing else.
-    assert.deepEqual(h.got, c.expect === null ? [] : [{ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: "tok" } }, { jsonrpc: "2.0", method: "agent.event", params: c.expect }]);
+    assert.deepEqual(h.got, c.expect === null ? [] : [{ jsonrpc: "2.0", method: "initialize", params: { token: "tok" } }, { jsonrpc: "2.0", method: "agent.event", params: c.expect }]);
     for (const f of c.forbidden ?? []) assert.ok(!JSON.stringify(h.got).includes(f), `"${f}" must not leave the hook`);
   });
 }

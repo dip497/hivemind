@@ -24,7 +24,7 @@ async function host(dir: string, name: string, answer: (m: Line) => Line | null)
       let nl;
       while ((nl = buf.indexOf("\n")) >= 0) {
         const m = JSON.parse(buf.slice(0, nl)) as Line; buf = buf.slice(nl + 1);
-        if (m.method === "initialize") { signedIn = true; c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
+        if (m.method === "initialize") { signedIn = true; if (m.id !== undefined) c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
         if (m.jsonrpc && !signedIn) continue;
         got.push(m);
         const res = answer(m);

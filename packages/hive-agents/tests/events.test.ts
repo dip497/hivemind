@@ -66,8 +66,15 @@ describe("an entry that hands over the turn's reply", () => {
     ];
     for (const [why, events] of bad) expect(() => defFromManifest(manifest(events)), why).toThrow();
     const { launch: _l, ...unlaunched } = manifest({ Stop: { emit: "turn.ended", reply: "last_assistant_message" } });
-    expect(() => defFromManifest({ ...unlaunched, caps: { ...base.caps, turnSignal: false, supervise: "none" } })).toThrow(/reply needs launch.hcp/);
+    expect(() => defFromManifest({ ...unlaunched, caps: { ...base.caps, turnSignal: false, supervise: "none" } })).toThrow(/reports \(emit\) needs launch.hcp/);
   });
+});
+
+test("an entry that reports is refused without the launch that gives the agent its tile's token, which every report signs in with", () => {
+  const events = { SessionStart: { emit: "session.started" } };
+  expect(defFromManifest(manifest(events)).hooks!.events.SessionStart).toEqual({ emit: "session.started" });
+  const { launch: _l, ...unlaunched } = manifest(events);
+  expect(() => defFromManifest({ ...unlaunched, caps: { ...base.caps, turnSignal: false, supervise: "none" } })).toThrow(/reports \(emit\) needs launch.hcp/);
 });
 
 /** What Claude Code's PermissionRequest hook prints to answer, as its entry declares it. */

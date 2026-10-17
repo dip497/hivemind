@@ -22,8 +22,10 @@ for that answer, and exits 0 printing nothing when the host is not there.
 
 ## Messages (JSON-RPC 2.0, one per line, on `HIVE_HOOK_SOCK`)
 
-Every connection signs in first: `initialize {"token": HCP_TOKEN}`, the tile's own token. The host
-hears nothing else from a connection that has not, notifications included. A tile's token speaks
+Every connection signs in first: `initialize {"token": HCP_TOKEN}`, the tile's own token. Sent as
+a notification (no `id`) it asks for no reply, which is how a hook that reads nothing signs in: a
+reply written to a connection whose writer already ended is never let go of on some runtimes. The
+host hears nothing else from a connection that has not signed in, notifications included. A tile's token speaks
 only for its tile: a notification naming another tile is dropped, a request refused with
 `FORBIDDEN`. The person's token may name any tile. The standalone daemon (`hive host` with no app)
 keeps the same rule on its own socket.

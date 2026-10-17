@@ -20,14 +20,12 @@ async function run(agent: string, file: string, payload: unknown, answer: (m: Li
   const got: Line[] = [];
   const server = net.createServer((c) => {
     let buf = "";
-    // A hook goes once it has said its piece, as the control plane allows.
-    c.on("error", () => {});
     c.on("data", (d) => {
       buf += d;
       let nl;
       while ((nl = buf.indexOf("\n")) >= 0) {
         const m = JSON.parse(buf.slice(0, nl)) as Line; buf = buf.slice(nl + 1);
-        if (m.method === "initialize") { c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
+        if (m.method === "initialize") { if (m.id !== undefined) c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: {} }) + "\n"); continue; }
         got.push(m);
         const res = answer(m);
         if (res) c.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, ...res }) + "\n");

@@ -99,7 +99,7 @@ module.exports = {
   emit: async (event, fields) => {
     if (!tile || typeof event !== "string") return;
     await send(sock, [
-      { jsonrpc: "2.0", id: reqId(), method: "initialize", params: { token: token } },
+      { jsonrpc: "2.0", method: "initialize", params: { token: token } },
       { jsonrpc: "2.0", method: "agent.event", params: Object.assign({}, fields || {}, { tileId: tile, event: event }) },
     ], undefined, 2000);
   },

@@ -632,10 +632,11 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   // that does the talking.
   const wiredToControlPlane = !!(m.launch as { hcp?: unknown } | undefined)?.hcp
     && ((Array.isArray(m.assets) && m.assets.length > 0) || !!m.hooks || !!m.home);
-  // A reply is handed over as the agent's own tile, with the token only a launch gives it.
-  const replies = isObj(m.hooks) && isObj((m.hooks as Record<string, unknown>).events)
-    && Object.values((m.hooks as { events: Record<string, unknown> }).events).flat().some((e) => isObj(e) && (e as { reply?: unknown }).reply !== undefined);
-  if (replies) req((m.launch as { hcp?: unknown } | undefined)?.hcp === true, "hooks: an entry with reply needs launch.hcp: true");
+  // A report (and the reply it hands over) is signed in as the agent's own tile, with the token
+  // only a launch gives it.
+  const reports = isObj(m.hooks) && isObj((m.hooks as Record<string, unknown>).events)
+    && Object.values((m.hooks as { events: Record<string, unknown> }).events).flat().some((e) => isObj(e) && (e as { emit?: unknown }).emit !== undefined);
+  if (reports) req((m.launch as { hcp?: unknown } | undefined)?.hcp === true, "hooks: an entry that reports (emit) needs launch.hcp: true");
   if (!wiredToControlPlane) {
     req(m.caps.turnSignal === false,
       "caps.turnSignal must be false: nothing here sends it — a daemon half, or `launch.hcp` with the asset that talks to it");

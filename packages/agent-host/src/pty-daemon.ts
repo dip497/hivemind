@@ -795,15 +795,17 @@ if (STANDALONE) {
       try { m = JSON.parse(line); } catch { return; }
       if (m.jsonrpc !== "2.0" || typeof m.method !== "string") return;
       const params = (m.params ?? {}) as Record<string, unknown>;
+      // Signing in as a notification asks for no reply: a hook that reads nothing is told nothing.
+      if (m.method === "initialize") {
+        who = holderOf(installToken, params.token);
+        if (m.id === undefined) return;
+        if (!who) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "FORBIDDEN" } } });
+        return answer?.(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
+      }
       if (m.id === undefined) {
         // An event, or a reply ahead of the turn end it belongs to, from a hook signed in here.
         if ((m.method === AGENT_EVENT_METHOD || m.method === "agent.reply") && mine(m.params)) reported(m.method, m.params, heard);
         return;
-      }
-      if (m.method === "initialize") {
-        who = holderOf(installToken, params.token);
-        if (!who) return answer?.(m.id, { error: { code: -32000, message: "bad or missing token", data: { code: "FORBIDDEN" } } });
-        return answer?.(m.id, { result: { protocolVersion: 2, capabilities: { status: false } } });
       }
       if (!who) return answer?.(m.id, { error: { code: -32000, message: "call initialize with the token first", data: { code: "FORBIDDEN" } } });
       if (m.method === "agent.reply") {
