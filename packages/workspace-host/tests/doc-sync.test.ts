@@ -25,13 +25,25 @@ function storeWith(dir: string, person?: Uint8Array) {
   const changes = (l: (c: WorkspaceChange) => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
   return { store, changes };
 }
-/** Two ends of a channel (frames delivered in order, at once). */
-function channel(): [SyncChannel, SyncChannel] {
+/** Room on a channel's link, there always unless `full`; `free` gives it back. */
+function linkRoom() {
+  let full = false;
+  const waiting = new Set<() => void>();
+  return {
+    fill: () => { full = true; },
+    free: () => { full = false; const told = [...waiting]; waiting.clear(); for (const l of told) l(); },
+    hasRoom: () => !full,
+    whenRoom: (l: () => void) => { waiting.add(l); if (!full) queueMicrotask(() => { if (waiting.delete(l)) l(); }); return () => { waiting.delete(l); }; },
+  };
+}
+/** Two ends of a channel (frames delivered in order, at once), on a link with `room`. */
+function channel(room = linkRoom()): [SyncChannel, SyncChannel] {
   const a = new Set<(t: string) => void>();
   const b = new Set<(t: string) => void>();
+  const { hasRoom, whenRoom } = room;
   return [
-    { send: (t) => { for (const l of b) l(t); }, on: (l) => { a.add(l); return () => { a.delete(l); }; } },
-    { send: (t) => { for (const l of a) l(t); }, on: (l) => { b.add(l); return () => { b.delete(l); }; } },
+    { send: (t) => { for (const l of b) l(t); }, on: (l) => { a.add(l); return () => { a.delete(l); }; }, hasRoom, whenRoom },
+    { send: (t) => { for (const l of a) l(t); }, on: (l) => { b.add(l); return () => { b.delete(l); }; }, hasRoom, whenRoom },
   ];
 }
 /** Connect a replica of `/a` to the host, as a peer with `access`: the host answers its hello. */
@@ -198,7 +210,7 @@ test("a new guest is welcomed with the workspace as it is, not with every change
   const guest = storeWith("shared");
   const [h, g] = channel();
   const sent: string[] = [];
-  const spied: SyncChannel = { send: (t) => { sent.push(t); h.send(t); }, on: (l) => h.on(l) };
+  const spied: SyncChannel = { ...h, send: (t) => { sent.push(t); h.send(t); } };
   const off = h.on((text) => { const m = parseSync(text); if (m?.t !== "hello") return; off(); serveReplica(host.store, "/a", spied, { seen: m.seen, access: "edit", changes: host.changes, writer: "peer:priya" }); });
   replicate(guest.store, "hive://w", g, { workspace: "w", changes: guest.changes });
   const welcome = sent.map((t) => parseSync(t)).find((m) => m?.t === "welcome") as { data: string };
@@ -225,4 +237,30 @@ test("a guest that cannot take another guest's offline change, made before it jo
   const now = late.store.getObjects("hive://w");
   writeBoard(late.store, "hive://w", now.map((o) => (o.id === "n2" ? { ...o, text: "and from late" } : o)), { writer: "window", base: now });
   expect(texts(host.store.getObjects("/a"))).toEqual(["n1: hello from the host", "n2: and from late"]);
+});
+
+test("while the link has no room the host sends a guest nothing; when room returns, one update holds every change made meanwhile", () => {
+  const host = storeWith("host", newSeed());
+  host.store.setCore("/a", core("api"));
+  writeBoard(host.store, "/a", [note("a")]);
+  const guest = storeWith("shared");
+  const room = linkRoom();
+  const [h, g] = channel(room);
+  const sent: string[] = [];
+  const spied: SyncChannel = { ...h, send: (t) => { sent.push(t); h.send(t); } };
+  const off = h.on((text) => { const m = parseSync(text); if (m?.t !== "hello") return; off(); serveReplica(host.store, "/a", spied, { seen: m.seen, access: "edit", changes: host.changes, writer: "peer:priya" }); });
+  replicate(guest.store, "hive://w", g, { workspace: "w", changes: guest.changes });
+  expect(sent.map((t) => parseSync(t)?.t)).toEqual(["welcome"]);
+
+  room.fill();
+  let board = host.store.getObjects("/a");
+  for (const text of ["ab", "abc", "abcd"]) {
+    const next = [{ ...board[0]!, text }];
+    writeBoard(host.store, "/a", next, { base: board });
+    board = next;
+  }
+  expect(sent.length).toBe(1);
+  room.free();
+  expect(sent.map((t) => parseSync(t)?.t)).toEqual(["welcome", "update"]);
+  expect(guest.store.getObjects("hive://w")).toEqual(host.store.getObjects("/a"));
 });

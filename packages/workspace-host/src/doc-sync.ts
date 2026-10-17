@@ -12,10 +12,11 @@
 import { ROLES, type Access } from "./access.js";
 import type { KeptCore } from "@hivemind/workspace-doc/shapes";
 import { refusedEdit } from "./edit-rules.js";
+import type { Room } from "./hive-net.js";
 import { RefusedImport, isWholeDocument, type WorkspaceChange, type WorkspaceStore } from "./store.js";
 
-/** Text frames, both ways. */
-export interface SyncChannel {
+/** Text frames, both ways, and whether what is sent goes out as fast as it is made. */
+export interface SyncChannel extends Room {
   send(text: string): void;
   on(listener: (text: string) => void): () => void;
 }
@@ -73,7 +74,8 @@ export const mayEdit = (access: Access): boolean => access === "owner" || ROLES.
 /**
  * The host's side for one replica of `repo`, which said it has seen `seen`: sends it what it lacks,
  * then each change the host's store makes, and takes the replica's changes as `writer`'s when
- * `access` may edit. Returns a function that stops it.
+ * `access` may edit. While the channel has no room it sends no change; when room returns, one
+ * update holds every change made meanwhile. Returns a function that stops it.
  */
 export function serveReplica(
   store: WorkspaceStore,
@@ -87,14 +89,22 @@ export function serveReplica(
     theirs = store.version(repo);
     return b64(data);
   };
-  const stopChanges = opts.changes(function sendToReplica(change) {
-    if (change.repo !== repo || (theirs && b64(theirs) === b64(store.version(repo)))) return;
+  let stopWaiting: (() => void) | null = null;
+  const sendLacking = (): void => {
+    if (theirs && b64(theirs) === b64(store.version(repo))) return;
+    if (!channel.hasRoom()) {
+      stopWaiting ??= channel.whenRoom(() => { stopWaiting = null; sendLacking(); });
+      return;
+    }
     try {
       const data = lacking();
       channel.send(JSON.stringify({ t: "update", data, seen: b64(store.version(repo)) }));
     } catch (e) {
       opts.onDropped?.(`an update to it could not be sent (${e instanceof Error ? e.message : String(e)})`);
     }
+  };
+  const stopChanges = opts.changes(function sendToReplica(change) {
+    if (change.repo === repo) sendLacking();
   });
   const welcome = (): void => {
     const data = b64(store.welcomeFor(repo, theirs));
@@ -122,7 +132,7 @@ export function serveReplica(
   });
   // Listening before the welcome goes: the replica answers it with what it wrote while away.
   welcome();
-  return () => { stopChanges(); stopFrames(); };
+  return () => { stopChanges(); stopFrames(); stopWaiting?.(); };
 }
 
 /**

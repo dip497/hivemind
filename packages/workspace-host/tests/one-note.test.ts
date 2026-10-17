@@ -33,6 +33,8 @@ function storeWith(dir: string, person?: Uint8Array) {
   return { store, changes };
 }
 
+/** A link that always has room. */
+const room = { hasRoom: () => true, whenRoom: (l: () => void) => { queueMicrotask(l); return () => {}; } };
 /** Two ends of a channel whose frames wait in `pending` until delivered, in order each way. */
 function lateChannel(pending: Array<Array<() => void>>): [SyncChannel, SyncChannel] {
   const toA: Array<() => void> = [];
@@ -41,8 +43,8 @@ function lateChannel(pending: Array<Array<() => void>>): [SyncChannel, SyncChann
   const a = new Set<(t: string) => void>();
   const b = new Set<(t: string) => void>();
   return [
-    { send: (t) => { toB.push(() => { for (const l of b) l(t); }); }, on: (l) => { a.add(l); return () => { a.delete(l); }; } },
-    { send: (t) => { toA.push(() => { for (const l of a) l(t); }); }, on: (l) => { b.add(l); return () => { b.delete(l); }; } },
+    { send: (t) => { toB.push(() => { for (const l of b) l(t); }); }, on: (l) => { a.add(l); return () => { a.delete(l); }; }, ...room },
+    { send: (t) => { toA.push(() => { for (const l of a) l(t); }); }, on: (l) => { b.add(l); return () => { b.delete(l); }; }, ...room },
   ];
 }
 

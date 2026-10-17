@@ -26,6 +26,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Changed
 
+- A guest on a slow link is sent nothing while the link has no room; when room returns, one update carries everything changed meanwhile.
 - A window that takes another window's change no longer sends its layout back: what it would save equals what it read, so nothing is sent.
 - A new guest of a shared workspace is sent the workspace as it is, not every change since its owner's app started: 487 KB for a 5000-object board, however long the app has run. A guest that cannot take another guest's offline change asks for the workspace again and keeps its own edits.
 - A guest's edit is checked on a copy of the workspace kept up to date, not on a fresh copy of the whole document each time: a guest's typed character takes about 9 ms on the host at 5000 board objects instead of 600 ms.
