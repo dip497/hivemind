@@ -49,7 +49,10 @@ c.on("data", (d) => {
   }
 });
 `, { mode: 0o755 });
-const mode = (m: "stay" | "fail" | "finish") => fs.writeFileSync(path.join(dir, "mode"), m);
+const mode = (m: "stay" | "fail" | "finish") => {
+  fs.writeFileSync(path.join(dir, "mode.next"), m);
+  fs.renameSync(path.join(dir, "mode.next"), path.join(dir, "mode"));
+};
 
 // This process was started from an agent's tile: its token and anything else of its own stay out.
 const own = { HCP_TOKEN: process.env.HCP_TOKEN, HIVEMIND_TILE: process.env.HIVEMIND_TILE, SECRET: process.env.SECRET };
