@@ -186,13 +186,28 @@ export function sessionFile(pattern: string, id: string, home: string = homedir(
   const isFile = (at: string) => { try { return statSync(at).isFile(); } catch { return false; } };
   const star = full.indexOf("/*/");
   if (star < 0) return isFile(full) ? full : null;
+  // A session's file stays where it was found, so the folders are looked through again only once
+  // it is gone from there.
+  const was = foundAt.get(full);
+  if (was && isFile(was)) return was;
+  foundAt.delete(full);
   const dir = full.slice(0, star);
   const rest = full.slice(star + 3);
   let names: string[];
   try { names = readdirSync(dir); } catch { return null; }
-  for (const n of names.slice(0, MAX_FILES)) if (isFile(join(dir, n, rest))) return join(dir, n, rest);
+  for (const n of names.slice(0, MAX_FILES)) {
+    const at = join(dir, n, rest);
+    if (!isFile(at)) continue;
+    if (foundAt.size >= FOUND_MAX) foundAt.delete(foundAt.keys().next().value!);
+    foundAt.set(full, at);
+    return at;
+  }
   return null;
 }
+
+/** Where each session's file was found, by its pattern filled in; the oldest forgotten first. */
+const foundAt = new Map<string, string>();
+const FOUND_MAX = 4096;
 
 /** A listing command that hangs must not hold a restore or a caller for long. */
 const LIST_TIMEOUT_MS = 15_000;

@@ -334,7 +334,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     controlApi({ control: () => control.api() }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").
-    conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)) }),
+    conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)), status: () => control.status }),
     // The community views installed here on the person's phone, their host run here (P8).
     views({
       installed: (repo) => listInstalledViews(repo),

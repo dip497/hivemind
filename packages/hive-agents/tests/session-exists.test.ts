@@ -43,5 +43,12 @@ test("a session's file is found where its store says, under any one directory; n
   expect(sessionFile(PATTERN, "abc-2", home)).toBeNull();
   expect(sessionFile(PATTERN, "../../etc/passwd", home)).toBeNull();
   expect(sessionFile(PATTERN, "abc-1", path.join(home, "nope"))).toBeNull();
+  // Moved under another directory, it is found there; gone, it is none.
+  const moved = path.join(home, ".claude", "projects", "-other", "abc-1.jsonl");
+  fs.mkdirSync(path.dirname(moved), { recursive: true });
+  fs.renameSync(at, moved);
+  expect(sessionFile(PATTERN, "abc-1", home)).toBe(moved);
+  fs.rmSync(moved);
+  expect(sessionFile(PATTERN, "abc-1", home)).toBeNull();
   fs.rmSync(home, { recursive: true, force: true });
 });

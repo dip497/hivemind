@@ -17,8 +17,9 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { readAgentManifest } from "@hivemind/agents/load";
 import { followConversation, lastSaid, pendingTool, readConversation, TAIL_BYTES, TAIL_ENTRIES, TOOL_MAX, toolUse } from "../src/conversation.ts";
-import { conversations, LastSaid, transcriptOf, type Transcript } from "../src/conversations.ts";
+import { askingOf, conversations, LastSaid, transcriptOf, type Transcript } from "../src/conversations.ts";
 import { manifestFacts } from "../src/agent-list.ts";
+import { StatusStore } from "@hivemind/agent-host/status-store";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-conversation-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -109,10 +110,10 @@ test("followed, what is written next is handed on as it comes, a line once it en
   assert.equal(heard.length, 2, "nothing once stopped");
 });
 
-/** A server of conversations, the agent of `t1` keeping the session `kept()` says, and how to
- *  connect a caller to it. */
-function served(kept: () => Transcript | null) {
-  const server = new WorkspaceServer([conversations({ transcriptOf: (tile) => (tile === "t1" ? kept() : null) })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+/** A server of conversations, the agent of `t1` keeping the session `kept()` says, its status in
+ *  `status`, and how to connect a caller to it. */
+function served(kept: () => Transcript | null, status = new StatusStore()) {
+  const server = new WorkspaceServer([conversations({ transcriptOf: (tile) => (tile === "t1" ? kept() : null), status: () => status })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {
     const closing = new AbortController();
     const got: EventMessage[] = [];
@@ -218,7 +219,8 @@ test("asked for a tool use an agent made, the caller is answered it unfolded; on
 test("asked before the agent has said anything, its session file not yet there, the caller is answered nothing, then once its file is there sent the last of it and what is written to it; a tile where no agent keeps a conversation is not looked at again", async () => {
   let kept: Transcript = { session: "s1", file: null, format: FORMAT };
   let asked = 0;
-  const server = new WorkspaceServer([conversations({ transcriptOf: (tile) => (tile === "t1" ? kept : (asked++, null)) })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+  const status = new StatusStore();
+  const server = new WorkspaceServer([conversations({ transcriptOf: (tile) => (tile === "t1" ? kept : (asked++, null)), status: () => status })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const closing = new AbortController();
   const got: EventMessage[] = [];
   const phone: Connection & { got: EventMessage[]; go(): void } = { actor: { kind: "person" }, got, send: (m) => got.push(m), closed: closing.signal, go: () => closing.abort() };
@@ -231,6 +233,8 @@ test("asked before the agent has said anything, its session file not yet there, 
     assert.deepEqual(phone.got, []);
     const at = sessionFile(said(0));
     kept = { session: "s1", file: at, format: FORMAT };
+    // The person's prompt starts its turn: the agent's status changes.
+    status.event("t1", { tileId: "t1", event: "turn.started" });
     for (let t = 0; t < 4000 && phone.got.length === 0; t += 20) await wait(20);
     assert.deepEqual(phone.got.map((e) => [ids({ result: { entries: e.params[1] } }), e.params[3]]), [[["u0"], "s1"]]);
     fs.appendFileSync(at, said(1));
@@ -241,15 +245,22 @@ test("asked before the agent has said anything, its session file not yet there, 
   }
 });
 
-test("followed, an agent that begins another session (Claude Code's /clear) is followed in it: the last of it, then what is written to it, each named by it; the one before says no more", async () => {
+test("followed, an agent is looked at again only when its status changes; one that begins another session (Claude Code's /clear) is followed in it, its file looked for until it is written: the last of it, then what is written to it, each named by it; the one before says no more", async () => {
   const before = sessionFile(said(0));
   let kept: Transcript | null = { session: "s1", file: before, format: FORMAT };
-  const { server, client } = served(() => kept);
+  let looked = 0;
+  const status = new StatusStore();
+  const { server, client } = served(() => (looked++, kept), status);
   const phone = client();
   try {
     assert.deepEqual(ids(await server.answer("agent.conversation", ["t1"], phone)), ["u0"]);
+    // Until the agent's status changes, it is not looked at again.
+    looked = 0;
+    await wait(1500);
+    assert.equal(looked, 0);
     // Begun, its file not yet written: still the one before.
     kept = { session: "s2", file: null, format: FORMAT };
+    status.event("t1", { tileId: "t1", event: "session.started", sessionId: "s2" });
     await wait(1500);
     assert.deepEqual(phone.got, []);
     const after = sessionFile(said(5));
@@ -298,6 +309,40 @@ test("an agent's session is the one last recorded for its tile, else the one bou
   writeTrackedSession(sessions, "hm:t1", "s-gone");
   assert.deepEqual(transcriptOf(held, "t1", sessions, home), { session: "s-gone", file: null, format: FORMAT }, "a session whose file is not there yet");
   assert.equal(TILE_SESSIONS_DIR, "tile-sessions");
+});
+
+test("the tool use an agent waits on is read from its session file as it is now: after the agent writes to it, and from the next session's once it begins one", () => {
+  const home = fs.mkdtempSync(path.join(tmp, "home-"));
+  const sessions = path.join(tmp, `tile-sessions-${made++}`);
+  const project = path.join(home, ".claude", "projects", "-home-p-api");
+  fs.mkdirSync(project, { recursive: true });
+  const TOOLS: AgentTranscript = {
+    id: "uuid", at: "timestamp",
+    said: [
+      { require: { type: "assistant" }, each: "message.content", item: { type: "tool_use" }, tool: { id: "id", name: "name", about: ["input.command"] } },
+      { require: { type: "user" }, each: "message.content", item: { type: "tool_result" }, result: { of: "tool_use_id", text: "content" } },
+    ],
+  };
+  let n = 0;
+  const record = (type: string, ...content: object[]) =>
+    `${JSON.stringify({ type, uuid: `r${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content } })}\n`;
+  const claude = { id: "claude", label: "Claude Code", bin: "claude", enabled: true, session: { transcript: TOOLS, resume: { args: ["--resume", "{id}"], exists: "{home}/.claude/projects/*/{id}.jsonl" } } } as unknown as AgentProviderDef;
+  setCatalog([claude]);
+  const held = [{ workspace: "w", name: "api", repo: "/home/p/api", core: { frames: [], tiles: [{ id: "t1", kind: "claude", label: "Claude", cmd: "claude", args: [] }] } }] as never;
+  const first = path.join(project, "s-a.jsonl");
+  fs.writeFileSync(first, record("assistant", { type: "tool_use", id: "u1", name: "Bash", input: { command: "ls" } }));
+  writeTrackedSession(sessions, "hm:t1", "s-a");
+  assert.deepEqual(askingOf(held, "t1", sessions, home), { name: "Bash", about: "ls" });
+  fs.appendFileSync(first, record("user", { type: "tool_result", tool_use_id: "u1", content: "" }) + record("assistant", { type: "tool_use", id: "u2", name: "Bash", input: { command: "make" } }));
+  const then = new Date(1_790_000_000_000);
+  fs.utimesSync(first, then, then);
+  assert.deepEqual(askingOf(held, "t1", sessions, home), { name: "Bash", about: "make" });
+  // The next session's file the same size and time as the one before: only which file it is differs.
+  const next = path.join(project, "s-b.jsonl");
+  fs.writeFileSync(next, fs.readFileSync(first, "utf8").replace('"make"', '"mak2"'));
+  fs.utimesSync(next, then, then);
+  writeTrackedSession(sessions, "hm:t1", "s-b");
+  assert.deepEqual(askingOf(held, "hm:t1", sessions, home), { name: "Bash", about: "mak2" });
 });
 
 test("what an agent last said, in a line: the first line of its last words, or the tool it last used and what about, what tools gave back passed over; at most 160 characters", () => {
