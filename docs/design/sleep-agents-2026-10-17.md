@@ -41,7 +41,9 @@ Sleeping one idle agent frees ~360 MB and a few % of a CPU. A frame of 5 frees ~
 
 Measured with the daemon step (`bench-sleep.ts`, 5 real Claude Code agents in their own daemon,
 load ~100 on 16 CPUs): awake, their process trees held **2746 MB**; asleep, **0 processes, 0 MB**;
-the daemon itself went 116 → 98 MB. Sleeping the 5 took 6.1 s.
+the daemon itself went 116 → 98 MB. Sleeping the 5 took 6.1 s. Again with the whole step built
+(load ~32): **2224 MB → 0 MB**, the 5 asleep in 2.1 s, each exit `slept`; woken, the agent resumed
+its session id and recalled a code word given before it slept, 3.6 s after it was asked.
 
 **Known problem.** Session parking: a browser discarding a tab, a terminal reviving a persistent
 session, tmux-resurrect restoring programs. The live process is dropped, a description of it is
@@ -345,12 +347,19 @@ taking its resume time. A sleep takes the agent's own exit time (Claude: ~4.5 s 
 7. Phone: `sleeping: true` in `agentsOf` and the phone core; Wake on the rows (Android, iOS, the
    browser phone).
 8. Bench (`bench-sleep.ts`): 5 real agents, RSS of their trees before / after, no descendant left,
-   Resume continues the conversation (the agent recalls a word given before sleep).
+   Resume continues the conversation (the agent recalls a word given before sleep). **Done** (the
+   numbers under Problem; wake latency and descendants under Unknown).
 
 ## Unknown
 
-- Wake latency for a large transcript. Check: the bench times wake → prompt.
-- Whether an MCP server that starts its own session (`setsid`) escapes the group kill. Check: the
-  bench lists every descendant of each agent before sleep and checks each pid after.
+- Wake latency. Measured (`bench-wake.ts`, Claude Code, load ~20, 3 wakes): the wake attach is
+  answered in 24-38 ms, the agent's first output comes at ~0.8 s and its prompt at 4.3-5.6 s; a
+  fresh start drew its prompt at 5.2 s. A large transcript is still unmeasured.
+- Descendants. Measured: of 27 descendants of the 5 agents, 25 ended with the group. The 2 left
+  were one Claude Code SessionStart hook run in its own session (`setsid`), which ended by itself
+  within a minute; no MCP server survived. Ceiling: work an agent starts in its own session
+  outlives the sleep (and a close, which ends it the same way) until it ends itself. Upgrade: the
+  daemon records the agent's descendants by parent before the hangup and kills any still alive
+  after it.
 - iOS cannot be built on this Linux machine. Check: the Swift change is kept to the row's label
   and one action, and listed for the coordinator to build.
