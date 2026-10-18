@@ -14,7 +14,8 @@
     "install:sync": "node scripts/sync-install.mjs",
     "install:check": "node scripts/sync-install.mjs --check",
     "icons:sync": "node scripts/sync-agent-icons.mjs",
-    "icons:check": "node scripts/sync-agent-icons.mjs --check"
+    "icons:check": "node scripts/sync-agent-icons.mjs --check",
+    "diagrams": "node scripts/diagrams/build.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.0",
@@ -23,5 +24,11 @@
   },
   "engines": {
     "node": ">=22.19.0"
+  },
+  "devDependencies": {
+    "@fontsource/geist-sans": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "playwright": "1.63.0",
+    "subset-font": "2.9.0"
   }
 }
