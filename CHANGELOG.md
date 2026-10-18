@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- An agent's issue brief quotes a review comment as it really arrives, and the server set-up brief checks enrolment where `hive network use` prints it.
+
 - The example widgets, tools and views are on HiveHub, published from dip497/hivemind-plugins; install one with `hive widgets install @dip497/<name>`, `hive tools install dip497/<name>` or `hive views install @dip497/<name>`, or from Settings ▸ Plugins. The Agent board view is `@dip497/agent-board`, and a new widget, Dog, barks when an agent waits on you.
 
 - A widget with no card reaches the right edge of the screen when it moves there; it stopped as far short as a card is wider than it.
