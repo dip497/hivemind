@@ -10,6 +10,19 @@ through, and you choose it once: **your own** network, or one of your devices se
 There is no hosted network: this page is about running your own. Everything below is the `hive-net` binary
 that `install.sh` puts beside `hive`, MIT-licensed.
 
+**Serve from one of my devices** (under **Reach devices elsewhere…** on Settings → Connect, or
+**Settings → Servers → Change…**) has **Set it up with an agent**: an agent on that computer asks
+how your devices should reach it, then runs the steps below for you. By hand, the short version is
+two commands on a machine the others can reach:
+
+```bash
+hive-net serve --all --url https://hive.example.com --data ~/hive-network
+hive network enrol-link --data ~/hive-network --uses 5   # paste this link on each device
+```
+
+`--url` is the address the devices use, here with HTTPS in front of the server
+([Certificates](#certificates)). The sections below give the full setups.
+
 ## What a network is
 
 | Role | What it does |
@@ -21,7 +34,7 @@ that `install.sh` puts beside `hive`, MIT-licensed.
 
 `hive-net serve` runs any of them, on **one port**: the lookup server at `/pkarr`, access at
 `/access`, push at `/push`, the relay on the rest. `--all` is all four. `--phone <folder>` also serves the
-[phone page](../phone/) at `/phone/`, and `--views <port>` its views on a port of their own; the
+[phone page](../phone/) at `/phone/` (each release has it as `hive-phone-page.tar.gz`), and `--views <port>` its views on a port of their own; the
 Docker stack does both (views on 3341, or 8443 with a public name). A network is described by a **profile**,
 signed by the network's **admin key**, and handed around as a link (`hivemind://network/…`).
 
@@ -203,9 +216,8 @@ it through the server from then on. The server reaches the phone where the phone
   to addresses on the internet alone, so it cannot be made to post into your network.
 - **Apple** (iPhone): with an APNs key from the Apple Developer team that signed the iPhone app
   (`--apns-key AuthKey_….p8 --apns-key-id … --apns-team … --apns-topic <the app's bundle id>`).
-  Apple's keys reach only their own team's apps: hivemind's App Store app is told through
-  hivemind's push server, which sees only ciphertext, unless you build and sign the app yourself.
-  Make the key for *Sandbox & Production*: one server tells both kinds of build.
+  Apple's keys reach only their own team's apps, so this needs an iPhone app you build and sign
+  with that team. Make the key for *Sandbox & Production*: one server tells both kinds of build.
 - **Google** (Android through Firebase): with a service account of the Firebase project the
   Android build was made with (`--fcm service-account.json`).
 
@@ -238,4 +250,5 @@ it where it sees the devices' own addresses.
 
 ## Not yet
 
-The phone apps themselves (iPhone, Android) are not out yet; the push server is ready for them.
+The iPhone and Android apps are a development preview and are not published; the push server is
+ready for them. The [phone page](../phone/) in a phone's browser is in the release.

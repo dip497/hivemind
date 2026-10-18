@@ -3,51 +3,55 @@ title: Phone and browser
 description: Answer and drive your agents from your phone's browser, or open the whole app in a browser tab.
 ---
 
-**Development preview: the iOS and Android apps.** They are not published yet. The page in your
-phone's browser is in the release and does what they do.
+The phone page is a web page your phone's browser opens. It lets you answer and drive the
+agents on your computer from the phone. It needs a hivemind network server of your own
+(`hive-net`): the page comes from that server, and all its traffic goes through it.
+
+The iOS and Android apps are a development preview. They are not published.
 
 ```mermaid title="How the phone reaches your computer"
 flowchart TB
   page["Phone page"]
-  apps["Phone app"]
   server["Your server<br>hive-net serve"]
   computer["Your computer"]
   others["Your other computers<br>and hosts"]
   page -->|https| server
-  apps -->|elsewhere| server
-  apps -.->|same Wi-Fi| computer
   server -->|relay| computer
   server --> others
   computer -.->|introduces the phone| others
 ```
 
-The phone app is the iOS or Android app. Traffic through the relay is end-to-end encrypted: the
-server cannot read it. A browser cannot reach your computer directly, so the page always goes
-through the relay.
+Traffic through the relay is end-to-end encrypted: the server cannot read it. A browser cannot
+reach your computer directly, so the page always goes through the relay.
 
 ## Before you start
 
 The page comes from your own network's server, and your computer has to be on that network
-(**Settings → Servers**). The default *Local network* has no server, so it offers no page.
+(**Settings → Servers**). The default *Local network* has no server, so it offers no page. On
+Settings → Connect, press **Connect**: the **Phone browser** tab then offers **Set it up with an agent**: an agent
+on your computer sets up the server, asking you how your devices should reach it.
 
 The Docker stack in [Self-hosting](../self-hosting/) serves the page at `/phone/`. Use the
 setup with a public name: over plain HTTP a phone's browser withholds the keys, camera and
-offline copy the page needs. Without Docker, build the page with `crates/hive-web/build.sh` and
-serve it:
+offline copy the page needs. Without Docker, take the page from the release and serve it:
 
 ```bash
-hive-net serve --all --data /var/lib/hive-net --domain hive.example.com \
-  --phone crates/hive-web/www --views 8443
+mkdir -p ~/hive-network
+curl -L https://github.com/dip497/hivemind/releases/latest/download/hive-phone-page.tar.gz \
+  | tar -xz -C ~/hive-network
+hive-net serve --all --data ~/hive-network --domain hive.example.com \
+  --phone ~/hive-network/phone --views 8443
 ```
 
-`--views` is the port that serves [views](#views) to the phone, on an origin of their own.
+`--views` is the port that serves [views](#views) to the phone, on an origin of their own. To
+build the page from source instead, run `crates/hive-web/build.sh`; it writes
+`crates/hive-web/www`.
 
 ## Pair
 
 1. On the computer: **Settings → Connect → Connect**.
-2. Turn on **Open in the phone's browser, no app needed**. The switch shows only when your server
-   serves the page. Whoever runs that server is given the code with it: turn it on only if that
-   is you.
+2. Choose the **Phone browser** tab. It shows a code only when your server serves the page, and
+   names that server. Whoever runs it is given the code with it: use it only if that is you.
 3. Scan the QR code with the phone's camera. The page asks *Connect to ⟨computer⟩?*; tap
    **Connect**.
 4. Both screens show three words. If they match, press **It's me — the words match** on the
@@ -78,6 +82,7 @@ lists them. Each row shows what the agent last said, or what a terminal last pri
 | Hold a row, right-click it, or swipe it left | **Stop** or **Close** it |
 | **+** in the header or on a project | start an agent |
 | Search, or a machine chip | narrow the list |
+| **View** | filter by status or last activity, group by project, machine, date, status or agent, and sort; **Reset to defaults** undoes it |
 
 **+** opens **New agent**: write what it should do, add up to four photos (the agent gets them as
 files), and tap **Start**. One line says which agent starts in which folder on which machine; tap
@@ -134,8 +139,8 @@ program. **New output ↓**, a key or a tap brings back the newest.
 ## Views
 
 The **Views** tab lists the views installed on your computer that say they work on a phone
-(`"phone": true` in `hivemind-view.json`); neither view that comes with the app does yet. Each
-runs in a frame of its own, with no access to the page. The server must run with `--views`.
+(`"phone": true` in `hivemind-view.json`). Each runs in a frame of its own, with no access to
+the page. The server must run with `--views`; without it the tab says so.
 
 A view that shows the board's [widgets](../widgets/) draws them there, and its buttons work.
 

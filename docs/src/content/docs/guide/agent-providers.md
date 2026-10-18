@@ -3,10 +3,10 @@ title: Add your own agent
 description: Describe a CLI coding agent in one YAML file, and turn any agent on or off.
 ---
 
-An agent is configuration. Nothing agent-specific ships in the app: every agent — claude,
-codex, pi and the rest — comes from the HiveHub registry and is added automatically when
-its CLI is found on your machine. You can add another by writing one file — no rebuild, no
-code — and switch any agent off, including the ones HiveHub added for you.
+An agent is configuration. Nothing agent-specific ships in the app: every agent, claude,
+codex, pi and the rest, is a manifest from the HiveHub registry, added when its CLI is found on
+your machine (see [Agents](../agents/)). You can add another by writing one file, with no
+rebuild and no code, and switch any agent off, including the ones HiveHub added for you.
 
 ## What an agent file can and cannot do
 
@@ -44,7 +44,7 @@ id: acme                 # lowercase letters, digits and dashes
 label: Acme Coder
 bin: acme-coder          # the binary name on your PATH — never a path
 aliases: [acme]          # other names that identify it when you run it yourself
-enabled: true            # false = recognised for status, not offered to spawn
+enabled: true            # false (the default) = recognised for status, not offered to spawn
 
 caps:
   promptDelivery: typed  # typed: keyed into its TUI · argv: passed as an argument
@@ -85,8 +85,9 @@ must be a decision.
 You name the flag; the values come from the agent itself. When Settings shows an
 agent, Hivemind runs `<bin> --help` and reads the values listed for each flag, in the
 forms argument parsers print: `(choices: "a", "b")`, `[possible values: a, b]`,
-`a|b|c`. A flag whose help lists nothing becomes a text field. Nothing is chosen
-until you choose it, so by default the agent decides.
+`a|b|c`. A flag whose help lists nothing becomes a text field. An option may name a
+`default` value, which is passed until you choose another; without one, nothing is passed and
+the agent decides.
 
 ## Where Hivemind looks
 
@@ -110,7 +111,8 @@ The app ships with no agents. They come from the plugin catalog on
 Hivemind adds it at startup and says so — no questions. The notice says what the agent can
 do, with a Remove button. It only adds when the files match their checksums, the manifest
 names the CLI that was found, and that CLI answers `--version` like one; and it can never
-replace an agent you already have. Remove one and it stays removed. Switch this off under
+replace an agent you already have. Remove one and it stays removed. It needs the network,
+and it does not run while the update check is off. Switch it off under
 **Settings ▸ Plugins ▸ Agents ▸ Add agents found on this machine**. Adding the listing itself is a
 pull request to [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).
 
@@ -118,21 +120,26 @@ pull request to [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plu
 
 ```bash
 hive agents install ./acme     # checks the file, then copies the folder
+hive agents validate ./acme    # checks it the way an install would, copies nothing
 hive agents list               # every agent, where it came from, where its CLI is, and why any is unavailable
 hive agents list --found       # only the agents whose CLI is on this machine
 hive agents remove acme        # only agents you installed; switch the others off instead
 ```
 
 `install` checks the manifest **before** copying, so a broken one never lands on disk.
+Given a name instead of a folder (`hive agents install amp`) it takes the agent from HiveHub;
+given `owner/repo[/dir]` it takes it from GitHub. Both print what the agent does first and
+install only when run again with `--yes`. `--replace` lets your manifest take a reserved id
+and point it at another command.
 If Hivemind is running it picks the change up immediately; otherwise it does so at the
 next start.
 
 ## Turn agents on and off
 
-**Settings ▸ Plugins** lists every agent Hivemind found, grouped into the ones this
-machine has, the ones it does not (each saying which command it needs), and the ones you
-switched off. The control on a row makes that agent the default; open a row for its
-launch options, its README, or to switch it off (`hive plugins disable agent:<id>` does the
+**Settings ▸ Plugins** lists every agent Hivemind found in its Agents group: the ones
+ready on this machine first, then the ones whose command is missing (**Needs setup**, saying
+which command it needs), then the ones you switched off. Open a row for its launch options,
+its README, **Make default**, and its on/off switch (`hive plugins disable agent:<id>` does the
 same). Turning one off removes it from
 every picker and from `hive ctl spawn`; turning it back on restores it. Agents HiveHub
 added can be turned off too, or removed for good.
@@ -143,8 +150,8 @@ did not appear rather than wondering.
 ## Reading status from the screen
 
 `detect` is an ordered list of rules. The first rule that matches decides the status;
-if none match, `default` is used. Statuses are `idle`, `working` and `blocked`
-(needs you).
+if none match, `default` is used. Statuses are `idle`, `working`, and three that wait on
+you: `blocked`, `permission` and `question`.
 
 **Tests on the whole screen:**
 
@@ -168,13 +175,19 @@ the list:
 | `numBeforeWord: task, op: gt, value: 0` | has a number before "task" that is greater than 0 |
 | `anyOf: [...]` | passes any one of the tests listed |
 
+For anything finer there is `seq: [...]`, a sequence of terms matched on one line: `lit`
+(the text), `any` (the first of these texts that matches), `run` (a run of `space`, `digit`,
+`word` or the characters given, with `min` and `max`), `upTo`, `notNext` and `end`. Add
+`at: start` to match from the line's start. Claude's manifest uses one to find "2. Yes," on
+its chooser.
+
 Combine tests with `all: [...]`, `any: [...]` and `not: {...}`. Limit a rule to the end
 of the screen with `scope: { kind: tail, n: 20 }`.
 
-**Regular expressions are not allowed** in an agent you add yourself. A badly written
-pattern can freeze the window: `(a+)+$` against 41 characters takes about a second, and
-Hivemind checks every agent's screen every 1.2 seconds. Every test above runs in time
-proportional to the line it reads.
+**Regular expressions are not allowed**, in any manifest. A badly written pattern can
+stall status for every terminal: `(a+)+$` against 41 characters takes about a second, and
+Hivemind checks every agent's screen every 1.2 seconds. Every test above, `seq` included,
+never backtracks, so it runs in time proportional to the line it reads.
 
 ## Allow and Deny from your phone
 

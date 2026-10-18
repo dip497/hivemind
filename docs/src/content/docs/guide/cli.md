@@ -3,9 +3,10 @@ title: CLI reference
 description: Commands, options, and exit codes.
 ---
 
-`hive` has two vocabularies: issue verbs (file operations, work without the app) and
-`hive ctl` (drives the running app over a local socket, its drive socket). Agents use the same CLI from
-Bash; there is no MCP server. In an agent's terminal `hive ctl` is that agent, driving its own
+`hive` has three kinds of command: issue verbs (file operations, work without the app),
+`hive ctl` (drives the running app or `hive host` over a local socket, its drive socket), and
+commands that manage this machine: plugins, terminals, machines, sharing and the network. Agents
+use the same CLI from Bash; there is no MCP server. `hive <command> --help` lists every option. In an agent's terminal `hive ctl` is that agent, driving its own
 workspace; anywhere else it is you, in the workspace open there whose folder you are in, the only
 one open, or the one `--repo` names. Conventions:
 
@@ -27,7 +28,8 @@ you supply. See [Getting started](../getting-started/) for runnable examples.
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED` | refused — the runtime cannot do this, or not now |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing |
+| 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 1 | `FAILED` | other |
 
 ## Issues
@@ -44,10 +46,10 @@ hive list [--state todo] [--assignee id] [--label l] [--parent none|ID]
 hive show MYP-1
 hive update MYP-1 [--state s] [--title t] [--assignee id|none]
                  [--add-label l] [--rm-label l] [--github N|none] [--note "…"]
-hive close MYP-1 [--reason "…"]         # --reason → cancelled, else done
-hive reopen MYP-1 [--state todo]
+hive close MYP-1 [--reason "…"] [--note "…"]   # --reason → cancelled, else done
+hive reopen MYP-1 [--state todo] [--note "…"]
 
-hive task MYP-3 add "Subtask" [--assignee id]   # sub-issues: MYP-3.1, …
+hive task MYP-3 add "Subtask" [--assignee id] [--state todo]   # sub-issues: MYP-3.1, …
 hive task MYP-3 done 2                          # tail number or full id
 hive task MYP-3 list
 ```
@@ -65,7 +67,7 @@ hive move MYP-4 OPS [--copy]            # move refuses issues with sub-issues
 hive workspace list
 hive workspace register
 hive agent detect                     # detect agent CLIs
-hive agent context                    # regenerate .agent.md
+hive agent context [--state todo]     # regenerate .agent.md
 hive resolve "text"                     # expand @ID mentions to markdown links
 ```
 
@@ -77,13 +79,15 @@ hive ctl frames                         # frames an agent may start in: id, name
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                [--frame <id or name>] [--mode plan] [--model sonnet]
                [--no-report] [--supervise all|Bash,Edit] [--resume <session>]
-                                        # → {"tile":…}; workers auto-report by default
+                                        # → {"tile":…}; workers auto-report by default;
+                                        # --mode yolo: the agent asks nothing
 hive ctl sessions [agent] [--cwd dir] [--limit 100]
                                         # past sessions in a folder, to --resume
 hive ctl send <tileId> "text" [--interrupt]   # after its turn; --interrupt: stop the turn first
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
-hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait; exit 8: it waits on an answer
-hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once
+hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait
+                                        # exit 4 timeout, 5 closed, 7 asleep, 8 waits on an answer
+hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once (--wait at most 10m)
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
@@ -91,8 +95,12 @@ hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is 
 hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
 hive ctl wake [tile|frame]              # back in its conversation; exit 7 if nothing woke
 hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing
-hive ctl connect <src> <dst>
+hive ctl connect <src> <dst>            # pipe src's replies into dst's input
 hive ctl disconnect <src> [<dst>]
+hive ctl open-tool <owner/name/tool> [--frame f] [--url https://…]
+                                        # open a tile of a tool that is switched on
+hive ctl view emit <name> ['{"json":1}' | -] [--view id]
+                                        # a named event to the view shown
 ```
 
 Run inside an agent's tile, these act on that agent's workspace, as that agent. Anywhere else
@@ -133,7 +141,7 @@ threw is the message).
 ```sh
 hive ctl plugin open widget:@dip497/progress                           # → added widget widget-…: ready (set-title, add, …)
 hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'   # → {"index": 0}
-hive ctl plugin call agent-board post '{"text":"Tests pass","kind":"done"}'
+hive ctl plugin call agent-board post '{"text":"Tests pass","kind":"done"}'   # the example view in examples/views/agent-board
 hive ctl plugin call dip497/worktrees list
 hive ctl plugin close widget-…                                         # the widget leaves the board
 ```
@@ -149,8 +157,8 @@ hive ctl workflow --shape fanout|pipeline|mapreduce
                   [--max-concurrent 6] [--timeout 10m] [--close] [--repo dir]
                                         # per-worker timeout; blocks until all replies
 hive ctl approve <reqId> allow|deny|always|never [--reason "…"]
-hive ctl report "summary"               # to the inbox of the tile that spawned you ($HIVEMIND_TILE)
-hive ctl open-review --file plan.md [--cwd dir] [--timeout 30m] [--tile id]
+hive ctl report "summary" [--tile id]   # to the inbox of the tile that spawned you ($HIVEMIND_TILE)
+hive ctl open-review --file plan.md|--plan "…" [--cwd dir] [--timeout 30m] [--tile id]
                                         # default ceiling 24 h; --tile from a terminal
 ```
 
@@ -169,22 +177,27 @@ hive ctl list-workspaces
 ```text
 hive views list                         # installed view plugins + load errors
 hive views install <dir>|@owner/name    # a folder with hivemind-view.json, or from HiveHub
-hive views new <name>                   # a starter view in ./<name>, with PROMPT.md
+hive views new <name> [--owner login]   # a starter view in ./<name>, with PROMPT.md
 hive views remove <id>
 
 hive agents list                        # every agent, its source, on/off, and why any failed
 hive agents list --found                # only agents whose CLI is on this machine
-hive agents install <dir>               # dir with agent.yaml; checked before it is copied
-hive agents remove <id>                 # removes the agent from this machine; a catalog agent stays removed
+hive agents install amp                 # by its name on HiveHub; every file checked against its hash
+hive agents install <dir>               # a folder with agent.yaml; checked before it is copied
+hive agents install owner/repo[/dir] [--ref tag]   # from a GitHub repository
+                                        # downloaded ones print what they run first: re-run with --yes
+hive agents validate <dir>              # check a manifest the way an install would
+hive agents remove <id>                 # removes the agent from this machine; it stays removed
 
 hive widgets list                       # the app's own widgets and the ones you added
 hive widgets install <dir>|@owner/name  # from a folder, or from HiveHub
-hive widgets new <name>                 # a starter widget in ./<name>, with PROMPT.md
+hive widgets new <name> [--owner login] # a starter widget in ./<name>, with PROMPT.md
 hive widgets remove <id>
 
 hive tools list                         # what each tool contributes: tiles and commands, yours included
-hive tools new <name>                   # a starter tool plugin in ./<name>
-hive tools install <dir>                # added off: hive plugins enable tool:<owner>/<name>
+hive tools new <name> [--owner login]   # a starter tool plugin in ./<name>, with PROMPT.md
+hive tools install <dir>|owner/name     # a folder, or from HiveHub (dip497/worktrees)
+                                        # added off: hive plugins enable tool:<owner>/<name>
 hive tools remove <owner>/<name>
 
 hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off
@@ -193,6 +206,7 @@ hive plugins enable tool:hivemind/web   # or disable
 hive plugins set view:@you/board columns all   # checked against what the setting takes
 hive plugins reset view:@you/board [columns]   # back to its default
 hive plugins workspaces tool:<id> <folder>…    # the workspaces a tool's service drives (hive host)
+hive plugins workspaces tool:<id> --none       # it drives none: its service stops
 
 hive grant create <name> -w <folder> [--role agents] [--expires 30d]
                                         # a token for one program to drive these workspaces
@@ -210,7 +224,8 @@ hive upgrade [--dev]
 ```
 
 `hive config set` takes a JSON value (`'"nord"'` for strings) and asks a running app to
-reload; themes cover ubuntu, dracula, nord, solarized-dark, one-dark.
+reload. `hive theme list` names the presets: signal (the default), ubuntu, dracula, nord,
+solarized-dark and one-dark.
 
 `hive plugins` writes the same record Settings ▸ Plugins does, one per plugin under
 `plugins.state["<kind>:<id>"]` in settings.json: whether it is on, and the values set for the
@@ -302,9 +317,79 @@ enables it. To start it with the machine, before anyone logs in, it turns linger
 (`loginctl enable-linger`); whatever it cannot do itself, it prints the command for. Restarting
 or upgrading the host leaves its terminals and agents running.
 
+## Review comments
+
+Comments left on a diff in the Code tile's Changes are kept in `.hivemind/review.json`. These
+commands read it directly, so they work with or without the app:
+
+```text
+hive review list [--file src/x.ts] [--status open|resolved|all]
+hive review show <id>                   # one comment with its replies
+hive review reply <id> "fixed in 3f2c1a"
+hive review resolve <id> [--summary "how it was addressed"]
+hive review reopen <id>
+hive review watch [--timeout 300] [--file f]   # wait for the next comment; exit 4 on timeout
+```
+
+## Terminals that outlive the app
+
+Every terminal runs in this machine's PTY daemon, so it keeps running when the app quits.
+The same commands reach a saved ssh machine with `--machine <id or label>`.
+
+```text
+hive daemon start|status|stop           # stop: sessions are kept as snapshots and restored on start
+hive ps [--machine build-box]           # the sessions running
+hive run [--attach] [--cwd dir] [--id name] -- npm run dev
+                                        # start one; with --attach, ctrl-b d detaches
+hive attach <session> [--read-only]     # view and type into one; a unique prefix of its id is enough
+hive kill <session>                     # end it and its process
+```
+
+## Machines
+
+A machine is an ssh destination the app and the CLI can run terminals and agents on.
+Logins stay with OpenSSH (`~/.ssh/config`, your keys, your agent). A machine is saved only
+when the probe reaches it.
+
+```text
+hive machine add me@build-box [--label build] [--install]
+                                        # also an ssh alias or ssh://me@build-box:2222;
+                                        # --install puts hive in ~/.local/bin there when it is missing
+hive machine list
+hive machine check build                # reachable, platform, hive path and version
+hive machine rename build gpu-box
+hive machine disable build              # kept, not connected; enable turns it back on
+hive machine remove build               # forgotten; its sessions there keep running
+```
+
+See [Machines](../machines/).
+
+## Network and notifications
+
+```text
+hive network show                       # which network, who signed it, its servers
+hive network use local                  # or a network link, or a signed profile's file
+hive network doctor                     # whether its relays answer this computer
+hive push set https://ntfy.sh/<your-topic> [--events input.requested,turn.ended]
+                                        # a plain-text POST when an agent on this machine needs you
+hive push status | test | off
+```
+
+`hive network` changes what **Settings → Servers** shows; a running app starts its network
+again. It needs `hive-net`, which the installer puts beside `hive`.
+
+## Workspace bundles
+
+```text
+hive packages inspect <dir>             # check a bundle and show its startup plan, running nothing
+```
+
+This is a development preview.
+
 ## Optional tools
 
-Browser is an optional bundled tool. Switch it on in **Settings ▸ Plugins**, or from the CLI:
+Browser is a tool that ships with the app, switched off. Switch it on in **Settings ▸ Plugins**
+(under Tools), or from the CLI:
 
 ```sh
 hive plugins enable tool:hivemind/web
@@ -312,7 +397,7 @@ hive ctl open-tool hivemind/web/browser --url https://example.com --json
 hive plugins disable tool:hivemind/web
 ```
 
-`open-tool` accepts `--frame <frame-id>`. Browser URLs must use HTTP/HTTPS or
-`about:blank`. A disabled Browser returns `FORBIDDEN`; disabling does not close
-existing browser panels. Fresh profiles start with Browser disabled, while older
-version-1 settings preserve its availability during migration.
+`open-tool` accepts `--frame <frame id or name>` and opens any tool that is switched on, ones
+you added included. Browser URLs must use http or https, or be `about:blank`. A tool that is
+switched off returns `FORBIDDEN` (exit 6). For agents to drive Browser tiles, also turn on
+**Agent browser control** on Browser's page in Settings and relaunch the app.

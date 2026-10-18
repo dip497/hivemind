@@ -60,7 +60,7 @@ hive views list                            # what will load, and why not
 hive views remove @someone/their-view
 ```
 
-Or **Settings ▸ Plugins**: **On HiveHub**, or **Yours → Add a view from a folder**. Review the
+Or **Settings ▸ Plugins**: the **HiveHub** tab, or **Add → Add a view from a folder**. Review the
 permissions it asks for. The view's page there switches it off or removes it.
 
 A view runs in a sandboxed frame on its own origin: no files, network or app API. It reads the

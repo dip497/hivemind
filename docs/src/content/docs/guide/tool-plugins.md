@@ -5,8 +5,10 @@ description: Add a kind of tile to the app — a pull request panel, a commit br
 
 A tool plugin adds a kind of tile. Open it from the toolbar's **Add**, a frame's ⋯ → **Add a tool
 or widget…**, or with `hive ctl open-tool <owner>/<name>/<tool>`, and it sits on the board beside
-terminals and the Code tile, in every view. The Browser, Issues and the Code tile are tools that come with the app; the
-ones you add are written against the same contract.
+terminals and the Code tile, in every view. The Browser, Issues and the Code tile are tools that come with the app.
+Issues and Code are always on. The Browser is off until you switch it on: its page in
+**Settings ▸ Plugins**, or `hive plugins enable tool:hivemind/web`. The ones you add are written
+against the same contract.
 
 A tool plugin runs **inside the app**, with the access the app has: your files, your programs and
 your logins. So one you add is off until you switch it on, on its page in **Settings ▸ Plugins** or
@@ -23,8 +25,9 @@ The examples are in the repository, in `examples/tools`:
 | `ci-runs` | GitHub Actions runs: a failed job's lines, rerun or cancel, hand the failure to an agent (through `gh`) |
 | `worktrees` | every git worktree: uncommitted changes, ahead and behind the base, its diffs; review one with an agent, remove the merged ones |
 
-On HiveHub today: `dip497/worktrees` and `dip497/ci-runs`. Install one by its id (from 2026.10.3;
-Settings → Plugins lists them under **Tools** too). It arrives switched off, so turn it on:
+On HiveHub today: `dip497/worktrees` and `dip497/ci-runs`. Install one by its id (from 2026.10.3),
+or from the **HiveHub** tab of Settings ▸ Plugins (pick **Tools** to see only tools). It arrives
+switched off, an update too, so turn it on:
 
 ```bash
 hive tools install dip497/worktrees

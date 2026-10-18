@@ -52,7 +52,7 @@ on you.
 <figcaption>A frame binds one directory; every tile inside it starts there — the same whether that directory is local or on a saved machine</figcaption>
 </figure>
 
-- **Canvas** — one per project, saved with the repository.
+- **Canvas** — one per project folder, saved on this computer (not in the repository).
 - **Frame** — a named zone bound to a directory: a local repo, a git worktree, or a folder on a
   saved machine.
 - **Tile** — one thing in that directory: an agent, a shell, the Code tile, a browser, a tool.
@@ -81,7 +81,9 @@ a board, Windows puts them in tabs and split panes. Switching keeps every sessio
 
 <ul class="doors">
   <li><a href="getting-started/"><b>Install and start</b><span>One command, then your first frame.</span></a></li>
-  <li><a href="agents/"><b>Run agents</b><span>Which agents there are, and how they are detected.</span></a></li>
+  <li><a href="agents/"><b>Run agents</b><span>Install them from HiveHub; none ships in the app.</span></a></li>
+  <li><a href="machines/"><b>Use another computer</b><span>Add a machine over ssh and run agents there.</span></a></li>
+  <li><a href="multiplayer/"><b>Work with others</b><span>Share a workspace; someone joins from their computer.</span></a></li>
   <li><a href="agent-workflows/"><b>Drive them from the CLI</b><span>Spawn, read, approve, without the mouse.</span></a></li>
   <li><a href="extension-authoring/"><b>Write a view</b><span>The same protocol the built-ins use.</span></a></li>
 </ul>

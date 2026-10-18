@@ -6,9 +6,10 @@ description: Inspect a bundle of views and agent presets.
 **Development preview.** `hive packages inspect` is in the CLI. Installing a package, downloading
 one from HiveHub and starting it are not implemented.
 
-A package can include a view, agent presets, or both. Presets refer to agent CLIs you
-already installed; packages cannot add provider code, install binaries, supply
-credentials, or override permission modes.
+A package (`hivemind-package.json`) can include up to eight views, up to sixteen agent
+presets, or both. A preset names an installed agent as its `provider`, with a prompt and an
+optional model; a package cannot add an agent, install binaries, supply credentials, or set a
+permission mode.
 
 ## Inspect the example
 

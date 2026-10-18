@@ -3,15 +3,17 @@ title: Extension authoring
 description: Build and install a workspace view.
 ---
 
-A view speaks a versioned protocol (`PROTOCOL_VERSION`); a view built for a newer one says so
-with `minAppVersion`, and the app refuses rather than half-loads it.
+A view speaks a versioned protocol. Its manifest names the major version (`"protocol": 1`, the
+one the app speaks today); a view that names a newer one is refused rather than half-loaded.
+Each later addition is a minor version (1.1 to 1.10 below) that the app lists in
+`hm.hello.features`, so a view checks `hm.supports("<feature>")` before it uses one.
 
 ## Start one
 
 ```bash
-hive views new pulse          # ./pulse, id @<your GitHub login>/pulse
+hive views new pulse          # ./pulse, id @<your GitHub login>/pulse (--owner to set it)
 cd pulse && npm install
-npm run dev                   # build to dist/, install into the running app
+npm run dev                   # build to dist/, then hive views install dist
 ```
 
 There is no SDK package to install. The app serves `@hivemind/view-sdk` to every view, the
@@ -31,9 +33,10 @@ A manifest may say what the view is for with `"category"`: `code`, `git`, `agent
 refused.
 
 A view may also say what an agent can run in it while it is the view shown, under
-`"commands"`, each answered by `hm.onCommand(name, handler)`: what the handler returns is what
-`hive ctl plugin call <view> <command>` prints. `examples/views/agent-board` is one: agents pin
-notes to it.
+`"commands"`, each answered by `hm.onCommand(name, handler)` (protocol 1.10, feature `invoke`):
+what the handler returns is what `hive ctl plugin call <view> <command>` prints, and
+`hive ctl plugin commands` lists what the running plugins offer. `examples/views/agent-board` in
+the Hivemind repository is one: agents pin notes to it.
 
 A command may also name the keys that run it, `"keys": "mod+alt+k"`: modifiers (`mod`, which is
 Cmd on a Mac and Ctrl elsewhere, `ctrl`, `meta`, `alt`, `shift`) and one key, with at least one of
@@ -45,13 +48,15 @@ digit (Ctrl+C, Ctrl+Shift+V), an arrow, Home, End, Page Up/Down, Backspace, Dele
 are free.
 
 `hive views install <dir>` validates the manifest and copies it to
-`$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views list` reports load errors. In the app,
-**Settings ▸ Plugins ▸ Yours → Add a view from a folder** shows a review step first.
+`$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views install @owner/name` takes a published one
+from HiveHub; `hive views list` reports load errors and `hive views remove <id>` takes one out.
+In the app, **Settings ▸ Plugins ▸ Add ▸ Add a view from a folder** shows a review step first.
 
 ## Publish
 
-Push the commit, then `hivehub publish dist` (or sign in on HiveHub and name the folder). The
-id's scope must be your GitHub login: nobody can publish into someone else's.
+Push the commit, then run `hivehub publish dist` with HiveHub's own CLI (or sign in on HiveHub
+and name the folder). The id's scope must be your GitHub login: nobody can publish into someone
+else's.
 
 ## Sandbox
 

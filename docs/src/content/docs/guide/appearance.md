@@ -40,20 +40,21 @@ its own background.
 | Plugins | Plugins: agents, views, widgets and tools |
 | Advanced | In a browser, Servers, About and updates |
 
-Links to the old page names (Agents, Views, Tools, Browse, Installed) open Plugins.
+Links to the old page names (Agents, Views, Tools, Installed) open Plugins.
 
 ## Plugins
 
-One page for every kind. **Yours** lists what you have, **On HiveHub** what is published on
-[HiveHub](https://hivehub.griiken.workers.dev), with one search and a filter by kind. **Add a
-view / widget / tool from a folder** adds your own. Installing from HiveHub checks every file
+One page for every kind. The **Installed** tab lists what you have, the **HiveHub** tab what is
+published on [HiveHub](https://hivehub.griiken.workers.dev), with one search and a filter by kind.
+The **Add** menu holds **Make your own**, which writes a prompt a coding agent can build a plugin
+from, and **Add a view / widget / tool from a folder**. Installing from HiveHub checks every file
 against the checksum HiveHub recorded and shows what the plugin can do before anything is
 written. Each plugin has a page with three tabs: **Settings**, **Read me**, **What it can do**.
 
 - **Agents**: point at an agent and **Make default**. Its page says where its CLI was found and
   which version, or how to get it, and sets its launch options (model, permission mode, and
   whatever else it declares); see [Add your own agent](../agent-providers/#launch-options).
-- **Views**: **Use** picks the active view. A view's page sets its toolbar under **Display**:
+- **Views**: **Use this view** on a view's page makes it the active one. A view's page sets its toolbar under **Display**:
   Automatic, Top, Bottom, Collapsed or Off. **Customize actions** chooses the toolbar's buttons and
   labels; **Reset actions** restores them. Browser shows only while the Browser tool is on.
 - **Tools**: a tool you add is off until you switch it on. The Browser's page also holds **Agent

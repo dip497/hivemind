@@ -6,7 +6,9 @@ description: Diagnose common errors.
 ## Start with the exit code
 
 `hive ctl` failures carry structured codes (full table in [CLI](../cli/)): 2 usage,
-3 neither the app nor `hive host` running, 4 timeout, 5 not found, 6 unauthorized, 7 refused/unsupported.
+3 neither the app nor `hive host` running, 4 timeout, 5 not found, 6 unauthorized, 7 refused or
+unsupported (also: the agent is asleep, or `sleep`/`wake` did nothing), 8 the agent stopped to wait
+on an answer.
 
 ## Tracker
 
@@ -24,27 +26,34 @@ description: Diagnose common errors.
 
 - **Exit 3 on canvas verbs** — neither the app nor `hive host` is running: `hivemind .`. Issue
   verbs work without it; `spawn`, `read` and `agents` do not.
-- **Agent not spawnable** — run `hive agent detect` in the workspace; install the CLI if
-  missing. Distinguish spawnable runtimes from recognised-for-status ones
-  ([Agents](../agents/)).
-- **Terminal empty after reboot** — runtimes without resume (opencode) start fresh;
-  others resume per their provider. Screen content replays from disk after a daemon
-  restart either way.
+- **No agent to start** — no agent ships in the app. Install the agent's CLI, then restart
+  Hivemind (it adds agents from HiveHub whose CLI it finds), or add one in Settings ▸ Plugins or
+  with `hive agents install <name>`. `hive agents list --found` shows what is installed and
+  whose CLI is on your `PATH`. See [Agents](../agents/).
+- **Terminal empty after reboot** — an agent whose manifest has no resume starts fresh; the
+  others continue their conversation. Screen content replays from disk after a daemon restart
+  either way.
+- **Agent tile is black with Resume** — it is asleep (`hive ctl sleep`, or **Put to sleep**).
+  Press **Resume** or run `hive ctl wake <tile>`. `hive ctl read` on it exits 7 at once.
 - **Remote terminals ended** — the machine has no `hive`, so its terminals are plain ssh and
   end with the connection. **Manage machines → Install hive** puts them in that machine's own
-  daemon, where they survive drops and app restarts.
+  daemon, where they survive drops and app restarts. See [Machines](../machines/).
+- **Machine shows Sign in, or will not connect** — press **Sign in** to give it a password, or
+  run `ssh user@host` once in a terminal to accept its host key or fix the login; Hivemind does
+  not ask about host keys. `hive machine check
+  <machine>` shows what it finds.
 - **Browser page reloaded after a view switch** — known `<webview>` limit; tabs and
   history survive, scroll/form state does not.
-- **Agent cannot browse** — enable agent browser control in Settings, open a Browser
-  tile, retry; the `hive-browser` skill reports what is missing.
+- **Agent cannot browse** — switch on the Browser tool and its **Agent browser control** in
+  Settings ▸ Plugins ▸ Browser, open a Browser tile, retry; the `hive-browser` skill reports what
+  is missing.
 - **View missing or disabled** — its page in Settings ▸ Plugins says why it cannot load (the
-  Views list there shows it under **Off**); `hive views list` shows package errors. A view that
-  broke its budget stays off until the app restarts.
+  Views list there shows it under **Off**); `hive views list` shows package errors.
 
 ## Timeouts
 
-- `hive ctl read` waits 100 s by default in ≤ 10 s slices; keep the total under your
-  tool's timeout. Exit 4 means the turn had not finished — call
+- `hive ctl read` waits 100 s by default (`--timeout 5m` to change it), in short polls; keep the
+  total under your tool's timeout. Exit 4 means the turn had not finished — call
   again to collect it. Exit 5 with `finalStatus: "closed"` means the tile was closed
   while you waited; there is nothing left to read.
 - `hive ctl workflow --timeout` is per worker (default `10m`; durations take units — `90s`, `10m`); give the calling
@@ -63,7 +72,6 @@ After upgrading, refresh workspace skills with `hive add skill`.
 
 ## Environment quirks
 
-- Dev-bridge needs tsx (node), not bun — bun drops `@lydell/node-pty` output on Linux.
 - Playwright/e2e: `unset ELECTRON_RUN_AS_NODE`, run under xvfb; the config isolates the
   profile.
 - `HIVEMIND_SHELL_ENV=0` makes tiles inherit the app environment verbatim.
