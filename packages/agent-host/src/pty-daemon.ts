@@ -18,7 +18,7 @@ import * as bunPty from "./bun-pty.js";
 import { listenExclusive } from "./socket-claim.js";
 import { dropHandedDown, HANDED_DOWN } from "./handed-down.js";
 import { Asleep, SessionManager, type ManagedPty, type SpawnSpec, type SessionSnapshot, type SessionClient } from "./pty-session-manager.js";
-import { type ClientMsg, type ServerMsg, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
+import { type ClientMsg, type ServerMsg, DAEMON_PROTOCOL_VERSION, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
 import { PtyOutputBuffer } from "./pty-output-buffer.js";
 import { ipcPath } from "@hivemind/core/ipc";
 import { repairShellSpec } from "./shell-spec.js";
@@ -52,21 +52,6 @@ const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; col
 dropHandedDown(process.env[HANDED_DOWN]);
 delete process.env[HANDED_DOWN];
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
-// Captured ONCE at startup: the mtime of the daemon script this process is
-// running. Reported on `ping` so the app can detect a rebuild (the on-disk
-// script is newer than what we loaded) and replace us with a fresh daemon.
-// CONTENT hash (FNV-1a) of our own bundle — NOT mtime. A rebuild that doesn't
-// change the daemon's code keeps the same stamp, so a renderer/main-only rebuild
-// won't make the app respawn us and tear down live agent sessions. Must match
-// daemon-client.ts's currentBuildStamp() byte-for-byte.
-const BUILD_STAMP = (() => {
-  try {
-    const b = fs.readFileSync(process.argv[1] ?? "");
-    let h = 0x811c9dc5;
-    for (let i = 0; i < b.length; i++) { h ^= b[i]!; h = Math.imul(h, 0x01000193); }
-    return h >>> 0;
-  } catch { return 0; }
-})();
 if (!socketPath) {
   console.error("[pty-daemon] no socket path given");
   process.exit(1);
@@ -696,7 +681,7 @@ const server = net.createServer((sock) => {
         send({ t: "sessions", reqId: msg.reqId, ids: manager.list(), ...(msg.detail ? { detail: manager.info() } : {}) });
         break;
       case "ping":
-        send({ t: "pong", reqId: msg.reqId, buildStamp: BUILD_STAMP });
+        send({ t: "pong", reqId: msg.reqId, protocol: DAEMON_PROTOCOL_VERSION });
         break;
       case "hello":
         canResync = Array.isArray(msg.caps) && msg.caps.includes("resync");

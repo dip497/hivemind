@@ -297,6 +297,21 @@ export function App() {
     });
   }, []);
 
+  // A terminal daemon of another protocol waits for agents to finish their turns before it is replaced.
+  useEffect(() => {
+    const show = (ids: string[] | null) => {
+      if (!ids) return void toast.dismiss("daemon-waiting");
+      toast.loading("Updating how terminals run", {
+        id: "daemon-waiting",
+        description: `Waiting for ${ids.length === 1 ? "an agent to finish its turn" : `${ids.length} agents to finish their turns`}; each comes back in the same conversation.`,
+        action: { label: "Restart them now", onClick: () => void window.hive.restartAgentsNow?.() },
+        duration: Infinity,
+      });
+    };
+    void window.hive.daemonWaitingOn?.().then(show).catch(() => {});
+    return window.hive.onDaemonWaiting(show);
+  }, []);
+
   // A new app version landed → ping once (not every 4h re-check). Only when the
   // master notification preference is on; the toolbar's update button always shows it
   // regardless. Uses the sonner action surface (an inline Update button) since

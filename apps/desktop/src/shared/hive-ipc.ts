@@ -189,6 +189,9 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     hcpResult: local("hcp:result", invoke("hcp:result")),
     onHcpCommand: (cb) => port.on("hcp:command", cb),
     onAppError: (cb) => port.on("app:error", cb),
+    daemonWaitingOn: local("daemon:waiting", invoke("daemon:waiting")),
+    onDaemonWaiting: (cb) => port.on("daemon:waiting", cb),
+    restartAgentsNow: local("daemon:restart-now", invoke("daemon:restart-now")),
     importWallpaper: local("wallpaper:import", invoke("wallpaper:import")),
     pickMedia: local("media:pick", invoke("media:pick")),
   };

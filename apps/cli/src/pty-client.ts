@@ -64,13 +64,13 @@ export function connect(socket: string, timeoutMs = 2000): Promise<DaemonConn> {
 }
 
 /** `null` when nothing answers; never throws. */
-export async function ping(socket: string, timeoutMs = 1000): Promise<{ buildStamp?: number } | null> {
+export async function ping(socket: string, timeoutMs = 1000): Promise<{ protocol: number } | null> {
   try {
     const c = await connect(socket, timeoutMs);
     try {
       c.send({ t: "ping", reqId: "ping" });
       const pong = await c.next((m): m is Extract<ServerMsg, { t: "pong" }> => m.t === "pong", timeoutMs);
-      return { buildStamp: pong.buildStamp };
+      return { protocol: pong.protocol ?? 0 };
     } finally { c.close(); }
   } catch { return null; }
 }
