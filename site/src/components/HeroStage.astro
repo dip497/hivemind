@@ -1,0 +1,481 @@
+---
+// The hero: the app's workspace drawn in HTML, changing shape. The same agents sit on the
+// canvas, then in a view an agent writes, then a widget and a tool arrive. Every name, command
+// and plugin on it is a real one; the terminal lines are stand-ins.
+import icons from '../generated/agent-icons.json';
+const icon = (id: string) => icons.agents.find((a) => a.id === id)?.icon;
+const tiles = [
+  { id: 't1', name: 'my-tools', agent: 'claude', frame: 'api' },
+  { id: 't2', name: 'routing-tests', agent: 'claude', frame: 'api' },
+  { id: 't3', name: 'params', agent: 'codex', frame: 'api' },
+  { id: 't4', name: 'export-3x', agent: 'opencode', frame: 'ex' },
+  { id: 't5', name: 'hit-test', agent: 'cursor', frame: 'ex' },
+];
+const steps = [
+  { id: 'canvas', label: 'Canvas' },
+  { id: 'view', label: 'A view it wrote' },
+  { id: 'widget', label: 'A widget' },
+  { id: 'tool', label: 'A tool' },
+  { id: 'timeline', label: 'Another view' },
+];
+---
+<div class="hs" data-hero-stage>
+  <div class="hs-glow" aria-hidden="true"></div>
+  <p class="hs-say" aria-live="off"><span class="hs-say-who" data-who>The canvas, where it starts</span><span class="hs-say-q" data-say>Five agents at work, each in a real terminal.</span></p>
+  <div class="hs-tilt">
+    <div class="hs-stage" data-view="canvas" role="img"
+      aria-label="The Hivemind workspace. Five coding agents run in terminal tiles on a canvas. One is asked for a view and writes it, and the same agents rearrange into columns by project. It then writes a release widget and a flaky tests tool, which appear beside them, and installs a timeline view from HiveHub.">
+      <div class="hs-bar" aria-hidden="true">
+        <span class="hs-bar-i">✳</span><span class="hs-bar-sep"></span>
+        <span class="hs-bar-i">⬚</span><span class="hs-bar-i">⊞</span><span class="hs-bar-sep"></span>
+        <span class="hs-view"><span class="hs-view-ic">▦</span><span data-view-name>Canvas</span><span class="hs-caret">▾</span></span>
+      </div>
+
+      <div class="hs-frame" data-id="api" aria-hidden="true"><span class="hs-flabel">fastapi <i>main</i></span><span class="hs-fcount">3</span></div>
+      <div class="hs-frame" data-id="ex" aria-hidden="true"><span class="hs-flabel">excalidraw <i>main</i></span><span class="hs-fcount">2</span></div>
+      <div class="hs-frame hs-plug" data-id="plug" aria-hidden="true"><span class="hs-flabel">Plugins <i>written here</i></span></div>
+      <div class="hs-axis" aria-hidden="true"><span>12:00</span><span>12:15</span><span>12:30</span><span>now</span></div>
+
+      {tiles.map((t) => {
+        const ic = icon(t.agent);
+        return (
+          <div class="hs-tile" data-id={t.id} data-status="working" aria-hidden="true">
+            <div class="hs-th">
+              {ic ? <svg viewBox={ic.viewBox} fill="currentColor" fill-rule={ic.fillRule as any}>{ic.paths.map((d) => <path d={d} />)}</svg> : <span class="hs-noic"></span>}
+              <b>{t.name}</b><span class="hs-agent">{t.agent}</span>
+              <span class="hs-pill"><i></i><span data-pill>working</span></span>
+            </div>
+            <div class="hs-term"><div class="hs-lines" data-lines></div>{t.id === 't1' && <div class="hs-ask"><span>›</span> <span data-ask></span><span class="hs-cur"></span></div>}</div>
+            <div class="hs-lane"><i></i></div>
+          </div>
+        );
+      })}
+
+      <div class="hs-tile hs-tool" data-id="tool" data-status="idle" aria-hidden="true">
+        <div class="hs-th"><span class="hs-tic">⚑</span><b>Flaky tests</b><span class="hs-agent">tool</span><span class="hs-pill"><i></i><span>run 8 times</span></span></div>
+        <div class="hs-tbody">
+          <p class="hs-tcmd">$ bun test tests/ <span>· 5 tests · 8 runs</span></p>
+          <p class="hs-trow"><span>cart › applies a coupon before tax</span><em class="f">flaky</em><span class="hs-runs">●●●●●○●○</span></p>
+          <p class="hs-trow"><span>checkout sends one email</span><em class="f">flaky</em><span class="hs-runs">●●○●●●●●</span></p>
+          <p class="hs-trow"><span>cart › totals in cents</span><em></em><span class="hs-runs bad">○○○○○○○○</span></p>
+          <p class="hs-trow"><span>cart › adds an item</span><em></em><span class="hs-runs ok">●●●●●●●●</span></p>
+        </div>
+        <div class="hs-lane"><i></i></div>
+      </div>
+
+      <div class="hs-toast" aria-hidden="true"><span class="hs-toast-dot"></span><span data-toast></span></div>
+
+      <div class="hs-widget" data-id="widget" aria-hidden="true">
+        <p class="hs-wcap">Widget · written by claude</p>
+        <p class="hs-wtitle">Ship 2026.10.3</p>
+        <p class="hs-wsub"><span data-done>0</span> of 4 done</p>
+        <div class="hs-wbar"><i></i></div>
+        <ul>
+          <li>Merge the branch</li><li>Run the full e2e</li><li>Tag the release</li><li>Publish the plugins</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="hs-steps" role="tablist" aria-label="What the workspace shows">
+    {steps.map((s, i) => (
+      <button type="button" role="tab" data-step={s.id} aria-selected={i === 0 ? 'true' : 'false'}>
+        <span>{s.label}</span><i aria-hidden="true"></i>
+      </button>
+    ))}
+    <button type="button" class="hs-pause" aria-pressed="false" data-pause>Pause</button>
+  </div>
+</div>
+
+<style is:global>
+  .hs{position:relative;--fs:clamp(6.5px,.82cqw,11.5px)}
+  .hs-glow{position:absolute;inset:-12% -8% 0;pointer-events:none;z-index:0;
+    background:radial-gradient(55% 48% at 50% 42%,oklch(0.62 0.05 250 / .26),transparent 70%),
+               radial-gradient(30% 26% at 72% 30%,oklch(0.80 0.13 72 / .07),transparent 70%)}
+  .hs-say{position:relative;z-index:2;display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:6px 14px;margin:0 0 18px;text-align:center}
+  .hs-say-who{font:500 12px/1 var(--f-m);letter-spacing:.08em;text-transform:uppercase;color:var(--fg3)}
+  .hs-say-q{font-size:clamp(17px,1.6vw,22px);font-weight:500;letter-spacing:-.015em;color:var(--fg);transition:opacity .25s var(--ease),transform .35s var(--ease)}
+  .hs-say[data-swap] .hs-say-q{opacity:0;transform:translateY(6px)}
+  .hs-tilt{position:relative;z-index:1;perspective:1900px;perspective-origin:50% 0%}
+  .hs-stage{position:relative;container-type:inline-size;aspect-ratio:16/9.4;border-radius:14px;
+    background:
+      radial-gradient(circle at 1px 1px,var(--grid-dot) 1px,transparent 1.4px) 0 0/22px 22px,
+      linear-gradient(180deg,oklch(0.19 0.005 250),var(--bg) 70%);
+    border:1px solid var(--line);box-shadow:0 40px 120px -20px oklch(0 0 0 / .7),inset 0 1px 0 oklch(1 0 0 / .06);
+    transform-style:preserve-3d;transform-origin:50% 0%;transform:rotateX(10deg) scale(.98);
+    overflow:hidden;font-family:var(--f-m);font-size:var(--fs);color:var(--fg2)}
+  @supports (animation-timeline: view()){
+    @media (prefers-reduced-motion:no-preference){
+      .hs-stage{animation:hs-flatten linear both;animation-timeline:view();animation-range:entry 30% cover 48%}
+      @keyframes hs-flatten{from{transform:rotateX(10deg) scale(.98)}to{transform:rotateX(0deg) scale(1)}}
+    }
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .hs-tilt{animation:hs-in 1.1s var(--ease) .15s both}
+    @keyframes hs-in{from{opacity:0;transform:translateY(48px) rotateX(16deg)}to{opacity:1;transform:none}}
+  }
+
+  .hs-bar{position:absolute;left:50%;top:2.2%;translate:-50% 0;display:flex;align-items:center;gap:.9em;z-index:5;
+    padding:.55em 1em;border:1px solid var(--line2);border-radius:999px;background:oklch(0.2 0.004 250 / .92);
+    box-shadow:var(--sh2);color:var(--fg3);font-family:var(--f);white-space:nowrap}
+  .hs-bar-sep{width:1px;height:1.2em;background:var(--line2)}
+  .hs-view{display:inline-flex;align-items:center;gap:.5em;color:var(--fg);font-weight:500;
+    padding:.15em .7em;border-radius:999px;transition:background-color .3s var(--ease)}
+  .hs-view[data-new]{background:oklch(0.93 0.004 250 / .12)}
+  .hs-caret{color:var(--fg3)}
+
+  /* Everything placed on the stage is positioned by script in % of the stage, and glides. */
+  .hs-frame,.hs-tile,.hs-widget,.hs-axis{position:absolute;left:0;top:0;width:10%;height:10%}
+  .hs-stage[data-placed] :is(.hs-frame,.hs-tile,.hs-widget,.hs-axis){
+    transition:left .9s var(--ease-move),top .9s var(--ease-move),width .9s var(--ease-move),height .9s var(--ease-move),
+      opacity .45s var(--ease),transform .6s var(--ease),border-color .4s,background-color .4s}
+  .hs-frame{border:1px solid var(--line);border-radius:10px;background:oklch(0.18 0.004 250 / .55)}
+  .hs-flabel{position:absolute;left:1.1em;top:.7em;color:var(--fg2);font-family:var(--f);font-weight:600}
+  .hs-flabel i{font-style:normal;font-weight:400;color:var(--fg3);margin-left:.5em;font-family:var(--f-m)}
+  .hs-fcount{position:absolute;right:1.1em;top:.7em;color:var(--fg3)}
+  .hs-plug{opacity:0;border-style:dashed}
+  .hs-stage[data-view="columns"] .hs-plug{opacity:1}
+  .hs-stage[data-view="timeline"] .hs-frame{background:transparent;border-color:transparent}
+  .hs-axis{display:flex;justify-content:space-between;color:var(--fg3);opacity:0;padding:0 .5em;align-items:end}
+  .hs-stage[data-view="timeline"] .hs-axis{opacity:1}
+
+  .hs-tile{display:flex;flex-direction:column;border:1px solid var(--line2);border-radius:8px;overflow:hidden;
+    background:var(--term);box-shadow:var(--sh2);transform:translateZ(18px)}
+  .hs-th{display:flex;align-items:center;gap:.6em;padding:.55em .8em;border-bottom:1px solid var(--line);
+    background:oklch(0.205 0.004 250);white-space:nowrap;flex:none}
+  .hs-th svg,.hs-noic{width:1.25em;height:1.25em;flex:none;color:var(--fg)}
+  .hs-th b{color:var(--fg);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+  .hs-agent{color:var(--fg3)}
+  .hs-tic{color:var(--fg)}
+  .hs-pill{margin-left:auto;display:inline-flex;align-items:center;gap:.45em;padding:.1em .6em;border-radius:999px;
+    border:1px solid var(--line2);color:var(--fg2)}
+  .hs-pill i{width:.6em;height:.6em;border-radius:50%;background:var(--st-working)}
+  .hs-tile[data-status="working"] .hs-pill i{animation:hs-pulse 1.6s ease-in-out infinite}
+  .hs-tile[data-status="idle"] .hs-pill i{background:var(--st-idle)}
+  .hs-tile[data-status="done"] .hs-pill i{background:var(--st-done)}
+  .hs-tile[data-status="attention"] .hs-pill{border-color:color-mix(in oklab,var(--st-attention) 55%,transparent);color:var(--st-attention)}
+  .hs-tile[data-status="attention"] .hs-pill i{background:var(--st-attention)}
+  @keyframes hs-pulse{50%{opacity:.35}}
+  .hs-term{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;padding:.5em .9em .7em;line-height:1.55;overflow:hidden}
+  .hs-lines{overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;min-height:0}
+  .hs-lines p{flex:none;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hs-lines .c{color:var(--fg)} .hs-lines .g{color:var(--st-done)} .hs-lines .d{color:var(--fg3)} .hs-lines .a{color:var(--st-attention)}
+  .hs-ask{margin-top:.5em;padding:.45em .7em;border:1px solid var(--line2);border-radius:5px;color:var(--fg);white-space:nowrap;overflow:hidden}
+  .hs-ask>span:first-child{color:var(--fg3)}
+  .hs-cur{display:inline-block;width:.55em;height:1.1em;background:var(--fg);vertical-align:-.2em;margin-left:.1em;animation:hs-blink 1s steps(1) infinite}
+  @keyframes hs-blink{50%{opacity:0}}
+  .hs-lane{display:none}
+  .hs-stage[data-view="timeline"] .hs-tile{flex-direction:row;align-items:center}
+  .hs-stage[data-view="timeline"] .hs-th{border:0;background:transparent;width:40%;flex:none}
+  .hs-stage[data-view="timeline"] .hs-agent{display:none}
+  .hs-stage[data-view="timeline"] .hs-term,.hs-stage[data-view="timeline"] .hs-tbody{display:none}
+  .hs-stage[data-view="timeline"] .hs-lane{display:block;flex:1;height:100%;position:relative;margin-right:.8em}
+  .hs-lane i{position:absolute;top:40%;bottom:40%;left:var(--l,40%);right:0;border-radius:3px;background:var(--st-working);opacity:.85}
+  .hs-tile[data-status="attention"] .hs-lane i{background:var(--st-attention)}
+  .hs-tile[data-status="idle"] .hs-lane i{background:var(--line2)}
+
+  .hs-tool{opacity:0;transform:translateZ(18px) scale(.94)}
+  .hs-tool[data-on]{opacity:1;transform:translateZ(18px)}
+  .hs-tbody{padding:.6em .9em;display:grid;gap:.35em;align-content:start;overflow:hidden}
+  .hs-tbody p{margin:0;white-space:nowrap}
+  .hs-tcmd{color:var(--fg)} .hs-tcmd span{color:var(--fg3)}
+  .hs-trow{display:grid;grid-template-columns:minmax(0,1fr) 3.6em auto;gap:.8em;align-items:center;color:var(--fg2)}
+  .hs-trow span:first-child{overflow:hidden;text-overflow:ellipsis}
+  .hs-trow em{font-style:normal;text-align:center}
+  .hs-trow em.f{color:var(--st-attention);border:1px solid color-mix(in oklab,var(--st-attention) 40%,transparent);border-radius:3px}
+  .hs-runs{letter-spacing:.08em;color:var(--st-done)}
+  .hs-runs.bad{color:var(--st-failed)}
+
+  .hs-widget{z-index:6;padding:1.1em 1.3em;border-radius:12px;border:1px solid var(--line2);font-family:var(--f);
+    background:oklch(0.215 0.005 250 / .96);box-shadow:var(--sh3),inset 0 1px 0 oklch(1 0 0 / .08);
+    opacity:0;transform:translateZ(60px) translateY(14px) scale(.96)}
+  .hs-widget[data-on]{opacity:1;transform:translateZ(60px)}
+  .hs-widget p{margin:0}
+  .hs-wcap{font:500 .82em var(--f-m);letter-spacing:.08em;text-transform:uppercase;color:var(--fg3)}
+  .hs-wtitle{font-size:1.65em;font-weight:600;color:var(--fg);letter-spacing:-.02em;margin-top:.35em!important}
+  .hs-wsub{color:var(--fg3);margin-top:.1em!important}
+  .hs-wbar{height:.45em;border-radius:9px;background:var(--line);margin:.8em 0 .7em;overflow:hidden}
+  .hs-wbar i{display:block;height:100%;width:calc(var(--done,0) * 25%);background:var(--fg);border-radius:inherit;transition:width .5s var(--ease),background-color .4s}
+  .hs-widget[data-all] .hs-wbar i{background:var(--st-done)}
+  .hs-widget ul{list-style:none;margin:0;padding:0;display:grid;gap:.4em;color:var(--fg2)}
+  .hs-widget li{display:flex;align-items:center;gap:.6em}
+  .hs-widget li::before{content:"";width:.95em;height:.95em;border:1px solid var(--line2);border-radius:3px;flex:none;transition:all .3s}
+  .hs-widget li[data-done]{color:var(--fg)}
+  .hs-widget li[data-done]::before{background:var(--st-done);border-color:var(--st-done);
+    box-shadow:inset 0 0 0 2px oklch(0.215 0.005 250)}
+
+  .hs-toast{position:absolute;left:50%;top:9.5%;z-index:8;display:flex;align-items:center;gap:.7em;font-family:var(--f);font-size:1.25em;
+    color:var(--fg);padding:.75em 1.2em;border-radius:999px;border:1px solid var(--line2);white-space:nowrap;
+    background:oklch(0.23 0.005 250 / .96);box-shadow:var(--sh3),0 0 40px oklch(0.62 0.05 250 / .35);
+    opacity:0;transform:translate(-50%,-10px) scale(.97);transition:opacity .35s var(--ease),transform .5s var(--ease)}
+  .hs-toast[data-on]{opacity:1;transform:translate(-50%,0)}
+  .hs-toast b{font-weight:600}
+  .hs-toast-dot{width:.6em;height:.6em;border-radius:50%;background:var(--st-done);box-shadow:0 0 10px var(--st-done)}
+  .hs-steps{position:relative;z-index:2;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:22px}
+  .hs-steps [role="tab"],.hs-pause{position:relative;font:500 13px/1 var(--f);color:var(--fg3);background:transparent;
+    border:1px solid transparent;border-radius:999px;padding:9px 14px;cursor:pointer;overflow:hidden;transition:color .15s,border-color .15s}
+  .hs-steps [role="tab"][aria-selected="true"]{color:var(--fg);border-color:var(--line2);background:var(--bg2)}
+  .hs-steps [role="tab"] i{position:absolute;left:14px;right:14px;bottom:4px;height:1px;background:var(--fg2);transform:scaleX(0);transform-origin:left}
+  .hs-steps [role="tab"][aria-selected="true"][data-run] i{animation:hs-prog var(--dur,4s) linear both}
+  @keyframes hs-prog{to{transform:scaleX(1)}}
+  .hs-pause{color:var(--fg3);border-color:var(--line);font-family:var(--f-m);font-size:12px}
+  @media (hover:hover) and (pointer:fine){.hs-steps button:hover{color:var(--fg)}}
+
+  @media (max-width:640px){
+    .hs{--fs:clamp(6px,2.25cqw,9.5px)}
+    .hs-agent{display:none}
+    .hs-say{justify-content:flex-start;text-align:left;flex-direction:column;gap:6px;margin-bottom:14px}
+    .hs-stage{aspect-ratio:4/5.2;border-radius:12px;transform:rotateX(10deg) scale(.98)}
+    .hs-steps{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;margin:16px calc(var(--gut) * -1) 0;padding:0 var(--gut)}
+    .hs-steps::-webkit-scrollbar{display:none}
+    .hs-steps button{flex:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .hs-frame,.hs-tile,.hs-widget,.hs-axis{transition:none}
+    .hs-tile[data-status="working"] .hs-pill i,.hs-cur{animation:none}
+    .hs-steps [role="tab"] i{display:none}
+  }
+</style>
+
+<script>
+  type Rect = [number, number, number, number];
+  type Layout = Record<string, Rect>;
+  // Every layout in % of the stage: [left, top, width, height].
+  const WIDE: Record<string, Layout> = {
+    canvas: {
+      api: [2.5, 12, 57, 85], ex: [62, 38, 35.5, 59], plug: [68, 11, 30, 86], axis: [32, 90, 66, 5],
+      t1: [4, 18, 27, 44], t2: [32.5, 24, 25.5, 36], t3: [7, 65, 29, 29], tool: [38, 63, 20, 31],
+      t4: [63.5, 44, 32.5, 27], t5: [63.5, 73, 32.5, 21.5], widget: [64, 5, 31, 30],
+    },
+    columns: {
+      api: [2, 11, 31, 86], ex: [35, 11, 31, 86], plug: [68, 11, 30, 86], axis: [32, 90, 66, 5],
+      t1: [3.2, 17, 28.6, 33], t2: [3.2, 51.5, 28.6, 21.5], t3: [3.2, 74.5, 28.6, 21],
+      t4: [36.2, 17, 28.6, 33], t5: [36.2, 51.5, 28.6, 21.5],
+      widget: [69.2, 17, 27.6, 31], tool: [69.2, 50, 27.6, 23],
+    },
+    timeline: {
+      api: [2, 11, 68, 50], ex: [2, 61, 68, 23], plug: [68, 11, 30, 86], axis: [24, 88, 45, 5],
+      t1: [3, 18, 66, 9], t2: [3, 28.5, 66, 9], t3: [3, 39, 66, 9], tool: [3, 49.5, 66, 9],
+      t4: [3, 66, 66, 9], t5: [3, 76.5, 66, 9], widget: [72.5, 14, 25.5, 42],
+    },
+  };
+  const NARROW: Record<string, Layout> = {
+    canvas: {
+      api: [3, 9, 94, 53], ex: [3, 65, 94, 33], plug: [51, 51, 46, 47], axis: [30, 92, 67, 4],
+      t1: [5, 14, 56, 28], t2: [63, 18, 32, 22], t3: [9, 44, 40, 16], tool: [52, 42, 43, 18],
+      t4: [5, 70, 45, 25], t5: [52, 74, 43, 22], widget: [40, 47, 57, 30],
+    },
+    columns: {
+      api: [3, 9, 46, 89], ex: [51, 9, 46, 40], plug: [51, 51, 46, 47], axis: [30, 92, 67, 4],
+      t1: [4.5, 15, 43, 34], t2: [4.5, 51, 43, 22.5], t3: [4.5, 75, 43, 21.5],
+      t4: [52.5, 15, 43, 15.5], t5: [52.5, 32, 43, 15.5],
+      widget: [52.5, 57, 43, 26], tool: [52.5, 84.5, 43, 12],
+    },
+    timeline: {
+      api: [3, 9, 94, 52], ex: [3, 63, 94, 24], plug: [51, 51, 46, 47], axis: [30, 90, 67, 4],
+      t1: [4, 15, 92, 9.5], t2: [4, 25.5, 92, 9.5], t3: [4, 36, 92, 9.5], tool: [4, 46.5, 92, 9.5],
+      t4: [4, 68, 92, 9.5], t5: [4, 78.5, 92, 9.5], widget: [42, 50, 55, 33],
+    },
+  };
+  const VIEW_NAME: Record<string, string> = { canvas: 'Canvas', columns: 'By project', timeline: 'Timeline' };
+
+  // What each agent prints while it works. Stand-ins, in the shape real agents print.
+  const FEED: Record<string, string[]> = {
+    t2: ['d|Read tests/test_routing.py', 'Edit tests/test_routing.py (+22 −3)', 'c|$ pytest tests/test_routing.py -q', 'g|✓ 41 passed in 2.31s', 'Writing router tests…', 'Read fastapi/routing.py', 'Edit fastapi/routing.py (+6 −1)', 'c|$ pytest -q -k lifespan', 'g|✓ 12 passed in 0.88s'],
+    t3: ['d|Searched for 1 pattern, read 3 files', 'Update fastapi/params.py', 'c|$ ruff check fastapi/', 'g|All checks passed!', 'Thinking…', 'Edit fastapi/params.py (+14 −9)', 'c|$ pytest tests/test_params.py', 'g|✓ 18 passed'],
+    t4: ['d|Read packages/excalidraw/scene/export.ts', 'Edit export.ts (+31 −4)', 'c|$ yarn test export', 'g|✓ 9 passed', 'Rendering at 3x…', 'Edit renderStaticScene.ts (+3 −1)', 'c|$ yarn test:typecheck', 'g|✓ no errors'],
+    t5: ['d|Read element/collision.ts', 'Thinking about the hit area…', 'Edit collision.ts (+12 −5)', 'c|$ yarn test hit-test', 'g|✓ 6 passed', 'Read element/bounds.ts', 'Edit bounds.ts (+4 −4)'],
+    t1: ['d|Ready.'],
+  };
+  const ASKS = {
+    view: { ask: 'put my agents in columns by project', out: ['c|$ hive views new by-project', 'd|wrote by-project/view.tsx', 'c|$ hive views install ./by-project', 'g|✓ by-project installed'] },
+    widget: { ask: 'a widget for the release checklist', out: ['c|$ hive widgets new release', 'd|wrote release/widget.tsx, PROMPT.md', 'c|$ hive widgets install ./release', 'g|✓ release is on every view'] },
+    tool: { ask: 'a tool that finds flaky tests', out: ['c|$ hive tools new flaky-tests', 'd|wrote flaky-tests/tool.ts', 'c|$ hive tools install ./flaky-tests', 'g|✓ flaky-tests runs bun test 8 times'] },
+    timeline: { ask: 'and a timeline of today', out: ['c|$ hive views install @dip497/timeline', 'g|✓ timeline installed from HiveHub'] },
+  };
+  // A scene is what the workspace holds at the end of a step.
+  const SCENES: Record<string, { view: string; widget: boolean; tool: boolean; done: number }> = {
+    canvas: { view: 'canvas', widget: false, tool: false, done: 0 },
+    view: { view: 'columns', widget: false, tool: false, done: 0 },
+    widget: { view: 'columns', widget: true, tool: false, done: 3 },
+    tool: { view: 'columns', widget: true, tool: true, done: 3 },
+    timeline: { view: 'timeline', widget: true, tool: true, done: 4 },
+  };
+  const ORDER = ['canvas', 'view', 'widget', 'tool', 'timeline'];
+  const DUR: Record<string, number> = { canvas: 3200, view: 6200, widget: 6000, tool: 5600, timeline: 5600 };
+
+  for (const root of document.querySelectorAll<HTMLElement>('[data-hero-stage]')) {
+    const stage = root.querySelector<HTMLElement>('.hs-stage')!;
+    const els = new Map<string, HTMLElement>();
+    for (const el of stage.querySelectorAll<HTMLElement>('[data-id]')) els.set(el.dataset.id!, el);
+    els.set('axis', stage.querySelector('.hs-axis')!);
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-step]')];
+    const pause = root.querySelector<HTMLButtonElement>('[data-pause]')!;
+    const viewName = stage.querySelector<HTMLElement>('[data-view-name]')!;
+    const viewChip = viewName.parentElement!;
+    const widget = els.get('widget')!, tool = els.get('tool')!;
+    const askEl = stage.querySelector<HTMLElement>('[data-ask]')!;
+    const toastEl = stage.querySelector<HTMLElement>('.hs-toast')!;
+    const sayBox = root.querySelector<HTMLElement>('.hs-say')!;
+    const SAY: Record<string, [string, string]> = {
+      canvas: ['The canvas, where it starts', 'Five agents at work, each in a real terminal.'],
+      view: ['You, to claude', '“Put my agents in columns by project.”'],
+      widget: ['You, to claude', '“A widget for the release checklist.”'],
+      tool: ['You, to claude', '“A tool that finds flaky tests.”'],
+      timeline: ['You, to claude', '“And a timeline of today.”'],
+    };
+    const say = (id: string) => {
+      sayBox.dataset.swap = '';
+      window.setTimeout(() => {
+        sayBox.querySelector('[data-who]')!.textContent = SAY[id][0];
+        sayBox.querySelector('[data-say]')!.textContent = SAY[id][1];
+        delete sayBox.dataset.swap;
+      }, still ? 0 : 220);
+    };
+    let toastTimer = 0;
+    const toast = (what: string, name: string) => {
+      toastEl.querySelector('[data-toast]')!.innerHTML = `claude wrote ${what} <b>${name}</b>`;
+      toastEl.dataset.on = '';
+      clearTimeout(toastTimer); toastTimer = window.setTimeout(() => delete toastEl.dataset.on, 2600);
+    };
+    const narrow = matchMedia('(max-width: 640px)');
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let view = 'canvas';
+    let timers: number[] = [];
+    let feeds: number[] = [];
+    let playing = !still;
+    let current = 0;
+    const later = (ms: number, fn: () => void) => { timers.push(window.setTimeout(fn, still ? 0 : ms)); };
+    const clear = () => { timers.forEach(clearTimeout); timers = []; };
+
+    const place = () => {
+      const L = (narrow.matches ? NARROW : WIDE)[view];
+      for (const [id, r] of Object.entries(L)) {
+        const el = els.get(id); if (!el) continue;
+        el.style.left = r[0] + '%'; el.style.top = r[1] + '%'; el.style.width = r[2] + '%'; el.style.height = r[3] + '%';
+      }
+    };
+    const setView = (v: string) => {
+      if (v === view) return;
+      view = v; stage.dataset.view = v; viewName.textContent = VIEW_NAME[v];
+      viewChip.dataset.new = ''; window.setTimeout(() => delete viewChip.dataset.new, 1200);
+      place();
+    };
+    const line = (tile: string, text: string) => {
+      const box = els.get(tile)?.querySelector('[data-lines]'); if (!box) return;
+      const p = document.createElement('p');
+      const m = /^([cgda])\|(.*)$/.exec(text);
+      if (m) { p.className = m[1]; p.textContent = m[2]; } else p.textContent = text;
+      box.append(p);
+      while (box.children.length > (tile === 't1' ? 8 : 14)) box.firstElementChild!.remove();
+    };
+    const setDone = (n: number) => {
+      widget.style.setProperty('--done', String(n));
+      widget.querySelector('[data-done]')!.textContent = String(n);
+      widget.querySelectorAll('li').forEach((li, i) => li.toggleAttribute('data-done', i < n));
+      widget.toggleAttribute('data-all', n === 4);
+    };
+    const status = (tile: string, s: string, label = s === 'attention' ? 'needs you' : s) => {
+      const el = els.get(tile); if (!el) return;
+      el.dataset.status = s; el.querySelector('[data-pill]')!.textContent = label;
+    };
+    const lanes = () => { for (const id of ['t1', 't2', 't3', 't4', 't5', 'tool']) els.get(id)!.style.setProperty('--l', (8 + Math.random() * 50).toFixed(0) + '%'); };
+
+    // The background hum: agents print as they work, whatever the step.
+    const hum = () => {
+      feeds.forEach(clearInterval); feeds = [];
+      for (const id of ['t2', 't3', 't4', 't5']) {
+        let i = Math.floor(Math.random() * 4);
+        FEED[id].slice(0, 5).forEach((l) => line(id, l));
+        if (still) continue;
+        feeds.push(window.setInterval(() => { if (playing) line(id, FEED[id][i++ % FEED[id].length]); }, 900 + Math.random() * 900));
+      }
+    };
+
+    const typeAsk = (text: string, then: () => void) => {
+      askEl.textContent = '';
+      if (still) { askEl.textContent = text; then(); return; }
+      let i = 0;
+      const tick = () => { askEl.textContent = text.slice(0, ++i); if (i < text.length) later(34, tick); else later(380, then); };
+      later(250, tick);
+    };
+    const runAsk = (key: keyof typeof ASKS, done: () => void) => {
+      status('t1', 'working');
+      typeAsk(ASKS[key].ask, () => {
+        line('t1', 'c|› ' + ASKS[key].ask);
+        askEl.textContent = '';
+        ASKS[key].out.forEach((l, i) => later(420 * (i + 1), () => line('t1', l)));
+        later(420 * (ASKS[key].out.length + 1), () => { status('t1', 'idle'); done(); });
+      });
+    };
+
+    // Jump straight to the end state of a step, with nothing typed.
+    const show = (id: string) => {
+      const s = SCENES[id];
+      setView(s.view);
+      widget.toggleAttribute('data-on', s.widget); tool.toggleAttribute('data-on', s.tool);
+      setDone(s.done);
+    };
+    const select = (i: number, run: boolean) => {
+      current = i;
+      say(ORDER[i]);
+      tabs.forEach((t, j) => {
+        t.setAttribute('aria-selected', String(j === i));
+        t.toggleAttribute('data-run', run && j === i);
+        if (j === i) t.style.setProperty('--dur', DUR[ORDER[i]] + 'ms');
+      });
+    };
+    const play = (i: number) => {
+      clear();
+      const id = ORDER[i];
+      select(i, true);
+      if (id === 'canvas') {
+        show('canvas'); status('t3', 'working'); status('t5', 'working');
+        els.get('t1')!.querySelector('[data-lines]')!.replaceChildren();
+        line('t1', 'd|Ready. Ask me for anything on this workspace.');
+        later(1600, () => status('t5', 'attention'));
+      } else if (id === 'view') {
+        show('canvas');
+        runAsk('view', () => { setView('columns'); status('t5', 'working'); toast('a view:', 'By project'); });
+      } else if (id === 'widget') {
+        show('view');
+        runAsk('widget', () => {
+          widget.toggleAttribute('data-on', true); toast('a widget:', 'release');
+          [1, 2, 3].forEach((n) => later(500 + n * 520, () => setDone(n)));
+        });
+      } else if (id === 'tool') {
+        show('widget');
+        runAsk('tool', () => { tool.toggleAttribute('data-on', true); status('t3', 'done'); toast('a tool:', 'Flaky tests'); });
+      } else {
+        show('tool'); lanes();
+        runAsk('timeline', () => { setView('timeline'); later(900, () => setDone(4)); toastEl.querySelector('[data-toast]')!.innerHTML = 'Installed from HiveHub: <b>Timeline</b>'; toastEl.dataset.on = ''; clearTimeout(toastTimer); toastTimer = window.setTimeout(() => delete toastEl.dataset.on, 2600); });
+      }
+      later(DUR[id], () => { if (playing) play((i + 1) % ORDER.length); });
+    };
+
+    tabs.forEach((t, i) => t.addEventListener('click', () => {
+      playing = false; pause.textContent = 'Play'; pause.setAttribute('aria-pressed', 'true');
+      clear(); select(i, false); show(ORDER[i]); if (ORDER[i] === 'timeline') lanes(); askEl.textContent = '';
+    }));
+    pause.addEventListener('click', () => {
+      playing = !playing;
+      pause.textContent = playing ? 'Pause' : 'Play';
+      pause.setAttribute('aria-pressed', String(!playing));
+      if (playing) play((current + 1) % ORDER.length); else { clear(); select(current, false); }
+    });
+    narrow.addEventListener('change', place);
+
+    place(); hum(); lanes();
+    requestAnimationFrame(() => requestAnimationFrame(() => { stage.dataset.placed = ''; }));
+    if (still) { pause.textContent = 'Play'; pause.setAttribute('aria-pressed', 'true'); select(0, false); show('canvas'); line('t1', 'd|Ready.'); }
+    else {
+      // Off screen, nothing runs.
+      let started = false;
+      new IntersectionObserver(([e]) => {
+        if (e.isIntersecting && !started) { started = true; play(0); }
+        else if (!e.isIntersecting && started && playing) { playing = false; clear(); select(current, false); root.dataset.away = ''; }
+        else if (e.isIntersecting && root.dataset.away !== undefined && pause.getAttribute('aria-pressed') === 'false') { delete root.dataset.away; playing = true; play(current); }
+      }, { threshold: 0.15 }).observe(stage);
+    }
+  }
+</script>
