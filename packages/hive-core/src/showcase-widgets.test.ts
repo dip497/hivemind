@@ -1,7 +1,7 @@
 // The showcase widgets in examples/widgets, each run as the app runs it: the widget API's prelude
 // and the widget's own code in one worker scope, driven by the messages the window sends (start,
 // a press, hive.hm's callbacks, an agent's command), and judged by what it draws and answers.
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { WIDGET_PRELUDE } from "./widget-api";
@@ -174,6 +174,20 @@ test("Agent pulse: it counts agents by what they are doing, and today's turns fr
   await new Promise((r) => setTimeout(r, 0));
   expect(await w.command("status")).toEqual({ working: 1, waiting: 1, idle: 1, stuck: 0, turnsToday: 5 });
   expect(texts(w.tree())).toContain("33% of 3 agents busy");
+});
+
+test("Agent pulse: left open past midnight, its turns today start again from the new day's turns", async () => {
+  setSystemTime(new Date(2026, 9, 18, 23, 59));
+  try {
+    const w = run("agent-pulse", { replies: { history: { tiles: [{ turns: [1, 2] }] } } });
+    await new Promise((r) => setTimeout(r, 0));
+    expect((await w.command("status")).turnsToday).toBe(2);
+    setSystemTime(new Date(2026, 9, 19, 0, 1));
+    await w.fire("onEvents", { kind: "turn" });
+    expect((await w.command("status")).turnsToday).toBe(1);
+  } finally {
+    setSystemTime();
+  }
 });
 
 test("Issue burndown: an issue is open each day from its creation until the day it was closed", async () => {

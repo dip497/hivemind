@@ -3,6 +3,7 @@
 const states = new Map();
 const watching = new Map();
 let turns = 0;
+let day = "";
 
 function stateOf(status, info) {
   const s = info && info.agent && info.agent.state;
@@ -13,7 +14,14 @@ function stateOf(status, info) {
   return "idle";
 }
 
+/** Today's count starts again at midnight. */
+function rollOver() {
+  const d = today();
+  if (d !== day) { day = d; turns = 0; }
+}
+
 function draw() {
+  rollOver();
   const count = { working: 0, waiting: 0, idle: 0, stuck: 0 };
   for (const s of states.values()) if (s in count) count[s]++;
   const live = count.working + count.waiting + count.idle + count.stuck;
@@ -45,15 +53,18 @@ hive.on("start", async () => {
     for (const id of agents) if (!watching.has(id)) watching.set(id, hive.hm.subscribeStatus(id, (s, info) => { states.set(id, stateOf(s, info)); draw(); }));
     draw();
   });
-  hive.hm.onEvents(["turn"], () => { turns++; draw(); });
+  hive.hm.onEvents(["turn"], () => { rollOver(); turns++; draw(); });
   try {
-    const day = await hive.hm.history(today());
-    turns += day.tiles.reduce((n, t) => n + t.turns.length, 0);
+    const asked = day;
+    const history = await hive.hm.history(asked);
+    if (asked !== day) return;
+    turns += history.tiles.reduce((n, t) => n + t.turns.length, 0);
     draw();
   } catch { /* an app without history counts from now */ }
 });
 
 hive.hm.onCommand("status", () => {
+  rollOver();
   const out = { working: 0, waiting: 0, idle: 0, stuck: 0, turnsToday: turns };
   for (const s of states.values()) if (s in out) out[s]++;
   return out;

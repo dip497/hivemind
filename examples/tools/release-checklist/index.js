@@ -39,7 +39,8 @@ async function runCheck(id, host, opts) {
     return b === opts.branch ? { state: "pass", detail: `On ${b}` } : { state: "fail", detail: `On ${b}, not ${opts.branch}` };
   }
   if (id === "remote") {
-    await git(host, ["fetch", "--quiet"]);
+    const f = await git(host, ["fetch", "--quiet"]);
+    if (f.code !== 0) return { state: "fail", detail: `Could not fetch the remote: ${f.stderr.trim().split("\n")[0] || `git fetch ended ${f.code}`}` };
     const r = await git(host, ["rev-list", "--left-right", "--count", "HEAD...@{u}"]);
     if (r.code !== 0) return { state: "fail", detail: /no upstream/i.test(r.stderr) ? "The branch has no remote branch to compare with" : r.stderr.trim().split("\n")[0] };
     const u = upToDate(r.stdout);

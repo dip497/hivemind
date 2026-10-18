@@ -9,17 +9,12 @@ const h = React.createElement;
 const muted = { color: "var(--color-fg3)", fontSize: 11 };
 const mono = { fontFamily: "var(--font-mono)" };
 const LIMIT = 200;
-let safeFlag = ["-safe"];
-
 async function sqlite(host, file, sql) {
   const refused = refuseQuery(sql);
   if (refused) throw new Error(refused);
-  let r = await host.run("sqlite3", ["-readonly", ...safeFlag, "-json", file, sql.trim()]);
-  // sqlite3 before 3.37 has no -safe; the dot commands it guards are refused above anyway.
-  if (r.code !== 0 && safeFlag.length && /-safe/.test(r.stderr) && /unknown option/i.test(r.stderr)) {
-    safeFlag = [];
-    r = await host.run("sqlite3", ["-readonly", "-json", file, sql.trim()]);
-  }
+  const r = await host.run("sqlite3", ["-readonly", "-safe", "-json", file, sql.trim()]);
+  // Without -safe a query's own functions (writefile, load_extension) can still write files.
+  if (r.code !== 0 && /-safe/.test(r.stderr) && /unknown option/i.test(r.stderr)) throw new Error("This sqlite3 has no -safe (it came in 3.37); install a newer sqlite3 to browse here.");
   if (r.code !== 0) throw new Error(cleanError(r.stderr));
   return parseRows(r.stdout);
 }
