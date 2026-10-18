@@ -92,20 +92,22 @@
           {
             "u": 0.45,
             "box": "widget",
-            "pad": 1.12
+            "pad": 1.36,
+            "lift": 0.12
           }
         ]
       },
       {
         "beat": "built-close",
         "start": 11.0,
-        "end": 14.6,
+        "end": 17.4,
         "play": "loop",
         "camera": [
           {
             "u": 0,
             "box": "widget",
-            "pad": 1.12
+            "pad": 1.36,
+            "lift": 0.12
           }
         ]
       }
@@ -150,7 +152,21 @@
     "stills": {
       "start": 0,
       "asked": 5.8,
-      "built": 13.0
+      "built": 13.0,
+      "end": 16.5
+    },
+    "rings": [
+      {
+        "start": 9.9,
+        "end": 11.0,
+        "shot": "building",
+        "box": "widget"
+      }
+    ],
+    "end": {
+      "start": 14.6,
+      "title": "Download Hivemind",
+      "command": "bash <(curl -fsSL https://hivemind.griiken.com/install.sh)"
     }
   },
   "phone": {

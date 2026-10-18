@@ -22,16 +22,20 @@ if (!process.argv.includes("--render")) {
   run(path.join(HERE, "demo-workspace.sh"), [DEMO]);
   const env = { ...process.env, DEMO_HOME: DEMO, DEMO_OUT: RECORDING };
   for (const name of ["ELECTRON_RUN_AS_NODE", "WAYLAND_DISPLAY"]) delete env[name];
-  run("xvfb-run", ["-a", "-s", "-screen 0 1700x1100x24", "npx", "playwright", "test", "--config", "scripts/demo-media/capture.config.ts"], { cwd: DESKTOP, env });
+  // Low priority: a capture or a render must not slow the machine it runs on.
+  run("nice", ["-n", "15", "xvfb-run", "-a", "-s", "-screen 0 1700x1100x24", "npx", "playwright", "test", "--config", "scripts/demo-media/capture.config.ts", "capture.spec.ts"], { cwd: DESKTOP, env });
 }
 
 // The scene the clips promise, as the recording counted it; no render from a wrong one.
 const cues = JSON.parse(fs.readFileSync(path.join(RECORDING, "cues.json"), "utf8"));
 const wrong = [];
-if ((cues.census.before.working ?? 0) < 16) wrong.push(`only ${cues.census.before.working ?? 0} agents were working`);
+// The opening: two agents at their jobs and one waiting on the person.
+if ((cues.census.before.working ?? 0) < 2 || (cues.census.before.waiting ?? 0) !== 1) wrong.push(`the opening needs two agents working and one waiting, saw ${JSON.stringify(cues.census.before)}`);
 if (!cues.widget.id) wrong.push("the agent put no widget on the board");
 const criteria = cues.widget.list ?? [];
 if (!criteria.length || criteria.some((c) => !c.done)) wrong.push("the issue the widget tracks was not ticked off");
+const unreadable = (cues.widget.drawn ?? []).findIndex((t) => t.includes("[object "));
+if (unreadable >= 0) wrong.push(`the widget printed an object as text in building frame ${unreadable}`);
 if (Object.entries(cues.census.asking).filter(([k]) => k === "waiting").reduce((n, [, v]) => n + v, 0) !== 1) wrong.push(`the phone clip needs one agent waiting, saw ${JSON.stringify(cues.census.asking)}`);
 if (wrong.length) {
   console.error(`not rendering, the recording is wrong:\n  ${wrong.join("\n  ")}`);
@@ -40,4 +44,4 @@ if (wrong.length) {
 
 const render = path.join(HERE, "render");
 if (!fs.existsSync(path.join(render, "node_modules"))) run("npm", ["ci", "--no-audit", "--no-fund", "--ignore-scripts"], { cwd: render });
-run("node", ["render.mjs", "--recording", RECORDING], { cwd: render });
+run("nice", ["-n", "15", "node", "render.mjs", "--recording", RECORDING], { cwd: render });

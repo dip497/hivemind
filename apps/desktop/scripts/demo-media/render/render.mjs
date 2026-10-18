@@ -2,7 +2,7 @@
 // Remotion in headless Chromium, then one ffmpeg encode per format with fixed settings, so the same
 // recording and story give the same files.
 //
-//   node render.mjs [--recording DIR] [--site DIR] [--only hero|phone]
+//   node render.mjs [--recording DIR] [--site DIR] [--only <story id>]
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,9 +17,8 @@ const arg = (name, fallback) => {
   return i > 0 ? process.argv[i + 1] : fallback;
 };
 const recording = path.resolve(arg("recording", path.join(os.homedir(), "hivemind-demo-recording")));
-const site = path.resolve(arg("site", path.join(HERE, "../../../../../docs/public/shots")));
+const site = path.resolve(arg("site", path.join(HERE, "../../../../../site/public/shots")));
 const only = arg("only", null);
-const cues = JSON.parse(fs.readFileSync(path.join(recording, "cues.json"), "utf8"));
 const stories = JSON.parse(fs.readFileSync(path.join(HERE, "../story.json"), "utf8"));
 
 // What each clip may weigh on the page.
@@ -27,20 +26,24 @@ const BUDGET = { "poster.webp": 120_000, "clip.webm": 1_500_000, "clip.mp4": 2_0
 const EXACT = ["-map_metadata", "-1", "-fflags", "+bitexact", "-flags:v", "+bitexact"];
 const ffmpeg = (...a) => execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...a], { stdio: "inherit" });
 
-// The story's words: at most eight on screen at once, each line readable at 0.3 s a word once it
-// is fully in (a 0.4 s entrance, a 0.25 s exit).
+// The story's words: at most eight on screen at once, each line readable at 0.3 s a word between
+// its fades (0.18 s in, 0.18 s out).
 for (const [id, story] of Object.entries(stories)) {
   for (const c of story.captions) {
     const words = c.text.split(/\s+/).length;
     if (words > 8) throw new Error(`${id}: "${c.text}" is more than eight words`);
-    if (c.end - c.start - 0.65 < 0.3 * words) throw new Error(`${id}: "${c.text}" is shown too briefly to read`);
+    if (c.end - c.start - 0.36 < 0.3 * words) throw new Error(`${id}: "${c.text}" is shown too briefly to read`);
   }
 }
 
 const serveUrl = await bundle({ entryPoint: path.join(HERE, "src/index.ts"), publicDir: recording });
 const report = [];
 for (const [id, story] of Object.entries(stories)) {
-  if (only && only !== id) continue;
+  if (only && !only.split(",").includes(id)) continue;
+  // A clip recorded on its own keeps its cues in its folder; its frames are named from the top.
+  const cuesFile = path.join(recording, story.recording ?? "", "cues.json");
+  if (!fs.existsSync(cuesFile)) { report.push({ file: `${id}: no recording at ${cuesFile}`, ok: false }); continue; }
+  const cues = JSON.parse(fs.readFileSync(cuesFile, "utf8"));
   // Boxes the story measured by hand from the frames, for what the recording did not measure.
   const boxes = { ...cues.boxes };
   for (const [name, b] of Object.entries(story.boxes ?? {})) if (!boxes[name]?.w) boxes[name] = b;
@@ -49,7 +52,7 @@ for (const [id, story] of Object.entries(stories)) {
   const frames = fs.mkdtempSync(path.join(os.tmpdir(), `demo-${id}-`));
   await renderFrames({
     composition, serveUrl, inputProps, outputDir: frames, imageFormat: "png", concurrency: 4,
-    chromiumOptions: { gl: "swangle" }, onStart: () => {}, onFrameUpdate: () => {},
+    onStart: () => {}, onFrameUpdate: () => {},
   });
   const files = fs.readdirSync(frames).filter((f) => f.endsWith(".png")).sort();
   const seq = path.join(frames, "seq");

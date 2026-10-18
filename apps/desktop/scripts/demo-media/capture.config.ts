@@ -15,7 +15,7 @@ for (const name of Object.keys(process.env)) if (/^CLAUDE/.test(name)) delete pr
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "capture.spec.ts",
+  testMatch: ["capture.spec.ts", "clips.spec.ts"],
   timeout: 1_800_000,
   workers: 1,
   retries: 0,

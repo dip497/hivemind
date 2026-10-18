@@ -4,8 +4,8 @@
   "type": "module",
   "description": "Renders the website's demo clips from a recording made by ../capture.spec.ts",
   "dependencies": {
-    "@paper-design/shaders-react": "0.0.81",
     "@remotion/bundler": "4.0.531",
+    "@remotion/google-fonts": "4.0.531",
     "@remotion/renderer": "4.0.531",
     "react": "19.3.0",
     "react-dom": "19.3.0",

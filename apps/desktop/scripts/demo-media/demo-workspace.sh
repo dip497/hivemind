@@ -48,11 +48,13 @@ issue excalidraw "Faster hit testing on scenes with 5,000 elements" backlog "Pro
 issue ripgrep "Document how --glob and --iglob combine" in_progress \
   "The guide says nothing about the order globs apply in.\n\nSee \`GUIDE.md\`." "Write the section||Add an example per flag"
 issue ripgrep "Count matches per file type" todo "\`--type-list\` names the types; \`--count\` does not group by them."
-issue fastapi "Docstrings for the helpers in fastapi/utils.py" in_progress \
+issue fastapi "Document utils.py" in_progress \
   "Three helpers have none: \`generate_unique_id\`, \`get_value_or_default\`, \`is_body_allowed_for_status_code\`." \
   "generate_unique_id||get_value_or_default||is_body_allowed_for_status_code"
 issue fastapi "Show the release checklist on the board" todo "A widget beside the agent doing the release, ticked as it goes."
 issue fastapi "Typed responses in the advanced tutorial" backlog "Several examples return bare dicts."
+issue fastapi "An example of dependencies with yield and HTTPException" todo "The tutorial explains it; no example runs it."
+issue fastapi "Mention response_model_exclude_none in the FAQ" todo "Asked often; the answer is one flag."
 
 # The agents that work apart, each on its own branch in its own worktree.
 git -C "$DIR/excalidraw" worktree add -q -b fix/arrow-binding "$DIR/worktrees/excalidraw-arrow-binding"
