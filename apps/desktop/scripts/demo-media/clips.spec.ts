@@ -33,6 +33,8 @@ test.afterEach(async () => {
 
 // The only commands a clip answers Yes to, each the one its job names; anything else fails it.
 const RUFF = /^ruff check fastapi\/?( --[\w-]+)*(; echo "EXIT=\$\?")?$/;
+// Then it reports on the CI light, as the job says.
+const REPORT = /^hive ctl plugin call @dip497\/ci-light set '\{"state":"(passed|failed)","name":"ruff","branch":"main","detail":"[^'"]*"\}'(; echo "EXIT=\$\?")?$/;
 const FLAKY = /^hive ctl plugin call dip497\/flaky-tests flaky( --json)?$/;
 
 // Jobs a person would give, each about its own folder.
@@ -88,7 +90,7 @@ test("widgets", async () => {
   const before = await said();
   for (let i = 0; i < 300 && !((await said()) !== before && s.census().of(ci)?.state !== "working"); i++) {
     // What it runs that is not on its list it asks about first; the person allows it.
-    allow(s, ci, RUFF, approved);
+    allow(s, ci, new RegExp(`${RUFF.source}|${REPORT.source}`), approved);
     await light(); await desktop.waitForTimeout(700);
   }
   expect(await said(), s.show()).not.toBe(before);
