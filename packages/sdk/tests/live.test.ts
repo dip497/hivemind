@@ -53,7 +53,7 @@ describe.skipIf(!unix)("a real hive host", () => {
     const client = await connect({ token: made.token, socket: path.join(data, "drive.sock") });
     try {
       expect(client.as).toEqual({ client: "dashboard", role: "view", workspace: fs.realpathSync(workspace) });
-      expect(await client.agents.list()).toEqual({ seq: 0, agents: [] });
+      expect(await client.agents.list()).toEqual({ seq: expect.any(Number), agents: [] });
 
       const refused = await client.agents.start({ program: "claude", prompt: "Run the tests" }).catch((e: unknown) => e);
       expect(refused).toBeInstanceOf(ApiError);

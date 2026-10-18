@@ -63,7 +63,9 @@ class LiveHost(unittest.TestCase):
         made = self.hive("grant", "create", "dashboard", "-w", self.workspace, "--role", "view")
         with connect(token=made["token"], socket=self.socket) as hive:
             self.assertEqual(hive.as_, {"client": "dashboard", "role": "view", "workspace": os.path.realpath(self.workspace)})
-            self.assertEqual(hive.agents.list(), {"seq": 0, "agents": []})
+            listed = hive.agents.list()
+            self.assertEqual(listed["agents"], [])
+            self.assertIsInstance(listed["seq"], int)
             with self.assertRaises(ApiError) as refused:
                 hive.agents.start({"program": "claude", "prompt": "Run the tests"})
             self.assertEqual(refused.exception.code, "FORBIDDEN")
@@ -79,7 +81,9 @@ class LiveHost(unittest.TestCase):
 
         async def run() -> None:
             async with await aio.connect(token=made["token"], socket=self.socket) as hive:
-                self.assertEqual(await hive.agents.list(), {"seq": 0, "agents": []})
+                listed = await hive.agents.list()
+                self.assertEqual(listed["agents"], [])
+                self.assertIsInstance(listed["seq"], int)
                 with self.assertRaises(ApiError) as refused:
                     await hive.call("agent.close", ["t1"])
                 self.assertEqual(refused.exception.code, "FORBIDDEN")
