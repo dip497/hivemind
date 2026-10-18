@@ -449,7 +449,6 @@ detect:
 </script>
 
 <style is:global define:vars={{
-  artHero: `url(${base}/shots/marble.webp)`,
   artHow: `url(${base}/shots/marble-4.webp)`,
   artYours: `url(${base}/shots/marble-5.webp)`,
   artViews: `url(${base}/shots/marble-2.webp)`,
@@ -502,12 +501,12 @@ detect:
   /* ── Hero ─────────────────────────────────────────────────────────────── */
   /* The hero holds what it holds: the copy, and the app beside it. */
   /* Which piece sits where — the recipe itself lives in workspace.css (.plate).
-       hero  · a draped figure at rest — the workspace holding steady while agents run
        how   · a handover painted on a vase — one figure passing work to the next
        yours · a grave stele — one standard form, cut the same for everyone
        views · a temple column — the structure you are free to rebuild
        faq   · a face, where a reader decides whether to trust it                        */
-  .hero{padding:56px 0 48px;--plate-art:var(--artHero);--plate-w:min(44vw,720px);--plate-o:.42;--plate-pos:right top}
+  /* The hero has no figure behind it: its loop's poster is what the page loads first. */
+  .hero{padding:56px 0 48px;--plate-art:none}
   #how{--plate-art:var(--artHow);--plate-w:min(24vw,340px);--plate-o:.2;--plate-fit:cover}
   #yours{--plate-art:var(--artYours);--plate-w:min(18vw,250px);--plate-o:.22;--plate-pos:right bottom}
   #views{--plate-art:var(--artViews);--plate-w:min(20vw,300px);--plate-o:.2;--plate-pos:left bottom}

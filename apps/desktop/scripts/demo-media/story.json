@@ -1,51 +1,256 @@
 {
   "hero": {
+    "boxes": {
+      "widget": {
+        "x": 2688,
+        "y": 128,
+        "w": 480,
+        "h": 406
+      }
+    },
     "shots": [
-      { "beat": "working", "start": 0, "end": 3.0, "play": "loop",
-        "camera": [{ "u": 0, "box": "full" }, { "u": 0.35, "box": "full" }, { "u": 1, "box": "builderWide", "pad": 2.6 }] },
-      { "beat": "builder-close", "start": 2.6, "end": 3.9, "fade": 0.4, "play": "loop",
-        "camera": [{ "u": 0, "box": "builderClose", "pad": 1.25 }, { "u": 1, "box": "full" }] },
-      { "beat": "typing", "start": 3.9, "end": 5.7, "play": "steps",
-        "camera": [{ "u": 0, "box": "full" }] },
-      { "beat": "building", "start": 5.7, "end": 11.2, "play": "lapse",
-        "camera": [{ "u": 0, "box": "full" }] },
-      { "beat": "built-close", "start": 11.2, "end": 12.4, "play": "loop",
-        "camera": [{ "u": 0, "box": "full" }] },
-      { "beat": "built", "start": 12.0, "end": 15.0, "fade": 0.4, "play": "loop",
-        "camera": [{ "u": 0, "box": "builderWide", "pad": 2.6 }, { "u": 0.55, "box": "full" }, { "u": 1, "box": "full" }] }
+      {
+        "beat": "working",
+        "start": 0,
+        "end": 2.6,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          },
+          {
+            "u": 0.4,
+            "box": "full"
+          },
+          {
+            "u": 1,
+            "box": "builderWide",
+            "pad": 2.2
+          }
+        ]
+      },
+      {
+        "beat": "builder-close",
+        "start": 2.3,
+        "end": 4.0,
+        "fade": 0.35,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "builderClose",
+            "pad": 1.02
+          }
+        ]
+      },
+      {
+        "beat": "typing",
+        "start": 4.0,
+        "end": 6.2,
+        "play": "steps",
+        "camera": [
+          {
+            "u": 0,
+            "box": "builderClose",
+            "pad": 1.02
+          }
+        ]
+      },
+      {
+        "beat": "building",
+        "start": 6.2,
+        "end": 9.0,
+        "play": "lapse",
+        "range": [
+          0,
+          0.37
+        ],
+        "camera": [
+          {
+            "u": 0,
+            "box": "builderClose",
+            "pad": 1.02
+          }
+        ]
+      },
+      {
+        "beat": "building",
+        "start": 9.0,
+        "end": 11.0,
+        "play": "lapse",
+        "range": [
+          0.37,
+          1
+        ],
+        "camera": [
+          {
+            "u": 0,
+            "box": "builderClose",
+            "pad": 1.02
+          },
+          {
+            "u": 0.45,
+            "box": "widget",
+            "pad": 1.12
+          }
+        ]
+      },
+      {
+        "beat": "built-close",
+        "start": 11.0,
+        "end": 14.6,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "widget",
+            "pad": 1.12
+          }
+        ]
+      }
     ],
     "captions": [
-      { "text": "Twenty agents, one board.", "start": 0.2, "end": 2.7 },
-      { "text": "Ask one for a widget.", "start": 3.6, "end": 6.2 },
-      { "text": "It builds it, installs it, uses it.", "start": 6.6, "end": 11.0 },
-      { "text": "Your workspace, built by your agents.", "start": 12.6, "end": 14.9 }
+      {
+        "text": "Twenty agents, one board.",
+        "start": 0.2,
+        "end": 2.4
+      },
+      {
+        "text": "Ask one for a widget.",
+        "start": 3.8,
+        "end": 6.0
+      },
+      {
+        "text": "It builds it, installs it, uses it.",
+        "start": 6.4,
+        "end": 9.2
+      },
+      {
+        "text": "Your workspace, built by your agents.",
+        "start": 11.6,
+        "end": 14.4
+      }
     ],
     "pointer": [
-      { "start": 3.0, "end": 3.95, "from": [980, 640], "to": { "shot": "builder-close", "box": "builderClose" }, "click": 3.7 }
+      {
+        "start": 2.7,
+        "end": 3.7,
+        "from": [
+          980,
+          640
+        ],
+        "to": {
+          "shot": "builder-close",
+          "box": "builderClose"
+        },
+        "click": 3.4
+      }
     ],
-    "stills": { "start": 0, "asked": 5.5, "built": 11.8 }
+    "stills": {
+      "start": 0,
+      "asked": 5.8,
+      "built": 13.0
+    }
   },
   "phone": {
     "shots": [
-      { "beat": "asking", "start": 0, "end": 2.4, "play": "loop",
-        "camera": [{ "u": 0, "box": "full" }, { "u": 0.3, "box": "full" }, { "u": 1, "box": "askerWide", "pad": 2.6 }] },
-      { "beat": "asking-close", "start": 2.0, "end": 5.7, "fade": 0.4, "play": "loop",
-        "camera": [{ "u": 0, "box": "full" }] },
-      { "beat": "answered-close", "start": 5.7, "end": 9.0, "fade": 0.3, "play": "loop",
-        "camera": [{ "u": 0, "box": "full" }] }
+      {
+        "beat": "asking",
+        "start": 0,
+        "end": 2.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          },
+          {
+            "u": 0.3,
+            "box": "full"
+          },
+          {
+            "u": 1,
+            "box": "askerWide",
+            "pad": 2.6
+          }
+        ]
+      },
+      {
+        "beat": "asking-close",
+        "start": 2.0,
+        "end": 5.7,
+        "fade": 0.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          }
+        ]
+      },
+      {
+        "beat": "answered-close",
+        "start": 5.7,
+        "end": 9.0,
+        "fade": 0.3,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          }
+        ]
+      }
     ],
     "captions": [
-      { "text": "One agent needs you.", "start": 0.2, "end": 2.4 },
-      { "text": "Answer it from your phone.", "start": 2.8, "end": 8.8 }
+      {
+        "text": "One agent needs you.",
+        "start": 0.2,
+        "end": 2.4
+      },
+      {
+        "text": "Answer it from your phone.",
+        "start": 2.8,
+        "end": 8.8
+      }
     ],
-    "phone": { "start": 2.6, "end": 9.0, "shots": [
-      { "file": "frames/phone-needs.png", "start": 2.6 },
-      { "file": "frames/phone-asks.png", "start": 4.2 },
-      { "file": "frames/phone-answered.png", "start": 5.6 }
-    ] },
+    "phone": {
+      "start": 2.6,
+      "end": 9.0,
+      "shots": [
+        {
+          "file": "frames/phone-needs.png",
+          "start": 2.6
+        },
+        {
+          "file": "frames/phone-asks.png",
+          "start": 4.2
+        },
+        {
+          "file": "frames/phone-answered.png",
+          "start": 5.6
+        }
+      ]
+    },
     "pointer": [
-      { "start": 4.4, "end": 5.6, "from": [760, 700], "to": { "phone": "allow" }, "click": 5.3 }
+      {
+        "start": 4.4,
+        "end": 5.6,
+        "from": [
+          760,
+          700
+        ],
+        "to": {
+          "phone": "allow"
+        },
+        "click": 5.3
+      }
     ],
-    "stills": { "asking": 1.5, "asks": 5.0, "answered": 7.5 }
+    "stills": {
+      "asking": 1.5,
+      "asks": 5.0,
+      "answered": 7.5
+    }
   }
 }

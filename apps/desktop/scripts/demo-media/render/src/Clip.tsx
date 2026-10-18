@@ -22,6 +22,7 @@ type Caption = { text: string; start: number; end: number };
 type PhoneShot = { file: string; start: number };
 type Pointer = { start: number; end: number; from: [number, number]; to: { shot: string; box: string } | { phone: string }; click?: number };
 export type Story = {
+  boxes?: Record<string, Box>;
   shots: Shot[];
   captions: Caption[];
   phone?: { start: number; end: number; shots: PhoneShot[] };
@@ -149,7 +150,7 @@ export function Clip({ story, cues }: ClipProps) {
 
   return (
     <AbsoluteFill style={{ background: "#0b0d10" }}>
-      <ShaderMeshGradient speed={0.12} colors={["#0b0d10", "#14171c", "#1d2a4a", "#101318"]} distortion={0.5} swirl={0.08} />
+      <ShaderMeshGradient speed={0.12} colors={["#1d2536", "#2d3d60", "#4b6198", "#26314b"]} distortion={0.5} swirl={0.08} />
       <div style={{
         position: "absolute", left: WIN.x, top: WIN.y, width: WIN.w, height: WIN.h, overflow: "hidden",
         borderRadius: 14, background: "#121416",

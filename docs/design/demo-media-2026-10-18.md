@@ -63,7 +63,11 @@ render/render.mjs   →  docs/public/shots/{hero,phone}/clip.webm, clip.mp4, pos
 2. **Cues** (`cues.json`): what capture saw, as data: each beat's frames and times, the boxes the
    camera aims at, the scene counted by `hive ctl agents` and the widget's own `list`.
 3. **Story** (`story.json`): what each clip shows when: beats, camera keys by box name, captions,
-   phone and pointer. Copy or timing changes never need a new recording.
+   phone and pointer. Copy or timing changes never need a new recording. A box the recording did
+   not measure (a widget floating over the board, before capture measured those) may be given in
+   the story's own `boxes`, measured from the frames. After the opening the camera stays on the
+   active tile, then on the widget, which fills the clip for its last five seconds. A caption
+   stays at least 0.3 s a word once it is in; the render refuses one that does not.
 4. **Render**: a Remotion composition (`render/src/Clip.tsx`) whose frame `f` is a pure function
    of story, cues and frames, behind it remocn's mesh-gradient shader (paper-design/shaders,
    Apache-2.0; the wrapper, MIT), clocked by the frame number. Frames go to ffmpeg once per
@@ -82,7 +86,8 @@ render/render.mjs   →  docs/public/shots/{hero,phone}/clip.webm, clip.mp4, pos
 | words on screen at once | ≤ 8 (the render refuses more) |
 | entrances | 200–500 ms, ease-out; the hook within 2 s |
 
-On the page the poster is an `<img fetchpriority="high">`; the `<video muted playsinline loop
+On the page the poster is an `<img fetchpriority="high">` and the hero has no backdrop figure, so
+the poster is the page's largest paint on desktop (LCP 0.87 s locally); the `<video muted playsinline loop
 preload="none">` over it starts after `load` and shows only once it plays. A Pause button is always
 there. With `prefers-reduced-motion: reduce` the video does not start; the button can start it.
 

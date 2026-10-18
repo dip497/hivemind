@@ -337,7 +337,8 @@ test("capture", async () => {
     await desktop.waitForTimeout(700);
   }
   const ticked = criteria();
-  boxes.widgetClose = await box(".react-flow__node-widget").catch(() => ({ x: 0, y: 0, w: 0, h: 0 }));
+  // A widget sits on the board or floats over it, as its widget.json says.
+  boxes.widget = await box(".react-flow__node-widget, [data-widget]").catch(() => ({ x: 0, y: 0, w: 0, h: 0 }));
   await burst("built-close");
   await desktop.keyboard.press("Escape");
   await fit();

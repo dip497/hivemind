@@ -27,16 +27,24 @@ const BUDGET = { "poster.webp": 120_000, "clip.webm": 1_500_000, "clip.mp4": 2_0
 const EXACT = ["-map_metadata", "-1", "-fflags", "+bitexact", "-flags:v", "+bitexact"];
 const ffmpeg = (...a) => execFileSync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", ...a], { stdio: "inherit" });
 
-// The story's words: at most eight on screen at once.
+// The story's words: at most eight on screen at once, each line readable at 0.3 s a word once it
+// is fully in (a 0.4 s entrance, a 0.25 s exit).
 for (const [id, story] of Object.entries(stories)) {
-  for (const c of story.captions) if (c.text.split(/\s+/).length > 8) throw new Error(`${id}: "${c.text}" is more than eight words`);
+  for (const c of story.captions) {
+    const words = c.text.split(/\s+/).length;
+    if (words > 8) throw new Error(`${id}: "${c.text}" is more than eight words`);
+    if (c.end - c.start - 0.65 < 0.3 * words) throw new Error(`${id}: "${c.text}" is shown too briefly to read`);
+  }
 }
 
 const serveUrl = await bundle({ entryPoint: path.join(HERE, "src/index.ts"), publicDir: recording });
 const report = [];
 for (const [id, story] of Object.entries(stories)) {
   if (only && only !== id) continue;
-  const inputProps = { story, cues };
+  // Boxes the story measured by hand from the frames, for what the recording did not measure.
+  const boxes = { ...cues.boxes };
+  for (const [name, b] of Object.entries(story.boxes ?? {})) if (!boxes[name]?.w) boxes[name] = b;
+  const inputProps = { story, cues: { ...cues, boxes } };
   const composition = await selectComposition({ serveUrl, id, inputProps });
   const frames = fs.mkdtempSync(path.join(os.tmpdir(), `demo-${id}-`));
   await renderFrames({
