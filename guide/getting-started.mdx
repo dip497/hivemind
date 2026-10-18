@@ -1,0 +1,85 @@
+---
+title: "Install and first agent"
+description: "Install Hivemind, add an agent, and start it in a project."
+---
+
+Three steps: install the app, add an agent, open a project.
+
+<Prompt description="Paste this into your coding agent to install Hivemind and add your first agent." actions={["copy","cursor"]}>
+Install Hivemind on this computer, add a coding agent to it, and open a project.
+
+1. Install. On Linux or macOS: `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`. On Windows, in PowerShell: `irm https://hivemind.griiken.com/install.ps1 | iex`. Linux arm64 gets only the `hive` CLI; an Intel Mac has no prebuilt app (tell me, and offer `bash install.sh --dev`, which builds from source and needs git, node 22+, pnpm and bun).
+2. Check: `hive --version` prints a version. If `hive` is not found, `~/.local/bin` is missing from PATH; tell me the line to add to my shell profile.
+3. See which agent CLIs this machine has: `command -v claude codex opencode`. Ask me which one to use. If I have none, ask before installing one.
+4. Add it: `hive agents install <name> --yes`. Check `hive agents list` shows it switched on and `hive agents list --found` lists it.
+5. Ask me which project folder to open, then run `hivemind <folder>`.
+
+Never type a password; if a step needs sudo, ask me to run it. At the end, tell me: the version installed, the agent added, and the keys to use in the app (`2` starts the agent, `1` a terminal, `3` the Code tile).
+</Prompt>
+
+<Steps>
+  <Step title="Install">
+    <CodeGroup>
+    ```bash Linux and macOS
+    bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
+    ```
+
+    ```powershell Windows (PowerShell)
+    irm https://hivemind.griiken.com/install.ps1 | iex
+    ```
+    </CodeGroup>
+
+    | Platform | You get |
+    |---|---|
+    | Linux x86_64, macOS Apple Silicon, Windows x64 | the app, the `hive` CLI and `hive-net` |
+    | Linux arm64 | the `hive` CLI only, to use as a [machine](/machines) |
+    | Intel Mac | build from source with `--dev` |
+
+    Files go in `~/.hivemind-app/` (linked into `~/.local/bin/`), or `%LOCALAPPDATA%\hivemind` on
+    Windows. Run the installer again to upgrade. If the app is open, it downloads the new version and
+    shows **Restart to finish**.
+
+    ```bash
+    bash install.sh --version v2026.10.3   # one exact release
+    bash install.sh --channel nightly      # nightly builds; --channel stable goes back
+    bash install.sh --dev                  # build from source (git, node 22+, pnpm, bun)
+    ```
+  </Step>
+  <Step title="Add an agent">
+    No agent ships in the app. Install an agent's own CLI (`claude`, `codex`, `opencode`, …), then
+    start Hivemind: it finds the CLI on your `PATH` and adds the matching agent from
+    [HiveHub](https://hivehub.griiken.workers.dev/). Or add one yourself:
+
+    ```bash
+    hive agents install claude --yes
+    hive agents list --found          # agents whose CLI is on this machine
+    ```
+
+    In the app: **Settings ▸ Plugins**, tab **HiveHub**. More in [Run agents](/agents).
+  </Step>
+  <Step title="Open a project">
+    ```bash
+    cd ~/my-project && hivemind .
+    ```
+
+    | Key | Opens |
+    |---|---|
+    | `1` | a terminal |
+    | `2` | your default agent, in the selected frame |
+    | `3` | the Code tile (files, editor, changes) |
+    | `6` | a new frame |
+    | `7` | a browser (once the Browser tool is on in Settings ▸ Plugins) |
+    | ⌘B (Ctrl+B) | show or hide the Layers panel |
+    | ⌘E (Ctrl+E) | switch views |
+
+    Everything else is in the toolbar's **Add**. Ctrl+click (⌘+click on a Mac) opens a link in a
+    terminal.
+  </Step>
+</Steps>
+
+## Next
+
+- Track work as [issues](/issues) that agents pick up and close.
+- Watch an agent's edits and comment on them: [Review changes](/review).
+- Run several agents at once: [Coordinate agents](/agent-workflows).
+- Let your coding agent read these docs: [Use these docs with your agent](/docs-for-agents).

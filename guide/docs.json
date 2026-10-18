@@ -1,0 +1,111 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Hivemind",
+  "description": "A workspace for coding agents: run them side by side, see which one waits on you, and drive them from other computers, your phone or your own program.",
+  "colors": {
+    "primary": "#3C68D9",
+    "light": "#739BF5",
+    "dark": "#2C57CD"
+  },
+  "background": {
+    "color": {
+      "light": "#FFFFFF",
+      "dark": "#0D0E10"
+    }
+  },
+  "fonts": {
+    "family": "Geist"
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "favicon": "/favicon.png",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Get started",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["index", "getting-started", "docs-for-agents"]
+          }
+        ]
+      },
+      {
+        "tab": "Use Hivemind",
+        "groups": [
+          {
+            "group": "The workspace",
+            "pages": ["workspaces", "views", "issues", "review"]
+          },
+          {
+            "group": "Agents",
+            "pages": ["agents", "agent-workflows"]
+          },
+          {
+            "group": "Other computers",
+            "pages": ["machines", "host"]
+          },
+          {
+            "group": "People and devices",
+            "pages": ["connect", "multiplayer", "phone", "self-hosting"]
+          },
+          {
+            "group": "Settings and appearance",
+            "pages": ["appearance"]
+          }
+        ]
+      },
+      {
+        "tab": "Extend",
+        "groups": [
+          {
+            "group": "Extend",
+            "pages": ["plugins", "agent-providers", "extension-authoring", "widgets", "tool-plugins"]
+          }
+        ]
+      },
+      {
+        "tab": "API",
+        "groups": [
+          {
+            "group": "API",
+            "pages": ["api", "api-tokens", "api-connect", "api-methods"]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": ["cli", "troubleshooting", "contributing"]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/dip497/hivemind"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Download",
+      "href": "https://hivemind.griiken.com/download"
+    }
+  },
+  "contextual": {
+    "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "add-mcp", "cursor", "vscode"]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/dip497/hivemind"
+    }
+  }
+}

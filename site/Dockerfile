@@ -20,6 +20,8 @@ ENV NODE_ENV=production
 COPY --from=build /app/dist ./dist
 # Everything the server imports, or the container exits before it listens and Cloud Run can
 # only say "the container failed to listen on PORT".
-COPY server.mjs downloads.mjs ./
+COPY server.mjs downloads.mjs guide-redirect.mjs ./
+# The old /guide pages move to the docs site when this names it, e.g. https://docs.example.com.
+ENV DOCS_SITE_URL=""
 EXPOSE 8080
 CMD ["node", "server.mjs"]
