@@ -13,6 +13,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - `hive agents install --help` and the installer name amp, an agent on HiveHub, as the example instead of gemini.
 
+### Added
+
+- Twenty plugins to try in `examples/`: widgets (Waiting on you, Agent pulse, Focus timer, CI light, Test meter, Spend today, Issue burndown, Launchpad), tools (dependency audit, flaky tests, changelog writer, release checklist, bundle size, SQLite browser, log tail, API explorer) and views (a 3D Constellation of your agents, Timeline, Agents by state, Workspace map), plus four wallpapers in `examples/wallpapers`.
+
 ## [2026.10.3] — 2026-10-18
 
 ### Added

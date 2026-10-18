@@ -1,0 +1,12 @@
+{
+  "id": "@dip497/agent-pulse",
+  "name": "Agent pulse",
+  "version": "1.0.0",
+  "description": "How many agents work, wait on you or sit idle right now, and how many turns they finished today.",
+  "category": "agents",
+  "icon": "icon.svg",
+  "size": { "w": 300, "h": 130 },
+  "commands": [
+    { "name": "status", "description": "How many agents are working, waiting, idle or stopped, and the turns finished today." }
+  ]
+}

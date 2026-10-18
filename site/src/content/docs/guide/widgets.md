@@ -194,6 +194,9 @@ hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
 ```
 
 `examples/widgets/progress` is a widget agents keep: a task's steps, added and ticked off by them.
+The other examples there: `waiting-on-you`, `agent-pulse` and `issue-burndown` read the workspace;
+`ci-light`, `test-meter` and `spend-today` show what agents, hooks or CI report to them;
+`focus-timer` keeps time, and `launchpad` starts agents with jobs you set.
 
 A `"category"` in `widget.json` says what it is for: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). The Add menu
 groups widgets by it, beside the tools.
