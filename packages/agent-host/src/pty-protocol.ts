@@ -12,6 +12,13 @@ export interface SpawnSpecWire {
   env?: Record<string, string>;
 }
 
+/** The manifest folder of the agent a start runs (agent-package.ts): its files by their path in
+ *  it, base64. A daemon with no agent of that id installs it before starting the session. */
+export interface AgentPackage {
+  id: string;
+  files: Record<string, string>;
+}
+
 /** One row of `list {detail:true}`. */
 export interface SessionInfo {
   id: string;
@@ -41,7 +48,7 @@ export type ClientMsg =
    *  base: the environment of whoever starts sessions, as it is now (the app's, after it read the
    *  person's shell): what a session starts from, under its own `spec.env`. Never saved.
    *  wake: a session put to sleep is restored; any other attach to it is answered `asleep`. */
-  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean; base?: Record<string, string>; lines?: number; wake?: boolean }
+  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean; base?: Record<string, string>; lines?: number; wake?: boolean; agent?: AgentPackage }
   /** Capabilities of this client; "resync" = may be sent a fresh screen instead of every byte when behind. */
   | { t: "hello"; caps: string[] }
   | { t: "write"; id: string; data: string; /** A message pasted into the TUI, not keystrokes (see paste.ts). */ paste?: boolean }
@@ -68,7 +75,7 @@ export type ClientMsg =
   /** The session's screen as text, line by line, as the daemon reads it: for a starter that skips
    *  a startup screen (agent-start.ts) with no terminal of its own. */
   | { t: "viewport"; reqId: string; id: string }
-  /** This connection serves the machine's control plane (`hive host`), on the socket `sock`: while
+  /** This connection serves the machine's control plane (the app, or `hive host`), on the socket `sock`: while
    *  it lasts, the daemon passes each connection to the machine's control-plane socket on to `sock`,
    *  and still hears what agents report there, for its other viewers and its pushes. Answered by
    *  `control`. */
@@ -99,8 +106,7 @@ export type ServerMsg =
   | { t: "pong"; reqId: string; buildStamp?: number }
   /** Answers `screen`, in order with the session's data: bytes before it are older than it. */
   | { t: "screen"; reqId: string; id: string; replay: string | null }
-  /** Answers `control`; `error` when this daemon serves no control-plane socket (one the app
-   *  started: the app serves it). */
+  /** Answers `control`; `error` when `sock` is not an absolute path. */
   | { t: "control"; reqId: string; error?: string }
   /** Answers `viewport`; null when the session is not running. */
   | { t: "viewport"; reqId: string; id: string; text: string | null }

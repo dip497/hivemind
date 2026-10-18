@@ -11,6 +11,7 @@ import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "@hivemind/
 import { ApiError, flag, text } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { mintId, toBareId } from "@hivemind/workspace-api/tile-id";
+import { isRemote, machineUri } from "@hivemind/core/remote-uri";
 import type { WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
 
 /** How the store is written by a frame call: its windows hear of it. */
@@ -28,6 +29,9 @@ export interface FramesOptions {
   worktreeRemove(repo: string, worktree: string, force?: boolean): Promise<void>;
   /** End the session of the tile `bare` and take it off its board. */
   closeTile(bare: string): unknown;
+  /** The other machines a frame may run on: the saved machines and the person's other devices,
+   *  each by its id and its name. */
+  machines(): Array<{ id: string; name: string }>;
 }
 
 /** A folder as it is on disk, links followed; as given when it is not there. */
@@ -60,8 +64,10 @@ function specOf(value: unknown): FrameSpec {
   const spec: FrameSpec = {};
   if (s.path != null) {
     spec.path = text(s.path, "spec.path");
-    if (!path.isAbsolute(spec.path)) throw new ApiError("BAD_REQUEST", "spec.path is a folder, given in full");
+    if (!path.posix.isAbsolute(spec.path) && !path.isAbsolute(spec.path)) throw new ApiError("BAD_REQUEST", "spec.path is a folder, given in full");
+    if (s.machine != null) spec.machine = text(s.machine, "spec.machine");
   } else {
+    if (s.machine != null) throw new ApiError("BAD_REQUEST", "spec.machine goes with spec.path: a worktree is made on this machine");
     const w = s.worktree as Record<string, unknown> | null;
     if (!w || typeof w !== "object") throw new ApiError("BAD_REQUEST", "spec.worktree is {branch, base?}");
     const branch = text(w.branch, "spec.worktree.branch");
@@ -81,12 +87,24 @@ export function framesDomain(o: FramesOptions): Domain<"frame.open" | "frame.clo
     if (!o.store().repos().includes(repo)) throw new ApiError("NOT_FOUND", `no workspace is open at ${repo}`);
     return o.store().getCore(repo) ?? { frames: [], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} };
   };
-  /** The frame bound to the folder `folder`, if one is. */
+  /** The frame bound to the folder `folder`, if one is: on this machine, or on another by its uri. */
   const boundTo = (core: KeptCore, folder: string): FrameRecord | undefined =>
     core.frames.find((f) => {
       const at = f.worktreePath ?? f.workspacePath;
-      return typeof at === "string" && path.isAbsolute(at) && real(at) === real(folder);
+      if (typeof at !== "string") return false;
+      return isRemote(folder) ? at === folder : path.isAbsolute(at) && real(at) === real(folder);
     });
+  /** The machine `given` names, by its id, else by its name in any case: exactly one. */
+  const machineNamed = (given: string): { id: string; name: string } => {
+    const all = o.machines();
+    const byId = all.find((m) => m.id === given);
+    if (byId) return byId;
+    const named = all.filter((m) => m.name.toLowerCase() === given.toLowerCase());
+    if (named.length === 1) return named[0]!;
+    const listed = (ms: typeof all) => ms.map((m) => `${m.name} (${m.id})`).join(", ");
+    if (named.length > 1) throw new ApiError("BAD_REQUEST", `more than one machine is called ${given}; name it by its id: ${listed(named)}`);
+    throw new ApiError("NOT_FOUND", all.length ? `no machine ${given}: ${listed(all)}` : `no machine ${given}: add one with \`hive machine add\`, or pair a device`);
+  };
   /** The workspace's own frame, the one bound to its repo at the top. */
   const ownFrame = (core: KeptCore, repo: string): FrameRecord | undefined =>
     core.frames.find((f) => !f.parentFrameId && typeof f.workspacePath === "string" && real(f.workspacePath) === real(repo));
@@ -105,6 +123,17 @@ export function framesDomain(o: FramesOptions): Domain<"frame.open" | "frame.clo
         const s = specOf(spec);
         const core = coreOf(r);
         if (s.parent !== undefined && !core.frames.some((f) => f.id === s.parent)) throw new ApiError("NOT_FOUND", `no frame ${s.parent} in this workspace`);
+        if (s.machine !== undefined) {
+          // A folder on another machine runs as the person there: theirs to name, or an agent's here.
+          if (from.actor.kind === "peer" && from.actor.access !== "owner" && from.actor.tile === undefined) throw new ApiError("FORBIDDEN", "only the person, or an agent on this machine, opens a frame on another machine");
+          const machine = machineNamed(s.machine);
+          const folder = machineUri(machine.id, s.path!);
+          const there = boundTo(core, folder);
+          if (there) return { frame: there.id, path: folder, opened: false, created: false };
+          const frame: FrameRecord = { id: mintId("frame"), title: s.title ?? (path.posix.basename(s.path!) || machine.name), workspacePath: folder, ...(s.parent ? { parentFrameId: s.parent } : {}) };
+          o.store().addFrame(r, frame, FRAMES);
+          return { frame: frame.id, path: folder, opened: true, created: false };
+        }
         if (s.path !== undefined) {
           if (!mayName(from, r, s.path)) throw new ApiError("FORBIDDEN", "that folder is not of this workspace");
           if (!fs.statSync(s.path, { throwIfNoEntry: false })?.isDirectory()) throw new ApiError("BAD_REQUEST", `${s.path} is not a folder`);

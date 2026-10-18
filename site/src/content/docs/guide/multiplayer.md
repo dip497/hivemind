@@ -33,7 +33,7 @@ The steps, and what each answer does, are in [Connect devices and people](../con
 ## Invite links from the command line
 
 `hive share` makes an invite link for a workspace on this computer. The app or `hive host` must
-be running here.
+be running here; a folder it does not serve yet is served first, with no window opening.
 
 ```bash
 hive share ~/work/api --role edit --uses 3 --expires 2d
@@ -50,6 +50,15 @@ hive join 'hivemind://join/…'
 ```
 
 `hive join` waits while the owner decides, up to about three minutes.
+
+Joining is the person's, at their own machine: an agent's tile, a program and your other devices
+are refused (*joining a workspace is the person's, at this machine: run `hive join <link>` in a
+terminal of your own…*). Your own devices need no link at all: a workspace on another of your
+devices opens from **Open recent → On your devices** in the app.
+
+`hive share`, like every command that takes a workspace, names it by its folder, its folder's name,
+its id or its issue prefix. When two workspaces answer to the name you give, it is refused and lists
+each with its id or prefix and folder; give one of those, or the folder.
 
 ## Answer someone asking to join
 

@@ -19,10 +19,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import type { Duplex } from "node:stream";
 import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
-import { driveSockPath, hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
+import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
+import { socketIn } from "./socket-in.js";
 import { serveDrive } from "./drive.js";
 import { controlApi } from "./control-api.js";
 import { Grants, grantsDomain } from "./grants.js";
@@ -108,8 +108,6 @@ export interface HeadlessHost {
   where(): Ready | null;
   /** The workspaces it holds, by folder, with their ids once they say whose they are. */
   workspaces(): Array<{ repo: string; workspace: string | null }>;
-  /** Serve the folder `repo` on this machine as one of its workspaces, made if it is new. */
-  add(repo: string): { repo: string; workspace: string };
   /** The person's other devices it was paired with. */
   devices(): PairedDevice[];
   /** Offer a code for one of a person's devices to enter (this host takes the person). `paired`
@@ -121,15 +119,6 @@ export interface HeadlessHost {
 
 /** This machine's name, as the person's other devices list it. */
 const deviceName = (): string => os.hostname() || "host";
-
-/** A socket of this host's: `file` in the data folder, unless the path is too long for a socket
- *  (then `hivemind-<tag>` in the temporary folder); a named pipe on Windows. */
-function socketIn(dir: string, file: string, tag: string): string {
-  const hash = createHash("sha256").update(dir).digest("hex").slice(0, 12);
-  if (process.platform === "win32") return `\\\\.\\pipe\\hivemind-${tag}-${hash}`;
-  const inData = path.join(dir, file);
-  return inData.length < 100 ? inData : path.join(os.tmpdir(), `hivemind-${tag}-${hash}.sock`);
-}
 
 /** The agents this machine has and the person's settings for them, as the app reads them: read
  *  at the start, and again before a verb once an agent was installed or removed, or the settings
@@ -307,7 +296,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),
     peopleHere.domain,
     grantsDomain(() => grants),
-    framesDomain({ store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare) }),
+    framesDomain({
+      store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare),
+      machines: () => [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...devices.list().filter((d) => d.kind !== "phone").map((d) => ({ id: d.device, name: d.name }))],
+    }),
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).
@@ -418,19 +410,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   });
   // Connected now, so the statuses of the sessions already running arrive before anyone asks.
   await endpoint.sessions();
-  // The machine's control-plane socket stays the daemon's, which passes each connection on to this
-  // host's own. A daemon the app started serves none (nor does one from before this), and this host
-  // serves the machine's itself.
-  const hcpWarn = (e: Error) => o.onWarn(`the control plane is off: ${e.message}. \`hive ctl\` cannot reach this host`);
-  const ownSocket = socketIn(o.dir, "hcp-host.sock", "hcp-host");
-  let hcp = control.listen(ownSocket, hcpWarn);
-  try {
-    await endpoint.control(ownSocket);
-  } catch (e) {
-    o.onWarn(`the terminal daemon keeps no control-plane socket to hand over (${e instanceof Error ? e.message : String(e)}): serving the machine's here`);
-    hcp.close();
-    hcp = control.listen(hcpSockPath(o.dir), hcpWarn);
-  }
+  const hcp = await control.serveBehind(endpoint, {
+    onWarn: o.onWarn,
+    onError: (e) => o.onWarn(`the control plane is off: ${e.message}. \`hive ctl\` cannot reach this host`),
+  });
 
   // Programs drive the workspaces here through the workspace API, held to what they were granted.
   const driveSock = driveSockPath(o.dir);
@@ -654,13 +637,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     person: keys.personId,
     where: () => net?.ready ?? null,
     workspaces: () => store.repos().map((repo) => ({ repo, workspace: store.ownership(repo)?.workspaceId ?? null })),
-    add: (repo) => {
-      if (!path.isAbsolute(repo) || !fs.statSync(repo, { throwIfNoEntry: false })?.isDirectory()) {
-        throw new Error(`${repo} is not a folder on this machine`);
-      }
-      if (!store.getCore(repo)) store.setCore(repo, { frames: [], tiles: [] });
-      return { repo, workspace: store.ownership(repo)!.workspaceId as string };
-    },
     devices: () => devices.list(),
     offerPairing: () => {
       mayTake();
