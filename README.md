@@ -53,6 +53,11 @@ account.
   </tr>
 </table>
 
+<p align="center">
+  <img alt="Biscuit, a pixel-art dog at the bottom of the window, barks when an agent asks to run a command, then walks to the right edge" src="site/public/shots/showcase/dog.webp" width="720" /><br />
+  <sub>A widget that moves: Biscuit barks when an agent waits on you</sub>
+</p>
+
 More widgets, tools and views to try are in [`examples/`](examples/).
 
 ## Install
