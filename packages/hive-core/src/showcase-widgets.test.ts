@@ -90,6 +90,8 @@ test("CI light: a failed report turns it red with its detail, notifies once, and
   const tree = w.tree();
   expect(flat(tree).find((n) => n.type === "image")?.src).toBe("light-failed.svg");
   expect(texts(tree)).toContain("typecheck: 2 errors");
+  // The detail is shown whole, on as many lines as it needs.
+  expect(flat(tree).find((n) => n.type === "text" && n.text === "typecheck: 2 errors")?.wrap).toBe(true);
   expect(w.notes()).toEqual(["CI failed on main"]);
   await w.press("fix");
   const spawn = w.calls.find((c) => c.path.join(".") === "commands.spawnAgent");

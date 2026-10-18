@@ -26,7 +26,7 @@ function draw() {
           { type: "text", text: [s.name, s.branch, s.at ? ago(s.at) : null].filter(Boolean).join(" · ") || "Waiting for a report", muted: true },
         ] },
       ] },
-      ...(s.detail ? [{ type: "text", text: s.detail }] : []),
+      ...(s.detail ? [{ type: "text", text: s.detail, wrap: true }] : []),
       ...(s.state === "failed" && can ? [{ type: "button", label: "Ask an agent to fix it", action: "fix" }] : []),
     ],
   });
