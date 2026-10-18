@@ -16,33 +16,33 @@ const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
 const shot = (file: string, width = 1600, height = 1120) => ({ file, width, height });
-type Example = { id: string; name: string; text: string; w?: number; h?: number; alt?: string };
+type Example = { id: string; name: string; w?: number; h?: number; alt?: string };
 const examples: { kind: string; one: string; fit: string; items: Example[] }[] = [
   { kind: 'Widgets', one: 'widget', fit: 'contain', items: [
-    { id: 'waiting-on-you', name: 'Waiting on you', w: 592, h: 421, text: 'Every agent waiting on you, longest first. Press one to go to it.' },
-    { id: 'agent-pulse', name: 'Agent pulse', w: 592, h: 354, text: 'How many agents are working, waiting or idle, and the turns finished today.' },
-    { id: 'focus-timer', name: 'Focus timer', w: 592, h: 381, text: 'Twenty-five minutes of focus, then a break, shared by everyone in the workspace.' },
-    { id: 'ci-light', name: 'CI light', w: 592, h: 436, text: 'The build as a light. When it turns red, an agent can start on the failure.' },
-    { id: 'test-meter', name: 'Test meter', w: 592, h: 477, text: 'The share of tests passing in the last run, beside the runs before it.' },
-    { id: 'spend-today', name: 'Spend today', w: 592, h: 448, text: 'What your agents report they spent today, against a daily budget.' },
-    { id: 'issue-burndown', name: 'Issue burndown', w: 592, h: 846, text: 'The open issues day by day for the last week.' },
-    { id: 'launchpad', name: 'Launchpad', w: 592, h: 476, text: 'Jobs you often hand to an agent, one press each.' },
+    { id: 'waiting-on-you', name: 'Waiting on you', w: 592, h: 421 },
+    { id: 'agent-pulse', name: 'Agent pulse', w: 592, h: 354 },
+    { id: 'focus-timer', name: 'Focus timer', w: 592, h: 381 },
+    { id: 'ci-light', name: 'CI light', w: 592, h: 436 },
+    { id: 'test-meter', name: 'Test meter', w: 592, h: 477 },
+    { id: 'spend-today', name: 'Spend today', w: 592, h: 448 },
+    { id: 'issue-burndown', name: 'Issue burndown', w: 592, h: 846 },
+    { id: 'launchpad', name: 'Launchpad', w: 592, h: 476 },
   ] },
   { kind: 'Tools', one: 'tool', fit: 'cover', items: [
-    { id: 'dependency-audit', name: 'Dependency audit', text: 'Your lockfiles checked against OSV, with the version that fixes each advisory.' },
-    { id: 'flaky-tests', name: 'Flaky tests', text: 'Runs the tests several times and puts the flaky ones first.' },
-    { id: 'changelog-writer', name: 'Changelog writer', text: 'A changelog draft from the commits since the last tag.' },
-    { id: 'release-checklist', name: 'Release checklist', text: 'Six checks on whether the repository is ready to release.' },
-    { id: 'bundle-size', name: 'Bundle size', text: "A build folder's files, largest first, with their gzip sizes." },
-    { id: 'sqlite-browser', name: 'SQLite browser', text: "The repository's SQLite files, read-only, with a box for queries." },
-    { id: 'log-tail', name: 'Log tail', text: 'Follows a log file live, each line coloured by its level.' },
-    { id: 'api-explorer', name: 'API explorer', text: 'The HTTP endpoints your code declares, and a form to try each one.' },
+    { id: 'dependency-audit', name: 'Dependency audit' },
+    { id: 'flaky-tests', name: 'Flaky tests' },
+    { id: 'changelog-writer', name: 'Changelog writer' },
+    { id: 'release-checklist', name: 'Release checklist' },
+    { id: 'bundle-size', name: 'Bundle size' },
+    { id: 'sqlite-browser', name: 'SQLite browser' },
+    { id: 'log-tail', name: 'Log tail' },
+    { id: 'api-explorer', name: 'API explorer' },
   ] },
   { kind: 'Views', one: 'view', fit: 'cover', items: [
-    { id: 'constellation', name: 'Constellation', text: 'The workspace in 3D: frames as stars, agents on orbits coloured by state.' },
-    { id: 'timeline', name: 'Timeline', text: 'Today as one row per agent, with each stretch spent working, waiting or idle.' },
-    { id: 'agents-by-state', name: 'Agents by state', text: 'A board of agents by state, longest waiting first, with a live terminal docked beside it.' },
-    { id: 'workspace-map', name: 'Workspace map', text: 'Frames, worktrees and tiles as a map, with the issues beside it.' },
+    { id: 'constellation', name: 'Constellation' },
+    { id: 'timeline', name: 'Timeline' },
+    { id: 'agents-by-state', name: 'Agents by state' },
+    { id: 'workspace-map', name: 'Workspace map' },
   ] },
 ];
 ---
@@ -98,9 +98,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     <div class="wrap">
       <div class="hero-copy">
         <h1>Your agents build the workspace they work in.</h1>
-        <p class="lede">Run Claude, Codex and {icons.total - 2} more agent CLIs side by side. Ask one
-          for a widget, a tool or a view, and it writes the plugin and installs it on the screen
-          you are looking at.</p>
+        <p class="lede">Run Claude, Codex and {icons.total - 2} more agent CLIs side by side, and have them write your widgets, tools and views.</p>
         <div class="hero-act">
           <div class="install">
             <code>{install}</code>
@@ -108,7 +106,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
           </div>
           <a class="btn primary" href="#download">Download</a>
         </div>
-        <p class="fine">MIT licensed. It runs on your computer and needs no account.</p>
+        <p class="fine">MIT licensed, on your computer, no account.</p>
       </div>
       <figure class="hero-media">
         <Loop name="hero" eager fallback={shot('agent-plugins.webp')}
@@ -121,8 +119,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     <div class="wrap">
       <div class="head">
         <h2 id="agents-h">Bring the agents you already use</h2>
-        <p class="sub">HiveHub lists {icons.total} agents. Each one is a manifest file, and the app
-          adds it when its command turns up on your machine.</p>
+        <p class="sub">The app adds each of the {icons.total} agents on HiveHub once its command is on your machine.</p>
       </div>
       <ul class="agents">
         {agents.map((a) => (
@@ -135,24 +132,15 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
           </li>
         ))}
       </ul>
-      <p class="after"><code>hive agents list --found</code> shows which are on this machine. <a href={link('guide/agent-providers/')}>Write a manifest for one that is missing</a>.</p>
+      <p class="after"><a href={link('guide/agent-providers/')}>Add one that is missing</a></p>
     </div>
   </section>
 
   <section class="band" id="plugins" aria-labelledby="plugins-h">
     <div class="wrap">
-      <div class="head split">
-        <div>
-          <h2 id="plugins-h">Widgets, tools and views, written by you or your agent</h2>
-          <p class="sub"><code>hive widgets new</code>, <code>hive tools new</code> and <code>hive views new</code> write a working starter and a <code>PROMPT.md</code> with
-            the whole guide for that kind of plugin. Write your idea at the top and hand the folder
-            to your agent.</p>
-        </div>
-        <pre class="cmd" aria-label="Commands"><span class="w">$</span> hive widgets new release
-<span class="c"># your agent builds release/ from PROMPT.md</span>
-<span class="w">$</span> hive widgets install release
-<span class="w">$</span> hive ctl plugin open <span class="s">widget:@dip497/progress</span>
-<span class="w">$</span> hive ctl plugin call @dip497/progress add <span class="g">'&#123;"text":"Run the tests"&#125;'</span></pre>
+      <div class="head">
+        <h2 id="plugins-h">Widgets, tools and views, written by your agent</h2>
+        <p class="sub"><code>hive widgets new</code> writes a starter and a <code>PROMPT.md</code>; hand the folder to your agent.</p>
       </div>
 
       <div class="kinds">
@@ -161,9 +149,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
             alt="The Waiting on you widget at the top of the canvas: 2 agents waiting on you, docs-utils for 11 s and binding-test for 9 s." />
           <div class="kind-copy">
             <h3>Widget</h3>
-            <p>A small live box that floats above every view. Its code runs in a worker with no
-              network and no files.</p>
-            <p class="ex"><code>@dip497/progress</code> On HiveHub. A checklist an agent ticks off as it works.</p>
+            <p>A small live box above every view, with no network and no files.</p>
             <a href={link('guide/widgets/')}>Make a widget</a>
           </div>
         </article>
@@ -172,10 +158,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
             alt="The Flaky tests tool on the canvas: five tests over 8 runs, two marked flaky, each with Ask an agent to fix." />
           <div class="kind-copy">
             <h3>Tool</h3>
-            <p>A kind of tile, beside the terminals in every view. It runs inside the app with the
-              app's access, so it arrives switched off, and so does each update.</p>
-            <p class="ex"><code>dip497/worktrees</code> On HiveHub. Every worktree, its changes and its diffs.</p>
-            <p class="ex"><code>dip497/ci-runs</code> On HiveHub. A failed job's lines, a rerun, or the failure handed to an agent.</p>
+            <p>A kind of tile with the app's access, so it arrives switched off.</p>
             <a href={link('guide/tool-plugins/')}>Make a tool</a>
           </div>
         </article>
@@ -184,10 +167,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
             alt="The Constellation view: each frame a star, its agents lights on orbits coloured by what they are doing." />
           <div class="kind-copy">
             <h3>View</h3>
-            <p>Draws the whole screen from the frames, tiles and status the app hands it. It runs
-              sandboxed, with no files, network or app API, and the terminals inside it are the
-              real ones.</p>
-            <p class="ex">Canvas and Windows come with the app. Queue, Tiled and Board are on HiveHub.</p>
+            <p>Draws the whole screen, sandboxed, around the real terminals. Canvas and Windows come with the app.</p>
             <a href={link('guide/views/')}>Make a view</a>
           </div>
         </article>
@@ -196,7 +176,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       <div class="examples">
         <div class="ex-head">
           <h3>Twenty examples to start from</h3>
-          <p>Example plugins in the repository's <a href={`${repo}/tree/main/examples`}><code>examples</code></a> folder, not on HiveHub yet. Copy one and have your agent change it. The agents in these pictures are stand-ins started for the screenshots.</p>
+          <p>In the repository's <a href={`${repo}/tree/main/examples`}><code>examples</code></a> folder. The agents in the pictures are stand-ins.</p>
         </div>
         {examples.map((group) => (
           <div class="ex-group">
@@ -206,7 +186,6 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
                 <li>
                   <img src={link(`shots/showcase/${e.id}.webp`)} width={e.w ?? 800} height={e.h ?? 500} loading="lazy" decoding="async" alt={e.alt ?? `The ${e.name} ${group.one}.`} />
                   <code>{e.id}</code>
-                  <p>{e.text}</p>
                 </li>
               ))}
             </ul>
@@ -221,22 +200,13 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     <div class="wrap">
       <div class="head">
         <h2 id="waiting-h">See which agent is waiting on you, and answer it</h2>
-        <p class="sub">Each agent's manifest says how to read its screen, so every tile shows
-          whether its agent is working, finished or waiting on you.</p>
+        <p class="sub">Every tile shows whether its agent is working, finished or waiting on you.</p>
       </div>
       <figure class="shot">
         <img src={link('shots/view-canvas.webp')} width="1600" height="1120" loading="lazy" decoding="async"
           alt="The canvas: each agent's tile shows whether it is working, finished or waiting on you." />
       </figure>
-      <div class="pair">
-        <p>An agent can start others and answer for them. Spawned with <code>--supervise all</code>,
-          a worker's permission prompts come to your inbox and wait for <code>hive ctl approve</code>.
-          Claude and Kiro hand their prompts over; most other agents keep them in their own terminal.</p>
-        <pre class="cmd"><span class="w">$</span> hive ctl agents <span class="g">--watch</span>
-<span class="w">$</span> hive ctl spawn <span class="g">--agent</span> claude <span class="g">--supervise</span> all <span class="g">--prompt</span> <span class="s">"Fix the flaky login test"</span>
-<span class="w">$</span> hive ctl approve <span class="s">&lt;reqId&gt;</span> allow
-<span class="w">$</span> hive ctl workflow <span class="g">--shape</span> fanout <span class="g">--items</span> <span class="s">"api || web || cli"</span></pre>
-      </div>
+      <p class="after"><code>hive ctl spawn --supervise all</code> sends a Claude or Kiro worker's permission prompts to you. <a href={link('guide/agent-workflows/')}>Agents running agents</a></p>
     </div>
   </section>
 
@@ -251,9 +221,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
           alt="Agents in frames, one of them on a machine reached over ssh." />
         <div class="row-copy">
           <h3>Machines over ssh</h3>
-          <p>Add a Linux machine you can reach with <code>ssh</code> and open one of its folders as
-            a frame. Every terminal and agent in that frame runs on the machine, with its files and
-            its tools. Hivemind uses your own OpenSSH, your keys and <code>~/.ssh/config</code>.</p>
+          <p>Open a folder on a Linux machine over your own ssh; its terminals and agents run there.</p>
           <pre class="cmd"><span class="w">$</span> hive machine add dev@build-box <span class="g">--label</span> build <span class="g">--install</span></pre>
           <a href={link('guide/machines/')}>Add a machine</a>
         </div>
@@ -264,9 +232,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
           alt="The Windows view: projects and their agents in the Layers list, an agent's terminal beside it." />
         <div class="row-copy">
           <h3>The same workspace on desktop, browser and phone</h3>
-          <p>Work in the app, or have it serve the whole app to a browser tab on the same computer.
-            Your phone's browser opens a phone page from your own <code>hive-net</code> server and
-            shows the same agents.</p>
+          <p>The app, a browser tab on the same computer, or your phone.</p>
           <a href={link('guide/phone/#the-whole-app-in-a-browser-tab')}>Open it in a browser</a>
         </div>
       </div>
@@ -276,12 +242,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
           alt="The phone page's Home: a permission card for Editing Nav.tsx with Allow and Deny." />
         <div class="row-copy">
           <h3>Answer from your phone</h3>
-          <p>The phone page puts what waits on you first, then every agent live with its
-            conversation. Allow or Deny reaches the agent on your computer, end-to-end encrypted
-            through your server.</p>
-          <p class="note">It needs a <code>hive-net</code> server of yours with a public name; the
-            default Local network serves no page. The iOS and Android apps are a development
-            preview and are not published.</p>
+          <p>Answer your agents from your phone's browser, through a <code>hive-net</code> server of yours.</p>
           <a href={link('guide/phone/')}>Set up the phone page</a>
         </div>
       </div>
@@ -291,8 +252,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
           alt="A shared workspace open in a second person's Hivemind." />
         <div class="row-copy">
           <h3>Someone joins your workspace</h3>
-          <p>Send an invite link, and the other person opens your workspace in their own Hivemind.
-            Both screens show three words. If they match, you choose what they may do, from <em>Can view</em> up to <em>Can drive agents</em>, which the app asks you about first.</p>
+          <p>Send an invite link; if both screens show the same three words, you choose what they may do.</p>
           <pre class="cmd"><span class="w">$</span> hive share ~/work/api <span class="g">--role</span> edit <span class="g">--uses</span> 3 <span class="g">--expires</span> 2d</pre>
           <a href={link('guide/multiplayer/')}>Share a workspace</a>
         </div>
@@ -304,8 +264,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     <div class="wrap">
       <div class="head">
         <h2 id="yours-h">Yours, not ours</h2>
-        <p class="sub">Hivemind runs the agent CLIs you installed, with your keys. There is no
-          Hivemind account, and no server of ours sits between you and your agents.</p>
+        <p class="sub">Your agents, your keys, your machines. No account and no server of ours.</p>
       </div>
       <div class="yours">
         <figure class="map" aria-labelledby="map-cap">
@@ -339,14 +298,11 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
         </figure>
         <dl class="facts">
           <dt>MIT licensed</dt>
-          <dd>The app, the <code>hive</code> CLI and <code>hive-net</code> are in one repository,
-            under the MIT licence. <a href={repo}>Read the source</a>.</dd>
+          <dd>The app, <code>hive</code> and <code>hive-net</code>, in one repository. <a href={repo}>Read the source</a>.</dd>
           <dt>Your own server for the phone</dt>
-          <dd><code>hive-net</code> runs on a machine you choose and relays traffic it cannot read. <a href={link('guide/self-hosting/')}>Run your own network</a>.</dd>
+          <dd><code>hive-net</code> relays traffic it cannot read. <a href={link('guide/self-hosting/')}>Run your own</a>.</dd>
           <dt>What a plugin can touch</dt>
-          <dd>A view is sandboxed on its own origin and a widget runs in a worker, with no files and
-            no network. A tool has the app's access, so it stays off until you switch it on. Before
-            an agent installs, the app says in plain words what it will run.</dd>
+          <dd>Views and widgets have no files or network; a tool stays off until you switch it on.</dd>
         </dl>
       </div>
     </div>
@@ -356,15 +312,15 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     <div class="wrap">
       <div class="head">
         <h2 id="numbers-h">Measured, with the load it ran under</h2>
-        <p class="sub">From the <a href={changelog}>2026.10.3 changelog</a>, on a 16-CPU machine.</p>
+        <p class="sub">From the <a href={changelog}>2026.10.3 changelog</a>, on 16 CPUs.</p>
       </div>
       <table class="nums">
         <thead><tr><th scope="col">Result</th><th scope="col">What was measured</th><th scope="col">Load</th></tr></thead>
         <tbody>
-          <tr><td>3–7 ms</td><td>Key echo in one terminal while another prints a 10 MB flood. Before, the median was 162 ms.</td><td>22–50</td></tr>
-          <tr><td>11–39 ms</td><td>The terminal daemon's longest pause while 30 long terminals show at once. Before, 2.3–2.7 s.</td><td>12–16</td></tr>
-          <tr><td>0.23 ms</td><td>What one agent event costs the app, the same with 72 or 600 agents. Before, 1.9 ms.</td><td>about 100</td></tr>
-          <tr><td>10 ms</td><td>Building the list of agents your phone follows, for 600 agents. Before, 1.6 s.</td><td>about 80</td></tr>
+          <tr><td>3–7 ms</td><td>Key echo while another terminal prints 10 MB (was 162 ms).</td><td>22–50</td></tr>
+          <tr><td>11–39 ms</td><td>Longest daemon pause with 30 terminals on screen (was 2.3–2.7 s).</td><td>12–16</td></tr>
+          <tr><td>0.23 ms</td><td>Cost of one agent event, with 72 or 600 agents (was 1.9 ms).</td><td>about 100</td></tr>
+          <tr><td>10 ms</td><td>Your phone's agent list for 600 agents (was 1.6 s).</td><td>about 80</td></tr>
         </tbody>
       </table>
     </div>
@@ -375,21 +331,15 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       <div class="head"><h2 id="faq-h">Questions</h2></div>
       <dl class="faq">
         <dt>Why not roll my own?</dt>
-        <dd>You can, and this is a place to do it. Hivemind keeps the terminals, the agent sessions
-          and their status alive, so what you write is the part only you need. A widget is a folder
-          with two files; a view is a manifest and one page.</dd>
+        <dd>You can, here. Hivemind keeps the terminals and agents alive; you write the rest.</dd>
         <dt>Does my code go anywhere?</dt>
-        <dd>No. The agents run on your computer, or on machines you added over ssh, with the
-          logins you already gave them. Hivemind has no account and no server of ours.</dd>
+        <dd>No. Agents run on your computer or your ssh machines.</dd>
         <dt>Which platforms does it run on?</dt>
-        <dd>Linux x86_64, macOS on Apple Silicon, and Windows x64, which we have run least. An Intel
-          Mac or a Linux arm64 box builds from source with <code>--dev</code>. A machine you add over
-          ssh can be Linux on x86_64 or arm64.</dd>
+        <dd>Linux x86_64, macOS on Apple Silicon and Windows x64; an Intel Mac or Linux arm64 builds with <code>--dev</code>.</dd>
         <dt>Is there a phone app?</dt>
-        <dd>Not a published one. The phone page runs in your phone's browser, served by your own <code>hive-net</code> server. The iOS and Android apps are a development preview.</dd>
+        <dd>Not a published one; the phone page runs in your browser.</dd>
         <dt>Which agents work with it?</dt>
-        <dd>The {icons.total} on HiveHub, each added once its CLI is on your machine. Any other CLI
-          works once someone writes its manifest, and that can be you.</dd>
+        <dd>The {icons.total} on HiveHub, or any CLI you write a manifest for.</dd>
       </dl>
     </div>
   </section>
@@ -398,7 +348,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     <div class="wrap">
       <div class="head">
         <h2 id="download-h">Download Hivemind</h2>
-        <p class="sub">One command installs the app and the <code>hive</code> CLI into <code>~/.hivemind-app</code>, links both into <code>~/.local/bin</code>, and touches nothing else.</p>
+        <p class="sub">One command installs the app and the <code>hive</code> CLI.</p>
       </div>
       <div class="dl-grid">
         <article class="dl-card" data-os="linux">
@@ -417,13 +367,10 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
           <h3>Windows <span class="dl-arch">x64</span></h3>
           <div class="install"><code>{installPs}</code>
             <button class="copy" type="button" data-copy={installPs} aria-label="Copy the install command for Windows">Copy</button></div>
-          <p class="dl-note">The platform we have run least. Tell us what breaks.</p>
+          <p class="dl-note">Run least so far.</p>
         </article>
       </div>
-      <p class="dl-more">
-        A machine you only drive from another desktop needs the CLI alone: <a href={dl('cli-linux-x86_64')}>Linux x86_64</a>, <a href={dl('cli-linux-arm64')}>Linux arm64</a>, <a href={dl('cli-macos-arm64')}>macOS</a>, <a href={dl('cli-windows-x64')}>Windows</a>.
-        Run the command again to upgrade, or use the app's own button. <a href={dl('notes')}>Release notes and every file</a>.
-      </p>
+      <p class="dl-more">CLI only: <a href={dl('cli-linux-x86_64')}>Linux x86_64</a>, <a href={dl('cli-linux-arm64')}>Linux arm64</a>, <a href={dl('cli-macos-arm64')}>macOS</a>, <a href={dl('cli-windows-x64')}>Windows</a>. <a href={dl('notes')}>Release notes</a>.</p>
     </div>
   </section>
 
@@ -558,7 +505,6 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
   /* Sections: one ground, divided by hairlines. */
   .band{padding:120px 0;border-top:1px solid var(--line)}
   .head{margin-bottom:48px}
-  .head.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,460px);gap:48px;align-items:end}
   .after{margin-top:28px;font-size:15px;color:var(--fg3)}
 
   .cmd{margin:0;font-size:12.5px;line-height:1.8;color:var(--fg2);background:var(--bg2);border:1px solid var(--line);
@@ -586,8 +532,6 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
   .kind-copy{display:grid;gap:12px;justify-items:start;font-size:16px;color:var(--fg3);max-width:44ch}
   .kind-copy h3{font-family:var(--f-m);font-size:13px;font-weight:500;letter-spacing:.02em;color:var(--fg2)}
   .kind-copy > p:first-of-type{font-size:19px;line-height:1.45;color:var(--fg);letter-spacing:-.01em}
-  .ex{font-size:14.5px}
-  .ex code{display:block;font-size:12.5px;color:var(--fg2)}
 
   /* Examples: real screenshots, grouped by kind. */
   .examples{margin-top:96px;padding-top:56px;border-top:1px solid var(--line)}
@@ -603,12 +547,9 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     border:1px solid var(--line);border-radius:8px;background:#0b0d10}
   .ex-grid.contain img{object-fit:contain;padding:10px}
   .ex-grid code{font-size:12.5px;color:var(--fg);margin-top:4px}
-  .ex-grid p{font-size:14px;line-height:1.5;color:var(--fg3)}
 
   .shot{margin:0}
   .shot img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:#0b0d10}
-  .pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:48px;margin-top:40px;align-items:start}
-  .pair p{font-size:16px;color:var(--fg3);max-width:52ch}
 
   /* Elsewhere: a clip and what it shows, alternating sides. */
   .row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:48px;align-items:center}
@@ -618,7 +559,6 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
   .row-copy{display:grid;gap:14px;justify-items:start;font-size:16px;color:var(--fg3)}
   .row-copy p{max-width:50ch}
   .row-copy .cmd{justify-self:stretch}
-  .note{font-size:14px;border-left:1px solid var(--line2);padding-left:12px}
 
   /* Yours: a map of where things run, and the facts beside it. */
   .yours{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:start}
@@ -669,7 +609,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
   @media (hover:hover) and (pointer:fine){ .foot a:hover{color:var(--fg)} }
 
   @media (max-width:960px){
-    .head.split,.kind,.pair,.row,.yours,.ex-head{grid-template-columns:minmax(0,1fr);gap:28px}
+    .kind,.row,.yours,.ex-head{grid-template-columns:minmax(0,1fr);gap:28px}
     .kind:nth-child(2),.row.flip{grid-template-columns:minmax(0,1fr)}
     .kind:nth-child(2) > .loop{order:0}
     .row.flip > .row-copy{order:0}
