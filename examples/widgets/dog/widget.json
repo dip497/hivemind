@@ -1,0 +1,16 @@
+{
+  "id": "@dip497/dog",
+  "name": "Dog",
+  "version": "1.0.0",
+  "description": "A dog that walks along the bottom of the screen, barks when an agent waits on you, jumps when a turn finishes and naps when all is quiet.",
+  "category": "agents",
+  "chrome": "none",
+  "icon": "icon.png",
+  "options": [
+    { "id": "name", "label": "Name", "type": "text", "default": "Biscuit" },
+    { "id": "quiet", "label": "Quiet: bark without a notification", "type": "boolean", "default": false }
+  ],
+  "commands": [
+    { "name": "status", "description": "What the dog is doing, and which agents it is waiting with you for." }
+  ]
+}

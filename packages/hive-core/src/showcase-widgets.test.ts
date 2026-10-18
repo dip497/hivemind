@@ -9,7 +9,7 @@ import { readWidget } from "./widgets";
 
 const ROOT = path.resolve(import.meta.dir, "../../../examples/widgets");
 type Msg = { type: string; [k: string]: unknown };
-type Node = { type: string; text?: string; value?: unknown; label?: string; src?: string; tint?: string; action?: unknown; max?: number; children?: Node[] };
+type Node = { type: string; text?: string; row?: number; value?: unknown; label?: string; src?: string; tint?: string; action?: unknown; max?: number; children?: Node[] };
 
 /** One widget's worker: its prelude and code, the messages it posted, and the window's side of hive.hm. */
 function run(name: string, { state, options = {}, replies = {}, values = true }: { state?: unknown; options?: Record<string, unknown>; replies?: Record<string, unknown>; values?: boolean } = {}) {
@@ -32,13 +32,33 @@ function run(name: string, { state, options = {}, replies = {}, values = true }:
     if (fn) fns.set(key, [...(fns.get(key) ?? []), fn]);
     else void Promise.resolve(replies[p.join(".")] ?? null).then((value) => send({ type: "hm-reply", req: m.req as number, ok: true, value }));
   };
+  // Its timeouts run when the test lets time pass (`wait`), in the order they fall due.
+  let clock = 0;
+  let ids = 0;
+  const timers: { at: number; id: number; f: () => void }[] = [];
+  const setTimeout = (f: () => void, ms = 0) => { timers.push({ at: clock + ms, id: ++ids, f }); return ids; };
+  const clearTimeout = (id: number) => { const i = timers.findIndex((t) => t.id === id); if (i >= 0) timers.splice(i, 1); };
   const code = readFileSync(path.join(ROOT, name, "widget.js"), "utf8");
-  new Function("self", "postMessage", "setInterval", "setTimeout", WIDGET_PRELUDE + code)(self, postMessage, () => 0, () => 0);
+  new Function("self", "postMessage", "setInterval", "setTimeout", "clearTimeout", WIDGET_PRELUDE + code)(self, postMessage, () => 0, setTimeout, clearTimeout);
   if (values) send({ type: "hm-values", values: { capabilities: ["workspace:spawn", "workspace:prompt", "workspace:issues"] } });
   send({ type: "init", state, options });
-  const tick = () => new Promise((r) => setTimeout(r, 0));
+  const tick = () => new Promise((r) => globalThis.setTimeout(r, 0));
   return {
     posted,
+    /** Let `ms` of its time pass. */
+    wait: async (ms: number) => {
+      const until = clock + ms;
+      for (;;) {
+        const due = timers.filter((t) => t.at <= until).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+        if (!due) break;
+        clearTimeout(due.id);
+        clock = due.at;
+        due.f();
+      }
+      clock = until;
+      await tick();
+    },
+    click: async () => { send({ type: "click" }); await tick(); },
     calls,
     /** What it drew last. */
     tree: () => [...posted].reverse().find((m) => m.type === "render")?.tree as Node,
@@ -59,7 +79,12 @@ function run(name: string, { state, options = {}, replies = {}, values = true }:
       await tick();
     },
     /** Each callback handed to `key`, separately: the n-th subscription. */
-    fireNth: async (key: string, n: number, ...args: unknown[]) => { send({ type: "hm-cb", fn: fns.get(key)![n]!, args }); await tick(); },
+    fireNth: async (key: string, n: number, ...args: unknown[]) => {
+      const fn = fns.get(key)?.[n];
+      if (!fn) throw new Error(`it handed hive.hm no ${key} callback number ${n}`);
+      send({ type: "hm-cb", fn, args });
+      await tick();
+    },
     /** Run an agent's command and get its answer, or { error }. */
     command: async (cmd: string, args?: unknown) => {
       const fn = fns.get(`onCommand:${cmd}`)?.[0];
@@ -208,6 +233,48 @@ test("Launchpad: a press starts the default agent with that button's job as its 
   const button = flat(w.tree()).find((n) => n.label === "▶  Ship it")!;
   await w.press(button.action);
   expect(w.calls.find((c) => c.path.join(".") === "commands.spawnAgent")?.args).toEqual([null, null, { name: "Ship it", prompt: "Cut the release." }]);
+});
+
+test("Dog: it barks, and notifies once, when an agent starts waiting on you, sits by it at a walk, and a click goes to that agent", async () => {
+  const w = run("dog");
+  await w.fire("on:structure", { tiles: [{ id: "a", agent: "claude", name: "tests" }, { id: "t", kind: "term", name: "shell" }] });
+  await w.fireNth("subscribeStatus", 0, "working", { agent: { state: "working" } });
+  expect(w.notes()).toEqual([]);
+  await w.fireNth("subscribeStatus", 0, "blocked", { agent: { state: "waiting", waitingFor: "question" } });
+  await w.fireNth("subscribeStatus", 0, "blocked", { agent: { state: "waiting", waitingFor: "question" } });
+  expect(w.tree().label).toBe("Biscuit is barking");
+  expect(w.notes()).toEqual(["Biscuit barks: tests is waiting on you"]);
+  await w.wait(20_000);
+  expect(w.tree().label).toBe("Biscuit is waiting with you");
+  expect(await w.command("status")).toEqual({ name: "Biscuit", doing: "waiting with you", waitingOn: ["tests"] });
+  const moves = w.posted.filter((m) => m.type === "move") as unknown as { x: number; over: number }[];
+  expect(moves.at(-1)!.x).toBeGreaterThan(0.9);
+  // Never faster than a walk: a whole screen's width takes it 14 s.
+  for (let i = 1; i < moves.length; i++) expect(moves[i]!.over).toBeGreaterThanOrEqual(Math.abs(moves[i]!.x - moves[i - 1]!.x) * 14_000);
+  await w.click();
+  expect(w.calls.find((c) => c.path.join(".") === "commands.focusTile")?.args).toEqual(["a"]);
+});
+
+test("Dog: it naps once every agent has been idle a while, not while one works, and wakes when one starts", async () => {
+  const w = run("dog", { options: { name: "Rex" } });
+  await w.fire("on:structure", { tiles: [{ id: "a", agent: "claude", name: "tests" }, { id: "b", agent: "codex", name: "docs" }] });
+  await w.fireNth("subscribeStatus", 0, "idle", { agent: { state: "idle" } });
+  await w.fireNth("subscribeStatus", 1, "working", { agent: { state: "working" } });
+  await w.wait(300_000);
+  expect(w.tree().label).not.toBe("Rex is asleep");
+  await w.fireNth("subscribeStatus", 1, "idle", { agent: { state: "idle" } });
+  await w.wait(120_000);
+  expect(w.tree().label).toBe("Rex is asleep");
+  await w.fireNth("subscribeStatus", 0, "working", { agent: { state: "working" } });
+  expect(w.tree().label).not.toBe("Rex is asleep");
+});
+
+test("Dog: quiet, it still barks but sends no notification", async () => {
+  const w = run("dog", { options: { quiet: true } });
+  await w.fire("on:structure", { tiles: [{ id: "a", agent: "claude", name: "tests" }] });
+  await w.fireNth("subscribeStatus", 0, "blocked", { agent: { state: "waiting" } });
+  expect(w.tree().label).toBe("Biscuit is barking");
+  expect(w.notes()).toEqual([]);
 });
 
 test("a widget that reads what it may do draws at once, before the app has sent hive.hm's values", async () => {
