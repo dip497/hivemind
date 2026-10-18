@@ -444,5 +444,140 @@
       "asking": 9.5,
       "answered": 13.0
     }
+  },
+  "views": {
+    "recording": "views",
+    "boxes": {
+      "terminal": {
+        "x": 1850,
+        "y": 80,
+        "w": 1290,
+        "h": 1720
+      }
+    },
+    "shots": [
+      {
+        "beat": "board",
+        "start": 0,
+        "end": 2.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          },
+          {
+            "u": 1,
+            "box": "full",
+            "pad": 0.92
+          }
+        ]
+      },
+      {
+        "beat": "agents-by-state",
+        "start": 2.4,
+        "end": 5.2,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          }
+        ]
+      },
+      {
+        "beat": "timeline",
+        "start": 5.2,
+        "end": 7.8,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          }
+        ]
+      },
+      {
+        "beat": "constellation",
+        "start": 7.8,
+        "end": 11.0,
+        "play": "lapse",
+        "skip": "+2 m",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          }
+        ]
+      },
+      {
+        "beat": "docking",
+        "start": 11.0,
+        "end": 12.2,
+        "play": "steps",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          }
+        ]
+      },
+      {
+        "beat": "docked",
+        "start": 12.2,
+        "end": 15.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          },
+          {
+            "u": 0.5,
+            "box": "terminal",
+            "pad": 1.05
+          },
+          {
+            "u": 1,
+            "box": "terminal",
+            "pad": 1.05
+          }
+        ]
+      }
+    ],
+    "captions": [
+      {
+        "text": "One workspace, many views.",
+        "start": 0.3,
+        "end": 2.3
+      },
+      {
+        "text": "Who is waiting, who is working.",
+        "start": 2.6,
+        "end": 5.0
+      },
+      {
+        "text": "What each agent did today.",
+        "start": 5.4,
+        "end": 7.6
+      },
+      {
+        "text": "Or every agent as a star.",
+        "start": 8.0,
+        "end": 10.8
+      },
+      {
+        "text": "Open one to answer it.",
+        "start": 11.2,
+        "end": 15.2
+      }
+    ],
+    "stills": {
+      "board": 1.0,
+      "agents": 4.0,
+      "timeline": 6.5,
+      "constellation": 9.5,
+      "docked": 14.8
+    }
   }
 }
