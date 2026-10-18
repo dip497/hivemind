@@ -1,0 +1,211 @@
+---
+title: "agent.yaml reference"
+description: "Every field of an agent file: how Hivemind starts an agent, reads its screen, answers it and resumes its sessions."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+This page lists every field of `agent.yaml`, `manifestVersion: 2`. To write one step by step, see
+[Add your own agent](/agent-providers).
+
+<AgentPrompt description="Paste this into your coding agent to check an agent file against this reference." page="agent-yaml">{`
+Using the agent.yaml reference, review the agent file I point you at. Do not change it yet.
+
+1. Run \`hive agents validate <folder>\` and show me what it says.
+2. For each capability under \`caps\`, say what wiring it needs from the reference (\`launch.hcp\`, a hook file, \`session.resume\`) and whether the file has it.
+3. Run the agent's \`--help\` and check that every flag in \`spawn.args\` and \`options\` exists there.
+4. Point out any \`detect\` rule, \`answer\` key or \`choose\` key that no real screen of the program backs up.
+
+At the end, list the fixes you suggest, each with the line it changes, and wait for my yes before editing.
+`}</AgentPrompt>
+
+## Top level
+
+| Field | Required | What it is |
+|---|---|---|
+| `manifestVersion` | yes | `2` |
+| `id` | yes | lowercase letters, digits and dashes; the same as the folder name |
+| `label` | yes | the name people see |
+| `bin` | yes | the program's name on `PATH`, never a path |
+| `aliases` | | other program names that identify it when you run it yourself |
+| `enabled` | | `true` offers it to start; `false` (the default) only recognises it for status |
+| `note` | | one line people see, for example what does not work yet |
+| `minAppVersion` | | the oldest Hivemind that can run it; HiveHub hides it from older apps |
+| `caps` | yes | what it can do (below) |
+| `spawn` | | how it starts |
+| `options` | | launch settings people choose in **Settings → Plugins** |
+| `install` | | where to get the program: `url` (https) and an optional one-line `command` |
+| `detect` | | how to read its status from its screen |
+| `answer`, `choose`, `interrupt`, `steer` | | how another device answers it |
+| `session` | | where its sessions are, to resume and to read them |
+| `launch`, `assets`, `hooks`, `home` | | the wiring behind turn signals, supervision and hooks |
+| `icon` | | its icon, drawn with shapes |
+
+## caps
+
+Every field under `caps` is required. Leaving one out is refused, so each one is a decision.
+
+| Field | Values | Means |
+|---|---|---|
+| `promptDelivery` | `argv`, `typed` | `argv`: the task is passed as an argument. `typed`: typed in once its screen reads idle. |
+| `turnSignal` | `true`, `false` | It tells Hivemind when it has finished replying, so another agent can collect its replies. Needs `launch.hcp` and a hook file. |
+| `resume` | `none`, `cwd`, `tile` | Resume after a restart: never, the newest session in the folder, or the tile's own session. Needs `session.resume`. |
+| `supervise` | `human`, `none`, `broker` | `human`: it has its own permission questions. `none`: it has none. `broker`: its permission questions can go to a supervising agent first; needs `launch.hcp` and a pre-tool hook. |
+| `blockedDetection` | `true`, `false` | Its screen shows when it waits on you. Without it, a permission question reads as finished. |
+
+## spawn
+
+| Field | What it is |
+|---|---|
+| `args` | arguments always passed |
+| `label` | the tile's name; `{n}` is the tile's number, `{label}` the agent's label |
+| `titles` | window titles the program sets, as templates: `{task}` is the part worth showing, `{any}` matches anything. A title without `{task}` is ignored. |
+| `dismiss` | start-up screens the launch flags already answered: `when`, optional `scope`, and the `keys` that skip it. Sent once, at the start, and never after you type. |
+
+## options
+
+Each option is a launch setting shown on the agent's page in **Settings → Plugins**.
+
+| Field | What it is |
+|---|---|
+| `id` | `model` and `mode` are what `hive ctl spawn --model` and `--mode` set |
+| `label` | the name people see |
+| `flag` | a chosen value is passed as `<flag> <value>` |
+| `values` | values that need other arguments, for example `yolo: ["--yes"]` |
+| `default` | what Hivemind passes when nothing is chosen; unset passes nothing |
+| `list` | a subcommand that prints the values, one a line: `args`, optional `skip` and `format` |
+| `unattended` | the value used for an agent with no person at its tile |
+
+With a `flag` and no `values` or `list`, Hivemind runs `<bin> --help` and reads the allowed values
+(`(choices: "a", "b")`, `[possible values: a, b]`, `a|b|c`). A flag with no listed values becomes a
+text field.
+
+## detect
+
+`detect.rules` are checked in order. The first match sets the status, else `default`.
+
+| Field | What it is |
+|---|---|
+| `default` | the status when no rule matches |
+| `rules[].when` | the test (below) |
+| `rules[].then` | `idle`, `working`, or one that waits on you: `blocked`, `permission`, `question` |
+| `rules[].says` | names what a waiting screen is, such as `trust`, so `answer` can have keys for it |
+| `rules[].scope`, `detect.scope` | limit to the bottom of the screen: `{ kind: tail, n: 20 }` |
+
+| Whole-screen test | Matches when |
+|---|---|
+| `contains` / `containsCS` | the text appears (any case / exact case) |
+| `helper: hasConfirmationPrompt` | "do you want" or "would you like" followed by yes or ❯ |
+| `helper: hasInterruptPattern` | an "esc to interrupt" hint |
+| `helper: hasBrailleSpinner` | a line starts with a braille spinner |
+
+`line: [...]` matches when one line passes every test in it. The line tests are `contains`,
+`startsWith`, `startsWithAny`, `gerundAfterPrefix` (a mark, then a word ending in -ing),
+`letterAfterPrefix`, `numBeforeWord`, `anyOf`, and `seq` for an exact sequence. Combine tests with
+`all`, `any` and `not`.
+
+Regular expressions are not allowed: a bad one could stall status for every terminal. Every test
+runs in time proportional to the line.
+
+## answer, choose, interrupt, steer
+
+These let your phone answer the agent. Write keys as `hive ctl keys` takes them: one to four keys,
+digits quoted. Read them from the real program: a wrong key answers the wrong way.
+
+```yaml
+answer:
+  permission:
+    allow: ['1']
+    deny: [escape]
+  trust:                 # a screen a detect rule names with says: trust
+    allow: ['1']
+    deny: [escape]
+choose: ['{n}']          # pick option n of a question
+interrupt: [escape]      # stop it, as Stop on the phone does
+steer: true              # it reads a message typed while it works
+```
+
+## session
+
+| Field | What it is |
+|---|---|
+| `resume.args` | arguments added to resume; `{id}` is the session |
+| `resume.exists` | where a session is kept: `{id}` for its id, `{home}` for your home, one `*` for an unknown folder. A session not there is not resumed. |
+| `resume.find` | where to find an id on disk: `strategy` `jsonl-header` or `dir-meta`, `root`, and the paths into each file |
+| `resume.from` | other places the id may come from: `tracked`, `bound` |
+| `resume.fallback` | arguments to try when no id is known |
+| `resume.position` | `before`, `beforeLaunch` or `after` (the default) |
+| `bind` | give a new session an id Hivemind chooses: `args` with `{newId}`, and `unless` |
+| `list` | how to list past sessions: the program's own `args`, or the files above, with paths to `id`, `cwd`, `title`, `prompt` and `updated` |
+| `transcript` | how its session file reads as a conversation, so the phone shows a chat |
+
+### transcript
+
+If the agent writes its session as JSON lines, `session.transcript` maps each line to messages,
+tool uses and results. Claude Code's mapping:
+
+```yaml
+session:
+  resume:
+    exists: '{home}/.claude/projects/*/{id}.jsonl'
+  transcript:
+    id: uuid
+    at: timestamp
+    skipWhen: { isSidechain: true, isMeta: true }
+    said:
+    - { require: { type: user }, text: message.content, who: person }
+    - { require: { type: user }, each: message.content, item: { type: text }, text: text, who: person }
+    - require: { type: user }
+      each: message.content
+      item: { type: tool_result }
+      result: { of: tool_use_id, text: content, error: is_error }
+    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }
+    - require: { type: assistant }
+      each: message.content
+      item: { type: tool_use }
+      tool:
+        id: id
+        name: name
+        about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
+        input: input
+        asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
+```
+
+`conformance/conversation.json` in the repository has cases to test a mapping against.
+
+## launch, assets, hooks, home
+
+| Field | What it is |
+|---|---|
+| `launch.hcp` | give the agent what it needs to report back to Hivemind. Required for `turnSignal: true` and `supervise: broker`. |
+| `launch.args` | arguments added at start; `{asset:name}` names a written file |
+| `launch.subcommand` | a subcommand it always starts through |
+| `launch.env` | extra environment |
+| `launch.unsetEnv` | variables removed from every terminal |
+| `launch.requiresHome` | skip these arguments when the private home is missing |
+| `assets[]` | files written into the agent's private folder before it starts: `name`, `file` (beside the manifest), optional `hook` and `produces` |
+| `hooks.events` | which of the agent's own events run which hook, or `emit` one of Hivemind's events |
+| `hooks.template`, `entry`, `group`, `arg`, `file`, `format` | how the hook settings are written in the agent's own format (`json` or `toml`) |
+| `home` | a private home folder for an agent that reads its settings from one: `root`, `dir`, `mirror`, `env`, `own` |
+
+The events a hook can report: `session.started`, `session.ready`, `session.ended`,
+`turn.started`, `turn.ended`, `input.requested`, `input.resolved`, `subagent.started`,
+`subagent.stopped`, `compacting.started`, `compacting.ended`.
+
+## icon
+
+Draw it with shapes. Hivemind builds the SVG, so nothing in the file becomes markup:
+
+```yaml
+icon:
+  viewBox: "0 0 24 24"
+  attrs: { fill: currentColor }
+  shapes:
+    - path: { d: "M12 2 2 22h20L12 2z" }
+    - circle: { cx: 12, cy: 16, r: 2 }
+```
+
+Shapes are `path`, `rect`, `circle` and `ellipse`.
+
+<LastValidated />

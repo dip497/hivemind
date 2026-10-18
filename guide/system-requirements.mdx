@@ -1,0 +1,41 @@
+---
+title: "System requirements"
+description: "Which systems Hivemind runs on, and what each one gets: the app, the hive command, or both."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+The systems each release is built for, and what you get on each.
+
+<AgentPrompt description="Paste this into your coding agent to check whether this computer can run Hivemind." page="system-requirements">{`
+Using the table on this page, check whether this computer can run Hivemind, and what it would get.
+
+1. Find the operating system, its version and the CPU type (\`uname -sm\` and \`sw_vers\` on macOS; \`[System.Environment]::OSVersion\` and \`$env:PROCESSOR_ARCHITECTURE\` on Windows).
+2. Check \`curl\` and \`bash\` exist on Linux and macOS, or the PowerShell version on Windows.
+3. List which coding-agent programs are on PATH, for example \`command -v claude codex opencode\`.
+4. Tell me what this computer gets (the app, or only the hive command), anything missing, and the install command to run. Do not install anything.
+`}</AgentPrompt>
+
+| System | You get | Notes |
+|---|---|---|
+| Linux x86_64 | the app, `hive` and `hive-net` | The installer unpacks the app, so it needs no `libfuse2`. |
+| macOS on Apple Silicon | the app, `hive` and `hive-net` | macOS 13 or later. The app is not signed by Apple; the installer clears the quarantine mark. |
+| Windows x64 | the app, `hive` and `hive-net` | Built and checked automatically for each release, but not yet tested on real hardware. [Report what breaks](https://github.com/dip497/hivemind/issues). |
+| Linux arm64 | `hive` and `hive-net` only | No app. Use it as a [machine](/machines) that another computer drives. |
+| macOS on Intel | nothing prebuilt | Build from source with `bash install.sh --dev`. |
+
+## What else you need
+
+- **To install:** `curl` and `bash` on Linux and macOS, or PowerShell 5.1 or newer on Windows.
+- **To run agents:** each coding agent's own program, such as `claude` or `codex`, on your `PATH`. No agent ships in the app.
+- **To build from source:** git, node 22 or newer, pnpm 12 or newer, and bun.
+- **To reach other machines:** `ssh`, with access to each machine.
+- **For your phone, or devices on other networks:** your own [network server](/self-hosting).
+
+## Related
+
+- [Install](/install)
+- [FAQ](/faq)
+
+<LastValidated />

@@ -1,0 +1,68 @@
+---
+title: "Glossary"
+description: "One word per thing: what each Hivemind word means, in a sentence."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+These docs use one word for each thing, the word the app shows.
+
+<AgentPrompt description="Paste this into your coding agent to make your own notes about Hivemind use the same words." page="glossary">{`
+Read the Hivemind glossary in the reference below. Then read the file or text I point you to about Hivemind (a README, notes, an issue).
+List each word that means something in the glossary but is not the glossary's word (for example "offer" for invite, "daemon" for background process, "board" for canvas), with the line it is on and the word to use instead.
+Do not change the file until I say which ones to change.
+`}</AgentPrompt>
+
+## The workspace
+
+| Word | What it is |
+|---|---|
+| <a id="workspace" />**Workspace** | One project folder and everything open for it. |
+| <a id="canvas" />**Canvas** | The view that lays your frames, tiles and widgets out on one endless surface. The app also calls it the **board**, as in **Can edit board**. |
+| <a id="frame" />**Frame** | A named area bound to one folder: the project, a git worktree, or a folder on another computer. Every tile in it starts in that folder. |
+| <a id="tile" />**Tile** | One thing in a frame: an agent, a terminal, the Code tile, a browser or a tool. |
+| <a id="layers-panel" />**Layers panel** | The list beside the canvas of your projects, frames and tiles. ⌘B / Ctrl+B shows or hides it. |
+| <a id="bell" />**Bell** | The count at the top of the Layers panel of agents waiting on you. Press it to jump to the next one. |
+| <a id="view" />**View** | A way of drawing the workspace: **Canvas**, **Windows**, or one you install. ⌘E / Ctrl+E switches. |
+| <a id="worktree" />**Worktree** | A second checkout of the same git repository in its own folder, on its own branch, so two agents never edit the same files. |
+| <a id="issue" />**Issue** | A piece of work written as a Markdown file in `.hivemind/`, which you and your agents read and update. |
+
+## Agents
+
+| Word | What it is |
+|---|---|
+| <a id="agent" />**Agent** | A coding agent's own program (Claude Code, Codex, opencode, …) running in a tile, which Hivemind reads and answers. |
+| <a id="needs-you" />**Needs you** | An agent waiting for a person: a permission question, a choice, or a plan to approve. Its tile turns amber. The app also shows **blocked**, **waiting: review** and **waiting: approval** in amber. |
+| <a id="working" />**Working** | An agent busy on its task. |
+| <a id="done" />**Done** | An agent that finished replying since you last looked: a dot on its row. Notifications call it **Finished**. |
+| <a id="idle" />**Idle** | An agent at its prompt, waiting for a task. |
+| <a id="exited" />**Exited** | The agent's program has stopped. Red when it failed. |
+| <a id="asleep" />**Asleep** | An agent put to sleep: its program stopped, its conversation kept, ready to resume. |
+| <a id="lead" />**Lead** | The agent, or you in a terminal, that starts other agents with `hive ctl`, sends them work and collects their replies. |
+| <a id="worker" />**Worker** | An agent a lead started to do one piece of the work. |
+| <a id="supervise" />**Supervise** | A worker's permission questions go to the lead's inbox instead of its own screen. |
+| <a id="channel" />**Channel** | Which releases you follow: **stable**, or **nightly** builds. |
+| <a id="background-process" />**Background process** | The `hive` process that keeps terminals and agents running while the app is closed or upgrading. |
+
+## Plugins
+
+| Word | What it is |
+|---|---|
+| <a id="plugin" />**Plugin** | Something you add to Hivemind: an agent, a view, a widget or a tool. |
+| <a id="widget" />**Widget** | A small live card on the canvas, drawn by a few lines of code. |
+| <a id="tool" />**Tool** | A plugin that adds a kind of tile, such as a pull request panel. It runs with your access, so it starts switched off. |
+| <a id="hivehub" />**HiveHub** | The catalogue Hivemind installs agents and plugins from. |
+
+## Other computers and people
+
+| Word | What it is |
+|---|---|
+| <a id="machine" />**Machine** | Another computer you added over ssh. Frames, terminals and agents can run on it. |
+| <a id="host" />**Host** | A server that keeps your workspaces and agents running while your laptop sleeps. |
+| <a id="network-server" />**Network server** | A server you run (`hive-net`) so your devices and guests reach each other across networks. It also serves the phone page. |
+| <a id="invite" />**Invite** | A link, QR code or code that lets one device or person in. |
+| <a id="role" />**Role** | What a person or a program may do: `view`, `edit`, `terminals` or `agents`. |
+| <a id="token" />**Token** | A secret a program of yours uses to drive a workspace, with one role. |
+
+<LastValidated />

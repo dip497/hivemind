@@ -1,0 +1,201 @@
+---
+title: "Connect and call"
+description: "Build a small client with the TypeScript or Python SDK: connect with your token, start an agent, read its reply, answer it, and hear events."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated, SdkInstall } from "/snippets/version.mdx";
+
+In this tutorial you build a client that lists your agents, starts one, reads its reply, answers its questions and follows what happens. It takes about ten minutes.
+
+<AgentPrompt description="Paste this into your coding agent to make a token and write a client with the hivemind-api SDK." page="api-connect">{`
+Make a Hivemind API token and write a small client with the \`hivemind-api\` SDK that connects to my workspace, starts an agent, reads its reply and prints the events it hears.
+
+1. Ask me which workspace folder to drive, whether I prefer TypeScript (Node 20 or newer, or Bun) or Python (3.9 or newer), and whether the client only reads (\`view\`) or also starts agents (\`agents\`).
+2. Check Hivemind runs with the folder open: \`hive ctl agents\` must not exit 3. If it does, ask me to run \`hivemind <folder>\`.
+3. Make the token: \`hive grant create api-client -w <folder> --role <role> --expires 7d --json\`. Keep the token out of this chat and out of git: write \`HIVE_DRIVE_TOKEN\`, \`HIVE_DRIVE_SOCK\` (the \`socket\` field) and \`HIVE_WORKSPACE\` (the folder) to a git-ignored \`.env\`.
+4. Install the SDK that comes with the app. On macOS or Linux: \`npm install ~/.hivemind-app/sdk/hivemind-api.tgz\` or \`pip install ~/.hivemind-app/sdk/python\`. On Windows: \`npm install %LOCALAPPDATA%\\hivemind\\sdk\\hivemind-api.tgz\` or \`pip install %LOCALAPPDATA%\\hivemind\\sdk\\python\`. Only on a computer without Hivemind, install it from the release: \`npm install https://github.com/dip497/hivemind/releases/download/v${validatedFor}/hivemind-api-${validatedFor}.tgz\` or \`pip install https://github.com/dip497/hivemind/releases/download/v${validatedFor}/hivemind_api-${validatedFor}-py3-none-any.whl\`.
+5. Write the client. \`connect()\` reads the token, workspace and socket from those variables. Print \`hive.as\` (Python: \`hive.as_\`), then \`hive.agents.list()\`.
+6. With an \`agents\` token: \`hive.agents.start\` with program set to an agent from \`hive agents list\` and prompt "Say hello", then \`hive.agents.read\` the tile. If \`finalStatus\` is \`waiting\`, show me what it asks and answer only after I say so, with \`hive.agents.answer(tile, reply.waiting.since, ...)\`.
+7. Print \`agent.event\` events with \`hive.on\`. Catch \`ApiError\` and print its \`code\`.
+8. Run it for 30 seconds and show me what it printed.
+
+At the end, tell me the token's id from \`hive grant list\` and how to revoke it: \`hive grant revoke <id>\`.
+`}</AgentPrompt>
+
+## What you'll learn
+
+- How a program says who it is, with a token.
+- How to start an agent, read its reply and answer it.
+- How to follow what your agents do, as it happens.
+
+## Before you start
+
+- Hivemind is running with your project open.
+- Node 20 or newer (or Bun), or Python 3.9 or newer.
+- A token for that project, made as in [Make an API token](/api-tokens). Use `agents` to follow every step here; `view` reads only.
+- The token in your environment, never in your code:
+
+```bash
+export HIVE_DRIVE_TOKEN=hgr_…                          # from hive grant create
+export HIVE_WORKSPACE=~/work/api                       # the project folder
+export HIVE_DRIVE_SOCK=~/.config/hivemind/drive.sock   # the socket it printed
+```
+
+<Steps>
+  <Step title="Install the SDK">
+    <SdkInstall />
+
+    The Python package uses only the standard library.
+  </Step>
+  <Step title="Connect">
+    `connect()` reads the token, the workspace and the socket from the variables above. Without them, it uses this computer's app.
+
+    <CodeGroup>
+    ```ts TypeScript
+    import { connect, ApiError } from "hivemind-api";
+
+    const hive = await connect();
+    // or: await connect({ token: "hgr_…", workspace: "/home/you/work/api", socket: "…/drive.sock" })
+    console.log(hive.as);
+    ```
+
+    ```python Python
+    from hivemind_api import connect, ApiError
+
+    with connect() as hive:
+        # or: connect(token="hgr_…", workspace="/home/you/work/api", socket="…/drive.sock")
+        print(hive.as_)
+    ```
+    </CodeGroup>
+
+    Check it worked: it prints your token's name, role and workspace:
+
+    ```text
+    { client: "dashboard", role: "agents", workspace: "/home/you/work/api" }
+    ```
+  </Step>
+  <Step title="List the agents and start one">
+    <CodeGroup>
+    ```ts TypeScript
+    const { agents } = await hive.agents.list();
+    console.log(agents);
+
+    const { tile } = await hive.agents.start({ program: "claude", prompt: "Run the tests" });
+    ```
+
+    ```python Python
+    print(hive.agents.list()["agents"])
+
+    tile = hive.agents.start({"program": "claude", "prompt": "Run the tests"})["tile"]
+    ```
+    </CodeGroup>
+
+    Check it worked: a new agent tile opens in the app. `program` is an agent from `hive agents list`.
+  </Step>
+  <Step title="Read the reply, and answer a question">
+    `agents.read` waits for the agent to finish replying. If it stops to ask you something, answer it.
+
+    <CodeGroup>
+    ```ts TypeScript
+    const reply = await hive.agents.read(tile, { timeoutMs: 600_000 });
+    if (reply.finalStatus === "waiting") {
+      await hive.agents.answer(tile, reply.waiting!.since, { decision: "allow" });
+    }
+    console.log(reply.text);
+    ```
+
+    ```python Python
+    reply = hive.agents.read(tile, timeout_ms=600_000)
+    if reply["finalStatus"] == "waiting":
+        hive.agents.answer(tile, reply["waiting"]["since"], {"decision": "allow"})
+    print(reply["text"])
+    ```
+    </CodeGroup>
+
+    | `finalStatus` | Means |
+    |---|---|
+    | `turn` | The reply is in `text`. |
+    | `timeout` | It is still working. Read again. |
+    | `waiting` | It asks you something. Answer with `agents.answer`: `allow` or `deny` a permission, or `{text}` for a question. |
+    | `asleep` | It is asleep. |
+    | `closed` | Its tile was closed. |
+
+    Check it worked: the agent's tile turns amber while it waits, then goes back to work after your answer.
+  </Step>
+  <Step title="Listen to events">
+    <CodeGroup>
+    ```ts TypeScript
+    const off = hive.on("agent.event", (repo, event) => console.log(event.kind, event.tile));
+    // later: off();
+    ```
+
+    ```python Python
+    off = hive.on("agent.event", lambda repo, event: print(event["kind"], event["tile"]))
+    # later: off()
+    ```
+    </CodeGroup>
+
+    | Event | Tells you |
+    |---|---|
+    | `agent.changed` | An agent appeared, changed or went. |
+    | `agent.event` | An agent finished replying (`turnEnded`), started waiting on you (`waiting`), was answered, or reported. |
+    | `status.changed` | An agent's status changed. |
+
+    Check it worked: start an agent in the app. Your client prints `came`.
+  </Step>
+  <Step title="Handle errors">
+    Every refusal is one `ApiError` with a `code`. `call` runs any method by name.
+
+    <CodeGroup>
+    ```ts TypeScript
+    try {
+      await hive.call("agent.start", [hive.workspace!, { program: "claude" }]);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "FORBIDDEN") console.log("this role may not start agents");
+    }
+    hive.close();
+    ```
+
+    ```python Python
+    try:
+        hive.call("agent.start", [hive.workspace, {"program": "claude"}])
+    except ApiError as e:
+        print(e.code)  # "FORBIDDEN"
+    ```
+    </CodeGroup>
+
+    Check it worked: with a `view` token, it prints the refusal. The codes are listed on [Protocol](/api-protocol#error-codes).
+  </Step>
+</Steps>
+
+<Note>
+For Python with `asyncio`, import from `hivemind_api.aio`: `async with await connect() as hive:`. The methods are the same, awaited.
+</Note>
+
+## What the SDK gives you
+
+Both SDKs have the same shape: `as` (Python `as_`), `workspace`, `call(method, params, timeout)`, `notice`, `on(event, fn)` that returns `off`, `closed` and `close()`. Helpers:
+
+| Helper | Methods |
+|---|---|
+| `agents` | `list`, `since`, `start`, `read`, `send`, `answer`, `output`, `interrupt`, `close` |
+| `frames` | `open`, `close` |
+| `terminals` | `write`, `close` |
+
+Everything else is on [Methods by role](/api-methods), through `call`.
+
+**Other languages:** see [Protocol](/api-protocol) for the raw messages.
+
+## What you did
+
+- Your program proved who it is with a token, at one role.
+- It started an agent, read its reply and answered its question.
+- It followed your agents through events, and handled a refusal.
+
+## Next
+
+- [Methods by role](/api-methods): everything else you can call.
+- Revoke the token when you are done: `hive grant revoke <id>`.
+
+<LastValidated />

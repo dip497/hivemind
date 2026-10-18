@@ -1,287 +1,121 @@
 ---
-title: Extension authoring
-description: Build and install a workspace view.
+title: Write a view
+description: Build a view that draws the workspace your way, with the view SDK.
 ---
 
-A view speaks a versioned protocol. Its manifest names the major version (`"protocol": 1`, the
-one the app speaks today); a view that names a newer one is refused rather than half-loaded.
-Each later addition is a minor version (1.1 to 1.10 below) that the app lists in
-`hm.hello.features`, so a view checks `hm.supports("<feature>")` before it uses one.
+A view is a small web page that draws the workspace: frames, tiles, agents and their status. It
+runs in a sandbox and reads everything through `@hivemind/view-sdk`.
 
 ## Start one
 
 ```bash
-hive views new pulse          # ./pulse, id @<your GitHub login>/pulse (--owner to set it)
+hive views new pulse          # ./pulse, id @<your GitHub login>/pulse
 cd pulse && npm install
-npm run dev                   # build to dist/, then hive views install dist
+npm run dev                   # builds to dist/
+hive views install dist
 ```
-
-There is no SDK package to install. The app serves `@hivemind/view-sdk` to every view, the
-same version it speaks, so your bundle leaves it out (`external` in `build.mjs`) and stays a
-few kilobytes. `types/view-sdk/` is its source, there for your editor and `tsc`.
 
 ```text
 pulse/
   hivemind-view.json   { "id": "@you/pulse", "name": "Pulse", "version": "0.1.0",
                          "entry": "index.html", "protocol": 1, "permissions": [] }
-  index.html           the page; loads ./main.js as a module
+  index.html           loads ./main.js
   src/main.ts          your view
   dist/                what you install and publish
 ```
 
-A manifest may say what the view is for with `"category"`: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). Any other value is
-refused.
+The app serves the SDK to every view, so your bundle leaves it out and stays small. Hand
+`PROMPT.md` to a coding agent and it can build the view without reading Hivemind's source.
 
-A view may also say what an agent can run in it while it is the view shown, under
-`"commands"`, each answered by `hm.onCommand(name, handler)` (protocol 1.10, feature `invoke`):
-what the handler returns is what `hive ctl plugin call <view> <command>` prints, and
-`hive ctl plugin commands` lists what the running plugins offer. The Agent board
-(`@dip497/agent-board` on HiveHub) is one: agents pin notes to it.
-
-A command may also name the keys that run it, `"keys": "mod+alt+k"`: modifiers (`mod`, which is
-Cmd on a Mac and Ctrl elsewhere, `ctrl`, `meta`, `alt`, `shift`) and one key, with at least one of
-`mod`, `ctrl` or `meta`. While the view is shown they work wherever focus is in the app, inside a
-terminal too, which then never sees them; the same handler answers them. Keys the terminals and
-the app answer are refused: escape and tab, and unless `alt` is among the modifiers a letter or
-digit (Ctrl+C, Ctrl+Shift+V), an arrow, Home, End, Page Up/Down, Backspace, Delete, Space, F11,
-`[ / = - + _ . ,`, and Enter without `shift`. `mod+\`, `mod+shift+enter` and `mod+alt+arrowleft`
-are free.
-
-`hive views install <dir>` validates the manifest and copies it to
-`$XDG_CONFIG_HOME/hivemind/views/<id>`; `hive views install @owner/name` takes a published one
-from HiveHub; `hive views list` reports load errors and `hive views remove <id>` takes one out.
-In the app, **Settings ▸ Plugins ▸ Add ▸ Add a view from a folder** shows a review step first.
-
-## Publish
-
-Push the commit, then run `hivehub publish dist` with HiveHub's own CLI (or sign in on HiveHub
-and name the folder). The id's scope must be your GitHub login: nobody can publish into someone
-else's.
-
-## Sandbox
-
-The page runs in a sandboxed iframe on its own `hm-view://<id>` origin with a strict
-CSP: no `window.hive`, no node, no network, no inline scripts. `@hivemind/view-sdk` resolves to the app's copy on every page. All workspace access is
-over one validated MessagePort. Budget violations — malformed messages, floods, runaway
-CPU — disable the plugin for the session and return the user to the canvas.
-
-## Client API (`@hivemind/view-sdk`)
+## The first lines
 
 ```ts
 import { connect, applyThemeVars } from "@hivemind/view-sdk";
 
 const hm = await connect();
-applyThemeVars(hm);
+applyThemeVars(hm);                       // follow the user's theme
 
-hm.on("structure", ({ tiles }) => {
-  const buttons = tiles.map((tile) => {
-    const button = document.createElement("button");
-    button.textContent = tile.name;
-    button.onclick = () => hm.commands.selectTile(tile.id);
-    return button;
-  });
-  document.body.replaceChildren(...buttons);
+hm.on("structure", ({ frames, tiles }) => {
+  document.body.replaceChildren(...tiles.map((tile) => {
+    const b = document.createElement("button");
+    b.textContent = tile.name;
+    b.onclick = () => hm.commands.selectTile(tile.id);
+    return b;
+  }));
 });
 ```
 
-For a view that keeps its own state with `setLayout` and answers agents' commands, read
-[`views/agent-board`](https://github.com/dip497/hivemind-plugins/tree/main/views/agent-board) in the published plugins.
+`structure` comes again whenever frames or tiles change. Each tile carries its `icon` (an SVG in
+`currentColor`) and its `agent`; each frame its `folder`, `branch`, `parentId` (a worktree under
+its project) and `machine` when it runs elsewhere.
 
-`setSurfaceRects` places host-owned tools in your view (a tile's live terminal, where the
-screen places them: `hm.supports("surfaces")`, protocol 1.6; a phone's app draws its own terminal
-over your view there); `onReveal` answers focus requests; `setLayout` saves up to 64 KB per repository. Canvas/WebGL views can use
-`createInvalidator` to coalesce drawing and pause while hidden.
+## What a view can use
 
-A rect may round its corners to match a card you draw around it (`radius`, 0 to 24) and, while
-you drag something across the surfaces (a divider between panes), let the pointer through to
-your view (`inert: true`; set it as the pointer reaches your grip, so the first moves are not
-caught). `setLayout` gathers saves for 250 ms, as a drag makes many; pass `{ now: true }` for a
-change made in one step, so a view switched away from straight after it keeps it.
+Check `hm.supports("<feature>")` before using a newer one.
 
-The manifest's `"toolbar"` says where the app's toolbar sits over your view: `"top"`,
-`"bottom"` (the default), `"hidden"` behind a handle, or `"off"`. The view's page in Settings ▸
-Plugins (**Toolbar → Display**) can still change it.
+| Need | Call |
+|---|---|
+| Put live terminals in your layout | `hm.setSurfaceRects(...)` (`surfaces`) |
+| Save your layout (64 KB, per workspace) | `hm.setLayout(blob)` |
+| An agent's status as it changes | `hm.subscribeStatus(tileId, (status, info) => …)` |
+| What happens: turns, waits, closes | `hm.onEvents(["turn", "needsInput"], cb)` |
+| How busy a terminal is (0 to 3) | `hm.activity(tileId, cb)` |
+| A day's history per tile | `await hm.history("2026-09-23")` |
+| Installed agents, past sessions | `await hm.agents()`, `await hm.sessions("claude", frameId)` |
+| Start an agent | `hm.commands.spawnAgent(agent, frameId, { prompt, resume })` |
+| Suggest a prompt (the user confirms) | `await hm.prompt(tileId, "run the tests")` |
+| Who else is here | `hm.onParticipants(cb)` (`participants`) |
+| The board's widgets | `hm.onWidgets(cb)`, `hm.pressWidget(id, action)` (`widgets`) |
+| Issues | `hm.onIssues(cb)`, `hm.issues.read(id)`, `create`, `update`, … (`issues`) |
+| Its settings | `hm.settings`, `hm.on("settings", cb)` (`settings`) |
+| Messages from your scripts | `hm.onCustom("ci.*", cb)`, sent by `hive ctl view emit ci.build '{…}'` |
 
-
-The hello/structure payload includes the resolved palette (`applyThemeVars`), so chrome
-can follow the user's theme.
-
-### Machines
-
-A frame whose folder is on another computer carries where it runs (protocol 1.1):
-
-```ts
-hm.on("structure", ({ frames }) => {
-  for (const f of frames) {
-    if (f.machine) draw(f.id, `${f.machine.name} · ${f.machine.state}`); // e.g. "build-box · online"
-  }
-});
-```
-
-`machine` is `{ name, state, rttMs? }`. `state` is `online` (with `rttMs` once measured),
-`connecting`, `reconnecting`, `offline`, `attention` (someone has to log in), `no-hive`
-(terminals there stop if the connection drops) or `idle`. It changes live — a new `structure`
-arrives — and a local frame has no `machine`. Show it wherever your view shows the frame:
-which computer the work is on is what a person needs to see.
-
-### Time, events, activity and history
-
-A newer app (view protocol 1.3) also tells a view what it knows about time and work, with no
-permission. Check `hm.hello.features` before using any of it — an older app serves an older SDK
-that doesn't have these methods:
-
-```ts
-const has = new Set(hm.hello.features ?? []);
-
-hm.subscribeStatus(tileId, (status, info) => {
-  // info.since: when this status began. info.exact === false: the app found it already there — show "≥".
-});
-hm.onEvents(["turn", "needsInput", "tileClosed"], (e) => { /* ids, kinds and times */ });
-hm.activity(tileId, (level) => { /* 0 quiet … 3 heavy, at most 4 a second, nothing while hidden */ });
-hm.onPresence(({ state }) => { /* active, idle, away */ });
-const day = await hm.history("2026-09-23");   // per-tile status intervals, even for a day your view wasn't open
-const outcome = await hm.share(png);          // the app shows the image and asks: copied, saved or cancelled
-```
-
-Your own scripts can talk to the view too. A git hook or a CI wrapper runs
-
-```bash
-hive ctl view emit ci.build '{"frame":"payments","state":"failed"}'
-```
-
-and a view that asked with `hm.onCustom("ci.*", cb)` gets it. With no view listening, the event
-waits an hour for one that asks with `replaySince`. Treat the payload as text from any program
-on your machine: show it, never run it.
-
-Nothing here carries what a terminal shows: output is a level, never text or a count, and events
-carry ids and times, never what an agent wrote.
-
-### Agents
-
-View protocol 1.4 lets a view see and drive the agents. Check the same `hm.hello.features`:
-
-```ts
-hm.subscribeStatus(tileId, (status, info) => {
-  // info.agent: state (idle, working, waiting, done, failed, interrupted, limited, exited),
-  // waitingFor (permission, question, plan, approval), subagents, background, compacting
-});
-const agents = await hm.agents();                   // installed agents: turns, resumes, sessions
-const past = await hm.sessions("claude", frameId);  // the frame's folder: { id, updated, prompt }
-hm.commands.spawnAgent("claude", frameId, { resume: past[0].id });
-const outcome = await hm.prompt(tileId, "run the tests"); // sent or cancelled — the user decides
-```
-
-`prompt` is the user's own first line of that session; a title the agent wrote is never sent.
-Every prompt a view writes opens a dialog in the app showing the full text, with Cancel focused;
-after three cancels the view's prompts are declined until it's reloaded. Text with control, bidi
-or zero-width characters is refused. A view never reads an agent's replies and never answers its
-permission prompts.
-
-### People and devices
-
-View protocol 1.5 tells a view who else is in a shared workspace, and what it is shown on:
-
-```ts
-if (hm.supports("participants")) hm.onParticipants((people) => {
-  // [{ id, person, name, color, cursor: { tileId } | null, selection: [tileId | frameId] }]
-});
-if (hm.device.compact) { /* a phone's screen: one column */ }
-if (hm.device.touch) { /* a finger: give what it taps room */ }
-```
-
-A view that arranges tiles can ask for the app's own Layers rail beside it, `"layers": true`:
-frames, their tiles, and every frame action (spawn into it, worktrees, bind a folder, git), drawn by
-the app, so the view need not draw one. What a view saves with `setLayout` is kept in the
-workspace, the same for everyone in it; `"layout": "personal"` keeps it on this device instead,
-each person's own (which tabs are minimized, say).
-
-A view that lays itself out for a phone says so in its manifest, `"phone": true`: only those are
-offered on the person's phone. There its host runs on their computer, and the view may do what
-the phone may: start and close agents (the phone asks its own lock first), but not rename tiles. A
-phone's screen places live terminal surfaces only where it says it does (`hm.supports("surfaces")`),
-and has no folder picker or share sheet, and starts no tile but an agent's: what asks for them is
-refused (`UNSUPPORTED`). Give a page of your own `<meta name="viewport" content="width=device-width,
-initial-scale=1">` (the page made for a script entry has it): without one, iOS lays the page out
-980 pixels wide. On iOS a view's page is not a secure context (it is served on the app's own
-scheme), so `crypto.subtle` and `crypto.randomUUID` are not there; the SDK needs neither.
-
-`cursor` is the tile someone's pointer is over, `selection` what they selected, both only of the
-view's own tiles and frames; the person at the view is never in the list. A view tests without the
-app against `fakeHost()` from `@hivemind/view-sdk/testing` (it comes with `hive views new`): it
-greets the view as the app does, and says what the app would refuse, and why.
-
-## Widgets
-
-A view can show the workspace's widgets (protocol 1.8, feature `widgets`), which is how a phone
-shows them: `hm.onWidgets((widgets) => …)` hears every widget now and whenever one changes, each
-`{ id, widget, name, tree, card, tint?, text?, items?, images, placement }`: `tree` is what it draws,
-in the same nodes a widget renders (stack, row, text, number, meter, button, image, sprite, input,
-textarea, list), `text` and `items` what people wrote in it, `images` the pictures its tree names.
-`hm.pressWidget(id, action)` presses one of its buttons and `hm.clickWidget(id)` its card, with the
-permission `workspace:widgets`: the widget's code hears it wherever it runs, and does what it does
-then as you, so pressing is asked for at install. `@dip497/widgets` on HiveHub is such a view.
-
-With the permission `workspace:issues`, a view reads and changes the workspace's issues (protocol
-1.9, feature `issues`): `hm.onIssues((issues) => …)`
-hears the list now and whenever an issue changes (an agent's `hive update` included), each
-`{ id, title, state, parent, labels, assignee, created, updated }`. `hm.issues.read(id)` gives one in
-full, with its description, acceptance criteria and activity; `create`, `update`, `setState`,
-`comment`, `delete`, `link`, `unlink` and `move` change them; `workspaces()` names the host's
-other workspaces. `read` finds an id of another workspace (a link's other end) by its prefix; every
-write is to the view's own workspace. Nothing a view is given says where a workspace is.
-
-## Settings
-
-A view declares what the person can set it to in its manifest's `settings`; the app draws the
-controls on its page in Settings ▸ Plugins (a view never draws its own settings screen), and
-`hive plugins set` sets them from a terminal. Each field is a `boolean`, a `number` (`min`,
-`max`), a `text` (`maxLength`) or a `choice` (`values`, `labels`), with a `label`, an optional
-`description` and a `default`:
-
-```json
-"settings": [
-  { "id": "columns", "label": "Columns", "type": "choice", "values": ["todo", "all"], "labels": ["To do", "Everything"], "default": "todo" },
-  { "id": "max", "label": "Most cards", "type": "number", "min": 1, "max": 50, "default": 20 }
-]
-```
-
-The view reads the values as `hm.settings` (protocol 1.7, feature `settings`) and hears each
-change as the `settings` event. A host before 1.7 sends none, so read each with its default
-beside it: `hm.settings.max ?? 20`.
+A view never reads an agent's replies or terminal text, and never answers its permission prompts.
+Every prompt a view writes opens a dialog showing the full text, with Cancel focused.
 
 ## Permissions
 
-Declared in the manifest, refused at install if unknown:
-`workspace:close` → `closeTile`; `workspace:spawn` → `spawnTile` / `spawnVis` /
-`spawnClaude` / `addFrame` / `spawnAgent`; `workspace:edit` → `renameTile` / `openFolder`;
-`workspace:prompt` → `prompt` and `spawnAgent` with a `prompt`; `workspace:sessions` →
-`sessions` and `spawnAgent` with `resume`; `workspace:widgets` → `pressWidget` / `clickWidget`;
-`workspace:issues` → `onIssues` and every `hm.issues` call. Selection and focus need none.
+Declared in the manifest; an unknown one is refused at install. Selection and focus need none.
 
-`spawnAgent(agent, frameId, { prompt?, name?, resume? })` starts an agent by its catalog id (`null` is
-the user's default); a `prompt` becomes its first message once the user sends it. An id that isn't installed is
-refused. `openFolder(frameId)` asks the user to pick the frame's folder; the view never sees a path.
+| Permission | Allows |
+|---|---|
+| `workspace:spawn` | start tiles, agents and frames |
+| `workspace:close` | close tiles |
+| `workspace:edit` | rename tiles, pick a frame's folder |
+| `workspace:prompt` | `prompt`, and `spawnAgent` with a prompt |
+| `workspace:sessions` | `sessions`, and `spawnAgent` with `resume` |
+| `workspace:widgets` | press and click widgets |
+| `workspace:issues` | read and change issues |
 
-Each tile in `structure` carries its `icon`, the mark the app draws for it (an agent's logo, a
-kind's icon) as one `<svg>` in `currentColor`: put it in your markup and size it with CSS.
+## Manifest options
 
-`structure` also tells you how the workspace is wired: each tile's `agent`, each frame's
-`parentId` (a worktree nested under its repo), `branch` and `folder: { name, kind }`, and
-`links: { pipes, spawns }` — which agent feeds which, and which agent started which.
+| Field | Does |
+|---|---|
+| `"settings"` | fields the app draws on the view's Settings page: `boolean`, `number`, `text`, `choice` |
+| `"commands"` | what an agent can run in it (`hm.onCommand(name, handler)`), optionally with `"keys": "mod+alt+k"` |
+| `"toolbar"` | `"top"`, `"bottom"` (default), `"hidden"` or `"off"` |
+| `"layout": "personal"` | keep the layout per person instead of shared |
+| `"layers": true` | show the app's Layers panel beside the view |
+| `"phone": true` | offer it on the phone page; use `hm.device.compact` and `hm.device.touch` |
+| `"category"` | where it is grouped in the Add menu and on HiveHub |
 
-## Rules
+## The sandbox
 
-- Treat surface slots as loans: the host mounts tile bodies once; you position them.
-- Render on change: subscribe per tile for status, coalesce draws, stop work while
-  `document.hidden`.
-- Keep the entry bundle small; heavy libraries load inside your iframe.
-- Name your own files relatively (`./main.js`, never `/main.js`): in a browser tab the app
-  serves your view under a path, not at a root of its own.
-- Store camera/placements via `setLayout`; version your blob yourself.
-- A disabled plugin recovers from its layout blob on next mount.
+The page runs on its own `hm-view://<id>` origin with a strict content policy: no `window.hive`,
+no Node, no network, no inline scripts. Malformed messages, floods or runaway CPU switch it off for
+the session and return the user to the canvas.
 
-Reference implementations:
-[`views/agent-board`](https://github.com/dip497/hivemind-plugins/tree/main/views/agent-board)
-(saved layout and agent commands) and `views/widgets` in
-[the published plugins](https://github.com/dip497/hivemind-plugins) (the workspace's widgets, drawn
-and pressed). Protocol types: `types/view-sdk/protocol.ts` in your view.
+- Name your files relatively (`./main.js`): in a browser tab the app serves views under a path.
+- Draw on change, and stop work while `document.hidden`.
+- Test without the app with `fakeHost()` from `@hivemind/view-sdk/testing`.
+
+## Install and publish
+
+```bash
+hive views install dist
+hivehub publish dist
+```
+
+Examples: [`views/agent-board`](https://github.com/dip497/hivemind-plugins/tree/main/views/agent-board)
+(saved layout, agent commands) and `views/widgets` in
+[the published plugins](https://github.com/dip497/hivemind-plugins).

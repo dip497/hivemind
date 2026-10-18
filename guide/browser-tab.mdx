@@ -1,0 +1,58 @@
+---
+title: "Open the app in a browser tab"
+description: "Serve the whole Hivemind app to a browser tab on this computer, or to another device through Tailscale."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+Use Hivemind in a browser tab: the whole app, with your terminals and agents. It listens on this computer only, unless you put it behind Tailscale.
+
+<AgentPrompt description="Paste this into your coding agent to turn on the browser tab and check it answers." page="browser-tab">{`Turn on Hivemind's "Serve the app to a browser" and check it answers, on this computer only.
+
+1. Check the Hivemind app is running: \`hive ctl agents --json\` must not fail with exit code 3.
+2. Turn it on: \`hive config set browserApp.enabled true\`. The port is \`browserApp.port\` (4483 by default): read it with \`hive config get browserApp\`.
+3. Check something answers: \`curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:4483/\`, with the port from step 2.
+4. The link with its key is shown only in the app. Tell me to open Settings → In a browser and press Open. Never print, copy or send that link anywhere: whoever has it can use my terminals.
+
+At the end, tell me how to turn it off: the switch in Settings → In a browser, or \`hive config set browserApp.enabled false\`.`}</AgentPrompt>
+
+<Warning>
+The link carries a key. Anyone with the link can use your terminals. Do not share it.
+</Warning>
+
+## Turn it on
+
+1. Open **Settings → In a browser**.
+2. Turn on **Serve the app to a browser**.
+3. Press **Open** next to the link that appears.
+
+Check: the app opens in a browser tab at `http://127.0.0.1:4483/#token=…`.
+
+The key in the link changes each time the app starts. Open the new link after a restart.
+
+## Reach it from another device
+
+1. Put the app behind Tailscale on this computer: run `tailscale serve` for port 4483.
+2. In **Settings → In a browser**, open **More options**.
+3. Under **Other names**, add the address Tailscale gives, with its port if it has one.
+
+Check: a second link appears, with that address. Open it on the other device.
+
+**Port**, under **More options**, changes the port from 4483.
+
+## If it didn't
+
+| You see | Do |
+|---|---|
+| `Port 4483 is in use by another program` | Pick another **Port** under **More options**. |
+| The old link stopped working | The app restarted, so the key changed. Use the new link. |
+
+More in [Troubleshooting](/troubleshooting).
+
+## Related
+
+- [Answer agents from your phone](/phone), the phone page made for small screens.
+- [Security and privacy](/security-and-privacy)
+
+<LastValidated />

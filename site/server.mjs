@@ -7,9 +7,11 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { downloadFor } from "./downloads.mjs";
+import { docsSiteFrom, guideRedirectFor } from "./guide-redirect.mjs";
 
 const ROOT = new URL("./dist/", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8080);
+const DOCS_SITE = docsSiteFrom(process.env);
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -50,6 +52,12 @@ createServer((req, res) => {
   // /download is the short URL people share; the section that downloads it lives on the home page.
   if (/^\/download\/?$/.test((req.url ?? "").split("?")[0])) {
     res.writeHead(302, { location: "/#download", "cache-control": "public, max-age=300" });
+    return res.end();
+  }
+  // Once DOCS_SITE_URL names the docs site, the old guide pages send people there for good.
+  const moved = guideRedirectFor(req.url ?? "/", DOCS_SITE);
+  if (moved) {
+    res.writeHead(301, { location: moved, "cache-control": "public, max-age=86400" });
     return res.end();
   }
   const to = downloadFor(req.url ?? "/");

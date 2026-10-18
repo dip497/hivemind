@@ -1,0 +1,79 @@
+---
+title: "Uninstall"
+description: "Remove Hivemind from your computer, with or without your settings and saved sessions."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+Remove the app, and choose whether your settings and saved sessions go too.
+
+<AgentPrompt description="Paste this into your coding agent to remove Hivemind from this computer." page="uninstall">{`
+Remove Hivemind from this computer.
+
+1. Ask me whether to keep my settings and saved sessions, or delete them too.
+2. Stop the background process that keeps terminals running: \`hive daemon stop\`. Tell me first: it ends every terminal and agent Hivemind runs.
+3. On Linux and macOS run \`hivemind uninstall\`, adding \`--purge\` only if I asked to delete my data. On Windows run \`hivemind uninstall\`, adding \`-Purge\` only if I asked.
+4. On Linux and macOS, also remove what the uninstaller leaves: \`rm -rf ~/.hivemind-app\` and \`rm -f ~/.local/bin/hive ~/.local/bin/hive-net\`.
+5. Check: \`command -v hivemind hive\` prints nothing (on Windows, \`Get-Command hivemind, hive\` finds nothing).
+
+Projects keep their \`.hivemind/\` issue folders; do not delete those unless I ask. At the end, tell me what was removed and what was kept.
+`}</AgentPrompt>
+
+## Before you start
+
+Uninstalling ends every terminal and agent Hivemind runs. Finish or save their work first.
+
+## Remove the app
+
+<Steps>
+  <Step title="Stop the background process">
+    Your terminals and agents keep running in a background process when the app closes. To stop it, run:
+
+    ```bash
+    hive daemon stop
+    ```
+  </Step>
+  <Step title="Run the uninstaller">
+    <Tabs>
+      <Tab title="Linux and macOS">
+        ```bash
+        hivemind uninstall            # keeps your settings and sessions
+        hivemind uninstall --purge    # deletes them too
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```powershell
+        hivemind uninstall            # keeps your settings and sessions
+        hivemind uninstall -Purge     # deletes them too
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  <Step title="Remove the rest (Linux and macOS)">
+    The uninstaller removes the app and the `hivemind` command. To remove the `hive` and `hive-net` commands too, run:
+
+    ```bash
+    rm -rf ~/.hivemind-app
+    rm -f ~/.local/bin/hive ~/.local/bin/hive-net
+    ```
+  </Step>
+</Steps>
+
+## What goes, and what stays
+
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| Removed | the app, the `hivemind` command, the desktop entry and icon | the app, the `hivemind` command, `~/Applications/hivemind.app` | the app, `hive`, `hive-net`, the `hivemind` command, the Start menu shortcut |
+| Removed with `--purge` / `-Purge` | `~/.config/hivemind` | `~/Library/Application Support/hivemind` and `~/.config/hivemind` | `%APPDATA%\hivemind` and `~/.config/hivemind` |
+| Always kept | each project's `.hivemind/` folder, and your agents' own programs | the same | the same |
+
+## Check it worked
+
+```bash
+command -v hivemind hive
+```
+
+It prints nothing. On Windows, `Get-Command hivemind, hive` finds nothing.
+
+<LastValidated />

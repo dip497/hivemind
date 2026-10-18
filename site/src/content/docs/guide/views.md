@@ -1,94 +1,52 @@
 ---
 title: Views
-description: How the workspace is drawn — Canvas, Windows, or a view you install.
+description: How the workspace is drawn, as Canvas, Windows, or a view you install.
 ---
 
-A view arranges the workspace on screen: frames, tiles, names and live status. The runtime owns
-frames, tiles and sessions; a view never decides what runs. A terminal inside a view is the real
-one: the view asks for a rectangle and the app places the live tile there.
+A view decides how the workspace looks. It never decides what runs: switching views keeps every
+terminal, agent and unsaved edit.
 
-Switch views with ⌘E (Ctrl+E), the toolbar's view switch, **Show as** in the Layers panel's
-title menu, or **Use this view** on a view's page in **Settings ▸ Plugins**.
+Switch with ⌘E (Ctrl+E), the toolbar's view switch, or **Show as** in the Layers panel's title menu.
 
-## Views that come with the app
+## The two built-in views
 
-| | |
+| View | What it is |
 |---|---|
-| **Canvas** | An infinite board. Frames are coloured zones; a frame's ⋯ menu arranges its tiles as Columns, Rows or Grid. |
-| **Windows** | Tiles as tabs in panes you split, with the Layers panel beside them. No toolbar. Each person keeps their own arrangement. |
+| **Canvas** | An endless board. Frames are coloured areas; tiles sit inside them. |
+| **Windows** | Tiles as tabs in panes you split, with the Layers panel beside them. Each person keeps their own arrangement. |
 
-<figure>
-  <img src="../../shots/showcase/waiting-on-you-board.webp" alt="The canvas: an agent's terminal on the board, the Layers list beside it and a widget above it." />
-  <figcaption>The canvas</figcaption>
-</figure>
+Keys in Windows (⌘ for Ctrl on a Mac; they work in a terminal too):
 
-In Windows:
-
-| Keys | |
+| Keys | Do |
 |---|---|
-| Ctrl+\\ / Ctrl+Shift+\\ | split the pane right / down |
+| Ctrl+\\ / Ctrl+Shift+\\ | split right / down |
 | Ctrl+Alt+arrows | move between panes |
 | Ctrl+Shift+Enter | show the pane alone, or bring the others back |
 
-On a Mac, ⌘ for Ctrl. The keys work with a terminal focused. Drag a tab onto another pane's tabs
-to move it, or onto a pane's edge to split it; double-click a divider to make the panes equal.
-An agent can do the same: `hive ctl plugin call windows split-right` (and `split-down`,
-`focus-left`, `maximize`, `close-pane`, `unsplit` …).
+Drag a tab onto another pane, or onto a pane's edge to split. An agent can do the same with
+`hive ctl plugin call windows split-right` (also `split-down`, `focus-left`, `maximize`,
+`close-pane`, `unsplit`).
 
-Windows is a view package like any other (`apps/desktop/views/windows`): install a view with
-the id `windows` and yours replaces it.
-
-## What a switch keeps
-
-Each tile is mounted once and lent to the active view, so a switch keeps terminal sessions,
-unsaved Code tile edits and browser tabs. Limits:
-
-- A Browser tile reloads its page once per switch; tabs, address and history survive, page
-  scroll and form state do not.
-- A view that crashes is switched off for the session and you land on the canvas; sessions
-  continue.
-
-Each view keeps its layout per workspace, shared with everyone in it, unless its manifest says
-`"layout": "personal"` (Windows does), which keeps it on your computer.
+A Browser tile reloads its page once per switch: tabs and history stay, scroll position does not.
 
 ## Install a view
 
 ```bash
-hive views install @someone/their-view     # from HiveHub, every file checked against its hash
-hive views install ./my-view/dist          # or from a folder
-hive views list                            # what will load, and why not
+hive views install @someone/their-view   # from HiveHub
+hive views install ./my-view/dist        # from a folder
+hive views list                          # what loads, and why not
 hive views remove @someone/their-view
 ```
 
-Or **Settings ▸ Plugins**: the **HiveHub** tab, or **Add → Add a view from a folder**. Review the
-permissions it asks for. The view's page there switches it off or removes it.
+Or **Settings ▸ Plugins** → **HiveHub**. A view runs in a sandbox: no files, no network. It sees
+only what its permissions allow, and the app switches it off for the session if it misbehaves.
 
-A view runs in a sandboxed frame on its own origin: no files, network or app API. It reads the
-workspace through `@hivemind/view-sdk` and does only what its permissions allow. Traffic that is
-malformed, flooded or CPU-heavy switches it off for the session.
+On [HiveHub](https://hivehub.griiken.workers.dev/), as `@dip497/<name>`: `constellation` (your
+agents in 3D), `timeline` (today's work per agent), `agents-by-state`, `workspace-map` and
+`agent-board` (notes agents pin). To write your own: [Write a view](../extension-authoring/).
 
-On [HiveHub](https://hivehub.griiken.workers.dev/), as `@dip497/<name>`: `constellation` (your agents in 3D, drawn with three.js
-shipped in the view's folder), `timeline` (today's work per agent), `agents-by-state` (a board by
-what each agent is doing), `workspace-map` (frames, worktrees, agents and issues) and `agent-board` (notes agents pin).
+## Toolbar
 
-## Write one
-
-```bash
-hive views new my-view
-```
-
-The starter runs as it is and includes `PROMPT.md`: the whole view API, the rules of the sandbox
-and what "done" means. Write what you want at the top, hand the file to a coding agent, and it can
-build the view without reading the Hivemind source. **Make your own…** in the Add menu or
-**Settings ▸ Plugins** writes the prompt for you. The API: [Extension authoring](../extension-authoring/).
-
-## Toolbar and appearance
-
-The toolbar (agent, frame, browser, Add, theme, the view switch, updates and Settings) draws over
-the active view. A view's manifest sets where (`"toolbar": "top" | "bottom" | "hidden" | "off"`);
-**Settings ▸ Plugins**, the view's page, **Toolbar → Display** overrides it. Where there is no
-toolbar, Settings is at the foot of the Layers panel or in the window's top-right corner.
-
-A terminal docked in an installed view follows `pluginSurfaces`: `theme` (as on the canvas,
-wallpaper clipped to the slot) or `opaque` (solid). Set it in **Settings ▸ Appearance** or with
-`hive config set appearance.pluginSurfaces '"opaque"'`.
+The toolbar sits over the active view. Each view's page in **Settings ▸ Plugins** sets
+**Toolbar → Display** (Automatic, Top, Bottom, Collapsed or Off) and its buttons
+(**Customize actions**). With no toolbar, Settings is at the foot of the Layers panel.
