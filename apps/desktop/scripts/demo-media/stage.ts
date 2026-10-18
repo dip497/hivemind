@@ -108,7 +108,9 @@ export async function stage(root: string, apps: ElectronApplication[], { name = 
     }
   }
 
-  const env = { USER: "hivemind", LOGNAME: "hivemind", LD_PRELOAD: named, HIVEMIND_TEST_UPDATE: "{}", HOME: home, SHELL: "/bin/bash", HIVEMIND_SHELL_ENV: "0", HISTFILE: "/dev/null", PATH: `${bin}:${process.env.PATH}`, ...more };
+  const env = { USER: "hivemind", LOGNAME: "hivemind", LD_PRELOAD: named, HIVEMIND_TEST_UPDATE: "{}", HOME: home, SHELL: "/bin/bash", HIVEMIND_SHELL_ENV: "0", HISTFILE: "/dev/null", PATH: `${bin}:${process.env.PATH}`,
+    // The runner's Rust toolchain, which the isolated home does not hold.
+    RUSTUP_HOME: process.env.RUSTUP_HOME ?? path.join(os.homedir(), ".rustup"), CARGO_HOME: process.env.CARGO_HOME ?? path.join(os.homedir(), ".cargo"), ...more };
   const config = path.join(root, name);
   const launchEnv = { ...process.env, XDG_CONFIG_HOME: config, HIVE_SETTINGS: path.join(config, "settings.json"), HIVEMIND_HIVE_NET: HIVE_NET, ...env } as Record<string, string>;
   delete launchEnv.ELECTRON_RUN_AS_NODE;
@@ -143,10 +145,11 @@ export async function stage(root: string, apps: ElectronApplication[], { name = 
       }
       await desktop.waitForTimeout(1200);
       ids[f] = await lastFrame();
-      if (f === "fastapi") {
+      // A frame added in the folder the app opened in starts unnamed; it is named for its folder.
+      if (path.join(DEMO, FOLDERS[f]) === cwd) {
         await emit("hivemind:frame-rename", ids[f]);
         const input = desktop.locator(`.react-flow__node[data-id="${ids[f]}"] input`).first();
-        if (await input.count()) { await input.fill("fastapi"); await input.press("Enter"); }
+        if (await input.count()) { await input.fill(f); await input.press("Enter"); }
       }
     }
     return ids;

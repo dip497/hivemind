@@ -130,6 +130,7 @@ test("tools", async () => {
     if (await desktop.getByRole("button", { name: /^Run 8 times/ }).first().isEnabled().catch(() => false) && i > 3) break;
     await desktop.waitForTimeout(600);
   }
+  await expect(desktop.locator(`.react-flow__node[data-id="${opened}"]`), "the runs found tests").not.toContainText("No test results", { timeout: 5_000 });
   await rec.burst("ran", 4);
   // An agent asks the same tool, from its own terminal.
   cli("ctl", "send", triage, JOB.triage);

@@ -335,5 +335,114 @@
       "asks": 6.0,
       "answered": 9.0
     }
+  },
+  "tools": {
+    "recording": "tools",
+    "shots": [
+      {
+        "beat": "tool",
+        "start": 0,
+        "end": 1.6,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "tool",
+            "pad": 1.02
+          }
+        ]
+      },
+      {
+        "beat": "running",
+        "start": 1.6,
+        "end": 4.6,
+        "play": "lapse",
+        "skip": "+10 s",
+        "camera": [
+          {
+            "u": 0,
+            "box": "tool",
+            "pad": 1.02
+          }
+        ]
+      },
+      {
+        "beat": "ran",
+        "start": 4.6,
+        "end": 7.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "tool",
+            "pad": 1.02
+          },
+          {
+            "u": 1,
+            "box": "tool",
+            "pad": 0.95
+          }
+        ]
+      },
+      {
+        "beat": "asking",
+        "start": 7.4,
+        "end": 10.6,
+        "play": "steps",
+        "camera": [
+          {
+            "u": 0,
+            "box": "triage",
+            "pad": 0.95
+          }
+        ]
+      },
+      {
+        "beat": "answered",
+        "start": 10.6,
+        "end": 13.8,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "triage",
+            "pad": 0.95
+          },
+          {
+            "u": 1,
+            "box": "triage",
+            "pad": 0.9
+          }
+        ]
+      }
+    ],
+    "captions": [
+      {
+        "text": "A tool runs the tests eight times.",
+        "start": 0.3,
+        "end": 4.4
+      },
+      {
+        "text": "It shows which ones only fail sometimes.",
+        "start": 4.7,
+        "end": 7.3
+      },
+      {
+        "text": "An agent asks the same tool.",
+        "start": 7.6,
+        "end": 10.4
+      },
+      {
+        "text": "Your tools, for you and your agents.",
+        "start": 10.8,
+        "end": 13.6
+      }
+    ],
+    "stills": {
+      "tool": 1.0,
+      "ran": 6.0,
+      "asking": 9.5,
+      "answered": 13.0
+    }
   }
 }
