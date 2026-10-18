@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The website's home page opens on a video recorded from the real app: a Claude Code agent writes a widget for its issue, installs it and ticks off the steps as it works. 
 - The guide's diagrams are drawn in the site's own colours and fonts; the issue-states diagram now says nothing enforces the order, and the terminal-size and widget diagrams match what the code does.
 
 - The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.
