@@ -83,7 +83,7 @@ import { rebindFrames } from "./machines/frame-binding";
 import type { MachineInfo, SessionSummary } from "../../shared/ipc";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import { isRemote } from "@hivemind/core/remote-uri";
-import { getAgents, AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
+import { AgentIcon, agentById, agentForCmd, useAgents } from "./agents";
 import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { useAgentAwareness } from "./useAgentAwareness";
@@ -114,12 +114,15 @@ import { PIN_SIZE, PINS } from "./workspace/pins";
 import { CanvasRuntimeContext, type CanvasRuntime, type FocusModeReq, type FocusReq, type Viewport } from "./workspace/views/canvas-runtime";
 // Registers the built-in view plugins (side effect) before the first render.
 import "./workspace/views";
-import { agentById as catalogAgentById, defaultAgent, preferredAgent } from "@hivemind/agents";
-import { notReady, noAgentInstalled, useAgentPresence } from "./agent-plugins";
+import { agentById as catalogAgentById } from "@hivemind/agents";
+import { agentToStart, noAgentInstalled } from "./agent-plugins";
+import { useReadyAgents } from "./agent-choice";
 import { AGENT_TILE_KIND, isTerminalKind } from "./tile-kinds";
 import { endTileSession } from "./TerminalTile";
 
 const DEFAULT_VIEWPORT: Viewport = { x: 16, y: 24, zoom: 1 };
+/** A Send to agent row that starts a new tile of the agent named after it. */
+const NEW_AGENT_ROW = "new:";
 /** The agent that runs in a tile, when one does. */
 const agentOfTile = (t: TileInstance): string | undefined => (t.kind === AGENT_TILE_KIND ? agentForCmd(t.cmd)?.id : undefined);
 /** A per-tile map without `id`'s entry: the map itself when it has none, so dropping nothing re-renders nothing. */
@@ -769,11 +772,9 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     }
   }, []);
 
-  // Which agent the tool island's spawn button creates (claude / codex / …):
-  // settings.agents.defaultAgent, validated against the catalog. Undefined when
-  // no agent is installed — the spawn paths route that to Settings ▸ Plugins.
-  const presence = useAgentPresence();
-  const agentSel = preferredAgent(settings.agents.defaultAgent, (d) => !notReady(presence, d.id))?.id;
+  // Which agent the tool island's spawn button creates (claude / codex / …), and the agents a
+  // prompt may start, that one first. Undefined when the catalog is empty.
+  const { ordered: readyAgents, first: agentSel } = useReadyAgents();
   const setAgentSel = useCallback((id: string) => patchSettings("agents.defaultAgent", id), []);
   const agentSelRef = useRef(agentSel);
   useEffect(() => { agentSelRef.current = agentSel; }, [agentSel]);
@@ -1078,10 +1079,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     return off;
   }, []);
 
-  // Deliver a prompt to claude with a TARGET PICKER. 0 claude tiles → spawn a
-  // new claude carrying the prompt; 1+ → picker (the chosen tile, or "New").
-  const deliverToAgent = useCallback((text: string, target: "new" | string) => {
-    if (target === "new") { spawnDefaultAgent(undefined, text); return; }
+  // Deliver a prompt to an agent with a TARGET PICKER. 0 agent tiles → start the agent a new
+  // tile starts, carrying the prompt; 1+ → picker (the chosen tile, or a new one of an agent).
+  const deliverToAgent = useCallback((text: string, target: string) => {
+    if (target.startsWith(NEW_AGENT_ROW)) { spawnDefaultAgent(undefined, text, target.slice(NEW_AGENT_ROW.length) || undefined); return; }
     window.dispatchEvent(new CustomEvent("hivemind:send-to-agent", { detail: { text, target } }));
     setSelectedTileId(target);
     focusTile(target);
@@ -1100,7 +1101,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
 
   // Spawn the island's CURRENTLY-selected agent (key "2").
   const spawnSelectedAgent = useCallback(() => {
-    const a = agentById(agentSelRef.current) ?? getAgents()[0];
+    const a = agentById(agentSelRef.current);
     if (!a) { noAgentInstalled(); return; }
     spawnAgent(a);
   }, [spawnAgent]);
@@ -1244,7 +1245,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     spawnClaude: () => spawnDefaultAgent(), // protocol name (1.0); it starts the DEFAULT agent
     addFrame,
     spawnAgent: (agentId, frameId, opts) => {
-      const def = agentId ? catalogAgentById(agentId) : defaultAgent();
+      const def = agentId ? catalogAgentById(agentId) : agentToStart();
       if (!def) return false;
       const id = spawnTile(AGENT_TILE_KIND, frameId, { agent: { id: def.id, cmd: def.bin, label: def.label }, ...(opts?.prompt ? { work: opts.prompt } : {}), ...(opts?.resume ? { resume: opts.resume } : {}) });
       if (id && opts?.name) renameTile(id, opts.name);
@@ -1372,7 +1373,9 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
           rows={frames.flatMap((f) => tiles
             .filter((t) => t.kind === AGENT_TILE_KIND && frameOf[t.id] === f.id)
             .map((t) => ({ id: t.id, label: tileName(tileNames, agentTitles, t), group: f.title, icon: <AgentIcon id={agentForCmd(t.cmd)?.id} size={13} /> })))}
-          extra={[{ id: "new", label: `New ${defaultAgent()?.label ?? "agent"}`, icon: <Plus size={13} /> }]}
+          extra={readyAgents.length
+            ? readyAgents.map((a) => ({ id: `${NEW_AGENT_ROW}${a.id}`, label: `New ${a.label}`, icon: <Plus size={13} /> }))
+            : [{ id: NEW_AGENT_ROW, label: "New agent", icon: <Plus size={13} /> }]}
           onPick={(id) => deliverToAgent(agentPick.text, id)}
           onClose={() => setAgentPick(null)}
         />

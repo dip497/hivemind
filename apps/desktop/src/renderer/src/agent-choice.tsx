@@ -3,9 +3,8 @@
  * every place that starts one, so New agent and a job handed to an agent offer the same agents.
  */
 import { useState } from "react";
-import { preferredAgent } from "@hivemind/agents";
 import { AgentIcon, useAgents, type AgentDef } from "./agents";
-import { notReady, useAgentPresence } from "./agent-plugins";
+import { agentToStart, notReady, useAgentPresence } from "./agent-plugins";
 import { useSettings } from "./settings-store";
 import { Blocks, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
@@ -18,7 +17,7 @@ export function useReadyAgents(): { ordered: AgentDef[]; first: string | undefin
   const presence = useAgentPresence();
   const chosen = useSettings().agents.defaultAgent;
   const ready = useAgents().filter((a) => a.enabled && !notReady(presence, a.id));
-  const first = preferredAgent(chosen, (d) => !notReady(presence, d.id))?.id;
+  const first = agentToStart(chosen, presence)?.id;
   return { ordered: [...ready].sort((a, b) => Number(b.id === first) - Number(a.id === first)), first };
 }
 

@@ -5,11 +5,11 @@
  */
 import type { ActivityLevel, ShareOutcome, TurnOutcome, ViewAgent, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
 import type { Participant } from "@hivemind/workspace-host/presence";
-import { canListSessions, defaultAgent, spawnableAgents, agentById as catalogAgentById } from "@hivemind/agents";
+import { canListSessions, spawnableAgents, agentById as catalogAgentById } from "@hivemind/agents";
 import type { LinkServices } from "@hivemind/view-host/link";
 import { viewAgentStatus } from "@hivemind/view-host/status";
 import { subscribeHostedStatus, subscribeStatus } from "../agent-status-bus";
-import { agentMissing } from "../agent-plugins";
+import { agentMissing, agentToStart } from "../agent-plugins";
 import { AGENT_TILE_KIND } from "../tile-kinds";
 import { watchPeopleHere } from "../multiplayer/presence";
 import { colorOf } from "../multiplayer/people";
@@ -106,7 +106,7 @@ export function startViewHost(): void {
 
 /** The agents a view may start: installed, enabled, and what each supports. */
 export function viewAgents(): ViewAgent[] {
-  const dflt = defaultAgent()?.id;
+  const dflt = agentToStart()?.id;
   return spawnableAgents().filter((d) => !agentMissing(d.id)).map((d) => ({
     id: d.id, label: d.label, default: d.id === dflt, turns: d.caps.turnSignal, resumes: !!d.session?.resume, sessions: canListSessions(d),
   }));

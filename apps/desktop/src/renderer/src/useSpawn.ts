@@ -12,7 +12,7 @@ import { frameColorFor } from "./frame-color";
 import { reserveTileSlot, FRAME_ROW_MAX, FRAME_GAP, type LayoutRect } from "./frame-layout";
 import { defaultSizeForKind, defaultTileSize, FRAME_PAD, FRAME_HEADER } from "./canvas-sizing";
 import { agentById } from "./agents";
-import { agentById as catalogAgentById, agentLaunch, defaultAgent, nextOrdinal, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
+import { agentById as catalogAgentById, agentLaunch, nextOrdinal, type AgentProviderDef, type SpawnOptions } from "@hivemind/agents";
 import { AGENT_TILE_KIND } from "./tile-kinds";
 import { defaultShell, type FrameState, type TileInstance } from "./canvas-persistence";
 import { queueWork } from "./work-queue";
@@ -20,7 +20,7 @@ import type { TileKind } from "./tile-kinds";
 import { canSpawnKind, pluginOfKind, tileKind, type TileStart } from "./tiles";
 import { PLAN_REVIEW } from "./tiles/plan-review";
 import { checkToolCreation } from "./tool-availability";
-import { checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
+import { agentToStart, checkAgentInstalled, noAgentInstalled } from "./agent-plugins";
 import { isRemote } from "@hivemind/core/remote-uri";
 import { mintId } from "@hivemind/workspace-api/tile-id";
 import { getSettings } from "./settings-store";
@@ -256,7 +256,7 @@ export function useSpawn(ctx: SpawnCtx) {
       const target = (targetFrameId ? framesRef.current.find((f) => f.id === targetFrameId) : undefined) ?? pickFrame();
       // A remote frame runs the agent on its host, whose PATH this machine cannot see.
       const remote = !!target?.workspacePath && isRemote(target.workspacePath);
-      const def = kind === AGENT_TILE_KIND ? ((opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent()) : undefined;
+      const def = kind === AGENT_TILE_KIND ? ((opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? agentToStart()) : undefined;
       if (kind === AGENT_TILE_KIND) {
         // Nothing compiled in to fall back to: with no agent installed there is nothing to spawn.
         if (!def) { noAgentInstalled(); return; }
@@ -308,7 +308,7 @@ export function useSpawn(ctx: SpawnCtx) {
   const spawnInto = useCallback((kind: TileKind, opts?: SpawnOpts) => {
     if (!checkToolCreation(kind)) return;
     // Refuse before creating a frame or asking which one: only a remote frame could still run it.
-    const def = (opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? defaultAgent();
+    const def = (opts?.agent ? catalogAgentById(opts.agent.id) : undefined) ?? agentToStart();
     if (kind === AGENT_TILE_KIND) {
       if (!def) { noAgentInstalled(); return; }
       const anyRemote = framesRef.current.some((f) => !!f.workspacePath && isRemote(f.workspacePath));

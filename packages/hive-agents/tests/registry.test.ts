@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   getCatalog, setCatalog, subscribeCatalog,
-  agentById, agentForCmd, identifyProvider, defaultAgent, preferredAgent, spawnableAgents, workerAgents,
+  agentById, agentForCmd, identifyProvider, preferredAgent, spawnableAgents, workerAgents,
 } from "../src/catalog.js";
 import { providers } from "../src/node.js";
 import type { AgentProviderDef } from "../src/types.js";
@@ -32,7 +32,7 @@ afterEach(() => setCatalog([]));
 describe("live catalog", () => {
   test("the catalog starts empty — nothing agent-specific is compiled in", () => {
     expect(getCatalog()).toEqual([]);
-    expect(defaultAgent()).toBeUndefined();
+    expect(preferredAgent(undefined, () => true)).toBeUndefined();
     expect(spawnableAgents()).toEqual([]);
   });
 
@@ -77,25 +77,24 @@ describe("live catalog", () => {
   });
 });
 
-describe("defaultAgent never throws", () => {
+describe("preferredAgent never throws", () => {
   test("falls back to the first entry when nothing is enabled", () => {
     setCatalog(CATALOG.map((d) => ({ ...d, enabled: false })));
     expect(spawnableAgents()).toEqual([]);
     expect(workerAgents()).toEqual([]);
-    expect(() => defaultAgent()).not.toThrow();
-    expect(defaultAgent()?.enabled).toBe(false);
+    expect(() => preferredAgent(undefined, () => false)).not.toThrow();
+    expect(preferredAgent(undefined, () => false)?.enabled).toBe(false);
   });
 
   test("is undefined when the catalog is empty", () => {
     setCatalog([]);
     expect(getCatalog()).toEqual([]);
-    expect(defaultAgent()).toBeUndefined();
     expect(preferredAgent(undefined, () => true)).toBeUndefined();
   });
 
   test("prefers an enabled provider over the first entry", () => {
     setCatalog([{ ...acme, enabled: false }, { ...acme, id: "beta", bin: "beta", enabled: true }]);
-    expect(defaultAgent()?.id).toBe("beta");
+    expect(preferredAgent(undefined, () => false)?.id).toBe("beta");
   });
 });
 
@@ -110,9 +109,9 @@ describe("preferredAgent", () => {
     expect(preferredAgent("codex", has("pi"))?.id).toBe("pi");
     expect(preferredAgent(undefined, has("droid"))?.id).toBe("droid");
   });
-  test("with nothing installed, the choice stands, then the catalog default", () => {
+  test("with nothing installed, the choice stands, then the first spawnable entry", () => {
     setCatalog([byId("claude"), byId("codex")]);
     expect(preferredAgent("codex", has())?.id).toBe("codex");
-    expect(preferredAgent(undefined, has())?.id).toBe(defaultAgent()?.id);
+    expect(preferredAgent(undefined, has())?.id).toBe("claude");
   });
 });
