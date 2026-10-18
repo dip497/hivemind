@@ -657,116 +657,300 @@
     ],
     "panes": [
       {
-        "start": 3.6,
-        "end": 12.4,
+        "start": 3.4,
+        "end": 6.6,
         "rect": {
           "x": 80,
-          "y": 20,
+          "y": 30,
           "w": 1120,
-          "h": 700
+          "h": 93
         },
         "look": "browser",
         "size": {
           "width": 2048,
           "height": 1280
         },
+        "part": {
+          "x": 0,
+          "y": 0,
+          "w": 2048,
+          "h": 170
+        },
         "shots": [
           {
             "file": "devices/frames/browser-asks-0.png",
-            "start": 3.6
+            "start": 3.4
           },
           {
             "file": "devices/frames/browser-asks-1.png",
-            "start": 4.5
+            "start": 4.2
           },
           {
             "file": "devices/frames/browser-asks-2.png",
-            "start": 5.4
+            "start": 5.0
           },
           {
             "file": "devices/frames/browser-asks-3.png",
-            "start": 6.3
-          },
-          {
-            "file": "devices/frames/browser-answered-0.png",
-            "start": 7.8
-          },
-          {
-            "file": "devices/frames/browser-answered-1.png",
-            "start": 8.5
-          },
-          {
-            "file": "devices/frames/browser-answered-2.png",
-            "start": 9.2
-          },
-          {
-            "file": "devices/frames/browser-answered-3.png",
-            "start": 9.9
-          },
-          {
-            "file": "devices/frames/browser-answered-4.png",
-            "start": 10.6
-          },
-          {
-            "file": "devices/frames/browser-answered-5.png",
-            "start": 11.3
+            "start": 5.8
           }
         ]
       },
       {
-        "start": 4.2,
-        "end": 12.4,
+        "start": 3.4,
+        "end": 6.6,
         "rect": {
-          "x": 860,
-          "y": 40,
-          "w": 300,
-          "h": 649
+          "x": 80,
+          "y": 150,
+          "w": 1120,
+          "h": 284
+        },
+        "look": "browser",
+        "size": {
+          "width": 2048,
+          "height": 1280
+        },
+        "part": {
+          "x": 0,
+          "y": 650,
+          "w": 2048,
+          "h": 520
+        },
+        "shots": [
+          {
+            "file": "devices/frames/browser-asks-0.png",
+            "start": 3.4
+          },
+          {
+            "file": "devices/frames/browser-asks-1.png",
+            "start": 4.2
+          },
+          {
+            "file": "devices/frames/browser-asks-2.png",
+            "start": 5.0
+          },
+          {
+            "file": "devices/frames/browser-asks-3.png",
+            "start": 5.8
+          }
+        ]
+      },
+      {
+        "start": 6.6,
+        "end": 9.2,
+        "rect": {
+          "x": 360,
+          "y": 30,
+          "w": 560,
+          "h": 80
         },
         "look": "phone",
         "size": {
           "width": 780,
           "height": 1688
         },
+        "part": {
+          "x": 0,
+          "y": 0,
+          "w": 780,
+          "h": 112
+        },
         "shots": [
           {
             "file": "devices/frames/phone-asks-0.png",
-            "start": 3.6
+            "start": 6.6
           },
           {
             "file": "devices/frames/phone-asks-1.png",
-            "start": 4.5
+            "start": 7.0
           },
           {
             "file": "devices/frames/phone-asks-2.png",
-            "start": 5.4
+            "start": 7.4
           },
           {
             "file": "devices/frames/phone-asks-3.png",
-            "start": 6.3
-          },
-          {
-            "file": "devices/frames/phone-answered-0.png",
             "start": 7.8
           },
           {
-            "file": "devices/frames/phone-answered-1.png",
-            "start": 8.5
+            "file": "devices/frames/phone-answered-0.png",
+            "start": 8.6
           },
           {
-            "file": "devices/frames/phone-answered-2.png",
+            "file": "devices/frames/phone-answered-1.png",
             "start": 9.2
           },
           {
+            "file": "devices/frames/phone-answered-2.png",
+            "start": 9.8
+          },
+          {
             "file": "devices/frames/phone-answered-3.png",
-            "start": 9.9
+            "start": 10.4
           },
           {
             "file": "devices/frames/phone-answered-4.png",
-            "start": 10.6
+            "start": 11.0
           },
           {
             "file": "devices/frames/phone-answered-5.png",
-            "start": 11.3
+            "start": 11.6
+          }
+        ]
+      },
+      {
+        "start": 6.6,
+        "end": 9.0,
+        "rect": {
+          "x": 360,
+          "y": 130,
+          "w": 560,
+          "h": 402
+        },
+        "look": "phone",
+        "size": {
+          "width": 780,
+          "height": 1688
+        },
+        "part": {
+          "x": 0,
+          "y": 1020,
+          "w": 780,
+          "h": 560
+        },
+        "shots": [
+          {
+            "file": "devices/frames/phone-asks-0.png",
+            "start": 6.6
+          },
+          {
+            "file": "devices/frames/phone-asks-1.png",
+            "start": 7.0
+          },
+          {
+            "file": "devices/frames/phone-asks-2.png",
+            "start": 7.4
+          },
+          {
+            "file": "devices/frames/phone-asks-3.png",
+            "start": 7.8
+          },
+          {
+            "file": "devices/frames/phone-answered-0.png",
+            "start": 8.6
+          },
+          {
+            "file": "devices/frames/phone-answered-1.png",
+            "start": 9.2
+          },
+          {
+            "file": "devices/frames/phone-answered-2.png",
+            "start": 9.8
+          },
+          {
+            "file": "devices/frames/phone-answered-3.png",
+            "start": 10.4
+          },
+          {
+            "file": "devices/frames/phone-answered-4.png",
+            "start": 11.0
+          },
+          {
+            "file": "devices/frames/phone-answered-5.png",
+            "start": 11.6
+          }
+        ]
+      },
+      {
+        "start": 9.2,
+        "end": 12.4,
+        "rect": {
+          "x": 80,
+          "y": 200,
+          "w": 1120,
+          "h": 93
+        },
+        "look": "browser",
+        "size": {
+          "width": 2048,
+          "height": 1280
+        },
+        "part": {
+          "x": 0,
+          "y": 0,
+          "w": 2048,
+          "h": 170
+        },
+        "shots": [
+          {
+            "file": "devices/frames/browser-answered-0.png",
+            "start": 9.2
+          },
+          {
+            "file": "devices/frames/browser-answered-1.png",
+            "start": 9.8
+          },
+          {
+            "file": "devices/frames/browser-answered-2.png",
+            "start": 10.4
+          },
+          {
+            "file": "devices/frames/browser-answered-3.png",
+            "start": 11.0
+          },
+          {
+            "file": "devices/frames/browser-answered-4.png",
+            "start": 11.6
+          },
+          {
+            "file": "devices/frames/browser-answered-5.png",
+            "start": 12.2
+          }
+        ]
+      },
+      {
+        "start": 9.2,
+        "end": 12.4,
+        "rect": {
+          "x": 360,
+          "y": 340,
+          "w": 560,
+          "h": 80
+        },
+        "look": "phone",
+        "size": {
+          "width": 780,
+          "height": 1688
+        },
+        "part": {
+          "x": 0,
+          "y": 0,
+          "w": 780,
+          "h": 112
+        },
+        "shots": [
+          {
+            "file": "devices/frames/phone-answered-0.png",
+            "start": 9.2
+          },
+          {
+            "file": "devices/frames/phone-answered-1.png",
+            "start": 9.8
+          },
+          {
+            "file": "devices/frames/phone-answered-2.png",
+            "start": 10.4
+          },
+          {
+            "file": "devices/frames/phone-answered-3.png",
+            "start": 11.0
+          },
+          {
+            "file": "devices/frames/phone-answered-4.png",
+            "start": 11.6
+          },
+          {
+            "file": "devices/frames/phone-answered-5.png",
+            "start": 12.2
           }
         ]
       }
@@ -775,43 +959,44 @@
       {
         "text": "An agent asks before it edits a file.",
         "start": 0.3,
-        "end": 3.4
+        "end": 3.2
       },
       {
-        "text": "Your browser and phone ask too.",
-        "start": 3.9,
-        "end": 6.6
+        "text": "Your browser asks too.",
+        "start": 3.7,
+        "end": 6.3
       },
       {
-        "text": "Answer it on your phone.",
-        "start": 7.0,
-        "end": 9.2
+        "text": "So does your phone. Answer it there.",
+        "start": 6.8,
+        "end": 9.4
       },
       {
         "text": "Every screen moves on.",
-        "start": 9.6,
+        "start": 9.8,
         "end": 12.2
       }
     ],
     "pointer": [
       {
-        "start": 6.4,
-        "end": 7.9,
+        "start": 7.4,
+        "end": 8.7,
         "from": [
-          640,
+          900,
           640
         ],
         "to": {
-          "pane": 1,
+          "pane": 3,
           "box": "allow"
         },
-        "click": 7.6
+        "click": 8.4
       }
     ],
     "stills": {
       "asks": 2.0,
-      "devices": 6.0,
-      "answered": 10.5
+      "browser": 5.0,
+      "phone": 7.8,
+      "answered": 11.0
     },
     "boxes": {
       "ask": {
@@ -820,7 +1005,13 @@
         "w": 2150,
         "h": 1344
       }
-    }
+    },
+    "away": [
+      {
+        "start": 3.4,
+        "end": 12.6
+      }
+    ]
   },
   "machines": {
     "recording": "machines",
@@ -833,7 +1024,7 @@
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "prompt"
           }
         ]
       },
@@ -857,14 +1048,14 @@
         "camera": [
           {
             "u": 0,
-            "box": "local+remote"
+            "box": "local"
           },
           {
             "u": 0.4,
-            "box": "local+remote"
+            "box": "local"
           },
           {
-            "u": 0.75,
+            "u": 0.6,
             "box": "remote"
           },
           {
@@ -914,6 +1105,12 @@
         "y": 632,
         "w": 1032,
         "h": 725
+      },
+      "prompt": {
+        "x": 930,
+        "y": 560,
+        "w": 1600,
+        "h": 1000
       }
     }
   }

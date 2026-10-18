@@ -44,14 +44,17 @@ type Shot = {
 type Caption = { text: string; start: number; end: number };
 type Still = { file: string; start: number };
 type Pointer = { start: number; end: number; from: [number, number]; to: { shot: string; box: string } | { pane: number; box: string }; click?: number };
-/** Another device's page beside the window, each still shown from its start. */
-type Pane = { start: number; end: number; rect: Box; look: "browser" | "phone"; shots: Still[]; size: { width: number; height: number } };
+/** Another device's page beside the window, each still shown from its start; `part` (in the
+ *  page's pixels) shows only that part of it, filling the rect's width. */
+type Pane = { start: number; end: number; rect: Box; look: "browser" | "phone"; shots: Still[]; size: { width: number; height: number }; part?: Box };
 export type Story = {
   /** The folder of the recording under the recordings folder; the hero's own when left out. */
   recording?: string;
   /** Where the app window sits, when not in its usual place; keep the window's shape. */
   win?: Box;
   panes?: Pane[];
+  /** Times the window steps away, so only the other devices' pages are seen. */
+  away?: { start: number; end: number }[];
   boxes?: Record<string, Box>;
   shots: Shot[];
   captions: Caption[];
@@ -171,6 +174,8 @@ function Capture({ cues, shot, t, cam, win }: { cues: Cues; shot: Shot; t: numbe
   );
 }
 
+const partScale = (pane: Pane) => pane.rect.w / (pane.part?.w ?? pane.size.width);
+
 /** Another device's page: a browser's or a phone's, flat, with a one-pixel edge. */
 function Device({ pane, t }: { pane: Pane; t: number }) {
   const phone = pane.look === "phone";
@@ -179,7 +184,9 @@ function Device({ pane, t }: { pane: Pane; t: number }) {
       position: "absolute", left: pane.rect.x, top: pane.rect.y, width: pane.rect.w, height: pane.rect.h, opacity: shown(t, pane.start, pane.end),
       borderRadius: phone ? 28 : 10, overflow: "hidden", background: "#000", boxShadow: `0 0 0 1px ${LINE}, 0 10px 30px rgba(0,0,0,.35)`,
     }}>
-      <Img src={staticFile(fileAt(pane.shots, t))} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />
+      {pane.part
+        ? <Img src={staticFile(fileAt(pane.shots, t))} style={{ position: "absolute", left: -pane.part.x * partScale(pane), top: -pane.part.y * partScale(pane), width: pane.size.width * partScale(pane), maxWidth: "none" }} />
+        : <Img src={staticFile(fileAt(pane.shots, t))} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "top" }} />}
     </div>
   );
 }
@@ -199,8 +206,8 @@ export function Clip({ story, cues }: ClipProps) {
     if ("pane" in pointer.to) {
       const pane = story.panes![pointer.to.pane]!;
       const b = cues.boxes[pointer.to.box]!;
-      const s = pane.rect.w / pane.size.width;
-      to = [pane.rect.x + (b.x + b.w / 2) * s, pane.rect.y + (b.y + b.h / 2) * s];
+      const s = partScale(pane);
+      to = [pane.rect.x + (b.x - (pane.part?.x ?? 0) + b.w / 2) * s, pane.rect.y + (b.y - (pane.part?.y ?? 0) + b.h / 2) * s];
     } else {
       const target = pointer.to;
       to = onClip(cues, story.shots.find((s) => s.beat === target.shot)!, cues.boxes[target.box]!, t, win);
@@ -217,6 +224,7 @@ export function Clip({ story, cues }: ClipProps) {
     <AbsoluteFill style={{ background: BG }}>
       <div style={{
         position: "absolute", left: framed.win.x, top: framed.win.y, width: framed.win.w, height: framed.win.h, overflow: "hidden",
+        opacity: 1 - Math.max(0, ...(story.away ?? []).map((a) => shown(t, a.start, a.end))),
         borderRadius: 10, background: BG, boxShadow: `0 0 0 1px ${framed.k > 0.5 ? EDGE : LINE}, 0 10px 30px rgba(0,0,0,.35)`,
       }}>
         <Capture cues={cues} shot={shot} t={t} cam={framed.cam} win={framed.win} />

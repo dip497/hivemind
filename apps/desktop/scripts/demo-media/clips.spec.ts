@@ -342,7 +342,10 @@ test("join", async () => {
   await expect(guest.desktop.locator('[data-join-result="in"]')).toBeVisible({ timeout: 30_000 });
   await both("in", 1);
   await guest.desktop.locator("[data-join-open]").click();
-  await expect.poll(() => guest.desktop.locator(".react-flow__node-terminal").count(), { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
+  await expect(guest.desktop.locator("[data-shared-banner]")).toHaveAttribute("data-state", "connected", { timeout: 30_000 });
+  // The same tiles as the host's, each its kind and id.
+  const board = (w: Page) => w.locator(".react-flow__node:not(.react-flow__node-widget)").evaluateAll((ns) => ns.map((n) => `${/react-flow__node-(\S+)/.exec(n.className)?.[1]}:${n.getAttribute("data-id")}`).sort().join(" "));
+  await expect.poll(() => board(guest.desktop), { timeout: 30_000 }).toBe(await board(host.desktop));
   await guest.fit();
   await both("joined", 3);
   await note(host.desktop, "Release on Friday");
