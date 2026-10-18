@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The guide's diagrams are drawn in the site's own colours and fonts; the issue-states diagram now says nothing enforces the order, and the terminal-size and widget diagrams match what the code does.
+
 - The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.
 
 - `hive agents install --help` and the installer name amp, an agent on HiveHub, as the example instead of gemini.
