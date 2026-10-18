@@ -162,17 +162,14 @@ the screen.
 
 ## Where they run
 
-```mermaid title="One window runs a widget; everyone sees it"
-flowchart TB
-  run["The one window that runs widget.js"]
-  seen["Guests' windows, your other windows,<br>your phone"]
-  run -->|what it draws, live| seen
-  seen -.->|a press| run
-```
+<figure class="diagram" style="--min:600px">
+  <div><img src="../../diagrams/widgets-runner.svg" width="640" height="330" alt="One window runs widget.js: the first of your own windows with the workspace open to ask. What it draws goes live to guests' windows, your other windows on any of your devices, and your phone through a widgets view; a press from any of them goes back to that window. Guests can press only if they can edit the board. Nothing it draws is saved." /></div>
+  <figcaption>One window runs a widget; everyone sees it</figcaption>
+</figure>
 
-The window that runs it is on the machine that hosts the workspace, or, for a workspace on a
-`hive host` with no window, your own laptop or desktop that has it open. Nobody else's computer
-runs your code, and nobody installs anything to see it. What it draws is never saved. A guest who
+The window that runs it is the first of your own windows with the workspace open to ask: on the
+machine that hosts the workspace or on another of your devices (a `hive host` has no window of its
+own). When that window closes, another of yours takes over. Nobody else's computer runs your code, and nobody installs anything to see it. What it draws is never saved. A guest who
 can edit the board can press its buttons; one who can only view cannot.
 
 On your phone, a view that shows widgets draws them and its buttons work, for example
