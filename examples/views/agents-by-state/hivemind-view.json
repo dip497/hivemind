@@ -1,0 +1,14 @@
+{
+  "id": "@dip497/agents-by-state",
+  "name": "Agents by state",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "protocol": 1,
+  "permissions": ["workspace:prompt"],
+  "category": "agents",
+  "toolbar": "bottom",
+  "commands": [
+    { "name": "board", "description": "Every agent by column: waiting on the person, working, ready for work, stopped; with its frame and how long it has been there." },
+    { "name": "open", "description": "Dock the live terminal of the agent whose name holds this text.", "args": "{ \"name\": string }" }
+  ]
+}

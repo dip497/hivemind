@@ -20,6 +20,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - A widget can show a long line whole: a `text` node with `wrap: true` goes on to the next line instead of being cut short with …, as every widget line was, a title too.
 
+### Added
+
+- Twenty plugins to try in `examples/`: widgets (Waiting on you, Agent pulse, Focus timer, CI light, Test meter, Spend today, Issue burndown, Launchpad), tools (dependency audit, flaky tests, changelog writer, release checklist, bundle size, SQLite browser, log tail, API explorer) and views (a 3D Constellation of your agents, Timeline, Agents by state, Workspace map), plus four wallpapers in `examples/wallpapers`.
 - A widget's `hive.hm.capabilities`, `features` and `settings` are an array or an object from its first line of code, empty until the app sends them, instead of a function that threw on `.includes()`; `hive.on("hm")` fires when they arrive or change.
 
 - A `tint` a widget's code draws colours its card, on the board and floating, as a sticky note's colour does.

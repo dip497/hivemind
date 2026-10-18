@@ -1,0 +1,14 @@
+{
+  "id": "@dip497/test-meter",
+  "name": "Test meter",
+  "version": "1.0.0",
+  "description": "The share of tests passing in the last run, and the runs before it, reported by agents, hooks or CI.",
+  "category": "code",
+  "icon": "icon.svg",
+  "size": { "w": 300, "h": 170 },
+  "commands": [
+    { "name": "report", "description": "Report a test run: how many passed, failed and were skipped, and the names of up to five that failed.", "args": "{ \"passed\": number, \"failed\": number, \"skipped\"?: number, \"suite\"?: string, \"failing\"?: string[] }" },
+    { "name": "history", "description": "The last 20 runs reported, newest first." },
+    { "name": "clear", "description": "Forget every run." }
+  ]
+}
