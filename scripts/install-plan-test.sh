@@ -39,6 +39,20 @@ expect Linux  arm64   cli_asset hive-linux-arm64
 expect Linux  riscv64 platform  none
 expect Linux  riscv64 net_asset none
 
+# The API SDKs, the same on every platform and channel.
+expect Linux  x86_64 sdk_npm_asset    hivemind-api.tgz
+expect Darwin arm64  sdk_python_asset hivemind-api-python.tar.gz
+expect Linux  aarch64 sdk_npm_asset   hivemind-api.tgz
+
+# Each name the installers ask for is one the release uploads.
+for asset in hivemind-api.tgz hivemind-api-python.tar.gz; do
+  if grep -q "release-assets/$asset\$" .github/workflows/release.yml && grep -q "/$asset\"" install.ps1; then
+    printf '  ok   release.yml uploads %s, which install.ps1 also asks for\n' "$asset"
+  else
+    printf '  FAIL %s is not both uploaded by release.yml and asked for by install.ps1\n' "$asset"; fail=1
+  fi
+done
+
 nightly_plan() { HIVEMIND_PRINT_PLAN=1 HIVEMIND_OS="$1" HIVEMIND_ARCH="$2" bash install.sh --channel nightly; }
 for spec in 'Linux x86_64 hivemind-linux-x86_64.AppImage' 'Darwin arm64 hivemind-macos-arm64.zip'; do
   read -r os arch asset <<< "$spec"

@@ -20,6 +20,7 @@
     "@hivemind/host": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "@hivemind/workspace-host": "workspace:*",
+    "hivemind-api": "workspace:*",
     "citty": "catalog:",
     "uqr": "catalog:",
     "yaml": "catalog:",

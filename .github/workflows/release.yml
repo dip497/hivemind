@@ -8,6 +8,7 @@ name: release
 # Apple Silicon (`hive-darwin-arm64` + an ad-hoc-signed `hivemind.app` zip).
 # `build-hive-net` builds the network binary (crates/hive-net, Rust) for every
 # target; it may fail on its own, and the installers go on without it.
+# `build-sdk` builds the API SDKs: the npm tarball and the Python wheel and source.
 # A final `publish` job downloads both jobs' assets and creates the GitHub
 # Release from the tag.
 #
@@ -922,9 +923,70 @@ jobs:
           name: ${{ matrix.asset }}
           path: release-assets/
 
+  # The API SDKs, which ship with the app at its version: the npm package as a tarball and the
+  # Python package as a wheel. Each is installed and imported before it is published.
+  build-sdk:
+    name: build api sdks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: pnpm install (workspace)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build hivemind-api-<version>.tgz, and hivemind_api-<version>-py3-none-any.whl with its source hivemind_api-<version>.tar.gz
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          bash packages/sdk/scripts/build-npm.sh
+          # pnpm pack, not npm pack: it applies publishConfig, so the package points at dist.
+          (cd packages/sdk && pnpm pack --pack-destination "$GITHUB_WORKSPACE/release-assets")
+          python -m pip install build==1.3.0
+          python -m build packages/sdk-python --outdir release-assets
+          ls -la release-assets
+
+      - name: Each installs and imports
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./packages/sdk/package.json').version")
+          tgz="$PWD/release-assets/hivemind-api-$version.tgz"
+          whl="$PWD/release-assets/hivemind_api-$version-py3-none-any.whl"
+          node_dir=$(mktemp -d)
+          (cd "$node_dir" && npm init -y >/dev/null && npm install --silent "$tgz" \
+            && node --input-type=module -e 'import { connect, ApiError } from "hivemind-api"; if (typeof connect !== "function" || typeof ApiError !== "function") process.exit(1)')
+          python -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet "$whl"
+          "$RUNNER_TEMP/venv/bin/python" -c "import hivemind_api; assert hivemind_api.__version__ == '$version', hivemind_api.__version__"
+
+      - name: Upload artifacts (workflow result)
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-sdks
+          path: release-assets/
+
   publish:
     name: publish github release
-    needs: [build-phone-page, test-phone-page, build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net]
+    needs: [build-phone-page, test-phone-page, build-linux, build-linux-arm64, build-macos, build-windows, build-hive-net, build-sdk]
     # A tag push always publishes. A MANUAL run only publishes when it explicitly
     # asks to — the default is build-only, so dispatching to smoke-test a build
     # can never cut an accidental release.
@@ -953,6 +1015,9 @@ jobs:
           for f in *-x86_64.AppImage; do [ -e "$f" ] && cp "$f" hivemind-linux-x86_64.AppImage; done
           for f in *-arm64-mac.zip; do [ -e "$f" ] && cp "$f" hivemind-macos-arm64.zip; done
           for f in *-x64-win.zip; do [ -e "$f" ] && cp "$f" hivemind-windows-x64.zip; done
+          # The API SDKs as the installers fetch them: the npm tarball, and the Python package's source.
+          for f in hivemind-api-*.tgz; do [ -e "$f" ] && cp "$f" hivemind-api.tgz; done
+          for f in hivemind_api-*.tar.gz; do [ -e "$f" ] && cp "$f" hivemind-api-python.tar.gz; done
           ls -la
 
       - name: Resolve release tag
@@ -992,3 +1057,8 @@ jobs:
             release-assets/hive-net-windows-x64.exe
             release-assets/hive-phone-page.tar.gz
             release-assets/hive-phone-page.sha256
+            release-assets/hivemind-api-*.tgz
+            release-assets/hivemind_api-*-py3-none-any.whl
+            release-assets/hivemind_api-*.tar.gz
+            release-assets/hivemind-api.tgz
+            release-assets/hivemind-api-python.tar.gz

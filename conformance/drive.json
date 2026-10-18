@@ -1,0 +1,233 @@
+{
+  "about": "A program on the drive socket (spec/workspace-api.md 0.30, \"Messages\", \"Transports\" and \"Drive socket\"), message by message, as an SDK's client meets a host. Written by hand from the spec; the refusals' messages are the host's (packages/host/src/drive.ts). The win32 pipe's hash is sha256 of the folder, taken with sha256sum.",
+  "steps": {
+    "host_reads": "the host reads the next line the client sent; it is this JSON. An \"id\" that is a string here is a label: the line's id is any number, remembered under the label",
+    "host_sends": "the host sends this JSON as one line; an \"id\" that is a label is the id remembered under it",
+    "host_sends_raw": "the host sends this text as it is, then waits a moment (50 ms), so that it reaches the client apart from what follows; <id:label> in it is the id remembered under the label",
+    "host_closes": "the host closes the connection",
+    "host_sees_end": "the host reads the end of the connection: the client closed it",
+    "connected": "connecting resolved: the client's as, and the api the host speaks",
+    "refused": "connecting failed with an error of this code (and this message, when given)",
+    "call": "the client calls method with params (timeoutMs when given), without waiting; its answer is known by label",
+    "answered": "the call known by label resolved with result",
+    "failed": "the call known by label failed with an error of this code (and this message, when given)",
+    "notice": "the client sends a notice",
+    "listen": "the client listens for this event from now on",
+    "heard": "the listeners for event have been called with these params, in this order, and with nothing else",
+    "close": "the client closes the connection",
+    "closed": "the client's closed resolved"
+  },
+  "places": [
+    { "name": "the app's data folder on Linux is in the config folder", "platform": "linux", "env": { "XDG_CONFIG_HOME": "/cfg" }, "socket": "/cfg/hivemind/drive.sock" },
+    { "name": "HIVEMIND_APP_DATA names another data folder", "platform": "linux", "env": { "HIVEMIND_APP_DATA": "/data" }, "socket": "/data/drive.sock" },
+    { "name": "HIVE_DRIVE_SOCK, given every agent, wins", "platform": "linux", "env": { "HIVE_DRIVE_SOCK": "/run/agent/drive.sock", "HIVEMIND_APP_DATA": "/data" }, "socket": "/run/agent/drive.sock" },
+    { "name": "on Windows it is the app's named pipe, named from its data folder", "platform": "win32", "env": { "APPDATA": "C:\\Users\\u\\AppData\\Roaming" }, "socket": "\\\\.\\pipe\\hivemind-f6d3efcdf6a9-drive" },
+    { "name": "on Windows the env's names are read in any case", "platform": "win32", "env": { "AppData": "C:\\Users\\u\\AppData\\Roaming" }, "socket": "\\\\.\\pipe\\hivemind-f6d3efcdf6a9-drive" }
+  ],
+  "cases": [
+    {
+      "name": "a program's hello names its token and workspace, and the host says who it is",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } }
+      ]
+    },
+    {
+      "name": "a hello that names no workspace leaves it out",
+      "connect": { "token": "install-token" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "install-token" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": "person" } } },
+        { "connected": { "as": "person", "api": "0.30" } }
+      ]
+    },
+    {
+      "name": "a token that lets nothing drive is refused with the host's code and message",
+      "connect": { "token": "wrong", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "wrong", "workspace": "/work/api" } } },
+        { "host_sends": { "error": { "code": "FORBIDDEN", "message": "that token lets nothing drive here: make a grant with `hive grant create`" } } },
+        { "host_closes": true },
+        { "refused": { "code": "FORBIDDEN", "message": "that token lets nothing drive here: make a grant with `hive grant create`" } }
+      ]
+    },
+    {
+      "name": "a grant that reaches several workspaces is refused when it names none",
+      "connect": { "token": "hgr_two" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_two" } } },
+        { "host_sends": { "error": { "code": "BAD_REQUEST", "message": "name the workspace: {\"hello\": {\"token\": …, \"workspace\": \"<its folder>\"}}" } } },
+        { "host_closes": true },
+        { "refused": { "code": "BAD_REQUEST", "message": "name the workspace: {\"hello\": {\"token\": …, \"workspace\": \"<its folder>\"}}" } }
+      ]
+    },
+    {
+      "name": "a host that closes before it says who this is leaves the program unconnected",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_closes": true },
+        { "refused": { "code": "UNAVAILABLE" } }
+      ]
+    },
+    {
+      "name": "a call goes out with an id, its method and params, and its answer comes back by that id",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } },
+        { "call": { "label": "list", "method": "agent.list", "params": ["/work/api"] } },
+        { "host_reads": { "id": "list", "method": "agent.list", "params": ["/work/api"] } },
+        { "host_sends": { "id": "list", "result": { "seq": 3, "agents": [] } } },
+        { "answered": { "label": "list", "result": { "seq": 3, "agents": [] } } }
+      ]
+    },
+    {
+      "name": "answers that come out of order reach the calls they answer",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "bot", "role": "agents", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "bot", "role": "agents", "workspace": "/work/api" }, "api": "0.30" } },
+        { "call": { "label": "read", "method": "agent.read", "params": ["t1", 600000] } },
+        { "host_reads": { "id": "read", "method": "agent.read", "params": ["t1", 600000] } },
+        { "call": { "label": "send", "method": "agent.send", "params": ["t2", "go on"] } },
+        { "host_reads": { "id": "send", "method": "agent.send", "params": ["t2", "go on"] } },
+        { "host_sends": { "id": "send", "result": { "sent": true } } },
+        { "answered": { "label": "send", "result": { "sent": true } } },
+        { "host_sends": { "id": "read", "result": { "text": "All 41 tests pass.", "finalStatus": "turn", "truncated": false } } },
+        { "answered": { "label": "read", "result": { "text": "All 41 tests pass.", "finalStatus": "turn", "truncated": false } } }
+      ]
+    },
+    {
+      "name": "an error answer fails the call with the host's code and message",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } },
+        { "call": { "label": "start", "method": "agent.start", "params": ["/work/api", { "program": "claude", "prompt": "Run the tests" }] } },
+        { "host_reads": { "id": "start", "method": "agent.start", "params": ["/work/api", { "program": "claude", "prompt": "Run the tests" }] } },
+        { "host_sends": { "id": "start", "error": { "code": "FORBIDDEN", "message": "agent.start is not open to your role on this workspace" } } },
+        { "failed": { "label": "start", "code": "FORBIDDEN", "message": "agent.start is not open to your role on this workspace" } }
+      ]
+    },
+    {
+      "name": "a code the client does not know yet is kept as the host sent it",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.31", "as": { "client": "bot", "role": "agents", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "bot", "role": "agents", "workspace": "/work/api" }, "api": "0.31" } },
+        { "call": { "label": "start", "method": "agent.start", "params": ["/work/api", { "program": "claude" }] } },
+        { "host_reads": { "id": "start", "method": "agent.start", "params": ["/work/api", { "program": "claude" }] } },
+        { "host_sends": { "id": "start", "error": { "code": "SOMETHING_NEW", "message": "a refusal from a newer host" } } },
+        { "failed": { "label": "start", "code": "SOMETHING_NEW", "message": "a refusal from a newer host" } }
+      ]
+    },
+    {
+      "name": "an event on a line of its own reaches its listeners with its params",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } },
+        { "listen": "agent.event" },
+        { "host_sends": { "event": "agent.event", "params": ["/work/api", { "seq": 4, "at": 1792345514357, "kind": "turnEnded", "tile": "t1", "detail": "done" }] } },
+        { "heard": { "event": "agent.event", "params": [["/work/api", { "seq": 4, "at": 1792345514357, "kind": "turnEnded", "tile": "t1", "detail": "done" }]] } }
+      ]
+    },
+    {
+      "name": "the events of one moment come as a list on one line, each heard in order",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } },
+        { "listen": "agent.event" },
+        { "listen": "status.changed" },
+        { "host_sends": [
+          { "event": "agent.event", "params": ["/work/api", { "seq": 5, "at": 1, "kind": "came", "tile": "t3" }] },
+          { "event": "status.changed", "params": [{ "tileId": "t3", "status": { "state": "working" } }] },
+          { "event": "agent.event", "params": ["/work/api", { "seq": 6, "at": 2, "kind": "waiting", "tile": "t3", "detail": "approval" }] }
+        ] },
+        { "heard": { "event": "agent.event", "params": [["/work/api", { "seq": 5, "at": 1, "kind": "came", "tile": "t3" }], ["/work/api", { "seq": 6, "at": 2, "kind": "waiting", "tile": "t3", "detail": "approval" }]] } },
+        { "heard": { "event": "status.changed", "params": [[{ "tileId": "t3", "status": { "state": "working" } }]] } }
+      ]
+    },
+    {
+      "name": "a line that comes in pieces is read whole, and an empty line is nothing",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends_raw": "{\"hello\": {\"api\": \"0.30\", \"as\": {\"client\": \"dashboard\", " },
+        { "host_sends_raw": "\"role\": \"view\", \"workspace\": \"/work/api\"}}}\n\n" },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } },
+        { "call": { "label": "diff", "method": "agent.diff", "params": ["t1"] } },
+        { "host_reads": { "id": "diff", "method": "agent.diff", "params": ["t1"] } },
+        { "host_sends_raw": "{\"id\": <id:diff>, \"result\": {\"files\": [], \"patch\": \"\u00e9t\u00e9 \u2192 ok\", " },
+        { "host_sends_raw": "\"truncated\": false}}\n" },
+        { "answered": { "label": "diff", "result": { "files": [], "patch": "\u00e9t\u00e9 \u2192 ok", "truncated": false } } }
+      ]
+    },
+    {
+      "name": "a notice goes out without an id",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "typist", "role": "terminals", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "typist", "role": "terminals", "workspace": "/work/api" }, "api": "0.30" } },
+        { "notice": { "method": "terminal.write", "params": ["t1", "ls\r"] } },
+        { "host_reads": { "method": "terminal.write", "params": ["t1", "ls\r"] } }
+      ]
+    },
+    {
+      "name": "when the host closes the connection, a call still waiting fails UNAVAILABLE, the client is closed, and a call after fails UNAVAILABLE",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "bot", "role": "agents", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "bot", "role": "agents", "workspace": "/work/api" }, "api": "0.30" } },
+        { "call": { "label": "read", "method": "agent.read", "params": ["t1", 600000] } },
+        { "host_reads": { "id": "read", "method": "agent.read", "params": ["t1", 600000] } },
+        { "host_closes": true },
+        { "failed": { "label": "read", "code": "UNAVAILABLE" } },
+        { "closed": true },
+        { "call": { "label": "late", "method": "agent.list", "params": ["/work/api"] } },
+        { "failed": { "label": "late", "code": "UNAVAILABLE" } }
+      ]
+    },
+    {
+      "name": "a call with no answer in its time fails TIMEOUT, and its late answer harms nothing",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } },
+        { "call": { "label": "slow", "method": "agent.list", "params": ["/work/api"], "timeoutMs": 100 } },
+        { "host_reads": { "id": "slow", "method": "agent.list", "params": ["/work/api"] } },
+        { "failed": { "label": "slow", "code": "TIMEOUT" } },
+        { "host_sends": { "id": "slow", "result": { "seq": 1, "agents": [] } } },
+        { "call": { "label": "next", "method": "agent.list", "params": ["/work/api"] } },
+        { "host_reads": { "id": "next", "method": "agent.list", "params": ["/work/api"] } },
+        { "host_sends": { "id": "next", "result": { "seq": 2, "agents": [] } } },
+        { "answered": { "label": "next", "result": { "seq": 2, "agents": [] } } }
+      ]
+    },
+    {
+      "name": "a program that closes the connection ends it at the host and is closed",
+      "connect": { "token": "hgr_one", "workspace": "/work/api" },
+      "steps": [
+        { "host_reads": { "hello": { "token": "hgr_one", "workspace": "/work/api" } } },
+        { "host_sends": { "hello": { "api": "0.30", "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" } } } },
+        { "connected": { "as": { "client": "dashboard", "role": "view", "workspace": "/work/api" }, "api": "0.30" } },
+        { "close": true },
+        { "host_sees_end": true },
+        { "closed": true }
+      ]
+    }
+  ]
+}

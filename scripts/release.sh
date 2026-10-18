@@ -101,6 +101,16 @@ for f in "${files[@]}"; do
   fi
 done
 
+# The Python SDK's version, in lockstep with the rest.
+PY_VERSION=packages/sdk-python/src/hivemind_api/__init__.py
+if [ "$DRY" = "1" ]; then
+  printf "  (dry) %s\n" "$PY_VERSION"
+else
+  sed -i.bak -E "s/^__version__ = \"[^\"]+\"/__version__ = \"$NEXT\"/" "$PY_VERSION"
+  rm -f "$PY_VERSION.bak"
+  printf "  %s\n" "$PY_VERSION"
+fi
+
 # 4. CHANGELOG entry (template if Unreleased section is empty).
 if [ -f CHANGELOG.md ] && [ "$DRY" = "0" ]; then
   TODAY=$(date +%Y-%m-%d)

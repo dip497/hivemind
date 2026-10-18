@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- API SDKs: `hivemind-api` for TypeScript (Node and Bun) and Python (3.9+, standard library only) connects a program to a workspace with a token from `hive grant create`, calls any method, hears events, and lists, starts, reads and answers agents without hand-writing the drive socket protocol. Each release carries them (`hivemind-api-<version>.tgz`, `hivemind_api-<version>-py3-none-any.whl`), and the installers put them in `sdk/` beside `hive`: `npm install ~/.hivemind-app/sdk/hivemind-api.tgz`, `pip install ~/.hivemind-app/sdk/python`. `hive` now drives the socket through the TypeScript one.
+
 - The example widgets, tools and views are on HiveHub, published from dip497/hivemind-plugins; install one with `hive widgets install @dip497/<name>`, `hive tools install dip497/<name>` or `hive views install @dip497/<name>`, or from Settings ▸ Plugins. The Agent board view is `@dip497/agent-board`, and a new widget, Dog, barks when an agent waits on you.
 
 - A widget with no card reaches the right edge of the screen when it moves there; it stopped as far short as a card is wider than it.

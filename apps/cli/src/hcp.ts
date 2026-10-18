@@ -11,9 +11,10 @@
  */
 import net from "node:net";
 import fs from "node:fs";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { appData, appSocket, envGet, type Where } from "./app-data.js";
+import { defaultToken } from "hivemind-api";
+import type { Where } from "@hivemind/core/app-data";
+import { appSocket } from "./app-data.js";
 
 /** Exit codes — stable, documented in the hivemind skill. */
 export const EXIT = {
@@ -63,18 +64,6 @@ export function sockPath(where: Where = {}): string {
   return appSocket("hcp.sock", "HIVE_HCP_SOCK", where);
 }
 
-/** Who this is to the app: `HCP_TOKEN`, an agent's own; `HIVE_DRIVE_TOKEN`, a program's grant (a
- *  plugin's service is given one); else the install's, the person's. */
-export function token(where: Where = {}): string {
-  const { env = process.env } = where;
-  const given = envGet(env, "HCP_TOKEN") || envGet(env, "HIVE_DRIVE_TOKEN");
-  if (given) return given;
-  try {
-    return fs.readFileSync(path.join(appData(where), "hcp.token"), "utf8").trim();
-  } catch {
-    return "";
-  }
-}
 /** This process's own tile id when it runs inside a hivemind-spawned agent. */
 export function ownTile(): string | undefined {
   return process.env.HIVEMIND_TILE || undefined;
@@ -98,7 +87,7 @@ function rpcError(m: ServerMsg): HcpCliError {
 function open(first: { id: string; method: string; params: unknown }, onMessage: (m: ServerMsg) => void, onDone: (e?: Error) => void): net.Socket {
   const c = net.connect(sockPath(), () => {
     try {
-      c.write(JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: token() } }) + "\n"
+      c.write(JSON.stringify({ jsonrpc: "2.0", id: "init", method: "initialize", params: { token: defaultToken() } }) + "\n"
         + JSON.stringify({ jsonrpc: "2.0", ...first }) + "\n");
     } catch (e) { onDone(unavailable((e as Error).message)); }
   });
