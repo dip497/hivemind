@@ -871,6 +871,12 @@ export type HiveApi = HiveIpc & {
     repoPath: string,
     cb: (info: { paths: string[] }) => void
   ) => () => void;
+  /** The sessions (agents mid-turn) a terminal daemon of another protocol waits on before it is
+   *  replaced; null when none waits. */
+  daemonWaitingOn?: () => Promise<string[] | null>;
+  onDaemonWaiting: (cb: (ids: string[] | null) => void) => () => void;
+  /** Stop waiting: those agents are put to sleep now, ending their turns, and woken in the new daemon. */
+  restartAgentsNow?: () => Promise<void>;
   /** Path passed on the CLI (`hivemind .` / `hivemind /repo`), or null. */
   getLaunchTarget?: () => Promise<string | null>;
   /** Another window, on the workspace this one shows. */

@@ -406,7 +406,7 @@ leaf → the `{ ok, data }` / `{ ok:false, code, error }` envelope from `format.
 ```
 hive daemon start [--socket P] [--foreground]   start this machine's PTY daemon (detached by default).
                                                  Idempotent: a live daemon on P → ok, not an error.
-hive daemon status [--socket P] [--json]         { running, socket, pid?, buildStamp?, sessions }
+hive daemon status [--socket P] [--json]         { running, socket, pid?, protocol?, sessions }
 hive daemon stop   [--socket P]                  graceful shutdown; sessions persist as snapshots
 
 hive ps     [--machine M] [--socket P] [--json]  sessions on a daemon: id, state, cmd, cwd, pid, viewers, size, title

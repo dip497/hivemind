@@ -97,7 +97,7 @@ const statusCmd = defineCommand({
     if (!pong) return ok(ctx, { socket: sock, running: false }, () => `not running (${sock})`);
     const sessions = await listSessions(sock).catch(() => []);
     const live = sessions.filter((s) => s.state === "live").length;
-    return ok(ctx, { socket: sock, running: true, buildStamp: pong.buildStamp ?? null, sessions: sessions.length, live },
+    return ok(ctx, { socket: sock, running: true, protocol: pong.protocol, sessions: sessions.length, live },
       () => `running on ${sock} · ${sessions.length} session(s), ${live} live`);
   },
 });

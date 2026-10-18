@@ -9,6 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Agents keep running through an app upgrade: the new app takes over the running terminal daemon, and a tile shows what its agent did meanwhile. When a release changes how the daemon talks, agents finish their turn, then come back in the same conversation.
+
+- **Breaking:** `hive daemon status --json` reports `protocol` instead of `buildStamp`.
+
 - An agent's notification card is drawn over widgets instead of behind them; dialogs now open over Settings and a fullscreen tile, and tooltips over dialogs.
 
 - Layers: "Hide asleep" in the View menu leaves asleep agents out of the list; a line at the end says how many are hidden and shows them again when clicked.
