@@ -12,10 +12,9 @@ import { useHubDescription } from "./plugins/library";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
-import { notReady, useAgentEntries, useAgentPresence, setAgentDisabled, refreshAgentPresence, syncAgentPlugins } from "./agent-plugins";
+import { agentToStart, notReady, useAgentEntries, useAgentPresence, setAgentDisabled, refreshAgentPresence, syncAgentPlugins } from "./agent-plugins";
 import { useSettingsNavigate } from "./settings-panels";
 import { SvgMark } from "./agents";
-import { preferredAgent } from "@hivemind/agents";
 
 type Choices = Awaited<ReturnType<typeof window.hive.agentOptionChoices>>;
 
@@ -71,7 +70,7 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
   const presence = useAgentPresence();
   const hub = useHubDescription();
   const { defaultAgent: saved, autoInstall } = useSettings().agents;
-  const defaultId = preferredAgent(saved, (d) => !notReady(presence, d.id))?.id;
+  const defaultId = agentToStart(saved, presence)?.id;
   const missing = (c: Card) => notReady(presence, c.id);
   const savedCard = saved && saved !== defaultId ? all.find((c) => c.id === saved) : undefined;
   const state = (c: Card): RowState => c.error ? "unavailable" : !c.on ? "off" : missing(c) ? "missing" : "on";
@@ -118,7 +117,7 @@ export function AgentMark({ id, size = 22 }: { id: string; size?: number }) {
 export function AgentActions({ id }: { id: string }) {
   const card = useCards().find((c) => c.id === id);
   const presence = useAgentPresence();
-  const defaultId = preferredAgent(useSettings().agents.defaultAgent, (d) => !notReady(presence, d.id))?.id;
+  const defaultId = agentToStart(useSettings().agents.defaultAgent, presence)?.id;
   if (!card) return null;
   const label = card.def?.label ?? card.id;
   return <>

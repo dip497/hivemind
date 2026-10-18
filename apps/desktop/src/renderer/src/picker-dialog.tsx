@@ -1,7 +1,7 @@
 /**
  * One way to ask "which one?": a modal list, searchable once it is long, its rows under group
  * headings, chosen by click or by arrows and Enter. Esc or a click outside cancels. The extra rows
- * (start a new one…) sit below the list and are never filtered away.
+ * (start a new one…) sit below the list, and the search matches them as it matches the list.
  */
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
@@ -32,11 +32,13 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const card = useRef<HTMLDivElement>(null);
-  const shown = useMemo(() => {
+  const searchable = rows.length + extra.length >= SEARCH_FROM;
+  const [shown, shownExtra] = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? rows.filter((r) => `${r.label} ${r.detail ?? ""} ${r.group ?? ""}`.toLowerCase().includes(q)) : rows;
-  }, [rows, query]);
-  const all = [...shown, ...extra];
+    const matches = (r: PickerRow) => `${r.label} ${r.detail ?? ""} ${r.group ?? ""}`.toLowerCase().includes(q);
+    return q ? [rows.filter(matches), extra.filter(matches)] : [rows, extra];
+  }, [rows, extra, query]);
+  const all = [...shown, ...shownExtra];
   const pick = (id: string) => { onClose(); onPick(id); };
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, all.length - 1)); }
@@ -56,18 +58,18 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent ref={card} tabIndex={-1} padding="none" className="w-[380px] max-w-[92vw] gap-0 overflow-hidden outline-none" onKeyDown={onKeyDown}
         // The search box takes the keys when there is one; else the card, for the arrows and Enter.
-        onOpenAutoFocus={(e) => { if (rows.length < SEARCH_FROM) { e.preventDefault(); card.current?.focus(); } }}>
+        onOpenAutoFocus={(e) => { if (!searchable) { e.preventDefault(); card.current?.focus(); } }}>
         <div className="border-b border-[var(--color-line)] px-3.5 pb-2.5 pt-3 pr-10">
           <DialogTitle className="text-body font-semibold">{title}</DialogTitle>
           {description && <DialogDescription className="mt-1 line-clamp-2 text-label text-[var(--color-fg3)]">{description}</DialogDescription>}
         </div>
-        {rows.length >= SEARCH_FROM && (
+        {searchable && (
           <div className="px-2 pt-2">
             <Input value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} placeholder="Search" aria-label="Search" size="sm" />
           </div>
         )}
         <div className="max-h-[min(420px,60vh)] overflow-y-auto p-1.5" role="listbox" aria-label={title}>
-          {shown.length === 0 && <p className="px-2 py-3 text-label text-[var(--color-fg3)]">Nothing matches.</p>}
+          {all.length === 0 && <p className="px-2 py-3 text-label text-[var(--color-fg3)]">Nothing matches.</p>}
           {shown.map((r, i) => {
             const heading = r.group && r.group !== lastGroup ? r.group : null;
             lastGroup = r.group;
@@ -76,8 +78,8 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
               row(r, i),
             ];
           })}
-          {extra.length > 0 && <div className="my-1 border-t border-[var(--color-line2)]" />}
-          {extra.map((r, i) => row(r, shown.length + i))}
+          {shown.length > 0 && shownExtra.length > 0 && <div className="my-1 border-t border-[var(--color-line2)]" />}
+          {shownExtra.map((r, i) => row(r, shown.length + i))}
         </div>
       </DialogContent>
     </Dialog>

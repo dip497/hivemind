@@ -355,7 +355,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Fresh install: every plugin as it is by default (a tool plugin that is not built in: off).
   plugins: { state: {} },
   // Empty = "the agent catalog's default" — hive-core does not depend on
-  // @hivemind/agents, and the renderer resolves an unknown id to defaultAgent().
+  // @hivemind/agents; preferredAgent() turns an empty or unknown id into the first installed agent.
   agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [] },
   profile: { name: "", color: "" },
   network: { updateCheck: true },

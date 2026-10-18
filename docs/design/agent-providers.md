@@ -21,7 +21,7 @@ produced workers that looked alive and delivered nothing.
 packages/hive-agents/src
 ├── types.ts            the contract: AgentProviderDef (browser-safe), AgentPlugin (daemon)
 ├── catalog.ts          CATALOG — the ONE list of defs; agentById / agentForCmd /
-│                       identifyProvider / defaultAgent / spawnableAgents /
+│                       identifyProvider / preferredAgent / spawnableAgents /
 │                       workerAgents / detectStatus / spawnArgsFor / spawnLabelFor
 ├── node.ts             PLUGINS — the ONE list of plugin objects; composeResume;
 │                       prepareProviders (daemon start). Derived: NODE_PARTS, PROVIDERS
@@ -95,7 +95,7 @@ every field has a reader:
 | status detection | `agent-state.ts` union type, alias map, detector table | catalog aliases + `def.detect` for every recognised agent; `agent-state.ts` only routes by id |
 | initial prompt delivery | `ARGV_PROMPT_AGENTS` set | `caps.promptDelivery` |
 | PTY daemon | per-provider blocks (pi ext, droid home, kiro home + hook) | `prepareProviders(paths)` → `ctx.providers` |
-| HCP spawn / read / workflow | `"claude"` default, `SUPERVISE_UNSUPPORTED = {pi}` | `defaultAgent()`, `caps.supervise`, `caps.turnSignal` |
+| HCP spawn / read / workflow | `"claude"` default, `SUPERVISE_UNSUPPORTED = {pi}` | `preferredAgent()`, `caps.supervise`, `caps.turnSignal` |
 | `hive ctl --agent`, `hive agent detect`, `--assignee` | three hand-kept lists | `spawnableAgents()`, `CATALOG.map(bin)`, `CATALOG.map(id)` — no extras list |
 | spawn args / labels | claude's modes + model flag in `useSpawn` | `def.spawnArgs` / `def.spawnLabel` via `spawnArgsFor` / `spawnLabelFor` |
 

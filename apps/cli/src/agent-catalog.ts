@@ -1,15 +1,14 @@
 /** The app's agent list, for commands that need it. Lazy: the YAML loader import costs ~65 ms. */
 import { disabledPlugins } from "@hivemind/core/plugin-settings";
-import { defaultAgent } from "@hivemind/agents";
 
 let loading: Promise<void> | null = null;
 let preferred: string | null = null;
 
 /** The agent `hive ctl spawn` starts with no --agent: the user's default if installed,
- *  else the first agent on this PATH. Null when no agent is installed at all.
+ *  else the first agent on this PATH. Null when the catalog is empty.
  *  Valid after `ensureAgentCatalog()`. */
 export function cliDefaultAgent(): string | null {
-  return preferred ?? defaultAgent()?.id ?? null;
+  return preferred;
 }
 
 export function ensureAgentCatalog(): Promise<void> {
