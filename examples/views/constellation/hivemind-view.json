@@ -1,0 +1,19 @@
+{
+  "id": "@dip497/constellation",
+  "name": "Constellation",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "protocol": 1,
+  "permissions": [],
+  "category": "agents",
+  "toolbar": "bottom",
+  "settings": [
+    { "id": "frameRate", "label": "Frames a second", "type": "number", "min": 5, "max": 60, "default": 30, "description": "Fewer frames use less of the computer." },
+    { "id": "turn", "label": "Turn slowly on its own", "type": "boolean", "default": true }
+  ],
+  "commands": [
+    { "name": "census", "description": "How many agents are working, waiting on the person, idle, stopped or gone." },
+    { "name": "show", "description": "Dock the live terminal of the agent whose name holds this text.", "args": "{ \"name\": string }" },
+    { "name": "release", "description": "Close the docked terminal." }
+  ]
+}

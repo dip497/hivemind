@@ -1,0 +1,16 @@
+{
+  "id": "@dip497/waiting-on-you",
+  "name": "Waiting on you",
+  "version": "1.0.0",
+  "description": "Every agent that is waiting on you, longest first: press one to jump to it.",
+  "category": "agents",
+  "icon": "icon.svg",
+  "size": { "w": 280, "h": 200 },
+  "options": [
+    { "id": "shown", "label": "Agents to list", "type": "number", "min": 1, "max": 8, "default": 4 },
+    { "id": "notify", "label": "Notify me when one starts waiting", "type": "boolean", "default": false }
+  ],
+  "commands": [
+    { "name": "list", "description": "The agents waiting on the person now: name, why and for how long, longest first." }
+  ]
+}

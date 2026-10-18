@@ -14,8 +14,9 @@ import { AGENT_EVENT_METHOD, cleanName, parseAgentEvent } from "@hivemind/agents
 import { TILE_SESSIONS_DIR, writeTrackedSession } from "@hivemind/agents/node";
 import { SUBMIT_DELAY_MS } from "@hivemind/agent-host/agent-io";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
-import { holderOf, readOrCreateToken, speaksFor } from "@hivemind/agent-host/hooks/token";
+import { hcpSockPath, holderOf, readOrCreateToken, speaksFor } from "@hivemind/agent-host/hooks/token";
 import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
+import { ControlRefused } from "@hivemind/agent-host/daemon-endpoint";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
@@ -30,6 +31,7 @@ import type { HcpCall } from "./protocol.js";
 import { SubagentReaper } from "./subagent-reaper.js";
 import { TurnTracker } from "./turn-tracker.js";
 import { Waits } from "../waits.js";
+import { socketIn } from "../socket-in.js";
 
 /** The verbs' dependencies that only the embedder has; the plane provides the rest. */
 export type EmbedderDeps = Omit<
@@ -416,6 +418,32 @@ export class ControlPlane {
     if (!reply) return;
     const sent = { from: bare, name: this.dispatcher.labelOf(bare), kind: "reply" as const, turn: this.turns.currentSeq(pid), text: reply };
     for (const dst of dests) this.inbox.post(dst, sent);
+  }
+
+  /**
+   * Serve the agent channel behind this machine's daemon, the app's and `hive host`'s alike: the
+   * daemon owns the control-plane socket and passes each connection on to this one's own, so every
+   * hook its sessions run reaches it and every device watching them (R6). A daemon that will not
+   * hand the socket over has this serve the machine's socket itself.
+   */
+  async serveBehind(daemon: { control(sock: string): Promise<void> }, o: { onWarn(message: string): void; onError?(err: Error): void }): Promise<HcpServer> {
+    const own = socketIn(this.o.dir(), "hcp-host.sock", "hcp-host");
+    const served = this.listen(own, o.onError);
+    for (;;) {
+      try {
+        await daemon.control(own);
+        return served;
+      } catch (e) {
+        const why = e instanceof Error ? e.message : String(e);
+        if (e instanceof ControlRefused) {
+          o.onWarn(`the terminal daemon keeps no control-plane socket to hand over (${why}): serving the machine's here`);
+          served.close();
+          return this.listen(hcpSockPath(this.o.dir()), o.onError);
+        }
+        o.onWarn(`the terminal daemon did not take this control plane (${why}): asking again`);
+        await new Promise((r) => setTimeout(r, 2_000));
+      }
+    }
   }
 
   /**

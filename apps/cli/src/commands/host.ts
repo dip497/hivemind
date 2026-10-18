@@ -24,7 +24,8 @@ import type { HeadlessHost, HeadlessHostOptions } from "@hivemind/host/headless"
 import type { PairedDevice } from "@hivemind/workspace-host/devices";
 import { appData, hiveNetBin } from "../app-data.js";
 import { err, ok } from "../format.js";
-import { EXIT } from "../hcp.js";
+import { EXIT, HcpCliError } from "../hcp.js";
+import { driveCall } from "../drive.js";
 import { appRunning, askHost, controlSocket, HostNotRunning, serveControl } from "../host-control.js";
 import { defaultSocket } from "../pty-client.js";
 import { checkSocketPath, daemonUnsupported, ensureDaemon, selfArgv } from "./daemon.js";
@@ -67,14 +68,18 @@ const connectTo = (sock: string): Promise<net.Socket> => new Promise((resolve, r
   s.once("connect", () => { s.removeListener("error", reject); resolve(s); });
 });
 
+/** Why `hive host` does not run beside the app, and what does what it would. */
+const appServes = (pid: number): string =>
+  `the hivemind app is running here (pid ${pid}) and serves this machine's workspaces itself: \`hive host add <folder>\` serves one more folder through it, and \`hive share <folder>\` shares one`;
+
 const runCmd = defineCommand({
-  meta: { name: "run", description: "Serve this machine's workspaces until stopped (what a service runs)" },
+  meta: { name: "run", description: "Serve this machine's workspaces until stopped (what a service runs); refused while the app runs here" },
   args: { json: { type: "boolean", description: "report the start as JSON" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
     const dir = appData();
     const app = appRunning(dir);
-    if (app) return err(ctx, "app_running", `the hivemind app is running here (pid ${app}) and serves this machine's workspaces itself`, EXIT.unavailable);
+    if (app) return err(ctx, "app_running", appServes(app), EXIT.unavailable);
     const daemonSock = defaultSocket();
     const bad = checkSocketPath(daemonSock) ?? daemonUnsupported();
     if (bad) return err(ctx, "daemon_unsupported", bad, EXIT.unavailable);
@@ -114,7 +119,6 @@ const runCmd = defineCommand({
         if (!pairing) throw new Error("no code is offered here: `hive host pair` offers one");
         return pairing;
       },
-      add: (a) => running().add(String(a.path ?? "")),
     });
     if (control.claim === "taken") return err(ctx, "already_running", "hive host is already running here (`hive host status`)", EXIT.unavailable);
     const shutdown = (): Promise<void> => (stopping ??= (async () => {
@@ -234,25 +238,27 @@ const stopCmd = defineCommand({
 });
 
 const addCmd = defineCommand({
-  meta: { name: "add", description: "Serve a folder on this machine as one of its workspaces" },
+  meta: { name: "add", description: "Serve a folder on this machine as one of its workspaces, through the app when it runs here, else through hive host" },
   args: {
     path: { type: "positional", required: true, description: "the folder" },
     json: { type: "boolean" },
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    // The app, when it runs here, or else `hive host`: whichever serves this machine's workspaces.
+    let added: { repo: string; workspace: string };
     try {
-      const added = (await askHost(controlSocket(appData()), "add", { path: path.resolve(String(args.path)) })) as { repo: string; workspace: string };
-      return ok(ctx, added, () => `serving ${added.repo} (workspace ${added.workspace.slice(0, 8)}…): your paired devices list it under Open recent`);
+      added = (await driveCall("host.add", [path.resolve(String(args.path))])) as { repo: string; workspace: string };
     } catch (e) {
-      if (e instanceof HostNotRunning) return err(ctx, "host_not_running", e.message, EXIT.unavailable);
+      if (e instanceof HcpCliError && e.code === "UNAVAILABLE") return err(ctx, "host_not_running", e.message, EXIT.unavailable);
       return err(ctx, "add_failed", e instanceof Error ? e.message : String(e));
     }
+    return ok(ctx, added, () => `serving ${added.repo} (workspace ${added.workspace.slice(0, 8)}…): your paired devices list it under Open recent`);
   },
 });
 
 const installCmd = defineCommand({
-  meta: { name: "install", description: "Run hive host as a service of yours: at boot, and again if it stops (systemd, Linux)" },
+  meta: { name: "install", description: "Run hive host as a service of yours: at boot, and again if it stops (systemd, Linux); refused while the app runs here" },
   args: { json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
@@ -261,6 +267,8 @@ const installCmd = defineCommand({
     }
     const unsupported = daemonUnsupported();
     if (unsupported) return err(ctx, "daemon_unsupported", unsupported, EXIT.unavailable);
+    const app = appRunning(appData());
+    if (app) return err(ctx, "app_running", appServes(app), EXIT.unavailable);
     // The service finds what this shell finds: hive-net, and the data folder it was told of.
     const env: Record<string, string> = {};
     const bin = hiveNetBin();

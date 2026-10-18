@@ -41,7 +41,7 @@ const folder = (name: string) => { const f = path.join(dir, name); fs.mkdirSync(
 
 beforeAll(async () => {
   if (!unix) return;
-  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config"), HIVEMIND_DAEMON_STANDALONE: "1" } });
+  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config") } });
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
 });
 

@@ -17,7 +17,7 @@ import { parseMachineUri, parseRemote } from "@hivemind/core/remote-uri";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 import type { ClientTransport } from "./client.js";
-import { mayCall } from "./roles.js";
+import { mayCall, refusalOf } from "./roles.js";
 import type { Answer, EventMessage } from "./protocol.js";
 import type { Links } from "./agents.js";
 import type { Connection, WorkspaceServer } from "./server.js";
@@ -259,7 +259,8 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
     if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
     if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return "that tile is not of this workspace";
-    if (typeof method !== "string" || !(attaching || mayCall(peer.actor, method))) return `${String(method)} is not open to your role on this workspace`;
+    if (typeof method !== "string") return `${String(method)} is not open to your role on this workspace`;
+    if (!(attaching || mayCall(peer.actor, method))) return refusalOf(peer.actor, method);
     if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
     // devices are the owner, there as here.

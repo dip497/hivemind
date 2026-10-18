@@ -11,6 +11,7 @@ import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
 import { PACED_WINDOW } from "@hivemind/agent-host/session-relay";
+import { SessionManager } from "@hivemind/agent-host/pty-session-manager";
 import { PAUSE_MAX_MS, REPAINT_AFTER_MS, Terminals, type SessionOutput } from "../src/terminals.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-terminals-"));
@@ -363,4 +364,48 @@ test("a phone that asks for some of a session's history is sent the screen with 
   const other = h.client();
   await h.open(other, "hm:t1");
   assert.deepEqual(sent(other), ["SCREEN"]);
+});
+
+test("a window that sizes a session while the host is still starting it gets that size once it runs, the size it was told", async (t) => {
+  // The daemon's own session manager, which sizes only a session it holds, and a process that keeps
+  // the size its terminal is given.
+  let ptySize = "";
+  const manager = new SessionManager((spec) => {
+    ptySize = `${spec.cols}x${spec.rows}`;
+    return { pid: 9, write: () => {}, resize: (c, r) => { ptySize = `${c}x${r}`; }, kill: () => {}, onData: () => {}, onExit: () => {} };
+  });
+  t.after(() => manager.killAll());
+  let spawn!: () => void;
+  const spawning = new Promise<void>((r) => { spawn = r; });
+  const file = path.join(tmp, `audit-${logs++}.jsonl`);
+  let server: WorkspaceServer | undefined;
+  const terminals = new Terminals({
+    intents: new Intents(new AuditLog({ file })),
+    relay: { record: () => {}, screenPrefix: "" },
+    publish: (event, ...params) => server?.publish(event, ...params),
+    backend: {
+      start: async (o, out) => {
+        await spawning;
+        const r = await manager.createOrAttach(o.tileId, { cwd: o.cwd!, cmd: o.cmd!, args: o.args ?? [], cols: o.cols, rows: o.rows }, { onData: (d) => out.data(d), onExit: (c) => out.exit(c) });
+        return { pid: r.pid };
+      },
+      write: () => {}, echoes: () => true, repaint: () => {}, pause: () => {}, resume: () => {}, kill: () => {}, detach: () => {},
+      resize: (tile, cols, rows) => manager.resize(tile, cols, rows),
+      screen: () => null,
+    },
+  });
+  server = new WorkspaceServer([terminals.domain], new Intents(new AuditLog({ file })));
+  const window: Connection & { received: EventMessage[] } = { actor: { kind: "person" }, received: [], send: (m) => window.received.push(m), closed: new AbortController().signal };
+  server.connect(window);
+  // The control plane starts it at the host's default size, and the window showing the tile asks
+  // for its own before the process is there.
+  const started = terminals.own({ tileId: "hm:t1", cwd: tmp, cmd: "claude", args: [], cols: 120, rows: 36 }, { data: () => {}, exit: () => {} });
+  const opened = server.answer("terminal.open", [{ tileId: "hm:t1", cwd: tmp, cmd: "claude", cols: 119, rows: 26 }], window);
+  server.notice("terminal.resize", ["hm:t1", 119, 26], window);
+  spawn();
+  await started;
+  await opened;
+  const told = window.received.filter((m) => m.event === "terminal.size").at(-1)?.params;
+  assert.deepEqual(told, ["hm:t1", 119, 26]);
+  assert.equal(ptySize, "119x26", "the process draws at the size the window draws it");
 });

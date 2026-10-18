@@ -1,0 +1,18 @@
+{
+  "id": "@dip497/focus-timer",
+  "name": "Focus timer",
+  "version": "1.0.0",
+  "description": "Work for a set time, then take a break, round after round; an agent can start one for you.",
+  "category": "productivity",
+  "icon": "icon.svg",
+  "size": { "w": 260, "h": 150 },
+  "options": [
+    { "id": "focus", "label": "Minutes of focus", "type": "number", "min": 1, "max": 120, "default": 25 },
+    { "id": "break", "label": "Minutes of break", "type": "number", "min": 1, "max": 60, "default": 5 }
+  ],
+  "commands": [
+    { "name": "start", "description": "Start or resume the timer; minutes sets this round's length.", "args": "{ \"minutes\"?: number }" },
+    { "name": "pause", "description": "Pause the timer." },
+    { "name": "status", "description": "Focus or break, running or not, the time left and the rounds done." }
+  ]
+}

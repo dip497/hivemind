@@ -219,6 +219,20 @@ test("a new guest is welcomed with the workspace as it is, not with every change
   expect(Buffer.from(welcome.data, "base64").length).toBeLessThan(host.store.exportSince("/a", null).length / 4);
 }, 30_000);
 
+test("a new guest whose window read its empty copy is told of the host's tiles, whatever part the host changed last", () => {
+  const host = storeWith("host", newSeed());
+  host.store.setCore("/a", core("api"));
+  host.store.setView("/a", "canvas", { v: 2, data: { positions: { t1: { x: 5, y: 6 } } } });
+  const guest = storeWith("shared");
+  // The window opens the copy before the host answers.
+  expect(guest.store.getCore("hive://w")).toBeNull();
+  const told: string[] = [];
+  guest.changes((c) => told.push(c.part));
+  connect(host, guest, "edit");
+  expect(told).toContain("core");
+  expect(guest.store.getCore("hive://w")).toEqual(core("api"));
+});
+
 test("a guest that cannot take another guest's offline change, made before it joined, asks again and ends with it", () => {
   const host = storeWith("host", newSeed());
   host.store.setCore("/a", core("api"));

@@ -93,12 +93,15 @@ export interface PartChanged {
  *  read from the changes alone (their operations, not a diff of the states), so it costs what
  *  changed, whatever the document's size. */
 export function partsChanged(doc: LoroDoc, before: Frontiers): PartChanged[] {
+  const every = (): PartChanged[] => [{ part: "core" }, { part: "board" }, ...[...doc.getMap(VIEWS).keys()].map((viewId) => ({ part: `view:${viewId}` as const }))];
   let changes: ReturnType<LoroDoc["exportJsonUpdates"]>["changes"];
   try {
+    // From before the history a shallow document keeps, its changes show only the last one made.
+    if (doc.isShallow() && !((doc.frontiersToVV(before).compare(doc.shallowSinceVV()) ?? -1) >= 0)) return every();
     changes = doc.exportJsonUpdates(doc.frontiersToVV(before), doc.oplogVersion(), false).changes;
   } catch (e) {
     if (!doc.isShallow()) throw e;
-    return [{ part: "core" }, { part: "board" }, ...[...doc.getMap(VIEWS).keys()].map((viewId) => ({ part: `view:${viewId}` as const }))];
+    return every();
   }
   const parts = new Set<LayoutPart>();
   const objects = new Set<string>();

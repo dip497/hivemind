@@ -18,7 +18,9 @@ a terminal. It keeps no keys of its own. A password, if you choose one, goes in 
 - `hive` on the machine, so its terminals keep running when the connection drops. Adding a
   machine can install it for you (see below).
 - The agent CLIs you want to run there (`claude`, `codex`, …), installed on that machine. An
-  agent runs where its frame is, not on your computer.
+  agent runs where its frame is, not on your computer. Its Hivemind wiring (what it reports, how
+  it is driven) comes with it the first time you start it there, from the agents your app has; an
+  agent the machine already has (`hive agents install` there) is kept as it is.
 
 Not supported as a machine: Windows. On a Mac, `hive daemon start` refuses with "the compiled
 hive cannot host a daemon on macOS yet".
@@ -74,8 +76,17 @@ From a terminal or an agent, start an agent there by naming the frame:
 
 ```bash
 hive ctl frames                       # id, name and machine of each frame
+hive ctl frame add --machine build --folder /srv/web --name web   # one there, made if missing
 hive ctl spawn --frame web --agent claude --prompt "Run the tests and fix what fails"
+hive ctl agents                       # it is listed with the workspace's other agents, on its machine
 ```
+
+`--repo` names a workspace on a machine by its address (`ssh://build/srv/web`, `machine://…`) or
+its name, as it names one here.
+
+`hive ctl frame add` opens the same kind of frame as **Open folder here…**. `--machine` takes a saved
+machine or one of your other devices, by its id or its name; a name two of them share is refused
+with each one's id. Adding the same folder again gives the frame it already has.
 
 ## Sessions that outlive the connection
 
@@ -140,5 +151,9 @@ hive push test
 - **`hive host`** turns a machine into an always-on host of its workspaces, with no desktop,
   reached through your network (`hive-net`) instead of ssh. `hive host pair` makes it one of
   your devices; frames can then run on it. See [Self-hosting](../self-hosting/).
+- **Your other devices**, with the app or `hive host` on them, run the terminals of frames in
+  their folders. An agent there reports to that device's terminal daemon, which passes what it
+  says on to the app that started it: its status, `hive ctl read`, and its reply in the starter's
+  `hive ctl inbox`, as for an agent on your own computer.
 - **Sharing a workspace** lets another person join with their own computer. See
   [Multiplayer](../multiplayer/).
