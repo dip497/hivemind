@@ -32,11 +32,12 @@ const XDG = tmp("hm-clip-xdg-"), HOME = tmp("hm-clip-home-"), WORK = tmp("hm-cli
 for (const cli of ["claude", "codex", "pi"]) {
   // A prompt reaches a real CLI either as argv or typed at its prompt — each manifest says which
   // (pi and claude take argv, codex is typed). A stand-in that only reads stdin leaves every
-  // argv agent sitting at an empty prompt, which the detector correctly calls idle.
+  // argv agent sitting at an empty prompt, which the detector correctly calls idle. codex's own
+  // flags carry values (`-c key=value`), so its stand-in reads only what is typed.
   fs.writeFileSync(path.join(BIN, cli), `#!/usr/bin/env bash
 [ "$1" = "--version" ] && { echo "0.0.0 (clip stand-in)"; exit 0; }
 cmd=""
-for a in "$@"; do case "$a" in -*) ;; *) cmd="$a" ;; esac; done
+${cli === "codex" ? "" : `for a in "$@"; do case "$a" in -*) ;; *) cmd="$a" ;; esac; done`}
 if [ -n "$cmd" ]; then clear; exec bash -c "$cmd"; fi
 printf '\\n❯ '
 IFS= read -r line
@@ -46,7 +47,7 @@ exec bash -c "$line"
 }
 
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) =>
-  !k.startsWith("CLAUDE") && !["ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "HIVE_HCP_SOCK", "HCP_TOKEN"].includes(k)));
+  !k.startsWith("CLAUDE") && !k.startsWith("HIVE") && !["ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "HCP_TOKEN"].includes(k)));
 Object.assign(env, { XDG_CONFIG_HOME: XDG, HOME, HIVEMIND_SHELL_ENV: "0", PATH: `${BIN}:${process.env.PATH}` });
 
 const profile = 'PS1="\\[\\e[38;5;244m\\]\\W\\[\\e[0m\\] \\$ "\nexport GIT_PAGER=cat PAGER=cat LESS=FRX\n';
@@ -79,6 +80,8 @@ for (const [k, v] of [
 const VIEWS = ["queue", "tiled", "board"];
 const published = (name) => VIEWS.includes(name) ? `@dip497/${name}` : name;
 for (const id of VIEWS) cli("views", "install", published(id));
+// No agent ships in the box: the stand-ins above run under each agent's published manifest.
+for (const a of ["claude", "codex", "pi"]) cli("agents", "install", a, "--yes");
 
 // Stills are for the website, where they are shown at up to 1200 CSS px: capture at 2x so the
 // text in a tile survives the downscale.
@@ -109,7 +112,7 @@ const userData = await (async () => {
   }
   throw new Error("the app never opened its control socket");
 })();
-hcp = { HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
+hcp = { HIVEMIND_APP_DATA: userData, HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
 
 // A video wallpaper, imported the way the app's own picker does: copied into the profile's media
 // directory and addressed by hivemedia://. It is scaled to the window first — a 4K source costs
@@ -188,7 +191,8 @@ const BLOCKED = {
 const agent = (name, frame, script, kind = "claude") => {
   const r = cli("ctl", "spawn", "--agent", kind, "--name", name, ...(frame ? ["--frame", frame] : []), "--prompt", `${script}; sleep 3600`, "--json");
   if (r.status !== 0) console.error(`spawn ${name}: ${r.stdout}${r.stderr}`);
-  return JSON.parse(r.stdout || "{}").data?.tileId;
+  const out = JSON.parse(r.stdout || "{}");
+  return out.data?.tile ?? out.tile;
 };
 async function namedFrame(title) {
   await emit("hivemind:add-frame");
@@ -254,16 +258,16 @@ await wait(1500);
 // What the detector actually made of the scene. A shot of an idle workspace sells nothing, and
 // the last one shipped saying "No agents yet" — so the scene reports itself before the camera.
 const census = () => {
-  const r = cli("ctl", "list", "--json");
+  const r = cli("ctl", "agents", "--json");
   let rows = [];
-  try { const d = JSON.parse(r.stdout || "{}").data; rows = Array.isArray(d) ? d : d?.tiles ?? []; } catch { /* reported below */ }
+  try { rows = JSON.parse(r.stdout || "{}").agents ?? []; } catch { /* reported below */ }
   const by = {};
-  for (const t of rows) by[t.status ?? "?"] = (by[t.status ?? "?"] ?? 0) + 1;
+  for (const t of rows) by[t.state ?? "?"] = (by[t.state ?? "?"] ?? 0) + 1;
   return { rows, by };
 };
 for (let i = 0; i < 20; i++) {
   const { rows, by } = census();
-  const blocked = (by.blocked ?? 0) + (by.permission ?? 0);
+  const blocked = (by.blocked ?? 0) + (by.permission ?? 0) + (by.waiting ?? 0);
   if (blocked >= 1 && (by.working ?? 0) >= 2) { console.log(`scene: ${rows.length} tiles — ${JSON.stringify(by)}`); break; }
   if (i === 19) console.log(`scene NOT LOADED: ${rows.length} tiles — ${JSON.stringify(by)}`);
   await wait(1000);
@@ -279,7 +283,7 @@ await wait(1200);
 if (STILL) {
   const dir = path.resolve(STILL);
   fs.mkdirSync(dir, { recursive: true });
-  for (const [mode, ready] of [["canvas", false], ["queue", true], ["tiled", true], ["board", true]]) {
+  for (const [mode, ready] of [["canvas", false], ["windows", false], ["queue", true], ["tiled", true], ["board", true]]) {
     await toView(mode, ready);
     // Queue docks the SELECTED agent's terminal; with nothing selected it draws its empty state,
     // so the shot would miss the one thing the view exists to do. N is "next that needs you".
@@ -290,6 +294,37 @@ if (STILL) {
       ["No agents yet", "Nothing needs you"].filter((s) => document.body.innerText.includes(s)));
     console.log(`still view-${mode}${empty.length ? `  — WEAK: view says ${JSON.stringify(empty)}` : ""}`);
   }
+  // An agent builds out its own workspace while it works: it installs a tool and a widget from
+  // HiveHub with the hive on its PATH, opens both, and keeps the widget's steps up to date.
+  const call = (cmd, json) => `c ${cmd} '${JSON.stringify(json)}'`;
+  const leadScript = [
+    "clear",
+    "hive tools install dip497/worktrees && hive plugins enable tool:dip497/worktrees",
+    "hive widgets install @dip497/progress && hive plugins enable widget:@dip497/progress",
+    "hive ctl plugin open tool:dip497/worktrees && hive ctl plugin open widget:@dip497/progress",
+    // A widget can refuse a command right after the last one; the agent asks again.
+    `c() { for i in $(seq 20); do hive ctl plugin call @dip497/progress "$@" >/dev/null && echo "progress $1 $2" && return; sleep 0.3; done; }`,
+    call("set-title", { title: "Ship 2026.10.3" }),
+    ...["Merge the branch", "Run the full e2e", "Tag the release", "Publish the plugins"].map((text) => call("add", { text })),
+    ...[0, 1, 2].map((index) => call("check", { index })),
+    WORKING.claude("Publishing the plugins"),
+  ].join("; ");
+  // Sixteen spawns a moment ago use up the spawn rate: wait for room for one more.
+  let lead;
+  for (let i = 0; i < 30 && !lead; i++) { lead = agent("claude", "site", leadScript, "claude"); if (!lead) await wait(2000); }
+  for (let i = 0; i < 60; i++) {
+    const r = cli("ctl", "plugin", "call", "@dip497/progress", "list", "{}", "--json");
+    if ((r.stdout.match(/"done":\s*true/g) ?? []).length >= 3) break;
+    await wait(1000);
+  }
+  const running = JSON.parse(cli("ctl", "plugin", "list", "--json").stdout.trim().split("\n").pop() || "{}");
+  console.log(`agent ${lead} opened: ${(running.plugins ?? []).map((p) => `${p.plugin} ${p.state}`).join(", ")}`);
+  const focused = cli("ctl", "focus", lead);
+  if (focused.status !== 0) console.error(`focus ${lead}: ${focused.stdout}${focused.stderr}`);
+  await toView("windows", false);
+  await wait(1500);
+  await page.screenshot({ path: path.join(dir, "agent-plugins.png") });
+  console.log("still agent-plugins");
   await app.close();
   process.exit(0);
 }

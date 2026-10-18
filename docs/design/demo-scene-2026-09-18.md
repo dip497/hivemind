@@ -66,6 +66,7 @@ The closing line is the product's whole argument: **you answer, they keep going.
 ## What the site says about it
 
 The homepage caption, the walkthrough's description and this file must agree on the numbers.
-Today: twenty agents, five frames, one repository, three waiting. When the scene changes, they change
+Today: sixteen agents, five frames, one repository, three waiting (`site-clip.mjs`'s census:
+twelve working, one finished). When the scene changes, they change
 together — `scripts/site-clip.mjs` prints the census it captured, and that number is the one
 the page is allowed to claim.

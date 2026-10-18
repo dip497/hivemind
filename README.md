@@ -22,12 +22,19 @@ grouped into frames bound to a repo, a worktree or an SSH host.
 
 - **Agents run agents.** `hive ctl` is on every agent's PATH, so one spawns three more, watches
   them work, reads their answers and approves their tools — while you watch all four.
-- **The screen itself is a plugin.** Don't like this canvas? Write the one you want — a queue, a
-  subway map, a Mars base — with the real, running terminals inside it.
+- **Everything is a plugin, and your agents drive them.** The agents, the view, the tiles and
+  the boxes above them are plugins; an agent installs one, opens it and keeps a widget up to date
+  while it works, and writes new ones from a starter — no restart.
+- **Answer from your phone.** What waits on you, every agent live, its questions and permission
+  prompts — in your phone's browser, through a network you run.
 
-<img alt="The canvas: two frames, each holding agent and shell tiles, on a shared wallpaper" src="docs/public/shots/view-canvas.webp" />
+<img alt="The Windows view: the Layers list of sixteen agents in five frames, and the agent waiting on a permission prompt" src="docs/public/shots/view-windows.webp" />
 
-<sub>The canvas — one frame per repository, tiles inside them.</sub>
+<sub>The Windows view — sixteen agents in five frames; the one that needs you is up front.</sub>
+
+<img alt="The Progress widget above the Windows view: Ship 2026.10.3, 3 of 4 done, each step added and ticked by an agent" src="docs/public/shots/agent-plugins.webp" />
+
+<sub>An agent installed the Progress widget from HiveHub and ticked off its steps as it worked.</sub>
 
 ---
 
@@ -45,7 +52,7 @@ irm https://hivemind.griiken.com/install.ps1 | iex
 
 Linux x86_64, macOS Apple Silicon and Windows x64 have prebuilt releases, so you need no
 toolchain; Intel macs and Linux arm64 build from source with `--dev`. Re-run it to upgrade,
-or pin a version with `HIVEMIND_VERSION=v2026.9.1`.
+or pin a version with `HIVEMIND_VERSION=v2026.10.3`. `--channel nightly` follows the nightly builds.
 
 ## Use
 
@@ -56,9 +63,9 @@ hive new "Fix token expiry comparison"
 hivemind .
 ```
 
-`1`–`7` spawn a terminal, an agent, an explorer, a diff, the issues board, a frame or a
-browser. Click **Work** on an issue and the agent starts with that issue and the `hive`
-skills loaded. `⌘B` opens the layers rail, `⌘E` switches view — the keys follow VS Code (Settings → Shortcuts).
+On the canvas, `1` opens a terminal, `2` an agent, `3` the file explorer, `6` a frame and `7` a
+browser. Start an agent from an issue and it begins with that issue and the `hive` skills loaded.
+Settings → Shortcuts lists every key.
 
 ## What you get
 
@@ -68,10 +75,14 @@ skills loaded. `⌘B` opens the layers rail, `⌘E` switches view — the keys f
 | **Status you can see** | working, finished, or waiting for you — read from the agent's own screen, so it needs no cooperation |
 | **Terminals that outlive the window** | a detached daemon keeps them running and replays the screen on reopen; a session resumes after a reboot |
 | **Issues as files in your repo** | markdown with YAML frontmatter under `.hivemind/`; no database, no account |
-| **Agents driving agents** | `hive ctl` is on every agent's PATH, so one agent spawns three more, reads their replies and approves their tools — see below |
-| **Views and plugins** | the canvas is one view; install another from HiveHub or write one against a sandboxed API with no files, network or app access |
+| **Agents driving agents** | one agent spawns three more, reads their replies and approves their tools — see below |
+| **Views** | Canvas and Windows come with the app; Queue, Tiled and Board are on HiveHub; write your own against a sandboxed API with no files, network or app access |
+| **Tool plugins and widgets** | a kind of tile your code draws (a commit browser, a pull request panel), or a small live box an agent keeps up to date; from HiveHub or a folder |
+| **Your phone** | the phone page answers questions and permission prompts, sends messages, starts and stops agents; pair it with three words on Settings → Connect |
+| **Sleep and wake** | an idle agent's process ends and frees its memory; waking it continues the same conversation |
+| **Your own network** | `hive-net` runs the relay and admission on a machine you choose, for your phone, other computers and your team; there is no hosted one |
 
-Works with **Claude Code · Codex · Cursor · Droid · Kiro · pi · Gemini · opencode** and a
+Works with **Claude Code · Codex · Cursor · Droid · Kiro · pi · Amp · opencode** and a
 dozen more.
 
 ## One agent, running the others
@@ -99,22 +110,59 @@ whole screen from the workspace we hand it: frames, tiles, names, live status. T
 inside your scene is the real one, still running; you tell the app where to put it and it
 mounts the session there.
 
-A queue if you triage. A board if you lead. A subway map where each line is a branch. A Mars
-base where every agent is a module and a stalled one goes dark. Anything you can draw in a web
-page, with real terminals living inside it.
+Canvas and Windows come with the app; Queue (if you triage), Board (if you lead) and Tiled are
+on HiveHub. Or build your own: anything you can draw in a web page, with real terminals living
+inside it.
 
 ```bash
 hive views new my-view     # a starter you can build, install and publish
 ```
 
 It writes a working view **and a `PROMPT.md`**: the whole view API, the theme variables and the
-rules of the sandbox, in one file. Describe what you want at the top of it — *"a subway map where
-each line is a git branch"* — hand it to your agent, and let the agent build it.
+rules of the sandbox, in one file. Describe what you want at the top of it, hand it to your agent,
+and let the agent build it.
 
 Build the room you always wanted to work in, then put it on
 [HiveHub](https://hivehub.griiken.workers.dev/) so everyone else can work in it too. Ten people
 will build ten different rooms, and the good ones become everyone's. A view decides how the
 workspace *looks* — never what runs: no files, no network, no app internals.
+
+## Your phone, your other computers
+
+**Settings → Connect** makes one offer. Scan it with your phone, check that both screens show
+the same three words, and say yes on each side: the phone page then shows what waits on you,
+each agent's conversation, and its questions and permission prompts to answer. The same offer
+lets in another computer of yours, or a person to one workspace.
+
+The page comes from your own network's server — `hive-net`, which the installer puts beside
+`hive` — run with a public name, with the computer on that network; the default *Local network*
+serves no page. See [phone](https://hivemind.griiken.com/guide/phone/) and
+[self-hosting](https://hivemind.griiken.com/guide/self-hosting/). The iOS and Android apps do
+the same and are **not published yet**.
+
+## Your agents build the workspace
+
+An agent drives every plugin in the app with `hive ctl plugin`: `list` shows what runs, `open`
+starts a tool's tile, a widget or a view, `commands` lists what each lets it run, `call` runs one.
+
+```bash
+hive tools install dip497/worktrees               # a tool: every git worktree, its changes and diffs
+hive plugins enable tool:dip497/worktrees          # a tool arrives switched off
+hive widgets install @dip497/progress              # a widget: steps an agent adds and ticks
+hive ctl plugin open widget:@dip497/progress
+hive ctl plugin call @dip497/progress check '{"index":2}'
+```
+
+A **tool** is a kind of tile your code draws, beside the terminals in every view. On HiveHub now:
+**Worktrees** and **CI runs** (a failed job's lines, rerun, hand it to an agent); install one from
+Settings → Plugins → Tools or `hive tools install <owner/name>` (2026.10.3 and later). A
+**widget** is a small live box above the board.
+
+`hive views new`, `hive widgets new` and `hive tools new` each write a working starter and a
+`PROMPT.md` with the whole API: write your idea at the top, hand it to your agent, and it builds
+and installs the thing. [Make your own and list it on HiveHub](https://hivehub.griiken.workers.dev/publish).
+See [tool plugins](https://hivemind.griiken.com/guide/tool-plugins/) and
+[widgets](https://hivemind.griiken.com/guide/widgets/).
 
 ## Bring your own agent
 
@@ -125,12 +173,13 @@ and nothing to fork.
 ```bash
 hive agents validate ./my-agent    # what a user will be told about it
 hive agents install ./my-agent     # from a folder
-hive agents install gemini         # or by name, from HiveHub
+hive agents install amp            # or by name, from HiveHub
 ```
 
 Adding an agent for everyone is a pull request to
-[dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins). Views are yours to
-publish: `hive views new <name>` writes one, `hivehub publish` lists it. See
+[dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins). Views, tools and widgets
+are yours to publish: `hive views new <name>` or `hive tools new <name>` writes one,
+`hivehub publish` lists it. See
 [agents](https://hivemind.griiken.com/guide/agent-providers/) and
 [views](https://hivemind.griiken.com/guide/views/).
 
@@ -163,6 +212,5 @@ first; the e2e suite needs a quiet machine. See
 - [VS Code](https://code.visualstudio.com/api) — the host serves its extension API instead of shipping it on a registry, and resolves a command through `PATHEXT` before spawning it. Views get the SDK the same way.
 - Browser extensions — say plainly what a plugin may do before it is installed, from its own manifest.
 - [Go's checksum database](https://go.dev/ref/mod#checksum-database) and [Homebrew](https://brew.sh) taps — a registry that stores a pointer and a hash, never the code; a file that changed after it was listed fails the install.
-- [Orca](https://github.com/stablyai/orca) and [Emdash](https://github.com/generalaction/emdash) — the Windows details: an encoded PowerShell hook command that survives any shell, and an app id the Start Menu shortcut carries.
 
 MIT — see [LICENSE](./LICENSE).

@@ -3,8 +3,6 @@ title: Widgets
 description: Small live boxes on the board, drawn from what your code renders.
 ---
 
-**Development preview.** Not in a release yet.
-
 A widget is a small live card whose content your code draws: a counter, a meter of busy agents,
 a reminder. Widgets float above every view; drag each one where you want it. Where they sit is
 yours alone (kept on your machine), and the eye button hides them all. Which widgets there are,
@@ -20,7 +18,7 @@ hive widgets install counter
 `PROMPT.md` is a brief a coding agent can build the widget from: write what you want at the top
 and hand it the file. `hive.d.ts` lets an editor check your code against the API.
 
-A widget is a folder holding two files. Add one in **Settings ▸ Plugins ▸ Yours → Add a widget
+A widget is a folder holding two files. Add one in **Settings ▸ Plugins**: **Add → Add a widget
 from a folder** (it is copied into `~/.config/hivemind/widgets`, so you can move the original).
 Switch one off on its page there, or with `hive plugins disable widget:<id>`: it is no longer
 offered, and the ones placed keep what they hold but do not run.
@@ -201,7 +199,7 @@ A `"category"` in `widget.json` says what it is for: `code`, `git`, `agents`, `p
 groups widgets by it, beside the tools.
 
 A `README.md` beside `widget.json` is shown on its page, on HiveHub and in Settings ▸ Plugins,
-before anyone installs it. People install it from Settings ▸ Plugins ▸ On HiveHub, or with:
+before anyone installs it. People install it from the **HiveHub** tab of Settings ▸ Plugins, or with:
 
 ```sh
 hive widgets install @you/counter   # every file checked against the hash HiveHub recorded

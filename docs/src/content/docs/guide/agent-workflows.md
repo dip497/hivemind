@@ -6,7 +6,9 @@ description: Coordinate agents with the hive CLI.
 ## Installed skills
 
 `hive init` writes four skills to `.claude/skills/` plus an agentic section in
-`CLAUDE.md`; `hive add skill` refreshes them:
+`CLAUDE.md`; `hive add skill` replaces older copies, edits included, so keep a skill of your own
+under another name. Starting an agent in a workspace brings the skills it has up to the app's
+version:
 
 | Skill | Activates on |
 |---|---|
@@ -46,7 +48,7 @@ other terminal as you. An agent finds the socket in `HIVE_DRIVE_SOCK`.
 # Who is there, and what each waits on; --watch follows turns, waits and answers
 hive ctl agents --watch
 
-# Start a worker with its default model
+# Start a worker with its default model (agents come from HiveHub: hive agents install pi)
 hive ctl spawn --agent pi --prompt "Review the current diff and report concrete bugs."
 
 # Fanout; worker tiles close after replies are gathered
@@ -68,6 +70,10 @@ Practical rules:
   `hive ctl inbox` (`--wait 90s` to block for one). Your terminal is only told to read it, at your
   prompt; nothing an agent wrote is typed into it.
 - `send` waits until the worker's turn ends; `send --interrupt` stops the turn first.
+- `hive ctl sleep <tile or frame>` ends an idle worker's process and keeps its screen and
+  conversation; `hive ctl wake` starts it again in the same conversation. A busy one stays awake
+  unless `--force`, and both exit 7 when they did nothing. A message sent to a sleeping agent
+  waits until it is at its prompt again.
 - `workflow --agent <id>` exits 7 before spawning when that agent has no turn signal;
   `hive agents list` shows which do.
 - `hive ctl stream <tile> --snapshot` shows the last 40 lines a tile printed (ANSI-stripped)
@@ -93,11 +99,37 @@ APPROVAL — worker … wants to run Bash: … reqId
 
 Answer with `hive ctl approve <reqId> allow|deny|always|never`. `always`/`never` are
 remembered per worker+tool; on timeout or absent supervisor the prompt falls back to the
-human. Only claude and kiro broker; pi is refused (no permission system).
+human. Whether an agent can be supervised is in its manifest (`caps.supervise`). Of the agents on
+HiveHub, claude and kiro broker their prompts; most others accept `--supervise` but keep their
+prompts with you; pi has no permission system, so `--supervise` is refused for it.
 
 ## Browser
 
-Opt in via Settings, then a spawned agent can drive the visible Browser tile over CDP
-via the `hive-browser` skill (`agent-browser` CLI): navigate, click, fill, screenshot
-the page you are watching. No hidden browser is started; the agent checks
-`$HIVEMIND_BROWSER_TARGETS` and reports if the bridge is off or no tile is open.
+Switch the Browser tool on in **Settings ▸ Plugins**, then turn on **Agent browser control** on
+its page and relaunch the app. A spawned agent can then drive the visible Browser tile over CDP
+with the `hive-browser` skill (`agent-browser` CLI): navigate, click, fill, screenshot the page
+you are watching. No hidden browser is started; the agent checks `$HIVEMIND_BROWSER_TARGETS` and
+reports if the bridge is off or no tile is open.
+
+## Plugins
+
+An agent drives the plugins in the app the way you would: install one, open it, run its
+commands. A widget is on once installed. A tool arrives switched off, so it is turned on before
+it opens.
+
+```bash
+hive widgets install @dip497/progress
+hive ctl plugin open widget:@dip497/progress      # waits until its commands can be called
+hive ctl plugin commands                          # what every running plugin lets you run
+hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
+hive ctl plugin call @dip497/progress check '{"index":0}'
+hive ctl plugin list                              # each starting, ready or failed, with why
+hive ctl plugin close widget-…                    # takes it off the board
+
+hive tools install dip497/worktrees && hive plugins enable tool:dip497/worktrees
+hive ctl plugin open tool:dip497/worktrees
+```
+
+To make a new one, `hive views new`, `hive widgets new` or `hive tools new` writes a starter and a
+`PROMPT.md` with the whole API. See [Views](../views/), [Widgets](../widgets/) and
+[Tool plugins](../tool-plugins/).

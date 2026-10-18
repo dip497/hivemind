@@ -3,8 +3,6 @@ title: Connect devices and people
 description: Pair your phone or another computer, or let someone into a workspace, with one offer from Settings → Connect.
 ---
 
-**Development preview.** None of this is in a release yet.
-
 One offer, made on **Settings → Connect**, serves your phone, another computer, or someone else.
 You say which when the other device uses it.
 
@@ -30,7 +28,8 @@ flowchart TB
 On **Settings → Connect**, press **Connect**. To let someone into a workspace, do it in the
 window that shows that workspace; an offer made from Home only pairs your own devices.
 
-The page shows a QR code, six words, **Copy the link** and **Cancel**. The offer works until the
+The page shows two tabs, **Hivemind app** and **Phone browser**. **Hivemind app** shows a QR
+code, six words, **Copy the link** and **Cancel**. The offer works until the
 time shown under it (a day), until one device is let in, or until you make another. Three wrong
 codes void it.
 
@@ -43,8 +42,7 @@ first ([Self-hosting](../self-hosting/)).
 | Device | Do |
 |---|---|
 | Another computer | **Have a code? Join** on Home or on Settings → Connect, or **Join a shared workspace…** in the Layers panel's title menu. Paste the link or type the six words, then **Connect**. |
-| Phone app (not published yet) | Scan the QR code. |
-| Phone, browser | Turn on **Open in the phone's browser, no app needed** first, then scan the code with the camera: [Phone and browser](../phone/#pair). |
+| Phone, browser | Choose the **Phone browser** tab first, then scan the code with the camera: [Phone and browser](../phone/#pair). |
 
 The other device then shows three words and waits for your answer.
 
@@ -97,4 +95,6 @@ workspace**, **Move there** hands it to a host you paired; **Keep it running** s
 one. **Move here**, on the workspace's banner, brings it back. Details:
 [`hive host`](../cli/#hive-host--an-always-on-host).
 
-Invite links come from a host's command line, `hive share`; the person pastes one into **Join**.
+Invite links come from the command line, `hive share`, on the computer or host whose workspace
+it is; the person pastes one into **Join**, or runs `hive join <link>`. See
+[Share a workspace](../multiplayer/).

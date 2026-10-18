@@ -39,8 +39,8 @@ const iconOf = (m) => {
 
 const agents = [];
 const seen = new Set();
-// Counted from the manifests themselves, not from the icons: droid ships without a mark, and a
-// strip that counts icons would quietly under-report what the registry carries.
+// Every listed agent is on the strip, so it and the FAQ give one count; one without a mark shows its
+// name alone.
 let total = 0;
 
 // openclaw is a test-only fixture: it is not on the registry.
@@ -51,7 +51,7 @@ for (const f of readdirSync(PUBLISHED).filter((n) => !n.startsWith(".") && n !==
     const m = parse(readFileSync(file, "utf8"));
     if (m?.id) total += 1;
     const icon = iconOf(m);
-    if (m?.id && icon && !seen.has(m.id)) { seen.add(m.id); agents.push({ id: m.id, label: m.label ?? m.id, published: true, icon }); }
+    if (m?.id && !seen.has(m.id)) { seen.add(m.id); agents.push({ id: m.id, label: m.label ?? m.id, published: true, icon }); }
   } catch (e) { console.error(`icons: ${f} — ${e.message}`); }
 }
 

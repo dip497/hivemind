@@ -90,7 +90,7 @@ async function stageFromRepo(spec: string, ref: string): Promise<{ dir: string; 
 const installCmd = defineCommand({
   meta: { name: "install", description: "Validate an agent package and copy it into the user agents dir" },
   args: {
-    dir: { type: "positional", required: true, description: "a folder holding agent.yaml, an agent's name on HiveHub (gemini), or owner/repo[/dir] on GitHub" },
+    dir: { type: "positional", required: true, description: "a folder holding agent.yaml, an agent's name on HiveHub (amp), or owner/repo[/dir] on GitHub" },
     replace: { type: "boolean", description: "allow it to take a reserved agent id and point it at another command" },
     ref: { type: "string", description: "branch or tag to take it from (default: the default branch)" },
     yes: { type: "boolean", description: "install from a repository without reading what it does first" },
