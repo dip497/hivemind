@@ -54,7 +54,7 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
   let lastGroup: string | undefined;
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent ref={card} tabIndex={-1} padding="none" className="z-[10000] w-[380px] max-w-[92vw] gap-0 overflow-hidden outline-none" onKeyDown={onKeyDown}
+      <DialogContent ref={card} tabIndex={-1} padding="none" className="w-[380px] max-w-[92vw] gap-0 overflow-hidden outline-none" onKeyDown={onKeyDown}
         // The search box takes the keys when there is one; else the card, for the arrows and Enter.
         onOpenAutoFocus={(e) => { if (rows.length < SEARCH_FROM) { e.preventDefault(); card.current?.focus(); } }}>
         <div className="border-b border-[var(--color-line)] px-3.5 pb-2.5 pt-3 pr-10">

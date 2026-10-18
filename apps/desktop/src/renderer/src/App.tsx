@@ -365,7 +365,7 @@ export function App() {
         {/* Canvas-only workspace. The canvas is full-bleed; floating chrome sits
             on top — frame = workspace, so the per-Frame "+ workspace" bind is the
             canonical add-a-workspace action; Open/Init/Recents live in the sidebar. */}
-        <div className="fixed inset-0 z-30 bg-[var(--color-bg)]">
+        <div className="fixed inset-0 z-(--layer-app) bg-[var(--color-bg)]">
           <Workspace
             cwd={cwd}
             repoPath={repoPath}
@@ -376,7 +376,7 @@ export function App() {
             onRestart={update.restart}
             upgrading={update.upgrading}
           />
-          <div className="absolute top-0 right-0 z-40 flex items-start gap-2 px-3 py-2.5 pointer-events-none">
+          <div className="absolute top-0 right-0 z-(--layer-workspace-actions) flex items-start gap-2 px-3 py-2.5 pointer-events-none">
             <SharedBanner onMoved={openMoved} />
             <WorkspaceActions onPeople={() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "connect" } }))} />
             {!islandShown && !layersShown && <AppControls corner />}

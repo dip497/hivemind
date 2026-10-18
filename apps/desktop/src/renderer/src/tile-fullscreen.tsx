@@ -81,7 +81,7 @@ export function FullscreenShell({
   }, []);
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] overflow-hidden">
+    <div className="fixed inset-0 z-(--layer-fullscreen-tile) overflow-hidden">
       <Wallpaper embedded covering />
       <div className="relative z-10 flex h-full w-full flex-col gap-2 p-3">
         <div className="h-7 flex items-center gap-2 px-1 text-count font-mono text-white/85 shrink-0">

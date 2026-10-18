@@ -108,7 +108,7 @@ export function GitCommitModal({
   const onPull = () => { if (canPull) pullMut.mutate({ repoPath: repoPath! }); };
 
   return (
-    <div className="fixed inset-0 z-[10000] grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
+    <div className="fixed inset-0 z-(--layer-dialogs) grid place-items-center bg-black/50" onClick={() => onOpenChange(false)}>
       <div
         className="hm-surface-3 w-[460px] max-w-[92vw] p-4"
         onClick={(e) => e.stopPropagation()}

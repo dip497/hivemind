@@ -1,11 +1,11 @@
 /* A sheet over the workspace, as the side panels are: set in from the window, corners round. The
    sheet is opaque, so workspace glass never bleeds through it; the workspace dims behind it. */
-.settings-overlay { position: fixed; inset: 0; z-index: 80; background: var(--color-scrim); }
+.settings-overlay { position: fixed; inset: 0; z-index: var(--layer-settings); background: var(--color-scrim); }
 .settings-dialog {
   --color-bg2: var(--surface-2);
   --color-bg3: var(--surface-3);
   --color-bg4: var(--surface-4);
-  position: fixed; z-index: 81; display: flex; overflow: hidden;
+  position: fixed; z-index: calc(var(--layer-settings) + 1); display: flex; overflow: hidden;
   top: 50%; left: 50%; transform: translate(-50%, -50%);
   width: min(1080px, calc(100vw - 48px)); height: min(780px, calc(100vh - 48px));
   border: 1px solid var(--color-line); border-radius: 14px; box-shadow: var(--hm-shadow-3);
