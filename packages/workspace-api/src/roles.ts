@@ -68,6 +68,7 @@ const LEAST: Record<string, Role> = {
   "agent.conversation": "view",
   "agent.tool": "view",
   "agent.approval": "view",
+  "agent.transcript": "view",
   "agent.start": "agents",
   // Where one may be started: the machine's projects, the folders opened lately and those inside a
   // project, which name the person's folders, so only to whoever may start one (0.8).

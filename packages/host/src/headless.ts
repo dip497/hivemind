@@ -72,7 +72,7 @@ import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from 
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
-import type { KnownMachines } from "@hivemind/core/remote-uri";
+import { isRemote, type KnownMachines } from "@hivemind/core/remote-uri";
 import { manifestFacts } from "./agent-list.js";
 import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
@@ -337,7 +337,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     controlApi({ control: () => control.api() }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").
-    conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR))}),
+    conversations({
+      transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
+      runsHere: (bare) => !isRemote(runsIn(heldBoards(store), bare)),
+    }),
     // The community views installed here on the person's phone, their host run here (P8).
     views({
       installed: (repo) => listInstalledViews(repo),

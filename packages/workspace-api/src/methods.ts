@@ -148,6 +148,8 @@ export interface WorkspaceMethods {
   "agent.conversation": (tile: string, cursor?: number, session?: string) => { entries: ConversationEntry[]; cursor: number; session?: string };
   /** (0.9 of spec/agents.md) The tool use `use` in the conversation of the agent of `tile`, unfolded. */
   "agent.tool": (tile: string, use: string) => ToolUse;
+  /** (0.32) The session the agent in `tile` is in, and its file on this machine. */
+  "agent.transcript": (tile: string) => { session: string; path: string };
   /** (0.31) The supervised tool use the agent in `tile` waits on, its input whole. */
   "agent.approval": (tile: string) => Approval;
   /** (0.23) Name the tile `tile`: one line, what every surface shows and the control plane calls it. */

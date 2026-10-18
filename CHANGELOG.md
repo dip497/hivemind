@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- API access: `agent.transcript` (Workspace API 0.32) tells a program on this machine which session an agent is in and where its session file is, so it can follow the agent's own records. A phone, a guest, or an agent on another machine is pointed to `agent.conversation` instead.
+
 - API access: `agent.approval` (Workspace API 0.31) and `hive ctl approval <request>` show what a supervised worker's approval request would do, with its tool's input in full (an edit's text, not only its file), so a program or a person answering it sees what it allows.
 
 - Claude: an agent stopped at startup on the "Settings Warning" (a settings rule was skipped) or the one-time Bypass Permissions mode warning now shows as waiting on you, saying which screen it is (`settings-warning`, `bypass`), to programs, the phone and notifications alike. The bypass warning is answered only at its terminal. Comes with the Claude plugin's update.

@@ -1353,7 +1353,10 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   controlApi({ control: () => control.api() }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
-  conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR))}),
+  conversations({
+    transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
+    runsHere: (bare) => !isRemote(runsIn(heldBoards(workspaceStore()), bare)),
+  }),
   // The community views here on the person's phone, their host run here (P8).
   views({
     installed: (repo) => listInstalledViews(repo, appViewsDir()),
