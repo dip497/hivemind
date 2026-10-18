@@ -1,41 +1,4 @@
-# Website and documentation
+# Engineering notes
 
-Astro + Starlight, built as static HTML. Guides live in `src/content/docs/guide/`.
-The build also exports `/llms.txt`, `/llms-full.txt`, and `/markdown/*.md` from the
-same content. Historical architecture notes remain in `design/`.
-
-## Local development
-
-Requires Node 22.19 or newer.
-
-```sh
-cd docs
-npm ci
-npm run dev
-npm run build
-```
-
-The default base path is `/hivemind`, for GitHub Pages. For hosting at a domain root:
-
-```sh
-SITE_BASE=/ SITE_URL=https://example.com npm run build
-```
-
-GitHub Actions builds `docs/dist` on changes merged to `main`.
-Do not deploy this project through ChatGPT Sites.
-
-## Writing
-
-Keep titles short. Start with the action or behavior. Include commands people can
-run, prerequisites, and actual limitations. Avoid taglines and repeated introductions.
-Mark unreleased features as development previews. Verify command examples against
-`apps/cli/src/commands/` and SDK examples against `packages/hive-view-sdk/src/`.
-
-Draw a flow, a connection or a layout as a diagram instead of describing it: a ```` ```mermaid ````
-block (optionally ```` ```mermaid title="Caption" ````) is drawn as an inline SVG at build time by
-`src/lib/mermaid.mjs`, in the site's colours, with no script on the page. Flowcharts, sequence,
-state, class and ER diagrams are supported.
-
-Use relative links to sibling guides (`../agents/`). The build resolves these to
-absolute URLs in the Markdown exports. Do not copy documentation into a second
-agent-only version.
+Design docs (`design/`), plans (`plans/`), reviews (`reviews/`) and the architecture-debt and
+agent-backlog lists. Not published. The website and its guide are in `../site/`.

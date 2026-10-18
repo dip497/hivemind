@@ -3,7 +3,7 @@
 What a hivemind network's servers are, to run them yourself (R13 in
 `docs/design/multiplayer-2026-09-28.md`): one `hive-net serve --all` serving a relay, a lookup
 server, the access role and the push server on one port (phones told at a distributor in the
-building too with `HIVE_PUSH_ALLOW=<its network>`). The guide is `docs/src/content/docs/guide/self-hosting.md`
+building too with `HIVE_PUSH_ALLOW=<its network>`). The guide is `site/src/content/docs/guide/self-hosting.md`
 (on the docs site: *Self-hosting*).
 
 | File | What |

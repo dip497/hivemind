@@ -10,7 +10,7 @@ const repo = 'https://github.com/dip497/hivemind';
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
 const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 // Every file link goes through /download/<key>, which the server sends on to the current
-// release (docs/downloads.mjs) — a link here never carries a version that will go stale.
+// release (site/downloads.mjs) — a link here never carries a version that will go stale.
 const dl = (key: string) => `${base}/download/${key}`;
 // The strip comes from the published agent manifests, vendored at build time — the page
 // cannot show an agent the registry does not list, or miscount what it carries.

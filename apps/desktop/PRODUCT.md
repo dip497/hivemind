@@ -60,7 +60,7 @@ own pieces use the same contracts as anyone's, with no special built-ins. Agents
 
 ## Evidence on Hand
 
-- Screenshots in `docs/public/shots/` (the canvas, views).
+- Screenshots in `site/public/shots/` (the canvas, views).
 - Plugins published on HiveHub (hivehub.griiken.workers.dev).
 - No customer testimonials, usage numbers or benchmarks are on hand; none may be invented.
 

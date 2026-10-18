@@ -28,11 +28,11 @@ grouped into frames bound to a repo, a worktree or an SSH host.
 - **Answer from your phone.** What waits on you, every agent live, its questions and permission
   prompts — in your phone's browser, through a network you run.
 
-<img alt="The Windows view: the Layers list of sixteen agents in five frames, and the agent waiting on a permission prompt" src="docs/public/shots/view-windows.webp" />
+<img alt="The Windows view: the Layers list of sixteen agents in five frames, and the agent waiting on a permission prompt" src="site/public/shots/view-windows.webp" />
 
 <sub>The Windows view — sixteen agents in five frames; the one that needs you is up front.</sub>
 
-<img alt="The Progress widget above the Windows view: Ship 2026.10.3, 3 of 4 done, each step added and ticked by an agent" src="docs/public/shots/agent-plugins.webp" />
+<img alt="The Progress widget above the Windows view: Ship 2026.10.3, 3 of 4 done, each step added and ticked by an agent" src="site/public/shots/agent-plugins.webp" />
 
 <sub>An agent installed the Progress widget from HiveHub and ticked off its steps as it worked.</sub>
 

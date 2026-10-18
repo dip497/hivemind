@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "docs/**"
+      - "site/**"
       - ".github/workflows/site.yml"
   workflow_dispatch:
 
@@ -36,7 +36,7 @@ jobs:
 
       - name: Deploy hivemind-site
         run: gcloud run deploy hivemind-site --source . --region europe-west1 --allow-unauthenticated --quiet
-        working-directory: docs
+        working-directory: site
 
       - name: The service answers
         run: |
