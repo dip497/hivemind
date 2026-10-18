@@ -1,6 +1,6 @@
 # Agents survive an app upgrade
 
-Status: accepted 2026-10-18. Steps 1–3 built (`daemon-replace.ts`, `daemon-client.ts`); steps 4–7 follow. Facts below were checked on this Linux laptop on
+Status: accepted 2026-10-18. Steps 1–3 built (`daemon-replace.ts`, `daemon-client.ts`); steps 4–7 built (`install.sh`, `install.ps1`, `daemon-runtime.ts`, `remote/pty.ts`). Facts below were checked on this Linux laptop on
 2026-10-18; facts marked *from code* were read, not run (no Mac or Windows machine here).
 
 ## Verdict
@@ -317,6 +317,14 @@ It is 2027 and B failed. Most likely why:
 Built in steps 1–3, and left for later: a daemon of the same protocol from an older build is kept
 as it is, with no "update waiting" yet; the daemon still ignores a request it does not know rather
 than answering it with an error.
+
+Built in steps 4–7: `install.sh` counts only the app, not its daemon, as running, so on macOS an
+upgrade is no longer refused and on Linux it goes in place instead of staged. `install.ps1` puts
+each version in `app-<version>` and removes a folder once nothing runs from it. An AppImage started
+directly runs its daemon from a copy extracted once per version under `<userData>/runtime/`. A
+machine's daemon of another protocol is replaced the same way when its `hive` speaks this app's
+protocol (`hive daemon status --json` → `speaks`); when that `hive` is older, the machine shows
+*attention: update it there*. There is no *Restart them now* for a machine yet.
 
 ## Unknown
 
