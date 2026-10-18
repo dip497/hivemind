@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New widgets stack down the right edge by their real height, so a tall widget is no longer covered by the ones added after it; a column that reaches the bottom goes on to its left.
+
 - A guest who joins a workspace sees its board: when the host's last change was not to its frames and tiles (a tile moved, say), the guest's board stayed empty though connected.
 
 - An agent started with `hive ctl spawn` no longer draws garbled text: the tile's size, given while the session was still starting (seconds on a remote machine), was lost, so the agent kept drawing at 120×36 inside a tile of another size.
