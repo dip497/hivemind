@@ -92,9 +92,9 @@ hive-net is `UNSUPPORTED`. The path is found as `agent.conversation` finds the f
 | | Today (16/min) | A looping program |
 |---|---|---|
 | one for all | 1,000 spawns ≈ 63 min | locks out the person and every agent |
-| one per caller (person, each grant, each agent) | same for one caller | locks out itself |
+| one per tree (its root: a grant, an agent the person started, the person), 64 for the machine | same for one tree | locks out itself; a tree of 3 levels still shares 16 |
 
-**One each.** A slot is taken only by a call that passes its checks.
+**One per tree, under a machine ceiling.** A slot is taken only by a call that passes its checks. One per caller lost: each child agent would bring its own 16 (16 → 256 → 4,096 by depth 3).
 
 ### The rest have one answer
 
@@ -139,7 +139,7 @@ host stops, the app does not take `drive.sock` over until it starts again (as to
 |---|---|---|
 | Each process that may serve `drive.sock` keeps grants | D1 (61e4d4f), habit | two owners of one file: a revoke in Settings did not reach the host |
 | A service's leftover grant is taken back when its own plugin starts again | D8 | a plugin switched off never starts again: its token held for ever |
-| One spawn limit for every caller | the control plane (cb4273c), made when only agents spawned | programs share it now; one loop locks out the person |
+| One spawn limit for every caller | the control plane (cb4273c), made when only agents spawned | programs share it now; one loop locks out the person. Replaced by one per tree, charged to its root (the program, the agent the person started, or the person), under 64 a minute for the machine: a limit per caller let each child agent bring 16 more (review, 2026-10-18) |
 | No transcript path anywhere (`agent.conversation` only) | D6 | its reason (a guest or phone gets this machine's paths) does not hold for a program on this machine |
 | The agent feed's `seq` counts from 0 in each process | habit | a cursor from the process before reads as current |
 

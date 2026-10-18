@@ -1,6 +1,7 @@
-// Agents started through the control plane (control/methods.ts, plane.ts): each caller has its own
-// limit of starts a minute, so one program at its limit leaves the person and other programs free,
-// and a start refused for what it asks uses none of it.
+// Agents started through the control plane (control/methods.ts, plane.ts): each tree of callers (a
+// program, an agent the person started, or the person, with the agents started under it) has its
+// own limit of starts a minute, under one for the whole machine; so one program at its limit leaves
+// the person and other programs free, and a start refused for what it asks uses none of it.
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -56,4 +57,19 @@ test("a start refused for what it asks uses none of the caller's limit", async (
   const p = plane();
   for (let i = 0; i < 20; i++) assert.equal(await code(p.start(REPO, { program: "nothing-installed", parent: "client:typo" })), "BAD_REQUEST");
   assert.equal(await code(p.start(REPO, { program: "acme", parent: "client:typo" })), "started");
+});
+
+test("an agent started by a program starts no more than what is left of that program's limit, while another program still starts", async () => {
+  const p = plane();
+  const worker = await p.start(REPO, { program: "acme", parent: "client:root" });
+  for (let i = 0; i < 15; i++) assert.equal(await code(p.start(REPO, { program: "acme", parent: worker })), "started");
+  assert.equal(await code(p.start(REPO, { program: "acme", parent: worker })), "RATE_LIMITED");
+  assert.equal(await code(p.start(REPO, { program: "acme", parent: "client:root" })), "RATE_LIMITED");
+  assert.equal(await code(p.start(REPO, { program: "acme", parent: "client:other" })), "started");
+});
+
+test("however many callers there are, the machine starts no more than 64 a minute", async () => {
+  const p = plane();
+  for (let i = 0; i < 64; i++) assert.equal(await code(p.start(REPO, { program: "acme", parent: `client:g${i % 8}` })), "started");
+  assert.equal(await code(p.start(REPO, { program: "acme", parent: "client:fresh" })), "RATE_LIMITED");
 });

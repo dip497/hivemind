@@ -76,8 +76,10 @@ export interface ControlPlaneOptions {
  *  would pin a tile's subagents forever: once the last subagent edge is this old, the plane
  *  reports the rest stopped. Every edge pushes the deadline out. */
 const SUBAGENT_REAP_MS = 120_000;
-/** Anti-fork-bomb: at most this many control-plane spawns a minute, by each caller. */
+/** Anti-fork-bomb: at most this many control-plane spawns a minute by each tree of callers… */
 const SPAWNS_A_MINUTE = 16;
+/** …and this many by all of them. */
+const SPAWNS_ALL_A_MINUTE = 64;
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 /** What an agent's terminal is told when messages wait in its inbox; never what they say. */
 const DOORBELL = "\n[hive] Your agents sent you messages. Read them: hive ctl inbox\n";
@@ -469,7 +471,7 @@ export class ControlPlane {
     });
   }
 
-  // Each caller its own: one program in a loop does not stop the person or others starting agents.
+  // Each tree its own: one program in a loop does not stop the person or others starting agents.
   private spawnAllowed(by: string): boolean {
     const now = Date.now();
     for (const [who, times] of this.spawnTimes) {
@@ -478,7 +480,9 @@ export class ControlPlane {
       else this.spawnTimes.delete(who);
     }
     const times = this.spawnTimes.get(by) ?? [];
-    if (times.length >= SPAWNS_A_MINUTE) return false;
+    let all = 0;
+    for (const t of this.spawnTimes.values()) all += t.length;
+    if (times.length >= SPAWNS_A_MINUTE || all >= SPAWNS_ALL_A_MINUTE) return false;
     this.spawnTimes.set(by, [...times, now]);
     return true;
   }
