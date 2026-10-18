@@ -56,6 +56,10 @@ are refused (*joining a workspace is the person's, at this machine: run `hive jo
 terminal of your own…*). Your own devices need no link at all: a workspace on another of your
 devices opens from **Open recent → On your devices** in the app.
 
+`hive share`, like every command that takes a workspace, names it by its folder, its folder's name
+or its id. When two workspaces answer to the name you give, it is refused and lists each with its id
+and folder; give the id.
+
 ## Answer someone asking to join
 
 In the app, a notice reads *⟨name⟩ wants to join ⟨workspace⟩ as ⟨role⟩*, with **Allow** and

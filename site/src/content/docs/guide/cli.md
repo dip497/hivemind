@@ -110,6 +110,11 @@ Run inside an agent's tile, these act on that agent's workspace, as that agent. 
 they act as you, on the workspace `--repo` names, else the open one your folder is in, else the
 only one open. `send` and `close` to a tile no agent runs exit 5.
 
+`--repo` here, `hive share <workspace>`, `hive people -w` and `hive grant create -w` all name a
+workspace the same way: by its folder, its folder's name, or its id (the first four characters or
+more). A name two workspaces answer to is refused, with each one's id and folder, so you can name
+the one you mean; nothing is guessed.
+
 ## `hive ctl` — plugins
 
 ```text

@@ -126,7 +126,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     await hive(["ctl", "agents", "--json"], { cwd: nested, env: env() });
     expect(last("agent.list").params).toEqual([nested]);
     const which = await hive(["ctl", "agents", "--json"], { cwd: dir, env: env() });
-    expect([which.code, (which.json as { message: string }).message]).toEqual([2, `which workspace? run this inside one, or give --repo: ${repoA}, ${nested}, ${repoB}`]);
+    expect([which.code, (which.json as { message: string }).message]).toEqual([2, `say which of the host's workspaces: a (not shared) at ${repoA}; sub (not shared) at ${nested}; b (not shared) at ${repoB}`]);
   });
 
   test("as an agent, by its tile's token, it drives its own workspace as itself; another is refused", async () => {

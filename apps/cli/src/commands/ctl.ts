@@ -31,6 +31,7 @@ import {
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile } from "../hcp.js";
 import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
+import { workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, resolveAgent, superviseOf, workflowPlan } from "../ctl-args.js";
 import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
@@ -104,20 +105,18 @@ async function onDrive<T>(use: (d: Drive) => Promise<T>): Promise<T> {
   }
 }
 
-/** The workspace a command acts on: `--repo`, else an agent's own, else of those open here the one
- *  this folder is in, or the only one. */
+/** The workspace a command acts on: for the person, the one `--repo` names or else the one this
+ *  folder is in (`workspaceNamed`); for an agent or a program, `--repo`'s folder, else its own. */
 async function workspaceOf(d: Drive, repo: unknown): Promise<string> {
-  if (typeof repo === "string" && repo) return path.resolve(repo);
-  if (d.as !== "person") return d.as.workspace;
-  const open = ((await d.call("host.status", [])) as { workspaces: Array<{ repo: string }> }).workspaces.map((w) => w.repo);
-  const here = process.cwd();
-  const within = open.filter((r) => here === r || here.startsWith(r + path.sep)).sort((a, b) => b.length - a.length);
-  if (within.length) return within[0]!;
-  if (open.length === 1) return open[0]!;
-  throw new UsageError(open.length ? `which workspace? run this inside one, or give --repo: ${open.join(", ")}` : "no workspace is open: open one in the app, or `hive host add <folder>`");
+  const given = typeof repo === "string" && repo ? repo : null;
+  if (d.as !== "person") return given ? path.resolve(given) : d.as.workspace;
+  const { workspaces } = (await d.call("host.status", [])) as { workspaces: HostWorkspace[] };
+  const named = workspaceNamed(workspaces, given, process.cwd());
+  if ("refused" in named) throw new UsageError(named.refused);
+  return named.repo;
 }
 
-const repoArg = { repo: { type: "string", description: "the workspace's folder (default: your own, as an agent; else the one this folder is in)" } } as const;
+const repoArg = { repo: { type: "string", description: "the workspace: its folder, name or id (default: your own, as an agent; else the one this folder is in)" } } as const;
 
 type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string } };
 type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };

@@ -9,6 +9,7 @@
  *   hive join <link>      ask to join; waits while the owner decides
  */
 import { defineCommand } from "citty";
+import { workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 import path from "node:path";
 import type { JoinRequests, PersonHere } from "@hivemind/workspace-api/people";
 import type { JoinReply } from "@hivemind/workspace-host/join";
@@ -37,19 +38,11 @@ async function callFor(ctx: OutCtx, ms: number, method: string, ...params: unkno
 }
 const call = (ctx: OutCtx, method: string, ...params: unknown[]) => callFor(ctx, 10_000, method, ...params);
 
-/** The folder of the host's workspace `given` names (its folder, its name, or its id's start);
- *  none given: the one this folder is in, or the host's only one. */
+/** The folder of the host's workspace `given` names (`workspaceNamed`). */
 async function workspaceOf(ctx: OutCtx, given: unknown): Promise<string> {
-  const { workspaces } = (await call(ctx, "host.status")) as { workspaces: Array<{ repo: string; workspace: string | null }> };
-  const g = typeof given === "string" && given ? given : null;
-  const cwd = process.cwd();
-  const found = g
-    ? workspaces.filter((w) => w.repo === path.resolve(g) || path.basename(w.repo) === g || (g.length >= 4 && !!w.workspace?.startsWith(g)))
-    : workspaces.filter((w) => cwd === w.repo || cwd.startsWith(`${w.repo}${path.sep}`));
-  const one = found.length === 1 ? found[0] : !g && workspaces.length === 1 ? workspaces[0] : undefined;
-  if (one) return one.repo;
-  const names = workspaces.map((w) => path.basename(w.repo)).join(", ") || "none yet (`hive host add <folder>`)";
-  return err(ctx, "usage", `${g ? `"${g}" names ${found.length ? "more than one" : "none"} of` : "say which of"} the host's workspaces (--workspace): ${names}`, EXIT.usage);
+  const { workspaces } = (await call(ctx, "host.status")) as { workspaces: HostWorkspace[] };
+  const named = workspaceNamed(workspaces, typeof given === "string" && given ? given : null, process.cwd());
+  return "repo" in named ? named.repo : err(ctx, "usage", named.refused, EXIT.usage);
 }
 
 function role(ctx: OutCtx, given: unknown, allowed: string[]): string | undefined {
@@ -60,13 +53,13 @@ function role(ctx: OutCtx, given: unknown, allowed: string[]): string | undefine
   return err(ctx, "usage", `--role is one of ${allowed.join(", ")}`, EXIT.usage);
 }
 
-const workspaceArg = { workspace: { type: "string", alias: "w", description: "which workspace (default: the one this folder is in, or the host's only one)" } } as const;
+const workspaceArg = { workspace: { type: "string", alias: "w", description: "which workspace: its folder, name or id (default: the one this folder is in, or the host's only one)" } } as const;
 const json = { json: { type: "boolean" } } as const;
 
 export const shareCmd = defineCommand({
   meta: { name: "share", description: "Make an invite link to one of this host's workspaces" },
   args: {
-    workspace: { type: "positional", required: false, description: "its folder or name (default: the one this folder is in, or the host's only one)" },
+    workspace: { type: "positional", required: false, description: "its folder, name or id (default: the one this folder is in, or the host's only one)" },
     role: { type: "string", description: "what they may do: view, edit or terminals (default: edit)" },
     uses: { type: "string", description: "how many people it lets in (default: 1)" },
     expires: { type: "string", description: "how long it works: 30m, 12h, 7d … (default: 7d)" },
