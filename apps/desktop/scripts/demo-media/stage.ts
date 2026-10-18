@@ -329,7 +329,7 @@ export function recorder(s: Stage, out: string, base = out) {
   const still = async (page: Page, name: string) => {
     const file = `frames/${name}.png`;
     const parts = await partsOf(page, 2);
-    await page.screenshot({ path: path.join(out, file) });
+    await page.screenshot({ path: path.join(out, file), timeout: 120_000 });
     shots.push({ beat: name, files: [rel(file)], at: [Date.now() - t0], layout: [layout(parts)] });
   };
   /** Where `sel` is in the window's capture (twice its CSS pixels). */
