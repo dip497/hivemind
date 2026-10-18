@@ -62,10 +62,6 @@ for (const [k, v] of [
   ["appearance.wallpaper.kind", opt("image", null) ? "image" : WALLPAPER],
   ["appearance.terminal.background", "#121416"],
 ]) cli("config", "set", k, JSON.stringify(v));
-// The published views, installed from HiveHub as anyone would, so a shot can show a plugin.
-const VIEWS = ["queue", "tiled", "board"];
-const published = (name) => `@dip497/${name}`;
-for (const id of VIEWS) cli("views", "install", published(id));
 // A widget from HiveHub and a tool from this repository's examples, added as their guides say.
 const WIDGET = "@dip497/progress";
 cli("widgets", "install", WIDGET);
@@ -210,12 +206,6 @@ try {
 
   await emit("hivemind:set-view-mode", { mode: "windows" });
   await shot(`windows-${MODE}`);
-
-  for (const id of VIEWS) {
-    await emit("hivemind:set-view-mode", { mode: published(id) });
-    await page.waitForSelector(`[data-community-view="${published(id)}"][data-community-ready="1"]`, { timeout: 15_000 }).catch(() => {});
-    await shot(`${id}-${MODE}`);
-  }
 
   // ── plugins on the canvas: a tool's tile, and a widget an agent keeps up to date ─────
   await emit("hivemind:set-view-mode", { mode: "canvas" });

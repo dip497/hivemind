@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { QUEUE_DIR, dockViaQueue, queueReady } from "./helpers/queue-view";
+import { TILE_LIST_DIR, dockFromList, tileListReady } from "./helpers/tile-list-view";
 import { seedAgents } from "./helpers/agents";
 import { pick } from "./helpers/select";
 
@@ -36,7 +36,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  execFileSync("bun", [CLI, "views", "install", QUEUE_DIR, "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
+  execFileSync("bun", [CLI, "views", "install", TILE_LIST_DIR, "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
   page = await app.firstWindow();
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });
@@ -67,7 +67,7 @@ test("the island is host chrome: top on the canvas, a compact bottom island in a
   await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]', { timeout: 15_000 });
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   let n = await terminalNodes();
-  for (const [view, ready] of [["queue", queueReady]] as const) {
+  for (const [view, ready] of [["tile-list", tileListReady]] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
     const island = page.locator('[data-host-island="bottom"] [data-tool-island]');
@@ -83,8 +83,8 @@ test("the island is host chrome: top on the canvas, a compact bottom island in a
 });
 
 test("the toolbar's Theme button opens Appearance beside the workspace, live, from a non-canvas view", async () => {
-  await toView("queue");
-  await page.waitForSelector(queueReady, { timeout: 15_000 });
+  await toView("tile-list");
+  await page.waitForSelector(tileListReady, { timeout: 15_000 });
   const theme = page.locator('[data-host-island="bottom"] [data-tool-island]').getByTitle(/^Theme/);
   await theme.click();
   const panel = page.locator("[data-theme-panel]");
@@ -122,7 +122,7 @@ test("wallpaper policy: an installed view gets the user's wallpaper behind it to
   await toView("windows");
   await page.waitForTimeout(300);
   await expect(page.locator(".hm-wallpaper")).toHaveCount(1);
-  for (const [view, ready] of [["queue", queueReady]] as const) {
+  for (const [view, ready] of [["tile-list", tileListReady]] as const) {
     await toView(view);
     await page.waitForSelector(ready, { timeout: 15_000 });
     // The wallpaper is the user's, not the canvas's: a view paints over it, and its own
@@ -140,17 +140,17 @@ test("wallpaper policy: an installed view gets the user's wallpaper behind it to
 test("community slot bar: the host's undock releases the tile and tells the plugin; Shift+Esc works there too", async () => {
   await toView("canvas");
   const tileId = (await page.locator(".react-flow__node-terminal").first().getAttribute("data-id"))!;
-  await toView("queue");
-  await page.waitForSelector(queueReady, { timeout: 15_000 });
-  const dock = () => dockViaQueue(page, tileId);
+  await toView("tile-list");
+  await page.waitForSelector(tileListReady, { timeout: 15_000 });
+  const dock = () => dockFromList(page, tileId);
   await dock();
   // Pop out: the tile lands on the canvas, selected. (Proved in the World view until it
   // was removed; the slot bar is the host's, so any docking view proves it.)
   await page.locator(`[data-slot-bar="${tileId}"]`).getByLabel("Pop out to canvas").click();
   await expect.poll(activeView).toBe("canvas");
   await expect(page.locator(`.react-flow__node-terminal[data-id="${tileId}"] .hm-node-selected`)).toHaveCount(1, { timeout: 5_000 });
-  await toView("queue");
-  await page.waitForSelector(queueReady, { timeout: 15_000 });
+  await toView("tile-list");
+  await page.waitForSelector(tileListReady, { timeout: 15_000 });
   await dock();
   await page.locator(`[data-slot-bar="${tileId}"]`).getByLabel("Undock").click();
   await expect(page.locator("[data-community-slot]")).toHaveCount(0);
@@ -179,7 +179,7 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   await expect(settings()).toHaveCount(0);
   expect(await page.locator(".xterm").first().evaluate((node, old) => node === old, original)).toBe(true);
   await original?.dispose();
-  await toView("queue");
+  await toView("tile-list");
   await expect(page.locator('[data-host-island="bottom"]')).toBeVisible();
   await toView("canvas");
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
@@ -202,18 +202,18 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
 
 test("collapsed toolbar expansion does not leak across views or placement changes", async () => {
   const configure = (chrome: Record<string, { island: "hidden" | "off" }>) => page.evaluate((value) => window.hive.settingsSet("views.chrome", value), chrome);
-  await configure({ canvas: { island: "hidden" }, queue: { island: "hidden" } });
+  await configure({ canvas: { island: "hidden" }, "tile-list": { island: "hidden" } });
   await toView("canvas");
   await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await page.getByRole("button", { name: "show tools", exact: true }).click();
   await expect(page.locator("[data-host-island]")).toBeVisible();
-  await toView("queue");
+  await toView("tile-list");
   await expect(page.getByRole("button", { name: "show tools", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await page.getByRole("button", { name: "show tools", exact: true }).click();
-  await configure({ queue: { island: "off" } });
+  await configure({ "tile-list": { island: "off" } });
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
-  await configure({ queue: { island: "hidden" } });
+  await configure({ "tile-list": { island: "hidden" } });
   await expect(page.getByRole("button", { name: "show tools", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("[data-host-island]")).toHaveCount(0);
   await configure({});

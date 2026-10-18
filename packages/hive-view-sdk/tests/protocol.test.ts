@@ -182,19 +182,19 @@ describe("validateViewManifest", () => {
   test("an id is a name, or @owner/name from the registry, and never passes for one it is not", () => {
     const ok = (id: string) => validateViewManifest({ ...good, id }).ok;
     expect(ok("board")).toBe(true);
-    expect(ok("@dip497/board")).toBe(true);
+    expect(ok("@someone/notes")).toBe(true);
     // `--` is what a scoped id becomes as a hostname, so a bare one may not contain it.
-    expect(ok("dip497--board")).toBe(false);
+    expect(ok("someone--notes")).toBe(false);
     expect(ok("@dip497/bo--ard")).toBe(false);
-    for (const bad of ["dip497/board", "@/board", "@Dip/board", "@a/b/c", "@a/../b", "@dip497/"]) expect(ok(bad)).toBe(false);
+    for (const bad of ["someone/notes", "@/board", "@Dip/board", "@a/b/c", "@a/../b", "@dip497/"]) expect(ok(bad)).toBe(false);
     // The hostname label is at most 63 characters.
     expect(ok(`@${"a".repeat(39)}/${"b".repeat(22)}`)).toBe(true);
     expect(ok(`@${"a".repeat(39)}/${"b".repeat(23)}`)).toBe(false);
   });
   test("a view's sandbox host is its id, or owner--name for a scoped one", () => {
     expect(viewHost("board")).toBe("board");
-    expect(viewHost("@dip497/board")).toBe("dip497--board");
-    expect(new URL(`http://${viewHost("@dip497/board")}/x`).host).toBe("dip497--board");
+    expect(viewHost("@someone/notes")).toBe("someone--notes");
+    expect(new URL(`http://${viewHost("@someone/notes")}/x`).host).toBe("someone--notes");
   });
   test("reports every problem", () => {
     const r = validateViewManifest({ id: "Bad Id", name: "", version: "one", entry: "../x.js", permissions: ["fs:read", "workspace:spawn"], protocol: 0, extra: 1 });

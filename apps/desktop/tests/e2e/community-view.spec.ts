@@ -1,5 +1,5 @@
 // Community views end to end (design doc phase 4): `hive views install` of the
-// example Queue view → it appears in the switcher and the ⌘E cycle → its
+// tile-list fixture view → it appears in the switcher and the ⌘E cycle → its
 // sandboxed iframe sees no privileged API → clicking a tile's row docks the LIVE
 // terminal through the hole-punch and typed keys arrive → a flooding plugin
 // and a CPU-burning plugin are disabled and the canvas comes back with every
@@ -13,7 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { QUEUE_DIR, dockViaQueue, framesDrawn, queueReady, releaseViaQueue } from "./helpers/queue-view";
+import { TILE_LIST_DIR, dockFromList, framesDrawn, tileListReady, releaseFromList } from "./helpers/tile-list-view";
 import { seedAgents } from "./helpers/agents";
 
 test.use({ trace: "off" });
@@ -51,9 +51,9 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  const installed = hive("views", "install", QUEUE_DIR);
+  const installed = hive("views", "install", TILE_LIST_DIR);
   expect(installed.ok).toBe(true);
-  expect(installed.data.dir).toBe(path.join(viewsDir(), "queue"));
+  expect(installed.data.dir).toBe(path.join(viewsDir(), "tile-list"));
   app = await electron.launch({
     // No --user-data-dir: the profile is isolated by this run's XDG_CONFIG_HOME
     // (playwright.config.ts), and that is where the app's HCP socket lands
@@ -87,15 +87,15 @@ test.afterAll(async () => {
   await fs.promises.rm(XDG, { recursive: true, force: true }).catch(() => {});
 });
 
-test("an installed view is registered after the app's own: ⌘E cycles canvas → windows → queue → canvas", async () => {
-  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue"]);
+test("an installed view is registered after the app's own: ⌘E cycles canvas → windows → tile-list → canvas", async () => {
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "tile-list"]);
   expect(await activeView()).toBe("canvas");
   const seen: string[] = [];
   // One toggle per registered view, so the cycle ends where it started — a lap too many
   // leaves the next test on the wrong view.
   for (let i = 0; i < 3; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
-  expect(seen).toEqual(["windows", "queue", "canvas"]);
-  expect(hive("views", "list").data.map((v: { id: string; error: string | null }) => [v.id, v.error])).toEqual([["queue", null]]);
+  expect(seen).toEqual(["windows", "tile-list", "canvas"]);
+  expect(hive("views", "list").data.map((v: { id: string; error: string | null }) => [v.id, v.error])).toEqual([["tile-list", null]]);
 });
 
 test("a view's frame is see-through where no pane covers it: the dark app shows, not white", async () => {
@@ -121,9 +121,9 @@ test("a view's frame is see-through where no pane covers it: the dark app shows,
 });
 
 test("the plugin runs sandboxed: its own origin, no window.hive, no node, no network", async () => {
-  await toView("queue");
-  await page.waitForSelector(queueReady, { timeout: 15_000 });
-  const frame = page.frame({ name: "hm-view:queue" });
+  await toView("tile-list");
+  await page.waitForSelector(tileListReady, { timeout: 15_000 });
+  const frame = page.frame({ name: "hm-view:tile-list" });
   expect(frame).toBeTruthy();
   const seen = await frame!.evaluate(async () => ({
     origin: location.origin,
@@ -133,7 +133,7 @@ test("the plugin runs sandboxed: its own origin, no window.hive, no node, no net
     fetch: await fetch("https://example.com/").then(() => "ok", () => "blocked"),
     parent: (() => { try { return String(Object.keys(window.parent.document).length); } catch { return "blocked"; } })(),
   }));
-  expect(seen).toEqual({ origin: "hm-view://queue", hive: "undefined", process: "undefined", require: "undefined", fetch: "blocked", parent: "blocked" });
+  expect(seen).toEqual({ origin: "hm-view://tile-list", hive: "undefined", process: "undefined", require: "undefined", fetch: "blocked", parent: "blocked" });
 });
 
 test("click a tile's row: the LIVE terminal docks through the hole-punch, typed keys arrive, Escape releases it", async () => {
@@ -142,7 +142,7 @@ test("click a tile's row: the LIVE terminal docks through the hole-punch, typed 
   // The plugin answers `reveal` with where it shows the tile (null until it has
   // received `structure`, which follows `hello` by a message).
   await expect.poll(() => reveal(tileId), { timeout: 10_000 }).toBeTruthy();
-  await dockViaQueue(page, tileId);
+  await dockFromList(page, tileId);
   const slot = page.locator(`[data-community-surfaces] [data-tile-slot="${tileId}"]`);
   await expect(slot).toBeVisible({ timeout: 5_000 });
   // The SAME xterm instance, adopted into the overlay slot — never a copy.
@@ -155,7 +155,7 @@ test("click a tile's row: the LIVE terminal docks through the hole-punch, typed 
   await page.keyboard.press("Enter");
   await expect.poll(() => fs.existsSync(marker), { timeout: 5_000 }).toBe(true);
   // Release from inside the view (its rule), and the surface parks again.
-  await releaseViaQueue(page);
+  await releaseFromList(page);
   await expect(slot).toHaveCount(0);
   expect(await probe("#hm-tile-park .xterm")).toBe("kept");
   // Render on demand: frames were drawn for the changes above, and none while nothing changes.
@@ -178,15 +178,15 @@ test("`hive views install` while the app runs: the CLI asks the app to rescan an
     expect(r.data.rescanned).toBe(true);
   }
   // No reloadViews() here: the rescan came from the CLI's HCP call.
-  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue", "hostile-flood", "hostile-loop"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "tile-list", "hostile-flood", "hostile-loop"]);
   const seen: string[] = [];
   await toView("canvas");
   for (let i = 0; i < 5; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
-  expect(seen).toEqual(["windows", "queue", "hostile-flood", "hostile-loop", "canvas"]);
+  expect(seen).toEqual(["windows", "tile-list", "hostile-flood", "hostile-loop", "canvas"]);
 });
 
 test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes back with the session intact", async () => {
-  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue", "hostile-flood", "hostile-loop"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "tile-list", "hostile-flood", "hostile-loop"]);
 
   await toView("hostile-flood");
   await expect.poll(activeView, { timeout: 10_000 }).toBe("canvas");
@@ -209,7 +209,7 @@ test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes 
   expect((await report()).refused["hostile-loop"]).toMatch(/^disabled: runaway/);
   // Disabled for the session: gone from the cycle even after a rescan.
   await reloadViews();
-  await expect.poll(async () => (await report()).registered).toEqual(["windows", "queue"]);
+  await expect.poll(async () => (await report()).registered).toEqual(["windows", "tile-list"]);
   await expect(page.locator(".xterm")).toHaveCount(1);
   await page.waitForSelector(".react-flow__node-terminal .xterm");
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
@@ -224,14 +224,14 @@ test("a package asking for an unknown permission is refused by install AND by th
   fs.cpSync(path.join(FIXTURES, "greedy"), path.join(viewsDir(), "greedy"), { recursive: true });
   await reloadViews();
   await expect.poll(async () => (await report()).refused["greedy"]).toMatch(/unknown permission "fs:read"/);
-  expect((await report()).registered).toEqual(["windows", "queue"]);
+  expect((await report()).registered).toEqual(["windows", "tile-list"]);
   expect(hive("views", "list").data.find((v: { id: string }) => v.id === "greedy").error).toMatch(/unknown permission/);
 });
 
 test("`hive views remove` of the ACTIVE view: the app rescans, the switcher drops it, the canvas is shown", async () => {
-  await toView("queue");
-  await page.waitForSelector(queueReady, { timeout: 15_000 });
-  const r = hive("views", "remove", "queue");
+  await toView("tile-list");
+  await page.waitForSelector(tileListReady, { timeout: 15_000 });
+  const r = hive("views", "remove", "tile-list");
   expect(r.ok).toBe(true);
   expect(r.data.rescanned).toBe(true);
   // No reloadViews(): the CLI's rescan did it.

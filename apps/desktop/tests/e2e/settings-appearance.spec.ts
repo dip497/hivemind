@@ -8,7 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { QUEUE_DIR, dockViaQueue, queueReady } from "./helpers/queue-view";
+import { TILE_LIST_DIR, dockFromList, tileListReady } from "./helpers/tile-list-view";
 import { seedAgents } from "./helpers/agents";
 import { pick } from "./helpers/select";
 
@@ -47,7 +47,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  execFileSync("bun", [CLI, "views", "install", QUEUE_DIR, "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
+  execFileSync("bun", [CLI, "views", "install", TILE_LIST_DIR, "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
   page = await app.firstWindow();
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });
@@ -93,9 +93,9 @@ test("`hive theme use` repaints the running app — no restart, no reopened wind
 test("pluginSurfaces: an installed view shows the wallpaper behind it, and 'opaque' takes the glass off the tools docked into it", async () => {
   await toView("canvas");
   const tileId = (await page.locator(".react-flow__node-terminal").first().getAttribute("data-id"))!;
-  await toView("queue");
-  await page.waitForSelector(queueReady, { timeout: 15_000 });
-  const dock = () => dockViaQueue(page, tileId);
+  await toView("tile-list");
+  await page.waitForSelector(tileListReady, { timeout: 15_000 });
+  const dock = () => dockFromList(page, tileId);
   await dock();
   // One layer, full-window, behind the view; a slot needs no copy of its own because the
   // view's surfaces are translucent and the wallpaper already sits behind them.
@@ -129,7 +129,7 @@ test("a preserved terminal follows the view's opacity without another theme chan
   await expect(terminal).toHaveAttribute("data-term-bg", "rgba(0,0,0,0)");
   const original = await terminal.elementHandle();
   const background = onDisk().appearance.terminal.background;
-  await toView("queue");
+  await toView("tile-list");
   await expect(terminal).toHaveAttribute("data-term-bg", background);
   await toView("canvas");
   await expect(terminal).toHaveAttribute("data-term-bg", "rgba(0,0,0,0)");

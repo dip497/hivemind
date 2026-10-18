@@ -391,7 +391,7 @@ for (let run = 0; run < RUNS; run++) for (const [b, main] of MAINS.entries()) {
     await open("plugin page", settings("plugin:agent:claude"),
       () => !!document.querySelector("[data-plugin-page] [role=tabpanel]") && performance.timeOrigin + performance.now(), escape);
     // A plugin HiveHub lists and this app has not installed: its page and its README.
-    await open("hivehub plugin page", settings("plugin:view:@dip497/queue"),
+    await open("hivehub plugin page", settings("plugin:view:@dip497/widgets"),
       () => {
         const panel = document.querySelector("[data-plugin-page] [role=tabpanel]");
         return !!panel && panel.textContent.length > 10 && !panel.querySelector("[role=status][aria-live]") && performance.timeOrigin + performance.now();

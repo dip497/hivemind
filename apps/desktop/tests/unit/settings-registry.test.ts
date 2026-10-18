@@ -75,7 +75,7 @@ test("page ids resolve: fixed, per plugin, and the links of the pages Plugins re
   // Links other code, docs and people's habits still use.
   for (const old of ["agents", "views", "tools", "installed"]) assert.equal(resolveSettingsPage(old), "plugins");
   assert.equal(resolveSettingsPage("agent:claude"), "plugin:agent:claude");
-  assert.equal(resolveSettingsPage("view:@dip497/board"), "plugin:view:@dip497/board");
+  assert.equal(resolveSettingsPage("view:@someone/notes"), "plugin:view:@someone/notes");
   assert.equal(resolveSettingsPage("tool:hivemind/web"), "plugin:tool:hivemind/web");
   assert.equal(resolveSettingsPage("extensions"), null, "an unknown page id resolves to nothing");
   assert.equal(resolveSettingsPage("agent:"), null);

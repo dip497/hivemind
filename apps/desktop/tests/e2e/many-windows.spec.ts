@@ -132,10 +132,10 @@ test("a second window on the workspace shows its terminals live and the wires dr
 
   // A view installed from the CLI shows up in every window, and goes from every window.
   const views = (w: Page) => w.evaluate(() => (window as unknown as { __hivemindViews?: { registered: string[] } }).__hivemindViews?.registered ?? []);
-  expect(hive(["views", "install", path.join(__dirname, "fixtures", "views", "tiled"), "--json"]).code).toBe(0);
-  for (const w of windows) await expect.poll(() => views(w)).toContain("tiled");
-  expect(hive(["views", "remove", "tiled", "--json"]).code).toBe(0);
-  for (const w of windows) await expect.poll(() => views(w)).not.toContain("tiled");
+  expect(hive(["views", "install", path.join(__dirname, "fixtures", "views", "tile-list"), "--json"]).code).toBe(0);
+  for (const w of windows) await expect.poll(() => views(w)).toContain("tile-list");
+  expect(hive(["views", "remove", "tile-list", "--json"]).code).toBe(0);
+  for (const w of windows) await expect.poll(() => views(w)).not.toContain("tile-list");
 
   // Closing a window lets go of nothing another still shows.
   await second.close();

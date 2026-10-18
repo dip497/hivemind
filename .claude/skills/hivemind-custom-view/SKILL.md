@@ -289,7 +289,7 @@ A view that looks impressive and helps nobody is the easiest kind to build and t
 kind to delete. Before any pixels, write down who it is for and the one job it makes easier —
 "never leave an agent waiting", "type into every terminal of this task at once" — and cut
 anything that does not serve that job. `docs/design/views-by-persona-2026-09-16.md` is the worked
-example; `views/{queue,tiled,board}` in dip497/hivemind-plugins are the results.
+example.
 
 ## True, and not guessable
 
@@ -318,7 +318,7 @@ Each of these cost a view real time to find out.
 
 ```bash
 cd apps/desktop
-xvfb-run -a -s "-screen 0 3400x2200x24" node scripts/view-check.mjs <view|all> <out-dir> [palette]
+xvfb-run -a -s "-screen 0 3400x2200x24" node scripts/view-check.mjs <view folder or @owner/name> <out-dir> [palette]
 ```
 
 It runs the built app on a private profile, spawns agents through a `claude` shim whose screens

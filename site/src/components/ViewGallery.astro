@@ -1,6 +1,6 @@
 ---
 /**
- * The views, shown as what they are: real screenshots of the same workspace drawn five ways,
+ * The views, shown as what they are: real screenshots of the same workspace drawn two ways,
  * and a last panel for the one that matters most — the view you write yourself.
  *
  * Nothing loops. You pick a tab and it stays where you put it.
@@ -9,9 +9,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const views = [
   { id: "canvas", name: "Canvas", note: "An infinite board. Frames are zones you drag, zoom and arrange.", ships: true },
   { id: "windows", name: "Windows", note: "Each agent a window beside the Layers list, the one you pick up front.", ships: true },
-  { id: "tiled", name: "Tiled", note: "One pane per agent, tabbed by frame — for people who live in a terminal.", ships: false },
-  { id: "queue", name: "Queue", note: "Ordered by who needs you, with that agent's live terminal docked beside the list.", ships: false },
-  { id: "board", name: "Board", note: "Doing, needs you, review, done — a session moves across when you say so.", ships: false },
 ];
 ---
 <div class="gal" data-view="windows">
@@ -39,7 +36,7 @@ const views = [
           tiles and their status; it draws the workspace however it likes, sandboxed, and asks
           for a live terminal when it wants one.</p>
         <pre class="cmd"><span class="w">$</span> hive views install ./my-view/dist
-<span class="w">$</span> hive views install <span class="s">@dip497/board</span></pre>
+<span class="w">$</span> hive views install <span class="s">@dip497/widgets</span></pre>
         <p class="gal-links"><a href={`${base}/guide/views/`}>Write a view →</a>
           <a href={`${base}/guide/agent-providers/`}>Write an agent →</a></p>
       </div>
@@ -66,7 +63,7 @@ const views = [
   .gal-tabs button em { font-style: normal; font-family: var(--f-m); font-size: 11px; color: var(--fg3); opacity: .8; }
   .gal-tabs button[aria-selected="true"] { color: var(--fg); border-color: var(--line2); background: var(--bg2); }
   @media (hover: hover) { .gal-tabs button:hover { color: var(--fg2); } }
-  /* The tab that is the point of the section reads as an invitation, not a fifth screenshot. */
+  /* The tab that is the point of the section reads as an invitation, not a third screenshot. */
   .gal-yours { border-style: dashed !important; }
 
   .gal-body { position: relative; }
@@ -81,10 +78,7 @@ const views = [
     text-transform: uppercase; color: var(--fg3);
   }
   .gal[data-view="canvas"] [data-panel="canvas"],
-  .gal[data-view="windows"] [data-panel="windows"],
-  .gal[data-view="tiled"] [data-panel="tiled"],
-  .gal[data-view="queue"] [data-panel="queue"],
-  .gal[data-view="board"] [data-panel="board"] { display: block; }
+  .gal[data-view="windows"] [data-panel="windows"] { display: block; }
   .gal[data-view="yours"] [data-panel="yours"] { display: grid; }
 
   .gal-write {

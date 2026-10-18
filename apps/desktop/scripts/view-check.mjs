@@ -3,7 +3,7 @@
 // whose terminal shows the screens the real status detector reads (working, permission, idle).
 //
 //   cd apps/desktop && xvfb-run -a -s "-screen 0 3400x2200x24" \
-//     node scripts/view-check.mjs <view-id> <out-dir>
+//     node scripts/view-check.mjs <view folder or @owner/name> <out-dir>
 import { _electron as electron } from "@playwright/test";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -14,9 +14,9 @@ import { fileURLToPath } from "node:url";
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT = path.resolve(APP, "../..");
 const CLI = path.join(ROOT, "apps/cli/src/index.ts");
-const [VIEW = "queue", OUT_ARG = "view-check", PALETTE = "shipped"] = process.argv.slice(2);
+const [VIEW, OUT_ARG = "view-check", PALETTE = "shipped"] = process.argv.slice(2);
+if (!VIEW) { console.error("usage: view-check.mjs <view folder or @owner/name> [out-dir] [palette]"); process.exit(2); }
 const OUT = path.resolve(OUT_ARG);
-const VIEWS = VIEW === "all" ? ["tiled", "board", "queue"] : [VIEW];
 fs.mkdirSync(OUT, { recursive: true });
 
 // Palette candidates, applied as the same --color-* tokens the app and every view read.
@@ -70,12 +70,11 @@ const cli = (...a) => spawnSync("bun", [CLI, ...a], { cwd: repo, encoding: "utf8
 if (palette) {
   for (const [k, v] of [["appearance.wallpaper.kind", palette.wallpaper], ["appearance.terminal.background", palette.terminal.background], ["appearance.terminal.foreground", palette.terminal.foreground]]) cli("config", "set", k, JSON.stringify(v));
 }
-// A view from a local checkout (VIEW_DIR, its dist/) or as published on HiveHub.
-const published = (name) => `@dip497/${name}`;
-for (const id of VIEWS) {
-  const installed = cli("views", "install", process.env.VIEW_DIR ?? published(id), "--json");
-  if (installed.status !== 0) throw new Error(`views install ${id} failed: ${installed.stdout}${installed.stderr}`);
-}
+// A view from a local folder (its dist/) or as published on HiveHub.
+const manifest = path.join(path.resolve(VIEW), "hivemind-view.json");
+const VIEW_ID = fs.existsSync(manifest) ? JSON.parse(fs.readFileSync(manifest, "utf8")).id : VIEW;
+const installed = cli("views", "install", fs.existsSync(manifest) ? path.resolve(VIEW) : VIEW, "--json");
+if (installed.status !== 0) throw new Error(`views install ${VIEW} failed: ${installed.stdout}${installed.stderr}`);
 
 // A build elsewhere (HIVEMIND_APP_OUT) keeps a running dev app's out/ untouched.
 const app = await electron.launch({ args: [path.join(APP, process.env.HIVEMIND_APP_OUT ?? "out", "main/index.js"), "--no-sandbox", "--force-device-scale-factor=2"], cwd: repo, env });
@@ -105,7 +104,7 @@ for (let i = 0; i < 80 && !hcp.HCP_TOKEN; i++) {
 
 const wait = (ms) => page.waitForTimeout(ms);
 const emit = (name, detail) => page.evaluate(([n, d]) => window.dispatchEvent(new CustomEvent(n, { detail: d })), [name, detail]);
-let current = VIEWS[0];
+const current = VIEW_ID.replace(/^@/, "").replace(/\//g, "--");
 const shot = async (name) => { await wait(1200); await page.screenshot({ path: path.join(OUT, `${PALETTE}-${current}-${name}.png`) }); console.log(`shot ${PALETTE}-${current}-${name}`); };
 
 // Screens the real detector reads.
@@ -144,37 +143,10 @@ try {
   const listed = JSON.parse(cli("ctl", "list", "--json").stdout || "{}");
   console.log("statuses:", (listed.frames ?? []).flatMap((f) => f.tiles.map((t) => `${t.label}:${t.status}`)).join("  "));
 
-  // Each view's own keys: the queue works the list, tiled switches frame and layout, the board reviews.
-  const STEPS = {
-    queue: [["n", "2-docked"], ["j", "3-next"]],
-    tiled: [["2", "2-frame-two"], ["m", "3-grid"]],
-    board: [["Enter", "2-review"], ["Escape", null], ["Shift+ArrowRight", "3-moved"]],
-  };
-  let keys;
-  for (const view of VIEWS) {
-    current = view;
-    await emit("hivemind:set-view-mode", { mode: published(view) });
-    await page.waitForSelector(`[data-community-view="${published(view)}"][data-community-ready="1"]`, { timeout: 20_000 });
-    await wait(2500);
-    await shot("1-arrive");
-    // Keys go to the view's own focusable element, the way a person's would after clicking into it.
-    keys = page.frame({ name: `hm-view:${published(view)}` })?.locator('[tabindex="0"]').first();
-    await keys?.focus().catch(() => {});
-    for (const [key, name] of STEPS[view] ?? []) {
-      await keys?.press(key).catch(() => {});
-      if (name) await shot(name); else await wait(500);
-      await keys?.focus().catch(() => {});
-    }
-  }
-
-  if (VIEWS.at(-1) === "queue") {
-    // Everyone who needed you is dealt with: the quiet state, with nothing docked.
-    const all = (JSON.parse(cli("ctl", "list", "--json").stdout || "{}").frames ?? []).flatMap((f) => f.tiles);
-    for (const t of all) if (t.status === "permission" || t.status === "blocked") cli("ctl", "close", t.tileId);
-    await keys?.press("Escape").catch(() => {});
-    await wait(3500);
-    await shot("4-quiet");
-  }
+  await emit("hivemind:set-view-mode", { mode: VIEW_ID });
+  await page.waitForSelector(`[data-community-view="${VIEW_ID}"][data-community-ready="1"]`, { timeout: 20_000 });
+  await wait(2500);
+  await shot("1-arrive");
 } finally {
   const pid = app.process().pid;
   await Promise.race([app.close(), new Promise((r) => setTimeout(r, 8000))]);

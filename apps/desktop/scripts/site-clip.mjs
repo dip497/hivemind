@@ -25,8 +25,8 @@ fs.mkdirSync(OUT, { recursive: true });
 const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), p));
 const XDG = tmp("hm-clip-xdg-"), HOME = tmp("hm-clip-home-"), WORK = tmp("hm-clip-work-"), BIN = tmp("hm-clip-bin-");
 
-// Queue and Board draw agents, so the clip needs agent tiles. The CLI they run is a stand-in that
-// prints the screens the real status detector reads — the statuses, views and docking are real.
+// The clip needs agent tiles. The CLI they run is a stand-in that prints the screens the real
+// status detector reads — the statuses and views are real.
 // One stand-in per bundled agent, so a shot can show the workspace holding several different
 // ones rather than the same CLI three times.
 for (const cli of ["claude", "codex", "pi"]) {
@@ -76,10 +76,6 @@ for (const [k, v] of [
   ["appearance.terminal.background", "#121416"],
 ]) cli("config", "set", k, JSON.stringify(v));
 
-// The views the clip switches between, installed from HiveHub as anyone would.
-const VIEWS = ["queue", "tiled", "board"];
-const published = (name) => VIEWS.includes(name) ? `@dip497/${name}` : name;
-for (const id of VIEWS) cli("views", "install", published(id));
 // No agent ships in the box: the stand-ins above run under each agent's published manifest.
 for (const a of ["claude", "codex", "pi"]) cli("agents", "install", a, "--yes");
 
@@ -168,10 +164,8 @@ async function type(id, text) {
   await page.keyboard.type(text, { delay: 55 });
   await page.keyboard.press("Enter");
 }
-const toView = async (name, ready) => {
-  const mode = published(name);
+const toView = async (mode) => {
   await emit("hivemind:set-view-mode", { mode });
-  if (ready) await page.waitForSelector(`[data-community-view="${mode}"][data-community-ready="1"]`, { timeout: 15_000 }).catch(() => {});
   await wait(1400);
 };
 
@@ -242,12 +236,11 @@ const SCENE = [
 
   ["site", "claude", work("claude", "wc -l apps/desktop/src/renderer/src/*.tsx | sort -n | tail -12", "Measuring the renderer")],
   ["site", "pi", work("pi", "git branch -a", "Listing the branches")],
-  // One that has finished: Board needs something in its Done column, and it says what it did.
+  // One that has finished, and says what it did.
   ["site", "codex", `clear; git show --stat --oneline HEAD 2>&1 | head -n 12; printf '\\nDone.\\n'`],
 ];
 const tiles = SCENE.map(([frame, kind, script]) => ({ frame, kind, id: agent(kind, frame, script, kind) }));
-// The first agent scripted to ask for permission: Queue docks whatever is selected, and a
-// keypress cannot reach a view that renders in its own sandboxed frame.
+// The first agent scripted to ask for permission: the clip answers it.
 const waiting = tiles[0];
 await wait(6000);
 
@@ -255,8 +248,8 @@ const first = await shell(frameIds.views, "");
 await type(first, "clear; git log --oneline --decorate=no -n 10");
 await wait(1500);
 
-// What the detector actually made of the scene. A shot of an idle workspace sells nothing, and
-// the last one shipped saying "No agents yet" — so the scene reports itself before the camera.
+// What the detector actually made of the scene. A shot of an idle workspace sells nothing, so the
+// scene reports itself before the camera.
 const census = () => {
   const r = cli("ctl", "agents", "--json");
   let rows = [];
@@ -278,21 +271,15 @@ await island("Zoom in").click();
 await wait(1200);
 
 // ── stills ───────────────────────────────────────────────────────────────────
-// The same populated scene the clip records, held still. The view screenshots on the website
-// came from a script that only opened shells, so Queue advertised itself with "No agents yet".
+// The same populated scene the clip records, held still.
 if (STILL) {
   const dir = path.resolve(STILL);
   fs.mkdirSync(dir, { recursive: true });
-  for (const [mode, ready] of [["canvas", false], ["windows", false], ["queue", true], ["tiled", true], ["board", true]]) {
-    await toView(mode, ready);
-    // Queue docks the SELECTED agent's terminal; with nothing selected it draws its empty state,
-    // so the shot would miss the one thing the view exists to do. N is "next that needs you".
-    if (mode === "queue" && waiting?.id) { cli("ctl", "focus", waiting.id); await wait(1800); }
+  for (const mode of ["canvas", "windows"]) {
+    await toView(mode);
     await wait(1200);
     await page.screenshot({ path: path.join(dir, `view-${mode}.png`) });
-    const empty = await page.evaluate(() =>
-      ["No agents yet", "Nothing needs you"].filter((s) => document.body.innerText.includes(s)));
-    console.log(`still view-${mode}${empty.length ? `  — WEAK: view says ${JSON.stringify(empty)}` : ""}`);
+    console.log(`still view-${mode}`);
   }
   // An agent builds out its own workspace while it works: it installs a tool and a widget from
   // HiveHub with the hive on its PATH, opens both, and keeps the widget's steps up to date.
@@ -321,7 +308,7 @@ if (STILL) {
   console.log(`agent ${lead} opened: ${(running.plugins ?? []).map((p) => `${p.plugin} ${p.state}`).join(", ")}`);
   const focused = cli("ctl", "focus", lead);
   if (focused.status !== 0) console.error(`focus ${lead}: ${focused.stdout}${focused.stderr}`);
-  await toView("windows", false);
+  await toView("windows");
   await wait(1500);
   await page.screenshot({ path: path.join(dir, "agent-plugins.png") });
   console.log("still agent-plugins");
@@ -344,33 +331,18 @@ try {
   await type(third, "clear; git diff --stat HEAD~4..HEAD | tail -n 12");
   await wait(2400);
 
-  // 2. the same tiles, drawn by three installed views
-  await toView("tiled", true);
-  await wait(2200);
-  await toView("queue", true);
-  await wait(1600);
-  // Queue docks a live terminal beside its list: click the row, as a person would.
-  const frame = page.frameLocator(`[data-community-view="${published("queue")}"] iframe`);
-  const other = frame.locator('.q-group[data-group="other"]');
-  if ((await other.count()) && (await other.getAttribute("data-collapsed")) !== null) await other.locator("h2").click().catch(() => {});
-  await wait(900);
-  await frame.locator(".q-row").first().click({ timeout: 4000 }).catch(() => {});
-  await page.waitForSelector("[data-community-slot] .xterm", { timeout: 8000 }).catch(() => {});
+  // 2. the same tiles as windows
+  await toView("windows");
   await wait(2200);
 
-  // The beat the product is about: the one that needs you is answered, and it goes back to work.
-  await page.locator("[data-community-slot] .xterm-helper-textarea").first().focus().catch(() => {});
+  // 3. back on the canvas, the beat the product is about: the one that needs you is answered,
+  // and it goes back to work.
+  await toView("canvas");
+  await page.locator(`.react-flow__node[data-id="${waiting.id}"] .xterm-helper-textarea`).focus().catch(() => {});
   await page.keyboard.type("1", { delay: 90 });
   await wait(700);
   await page.keyboard.press("Enter");
   await wait(2600);
-
-  await toView("board", true);
-  await wait(2400);
-
-  // 3. back where it started
-  await toView("canvas");
-  await wait(1800);
 } finally {
   rec.kill("SIGINT");
   await new Promise((r) => rec.on("close", r));
