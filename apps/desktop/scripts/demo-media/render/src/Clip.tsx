@@ -11,6 +11,8 @@ const { fontFamily: MONO } = loadMono("normal", { weights: ["400"], subsets: ["l
 // The app's own colours: its background oklch(0.165 0.004 250), a line a step lighter, its text.
 const BG = "#0d0e10";
 const LINE = "#232426";
+// A step lighter: the edge of a widget closed in on, so it stands off the background.
+const EDGE = "#282b30";
 const TEXT = "#e6e8ea";
 const MUTED = "#a3a5a7";
 const FADE = 0.18;
@@ -140,13 +142,13 @@ function onClip(cues: Cues, shot: Shot, box: Box, t: number, win: Box): [number,
 
 /** The window and the part of the capture in it, while a shot closes in on one box: both move
  *  evenly from the camera's view in the window to the box alone, centred above the caption strip. */
-function isolated(cues: Cues, shot: Shot, t: number, win: Box): { win: Box; cam: Box } {
+function isolated(cues: Cues, shot: Shot, t: number, win: Box): { win: Box; cam: Box; k: number } {
   const cam = camera(cues, shot, t);
-  if (!shot.isolate) return { win, cam };
+  if (!shot.isolate) return { win, cam, k: 0 };
   const u = clamp((t - shot.start) / (shot.end - shot.start));
   const k = easeInOut(clamp((u - shot.isolate.from) / (shot.isolate.to - shot.isolate.from)));
   const b = cues.boxes[shot.isolate.box]!;
-  const h = Math.min(win.h * 0.8, (win.w * 0.7 * b.h) / b.w);
+  const h = Math.min(win.h * 0.9, (win.w * 0.75 * b.h) / b.w);
   const end = { w: (h * b.w) / b.h, h, x: 0, y: 0 };
   end.x = (1280 - end.w) / 2;
   end.y = win.y + (win.h - h) / 2;
@@ -155,7 +157,7 @@ function isolated(cues: Cues, shot: Shot, t: number, win: Box): { win: Box; cam:
   const s = to.w / mix(cam.w, b.w);
   const cx = mix(cam.x + cam.w / 2, b.x + b.w / 2);
   const cy = mix(cam.y + cam.h / 2, b.y + b.h / 2);
-  return { win: to, cam: { x: cx - to.w / s / 2, y: cy - to.h / s / 2, w: to.w / s, h: to.h / s } };
+  return { win: to, cam: { x: cx - to.w / s / 2, y: cy - to.h / s / 2, w: to.w / s, h: to.h / s }, k };
 }
 
 function Capture({ cues, shot, t, cam, win }: { cues: Cues; shot: Shot; t: number; cam: Box; win: Box }) {
@@ -214,7 +216,7 @@ export function Clip({ story, cues }: ClipProps) {
     <AbsoluteFill style={{ background: BG }}>
       <div style={{
         position: "absolute", left: framed.win.x, top: framed.win.y, width: framed.win.w, height: framed.win.h, overflow: "hidden",
-        borderRadius: 10, background: BG, boxShadow: `0 0 0 1px ${LINE}, 0 10px 30px rgba(0,0,0,.35)`,
+        borderRadius: 10, background: BG, boxShadow: `0 0 0 1px ${framed.k > 0.5 ? EDGE : LINE}, 0 10px 30px rgba(0,0,0,.35)`,
       }}>
         <Capture cues={cues} shot={shot} t={t} cam={framed.cam} win={framed.win} />
       </div>

@@ -70,30 +70,35 @@
       {
         "beat": "typing",
         "start": 10.2,
-        "end": 13.0,
+        "end": 12.6,
         "play": "steps",
         "camera": [
           {
             "u": 0,
-            "box": "builderClose",
-            "pad": 1.02
+            "box": "typed",
+            "pad": 1.05
           },
           {
             "u": 1,
-            "box": "builderClose",
-            "pad": 0.95
+            "box": "typed",
+            "pad": 1.0
           }
         ]
       },
       {
         "beat": "building",
-        "start": 13.0,
+        "start": 12.6,
         "end": 18.0,
         "play": "lapse",
         "skip": "+2 m 26 s",
         "camera": [
           {
             "u": 0,
+            "box": "typed",
+            "pad": 1.0
+          },
+          {
+            "u": 0.18,
             "box": "builderClose",
             "pad": 0.95
           },
@@ -148,12 +153,12 @@
       },
       {
         "text": "Ask another for a widget.",
-        "start": 10.4,
-        "end": 12.8
+        "start": 10.3,
+        "end": 12.5
       },
       {
         "text": "It builds it, installs it, ticks it off.",
-        "start": 13.4,
+        "start": 12.9,
         "end": 17.6
       },
       {
@@ -188,6 +193,12 @@
         "y": 1385,
         "w": 120,
         "h": 40
+      },
+      "typed": {
+        "x": 1011,
+        "y": 1440,
+        "w": 1200,
+        "h": 200
       }
     },
     "stills": {

@@ -13,7 +13,7 @@ import { DEMO, OUT, WWW, demoInstructions, recorder, runnerSettings, stage } fro
 
 // Each agent's job, as a person would give it. The docs agent asks before its edit and waits on
 // the person; the reviewer is asked for a fix later, which the person allows from the phone.
-const ASK_WIDGET = "Run hive widgets new fas-1-board --owner hivemind here, make it show FAS-1 with its whole title, wrapped (wrap: true) rather than cut short, and install it. Then do FAS-1, ticking each criterion as you go";
+const ASK_WIDGET = "Run hive widgets new fas-1-board --owner hivemind here, make it show FAS-1 with its whole title, wrapped (wrap: true) rather than cut short, and ticked rows readable, not muted, and install it. Then do FAS-1, ticking each criterion as you go";
 const ASK_EDIT = "Add a short docstring to generate_encoders_by_class_tuples in fastapi/encoders.py";
 const ASK_GLOB = "Read how --glob and --iglob are combined in crates/core/flags/defs.rs and crates/globset/src/lib.rs, then add a short paragraph to GUIDE.md on the order they apply in, with one example";
 const ASK_REVIEW = "Review this branch: read git diff main, then packages/element/src/binding.ts and its tests, and list what could break";
