@@ -35,7 +35,6 @@ import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
 import { statusColor } from "./workspace/tile-status-bucket";
-import { defaultAgent } from "@hivemind/agents";
 import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
 import { useShown } from "./multiplayer/shown";
@@ -262,13 +261,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   /** Wrapper around the status dot+label — hidden entirely while idle. */
   const statusWrapRef = useRef<HTMLSpanElement>(null);
 
-  // null = plain shell. `isDefaultAgent` keeps a bare/`latest` send-to-agent on the
-  // default provider's tiles, never another runtime's. The default may not exist
-  // (nothing installed), in which case no tile is the default one.
-  // Read after the first agent scan: before it, every restored agent tile would look like a shell.
+  // null = plain shell. Read after the first agent scan: before it, every restored agent tile
+  // would look like a shell.
   const agentsScanned = useAgentsScanned();
   const agent = identifyAgent(cmd);
-  const isDefaultAgent = agent === defaultAgent()?.id;
   // The label shown on canvas chips / toasts / notifications: the tile's name (tile-name.ts).
   // Kept in a ref so the long-lived status effect always publishes the CURRENT label.
   const effLabel = name?.trim() || label || agent || cmd.split("/").slice(-1)[0] || "shell";
@@ -861,10 +857,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       }
       return true;
     });
-    // Cross-tile bus: if this PTY is a claude session, accept ADDRESSED text
-    // (see agent-send.ts). Registering makes this the latest agent tile so a
-    // bare/`latest` send lands here only — no more broadcast to every agent.
-    if (isDefaultAgent) {
+    // Cross-tile bus: an agent session accepts ADDRESSED text (see agent-send.ts), whichever
+    // agent it is. Registering makes this the latest agent tile so a bare/`latest` send lands
+    // here only — no more broadcast to every agent.
+    if (agent) {
       registerAgentTile(tileId);
       const onSend = (e: Event) => {
         const detail = (e as CustomEvent<string | SendToAgentDetail>).detail;

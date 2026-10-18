@@ -4,6 +4,7 @@
  * daemon stops, and each is woken in the new one. A daemon of the same protocol is never replaced.
  */
 import net from "node:net";
+import type { Duplex } from "node:stream";
 import { type ClientMsg, type ServerMsg, type SessionInfo, frame, makeLineDecoder } from "./pty-protocol.js";
 
 /** Putting one of these to sleep would end its turn: it is working, or asking the person. */
@@ -19,7 +20,7 @@ interface Line {
   end(): void;
 }
 
-function line(s: net.Socket): Line {
+function line(s: Duplex): Line {
   const listeners = new Set<(m: ServerMsg) => void>();
   s.on("data", makeLineDecoder((text) => {
     let m: ServerMsg;
@@ -46,18 +47,19 @@ function line(s: net.Socket): Line {
   };
 }
 
-function open(sock: string): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
+/** A connection to the daemon listening on the socket `sock`. */
+export function socketAt(sock: string): () => Promise<Duplex> {
+  return () => new Promise((resolve, reject) => {
     const s = net.connect(sock);
     s.once("error", reject);
     s.once("connect", () => { s.removeListener("error", reject); resolve(s); });
   });
 }
 
-/** The protocol of the daemon on `sock`: null when none answers there, 0 when it names none. */
-export async function daemonProtocol(sock: string, timeoutMs = 1000): Promise<number | null> {
-  let s: net.Socket;
-  try { s = await open(sock); } catch { return null; }
+/** The protocol of the daemon `connect` reaches: null when none answers, 0 when it names none. */
+export async function daemonProtocol(connect: () => Promise<Duplex>, timeoutMs = 1000): Promise<number | null> {
+  let s: Duplex;
+  try { s = await connect(); } catch { return null; }
   const l = line(s);
   try {
     return await l.ask({ t: "ping", reqId: "protocol" }, (m) => (m.t === "pong" ? m.protocol ?? 0 : undefined), timeoutMs);
@@ -75,11 +77,11 @@ export interface Retired {
   ended: string[];
 }
 
-/** Put every running session of the daemon on `sock` to sleep once no agent is mid-turn, then stop
- *  that daemon. `waiting` hears the sessions it waits on, and [] once it waits on none; `now` ends
+/** Put every running session of the daemon `connect` reaches to sleep once no agent is mid-turn,
+ *  then stop that daemon. `waiting` hears the sessions it waits on, and [] once it waits on none; `now` ends
  *  the wait, ending those turns. */
-export async function retireDaemon(sock: string, o: { waiting: (ids: string[]) => void; now: Promise<void> }): Promise<Retired> {
-  const l = line(await open(sock));
+export async function retireDaemon(connect: () => Promise<Duplex>, o: { waiting: (ids: string[]) => void; now: Promise<void> }): Promise<Retired> {
+  const l = line(await connect());
   try {
     const states = new Map<string, string>();
     const bare = (id: string) => id.replace(/^hm:/, "");
@@ -116,7 +118,7 @@ export async function retireDaemon(sock: string, o: { waiting: (ids: string[]) =
 }
 
 /** Wake each of `sessions` in the daemon `s` is connected to, as it was put to sleep: the ids woken. */
-export async function wakeSessions(s: net.Socket, sessions: readonly SessionInfo[]): Promise<string[]> {
+export async function wakeSessions(s: Duplex, sessions: readonly SessionInfo[]): Promise<string[]> {
   const l = line(s);
   try {
     const woke = await Promise.all(sessions.map(async (x) => {

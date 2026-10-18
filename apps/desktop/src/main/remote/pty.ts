@@ -14,6 +14,8 @@ import { pasteText } from "@hivemind/agent-host/paste";
 import { shq, withoutControl } from "@hivemind/agents/node";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
+import { DAEMON_PROTOCOL_VERSION } from "@hivemind/agent-host/pty-protocol";
+import { daemonProtocol, retireDaemon, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { acceptRemoteEvent } from "./events.js";
 import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
 
@@ -118,9 +120,11 @@ export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null
       return null;
     }
     const hivePath = found.hivePath;
+    // Auth is looked up per connect, so a password changed in Machines applies to the next attempt.
+    const bridge = () => openBridge(sshCommand(target, remoteConns.resolveAuthFor(target.hostId), sshPaths(), bridgeRemoteCommand(hivePath)));
+    await replaceOtherProtocol(target, hivePath, bridge);
     const ep: DaemonEndpoint = new DaemonEndpoint({
-      // Auth is looked up per connect, so a password changed in Machines applies to the next attempt.
-      connect: () => openBridge(sshCommand(target, remoteConns.resolveAuthFor(target.hostId), sshPaths(), bridgeRemoteCommand(hivePath))),
+      connect: bridge,
       retryInitialMs: 500,
       // The bridge itself may take up to its own 20 s start budget.
       attachTimeoutMs: 30_000,
@@ -138,11 +142,28 @@ export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null
   made.catch((e: unknown) => {
     if (endpoints.get(target.hostId) === made) endpoints.delete(target.hostId);
     const msg = e instanceof Error ? e.message : String(e);
-    failure.set(target.hostId, msg);
-    report(target.hostId, needsAttention(msg) ? "attention" : "offline", msg);
+    const attention = msg.startsWith("[attention] ") || needsAttention(msg);
+    failure.set(target.hostId, msg.replace(/^\[attention\] /, ""));
+    report(target.hostId, attention ? "attention" : "offline", msg.replace(/^\[attention\] /, ""));
     console.warn(`[remote] ${target.hostId}: no remote daemon (${msg}); using an in-app session`);
   });
   return made.catch(() => null);
+}
+
+/** The daemon there kept when it speaks this app's protocol, as on this computer; else, when the
+ *  `hive` there speaks it, replaced once no agent is mid-turn, each session woken in the new one. */
+async function replaceOtherProtocol(target: RemoteTarget, hivePath: string, bridge: () => Promise<import("node:stream").Duplex>): Promise<void> {
+  const protocol = await daemonProtocol(bridge, 30_000);
+  if (protocol === null || protocol === DAEMON_PROTOCOL_VERSION) return;
+  const r = await remoteConns.exec(target, `${shq(hivePath)} daemon status --json`, { timeoutMs: 30_000 });
+  let speaks: unknown;
+  try { speaks = (JSON.parse(String(r.stdout)) as { data?: { speaks?: unknown } }).data?.speaks; } catch { /* an older hive */ }
+  if (speaks !== DAEMON_PROTOCOL_VERSION) throw new Error(`[attention] the hive on this machine is older than this app: update it there (hivemind upgrade)`);
+  const retired = await retireDaemon(bridge, {
+    waiting: (ids) => report(target.hostId, "connecting", ids.length ? `updating its terminals once ${ids.length === 1 ? "an agent finishes its turn" : `${ids.length} agents finish their turns`}` : undefined),
+    now: new Promise(() => {}),
+  });
+  if (retired.asleep.length) await wakeSessions(await bridge(), retired.asleep);
 }
 
 /** Connected daemon endpoints by host, for the machine UI's round-trip pings. */

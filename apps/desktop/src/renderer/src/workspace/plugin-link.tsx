@@ -15,7 +15,8 @@ import type { SettingField } from "@hivemind/view-sdk/settings";
 import { CommunityLink } from "@hivemind/view-host/link";
 import { viewStructure } from "@hivemind/view-host/structure";
 import { isRemote } from "@hivemind/core/remote-uri";
-import { agentById as catalogAgentById, defaultAgent } from "@hivemind/agents";
+import { agentById as catalogAgentById } from "@hivemind/agents";
+import { agentToStart } from "../agent-plugins";
 import { pluginOptions, resolveSettings, type PluginKind } from "@hivemind/core/plugin-settings";
 import { frameMachine, useMachines } from "../machines/store";
 import { useMachineOwners } from "../machines/owners";
@@ -132,7 +133,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     const frameId = tile?.frameId ?? req.frameId;
     const frame = frameId ? framesRef.current.find((f) => f.id === frameId) : undefined;
     const agentId = tile?.agent ?? req.agent;
-    const agent = (agentId ? catalogAgentById(agentId) : defaultAgent())?.label ?? "an agent";
+    const agent = (agentId ? catalogAgentById(agentId) : agentToStart())?.label ?? "an agent";
     const where = tile ? `To the tile “${tile.name}”` : `A new ${agent} tile${frame ? ` in “${frame.title}”` : ""}`;
     const send = await new Promise<boolean>((resolve) => { promptAnswer.current = resolve; setPromptAsk({ viewName: optsRef.current.name, agent, where, text: req.text }); });
     promptAnswer.current = null;

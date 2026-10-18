@@ -11,6 +11,20 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
 
+- A supervised agent's tool use waits on its starter again: `hive ctl approve` and the drive API's `agent.answer` find it in the agent list, waiting on approval, until it is answered. The machine's terminal daemon keeps each session's status, and it overwrote the wait the app held.
+
+- An agent's issue brief quotes a review comment as it really arrives, and the server set-up brief checks enrolment where `hive network use` prints it.
+
+- The example widgets, tools and views are on HiveHub, published from dip497/hivemind-plugins; install one with `hive widgets install @dip497/<name>`, `hive tools install dip497/<name>` or `hive views install @dip497/<name>`, or from Settings ▸ Plugins. The Agent board view is `@dip497/agent-board`, and a new widget, Dog, barks when an agent waits on you.
+
+- A widget with no card reaches the right edge of the screen when it moves there; it stopped as far short as a card is wider than it.
+
+- Settings → Servers: on a fresh install, "Set up my server with an agent" is the first thing on the page; the page shows and checks a network an agent switched to with `hive network use`, without a refresh.
+
+- A new agent starts as the agent you chose in Settings everywhere one starts (Send to agent, a view, a plugin, the toolbar), or the first one installed, never one this machine does not have. Send to agent offers a new tile of every installed agent, your chosen one first, its search finds them, and a prompt sent to an agent tile reaches it whichever agent it runs.
+
+- Agents keep running through an upgrade on every platform: macOS no longer refuses an upgrade while agents run, Windows keeps each version in a folder of its own, an AppImage started directly keeps its agents when the app quits, and a machine's agents survive an update of `hive` there.
+
 - Agents keep running through an app upgrade: the new app takes over the running terminal daemon, and a tile shows what its agent did meanwhile. When a release changes how the daemon talks, agents finish their turn, then come back in the same conversation.
 
 - **Breaking:** `hive daemon status --json` reports `protocol` instead of `buildStamp`.

@@ -36,12 +36,6 @@ test("an invoked command is answered with what its handler returns, or throws; a
   expect(host.refused).toEqual([]);
 });
 
-test("the example view in the repository is a view this app loads, with its commands", async () => {
-  const raw = JSON.parse(await Bun.file(new URL("../../../examples/views/agent-board/hivemind-view.json", import.meta.url)).text());
-  const m = validateViewManifest(raw);
-  expect(m.ok && m.manifest.commands.map((c) => c.name)).toEqual(["post", "list", "clear"]);
-});
-
 test("a call that arrives before its handler is registered (the plugin has just connected) is answered by it", async () => {
   const host = fakeHost({});
   const hm = await host.connect();

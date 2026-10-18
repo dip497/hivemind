@@ -66,22 +66,15 @@ export function identifyProvider(cmd: string | undefined | null): AgentProviderD
   return BY_ALIAS.get(binOf(cmd).toLowerCase());
 }
 
-/** The provider spawned when none is named: the first spawnable entry. The UI's
- *  spawn button, `hive ctl spawn` and HCP all default to it. Undefined when no
- *  agent is installed — callers must offer installing one, not spawn nothing. */
-export function defaultAgent(): AgentProviderDef | undefined {
-  // Undefined, never a throw: callers render in JSX, and a user can disable every agent.
-  return active.find((x) => x.enabled) ?? active[0];
-}
-
 /** The agent a new tile starts when none is named: the user's choice if it can run
- *  here, else the first spawnable agent this machine has, else `defaultAgent()`.
- *  Undefined when no agent is installed. */
+ *  here, else the first spawnable agent this machine has. With nothing installed, the
+ *  choice stands, then the first spawnable entry, then the first entry at all (a user can
+ *  disable every agent). Undefined only when the catalog is empty. */
 export function preferredAgent(chosen: string | undefined, installed: (def: AgentProviderDef) => boolean): AgentProviderDef | undefined {
   const spawnable = active.filter((d) => d.enabled);
   const pick = chosen ? spawnable.find((d) => d.id === chosen) : undefined;
   if (pick && installed(pick)) return pick;
-  return spawnable.find(installed) ?? pick ?? defaultAgent();
+  return spawnable.find(installed) ?? pick ?? spawnable[0] ?? active[0];
 }
 
 /** Providers offered for spawning (UI pickers, `--agent` choices). */

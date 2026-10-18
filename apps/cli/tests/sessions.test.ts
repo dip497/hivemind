@@ -24,7 +24,11 @@ afterAll(() => { if (unix) { run("daemon", "stop"); fs.rmSync(dir, { recursive: 
 describe.skipIf(!unix)("daemon + sessions", () => {
   test("start is idempotent and status reports the daemon", () => {
     expect(data(run("daemon", "start", "--json"))).toMatchObject({ running: true, started: false });
-    expect(data(run("daemon", "status", "--json"))).toMatchObject({ running: true, socket: sock });
+    const status = data(run("daemon", "status", "--json"));
+    expect(status).toMatchObject({ running: true, socket: sock });
+    // An app reads `speaks` from a machine's hive to know a daemon it starts would be one it can keep.
+    expect(typeof status.speaks).toBe("number");
+    expect(status.protocol).toBe(status.speaks);
   });
 
   test("run starts a persistent session that ps lists", () => {

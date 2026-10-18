@@ -202,14 +202,13 @@ latest_nightly_tag() {
 # Is a packaged hivemind instance live right now? Matches the bundled Electron /
 # AppRun running out of our extracted dir. Used to avoid replacing files under a
 # running app (e.g. `hivemind upgrade` run from a terminal tile inside the app).
+# The terminal daemon it leaves running is not the app: it keeps the files it
+# runs from when they are replaced, and its agents run on through the upgrade.
 hivemind_running() {
   local pat="$APP_DIR/hivemind-extracted/"
   [ "$OS_KIND" = "mac" ] && pat="$APP_DIR/hivemind.app/"
-  if command -v pgrep >/dev/null 2>&1; then
-    pgrep -f "$pat" >/dev/null 2>&1
-  else
-    ps -e -o args= 2>/dev/null | grep -Fq "$pat"
-  fi
+  # The pattern is read from the environment, so this awk's own command line never matches it.
+  ps -e -o args= 2>/dev/null | HIVEMIND_PATTERN="$pat" awk 'index($0, ENVIRON["HIVEMIND_PATTERN"]) && !/pty-daemon\.js/ { found = 1 } END { exit !found }'
 }
 
 # Extract the downloaded AppImage into place. If the app is RUNNING, stage it

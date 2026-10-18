@@ -3,8 +3,7 @@ import { READ_SLICE_MS, UsageError, boolFlag, durationFlag, emitArgs, intFlag, p
 import { EXIT, exitCodeFor } from "../src/hcp.js";
 import { useFixtureAgents } from "./agents-fixtures.js";
 
-// workflowParams resolves the default agent from the catalog; a worker must be first,
-// the way a machine whose default is claude looks.
+// A workflow's agent must be in the catalog and drivable as a worker, as claude is.
 useFixtureAgents(["claude"]);
 
 describe("readSchedule", () => {
@@ -48,19 +47,20 @@ describe("flag parsing", () => {
 });
 
 describe("workflowPlan", () => {
-  test("fanout: its items and task, started as the default agent, ten minutes a turn, six at once", () => {
-    expect(workflowPlan({ shape: "fanout", items: "x || y", prompt: "do {item}", close: true, supervise: "Bash, Edit" })).toEqual({
+  const plan = (f: Parameters<typeof workflowPlan>[0]) => workflowPlan({ agent: "claude", ...f });
+  test("fanout: its items and task, started as the agent named, ten minutes a turn, six at once", () => {
+    expect(plan({ shape: "fanout", items: "x || y", prompt: "do {item}", close: true, supervise: "Bash, Edit" })).toEqual({
       shape: "fanout", items: ["x", "y"], prompt: "do {item}", stages: [], input: null, reducePrompt: "",
       program: "claude", supervise: ["Bash", "Edit"], turnMs: 600_000, concurrency: 6, close: true,
     });
   });
   test("pipeline needs stages, mapreduce a reducer's task; at least one and at most twelve at once", () => {
-    expect(() => workflowPlan({ shape: "pipeline" })).toThrow(/stages/);
-    expect(() => workflowPlan({ shape: "mapreduce", items: "a", prompt: "p" })).toThrow(/reduce-prompt/);
-    expect(() => workflowPlan({ shape: "star" })).toThrow(/shape/);
-    expect(workflowPlan({ shape: "pipeline", stages: "a || b", input: "seed", timeout: "1000" })).toMatchObject({ stages: ["a", "b"], input: "seed", turnMs: 1000 });
-    expect(workflowPlan({ items: "a", prompt: "p", "max-concurrent": "40" }).concurrency).toBe(12);
-    expect(workflowPlan({ items: "a", prompt: "p", "max-concurrent": "0" }).concurrency).toBe(1);
+    expect(() => plan({ shape: "pipeline" })).toThrow(/stages/);
+    expect(() => plan({ shape: "mapreduce", items: "a", prompt: "p" })).toThrow(/reduce-prompt/);
+    expect(() => plan({ shape: "star" })).toThrow(/shape/);
+    expect(plan({ shape: "pipeline", stages: "a || b", input: "seed", timeout: "1000" })).toMatchObject({ stages: ["a", "b"], input: "seed", turnMs: 1000 });
+    expect(plan({ items: "a", prompt: "p", "max-concurrent": "40" }).concurrency).toBe(12);
+    expect(plan({ items: "a", prompt: "p", "max-concurrent": "0" }).concurrency).toBe(1);
   });
 });
 
