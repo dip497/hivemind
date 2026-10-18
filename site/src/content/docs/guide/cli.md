@@ -76,6 +76,9 @@ hive resolve "text"                     # expand @ID mentions to markdown links
 ```text
 hive ctl agents [--watch]               # the workspace's agents, their state and what each waits on
 hive ctl frames                         # frames an agent may start in: id, name, machine
+hive ctl frame add --folder /srv/web [--machine build] [--name web]
+                                        # a frame on that folder, on a saved machine or one of
+                                        # your devices by id or name; → {"frame","path","opened"}
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                [--frame <id or name>] [--mode plan] [--model sonnet]
                [--no-report] [--supervise all|Bash,Edit] [--resume <session>]

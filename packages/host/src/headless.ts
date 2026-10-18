@@ -298,7 +298,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),
     peopleHere.domain,
     grantsDomain(() => grants),
-    framesDomain({ store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare) }),
+    framesDomain({
+      store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare),
+      machines: () => [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...devices.list().filter((d) => d.kind !== "phone").map((d) => ({ id: d.device, name: d.name }))],
+    }),
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).

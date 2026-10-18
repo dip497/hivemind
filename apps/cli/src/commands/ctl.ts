@@ -166,6 +166,22 @@ const agents = defineCommand({
 const frames = sub("frames", "The workspace's frames, where an agent may be started (id, name, machine)", repoArg,
   (a) => onDrive(async (d) => ((await d.call("agent.startable", [await workspaceOf(d, a.repo)])) as { frames: unknown[] }).frames));
 
+const frameAdd = sub("add", "Open a frame on a folder: on another machine with --machine (a saved machine or another of your devices, by id or name); prints { frame, path, opened }. A folder that has a frame already gives that frame", {
+  folder: { type: "string", required: true, description: "the folder, given in full (on that machine with --machine)" },
+  machine: { type: "string", description: "the machine the folder is on, by its id or name (`hive machine list`, Settings ▸ Devices); default: this one" },
+  name: { type: "string", description: "the frame's name (default: the folder's)" },
+  ...repoArg,
+}, (a) => onDrive(async (d) => d.call("frame.open", [await workspaceOf(d, a.repo), {
+  path: String(a.folder),
+  ...(a.machine ? { machine: String(a.machine) } : {}),
+  ...(a.name ? { title: String(a.name) } : {}),
+}])));
+
+const frame = defineCommand({
+  meta: { name: "frame", description: "Make frames: `add` opens one on a folder, here or on another machine" },
+  subCommands: { add: frameAdd },
+});
+
 /** `--frame`: a frame of the workspace by its id, or by its name in any case, as `frames` lists them. */
 async function frameIn(d: Drive, repo: string, given: string): Promise<string> {
   const { frames } = await d.call("agent.startable", [repo]) as { frames: Array<{ id: string; name: string }> };
@@ -623,7 +639,7 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, inbox, "open-review": openReview,
+    agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

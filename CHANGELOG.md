@@ -13,6 +13,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - `hive agents install --help` and the installer name amp, an agent on HiveHub, as the example instead of gemini.
 
+- `hive ctl frame add --folder <path> [--machine <name or id>] [--name <frame>]` opens a frame on a folder of a saved machine or another of your devices, as **Open folder here…** does, so an agent can set up a remote builder alone. Workspace API 0.30: `frame.open` takes `machine`.
 - An agent in a frame on your other device that runs the app now reports back: its turn end reaches `hive ctl read`, the starter's `hive ctl inbox` and its tile's status, as on your own computer. Every machine's terminal daemon now holds the agents' control-plane socket and passes what they report to each device watching, and the app on that machine shows each session's status as its daemon keeps it, so a tile no longer reads done while its agent works or stays on starting after its turn.
 
 ## [2026.10.3] — 2026-10-18

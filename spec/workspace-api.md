@@ -1,4 +1,4 @@
-# Workspace API (0.29)
+# Workspace API (0.30)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -59,7 +59,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.29", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.30", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -203,7 +203,7 @@ sends, and one participant per device.
 | `git.handOff` | `repo`, `branch`, `bundle` (a git bundle of it, base64, 32 MB at most) | `{branch, base}`: the branch it landed as, `handoff/<who>/<branch>` (`who` the caller's name, made plain), and the branch checked out here that a Diff tile on the board now shows it against. The bundle is checked against the repo first (`FAILED`, saying the repo lacks commits it builds on, when it does: send its whole history); the repo's working tree, index and own branches are untouched, and a branch lands only over a hand-off of the same person's | target `repo`, detail the branch |
 | `worktree.list` | `repo` | `[{path, branch, head, locked, prunable, bare}]` | read |
 | `worktree.create` | `repo`, `{branch, base?, path?, sparse?, partial?, includeFiles?}` (`base`, 0.20: where a new branch starts; an existing branch is checked out as it is) | `{path, branch}` | target `repo`, detail the branch |
-| `frame.open` | `repo`, `{path}` or `{worktree: {branch, base?}}`, with `title?`, `parent?` | `{frame, path, opened, created}` (0.20): the frame bound to that folder, made when there is none (`opened`), on a worktree made when the branch has none (`created`); a worktree frame nests in the workspace's own frame unless `parent` says another. A guest or a program names only the workspace's folders. A window shows a frame it is handed with no place in the next free slot | target `repo`, detail the branch or folder |
+| `frame.open` | `repo`, `{path, machine?}` or `{worktree: {branch, base?}}`, with `title?`, `parent?` | `{frame, path, opened, created}` (0.20): the frame bound to that folder, made when there is none (`opened`), on a worktree made when the branch has none (`created`); a worktree frame nests in the workspace's own frame unless `parent` says another. A guest or a program names only the workspace's folders. `machine` (0.30): `path` is on that machine, a saved machine or another of the person's devices, named by its id or, in any case, its name; `path` is then `machine://<id><path>`. A name two machines share is `BAD_REQUEST` listing each with its id, one no machine has `NOT_FOUND`; only the person, the owner's devices and an agent on this machine name one (else `FORBIDDEN`). A window shows a frame it is handed with no place in the next free slot | target `repo`, detail the branch or folder |
 | `frame.close` | `repo`, `frame`, `{closeTiles?, removeWorktree?, force?}`? | `{closed, tilesClosed, worktreeRemoved}` (0.20): the frame and those nested in it go; one holding tiles only with `closeTiles`, which ends them; its worktree only with `removeWorktree`, removed first, so git refusing one with changes (without `force`) closes nothing | target the frame |
 | `worktree.remove` | `repo`, `worktree`, `force`? | `null` | target the worktree |
 | `worktree.prune` | `repo` | `{removed}` | target `repo` |

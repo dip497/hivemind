@@ -74,8 +74,13 @@ From a terminal or an agent, start an agent there by naming the frame:
 
 ```bash
 hive ctl frames                       # id, name and machine of each frame
+hive ctl frame add --machine build --folder /srv/web --name web   # one there, made if missing
 hive ctl spawn --frame web --agent claude --prompt "Run the tests and fix what fails"
 ```
+
+`hive ctl frame add` opens the same kind of frame as **Open folder here…**. `--machine` takes a saved
+machine or one of your other devices, by its id or its name; a name two of them share is refused
+with each one's id. Adding the same folder again gives the frame it already has.
 
 ## Sessions that outlive the connection
 
