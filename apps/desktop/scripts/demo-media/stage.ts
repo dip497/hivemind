@@ -108,7 +108,7 @@ export async function stage(root: string, apps: ElectronApplication[], { name = 
     }
   }
 
-  const env = { USER: "hivemind", LOGNAME: "hivemind", LD_PRELOAD: named, HIVEMIND_TEST_UPDATE: "{}", HOME: home, SHELL: "/bin/bash", HIVEMIND_SHELL_ENV: "0", HISTFILE: "/dev/null", PATH: `${bin}:${process.env.PATH}`,
+  const env = { USER: "hivemind", LOGNAME: "hivemind", LD_PRELOAD: named, HIVEMIND_TEST_UPDATE: "{}", HOME: home, SHELL: "/bin/bash", HIVEMIND_SHELL_ENV: "0", HISTFILE: "/dev/null", PATH: `${bin}:${DEMO}/.tools/bin:${process.env.PATH}`,
     // The runner's Rust toolchain, which the isolated home does not hold.
     RUSTUP_HOME: process.env.RUSTUP_HOME ?? path.join(os.homedir(), ".rustup"), CARGO_HOME: process.env.CARGO_HOME ?? path.join(os.homedir(), ".cargo"), ...more };
   const config = path.join(root, name);

@@ -24,6 +24,8 @@ REPOS=(
 
 rm -rf "$DIR"
 mkdir -p "$DIR/worktrees"
+# The checks an agent runs, at a pinned version; the stage puts $DIR/.tools/bin on its PATH.
+UV_TOOL_DIR="$DIR/.tools/uv" UV_TOOL_BIN_DIR="$DIR/.tools/bin" uv tool install -q ruff==0.13.3
 export GIT_AUTHOR_NAME=hivemind GIT_AUTHOR_EMAIL=demo@hivemind.dev GIT_COMMITTER_NAME=hivemind GIT_COMMITTER_EMAIL=demo@hivemind.dev
 export GIT_AUTHOR_DATE=2026-10-18T09:00:00Z GIT_COMMITTER_DATE=2026-10-18T09:00:00Z
 
