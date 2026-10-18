@@ -136,7 +136,14 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
       sockets.add(socket);
       socket.on("close", () => { sockets!.delete(socket); if (sockets!.size === 0) byGrant.delete(grant.id); });
       if (grant.expires !== null) {
-        const ends = setTimeout(() => socket.destroy(), Math.max(0, grant.expires - Date.now()));
+        // A timer waits at most 2^31-1 ms (about 24.8 days); a longer one fires at once.
+        const expires = grant.expires;
+        let ends: ReturnType<typeof setTimeout>;
+        const wait = () => {
+          const left = expires - Date.now();
+          ends = left > 0 ? setTimeout(wait, Math.min(left, 2 ** 31 - 1)) : setTimeout(() => socket.destroy(), 0);
+        };
+        wait();
         socket.on("close", () => clearTimeout(ends));
       }
       o.grants.used(grant.id);
