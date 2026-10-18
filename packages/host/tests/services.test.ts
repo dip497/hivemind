@@ -148,9 +148,8 @@ test("its grant taken back elsewhere stops it, and it stays stopped", async () =
   await services.sync([]);
 });
 
-test("it does not start without a workspace, a role there is, or its program; one left behind is taken back", async () => {
+test("it does not start without a workspace, a role there is, or its program", async () => {
   mode("stay");
-  const stale = grants.create({ name: "CI service", repos: [repoA], role: "agents" }, "acme/ci").grant.id;
   for (const [want, why] of [
     [ci({ workspaces: [] }), "no workspace is picked for it"],
     [ci({ service: { command: ["node", "service.js"], role: "owner" } }), 'it asks for the role "owner", which is none of view, edit, terminals, agents'],
@@ -162,5 +161,12 @@ test("it does not start without a workspace, a role there is, or its program; on
     assert.deepEqual(ours(), [], `${why}: no grant`);
     await services.sync([]);
   }
-  assert.ok(!grants.list().some((g) => g.id === stale), "the grant an earlier run left is taken back");
+});
+
+test("a service's grant left behind by an app that was killed is taken back when services begin again, its plugin on or not", async () => {
+  const stale = grants.create({ name: "Old service", repos: [repoA], role: "agents" }, "acme/switched-off");
+  const program = grants.create({ name: "a program", repos: [repoA], role: "agents" });
+  const again = new Services({ driveSock: sock, grants, logDir: path.join(tmp, "services") });
+  assert.deepEqual([grants.holder(stale.token), grants.holder(program.token)?.name], [null, "a program"]);
+  await again.stop();
 });

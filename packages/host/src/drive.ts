@@ -12,7 +12,7 @@ import net from "node:net";
 import path from "node:path";
 import { servePeer } from "@hivemind/workspace-api/peers";
 import type { Connection, WorkspaceServer } from "@hivemind/workspace-api/server";
-import type { EventMessage } from "@hivemind/workspace-api/protocol";
+import { ApiError, type ErrorCode, type EventMessage } from "@hivemind/workspace-api/protocol";
 import { holderOf } from "@hivemind/agent-host/hooks/token";
 import { listenExclusive } from "@hivemind/agent-host/socket-claim";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -218,4 +218,44 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
       if (mine) try { fs.unlinkSync(sockPath); } catch { /* gone */ }
     },
   };
+}
+
+/** `method` answered on the drive socket at `sockPath` as whoever `token` is: what another
+ *  process on this machine, the one serving it, answers. */
+export function askDrive(sockPath: string, token: string, method: string, params: unknown[], timeoutMs = 10_000): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(sockPath);
+    socket.setEncoding("utf8");
+    let settled = false;
+    const done = (fail: ApiError | null, value?: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (fail) reject(fail);
+      else resolve(value);
+    };
+    const nobody = () => done(new ApiError("UNAVAILABLE", "nothing serves programs on this machine now: start the app or `hive host` again"));
+    const timer = setTimeout(nobody, timeoutMs);
+    socket.on("connect", () => socket.write(`${JSON.stringify({ hello: { token } })}\n`));
+    socket.on("error", nobody);
+    socket.on("close", nobody);
+    let buf = "";
+    socket.on("data", (chunk: string) => {
+      buf += chunk;
+      for (let nl; (nl = buf.indexOf("\n")) >= 0; ) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        let m: { hello?: unknown; id?: unknown; result?: unknown; error?: { code?: string; message?: string } };
+        try {
+          m = JSON.parse(line) as typeof m;
+        } catch {
+          continue;
+        }
+        if (m.hello) socket.write(`${JSON.stringify({ id: 1, method, params })}\n`);
+        else if (m.error && m.id === undefined) done(new ApiError((m.error.code ?? "FAILED") as ErrorCode, m.error.message ?? "refused"));
+        else if (m.id === 1) done(m.error ? new ApiError((m.error.code ?? "FAILED") as ErrorCode, m.error.message ?? "refused") : null, m.result);
+      }
+    });
+  });
 }

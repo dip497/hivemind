@@ -79,7 +79,10 @@ The first line says who connects: `{"hello": {"token", "workspace"?}}`.
   does a grant reaching several workspaces that does not name one, or one that ran out.
 
 Taking a grant back closes its connections; one that runs out closes them then. The host keeps
-grants in `grants.json` beside `hcp.token`, 0600, each token only as its sha256.
+grants in `grants.json` beside `hcp.token`, 0600, each token only as its sha256. Only the
+process serving the socket keeps them: `grant.*` asked of the other (the app opened beside a
+running `hive host`) is answered by the one serving, and `UNAVAILABLE` when none does. A service's
+grant found as a process begins serving was left behind by the one before, and is taken back.
 
 ## Who asks, and the audit log
 

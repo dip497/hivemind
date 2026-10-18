@@ -11,7 +11,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Domain } from "@hivemind/workspace-api/server";
 import { tileToken } from "@hivemind/agent-host/hooks/token";
-import { serveDrive } from "../src/drive.ts";
+import { askDrive, serveDrive } from "../src/drive.ts";
 import { Grants, grantsDomain } from "../src/grants.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-drive-"));
@@ -37,7 +37,7 @@ const domain = {
 
 const grants = new Grants(path.join(tmp, "grants.json"));
 const auditFile = path.join(tmp, "audit.jsonl");
-const server = new WorkspaceServer([domain, grantsDomain(() => grants)], new Intents(new AuditLog({ file: auditFile })));
+const server = new WorkspaceServer([domain, grantsDomain({ serving: async () => true, grants: () => grants, elsewhere: () => assert.fail("this process serves") })], new Intents(new AuditLog({ file: auditFile })));
 const sock = path.join(tmp, "drive.sock");
 const drive = serveDrive(sock, {
   server,
@@ -171,6 +171,21 @@ test("taking a grant back closes the program's connection, and its token lets no
   const again = await connect({ token, workspace: repoA });
   assert.equal(((await again.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
   person.socket.destroy();
+});
+
+test("Settings in a process that does not serve the drive socket makes and takes back grants with the one that does", async () => {
+  // The app opened beside a running `hive host`: its grants are the host's.
+  const appsOwn = new Grants(path.join(tmp, "grants.json"));
+  const app = new WorkspaceServer([grantsDomain({ serving: async () => false, grants: () => appsOwn, elsewhere: (method, params) => askDrive(sock, INSTALL, method, params) })], new Intents(new AuditLog({ file: path.join(tmp, "app-audit.jsonl") })));
+  const atWindow = { actor: { kind: "person" as const }, send: () => {}, closed: new AbortController().signal };
+  const made = (await app.answer("grant.create", [{ name: "made in Settings", repos: [repoA], role: "agents" }], atWindow)) as { result: { grant: { id: string }; token: string } };
+  const p = await connect({ token: made.result.token, workspace: repoA });
+  assert.deepEqual(((await p.next((m) => "hello" in m)).hello as { as: unknown }).as, { client: "made in Settings", role: "agents", workspace: repoA });
+  assert.ok(((await app.answer("grant.list", [], atWindow)) as { result: Array<{ id: string }> }).result.some((g) => g.id === made.result.grant.id));
+  assert.deepEqual(await app.answer("grant.revoke", [made.result.grant.id], atWindow), { result: { revoked: true } });
+  await within(p.closed, "the program's connection closing");
+  const again = await connect({ token: made.result.token, workspace: repoA });
+  assert.equal(((await again.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
 });
 
 test("a grant that runs out closes its program's connection then, and lets nothing in after", async () => {

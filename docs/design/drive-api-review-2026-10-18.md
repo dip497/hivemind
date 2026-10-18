@@ -133,7 +133,7 @@ with the install's token. A service grant found when a process begins serving wa
 the one before (services run only where it is served), so it is taken back then. Ceiling: when the
 host stops, the app does not take `drive.sock` over until it starts again (as today).
 
-## Dropped (for the maintainer to confirm)
+## Dropped (confirmed by the maintainer, 2026-10-18)
 
 | Choice or habit | From | Why it no longer holds |
 |---|---|---|

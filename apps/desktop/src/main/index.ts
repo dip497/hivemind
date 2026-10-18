@@ -96,7 +96,7 @@ import { presence } from "@hivemind/host/presence";
 import { widgets } from "@hivemind/host/widgets";
 import { appearance } from "@hivemind/host/appearance";
 import { Grants, grantsDomain } from "@hivemind/host/grants";
-import { serveDrive } from "@hivemind/host/drive";
+import { askDrive, serveDrive } from "@hivemind/host/drive";
 import { frameWorktrees, framesDomain } from "@hivemind/host/frames";
 import { worktreeCreate, worktreeList, worktreeRemove } from "@hivemind/host/git-adapter";
 import { answers } from "@hivemind/host/answers";
@@ -1294,6 +1294,9 @@ const layouts = new Layouts(storeFor, {
 /** The programs the person lets drive workspaces here (the drive socket). */
 let grantsKept: Grants | null = null;
 const grants = (): Grants => (grantsKept ??= new Grants(path.join(app.getPath("userData"), "grants.json")));
+/** Whether this app serves the drive socket, and so keeps the grants; another app or host does otherwise. */
+let servedDrive!: (mine: boolean) => void;
+const driveServing = new Promise<boolean>((resolve) => (servedDrive = resolve));
 // Shown on this machine's windows, run in one of the person's, and served to a phone's views.
 // Where the person may start an agent from their phone: the folders the windows opened lately,
 // as they tell (`recent:folders`), among them.
@@ -1372,7 +1375,11 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // How this host looks to its guests, as its theme changes.
   appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
   peopleHere.domain,
-  grantsDomain(grants),
+  grantsDomain({
+    serving: () => driveServing,
+    grants,
+    elsewhere: (method, params) => askDrive(driveSockPath(app.getPath("userData")), readOrCreateToken(app.getPath("userData")), method, params),
+  }),
   framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn }),
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
@@ -1965,8 +1972,10 @@ function startHcpControlPlane(): void {
       workspaceId: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
       onWarn: (m) => console.warn(`[drive] ${m}`),
     });
+    void drive.serving.then(servedDrive);
     startServices({ driveSock, grants: grants(), serving: drive.serving });
   } catch (e) {
+    servedDrive(false);
     pushAppError(`Programs cannot drive this app: ${(e as Error).message}`, "drive");
   }
   // A machine's daemon keeps the status of the sessions it runs (R6), this computer's too: shown here

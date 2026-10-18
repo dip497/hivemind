@@ -135,8 +135,6 @@ class Runner {
     this.again = null;
     if (this.ending) return;
     const { want, o } = this;
-    // One left behind by an app that was killed lets nothing in from now.
-    o.grants.revokePlugin(want.plugin);
     if (want.workspaces.length === 0) return this.set({ state: "stopped", why: "no workspace is picked for it" });
     if (!(ROLES as readonly string[]).includes(want.service.role)) return this.set({ state: "stopped", why: `it asks for the role "${want.service.role}", which is none of ${ROLES.join(", ")}` });
     const found = program(want, process.env);
@@ -246,7 +244,9 @@ export class Services {
   private readonly runners = new Map<string, Runner>();
   private readonly offRevoked: () => void;
 
+  /** Made by the process that serves the drive socket, once it does. */
   constructor(private readonly o: ServicesOptions) {
+    o.grants.revokeServices();
     this.offRevoked = o.grants.onRevoked((id) => { for (const r of this.runners.values()) r.revoked(id); });
   }
 

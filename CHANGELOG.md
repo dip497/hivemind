@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- API access: with `hive host` running, tokens made and taken back in the app's Settings now work there at once; before, a new one was refused and one taken back kept working. A plugin service's token left behind by an app that was killed stops working as soon as the app or host starts again.
+
 - API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
 
 - Agents keep running through an app upgrade: the new app takes over the running terminal daemon, and a tile shows what its agent did meanwhile. When a release changes how the daemon talks, agents finish their turn, then come back in the same conversation.
