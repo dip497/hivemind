@@ -59,7 +59,7 @@ export function MediaLayerView({
 }: {
   layer: MediaLayer;
   /** z-index of the plane (negative → behind the canvas; positive → over it). */
-  z: number;
+  z: number | string;
   /** data-attribute tag for debugging (e.g. "background" / "overlay"). */
   scene: string;
 }): React.ReactElement | null {
@@ -176,11 +176,11 @@ export function MediaLayerView({
 export function CanvasOverlay(): React.ReactElement | null {
   const { overlayMedia } = useTheme();
   if (overlayMedia.length === 0) return null;
-  // Paint in array order — later layers stack on top (z climbs from 45).
+  // Paint in array order — later layers stack on top.
   return (
     <>
       {overlayMedia.map((layer, i) => (
-        <MediaLayerView key={layer.id} layer={layer} z={45 + i} scene={`overlay-${i}`} />
+        <MediaLayerView key={layer.id} layer={layer} z={`calc(var(--layer-media-overlay) + ${i})`} scene={`overlay-${i}`} />
       ))}
     </>
   );

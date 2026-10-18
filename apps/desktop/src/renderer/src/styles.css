@@ -56,6 +56,23 @@
   --hm-track-heading: -0.014em;  /* 16–23px */
   --hm-track-body: -0.005em;     /* 12–15px — the body default */
   --hm-track-caption: 0.01em;    /* ≤11px — small text wants a touch of air */
+
+  /* ── Layers: what draws over what, bottom to top. Every screen-wide layer takes its z-index from
+     here (`z-(--layer-…)`), so the order is read in one place. */
+  --layer-app: 30;                /* the workspace: canvas and views */
+  --layer-widgets: 40;            /* widget cards, over every view */
+  --layer-workspace-actions: 41;  /* the top-right buttons */
+  --layer-panels: 42;             /* the tool island */
+  --layer-media-overlay: 45;      /* the person's foreground media; each more one up */
+  --layer-pinned-tiles: 50;
+  --layer-notifications: 60;      /* agent notification cards */
+  --layer-fullscreen-tile: 70;
+  --layer-appearance-panel: 75;
+  --layer-settings: 80;
+  --layer-machines-panel: 85;
+  --layer-dialogs: 90;
+  --layer-menus: 100;
+  --layer-tooltips: 110;
 }
 
 @theme inline {

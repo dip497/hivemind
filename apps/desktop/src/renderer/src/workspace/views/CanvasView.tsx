@@ -13,6 +13,7 @@
  */
 import { isRemote } from "@hivemind/core/remote-uri";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Background,
   BackgroundVariant,
@@ -538,7 +539,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
         id="hm-pinned-layer"
         ref={setPinnedLayer}
         className="fixed inset-0 pointer-events-none"
-        style={{ zIndex: 50 }}
+        style={{ zIndex: "var(--layer-pinned-tiles)" }}
       />
       {/* t3code-style DOCKED layout: the Layers panel is a flex SIBLING of the
           canvas (not an overlay), so the canvas sits BESIDE it and is never
@@ -636,12 +637,14 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
 
           {/* Background-event toasts — BOTTOM-right (top-right collides with the
               Board/List/Canvas switcher). An agent that goes blocked or finishes
-              while off-screen pings here; click to fly to it. Must stay inside
-              <ReactFlow>: a card's focus uses the react-flow camera. */}
-          {rt.toasts.length > 0 && (
-            <Panel position="bottom-right" className="!m-0 !mr-3 !mb-3">
+              while off-screen pings here; click to fly to it. Declared inside
+              <ReactFlow>, as a card's focus uses the react-flow camera, but drawn
+              in the page's notification layer: inside the canvas they sat under widgets. */}
+          {rt.toasts.length > 0 && createPortal(
+            <div className="fixed bottom-3 right-3 z-(--layer-notifications)" data-notifications>
               <Toasts toasts={rt.toasts} onDismiss={rt.dismissToast} onView={(id) => rt.markSeen([id])} />
-            </Panel>
+            </div>,
+            document.body,
           )}
 
           {/* Zoom + nav island — bottom-left (Excalidraw footer). The EYE toggle

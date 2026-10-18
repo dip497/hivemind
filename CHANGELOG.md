@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- An agent's notification card is drawn over widgets instead of behind them; dialogs now open over Settings and a fullscreen tile, and tooltips over dialogs.
+
 - Layers: "Hide asleep" in the View menu leaves asleep agents out of the list; a line at the end says how many are hidden and shows them again when clicked.
 
 - New widgets stack down the right edge by their real height, so a tall widget is no longer covered by the ones added after it; a column that reaches the bottom goes on to its left.
