@@ -40,6 +40,9 @@ type AttachSpec = Extract<ClientMsg, { t: "attach" }>["spec"];
 /** The tile still shows the pre-drop screen, so a re-attach replay starts from a full reset. */
 export const REATTACH_RESET = "\x1bc";
 
+/** The daemon answered a claim on its control-plane socket with a refusal. */
+export class ControlRefused extends Error {}
+
 export interface EndpointOptions {
   /** Open a fresh transport to the daemon; reject when it is unreachable. */
   connect: () => Promise<Duplex>;
@@ -277,12 +280,13 @@ export class DaemonEndpoint {
   /**
    * Serve the machine's control plane on `sock` from now on (`hive host`): the daemon passes each
    * connection to its own control-plane socket on to `sock`, and this endpoint claims it again on
-   * every connection after, which it keeps up. Rejects when the daemon serves none (one the app
-   * started).
+   * every connection after, which it keeps up. Rejects with `ControlRefused` when the daemon
+   * will not hand its socket over (one from an older release), and with an error when it does not
+   * answer.
    */
   async control(sock: string, timeoutMs = 10_000): Promise<void> {
     const r = await this.request<Extract<ServerMsg, { t: "control" }>>({ t: "control", reqId: `c${++this.seq}`, sock }, timeoutMs);
-    if (r.error) throw new Error(r.error);
+    if (r.error) throw new ControlRefused(r.error);
     this.controlSock = sock;
   }
 

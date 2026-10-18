@@ -27,8 +27,13 @@ a notification (no `id`) it asks for no reply, which is how a hook that reads no
 reply written to a connection whose writer already ended is never let go of on some runtimes. The
 host hears nothing else from a connection that has not signed in, notifications included. A tile's token speaks
 only for its tile: a notification naming another tile is dropped, a request refused with
-`FORBIDDEN`. The person's token may name any tile. The standalone daemon (`hive host` with no app)
-keeps the same rule on its own socket.
+`FORBIDDEN`. The person's token may name any tile.
+
+`HIVE_HOOK_SOCK` is the machine's control-plane socket, and the PTY daemon that runs the session
+holds it, whether the app or `hive host` serves the control plane: it passes each connection on to
+that control plane's own socket, and tells every other device watching it each event and reply it
+heard there (`agent.event`, `agent.reply`, and the session's `agent.status`, see `status.md`). With
+no control plane behind it, the daemon hears events itself and refuses every request at once.
 
 - **Event** — the notification `{"jsonrpc":"2.0","method":"agent.event","params":{…}}`, `params`
   per `agent-event.schema.json`, after `initialize`. No reply. The host drops fields outside the

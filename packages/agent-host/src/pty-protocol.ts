@@ -68,7 +68,7 @@ export type ClientMsg =
   /** The session's screen as text, line by line, as the daemon reads it: for a starter that skips
    *  a startup screen (agent-start.ts) with no terminal of its own. */
   | { t: "viewport"; reqId: string; id: string }
-  /** This connection serves the machine's control plane (`hive host`), on the socket `sock`: while
+  /** This connection serves the machine's control plane (the app, or `hive host`), on the socket `sock`: while
    *  it lasts, the daemon passes each connection to the machine's control-plane socket on to `sock`,
    *  and still hears what agents report there, for its other viewers and its pushes. Answered by
    *  `control`. */
@@ -99,8 +99,7 @@ export type ServerMsg =
   | { t: "pong"; reqId: string; buildStamp?: number }
   /** Answers `screen`, in order with the session's data: bytes before it are older than it. */
   | { t: "screen"; reqId: string; id: string; replay: string | null }
-  /** Answers `control`; `error` when this daemon serves no control-plane socket (one the app
-   *  started: the app serves it). */
+  /** Answers `control`; `error` when `sock` is not an absolute path. */
   | { t: "control"; reqId: string; error?: string }
   /** Answers `viewport`; null when the session is not running. */
   | { t: "viewport"; reqId: string; id: string; text: string | null }

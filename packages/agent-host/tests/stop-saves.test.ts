@@ -15,7 +15,7 @@ let daemon: ChildProcess | undefined;
 afterAll(() => { daemon?.kill("SIGKILL"); fs.rmSync(dir, { recursive: true, force: true }); });
 
 async function start(): Promise<void> {
-  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config"), HIVEMIND_DAEMON_STANDALONE: "1" } });
+  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config") } });
   for (let i = 0; i < 600 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
 }
 

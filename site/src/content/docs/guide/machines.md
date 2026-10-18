@@ -140,5 +140,9 @@ hive push test
 - **`hive host`** turns a machine into an always-on host of its workspaces, with no desktop,
   reached through your network (`hive-net`) instead of ssh. `hive host pair` makes it one of
   your devices; frames can then run on it. See [Self-hosting](../self-hosting/).
+- **Your other devices**, with the app or `hive host` on them, run the terminals of frames in
+  their folders. An agent there reports to that device's terminal daemon, which passes what it
+  says on to the app that started it: its status, `hive ctl read`, and its reply in the starter's
+  `hive ctl inbox`, as for an agent on your own computer.
 - **Sharing a workspace** lets another person join with their own computer. See
   [Multiplayer](../multiplayer/).
