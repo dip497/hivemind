@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New widgets stack down the right edge by their real height, so a tall widget is no longer covered by the ones added after it; a column that reaches the bottom goes on to its left.
+
 - The guide's diagrams are drawn in the site's own colours and fonts; the issue-states diagram now says nothing enforces the order, and the terminal-size and widget diagrams match what the code does.
 
 - The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.

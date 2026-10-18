@@ -15,10 +15,7 @@ import { widgetsOf } from "./board-model";
 import type { Board } from "./useBoard";
 import { WidgetContent, useWidgetLook } from "./WidgetBody";
 import { clickWidget, optionsOf, useDrawn } from "./widget-runtime";
-
-const CARD_W = 240;
-const EDGE = 16;
-type Spot = { x: number; y: number };
+import { CARD_W, stackDownRightEdge, type Size, type Spot } from "./widget-stack";
 
 const posKey = (repo: string) => `hivemind:widget-spots:${repo}`;
 const HIDDEN = "hivemind:widgets-hidden";
@@ -41,6 +38,7 @@ export function WidgetLayer({ repo, board, packages }: {
   packages: WidgetPackage[];
 }) {
   const [spots, setSpots] = useState<Record<string, Spot>>({});
+  const [sizes, setSizes] = useState<Record<string, Size>>({});
   const [hidden, setHidden] = useState(() => readJson(HIDDEN, false));
   const [, setSize] = useState(0);
   useEffect(() => { setSpots(repo ? readJson(posKey(repo), {}) : {}); }, [repo]);
@@ -60,15 +58,18 @@ export function WidgetLayer({ repo, board, packages }: {
     });
   };
   const hide = (value: boolean) => { setHidden(value); writeJson(HIDDEN, value); };
-  // A card never placed goes down the right edge, below the ones before it.
-  const fallback = (i: number): Spot => ({ x: window.innerWidth - CARD_W - EDGE, y: 64 + i * 156 });
+  const sized = (id: string, size: Size) => setSizes((all) => {
+    const was = all[id];
+    return was && was.w === size.w && was.h === size.h ? all : { ...all, [id]: size };
+  });
+  const stacked = stackDownRightEdge(widgets.map((w) => w.id), sizes, { w: window.innerWidth, h: window.innerHeight });
 
   if (!repo || widgets.length === 0) return null;
   return (
     <div className="pointer-events-none fixed inset-0 z-40" data-widget-layer={hidden ? "hidden" : "shown"}>
-      {!hidden && widgets.map((w, i) => (
+      {!hidden && widgets.map((w) => (
         <WidgetCard key={w.id} object={w} pkg={packages.find((p) => p.id === w.widget)} name={nameOf(w.widget)} onEdit={() => board.edit(w.id)}
-          spot={onScreen(spots[w.id] ?? fallback(i))} onMove={place} onRemove={() => board.remove(w.id)}
+          spot={onScreen(spots[w.id] ?? stacked[w.id]!)} onMove={place} onSize={sized} onRemove={() => board.remove(w.id)}
           onOption={(option, value) => board.update(w.id, (o) => (o.kind === "widget" ? { ...o, options: { ...o.options, [option]: value } } : o))} />
       ))}
       <div className="pointer-events-auto absolute bottom-4 right-4">
@@ -80,9 +81,9 @@ export function WidgetLayer({ repo, board, packages }: {
   );
 }
 
-function WidgetCard({ object, pkg, name, spot, onMove, onRemove, onOption, onEdit }: {
+function WidgetCard({ object, pkg, name, spot, onMove, onSize, onRemove, onOption, onEdit }: {
   object: WidgetObject; pkg: WidgetPackage | undefined; name: string; spot: Spot;
-  onMove: (id: string, spot: Spot, keep: boolean) => void; onRemove: () => void;
+  onMove: (id: string, spot: Spot, keep: boolean) => void; onSize: (id: string, size: Size) => void; onRemove: () => void;
   onOption: (option: string, value: unknown) => void;
   onEdit: () => void;
 }) {
@@ -97,6 +98,18 @@ function WidgetCard({ object, pkg, name, spot, onMove, onRemove, onOption, onEdi
   const [glide, setGlide] = useState(0);
   const applied = useRef<number | null>(null);
   const drag = useRef<{ dx: number; dy: number; x: number; y: number; moved: boolean } | null>(null);
+
+  // Its drawn size, so the cards stacked under it start below it however tall it grows.
+  useEffect(() => {
+    const card = el.current;
+    if (!card) return;
+    const measure = () => onSize(id, { w: card.offsetWidth, h: card.offsetHeight });
+    measure();
+    const watch = new ResizeObserver(measure);
+    watch.observe(card);
+    return () => watch.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // A move the widget asked for: every viewer glides its card there, on its own screen's size.
   const asked = drawing?.move;
