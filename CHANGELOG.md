@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A widget with no card reaches the right edge of the screen when it moves there; it stopped as far short as a card is wider than it.
+
 - A Dog example widget (`examples/widgets/dog`): Biscuit walks along the bottom of the screen, barks when an agent starts waiting on you, jumps when a turn finishes and naps when every agent is idle.
 
 - An agent's notification card is drawn over widgets instead of behind them; dialogs now open over Settings and a fullscreen tile, and tooltips over dialogs.

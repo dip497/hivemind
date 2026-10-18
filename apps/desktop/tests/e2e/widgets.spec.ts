@@ -193,3 +193,34 @@ test("a widget walking and stepping through its sprite costs the page no layout 
     fs.rmSync(ud, { recursive: true, force: true });
   }
 });
+
+test("a widget with no card, sent to the right edge, reaches it however narrow it is drawn", async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-edge-repo-"));
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-edge-ud-"));
+  execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
+  const dir = path.join(ud, "config", "hivemind", "widgets", "edge");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "widget.json"), JSON.stringify({ name: "Edge", chrome: "none" }));
+  fs.writeFileSync(path.join(dir, "widget.js"), `hive.on("start", () => {
+  hive.render({ type: "sprite", src: "walk.svg", frameW: 32, frameH: 32, scale: 2 });
+  hive.moveTo({ x: 1, y: "bottom" }, { over: 0 });
+});`);
+  fs.writeFileSync(path.join(dir, "walk.svg"), WALK_SHEET);
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
+  try {
+    const page = await app.firstWindow();
+    await page.waitForSelector(".react-flow", { timeout: 30_000 });
+    await page.locator('[data-toolbar-action="board"]').first().click();
+    await page.locator('[data-board-choice="widget:edge"]').click();
+    const edge = page.locator('[data-widget-layer] [data-widget="edge"]');
+    await expect(edge.locator("[data-widget-sprite]")).toBeVisible({ timeout: 15_000 });
+    const width = await page.evaluate(() => window.innerWidth);
+    await expect.poll(async () => { const b = await edge.boundingBox(); return b ? Math.round(width - (b.x + b.width)) : -1; }, { timeout: 10_000 }).toBe(0);
+  } finally {
+    await app.close();
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(ud, { recursive: true, force: true });
+  }
+});

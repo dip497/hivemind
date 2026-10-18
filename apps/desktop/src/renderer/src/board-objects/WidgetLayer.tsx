@@ -26,9 +26,9 @@ function writeJson(key: string, value: unknown): void {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* not kept: still placed now */ }
 }
 
-/** `spot` kept on the screen, whatever its size now. */
-const onScreen = (spot: Spot): Spot => ({
-  x: Math.min(Math.max(spot.x, 0), Math.max(window.innerWidth - CARD_W, 0)),
+/** `spot` kept on the screen, whatever its size now: a card as wide as it is drawn, else a card's width. */
+const onScreen = (spot: Spot, size?: Size): Spot => ({
+  x: Math.min(Math.max(spot.x, 0), Math.max(window.innerWidth - (size?.w ?? CARD_W), 0)),
   y: Math.min(Math.max(spot.y, 0), Math.max(window.innerHeight - 48, 0)),
 });
 
@@ -69,7 +69,7 @@ export function WidgetLayer({ repo, board, packages }: {
     <div className="pointer-events-none fixed inset-0 z-(--layer-widgets)" data-widget-layer={hidden ? "hidden" : "shown"}>
       {!hidden && widgets.map((w) => (
         <WidgetCard key={w.id} object={w} pkg={packages.find((p) => p.id === w.widget)} name={nameOf(w.widget)} onEdit={() => board.edit(w.id)}
-          spot={onScreen(spots[w.id] ?? stacked[w.id]!)} onMove={place} onSize={sized} onRemove={() => board.remove(w.id)}
+          spot={onScreen(spots[w.id] ?? stacked[w.id]!, sizes[w.id])} onMove={place} onSize={sized} onRemove={() => board.remove(w.id)}
           onOption={(option, value) => board.update(w.id, (o) => (o.kind === "widget" ? { ...o, options: { ...o.options, [option]: value } } : o))} />
       ))}
       <div className="pointer-events-auto absolute bottom-4 right-4">
@@ -124,6 +124,7 @@ function WidgetCard({ object, pkg, name, spot, onMove, onSize, onRemove, onOptio
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asked?.n]);
 
+  const drawnSize = (): Size | undefined => (el.current ? { w: el.current.offsetWidth, h: el.current.offsetHeight } : undefined);
   const down = (e: ReactPointerEvent<HTMLDivElement>) => {
     // Its buttons, options and what is written in it are pressed, not dragged.
     if (e.button !== 0 || (e.target as HTMLElement).closest("button, input, label, textarea, [role=checkbox]")) return;
@@ -136,7 +137,7 @@ function WidgetCard({ object, pkg, name, spot, onMove, onSize, onRemove, onOptio
     if (!d) return;
     if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return;
     d.moved = true;
-    onMove(id, onScreen({ x: e.clientX - d.dx, y: e.clientY - d.dy }), false);
+    onMove(id, onScreen({ x: e.clientX - d.dx, y: e.clientY - d.dy }, drawnSize()), false);
   };
   const up = (e: ReactPointerEvent<HTMLDivElement>) => {
     const d = drag.current;
@@ -145,7 +146,7 @@ function WidgetCard({ object, pkg, name, spot, onMove, onSize, onRemove, onOptio
     e.currentTarget.releasePointerCapture(e.pointerId);
     // Pressed and let go where it was: a click, which the widget's code hears.
     if (!d.moved) { clickWidget(id); return; }
-    onMove(id, onScreen(spot), true);
+    onMove(id, onScreen(spot, drawnSize()), true);
   };
   return (
     <div ref={el} data-widget={object.widget} data-widget-chrome={bare ? "none" : "card"} aria-label={name}
