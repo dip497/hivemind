@@ -3,7 +3,7 @@
 #
 # DEFAULT (no flags): downloads prebuilt binaries from the latest GitHub
 # Release. Needs only `curl` and `bash`, plus any supported agent CLI (claude, codex,
-# gemini, …) to launch agents — Hivemind finds whichever are installed.
+# amp, …) to launch agents — Hivemind finds whichever are installed.
 # No node / pnpm / bun required. Prebuilts exist for Linux x86_64 (AppImage)
 # and macOS Apple Silicon (.app zip); Linux arm64 gets the `hive` CLI alone
 # (a remote machine); anything else needs `--dev`.
@@ -732,7 +732,7 @@ agents_check() {
     ok "agents found: $found"
   else
     warn "No agent CLI found yet. Hivemind launches fine; install one to start agents:"
-    warn "  https://docs.claude.com/en/docs/claude-code  (or codex, gemini, … — see Settings ▸ Agents)"
+    warn "  https://docs.claude.com/en/docs/claude-code  (or codex, amp, … — see Settings ▸ Agents)"
   fi
 }
 
