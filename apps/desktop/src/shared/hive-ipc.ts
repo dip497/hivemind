@@ -119,6 +119,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     network: () => port.invoke("net:network"),
     networkHealth: () => port.invoke("net:network-health"),
     useNetwork: (given) => port.invoke("net:use-network", given),
+    onNetworkChanged: (cb) => port.on("net:network-changed", () => cb()),
     getAppVersion: () => port.invoke("getAppVersion"),
     settingsSync: () => port.sendSync("settings:get-sync"),
     workspaceCoreSync: (repo) => port.sendSync("workspace:core-sync", repo),
