@@ -1,0 +1,50 @@
+{
+  "name": "hivemind-api",
+  "version": "2026.10.3",
+  "description": "Drive a Hivemind workspace from a program: agents, frames and terminals over the drive socket, with a token.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dip497/hivemind.git",
+    "directory": "packages/sdk"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:npm": "bash scripts/build-npm.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@hivemind/core": "workspace:*",
+    "@hivemind/tsconfig": "workspace:*",
+    "@hivemind/workspace-api": "workspace:*",
+    "@types/bun": "^1.4.2",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "zod": "^4"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  }
+}

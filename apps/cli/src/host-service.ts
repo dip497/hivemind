@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { configDir } from "./app-data.js";
+import { configDir } from "@hivemind/core/app-data";
 import { EXIT } from "./hcp.js";
 
 export const UNIT = "hive-host.service";

@@ -22,9 +22,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The check the main branch requires: desktop and packages, which run side by side, both passed.
+  # The check the main branch requires: desktop, packages and the Python SDK, which run side by
+  # side, all passed.
   build-and-test:
-    needs: [desktop, packages]
+    needs: [desktop, packages, sdk-python]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -32,9 +33,46 @@ jobs:
       - env:
           DESKTOP: ${{ needs.desktop.result }}
           PACKAGES: ${{ needs.packages.result }}
+          SDK_PYTHON: ${{ needs.sdk-python.result }}
         run: |
-          echo "desktop: $DESKTOP, packages: $PACKAGES"
-          [ "$DESKTOP" = success ] && [ "$PACKAGES" = success ]
+          echo "desktop: $DESKTOP, packages: $PACKAGES, sdk-python: $SDK_PYTHON"
+          [ "$DESKTOP" = success ] && [ "$PACKAGES" = success ] && [ "$SDK_PYTHON" = success ]
+
+  # The Python SDK, on the oldest and newest Python it supports: conformance/drive.json, and a real
+  # `hive host` started from source (hence bun and the repo's packages).
+  sdk-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        python: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - uses: pnpm/action-setup@v6.1.0
+        with:
+          run_install: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4"
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Tests
+        working-directory: packages/sdk-python
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
 
   packages:
     runs-on: ubuntu-latest

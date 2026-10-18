@@ -37,7 +37,7 @@ export function ApiAccessPrefs() {
           <p className="settings-note">Only the app knows</p>
         ) : grants.length === 0 ? (
           <p className="text-label text-[var(--color-fg3)]" data-grants-none>
-            None yet. A script or tool with a token, an orchestrator or a dashboard, starts and answers agents here, and cannot push, share the workspace or write files.
+            None yet. A script or tool with a token, an orchestrator or a dashboard, starts and answers agents here. It cannot push or share the workspace; its role says what else it may do.
           </p>
         ) : (
           <ul className="flex flex-col" data-grants>

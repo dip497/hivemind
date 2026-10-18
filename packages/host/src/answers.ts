@@ -13,11 +13,12 @@
 import type { AnswerKeys, InputKind } from "@hivemind/agents";
 import { keyBytes } from "@hivemind/agent-host/keys";
 import type { ScreenReading, SessionStatus } from "@hivemind/agent-host/status-store";
-import type { Answerer, QuestionAnswer, ToolAsked } from "@hivemind/workspace-api/agents";
+import type { Answerer, Approval, QuestionAnswer, ToolAsked } from "@hivemind/workspace-api/agents";
 import { ApiError, oneOf, text, written } from "@hivemind/workspace-api/protocol";
 import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { ControlPlane } from "./control/plane.js";
+import { TOOL_MAX } from "./conversation.js";
 import { waitOn, waitsOnThePerson } from "./needs.js";
 
 /** What answering needs of the control plane: the agents' statuses and waits, and typing as the
@@ -117,10 +118,20 @@ const decidedOf = (answer: unknown): string => {
   return `choice ${each.join(", ")}`;
 };
 
-export function answers(o: AnswersOptions): Domain<"agent.answer"> {
+export function answers(o: AnswersOptions): Domain<"agent.answer" | "agent.approval"> {
   const answered = new Set<string>();
   return {
     answers: {
+      // What the person or the starter decides on, whole: the summary its supervisor is told is cut.
+      "agent.approval": (_from, tile): Approval => {
+        const wait = o.plane().waits.of(toBareId(text(tile, "tile")));
+        if (wait?.kind !== "approval") throw new ApiError("NOT_FOUND", "that agent waits on no supervised tool use");
+        const whole = typeof wait.input === "string" ? wait.input : JSON.stringify(wait.input ?? {}, null, 2);
+        return {
+          request: wait.request, since: wait.since, tool: wait.tool!, summary: wait.summary!, input: whole.slice(0, TOOL_MAX),
+          expiresAt: wait.expiresAt!, ...(whole.length > TOOL_MAX ? { truncated: true as const } : {}),
+        };
+      },
       "agent.answer": (from, tile, since, answer) => {
         const bare = toBareId(text(tile, "tile"));
         if (typeof since !== "number") throw new ApiError("BAD_REQUEST", "since must be a number");

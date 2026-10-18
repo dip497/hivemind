@@ -352,6 +352,7 @@ resolve_assets() {
       *)            CLI_ASSET=""; APP_ASSET="" ;;
     esac
     NET_ASSET="${PLATFORM:+hive-net-$PLATFORM}"
+    sdk_assets
     return
   fi
   case "$PLATFORM" in
@@ -361,6 +362,13 @@ resolve_assets() {
     *)            CLI_ASSET=""; APP_ASSET="" ;;
   esac
   NET_ASSET="${PLATFORM:+hive-net-$PLATFORM}"
+  sdk_assets
+}
+
+# The API SDKs, the same on every platform: each release carries them under these names too.
+sdk_assets() {
+  SDK_NPM_ASSET="hivemind-api.tgz"
+  SDK_PYTHON_ASSET="hivemind-api-python.tar.gz"
 }
 
 # Test seam: `HIVEMIND_LIB_ONLY=1 source install.sh` stops here, leaving every
@@ -405,6 +413,8 @@ if [ "${HIVEMIND_PRINT_PLAN:-0}" = "1" ]; then
   echo "cli_asset=${CLI_ASSET:-none}"
   echo "app_asset=${APP_ASSET:-none}"
   echo "net_asset=${NET_ASSET:-none}"
+  echo "sdk_npm_asset=$SDK_NPM_ASSET"
+  echo "sdk_python_asset=$SDK_PYTHON_ASSET"
   exit 0
 fi
 
@@ -425,10 +435,11 @@ fi
 # `*.new` (up to ~115MB). On a near-full disk those orphans snowball into ENOSPC
 # and wedge every future upgrade. CLI_TMP/APPIMG_TMP are assigned later in
 # install_prebuilt; declared here so the trap can always see them.
-CLI_TMP=""; APPIMG_TMP=""; NET_TMP=""
-cleanup_tmp() { rm -f "$CLI_TMP" "$APPIMG_TMP" "$NET_TMP" 2>/dev/null || true; }
+CLI_TMP=""; APPIMG_TMP=""; NET_TMP=""; SDK_TMP=""
+cleanup_tmp() { rm -f "$CLI_TMP" "$APPIMG_TMP" "$NET_TMP" 2>/dev/null || true; [ -z "$SDK_TMP" ] || rm -rf "$SDK_TMP" 2>/dev/null || true; }
 trap cleanup_tmp EXIT INT TERM
 # Sweep orphans a PREVIOUS killed run may have left (the bug above, pre-fix).
+rm -rf "$APP_DIR"/sdk.*.new 2>/dev/null || true
 rm -f "$APP_DIR"/hive.*.new "$APP_DIR"/hive-net.*.new "$APP_DIR"/hivemind.AppImage.*.new "$APP_DIR"/hivemind.app.*.new 2>/dev/null || true
 
 # hive-net, beside hive: this machine's device on the network (R10). Its release build is
@@ -445,6 +456,27 @@ install_net() {
     rm -f "$NET_TMP"
     warn "hive-net is not in $TAG; the rest is installed without it"
   fi
+}
+
+# The API SDKs, for programs that drive a workspace: `npm install ~/.hivemind-app/sdk/hivemind-api.tgz`
+# and `pip install ~/.hivemind-app/sdk/python`. A release without them installs the rest.
+install_sdk() {
+  local dir="$APP_DIR/sdk" base="https://github.com/$REPO/releases/download/$TAG"
+  SDK_TMP="$APP_DIR/sdk.$$.new"
+  rm -rf "$SDK_TMP"; mkdir -p "$SDK_TMP/python"
+  if curl -fsL -o "$SDK_TMP/hivemind-api.tgz" "$base/$SDK_NPM_ASSET" && [ -s "$SDK_TMP/hivemind-api.tgz" ] \
+    && curl -fsL -o "$SDK_TMP/python.tar.gz" "$base/$SDK_PYTHON_ASSET" \
+    && tar -xzf "$SDK_TMP/python.tar.gz" -C "$SDK_TMP/python" --strip-components=1 \
+    && [ -f "$SDK_TMP/python/pyproject.toml" ]; then
+    mkdir -p "$dir"
+    mv -f "$SDK_TMP/hivemind-api.tgz" "$dir/hivemind-api.tgz"
+    rm -rf "$dir/python"
+    mv "$SDK_TMP/python" "$dir/python"
+    ok "API SDKs in $dir: npm install $dir/hivemind-api.tgz · pip install $dir/python"
+  else
+    warn "the API SDKs are not in $TAG; the rest is installed without them"
+  fi
+  rm -rf "$SDK_TMP"
 }
 
 # ── PREBUILT path ─────────────────────────────────────────────────────────
@@ -542,6 +574,7 @@ install_prebuilt() {
   ln -sf "$APP_DIR/hive" "$BIN_DIR/hive"
   ok "linked $BIN_DIR/hive → $APP_DIR/hive"
   install_net
+  install_sdk
 
   if [ -z "$APP_ASSET" ]; then
     echo "$TAG" > "$INSTALLED_FILE"

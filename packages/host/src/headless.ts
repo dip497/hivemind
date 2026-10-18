@@ -23,7 +23,7 @@ import type { Duplex } from "node:stream";
 import { DaemonEndpoint, REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { socketIn } from "./socket-in.js";
-import { serveDrive } from "./drive.js";
+import { askDrive, serveDrive } from "./drive.js";
 import { controlApi } from "./control-api.js";
 import { Grants, grantsDomain } from "./grants.js";
 import { Services, wantedServices } from "./services.js";
@@ -72,7 +72,7 @@ import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from 
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
-import type { KnownMachines } from "@hivemind/core/remote-uri";
+import { isRemote, type KnownMachines } from "@hivemind/core/remote-uri";
 import { manifestFacts } from "./agent-list.js";
 import { PushNotices, PushSubscriptions, postNotice } from "./push.js";
 import { machines as savedMachines } from "./remote/catalog.js";
@@ -295,7 +295,11 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
     appearance({ current: () => appearanceNow(), onChange: () => {}, server: () => api }),
     peopleHere.domain,
-    grantsDomain(() => grants),
+    grantsDomain({
+      serving: () => drive.serving,
+      grants: () => grants,
+      elsewhere: (method, params) => askDrive(driveSockPath(o.dir), readOrCreateToken(o.dir), method, params),
+    }),
     framesDomain({
       store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare),
       machines: () => [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...devices.list().filter((d) => d.kind !== "phone").map((d) => ({ id: d.device, name: d.name }))],
@@ -333,7 +337,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     controlApi({ control: () => control.api() }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").
-    conversations({ transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR))}),
+    conversations({
+      transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
+      runsHere: (bare) => !isRemote(runsIn(heldBoards(store), bare)),
+    }),
     // The community views installed here on the person's phone, their host run here (P8).
     views({
       installed: (repo) => listInstalledViews(repo),
@@ -431,15 +438,18 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
 
   // The services of the tool plugins switched on, while this host serves the drive socket; again
   // each time the settings or the plugins installed change.
-  const services = new Services({ driveSock, grants, logDir: path.join(o.dir, "services") });
+  let services: Services | null = null;
   let syncing = Promise.resolve();
   const syncServices = (): void => {
-    syncing = syncing.then(async () => services.sync(wantedServices(await listToolPackages(), (await readSettings(settingsFile)).plugins.state, process.env.HIVEMIND_SAFE_MODE === "1")))
+    const s = services;
+    if (!s) return;
+    syncing = syncing.then(async () => s.sync(wantedServices(await listToolPackages(), (await readSettings(settingsFile)).plugins.state, process.env.HIVEMIND_SAFE_MODE === "1")))
       .catch((e: unknown) => o.onWarn(`tool plugins' services: ${e instanceof Error ? e.message : String(e)}`));
   };
   const servicesWatched = [settingsFile, userToolsDir()];
   void drive.serving.then((mine) => {
     if (!mine) return;
+    services = new Services({ driveSock, grants, logDir: path.join(o.dir, "services") });
     for (const f of servicesWatched) fs.watchFile(f, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) syncServices(); });
     syncServices();
   });
@@ -669,7 +679,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       // answers on the control-plane socket again.
       for (const f of servicesWatched) fs.unwatchFile(f);
       await syncing;
-      await services.stop();
+      await services?.stop();
       hcp.close();
       drive.close();
       endpoint.close();

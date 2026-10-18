@@ -1,7 +1,8 @@
 /** Client for the PTY daemon socket; the protocol is imported from the desktop, never copied. */
 import net from "node:net";
 import { frame, makeLineDecoder, type ClientMsg, type ServerMsg, type SessionInfo } from "@hivemind/agent-host/pty-protocol";
-import { appSocket, type Where } from "./app-data.js";
+import type { Where } from "@hivemind/core/app-data";
+import { appSocket } from "./app-data.js";
 
 export type { SessionInfo };
 

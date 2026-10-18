@@ -16,6 +16,8 @@ import type { Connection, Domain } from "@hivemind/workspace-api/server";
 const PREFIX = "hgr_";
 /** The longest name a grant is given. */
 const NAME_MAX = 80;
+/** How often a grant's last use is written at most. */
+const USED_EVERY_MS = 60_000;
 
 interface Kept extends ClientGrant {
   /** sha256 of the token, hex. */
@@ -34,12 +36,15 @@ function real(repo: string): string {
 }
 
 export class Grants {
-  private readonly grants: Kept[];
+  private kept: Kept[] | null = null;
   private readonly revoked = new Set<(id: string) => void>();
 
   /** `file`: where grants are kept, 0600. */
-  constructor(private readonly file: string) {
-    this.grants = read(file);
+  constructor(private readonly file: string) {}
+
+  /** Read when first needed, so a damaged file fails what needs it, not the process. */
+  private get grants(): Kept[] {
+    return (this.kept ??= read(this.file));
   }
 
   list(): ClientGrant[] {
@@ -65,32 +70,45 @@ export class Grants {
     return true;
   }
 
-  /** Take back every grant held for `plugin`'s service. */
-  revokePlugin(plugin: string): void {
-    for (const g of this.grants.filter((k) => k.plugin === plugin)) this.revoke(g.id);
+  /** Take back every service's grant: one found as a process begins serving the drive socket was
+   *  left behind by the one before, as services run only there. */
+  revokeServices(): void {
+    for (const g of this.grants.filter((k) => k.plugin)) this.revoke(g.id);
   }
 
   /** The grant `token` is, while it holds; null for any other token, and once it expired. */
   holder(token: unknown): ClientGrant | null {
     if (typeof token !== "string" || !token.startsWith(PREFIX)) return null;
     const id = token.slice(PREFIX.length, token.indexOf("_", PREFIX.length));
-    const kept = this.grants.find((g) => g.id === id);
+    const kept = this.readable().find((g) => g.id === id);
     if (!kept || !sameHex(kept.hash, hashOf(token)) || !this.live(kept.id)) return null;
     return shown(kept);
   }
 
   /** Whether grant `id` still holds: not taken back, not expired. */
   live(id: string): boolean {
-    const kept = this.grants.find((g) => g.id === id);
+    const kept = this.readable().find((g) => g.id === id);
     return !!kept && (kept.expires === null || Date.now() < kept.expires);
   }
 
-  /** A program connected with grant `id`. */
+  /** A program connected with grant `id`: written at most once a minute, as `hive ctl`
+   *  connects for each command. */
   used(id: string): void {
     const kept = this.grants.find((g) => g.id === id);
-    if (!kept) return;
+    if (!kept || (kept.lastUsed !== null && Date.now() - kept.lastUsed < USED_EVERY_MS)) return;
     kept.lastUsed = Date.now();
-    this.save();
+    try {
+      this.save();
+    } catch { /* noted at the next connection */ }
+  }
+
+  /** The grants, or none when the file cannot be read: a token then lets nothing in. */
+  private readable(): Kept[] {
+    try {
+      return this.grants;
+    } catch {
+      return [];
+    }
   }
 
   /** Be told of each grant taken back, until the returned function is called. */
@@ -130,19 +148,30 @@ function read(file: string): Kept[] {
 /** Only the person: at a window of theirs, or on one of their own devices. */
 const isPerson = (from: Connection): boolean => from.actor.kind === "person" || (from.actor.kind === "peer" && from.actor.access === "owner" && !from.actor.client);
 
-/** `grants`: read when first asked for, so a damaged file fails the call that needs it. */
-export function grantsDomain(grants: () => Grants): Domain<"grant.list" | "grant.create" | "grant.revoke"> {
+/** Where the grants are kept: here, by the process that serves the drive socket, which alone
+ *  checks tokens; anywhere else the person's calls are answered by that process. */
+export interface GrantsOwner {
+  /** Whether this process serves the drive socket. */
+  serving(): Promise<boolean>;
+  /** This process's grants: read when first asked for, so a damaged file fails the call. */
+  grants(): Grants;
+  /** `method` answered by the process that serves the drive socket, asked as the person. */
+  elsewhere(method: string, params: unknown[]): Promise<unknown>;
+}
+
+export function grantsDomain(owner: GrantsOwner): Domain<"grant.list" | "grant.create" | "grant.revoke"> {
   const person = (from: Connection): void => {
     if (!isPerson(from)) throw new ApiError("FORBIDDEN", "only the person at this machine lets programs drive its workspaces");
   };
+  // The process serving the drive socket answers as this one would.
+  const here = async <T>(from: Connection, method: string, params: unknown[], answer: (grants: Grants) => T): Promise<T> => {
+    person(from);
+    return (await owner.serving()) ? answer(owner.grants()) : (owner.elsewhere(method, params) as Promise<T>);
+  };
   return {
     answers: {
-      "grant.list": (from) => {
-        person(from);
-        return grants().list();
-      },
-      "grant.create": (from, spec) => {
-        person(from);
+      "grant.list": (from) => here(from, "grant.list", [], (grants) => grants.list()),
+      "grant.create": (from, spec) => here(from, "grant.create", [spec], (grants) => {
         const s = (spec ?? {}) as Record<string, unknown>;
         const name = text(s.name, "grant.name").trim();
         if (!name || name.length > NAME_MAX) throw new ApiError("BAD_REQUEST", `grant.name is at most ${NAME_MAX} characters`);
@@ -154,12 +183,9 @@ export function grantsDomain(grants: () => Grants): Domain<"grant.list" | "grant
         if (expires !== null && (typeof expires !== "number" || !Number.isSafeInteger(expires) || expires <= Date.now())) {
           throw new ApiError("BAD_REQUEST", "grant.expires is a time to come, in ms since the epoch");
         }
-        return grants().create({ name, repos, role, expires });
-      },
-      "grant.revoke": (from, id) => {
-        person(from);
-        return { revoked: grants().revoke(text(id, "id")) };
-      },
+        return grants.create({ name, repos, role, expires });
+      }),
+      "grant.revoke": (from, id) => here(from, "grant.revoke", [id], (grants) => ({ revoked: grants.revoke(text(id, "id")) })),
     },
     effects: {
       "grant.create": (spec) => ({ target: typeof (spec as { name?: unknown } | null)?.name === "string" ? (spec as { name: string }).name : undefined, detail: typeof (spec as { role?: unknown } | null)?.role === "string" ? (spec as { role: string }).role : undefined }),

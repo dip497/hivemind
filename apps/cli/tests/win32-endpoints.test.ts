@@ -9,9 +9,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ipcPath } from "@hivemind/core";
-import { sockPath, token } from "../src/hcp.js";
-import { win32UserDataDir } from "../src/app-data.js";
-import { driveSockPath } from "../src/drive.js";
+import { sockPath } from "../src/hcp.js";
+import { win32UserDataDir } from "@hivemind/core/app-data";
+import { defaultToken, driveSocketPath } from "hivemind-api";
 import { defaultSocket } from "../src/pty-client.js";
 
 const APPDATA = "C:\\Users\\u\\AppData\\Roaming";
@@ -50,10 +50,10 @@ describe("win32 endpoints", () => {
     expect(sockPath({ platform: "linux", env: { XDG_CONFIG_HOME: "/cfg" } })).toBe(path.join("/cfg", "hivemind", "hcp.sock"));
     expect(defaultSocket({ platform: "linux", env: {} })).toBe(path.join(os.homedir(), ".config", "hivemind", "pty-daemon.sock"));
     const mac = path.join(os.homedir(), "Library", "Application Support", "hivemind");
-    expect([sockPath, defaultSocket, driveSockPath].map((of) => of({ platform: "darwin", env: { XDG_CONFIG_HOME: "/cfg" } })))
+    expect([sockPath, defaultSocket, driveSocketPath].map((of) => of({ platform: "darwin", env: { XDG_CONFIG_HOME: "/cfg" } })))
       .toEqual([path.join(mac, "hcp.sock"), path.join(mac, "pty-daemon.sock"), path.join(mac, "drive.sock")]);
     // HIVEMIND_APP_DATA names another, for all of them.
-    expect(driveSockPath({ platform: "linux", env: { HIVEMIND_APP_DATA: "/data" } })).toBe(path.join("/data", "drive.sock"));
+    expect(driveSocketPath({ platform: "linux", env: { HIVEMIND_APP_DATA: "/data" } })).toBe(path.join("/data", "drive.sock"));
   });
 
   test("the token is read from the win32 userData dir; HCP_TOKEN still wins", () => {
@@ -63,8 +63,8 @@ describe("win32 endpoints", () => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "hcp.token"), " tok-win \n");
     try {
-      expect(token({ platform: "win32", env: { APPDATA: roaming } })).toBe("tok-win");
-      expect(token({ platform: "win32", env: { APPDATA: roaming, HCP_TOKEN: "injected" } })).toBe("injected");
+      expect(defaultToken({ platform: "win32", env: { APPDATA: roaming } })).toBe("tok-win");
+      expect(defaultToken({ platform: "win32", env: { APPDATA: roaming, HCP_TOKEN: "injected" } })).toBe("injected");
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }

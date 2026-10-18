@@ -16,7 +16,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { NetworkProfiles, type NetworkProfile } from "@hivemind/workspace-host/network-profile";
 import { err, ok } from "../format.js";
-import { appData, hiveNetBin } from "../app-data.js";
+import { appData } from "@hivemind/core/app-data";
+import { hiveNetBin } from "../app-data.js";
 import { EXIT } from "../hcp.js";
 import { duration } from "./share.js";
 

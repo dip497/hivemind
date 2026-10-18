@@ -13,7 +13,8 @@ import path from "node:path";
 import type { ClientGrant } from "@hivemind/workspace-api/grants";
 import { err, ok } from "../format.js";
 import { EXIT, HcpCliError } from "../hcp.js";
-import { driveCall, driveSockPath } from "../drive.js";
+import { driveSocketPath } from "hivemind-api";
+import { driveCall } from "../drive.js";
 import { duration } from "./share.js";
 import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 
@@ -67,10 +68,10 @@ const createCmd = defineCommand({
       expires = Date.now() + ms;
     }
     const made = (await call(ctx, "grant.create", { name: args.name, repos, role, expires })) as { grant: ClientGrant; token: string };
-    return ok(ctx, { ...made, socket: driveSockPath() }, () => [
+    return ok(ctx, { ...made, socket: driveSocketPath() }, () => [
       made.token,
       `${made.grant.name} may ${role === "agents" ? "drive agents" : role} in ${made.grant.repos.map((r) => path.basename(r)).join(", ")}, ${expires === null ? "until you take it back" : `until ${when(expires)}`} (\`hive grant revoke ${made.grant.id}\`).`,
-      `It connects to ${driveSockPath()} and says {"hello": {"token": "<this token>", "workspace": "<the folder>"}}. The token is not shown again.`,
+      `It connects to ${driveSocketPath()} and says {"hello": {"token": "<this token>", "workspace": "<the folder>"}}. The token is not shown again.`,
     ].join("\n"));
   },
 });
