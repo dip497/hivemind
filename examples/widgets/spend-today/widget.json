@@ -1,0 +1,16 @@
+{
+  "id": "@dip497/spend-today",
+  "name": "Spend today",
+  "version": "1.0.0",
+  "description": "What your agents spent today in dollars and tokens, against a daily budget, as they report it.",
+  "category": "agents",
+  "icon": "icon.svg",
+  "size": { "w": 300, "h": 170 },
+  "options": [
+    { "id": "budget", "label": "Daily budget in dollars", "type": "number", "min": 0, "max": 10000, "default": 20 }
+  ],
+  "commands": [
+    { "name": "add", "description": "Add what a turn cost to today's total, under the agent that spent it.", "args": "{ \"usd\"?: number, \"tokens\"?: number, \"agent\"?: string }" },
+    { "name": "today", "description": "Today's total, per agent, and the budget." }
+  ]
+}
