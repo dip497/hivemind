@@ -104,13 +104,27 @@ const LEAST: Record<string, Role> = {
 };
 
 /** The machine's own methods (0.23): a peer's device is another machine, so they are no peer's,
- *  the person's own devices included. An agent on this machine keeps them, but joining. */
+ *  the person's own devices included. An agent on this machine keeps them, but joining and serving
+ *  a folder: those are the person's, since a tile is kept to its own workspace. */
 const MACHINE = new Set(["view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "views.rescan", "agents.rescan",
-  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join"]);
+  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add"]);
+
+/** Why a peer with `access`, or an agent here in `tile`, may not call `method`, in words that name
+ *  what works instead. */
+export function refusalOf(who: { access: Access; tile?: string }, method: string): string {
+  if (method === "host.join") {
+    return "joining a workspace is the person's, at this machine: run `hive join <link>` in a terminal of your own, not from an agent's tile or another device. Your own devices need no link: what they hold opens from Open recent → On your devices in the app";
+  }
+  if (method === "host.add") {
+    return "serving a folder as a workspace is the person's, at this machine: run `hive host add <folder>` in a terminal of your own, not from an agent's tile or another device";
+  }
+  if (MACHINE.has(method) && who.tile === undefined) return `${method} is this machine's own: ask it at the machine, in its app or with \`hive\` there`;
+  return `${method} is not open to your role on this workspace`;
+}
 
 /** Whether a peer with `access`, or an agent here in `tile`, may call `method`. */
 export function mayCall(who: { access: Access; tile?: string }, method: string): boolean {
-  if (MACHINE.has(method)) return who.tile !== undefined && method !== "host.join";
+  if (MACHINE.has(method)) return who.tile !== undefined && method !== "host.join" && method !== "host.add";
   if (who.access === "owner") return true;
   const { access } = who;
   const least = Object.hasOwn(LEAST, method) ? LEAST[method] : undefined;

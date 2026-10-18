@@ -1,0 +1,21 @@
+{
+  "id": "@dip497/launchpad",
+  "name": "Launchpad",
+  "version": "1.0.0",
+  "description": "Three jobs you hand to an agent often, one press each; you read each message before it is sent.",
+  "category": "agents",
+  "icon": "icon.svg",
+  "size": { "w": 280, "h": 170 },
+  "permissions": ["workspace:spawn", "workspace:prompt"],
+  "options": [
+    { "id": "oneLabel", "label": "First button", "type": "text", "maxLength": 32, "default": "Review my changes" },
+    { "id": "one", "label": "First job", "type": "text", "maxLength": 500, "default": "Review my uncommitted changes: say what is wrong or risky, file by file." },
+    { "id": "twoLabel", "label": "Second button", "type": "text", "maxLength": 32, "default": "Run and fix the tests" },
+    { "id": "two", "label": "Second job", "type": "text", "maxLength": 500, "default": "Run the tests. Fix what fails, and tell me what you changed." },
+    { "id": "threeLabel", "label": "Third button", "type": "text", "maxLength": 32, "default": "Write the changelog" },
+    { "id": "three", "label": "Third job", "type": "text", "maxLength": 500, "default": "Write the changelog entry for the work since the last release." }
+  ],
+  "commands": [
+    { "name": "jobs", "description": "The three jobs its buttons start, with their labels." }
+  ]
+}

@@ -11,12 +11,31 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - A guest who joins a workspace sees its board: when the host's last change was not to its frames and tiles (a tile moved, say), the guest's board stayed empty though connected.
 
+- An agent started with `hive ctl spawn` no longer draws garbled text: the tile's size, given while the session was still starting (seconds on a remote machine), was lost, so the agent kept drawing at 120×36 inside a tile of another size.
+
+- The website's home page is redesigned around agents building the workspace: the 21 agents on HiveHub, widgets, tools and views, the Queue view, machines over ssh, the phone page and a shared workspace, then what stays yours, measured numbers with their load, and the download. It also shows screenshots of twenty example plugins. Each clip slot shows a real screenshot until its recording lands.
+
+- The website's home page opens on a video recorded from the real app: a Claude Code agent writes a widget for its issue, installs it and ticks off the steps as it works. 
 - The guide's diagrams are drawn in the site's own colours and fonts; the issue-states diagram now says nothing enforces the order, and the terminal-size and widget diagrams match what the code does.
 
 - The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.
 
 - `hive agents install --help` and the installer name amp, an agent on HiveHub, as the example instead of gemini.
 
+- `hive join` refused from an agent's tile, a program or another device now says what works: the person runs `hive join <link>` in a terminal of their own, and their own devices need no link (Open recent → On your devices). Who may join is unchanged.
+- A workspace named by a folder name two workspaces share is refused by `hive share`, `hive people`, `hive grant create` and `hive ctl --repo` alike, listing each with its id or issue prefix and folder, instead of picking one; each of them now takes a folder, a name, an id or an issue prefix (`hive workspace list`), and a registered folder the app does not serve counts too.
+- With the app running, `hive host add <folder>` and `hive share <folder>` have the app serve that folder, with no window opening, instead of saying `hive host` is not running; `hive share` serves a folder it is not serving yet before making the link. Only the person may: from an agent's tile it is refused.
+- `hive host install` and `hive host run` refuse once while the app runs here and name the commands that work; the service no longer restarts into the same refusal.
+- An agent started on a machine that has only `hive` (one added over ssh, a `hive host`) now reports its turns and shows in `hive ctl agents`: the start installs the agent there from your app's, where the machine has none of its own. `hive ctl --repo` takes a workspace on a machine by its address (`ssh://…`, `machine://…`).
+- `hive ctl frame add --folder <path> [--machine <name or id>] [--name <frame>]` opens a frame on a folder of a saved machine or another of your devices, as **Open folder here…** does, so an agent can set up a remote builder alone. Workspace API 0.30: `frame.open` takes `machine`.
+- An agent in a frame on your other device that runs the app now reports back: its turn end reaches `hive ctl read`, the starter's `hive ctl inbox` and its tile's status, as on your own computer. Every machine's terminal daemon now holds the agents' control-plane socket and passes what they report to each device watching, and the app on that machine shows each session's status as its daemon keeps it, so a tile no longer reads done while its agent works or stays on starting after its turn.
+- A widget's `hive.d.ts` now types issues: `onIssues` and `issues.read` say each field, and an issue's `assignee` is `{ type, id }`, so a widget that printed it as text showed `[object Object]` and now fails its own type check instead.
+
+- A widget can show a long line whole: a `text` node with `wrap: true` goes on to the next line instead of being cut short with …, as every widget line was, a title too.
+
+### Added
+
+- Twenty plugins to try in `examples/`: widgets (Waiting on you, Agent pulse, Focus timer, CI light, Test meter, Spend today, Issue burndown, Launchpad), tools (dependency audit, flaky tests, changelog writer, release checklist, bundle size, SQLite browser, log tail, API explorer) and views (a 3D Constellation of your agents, Timeline, Agents by state, Workspace map), plus four wallpapers in `examples/wallpapers`.
 - A widget's `hive.hm.capabilities`, `features` and `settings` are an array or an object from its first line of code, empty until the app sends them, instead of a function that threw on `.includes()`; `hive.on("hm")` fires when they arrive or change.
 
 - A `tint` a widget's code draws colours its card, on the board and floating, as a sticky note's colour does.

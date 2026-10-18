@@ -12,10 +12,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { stopDaemons } from "./helpers/daemons";
+import { seedAgents } from "./helpers/agents";
 
 const APP_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const HIVE = path.resolve(APP_DIR, "../cli/dist/hive");
 const SSHD = "/usr/sbin/sshd";
+const FAKE = path.join(APP_DIR, "tests/e2e/fixtures/fake-agent.cjs");
 /** A stale `dist/hive` (one without the daemon) would be installed on the fixture and rejected there,
  *  which reads as a product failure; skip instead and say what to build. */
 const hiveRunsDaemon = fs.existsSync(HIVE) && `${spawnSync(HIVE, ["daemon", "--help"], { encoding: "utf8" }).stdout}`.includes("bridge");
@@ -54,14 +56,17 @@ async function freePort(): Promise<number> {
 test.beforeAll(async () => {
   // Short: the remote daemon's socket lives here and must fit a unix socket path.
   dir = fs.mkdtempSync("/tmp/hm-mach-");
-  for (const d of ["rhome", "home", "xdg"]) fs.mkdirSync(path.join(dir, d));
+  for (const d of ["rhome", "home", "xdg", "rbin"]) fs.mkdirSync(path.join(dir, d));
+  seedAgents(path.join(dir, "xdg"), ["claude"]);
+  // The agent the machine runs: a stand-in that keeps claude's hooks, on that machine's PATH.
+  fs.writeFileSync(path.join(dir, "rbin/claude"), `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE)} claude "$@"\n`, { mode: 0o755 });
   for (const k of ["host_key", "client_key"]) execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", path.join(dir, k)]);
   fs.copyFileSync(path.join(dir, "client_key.pub"), path.join(dir, "authorized_keys"));
   port = await freePort();
   fs.writeFileSync(sshdCfg(), [
     `Port ${port}`, "ListenAddress 127.0.0.1", `HostKey ${dir}/host_key`, `AuthorizedKeysFile ${dir}/authorized_keys`,
     `PidFile ${dir}/sshd.pid`, "PasswordAuthentication no", "KbdInteractiveAuthentication no", "UsePAM no", "StrictModes no", "LogLevel ERROR",
-    `SetEnv HOME=${dir}/rhome XDG_CONFIG_HOME=${dir}/rhome/.config HIVEMIND_PTY_SOCK=${dir}/r.sock`, "",
+    `SetEnv HOME=${dir}/rhome XDG_CONFIG_HOME=${dir}/rhome/.config HIVEMIND_PTY_SOCK=${dir}/r.sock PATH=${dir}/rbin:/usr/local/bin:/usr/bin:/bin`, "",
   ].join("\n"));
   fs.writeFileSync(path.join(dir, "ssh_config"), [
     "Host rtest", "  HostName 127.0.0.1", `  Port ${port}`, `  IdentityFile ${dir}/client_key`, "  IdentitiesOnly yes",
@@ -177,6 +182,22 @@ test("a job started with `hive run` there opens from the chip as a live tile", a
   await page.getByRole("button", { name: /build-job/ }).click();
   await expect.poll(terminalText, { timeout: 20_000 }).toMatch(/build step \d+/);
   expect(await terminalText()).not.toContain("no longer running");
+});
+
+test("an agent in the frame on the machine is in the workspace's `hive ctl agents`, with its turn", async () => {
+  test.setTimeout(120_000);
+  const userData = fs.readdirSync(path.join(dir, "xdg")).map((d) => path.join(dir, "xdg", d)).find((d) => fs.existsSync(path.join(d, "drive.sock")))!;
+  const ctl = (...args: string[]) => {
+    const r = spawnSync(HIVE, ["ctl", ...args, "--json"], { cwd: dir, encoding: "utf8", env: { ...process.env, HOME: path.join(dir, "home"), XDG_CONFIG_HOME: path.join(dir, "xdg"), HIVEMIND_APP_DATA: userData, HIVEMIND_TILE: "", HCP_TOKEN: "" } });
+    try { return JSON.parse(r.stdout.trim().split("\n").pop()!); } catch { throw new Error(`hive ctl ${args.join(" ")} → ${r.status}\n${r.stdout}\n${r.stderr}`); }
+  };
+  const frame = await page.locator(".react-flow__node-frame").first().getAttribute("data-id");
+  const spawned = ctl("spawn", "--agent", "claude", "--name", "flag-count", "--frame", frame!, "--prompt", "echo counted on $(hostname)");
+  const tile = spawned.tile as string;
+  expect(tile, JSON.stringify(spawned)).toBeTruthy();
+  await expect.poll(() => (ctl("agents").agents as Array<{ tile: string; state: string }>).find((a) => a.tile === tile)?.state, { timeout: 60_000 }).toBe("done");
+  const row = (ctl("agents").agents as Array<{ tile: string; machine?: string }>).find((a) => a.tile === tile);
+  expect(row?.machine).toBe("build-box");
 });
 
 test("a login that stops working parks the machine, and fixing it brings the terminal back", async () => {

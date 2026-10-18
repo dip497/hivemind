@@ -1,7 +1,7 @@
 /**
  * Programs the person lets drive workspaces here (spec/workspace-api.md "Drive socket"):
  *
- *   hive grant create <name> --workspace <folder>… [--role agents] [--expires 30d]
+ *   hive grant create <name> --workspace <folder, name or id>… [--role agents] [--expires 30d]
  *   hive grant list
  *   hive grant revoke <id>
  *
@@ -15,6 +15,7 @@ import { err, ok } from "../format.js";
 import { EXIT, HcpCliError } from "../hcp.js";
 import { driveCall, driveSockPath } from "../drive.js";
 import { duration } from "./share.js";
+import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 
 const ROLES = ["view", "edit", "terminals", "agents"];
 const json = { json: { type: "boolean" } } as const;
@@ -34,7 +35,7 @@ const createCmd = defineCommand({
   meta: { name: "create", description: "Let a program drive workspaces here; prints its token once" },
   args: {
     name: { type: "positional", required: true, description: "what the program is called" },
-    workspace: { type: "string", alias: "w", description: "a workspace's folder it may drive; give it again for more", required: true },
+    workspace: { type: "string", alias: "w", description: "a workspace it may drive, by its folder, name or id; give it again for more", required: true },
     role: { type: "string", description: "view, edit, terminals or agents (default: agents)" },
     expires: { type: "string", description: "how long it holds: 12h, 30d … (default: until taken back)" },
     ...json,
@@ -43,12 +44,21 @@ const createCmd = defineCommand({
     const ctx = { json: !!args.json };
     const role = String(args.role ?? "agents");
     if (!ROLES.includes(role)) return err(ctx, "usage", `--role is one of ${ROLES.join(", ")}`, EXIT.usage);
-    // Each --workspace, in the order given.
-    const repos: string[] = [];
+    // Each --workspace, in the order given: its folder, name or id.
+    const given: string[] = [];
     for (let i = 0; i < rawArgs.length; i++) {
       const a = rawArgs[i]!;
-      if (a === "--workspace" || a === "-w") repos.push(path.resolve(rawArgs[++i] ?? ""));
-      else if (a.startsWith("--workspace=")) repos.push(path.resolve(a.slice("--workspace=".length)));
+      if (a === "--workspace" || a === "-w") given.push(rawArgs[++i] ?? "");
+      else if (a.startsWith("--workspace=")) given.push(a.slice("--workspace=".length));
+    }
+    const { workspaces } = (await call(ctx, "host.status")) as { workspaces: HostWorkspace[] };
+    const known = await registered();
+    const repos: string[] = [];
+    for (const g of given) {
+      const named = workspaceNamed(workspaces, g || null, process.cwd(), known);
+      if ("refused" in named) return err(ctx, "usage", named.refused, EXIT.usage);
+      if ("unserved" in named) return err(ctx, "usage", notServed(named.unserved), EXIT.usage);
+      repos.push(named.repo);
     }
     let expires: number | null = null;
     if (args.expires !== undefined) {

@@ -29,7 +29,7 @@ git("checkout", "-q", "main");
 const store = new WorkspaceStore({ dir: path.join(tmp, "store"), person: newSeed() });
 store.setCore(repo, { frames: [{ id: "own", title: "api", workspacePath: repo }], tiles: [{ id: "t1", kind: "shell", label: "sh" }], tileNames: {}, editorTabs: {}, frameOf: {} } as never, {});
 const closed: string[] = [];
-const server = new WorkspaceServer([framesDomain({ store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => { closed.push(bare); } })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+const server = new WorkspaceServer([framesDomain({ store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => { closed.push(bare); }, machines: () => [{ id: "m-1", name: "build" }] })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
 const as = (actor: Connection["actor"]): Connection => ({ actor, send: () => {}, closed: new AbortController().signal });
 const person = as({ kind: "person" });
 const program = as({ kind: "peer", person: "client:1", device: "client:1", access: "agents", client: "bot" });
@@ -48,6 +48,12 @@ test("a worktree frame is made on a new branch from its base, nested in the work
   assert.deepEqual({ parent: frame.parentFrameId, branch: frame.branch, worktreePath: frame.worktreePath, title: frame.title }, { parent: "own", branch: "fix-1", worktreePath: first.path, title: "fix-1" });
   const again = result<typeof first>(await call(program, "frame.open", repo, { worktree: { branch: "fix-1", base: "other" } }));
   assert.deepEqual(again, { frame: first.frame, path: first.path, opened: false, created: false });
+});
+
+test("a folder on another machine runs as the person there: a program may not open a frame on it, the person may", async () => {
+  const refused = await call(program, "frame.open", repo, { path: "/srv/api", machine: "build" });
+  assert.equal("error" in refused && refused.error.code, "FORBIDDEN");
+  assert.equal(result<{ path: string }>(await call(person, "frame.open", repo, { path: "/srv/api", machine: "build" })).path, "machine://m-1/srv/api");
 });
 
 test("a folder of the workspace gets a frame of its own, found again by the folder; a program may not name one outside it, the person may", async () => {

@@ -1,0 +1,59 @@
+{
+  "id": "dip497/log-tail",
+  "name": "Log tail",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "monitoring",
+  "description": "Follows a log file live: lines coloured by level, filtered by text or regular expression, and its errors handed to an agent.",
+  "entry": "index.js",
+  "permissions": [
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
+  "commands": [
+    {
+      "name": "errors",
+      "description": "The last 50 error lines of the log file the tile follows."
+    },
+    {
+      "name": "tail",
+      "description": "The last lines of the log file, each with its level (error, warn, info, debug or null).",
+      "args": "{ \"lines\"?: number (1 to 5000, default 100), \"filter\"?: string (text, or /regex/) }"
+    }
+  ],
+  "settings": [
+    {
+      "id": "file",
+      "label": "Log file",
+      "type": "text",
+      "default": "app.log",
+      "maxLength": 500,
+      "description": "From the repository's top, or a full path. The tile's own field changes it for that tile."
+    },
+    {
+      "id": "lines",
+      "label": "Lines kept",
+      "type": "number",
+      "min": 50,
+      "max": 5000,
+      "default": 500,
+      "description": "How many of the newest lines to show."
+    }
+  ],
+  "tools": [
+    {
+      "key": "tail",
+      "label": "Log tail",
+      "description": "A log file, followed live.",
+      "tileKind": "log-tail",
+      "size": {
+        "width": 1000,
+        "height": 620
+      },
+      "needsRepo": false,
+      "singleton": false,
+      "glyph": "≡",
+      "icon": "icon.svg"
+    }
+  ]
+}

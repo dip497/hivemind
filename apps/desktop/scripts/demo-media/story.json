@@ -1,0 +1,448 @@
+{
+  "hero": {
+    "shots": [
+      {
+        "beat": "working",
+        "start": 0,
+        "end": 2.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "tiles",
+            "pad": 1.05
+          },
+          {
+            "u": 0.15,
+            "box": "tiles",
+            "pad": 1.05
+          },
+          {
+            "u": 1,
+            "box": "askerWide",
+            "pad": 1.25
+          }
+        ]
+      },
+      {
+        "beat": "asking-close",
+        "start": 2.4,
+        "end": 7.6,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "askerClose",
+            "pad": 1.05
+          },
+          {
+            "u": 1,
+            "box": "askerClose",
+            "pad": 0.9,
+            "lift": 0.08
+          }
+        ]
+      },
+      {
+        "beat": "answering",
+        "start": 7.6,
+        "end": 10.2,
+        "play": "lapse",
+        "skip": "+35 s",
+        "camera": [
+          {
+            "u": 0,
+            "box": "askerClose",
+            "pad": 0.9,
+            "lift": 0.08
+          },
+          {
+            "u": 1,
+            "box": "askerClose",
+            "pad": 1.0
+          }
+        ],
+        "range": [
+          0,
+          1
+        ]
+      },
+      {
+        "beat": "typing",
+        "start": 10.2,
+        "end": 12.6,
+        "play": "steps",
+        "camera": [
+          {
+            "u": 0,
+            "box": "typed",
+            "pad": 1.05
+          },
+          {
+            "u": 1,
+            "box": "typed",
+            "pad": 1.0
+          }
+        ]
+      },
+      {
+        "beat": "building",
+        "start": 12.6,
+        "end": 18.0,
+        "play": "lapse",
+        "skip": "+2 m 26 s",
+        "camera": [
+          {
+            "u": 0,
+            "box": "typed",
+            "pad": 1.0
+          },
+          {
+            "u": 0.18,
+            "box": "builderClose",
+            "pad": 0.95
+          },
+          {
+            "u": 0.55,
+            "box": "builderClose",
+            "pad": 1.05
+          },
+          {
+            "u": 1,
+            "box": "widget",
+            "pad": 1.5,
+            "lift": 0.1
+          }
+        ]
+      },
+      {
+        "beat": "built-close",
+        "start": 18.0,
+        "end": 25.6,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "widget",
+            "pad": 1.5,
+            "lift": 0.1
+          }
+        ],
+        "isolate": {
+          "box": "widget",
+          "from": 0.03,
+          "to": 0.26
+        }
+      }
+    ],
+    "captions": [
+      {
+        "text": "Every agent on a real job.",
+        "start": 0.2,
+        "end": 2.4
+      },
+      {
+        "text": "One is waiting on you.",
+        "start": 2.7,
+        "end": 5.6
+      },
+      {
+        "text": "You answer it.",
+        "start": 6.3,
+        "end": 8.2
+      },
+      {
+        "text": "Ask another for a widget.",
+        "start": 10.3,
+        "end": 12.5
+      },
+      {
+        "text": "It builds it, installs it, ticks it off.",
+        "start": 12.9,
+        "end": 17.6
+      },
+      {
+        "text": "Your workspace, built by your agents.",
+        "start": 18.4,
+        "end": 22.6
+      }
+    ],
+    "pointer": [
+      {
+        "start": 6.6,
+        "end": 7.6,
+        "from": [
+          900,
+          640
+        ],
+        "to": {
+          "shot": "asking-close",
+          "box": "yes"
+        },
+        "click": 7.4
+      }
+    ],
+    "end": {
+      "start": 23.0,
+      "title": "Hivemind",
+      "command": "bash <(curl -fsSL https://hivemind.griiken.com/install.sh)"
+    },
+    "boxes": {
+      "yes": {
+        "x": 885,
+        "y": 1385,
+        "w": 120,
+        "h": 40
+      },
+      "typed": {
+        "x": 1011,
+        "y": 1440,
+        "w": 1200,
+        "h": 200
+      }
+    },
+    "stills": {
+      "start": 1.0,
+      "asking": 5.5,
+      "answered": 9.2,
+      "typing": 12.4,
+      "building": 15.5,
+      "built": 21.0,
+      "end": 24.8
+    }
+  },
+  "phone": {
+    "win": {
+      "x": 40,
+      "y": 100,
+      "w": 848,
+      "h": 530
+    },
+    "shots": [
+      {
+        "beat": "asking",
+        "start": 0,
+        "end": 2.8,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          },
+          {
+            "u": 0.3,
+            "box": "full"
+          },
+          {
+            "u": 1,
+            "box": "reviewerWide",
+            "pad": 1.5
+          }
+        ]
+      },
+      {
+        "beat": "review-close",
+        "start": 2.8,
+        "end": 7.2,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "askerClose",
+            "pad": 1.0
+          }
+        ]
+      },
+      {
+        "beat": "answered-close",
+        "start": 7.2,
+        "end": 11.0,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "askerClose",
+            "pad": 1.0
+          }
+        ]
+      }
+    ],
+    "panes": [
+      {
+        "start": 3.4,
+        "end": 11.0,
+        "rect": {
+          "x": 920,
+          "y": 40,
+          "w": 320,
+          "h": 692
+        },
+        "look": "phone",
+        "size": {
+          "width": 780,
+          "height": 1688
+        },
+        "shots": [
+          {
+            "file": "frames/phone-needs.png",
+            "start": 3.4
+          },
+          {
+            "file": "frames/phone-asks.png",
+            "start": 5.0
+          },
+          {
+            "file": "frames/phone-answered.png",
+            "start": 7.2
+          }
+        ]
+      }
+    ],
+    "captions": [
+      {
+        "text": "One agent needs you.",
+        "start": 0.3,
+        "end": 2.6
+      },
+      {
+        "text": "Answer it from your phone.",
+        "start": 3.0,
+        "end": 6.8
+      },
+      {
+        "text": "It goes on with the fix.",
+        "start": 7.4,
+        "end": 10.8
+      }
+    ],
+    "pointer": [
+      {
+        "start": 5.6,
+        "end": 7.2,
+        "from": [
+          1180,
+          720
+        ],
+        "to": {
+          "pane": 0,
+          "box": "allow"
+        },
+        "click": 6.9
+      }
+    ],
+    "stills": {
+      "asking": 1.5,
+      "asks": 6.0,
+      "answered": 9.0
+    }
+  },
+  "tools": {
+    "recording": "tools",
+    "shots": [
+      {
+        "beat": "tool",
+        "start": 0,
+        "end": 1.6,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "tool",
+            "pad": 1.02
+          }
+        ]
+      },
+      {
+        "beat": "running",
+        "start": 1.6,
+        "end": 4.6,
+        "play": "lapse",
+        "skip": "+10 s",
+        "camera": [
+          {
+            "u": 0,
+            "box": "tool",
+            "pad": 1.02
+          }
+        ]
+      },
+      {
+        "beat": "ran",
+        "start": 4.6,
+        "end": 7.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "tool",
+            "pad": 1.02
+          },
+          {
+            "u": 1,
+            "box": "tool",
+            "pad": 0.95
+          }
+        ]
+      },
+      {
+        "beat": "asking",
+        "start": 7.4,
+        "end": 10.6,
+        "play": "steps",
+        "camera": [
+          {
+            "u": 0,
+            "box": "triage",
+            "pad": 0.95
+          }
+        ]
+      },
+      {
+        "beat": "answered",
+        "start": 10.6,
+        "end": 13.8,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "triage",
+            "pad": 0.95
+          },
+          {
+            "u": 1,
+            "box": "triage",
+            "pad": 0.9
+          }
+        ]
+      }
+    ],
+    "captions": [
+      {
+        "text": "A tool runs the tests eight times.",
+        "start": 0.3,
+        "end": 4.4
+      },
+      {
+        "text": "It shows which ones only fail sometimes.",
+        "start": 4.7,
+        "end": 7.3
+      },
+      {
+        "text": "An agent asks the same tool.",
+        "start": 7.6,
+        "end": 10.4
+      },
+      {
+        "text": "Your tools, for you and your agents.",
+        "start": 10.8,
+        "end": 13.6
+      }
+    ],
+    "stills": {
+      "tool": 1.0,
+      "ran": 6.0,
+      "asking": 9.5,
+      "answered": 13.0
+    }
+  }
+}

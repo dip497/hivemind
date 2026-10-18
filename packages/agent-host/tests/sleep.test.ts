@@ -31,8 +31,7 @@ fs.writeFileSync(manifest, JSON.stringify({
   caps: { promptDelivery: "typed", turnSignal: false, resume: "none", supervise: "human", blockedDetection: false },
 }));
 const start = async () => {
-  // Standalone: the daemon keeps the statuses, as under `hive host`.
-  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config"), HIVEMIND_DAEMON_STANDALONE: "1" } });
+  daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "config") } });
   for (let i = 0; i < 300 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
 };
 beforeAll(async () => { if (unix) await start(); }, 40_000);

@@ -1,0 +1,14 @@
+{
+  "id": "@dip497/workspace-map",
+  "name": "Workspace map",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "protocol": 1,
+  "permissions": ["workspace:issues"],
+  "category": "agents",
+  "toolbar": "bottom",
+  "commands": [
+    { "name": "map", "description": "Every frame, worktree and tile, with what it sits under, and each agent's state." },
+    { "name": "read", "description": "Open an issue in the side panel for the person to read.", "args": "{ \"id\": string }" }
+  ]
+}

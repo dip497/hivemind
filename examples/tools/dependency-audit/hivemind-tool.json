@@ -1,0 +1,39 @@
+{
+  "id": "dip497/dependency-audit",
+  "name": "Dependency audit",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "code",
+  "description": "The repository's lockfiles checked against the public OSV database: vulnerable packages by severity, with the advisory and the version that fixes it.",
+  "entry": "index.js",
+  "permissions": [
+    "workspace:spawn",
+    "workspace:prompt"
+  ],
+  "commands": [
+    {
+      "name": "audit",
+      "description": "Every vulnerable package: name, version, ecosystem, lockfiles, advisory id, summary, severity and the version that fixes it. Waits up to 25 seconds for a check still running."
+    },
+    {
+      "name": "packages",
+      "description": "Each lockfile found, its ecosystem and how many pinned packages it holds."
+    }
+  ],
+  "tools": [
+    {
+      "key": "audit",
+      "label": "Dependency audit",
+      "description": "Known vulnerabilities in the repository's dependencies.",
+      "tileKind": "dependency-audit",
+      "size": {
+        "width": 1000,
+        "height": 700
+      },
+      "needsRepo": true,
+      "singleton": true,
+      "glyph": "⛨",
+      "icon": "icon.svg"
+    }
+  ]
+}

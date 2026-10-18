@@ -199,6 +199,9 @@ export interface WorkspaceMethods {
   "host.status": () => { workspaces: Array<{ repo: string; workspace: string | null }> };
   /** Join a workspace someone shared, by its link. */
   "host.join": (link: string) => unknown;
+  /** (0.30) Serve the folder `folder` on this machine as one of its workspaces, with no window
+   *  opened for it; one it serves already is answered as it is. */
+  "host.add": (folder: string) => { repo: string; workspace: string };
   /** The views installed on this device whose manifest says they work on a phone (P8). */
   "view.list": (workspace?: string, screen?: "desktop") => ViewListing[];
   /** One of view `id`'s files, at `path` inside its package, 4 MiB at most, and the policy to serve

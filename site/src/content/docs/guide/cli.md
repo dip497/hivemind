@@ -76,6 +76,9 @@ hive resolve "text"                     # expand @ID mentions to markdown links
 ```text
 hive ctl agents [--watch]               # the workspace's agents, their state and what each waits on
 hive ctl frames                         # frames an agent may start in: id, name, machine
+hive ctl frame add --folder /srv/web [--machine build] [--name web]
+                                        # a frame on that folder, on a saved machine or one of
+                                        # your devices by id or name; → {"frame","path","opened"}
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                [--frame <id or name>] [--mode plan] [--model sonnet]
                [--no-report] [--supervise all|Bash,Edit] [--resume <session>]
@@ -106,6 +109,12 @@ hive ctl view emit <name> ['{"json":1}' | -] [--view id]
 Run inside an agent's tile, these act on that agent's workspace, as that agent. Anywhere else
 they act as you, on the workspace `--repo` names, else the open one your folder is in, else the
 only one open. `send` and `close` to a tile no agent runs exit 5.
+
+`--repo` here, `hive share <workspace>`, `hive people -w` and `hive grant create -w` all name a
+workspace the same way: by its folder, its folder's name, its id (the first four characters or
+more), or its issue prefix (`hive workspace list`). A name two workspaces answer to, served or only
+on disk, is refused, with each one's id or prefix and folder, so you can name the one you mean;
+nothing is guessed.
 
 ## `hive ctl` — plugins
 
@@ -255,13 +264,16 @@ hive host run         # serve until stopped (what a service runs); one host per 
 hive host status      # whether it runs, as which device, where it is reached, its workspaces
 hive host stop        # stop serving; the terminals keep running in the daemon
 hive host pair        # print six words, a link and a QR code for your app to enter
-hive host add <dir>   # serve a folder on this machine as one of its workspaces
+hive host add <dir>   # serve a folder on this machine as one of its workspaces (through the app when it runs)
 hive host install     # run it as a service of yours (systemd): at boot, and again if it stops
 hive host uninstall   # stop running it as a service; its terminals keep running
 ```
 
 The host is the same device the app would be on that machine (it uses the app's keys), so it
-does not run while the app does. Pairing makes it you: in the app, **Settings → Connect → Have a code?
+does not run while the app does: `hive host run` and `hive host install` refuse then, once, and
+say so. The app serves the machine's workspaces itself, and `hive host add <dir>` and `hive share
+<dir>` ask it to serve one more, with no window opening. They are yours, in a terminal of your
+own: from an agent's tile they are refused, as an agent is kept to its own workspace. Pairing makes it you: in the app, **Settings → Connect → Have a code?
 Join** takes the six words `hive host pair` prints, which find the host on your network, or
 its link, which finds it from anywhere; from then on **Open recent → On your devices** lists the
 workspaces it serves. A workspace opened from there is yours; its terminals and
@@ -286,7 +298,7 @@ does (`hive config set profile.name '"Your Name"'` on the host), or by the machi
 ### Sharing from the host itself
 
 With no window anywhere, share straight from the host's command line. These ask the running
-`hive host`, act as you, and are written to its audit log like the app's Settings → Connect:
+`hive host`, or the app when it runs there instead, act as you, and are written to its audit log like the app's Settings → Connect:
 
 ```text
 hive share <workspace> [--role view|edit|terminals] [--uses n] [--expires 7d]
@@ -299,7 +311,8 @@ hive people role <person> <role> # view, edit, terminals, or agents (only while 
 hive people remove <person>      # take them off; their link stops working
 hive people rule [ask|invite]    # ask (default): you answer each request;
                                  #   invite: anyone with a valid link is let in at once
-hive join <link>                 # join a workspace someone shared, waiting while they decide
+hive join <link>                 # join a workspace someone shared, waiting while they decide;
+                                 #   yours to run in a terminal of your own, not from an agent's tile
 hive network enrol-link [--data <dir>] [--uses n] [--expires 7d]
                                  # on your network's server: a link that puts a device on it
 ```

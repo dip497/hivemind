@@ -30,6 +30,8 @@ test.skipIf(process.platform !== "linux")("install writes a user unit that runs 
   expect(unit).toContain(`Environment="HIVEMIND_HIVE_NET=${hiveNet}"`);
   expect(unit).toContain(`Environment="HIVEMIND_APP_DATA=${path.join(tmp, "data")}"`);
   expect(unit).toMatch(/^Restart=on-failure$/m);
+  // Refused while the app runs here (exit 3): systemd does not start it again and again.
+  expect(unit).toMatch(/^RestartPreventExitStatus=3$/m);
   expect(unit).toMatch(/^KillMode=process$/m);
   expect(unit).toMatch(/^WantedBy=default.target$/m);
   // No systemd reads this folder: what is left to do is said.

@@ -38,6 +38,7 @@ import { ScreenWatcher } from "./screen-status.js";
 import { StatusStore } from "./status-store.js";
 import { cleanName } from "@hivemind/agents";
 import { driveSockPath, holderOf, speaksFor, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
+import { installCarried } from "./agent-package.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
@@ -51,9 +52,6 @@ const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; col
 dropHandedDown(process.env[HANDED_DOWN]);
 delete process.env[HANDED_DOWN];
 const socketPath = process.argv[2] || process.env.HIVEMIND_PTY_SOCK;
-// Set by `hive daemon` (no desktop on this machine); removed so sessions don't inherit it.
-const STANDALONE = process.env.HIVEMIND_DAEMON_STANDALONE === "1";
-delete process.env.HIVEMIND_DAEMON_STANDALONE;
 // Captured ONCE at startup: the mtime of the daemon script this process is
 // running. Reported on `ping` so the app can detect a rebuild (the on-disk
 // script is newer than what we loaded) and replace us with a fresh daemon.
@@ -376,19 +374,18 @@ const eventViewers = new Set<(m: ServerMsg) => void>();
 let controller: { send: (m: ServerMsg) => void; sock: string } | null = null;
 /** Exit 8 s after the last session ends — no orphans — unless a control plane holds this daemon. */
 const IDLE_EXIT_MS = 8000;
-// With no desktop on this machine (one others connect to), it is its sessions' host: the hooks
-// report here, so the status of each session is kept here and every viewer mirrors it as
-// `agent.status` (docs/design/multiplayer-2026-09-28.md, R6). A desktop's own daemon leaves
-// that to the desktop, which its hooks report to.
-const statuses = STANDALONE ? new StatusStore() : null;
-statuses?.subscribe(({ tileId, status }) => { for (const push of eventViewers) push({ t: "event", topic: "agent.status", data: { tileId, status } }); });
+// This daemon is its sessions' host: their hooks report here whoever serves the control plane, so
+// the status of each session is kept here and every viewer, the app on this machine too, mirrors
+// it as `agent.status` (docs/design/multiplayer-2026-09-28.md, R6).
+const statuses = new StatusStore();
+statuses.subscribe(({ tileId, status }) => { for (const push of eventViewers) push({ t: "event", topic: "agent.status", data: { tileId, status } }); });
 // Every agent session's screen, read here where the screen is kept, for the status of an
 // agent whose hooks have not reported. Viewers take it as `agent.screen`.
 const screens = new ScreenWatcher({
   read: (ids) => manager.viewports(ids),
   detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
   report: (id, { status: state, says }) => {
-    statuses?.screen(id, state, says);
+    statuses.screen(id, state, says);
     for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state, ...(says ? { says } : {}) } });
   },
   line: (id, line) => { for (const push of eventViewers) push({ t: "event", topic: "tile.line", data: { tileId: id, line } }); },
@@ -403,7 +400,7 @@ setInterval(() => {
 // Viewers take it as `agent.title`, and one that connects is sent what there is.
 const titles = titleBook((id) => agentForCmd(manager.commandOf(id) ?? ""));
 const pushTitle = (tileId: string, title: string): void => {
-  statuses?.title(tileId, cleanName(title));
+  statuses.title(tileId, cleanName(title));
   for (const push of eventViewers) push({ t: "event", topic: "agent.title", data: { tileId, title } });
 };
 function reportTitle(id: string, raw: string): void {
@@ -419,9 +416,9 @@ const manager = new SessionManager(factory, {
   onEnd: (id, asleep) => {
     titles.forget(id);
     screens.forget(id);
-    if (asleep) return statuses?.slept(id);
-    statuses?.exited(id);
-    statuses?.forget(id);
+    if (asleep) return statuses.slept(id);
+    statuses.exited(id);
+    statuses.forget(id);
   },
   idleMs: IDLE_EXIT_MS,
   onEmpty: () => {
@@ -623,7 +620,8 @@ const server = net.createServer((sock) => {
         }
         // The spawn/restore checkpoint: an agent installed after boot is wired here,
         // before its spec is transformed.
-        void ensureAgentsCurrent()
+        void installCarried(msg.noSpawn ? undefined : msg.agent)
+          .then(() => ensureAgentsCurrent())
           .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view, linesOf(msg.lines), msg.wake === true))
           .then((r) => {
             ready = true;
@@ -646,7 +644,7 @@ const server = net.createServer((sock) => {
         // Only the writing connection's outBuf fast-paths its echo; other
         // viewers of the tile keep normal batching.
         outBuf.markInput(msg.id);
-        statuses?.input(msg.id, msg.data);
+        statuses.input(msg.id, msg.data);
         manager.write(msg.id, msg.data, viewers.get(msg.id), msg.paste);
         break;
       case "resize":
@@ -707,13 +705,11 @@ const server = net.createServer((sock) => {
           for (const { id, title } of titles.current()) send({ t: "event", topic: "agent.title", data: { tileId: id, title } });
           for (const [tileId, { status: state, says }] of screens.current()) send({ t: "event", topic: "agent.screen", data: { tileId, state, ...(says ? { says } : {}) } });
           for (const [tileId, line] of screens.currentLines()) send({ t: "event", topic: "tile.line", data: { tileId, line } });
-          for (const { tileId, status } of statuses?.all() ?? []) send({ t: "event", topic: "agent.status", data: { tileId, status } });
+          for (const { tileId, status } of statuses.all()) send({ t: "event", topic: "agent.status", data: { tileId, status } });
         }
         break;
       case "control":
-        // A daemon the app started leaves the control-plane socket to the app.
-        if (!STANDALONE) send({ t: "control", reqId: msg.reqId, error: "the app serves this machine's control plane" });
-        else if (typeof msg.sock !== "string" || !path.isAbsolute(msg.sock)) send({ t: "control", reqId: msg.reqId, error: "control needs the absolute path of a socket" });
+        if (typeof msg.sock !== "string" || !path.isAbsolute(msg.sock)) send({ t: "control", reqId: msg.reqId, error: "control needs the absolute path of a socket" });
         else {
           controller = { send, sock: msg.sock };
           send({ t: "control", reqId: msg.reqId });
@@ -759,10 +755,10 @@ if (claim === "taken") {
 // Owner-only whatever the umask: this socket is a shell as this user.
 try { fs.chmodSync(socketPath, 0o600); } catch { /* named pipe on Windows */ }
 
-if (STANDALONE) {
-  // No desktop here owns the control-plane socket: this daemon does. Hook events come to it and go
-  // on to viewers and push; what only a control plane can answer is answered by the one serving
-  // this machine's (`control`, a `hive host`), or refused at once.
+{
+  // This daemon owns the machine's control-plane socket. Hook events come to it and go on to every
+  // viewer and push; what only a control plane can answer is answered by the one serving this
+  // machine's (`control`: the app, or `hive host`), or refused at once.
   /** What an agent reported on the control-plane socket, whoever answers it: its session's status,
    *  and every viewer told but `heard`, the control plane that heard it itself. */
   const reported = (method: string, params: unknown, heard?: (m: ServerMsg) => void): void => {
@@ -780,7 +776,7 @@ if (STANDALONE) {
         recordedSessions.set(evt.tileId, evt.sessionId);
       } catch { /* best-effort: written with its next event */ }
     }
-    statuses?.event(evt.tileId, evt);
+    statuses.event(evt.tileId, evt);
     for (const push of eventViewers) if (push !== heard) push({ t: "event", topic: AGENT_EVENT_METHOD, data: evt });
     void notifyPush(evt);
   };
@@ -848,7 +844,7 @@ if (STANDALONE) {
     up.on("close", () => { if (reached) c.destroy(); });
   });
   void listenExclusive(hcp, hcpSock)
-    .then((r) => { if (r === "listening") fs.chmodSync(hcpSock, 0o600); })
+    .then((r) => { if (r === "listening") try { fs.chmodSync(hcpSock, 0o600); } catch { /* named pipe on Windows */ } })
     .catch((e: unknown) => console.error("[pty-daemon] control-plane socket unavailable:", e));
 }
 server.on("error", (e) => {
