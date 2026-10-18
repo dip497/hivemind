@@ -1,0 +1,67 @@
+---
+title: "Agent states"
+description: "What working, needs you, idle, exited and asleep mean on an agent's tile, and how Hivemind knows."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+Every agent's tile shows one state: what the agent is doing, and whether it waits on you. The same
+state shows on its row in the Layers panel, its frame, and in your notifications.
+
+<AgentPrompt description="Paste this into your coding agent to get a summary of what each agent is doing right now." page="agent-states">{`
+Tell me what each of my Hivemind agents is doing right now. Do not change anything.
+
+1. Run \`hive ctl agents --json\`. If it exits 3, tell me Hivemind is not open on this project and stop.
+2. Group the agents by state: needs you first, then working, then idle, then exited and asleep.
+3. For each agent that needs me, say what it is waiting on, in one line.
+4. Suggest which one I should answer first, and why.
+`}</AgentPrompt>
+
+<Frame caption="One state per agent: who waits on you, who works, who is ready">
+  <img src="/images/shots/showcase/agents-by-state.webp" alt="Agents grouped by state: two agents under Waiting on you that want permission, six under Working, three under Ready for work, none Stopped." />
+</Frame>
+
+## The states
+
+| State | Colour | Means |
+|---|---|---|
+| **working** | white | busy on its task |
+| **needs you** | amber | waiting for a person: a permission question or a question with options |
+| **blocked** | amber | waiting on a person for another reason |
+| **waiting: review** | amber | waiting for you to approve its plan |
+| **waiting: approval** | amber | a supervised worker, waiting for its lead to approve a tool |
+| **idle** | grey | at its prompt, ready for a task |
+| **exited** | grey, red if it failed | its program has stopped |
+| asleep | — | put to sleep: its program stopped, its conversation kept, with **Resume** |
+
+A dot on a row means the agent finished since you last looked. **Mark as read** in the row's ⋮
+menu clears it.
+
+Amber always means a person is being waited on. When a frame is collapsed, its dot shows the most
+urgent state inside it, so needs you wins.
+
+## How it works
+
+Hivemind learns an agent's state two ways:
+
+- **The agent tells it.** Many agents send Hivemind a message when they start working, stop to
+  ask, or finish replying. This is exact and immediate.
+- **Hivemind reads the screen.** For agents that send nothing, Hivemind reads the agent's screen
+  for its prompt, its permission questions and its spinner.
+
+An agent file says which of the two each agent uses. See [Add your own agent](/agent-providers).
+
+## Why it works this way
+
+An agent's own messages are the only exact source, but not every agent sends them. Reading the
+screen covers the rest, so every agent shows a state. Only agents that tell Hivemind when they
+finish replying can work for another agent: the lead needs to know when a reply is complete.
+
+## What to do with it
+
+- [Know who is waiting](/know-who-is-waiting): the bell, notifications and push.
+- [Run agents](/agents): sleep and resume.
+- [Coordinate agents](/agent-workflows): which agents can be workers.
+
+<LastValidated />

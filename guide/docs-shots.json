@@ -1,0 +1,242 @@
+{
+  "about": "Screenshots of the real app that the guide shows. apps/desktop/scripts/docs-shots.mjs makes every entry not marked todo; a todo entry needs a running agent or a second device and is captured by hand or by demo-media. Files land as images/app/<name>.<mode>.webp.",
+  "before": [
+    [
+      "new",
+      "Fix the login redirect",
+      "--ac",
+      "Redirect keeps the query || Test covers it"
+    ],
+    [
+      "new",
+      "Add a dark theme to the settings page"
+    ],
+    [
+      "new",
+      "Write the release notes"
+    ]
+  ],
+  "shots": [
+    {
+      "page": "views",
+      "name": "windows-view",
+      "setup": [
+        {
+          "press": "1"
+        },
+        {
+          "wait": 2000
+        },
+        {
+          "event": "hivemind:set-view-mode",
+          "detail": {
+            "mode": "windows"
+          }
+        },
+        {
+          "click": "shell #1"
+        }
+      ],
+      "alt": "The Windows view: one tile fills the window, with a tab for each tile across the top and the Layers panel on the left."
+    },
+    {
+      "page": "workspaces",
+      "name": "canvas",
+      "setup": [
+        {
+          "event": "hivemind:set-view-mode",
+          "detail": {
+            "mode": "canvas"
+          }
+        },
+        {
+          "press": "1"
+        },
+        {
+          "wait": 2000
+        },
+        {
+          "event": "hivemind:focus-selected"
+        },
+        {
+          "wait": 800
+        },
+        {
+          "event": "hivemind:zoom",
+          "detail": "out"
+        },
+        {
+          "event": "hivemind:zoom",
+          "detail": "out"
+        }
+      ],
+      "alt": "The canvas: the Layers panel on the left lists the project and its tiles, the toolbar sits on top, and the project's frame holds a terminal tile.",
+      "status": "todo",
+      "why": "The canvas fits to its frame, not its tiles, so a headless run shows the tiles too small; capture with demo-media or fix the framing in the runner."
+    },
+    {
+      "page": "issues",
+      "name": "issues-board",
+      "setup": [
+        {
+          "ctl": [
+            "plugin",
+            "open",
+            "tool:hivemind/issues"
+          ]
+        },
+        {
+          "wait": 1500
+        }
+      ],
+      "alt": "The Issues tile: a board with a column per state and a card for each issue."
+    },
+    {
+      "page": "machines",
+      "name": "new-machine",
+      "setup": [
+        {
+          "event": "hivemind:machines",
+          "detail": {
+            "kind": "add"
+          }
+        }
+      ],
+      "crop": "[role=dialog]",
+      "alt": "The New machine dialog: the ssh address to reach, and the button that checks it."
+    },
+    {
+      "page": "api-tokens",
+      "name": "settings-api-access",
+      "setup": [
+        {
+          "settings": "api"
+        }
+      ],
+      "crop": ".settings-dialog",
+      "alt": "Settings → API access, with New token at the top and the list of tokens below."
+    },
+    {
+      "page": "plugins",
+      "name": "settings-plugins",
+      "setup": [
+        {
+          "settings": "plugins"
+        }
+      ],
+      "crop": ".settings-dialog",
+      "alt": "Settings → Plugins: the installed agents, views, widgets and tools, each with its switch."
+    },
+    {
+      "page": "know-who-is-waiting",
+      "name": "settings-notifications",
+      "setup": [
+        {
+          "settings": "notifications"
+        }
+      ],
+      "crop": ".settings-dialog",
+      "alt": "Settings → Notifications: the switch, and which events notify you: Needs you, Finished, Failed."
+    },
+    {
+      "page": "keyboard-shortcuts",
+      "name": "settings-shortcuts",
+      "setup": [
+        {
+          "settings": "shortcuts"
+        }
+      ],
+      "crop": ".settings-dialog",
+      "alt": "Settings → Shortcuts: the keys that work anywhere, and the keys that work on the canvas."
+    },
+    {
+      "page": "connect",
+      "name": "settings-connect",
+      "setup": [
+        {
+          "settings": "connect"
+        }
+      ],
+      "crop": ".settings-dialog",
+      "alt": "Settings → Connect: your devices, the people in this workspace, and the button that makes an invite."
+    },
+    {
+      "page": "self-hosting",
+      "name": "settings-servers",
+      "setup": [
+        {
+          "settings": "servers"
+        }
+      ],
+      "crop": ".settings-dialog",
+      "alt": "Settings → Servers: the network this computer uses, and Set up my server with an agent."
+    },
+    {
+      "page": "appearance",
+      "name": "settings-appearance",
+      "setup": [
+        {
+          "settings": "appearance"
+        }
+      ],
+      "crop": ".settings-dialog",
+      "alt": "Settings → Appearance: theme, wallpaper and glass."
+    },
+    {
+      "page": "workspaces",
+      "name": "canvas-annotated",
+      "status": "todo",
+      "alt": "The canvas with numbered callouts: 1 frame, 2 tile, 3 Layers panel, 4 bell, 5 toolbar.",
+      "why": "Callouts are an HTML overlay on the canvas shot, drawn on the page; the shot needs agents in the frame."
+    },
+    {
+      "page": "agent-states",
+      "name": "agent-states-tiles",
+      "status": "todo",
+      "alt": "Three agent tiles: one working, one idle, one amber because it needs you.",
+      "why": "Needs real agents (demo-media stand-ins)."
+    },
+    {
+      "page": "getting-started",
+      "name": "first-agent-needs-you",
+      "status": "todo",
+      "alt": "The claude tile's header is amber, and the bell in the Layers panel shows 1: the agent is asking to create a file.",
+      "why": "Needs a real agent asking a permission question (a demo-media story beat)."
+    },
+    {
+      "page": "connect",
+      "name": "invite-dialog",
+      "status": "todo",
+      "alt": "The invite: a QR code, six words and Copy the link.",
+      "why": "Needs a network the computer is enrolled in."
+    },
+    {
+      "page": "connect",
+      "name": "three-word-match",
+      "status": "todo",
+      "alt": "The same three words on the computer and on the phone, with It's me — the words match.",
+      "why": "Needs a second device pairing."
+    },
+    {
+      "page": "agents",
+      "name": "settings-agent-page",
+      "status": "todo",
+      "alt": "An agent's page in Settings → Plugins: Make default, its settings, and Read me.",
+      "why": "Needs an agent installed from HiveHub in the run's profile."
+    },
+    {
+      "page": "review",
+      "name": "review-comment-loop",
+      "status": "todo",
+      "alt": "A line comment in Changes, and the agent fixing it.",
+      "why": "A loop video; needs a real agent (demo-media)."
+    },
+    {
+      "page": "multiplayer",
+      "name": "guest-faces-loop",
+      "status": "todo",
+      "alt": "A guest's face top right, their named pointer, and Ask for keyboard → Give.",
+      "why": "A loop video; needs a second person joined."
+    }
+  ]
+}

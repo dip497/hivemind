@@ -1,74 +1,88 @@
 ---
-title: "Canvas, frames and tiles"
-description: "Frames, worktrees, the Layers panel, and what is kept when the app closes."
+title: "Workspaces, frames and tiles"
+description: "How Hivemind arranges a project: a workspace holds frames, each frame is bound to one folder, and every tile in it runs there."
 ---
 
-A workspace is one project folder. Inside it, **frames** group tiles by folder, and every tile in a
-frame runs in that folder.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-<Prompt description="Paste this into your coding agent to lay out a project for parallel agents." actions={["copy","cursor"]}>
-Set up this project in Hivemind so several agents can work in parallel, each on its own branch.
+A <Tooltip tip="One project folder and everything open for it." cta="Glossary" href="/glossary#workspace">workspace</Tooltip>
+is one project folder and everything open for it. Inside it, frames group tiles by folder, and
+every tile in a frame runs in that folder.
 
-1. Check Hivemind is installed: `hive --version` prints a version. If not, stop and tell me to install it first with `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`.
-2. Ask me which branches or tasks I want worked on at the same time, and which agent to use (`hive agents list --found` lists the agents whose CLI is on this machine).
-3. For each task, make a git worktree beside the project: `git worktree add ../<project>-<task> -b <branch>`.
-4. Open the project: `hivemind .`. Then tell me to open each worktree as a frame from a frame's ⋯ menu → **Worktree ▸**, and to start an agent in each with ⋯ → **New agent ▸**.
-5. Once I say the frames are open, run `hive ctl agents` and check one agent is listed per worktree.
+<AgentPrompt description="Paste this into your coding agent to have it explain your open workspace to you." page="workspaces">{`
+Explain my open Hivemind workspace to me. Do not change anything.
 
-Do not delete or reset any branch. At the end, list each worktree, its branch, and the agent running there.
-</Prompt>
+1. Run \`hive ctl frames --json\` and \`hive ctl agents --json\`. If either exits 3, tell me Hivemind is not open on this project and stop.
+2. For each frame, tell me its name, the folder it is bound to, and whether that folder is the project, a git worktree (check with \`git worktree list\`) or a folder on another machine.
+3. For each agent, tell me which frame it is in and what it is doing or waiting on.
+4. Point out any frame with no agent, and any agent that waits on me.
+`}</AgentPrompt>
 
-## Frames
+<Frame caption="Projects, frames and tiles in the Layers panel, beside an agent at work">
+  <img src="/images/shots/showcase/waiting-on-you-board.webp" alt="The Layers panel lists projects such as fastapi and excalidraw, each with its agents as rows, some marked needs you. Beside it, the canvas shows one agent's terminal writing router tests." />
+</Frame>
 
-| A frame on | Make it with | Tiles run |
+## How it works
+
+| Word | What it is |
+|---|---|
+| **Workspace** | one project folder and everything open for it |
+| **<Tooltip tip="A named area bound to one folder: the project, a git worktree, or a folder on another computer. Every tile in it starts in that folder." cta="Glossary" href="/glossary#frame">Frame</Tooltip>** | a named area bound to one folder |
+| **<Tooltip tip="One thing in a frame: an agent, a terminal, the Code tile, a browser or a tool." cta="Glossary" href="/glossary#tile">Tile</Tooltip>** | one thing in a frame: an agent, a terminal, the Code tile, a browser or a tool |
+
+A frame can be bound to three kinds of folder:
+
+| A frame on | Tiles run | How to make one |
 |---|---|---|
-| The project folder | the default | in that folder |
-| A git worktree | a frame's ⋯ → **Worktree ▸** | in the worktree, on its branch (nested under the project) |
-| A folder on a machine | **Open folder here…** in the Machines pane | on that machine, over ssh ([Machines](/machines)) |
+| the project folder | in that folder | the default |
+| a git worktree | in the worktree, on its branch, nested under the project | [Work in a git worktree](/git-worktree) |
+| a folder on another computer | on that computer, over ssh | [Run agents on another computer](/machines) |
 
-A frame's ⋯ menu also arranges its tiles as **Columns**, **Rows** or **Grid**, starts an agent in it
-(**New agent ▸**), and adds a tool or widget. Deleting a frame that holds tiles asks whether to
-**Keep them** or close them with it.
+A frame's ⋯ menu also arranges its tiles (**Arrange**), starts an agent in it, and adds a tool or
+widget. Deleting a frame that holds tiles asks whether to **Keep them** or close them with it.
 
-<Tip>
-One agent per frame is the usual way to run agents in parallel: a worktree per branch with an
-agent in each, or a frame on a machine.
-</Tip>
+### The Layers panel
 
-## The Layers panel
-
-⌘B (Ctrl+B outside a terminal) shows and hides it. Its rail picks what it lists:
+The <Tooltip tip="The list beside the canvas of your projects, frames and tiles. ⌘B / Ctrl+B shows or hides it." cta="Glossary" href="/glossary#layers-panel">Layers panel</Tooltip>
+lists everything open. Its rail picks what it shows:
 
 | Pane | Lists |
 |---|---|
 | **Tiles** | **Pinned**, then each project with its worktrees and tiles. Agents a tile started fold under it. |
-| **Recents** | Past agent sessions, newest first. One click resumes one. |
-| **Machines** | This computer and every machine you added, with its link and how many agents there need you. |
+| **Recents** | past agent sessions, newest first. One click resumes one. |
+| **Machines** | this computer and every machine you added, with how many agents there need you. |
 
-The panel's title menu switches workspace, opens a folder, joins a shared workspace and switches
-views (**Show as**). Its bell jumps to the next agent that needs you.
+Its title menu switches workspace, opens a folder, joins a shared workspace and switches views.
+Its bell jumps to the next agent that needs you. A row's ⋮ menu pins, renames, closes, snoozes
+or puts an agent to sleep. Its keys are on [Keyboard shortcuts](/keyboard-shortcuts).
 
-| On a row | Does |
-|---|---|
-| **P** or ⋮ → **Pin** | keep it at the top |
-| **R** / **D** | rename / close |
-| **U** | mark read or unread (a dot means it finished while you looked away) |
-| **Snooze** | hide it for 30 min to tomorrow 9:00; it comes back early if it needs you |
-| Ctrl+1 … Ctrl+9 (⌘ on a Mac) | go to that row's tile, from a terminal too |
+The **View** menu over the tiles filters, groups and sorts them. Your pins, snoozes and what you
+have read are yours alone, on this computer, even in a shared workspace.
 
-The **View** menu (the tiles' heading) filters by status, last activity or machine, groups by
-project, machine, date, status or agent, and sorts. It is yours in every workspace
-(`hive config set views.layers.groupBy '"status"'`). Pins, snoozes and what you have read are
-yours alone, on this computer, even in a shared workspace.
-
-## What is kept
+### What is kept
 
 | When | What happens |
 |---|---|
-| You close the window | Terminals keep running in a background daemon. |
-| The daemon restarts or the computer reboots | Agents that can resume continue their conversation; others start fresh. Screens replay from disk. |
-| You close a tile (×) | Its process ends. |
-| You put an agent to sleep | Its process ends; its tile keeps its name and conversation, with **Resume**. See [Run agents](/agents#sleep-and-resume). |
+| You close the window | Terminals and agents keep running in a background process. |
+| That process restarts, or the computer reboots | Agents that can resume continue their conversation; others start fresh. Screens replay from disk. |
+| You close a tile (×) | Its program ends. |
+| You put an agent to sleep | Its program ends. Its tile keeps its name and conversation, with **Resume**. |
 
-Frames, tile positions, the viewport and open files are saved per project, on this computer, not
-in the repository.
+Frames, tile positions, the viewport and open files are saved per project, on this computer. They
+are not written into the repository.
+
+## Why it works this way
+
+A frame binds a folder so that a tile never asks where to start. An agent started in a worktree's
+frame edits that branch only. One started in a machine's frame runs on that machine. You choose
+the place once, on the frame, and every tile follows it.
+
+## What to do with it
+
+- [Work in a git worktree](/git-worktree)
+- [Run many agents at once](/run-many-agents)
+- [Switch views](/views)
+- [Run agents on another computer](/machines)
+
+<LastValidated />

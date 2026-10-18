@@ -29,7 +29,12 @@
         "groups": [
           {
             "group": "Get started",
-            "pages": ["index", "getting-started", "docs-for-agents"]
+            "pages": [
+              "index",
+              "getting-started",
+              "run-many-agents",
+              "docs-for-agents"
+            ]
           }
         ]
       },
@@ -37,24 +42,49 @@
         "tab": "Use Hivemind",
         "groups": [
           {
-            "group": "The workspace",
-            "pages": ["workspaces", "views", "issues", "review"]
-          },
-          {
             "group": "Agents",
-            "pages": ["agents", "agent-workflows"]
+            "pages": [
+              "agents",
+              "know-who-is-waiting",
+              "agent-workflows",
+              "review",
+              "issues",
+              "git-worktree",
+              "views"
+            ]
           },
           {
-            "group": "Other computers",
-            "pages": ["machines", "host"]
+            "group": "Other computers and people",
+            "pages": [
+              "self-hosting",
+              "machines",
+              "host",
+              "connect",
+              "multiplayer",
+              "phone",
+              "browser-tab"
+            ]
           },
           {
-            "group": "People and devices",
-            "pages": ["connect", "multiplayer", "phone", "self-hosting"]
-          },
+            "group": "Settings",
+            "pages": [
+              "appearance"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Concepts",
+        "groups": [
           {
-            "group": "Settings and appearance",
-            "pages": ["appearance"]
+            "group": "Concepts",
+            "pages": [
+              "workspaces",
+              "agent-states",
+              "plugins",
+              "how-devices-connect",
+              "security-and-privacy"
+            ]
           }
         ]
       },
@@ -63,7 +93,13 @@
         "groups": [
           {
             "group": "Extend",
-            "pages": ["plugins", "agent-providers", "extension-authoring", "widgets", "tool-plugins"]
+            "pages": [
+              "widgets",
+              "extension-authoring",
+              "tool-plugins",
+              "agent-providers",
+              "publish-to-hivehub"
+            ]
           }
         ]
       },
@@ -72,7 +108,13 @@
         "groups": [
           {
             "group": "API",
-            "pages": ["api", "api-tokens", "api-connect", "api-methods"]
+            "pages": [
+              "api",
+              "api-tokens",
+              "api-connect",
+              "api-methods",
+              "api-protocol"
+            ]
           }
         ]
       },
@@ -81,7 +123,38 @@
         "groups": [
           {
             "group": "Reference",
-            "pages": ["cli", "troubleshooting", "contributing"]
+            "pages": [
+              "cli",
+              "keyboard-shortcuts",
+              "settings",
+              "environment-variables",
+              "agent-yaml",
+              "hive-net",
+              "glossary"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Help",
+        "groups": [
+          {
+            "group": "Help",
+            "pages": [
+              "troubleshooting",
+              "faq",
+              "logs-and-bug-reports",
+              "changelog"
+            ]
+          },
+          {
+            "group": "Install and update",
+            "pages": [
+              "install",
+              "system-requirements",
+              "update-and-roll-back",
+              "uninstall"
+            ]
           }
         ]
       }
@@ -101,11 +174,27 @@
     }
   },
   "contextual": {
-    "options": ["copy", "view", "chatgpt", "claude", "perplexity", "mcp", "add-mcp", "cursor", "vscode"]
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "add-mcp",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {
       "github": "https://github.com/dip497/hivemind"
     }
-  }
+  },
+  "redirects": [
+    {
+      "source": "/contributing",
+      "destination": "https://github.com/dip497/hivemind/blob/main/CONTRIBUTING.md"
+    }
+  ]
 }

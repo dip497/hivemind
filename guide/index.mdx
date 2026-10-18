@@ -1,78 +1,76 @@
 ---
 title: "Hivemind"
 sidebarTitle: "Introduction"
-description: "A workspace for coding agents: run them side by side with terminals, an editor and a browser, and see which one waits on you."
+description: "Run your coding agents side by side, see which one is waiting on you, and answer it from anywhere."
+mode: "wide"
 ---
 
-Hivemind runs your coding agents side by side with terminals, a code editor and a browser, in one
-window. It shows you which agent is waiting on you.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-<Prompt description="Paste this into Claude Code, Codex or any coding agent to install Hivemind and start your first agent." actions={["copy","cursor"]}>
-Install Hivemind on this computer and open it on a project with a first coding agent.
+Hivemind runs your coding agents side by side and shows you which one is waiting on you.
 
-1. Find the operating system. On Linux or macOS run `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`. On Windows, in PowerShell, run `irm https://hivemind.griiken.com/install.ps1 | iex`. On an Intel Mac, stop and tell me: there is no prebuilt app, only `--dev` (a build from source).
-2. Check `hive --version` prints a version. If `hive` is not found, add `~/.local/bin` to PATH for this shell and say so.
-3. Check which coding-agent CLIs are on PATH (for example `command -v claude codex opencode`). If none, ask me which agent I use and whether to install its CLI; do not install one without my yes.
-4. Add the agent I pick: `hive agents install <name> --yes`, then check `hive agents list` shows it switched on.
-5. Ask me which project folder to open, then run `hivemind <folder>` there.
-
-If any step needs a password or sudo, ask me to type it myself and wait. At the end, tell me the version installed, the agent added, and that in the app `2` starts that agent in the selected frame.
-</Prompt>
-
-<Frame caption="The canvas, with the Layers panel beside it">
-  <img src="/images/waiting-on-you-board.webp" alt="The canvas: the Layers list of projects and their agents, an agent's terminal, and a widget listing the two agents waiting on you." />
+<Frame caption="Agents at work in one project, each in its own tile.">
+  <video autoPlay src="/images/shots/hero/clip.mp4" poster="/images/shots/hero/poster.webp" />
 </Frame>
 
-## How it fits together
+## Install
 
-```mermaid
-flowchart LR
-  subgraph api["Frame: api"]
-    b["builder (agent)"]
-    s["scout (agent)"]
-    t1["shell · code · browser"]
-  end
-  subgraph web["Frame: web"]
-    n["nurse (agent)"]
-    t2["shell"]
-  end
-  api -- "runs in" --> d1["~/src/api"]
-  web -- "runs in, on a machine" --> d2["machine://box/srv/web"]
-```
+<Tabs>
+  <Tab title="Linux and macOS">
+    ```bash
+    bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
+    ```
+    Then open a project: `cd ~/my-project && hivemind .`
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    irm https://hivemind.griiken.com/install.ps1 | iex
+    ```
+    Then open a project: `hivemind .` in its folder.
+  </Tab>
+  <Tab title="Setup prompt">
+    <AgentPrompt description="Paste this into Claude Code, Codex or any coding agent. It installs Hivemind and starts your first agent." page="getting-started">{`
+Install Hivemind on this computer and start my first agent in it.
 
-A frame binds one folder; every tile inside it starts there, whether that folder is on this
-computer or on a saved machine.
+1. Run the installer. On Linux or macOS: \`bash <(curl -fsSL https://hivemind.griiken.com/install.sh)\`. On Windows, in PowerShell: \`irm https://hivemind.griiken.com/install.ps1 | iex\`. On an Intel Mac, stop and tell me: there is no prebuilt app.
+2. Check: \`hive --version\` prints a version. If \`hive\` is not found, tell me the line that adds \`~/.local/bin\` to PATH in my shell profile.
+3. Check which agent programs are on PATH: \`command -v claude codex opencode\`. Ask me which one to use. If I have none, ask before installing one.
+4. Add it: \`hive agents install <name> --yes\`. Check: \`hive agents list --found\` lists it.
+5. Ask me which project folder to open, then run \`hivemind <folder>\`.
 
-| Word | What it is |
-|---|---|
-| **Workspace** | One project folder and everything open for it. |
-| **Frame** | A named area bound to one folder: the project, a git worktree, or a folder on another machine. |
-| **Tile** | One thing in a frame: an agent, a terminal, the Code tile, a browser, a tool. |
+Never type a password; if a step needs sudo, ask me to run it. At the end, tell me the version installed and the agent added, and that pressing 2 in the app starts that agent.
+`}</AgentPrompt>
+  </Tab>
+</Tabs>
 
-## What the colours mean
+Linux arm64 gets the command line only, and Intel Macs build from source: see [System requirements](/system-requirements).
 
-| Colour | Means |
-|---|---|
-| White | working |
-| Amber | needs you |
-| Green | done |
-| Grey | idle |
-
-Amber always means *a person is being waited on*. The bell in the Layers panel counts those and
-jumps to the next one.
-
-## Where to go
+## Start here
 
 <CardGroup cols={2}>
-  <Card title="Install" icon="download" href="/getting-started">One command, then your first agent.</Card>
-  <Card title="Run agents" icon="robot" href="/agents">Install, start, put to sleep.</Card>
-  <Card title="Coordinate agents" icon="diagram-project" href="/agent-workflows">One agent drives others with `hive ctl`.</Card>
-  <Card title="Use another computer" icon="server" href="/machines">Run agents on a machine over ssh.</Card>
-  <Card title="Work with others" icon="users" href="/multiplayer">Share a workspace.</Card>
-  <Card title="Extend it" icon="puzzle" href="/plugins">Agents, views, widgets and tools.</Card>
-  <Card title="Drive it from a program" icon="code" href="/api">Tokens and the workspace API.</Card>
-  <Card title="Use these docs with your agent" icon="sparkles" href="/docs-for-agents">MCP server, llms.txt and a prompt on every page.</Card>
+  <Card title="Install and run your first agent" icon="rocket" href="/getting-started">Five minutes, from the install command to answering your agent's first question.</Card>
+  <Card title="Run many agents at once" icon="layer-group" href="/run-many-agents">Give each agent its own worktree and watch them all from one window.</Card>
+  <Card title="Answer from your phone" icon="mobile" href="/phone">Approve, answer and stop your agents from your phone's browser.</Card>
+  <Card title="Build your own widget" icon="puzzle-piece" href="/widgets">A small live card on your canvas, in a few lines of code.</Card>
 </CardGroup>
 
-These docs follow the latest release; `hive --help` shows what your version has. The iOS and
-Android apps are development previews.
+## Popular
+
+<CardGroup cols={2}>
+  <Card title="Run agents on another computer" icon="server" href="/machines">Over ssh, from the same window.</Card>
+  <Card title="Share a workspace" icon="users" href="/multiplayer">Let someone in, with a role.</Card>
+  <Card title="Make an API token" icon="key" href="/api-tokens">Drive a workspace from your own program.</Card>
+  <Card title="CLI reference" icon="terminal" href="/cli">Every `hive` command.</Card>
+</CardGroup>
+
+## What's new in {validatedFor}
+
+- Tool plugins install from HiveHub, and each one arrives switched off until you turn it on.
+- Agents open, call and close plugins in the app with `hive ctl plugin`.
+- You can remove a workspace from this computer in the Layers panel. Its folder and files stay.
+
+Every release is in the [Changelog](/changelog). New words are in the [Glossary](/glossary). To let
+your coding agent read these docs, see [Use these docs from your agent](/docs-for-agents).
+
+<LastValidated />

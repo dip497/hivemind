@@ -1,0 +1,89 @@
+---
+title: "Run many agents at once"
+description: "A 15-minute tutorial: three agents on three branches of one project, and you answering whichever one waits."
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+Start three agents on three tasks in one project, each on its own branch, and answer them as they
+ask. It takes about 15 minutes.
+
+<AgentPrompt description="Paste this into your coding agent to set up three agents on three branches for you." page="run-many-agents">{`
+Set up three Hivemind agents working at once on this project, each on its own branch.
+
+1. Check Hivemind is open on this project: \`hive ctl frames --json\` answers. If it exits 3, tell me to open Hivemind on the project with \`hivemind .\` and stop.
+2. Ask me for three small tasks and which agent to use (\`hive agents list --found\` lists the ones on this computer).
+3. For each task, pick a short branch name and make a worktree: \`git worktree add ../<project>-worktrees/<branch> -b <branch>\`. Do not delete or reset any branch.
+4. Open each as a frame: \`hive ctl frame add --folder <full worktree path> --name <branch>\`.
+5. Start one agent in each: \`hive ctl spawn --frame <branch> --agent <agent> --prompt "<task>"\`.
+6. Check: \`hive ctl agents\` lists three agents, one per frame.
+
+Then tell me to watch the bell at the top of the Layers panel and press it whenever it shows a number. Do not answer the agents' permission questions for me.
+`}</AgentPrompt>
+
+<Frame caption="Three agents at work; one asks to make an edit">
+  <video autoPlay src="/images/shots/hero/clip.mp4" poster="/images/shots/hero/poster.webp" />
+</Frame>
+
+## What you'll learn
+
+- How to give each agent its own branch, so they never edit the same files.
+- How to start an agent in a chosen frame.
+- How to find and answer the agent that waits on you.
+
+## Before you start
+
+- Hivemind is installed and one agent works: [Install and run your first agent](/getting-started).
+- Your project is a git repository with no submodules.
+- You have three small tasks in mind, such as "add a test for X".
+
+<Steps>
+  <Step title="Open the project">
+    In a terminal, run `cd ~/my-project && hivemind .`.
+
+    Check: the canvas opens with one <Tooltip tip="A named area bound to one folder: the project, a git worktree, or a folder on another computer. Every tile in it starts in that folder." cta="Glossary" href="/glossary#frame">frame</Tooltip>, named after the project.
+  </Step>
+  <Step title="Make the first worktree">
+    Open the project frame's ⋯ menu, choose **Worktree**, then **Create new worktree**. Type
+    `task-one` and press **create**.
+
+    Check: a frame named `task-one` appears, nested under the project.
+  </Step>
+  <Step title="Make two more">
+    Repeat the last step for `task-two` and `task-three`.
+
+    Check: the Layers panel lists three frames under the project.
+  </Step>
+  <Step title="Start an agent in each">
+    Select `task-one` and press **2**. Type its task in the agent's tile and press Enter. Do the
+    same in the other two frames.
+
+    Check: each frame has an agent tile marked **working**.
+  </Step>
+  <Step title="Watch who waits">
+    Keep working on something else. Sooner or later an agent asks to run a command or edit a
+    file. Its tile turns amber, and the bell at the top of the Layers panel shows a number.
+
+    Check: the bell shows **1** or more.
+  </Step>
+  <Step title="Answer it">
+    Press the bell. Hivemind selects the agent that waits. Answer its question in its tile.
+
+    Check: the tile leaves amber and shows **working** again. The bell's number drops.
+  </Step>
+</Steps>
+
+## What you did
+
+- You gave three agents three branches with git worktrees, so their edits never collide.
+- You started each agent in its own frame, in its worktree's folder.
+- You used the bell to find and answer the agent that waited on you.
+
+## Next
+
+- [Know who is waiting](/know-who-is-waiting): notifications, snooze and push to your phone.
+- [Review an agent's changes](/review): comment on a line and the agent fixes it.
+- [Coordinate agents](/agent-workflows): let one agent lead the others.
+
+<LastValidated />

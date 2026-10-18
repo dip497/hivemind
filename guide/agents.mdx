@@ -1,95 +1,113 @@
 ---
 title: "Run agents"
-description: "Install agents, switch them on and off, read their status, and put them to sleep."
+description: "Add an agent, make it your default, switch one off, and put agents to sleep to free memory."
 ---
 
-Every agent is a small file from [HiveHub](https://hivehub.griiken.workers.dev) that tells
-Hivemind how to start an agent's CLI and read its screen. You install the CLI; Hivemind adds the
-file.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-<Prompt description="Paste this into your coding agent to add another agent to Hivemind and make it the default." actions={["copy","cursor"]}>
+Add the coding agents you use, pick the one that starts by default, and put idle ones to sleep.
+
+<AgentPrompt description="Paste this into your coding agent to add another agent to Hivemind and make it the default." page="agents">{`
 Add a coding agent to Hivemind on this computer.
 
-1. Check Hivemind is installed: `hive --version` prints a version.
-2. Run `hive agents list` and show me which agents are already there, and `hive agents list --found` for the ones whose CLI is on this machine.
-3. Ask me which agent to add (HiveHub has, among others, aider, amp, claude, cline, codex, copilot, cursor, droid, kiro, opencode, pi and qwen-code). If its own CLI is not installed, tell me how to install it and ask before you do.
-4. Run `hive agents install <name>` and show me what it says it would run. Only after I say yes, run `hive agents install <name> --yes`.
-5. Check: `hive agents list --found` now lists it.
-6. Ask whether it should be the default agent. If yes, tell me to open it in **Settings ▸ Plugins** and press **Make default**.
+1. Check Hivemind is installed: \`hive --version\` prints a version.
+2. Run \`hive agents list\` and show me the agents already added. Run \`hive agents list --found\` for the ones whose program is on this computer.
+3. Ask me which agent to add. The full list is on HiveHub: \`https://hivehub.griiken.workers.dev\`. If the agent's own program is not installed, tell me how to install it and ask before you do.
+4. Run \`hive agents install <name>\` and show me what it says it would run. Only after I say yes, run \`hive agents install <name> --yes\`.
+5. Check: \`hive agents list --found\` now lists it.
+6. Ask whether it should be my default agent. If yes, tell me to open it in Settings → Plugins and press Make default.
 
-At the end, tell me the agent added, whether it is the default, and that `2` in the app starts the default agent.
-</Prompt>
+At the end, tell me the agent added, whether it is the default, and that pressing 2 on the canvas starts the default agent.
+`}</AgentPrompt>
 
-## Install one
+## Before you start
 
-| How | Do |
-|---|---|
-| Automatically | Install the agent's CLI and start Hivemind. It adds every HiveHub agent whose CLI is on your `PATH`, and a notice says what it added (with **Remove**). |
-| In the app | **Settings ▸ Plugins** → **HiveHub** → find it → **Install**. |
-| In a terminal | `hive agents install codex` shows what it would run; add `--yes` to install. |
+- Hivemind is installed: [Install and run your first agent](/getting-started).
+- The agent's own program is installed, for example `claude`, `codex` or `opencode`.
 
-```bash
-hive agents list --found      # agents whose CLI is on this machine
-hive agents remove codex      # removed, and not added again at start
-```
+## Add an agent
 
-To stop automatic adding, switch off **Add agents found on this machine** in Settings ▸ Plugins.
-HiveHub lists 21 agents, among them aider, amp, claude, cline, codex, copilot, cursor, droid,
-kiro, opencode, pi and qwen-code. To write your own: [Add your own agent](/agent-providers).
+Every agent is a small file from <Tooltip tip="The catalogue Hivemind installs agents and plugins from." cta="Glossary" href="/glossary#hivehub">HiveHub</Tooltip>.
+The file tells Hivemind how to start the agent's program and read its screen.
 
-## Switch one off, pick the default
+<Tabs>
+  <Tab title="Automatically">
+    1. Install the agent's own program.
+    2. Start Hivemind. It adds every HiveHub agent whose program is on your `PATH`.
+    3. Check: a notice names the agents it added, each with **Remove**.
 
-Open the agent in **Settings ▸ Plugins**: its switch turns it off (it leaves every menu and
-`hive ctl spawn`), **Make default** makes it what ⌘\ and the toolbar's agent button start, and its
-launch options set model and permission mode.
+    To stop this, switch off **Add agents found on this machine** in **Settings → Plugins**.
+  </Tab>
+  <Tab title="In the app">
+    1. Open **Settings → Plugins** and choose the **HiveHub** tab.
+    2. Find the agent and press **Install**.
+    3. Check: the agent appears under **Installed**.
+  </Tab>
+  <Tab title="In a terminal">
+    1. To see what the agent would run, type `hive agents install codex`.
+    2. To install it, add `--yes`: `hive agents install codex --yes`.
+    3. Check: `hive agents list --found` lists it.
+  </Tab>
+</Tabs>
+
+To remove an agent, run `hive agents remove codex`. Hivemind does not add it again at start.
+To write an agent file yourself, see [Add your own agent](/agent-providers).
+
+## Pick your default agent
+
+The default agent is the one **2** and the toolbar's agent button start.
+
+1. Open the agent's page in **Settings → Plugins**.
+2. Press **Make default**.
+3. Check: press **2** on the canvas, and that agent starts in the selected frame.
+
+The same page sets the agent's launch options, such as its model and permission mode.
+
+## Switch an agent off
+
+To hide an agent from every menu and from `hive ctl spawn`, switch it off on its page in
+**Settings → Plugins**. In a terminal:
 
 ```bash
 hive plugins disable agent:codex
 hive plugins enable agent:codex
 ```
 
-## Status
+## Put agents to sleep
 
-A tile shows **working**, **idle** or **needs you**. Status comes from the agent's own reports
-where it sends them, and from reading its screen otherwise. It drives the frame header, the Layers
-panel and your notifications.
-
-## Agents that can work for other agents
-
-Some agents report when a turn ends. Only those can be workers whose replies another agent
-collects ([Coordinate agents](/agent-workflows)):
-
-| Agent | Gets its task | Resumes | Permission prompts with `--supervise` |
-|---|---|---|---|
-| claude | as an argument | its own session | go to the supervising agent |
-| codex | typed in | newest in the folder | stay with you |
-| droid | typed in | newest in the folder | stay with you |
-| hermes | typed in | no | stay with you |
-| kiro | typed in | its own session | go to the supervising agent |
-| opencode | typed in | no | stay with you |
-| pi | as an argument | newest in the folder | refused (it has no permission prompts) |
-
-Every other agent runs the same way, but you drive it by hand: a workflow refuses it at once.
-
-## Sleep and resume
-
-Sleeping ends an agent's process to free memory. Its tile keeps its name and conversation and
-shows **Resume**.
+Sleep ends an agent's program to free memory. Its <Tooltip tip="One thing in a frame: an agent, a terminal, the Code tile, a browser or a tool." cta="Glossary" href="/glossary#tile">tile</Tooltip>
+keeps its name and conversation, and shows **Resume**.
 
 | Where | Sleep | Wake |
 |---|---|---|
 | A tile | the moon button in its title bar | **Resume** |
-| Layers panel | ⋮ → **Put to sleep** | ⋮ → **Resume** |
+| A row in the Layers panel | ⋮ → **Put to sleep** | ⋮ → **Resume** |
 | A frame | ⋯ → **Put agents to sleep** | ⋯ → **Resume sleeping agents** |
-| Terminal | `hive ctl sleep [tile or frame]` | `hive ctl wake [tile or frame]` |
+| A terminal | `hive ctl sleep [tile or frame]` | `hive ctl wake [tile or frame]` |
 
-An agent that is working or waiting on you sleeps only after you confirm (`--force` in the
-terminal). A message sent to a sleeping agent waits until it is back at its prompt.
+An agent that is working or waiting on you sleeps only after you confirm. In a terminal, add
+`--force`. A message sent to a sleeping agent waits until the agent is back at its prompt.
 
-## Assign issues to agents
+## Check it worked
 
-```bash
-hive update MYP-1 --assignee claude --assignee-type agent
-```
+- `hive agents list --found` lists the agent.
+- Press **2** on the canvas: the default agent's tile opens and shows **working** as it starts.
+- After sleep, the tile shows **Resume**.
 
-`.hivemind/.agent.md` sums up the open issues so a new agent session can read one file.
+## If it didn't
+
+| You see | Do |
+|---|---|
+| `hive agents list --found` does not list the agent | The program is not on your `PATH`. Open a new terminal, or install the program. |
+| **2** starts a different agent | Press **Make default** on the agent you want. |
+| The agent never shows **needs you** | See [Troubleshooting](/troubleshooting). |
+
+## Related
+
+- [Agent states](/agent-states): what working, needs you and idle mean.
+- [Know who is waiting](/know-who-is-waiting): the bell, notifications and push.
+- [Coordinate agents](/agent-workflows): one agent drives others.
+- [Track work as issues](/issues): give agents work to pick up.
+
+<LastValidated />

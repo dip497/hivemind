@@ -1,38 +1,60 @@
 ---
-title: "Use these docs with your agent"
-description: "Connect your coding agent to these docs through their MCP server or llms.txt, and use the copy-ready prompt on each page."
+title: "Use these docs from your agent"
+description: "Let your coding agent search these docs through their MCP server or llms.txt, and teach it Hivemind with the hive skills."
 ---
 
 import { docsUrl, DocsMcpCommands, DocsMcpPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-Every page here is written for people and for coding agents. Three ways to hand them to yours.
+Your coding agent can read these docs and drive Hivemind for you. Connect it once, and it looks
+things up instead of guessing.
 
 <DocsMcpPrompt />
 
-## The docs MCP server
+## Connect the docs MCP server
 
-These docs run their own MCP server. Connect it and your agent searches the docs when it needs
-to, instead of guessing.
+These docs run their own MCP server. Your agent uses it to search the docs when it needs to.
 
 <DocsMcpCommands />
 
-The page menu at the top of every page has **Connect to MCP** and buttons to add it to Cursor or
-VS Code in one click.
+The page menu at the top of every page also has **Connect to MCP**, and buttons that add the
+server to Cursor or VS Code in one click.
 
-## The whole docs as text
+**Check:** ask your agent "How do I install Hivemind?" It answers with the install command from these docs.
+
+## Give it the whole docs as text
 
 | File | Holds |
 |---|---|
-| <a href={`${docsUrl}/llms.txt`}>`/llms.txt`</a> | the list of pages, each with its one-line description |
+| <a href={`${docsUrl}/llms.txt`}>`/llms.txt`</a> | every page, each with its one-line description |
 | <a href={`${docsUrl}/llms-full.txt`}>`/llms-full.txt`</a> | every page in one Markdown file |
 
-Add `.md` to any page's address for that page as Markdown, or use **Copy page** in the page menu.
+To get one page as Markdown, add `.md` to its address, or press **Copy page** in the page menu.
 
-## A prompt on each page
+## Teach it Hivemind with the hive skills
 
-Where a page describes something you set up or do, it starts with a prompt: the exact
-instructions to paste into Claude Code, Codex or any coding agent so it does the job on your
-computer. Each one says what to check at the end, and asks you for anything only you can do, such
-as a password, a sudo or a DNS record.
+To let an agent work in Hivemind on its own, add the hive skills to your project.
 
-The page menu can also open the page in ChatGPT, Claude or Perplexity, to ask about it.
+```bash
+cd ~/my-project && hive add skill
+```
+
+**Check:** `.claude/skills/` now holds `hive-work`, `hive-workflow`, `hivemind` and
+`hive-browser`. An agent that reads skills learns to pick up issues and to start and coordinate
+other agents with `hive ctl`.
+
+## Use the prompt on each page
+
+A page that describes something you set up or do starts with a prompt. Paste it into Claude Code,
+Codex or any coding agent, and it does the job on your computer. Each prompt says what to check at
+the end. It asks you for anything only you can do, such as a password, a sudo or a DNS record.
+Each one ends with a `REFERENCE` line: the page as Markdown, for the agent to read.
+
+## Rules for agents that read these docs
+
+- Prefer `hive ctl … --json`, and check `hive <command> --help` before using a flag.
+- Never ask a person for a token's value. Tell them to make one in **Settings → API access**.
+- Use the smallest role that does the job.
+- Ask the person before installing anything, and never type a password.
+
+<LastValidated />

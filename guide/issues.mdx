@@ -1,58 +1,110 @@
 ---
-title: "Issues"
-description: "Track work as markdown files that you and your agents read and update."
+title: "Track work as issues"
+description: "Keep a project's work as Markdown issues that you and your agents read, pick up and close."
 ---
 
-Issues are markdown files in the project's `.hivemind/` folder. You, the Issues tool and agents
-all change the same files, so the board updates as an agent works.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-<Prompt description="Paste this into your coding agent to start tracking this project's work as Hivemind issues." actions={["copy","cursor"]}>
+Write down the work, then let agents pick it up. Each <Tooltip tip="A piece of work written as a Markdown file in .hivemind/, which you and your agents read and update." cta="Glossary" href="/glossary#issue">issue</Tooltip>
+is a Markdown file in the project, so the Issues board updates as an agent works.
+
+<AgentPrompt description="Paste this into your coding agent to start tracking this project's work as Hivemind issues." page="issues">{`
 Turn on Hivemind issues in this project and file the first ones.
 
-1. Check Hivemind is installed: `hive --version` prints a version.
-2. Ask me for a prefix for issue ids: 2 to 10 capital letters or digits, starting with a letter (for example `WEB`).
-3. In the project folder run `hive init --prefix <PREFIX>`. This adds the `.hivemind/` tracker, agent skills and a CLAUDE.md section; if I only want the tracker, use `--no-agentic` instead.
-4. Ask me for up to five pieces of work. For each, run `hive new "<title>" --ac "<criterion one> || <criterion two>"`.
-5. Check: `hive list --json` lists them, each in state `backlog` or `todo`, with ids `<PREFIX>-1`, `<PREFIX>-2` and so on.
+1. Check Hivemind is installed: \`hive --version\` prints a version.
+2. Ask me for a prefix for issue ids: 2 to 10 capital letters or digits, starting with a letter (for example WEB).
+3. In the project folder, run \`hive init --prefix <PREFIX>\`. It adds the .hivemind/ folder, agent skills and a CLAUDE.md section. If I only want the issues, use \`hive init --prefix <PREFIX> --no-agentic\` instead.
+4. Ask me for up to five pieces of work. For each, run \`hive new "<title>" --ac "<criterion one> || <criterion two>"\`. The || separates acceptance criteria.
+5. Check: \`hive list --json\` lists them, with ids <PREFIX>-1, <PREFIX>-2 and so on.
 
-Do not commit anything without asking me. At the end, show me the list of ids and titles, and say that **▶ work** on an issue card in the Issues tool starts an agent on it.
-</Prompt>
+Do not commit anything without asking me. At the end, show me the ids and titles, and tell me that the work button on an issue card in the Issues tool starts an agent on it.
+`}</AgentPrompt>
 
-## Turn them on
+## Turn issues on
 
-Open the Issues tool (**Add ▸ Tools ▸ Issues**) in a project: it offers to keep issues there. Or:
+<Tabs>
+  <Tab title="In the app">
+    1. Press **Add**, choose the **Tools** tab, then **Issues**.
+    2. Type an **Issue prefix**, such as `MYP`, and press **Set up issues**.
+    3. Check: the Issues tile shows an empty board.
+  </Tab>
+  <Tab title="In a terminal">
+    1. In the project folder, run `hive init --prefix MYP`.
+    2. Check: a `.hivemind/` folder now exists.
 
-```bash
-hive init --prefix MYP            # tracker, plus agent skills and a CLAUDE.md section
-hive init --prefix MYP --no-agentic   # tracker only
-```
+    `hive init` also adds agent skills and a section in `CLAUDE.md`. For the issues alone, add
+    `--no-agentic`.
+  </Tab>
+</Tabs>
 
 The prefix is 2 to 10 capital letters or digits, starting with a letter. Issue ids are `MYP-1`,
-`MYP-2`, …
+`MYP-2`, and so on.
 
-## Work with them
+## File an issue
+
+To file one, run `hive new` with a title. `--ac` adds acceptance criteria, the checks that say the
+work is done. `||` separates them:
 
 ```bash
-hive new "Fix token expiry" --ac "boundary test || manual check passes"
-hive list --state todo
+hive new "Fix token expiry" --ac "boundary test passes || manual check passes"
+```
+
+Check: `hive list --state todo` or the board shows it. Other everyday commands:
+
+```bash
 hive show MYP-1
 hive update MYP-1 --assignee claude --assignee-type agent
 hive close MYP-1                  # done; --reason "…" makes it cancelled
+hive reopen MYP-1                 # back to todo
 ```
 
-On the board, **▶ work** on an issue card starts an agent on it. The agent loads the issue, claims
-it, ticks each acceptance criterion and ends by setting its state: the steps are in
-[Coordinate agents](/agent-workflows#the-steps-an-agent-follows-on-an-issue).
+## Hand an issue to an agent
 
-## States
+1. On the Issues board, press **work** on a card. In an open issue, press **Work on this**.
+2. Check: an agent's tile opens with the issue as its task, ready for you to send.
+3. Send it. The agent follows the steps below and ticks each criterion on the board.
+
+An agent started with `hive init`'s skills follows these steps:
+
+<Steps>
+  <Step title="Read">
+    `hive show MYP-42 --json`: the issue and its acceptance criteria.
+  </Step>
+  <Step title="Claim">
+    `hive ctl set-state MYP-42 in_progress`, and it assigns itself.
+  </Step>
+  <Step title="Plan">
+    `hive ctl add-comment MYP-42 "plan: …"`.
+  </Step>
+  <Step title="Work">
+    After each criterion, `hive ctl mark-acceptance MYP-42 <n>`, counting from 0.
+  </Step>
+  <Step title="Check">
+    It runs the tests and build, and commits with the issue id.
+  </Step>
+  <Step title="Hand back">
+    It ends every session with `hive ctl set-state`: `in_review`, `done`, `in_progress --note`,
+    or `cancelled --note`.
+  </Step>
+</Steps>
+
+`.hivemind/.agent.md` sums up the open issues, so a new agent session reads one file.
+`hive agent context` writes it again.
+
+## Move an issue through its states
 
 <Frame caption="The usual track; nothing enforces it">
-  <img src="/images/workspaces-issue-states.svg" alt="Issue states: an issue usually moves backlog, todo, in_progress, in_review, done, and can be set to cancelled from any state. The order is not enforced: any state can be set from any other. hive close sets done, hive close --reason sets cancelled, and hive reopen sets todo." />
+  <img src="/images/workspaces-issue-states.svg" alt="Issue states: an issue usually moves backlog, todo, in_progress, in_review, done, and can be set to cancelled from any state. Any state can be set from any other. hive close sets done, hive close --reason sets cancelled, and hive reopen sets todo." />
 </Frame>
 
 Every change is a line in the issue's activity, signed by the person or agent who made it.
 
-## Sub-issues and links
+<Frame caption="The Issues tile: a column for each state, a card for each issue.">
+  <img src="/images/app/issues-board.dark.webp" alt="The Issues tile: Backlog and Todo columns, three issue cards, and a work button on the first card." />
+</Frame>
+
+## Split and link issues
 
 ```bash
 hive task MYP-3 add "Write the test"     # MYP-3.1
@@ -61,10 +113,10 @@ hive relate MYP-3 OPS-7 --type blocks    # written on both issues
 hive move MYP-3 OPS                      # to another project; --copy keeps the original
 ```
 
-Link types: `relates`, `blocks`, `blocked-by`, `duplicates`, `parent-of`, `child-of`. To use ids
-from another project, register both: `hive workspace register`, then `hive workspace list`.
+Link types are `relates`, `blocks`, `blocked-by`, `duplicates`, `parent-of` and `child-of`. To use
+ids from another project, run `hive workspace register` in both, then `hive workspace list`.
 
-## The folder
+## What is in the folder
 
 ```text
 .hivemind/
@@ -74,4 +126,18 @@ from another project, register both: `hive workspace register`, then `hive works
 └── .agent.md         a summary of open issues for agents (not committed)
 ```
 
-Every command: [CLI reference](/cli#issues).
+## If it didn't
+
+| You see | Do |
+|---|---|
+| `no .hivemind/ found in this directory or any parent` | Run `hive init --prefix <PREFIX>` in the project folder first. |
+| The prefix is refused | Use 2 to 10 capital letters or digits, starting with a letter. |
+| The board does not show a new issue | Check it was filed in the same project folder. |
+
+## Related
+
+- [Coordinate agents](/agent-workflows)
+- [Review an agent's changes](/review)
+- [CLI reference](/cli): every issue command.
+
+<LastValidated />
