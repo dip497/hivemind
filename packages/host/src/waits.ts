@@ -11,7 +11,7 @@
  * is the agent's status, and lasts while its status waits on it. Electron-free.
  */
 import { randomUUID } from "node:crypto";
-import type { InputKind, StatusInput } from "@hivemind/agents";
+import type { InputKind } from "@hivemind/agents";
 import type { Asked, QuestionAnswer } from "@hivemind/agents/node";
 import type { Answerer, ToolAsked } from "@hivemind/workspace-api/agents";
 
@@ -49,7 +49,8 @@ export interface Wait {
 export interface WaitsOptions {
   /** The agents' statuses: a wait is the agent's status while it lasts. */
   status: {
-    event(tile: string, input: StatusInput): void;
+    waitOn(tile: string, kind: InputKind): void;
+    waitOver(tile: string): void;
     get(tile: string): { state: string; since: number; kind?: InputKind } | undefined;
     subscribe?(fn: (c: { tileId: string; status: { state: string; since: number } }) => void): () => void;
   };
@@ -99,7 +100,7 @@ export class Waits {
     const held = this.held.get(tile);
     if (!held) return;
     this.held.delete(tile);
-    if (!held.wait.prompt) this.o.status.event(tile, { event: "input.resolved" });
+    if (!held.wait.prompt) this.o.status.waitOver(tile);
     held.reply(held.wait.prompt ? null : decision, feedback);
     this.o.changed?.();
   }
@@ -110,7 +111,7 @@ export class Waits {
     const before = this.held.get(tile);
     this.held.delete(tile);
     before?.reply(null);
-    this.o.status.event(tile, { event: "input.requested", kind: wait.kind });
+    this.o.status.waitOn(tile, wait.kind);
     const made: Wait = { ...wait, request: randomUUID(), tile, since: this.o.status.get(tile)?.since ?? Date.now() };
     this.held.set(tile, { wait: made, reply });
     this.o.changed?.();
@@ -154,7 +155,7 @@ export class Waits {
     if (o.always && held.wait.tool) this.rules.set(`${tile}:${held.wait.tool}`, decision);
     this.answered.set(`${tile}@${since}`, { decision, by });
     if (this.answered.size > ANSWERED_KEPT) this.answered.delete(this.answered.keys().next().value!);
-    this.o.status.event(tile, { event: "input.resolved" });
+    this.o.status.waitOver(tile);
     held.reply(decision, feedback, o.answers);
     this.o.changed?.();
     return { answered: true };
