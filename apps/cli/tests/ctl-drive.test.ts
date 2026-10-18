@@ -155,7 +155,8 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       const r = await hive(["ctl", ...args, "--json"], { env: env() });
       expect(r.code, `${args.join(" ")}: ${r.stdout}${r.stderr}`).toBe(0);
     }
-    expect(calls.slice(-11).map((c) => [c.method, ...c.params])).toEqual([
+    // Which workspace `--repo` names is looked up first (host.status); the verb is the call after it.
+    expect(calls.filter((c) => c.method !== "host.status").slice(-11).map((c) => [c.method, ...c.params])).toEqual([
       ["agent.send", "w-1", "hi"], ["agent.keys", "w-1", ["Down", "Enter"]], ["agent.rename", "w-1", "reviewer"], ["agent.rename", "w-1", ""],
       ["agent.close", "w-1"], ["tile.focus", "w-1"], ["link.connect", "w-1", "w-2"], ["link.disconnect", "w-1"], ["link.disconnect", "w-1", "w-2"],
       ["tool.open", repoA, { tool: "a/b/c", url: "https://x" }], ["agent.sessions", repoA, "codex", 5],
