@@ -15,6 +15,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeDispatch } from "@hivemind/host/control/methods";
+import { answers } from "@hivemind/host/answers";
 import { useAuthoredAgents } from "./authored-agents.ts";
 
 // Spawn/supervise policy reads the live catalog: load the published fixtures.
@@ -93,6 +94,21 @@ test("an approval for a BUSY supervisor waits in its inbox; its terminal is told
   assert.ok(reqId, "it carries a reqId");
   assert.deepEqual(answer(reqId, "allow"), { answered: true });
   assert.deepEqual(await asked, { decision: "allow" });
+});
+
+test("what a supervised tool use would do is read whole by whoever answers it, not the cut summary its supervisor is told", async () => {
+  const { agentChannel, deps, answer, asked, supervisedBy } = plane();
+  const worker = await supervisedBy("tile-parent");
+  const edit = { file_path: "/repo/src/nav.ts", old_string: "a".repeat(400), new_string: "const nav = 1;\n".repeat(2_000) };
+  const pending = agentChannel("agent.await_approval", { callerTile: `hm:${worker}`, tool_name: "Edit", tool_input: edit }, PERSON);
+  const reqId = await asked("tile-parent");
+  const domain = answers({ plane: () => ({ waits: deps.waits, status: deps.status }) as never, answerKeys: () => undefined, asking: () => undefined, chooseKeys: () => undefined, who: () => null });
+  const read = await domain.answers["agent.approval"]!(PERSON, worker) as { request: string; tool: string; summary: string; input: string; truncated?: true };
+  assert.deepEqual([read.request, read.tool, read.summary, read.truncated], [reqId, "Edit", "/repo/src/nav.ts", undefined]);
+  assert.deepEqual(JSON.parse(read.input), edit);
+  answer(reqId, "deny");
+  assert.deepEqual(await pending, { decision: "deny" });
+  assert.throws(() => domain.answers["agent.approval"]!(PERSON, worker), (e: { code?: string }) => e.code === "NOT_FOUND");
 });
 
 test("approval with a dead supervisor resolves instead of hanging the worker", async () => {

@@ -50,6 +50,7 @@ beforeAll(async () => {
     answer("host.status", () => ({ workspaces: [repoA, nested, repoB, onBox].map((repo) => ({ repo, workspace: null })) })),
     answer("agent.list", () => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking] })),
     answer("agent.answer", (_tile, since) => ({ answered: since === 77 })),
+    answer("agent.approval", () => ({ request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
     answer("agent.start", () => ({ tile: "w-2" })),
     answer("agent.send", (tile, text) => { if (!text) throw new ApiError("BAD_REQUEST", "text required"); return { sent: tile !== "ghost" }; }),
@@ -200,6 +201,13 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect(last("agent.answer").params[2]).toEqual({ decision: "deny", feedback: "not that dir" });
     const gone = await hive(["ctl", "approve", "req-2", "allow", "--repo", repoA, "--json"], { env: env() });
     expect([gone.code, (gone.json as { code: string }).code]).toEqual([2, "BAD_REQUEST"]);
+  });
+
+  test("approval shows what the request it names would do, its input whole, from agent.approval; one not waiting is exit 5", async () => {
+    const r = await hive(["ctl", "approval", "req-1", "--repo", repoA, "--json"], { env: env() });
+    expect([r.code, r.json, last("agent.approval").params]).toEqual([0, { request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 }, ["w-3"]]);
+    const gone = await hive(["ctl", "approval", "req-2", "--repo", repoA, "--json"], { env: env() });
+    expect([gone.code, (gone.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
   });
 
   test("a bad token → exit 6 FORBIDDEN; an agent nobody runs → exit 5; a bad request → exit 2", async () => {

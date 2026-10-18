@@ -40,7 +40,8 @@ const REPORT_MAX = 10_000;
 
 export class AgentFeed {
   private agents = new Map<string, AgentItem>();
-  private seq = 0;
+  /** Counted on from when the feed began, in ms: a cursor from an earlier process is below it. */
+  private seq: number;
   /** What was told, oldest first, for `since`: by workspace, so a reader catches up on its own. */
   private told: Array<{ workspace: string; change?: AgentChange; event?: AgentEvent }> = [];
   private due: ReturnType<typeof setTimeout> | null = null;
@@ -53,6 +54,7 @@ export class AgentFeed {
     this.every = o.every ?? 250;
     this.keep = o.keep ?? 1000;
     this.now = o.now ?? Date.now;
+    this.seq = this.now();
     this.agents = new Map(o.build().map((a) => [a.tile, a]));
   }
 

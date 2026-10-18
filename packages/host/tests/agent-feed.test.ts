@@ -27,7 +27,8 @@ const events = (told: ReturnType<typeof feed>["told"]) => told.filter((t) => t.e
 
 test("a reader lists, then is told each change once, and what it means", () => {
   const h = feed([agent("1")]);
-  assert.deepEqual(h.f.list("ws-a"), { seq: 0, agents: [agent("1")] });
+  const listed = h.f.list("ws-a");
+  assert.deepEqual(listed.agents, [agent("1")]);
 
   h.set([agent("1", { state: "done" }), agent("2")]);
   h.f.refresh();
@@ -40,6 +41,7 @@ test("a reader lists, then is told each change once, and what it means", () => {
   assert.deepEqual(events(h.told), ["1:turnEnded:done", "2:came", "1:waiting:permission", "1:answered", "2:went"]);
   const seqs = h.told.map((t) => t.payload.seq);
   assert.deepEqual(seqs, [...seqs].sort((a, b) => a - b), "numbered in order");
+  assert.ok(seqs[0]! > listed.seq, "numbered on from the list");
   assert.equal(new Set(seqs).size, seqs.length, "each number once");
   assert.equal(h.f.list("ws-a").seq, seqs.at(-1));
 });
@@ -87,7 +89,18 @@ test("a reader that missed changes catches up on its own workspace's; past what 
 
   for (let i = 0; i < 4; i++) { h.set([agent("1", { since: 10 + i })]); h.f.refresh(); }
   assert.equal(h.f.since("ws-a", from), null, "older than the feed keeps: list again");
-  assert.equal(h.f.since("ws-a", 999), null, "ahead of the feed: list again");
+  assert.equal(h.f.since("ws-a", h.f.list("ws-a").seq + 1), null, "ahead of the feed: list again");
+});
+
+test("a cursor from before the host started again is told to list again, not given the new host's changes as after it", async () => {
+  const before = feed([agent("1")]);
+  for (const state of ["done", "working", "done"] as const) { before.set([agent("1", { state })]); before.f.refresh(); }
+  const cursor = before.f.list("ws-a").seq;
+  await new Promise((r) => setTimeout(r, 20));
+  const after = feed([agent("1")]);
+  for (const state of ["working", "done", "working", "done", "working"] as const) { after.set([agent("1", { state })]); after.f.refresh(); }
+  assert.equal(after.f.since("ws-a", cursor), null);
+  assert.deepEqual(after.f.since("ws-a", after.f.list("ws-a").seq)?.changes, []);
 });
 
 test("each workspace's changes go to its own folder, and none for a workspace not held here", () => {
@@ -100,12 +113,13 @@ test("each workspace's changes go to its own folder, and none for a workspace no
 
 test("what a worker reports to the program that started it is told to its workspace's readers, numbered on, and kept for one catching up", () => {
   const h = feed([agent("1"), agent("2", { workspace: "ws-b" })]);
+  const from = h.f.list("ws-a").seq;
   h.f.report("1", "done: 3 files");
   h.f.report("gone", "nobody hears this");
   assert.deepEqual(events(h.told), ["1:reported:done: 3 files"]);
   assert.equal(h.told[0]!.repo, "/a");
-  assert.deepEqual(h.f.since("ws-a", 0)?.events.map((e) => [e.kind, e.detail]), [["reported", "done: 3 files"]]);
-  assert.deepEqual(h.f.since("ws-b", 0)?.events, []);
+  assert.deepEqual(h.f.since("ws-a", from)?.events.map((e) => [e.kind, e.detail]), [["reported", "done: 3 files"]]);
+  assert.deepEqual(h.f.since("ws-b", from)?.events, []);
 });
 
 test("a wait that ends is told answered, with the decision and who gave it when it was decided; one replaced by another wait ended too", () => {

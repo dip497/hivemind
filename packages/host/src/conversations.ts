@@ -119,9 +119,15 @@ export interface ConversationsOptions {
   /** The session the agent of `tile` keeps its conversation in now, its file, and how its manifest
    *  maps the file's records; null when no agent there keeps one. */
   transcriptOf(tile: string): Transcript | null;
+  /** Whether the agent of `tile` runs on this machine, so its session file is here. */
+  runsHere(tile: string): boolean;
 }
 
-export function conversations(o: ConversationsOptions): Domain<"agent.conversation" | "agent.tool"> {
+/** Whoever is on this machine: the person, or a program or agent on the drive socket. A device on
+ *  the network (a phone, a guest) is not. */
+const onThisMachine = (from: Connection): boolean => from.actor.kind === "person" || (from.actor.kind === "peer" && !!from.actor.client);
+
+export function conversations(o: ConversationsOptions): Domain<"agent.conversation" | "agent.tool" | "agent.transcript"> {
   /** What each caller follows, by tile: how to stop it. */
   const following = new WeakMap<Connection, Map<string, () => void>>();
   /** Where each caller's view of each agent's conversation begins, in which session: a tool use
@@ -150,6 +156,14 @@ export function conversations(o: ConversationsOptions): Domain<"agent.conversati
         mine.get(bare)?.();
         mine.set(bare, followAgent(() => o.transcriptOf(bare), now, first.cursor, (said, of) => from.send({ event: "agent.said", params: [bare, said.entries, said.cursor, of] })));
         return now.file ? { ...first, session: now.session } : first;
+      },
+      // The agent's own file, for a program here that reads its records: a path is true only here.
+      "agent.transcript": (from, tile) => {
+        const bare = toBareId(text(tile, "tile"));
+        const now = o.transcriptOf(bare);
+        if (!now?.file) throw new ApiError("NOT_FOUND", "this agent keeps no session file yet");
+        if (!onThisMachine(from) || !o.runsHere(bare)) throw new ApiError("UNSUPPORTED", "a session file is named only to a program on the machine the agent runs on: read it with agent.conversation");
+        return { session: now.session, path: now.file };
       },
       // One tool use of its session now, unfolded: asked for when the person opens its row.
       "agent.tool": (from, tile, use) => {

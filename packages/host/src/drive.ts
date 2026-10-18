@@ -12,7 +12,7 @@ import net from "node:net";
 import path from "node:path";
 import { servePeer } from "@hivemind/workspace-api/peers";
 import type { Connection, WorkspaceServer } from "@hivemind/workspace-api/server";
-import type { EventMessage } from "@hivemind/workspace-api/protocol";
+import { ApiError, type ErrorCode, type EventMessage } from "@hivemind/workspace-api/protocol";
 import { holderOf } from "@hivemind/agent-host/hooks/token";
 import { listenExclusive } from "@hivemind/agent-host/socket-claim";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
@@ -21,9 +21,11 @@ import { takeLines } from "./control/protocol.js";
 import type { Grants } from "./grants.js";
 
 /** The workspace API version the drive socket speaks. */
-export const DRIVE_API = "0.30";
+export const DRIVE_API = "0.32";
 /** How long a connection may take to say who it is. */
 const HELLO_WITHIN_MS = 10_000;
+/** What may wait unread for a connection before it is closed: a program that stopped reading. */
+const UNREAD_MAX = 16 * 1024 * 1024;
 
 export interface DriveOptions {
   server: Pick<WorkspaceServer, "connect" | "answer" | "notice">;
@@ -69,10 +71,17 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
 
   const server = net.createServer((socket) => {
     socket.setEncoding("utf8");
-    const write = (line: string): void => { if (!socket.destroyed) socket.write(`${line}\n`); };
+    const write = (line: string): void => {
+      if (socket.destroyed) return;
+      socket.write(`${line}\n`);
+      if (socket.writableLength > UNREAD_MAX) socket.destroy();
+    };
+    let refused = false;
+    // Said why, and closed both ways once said: nothing it sends after is read.
     const refuse = (code: string, message: string): void => {
+      refused = true;
       write(JSON.stringify({ error: { code, message } }));
-      socket.end();
+      socket.end(() => socket.destroy());
     };
     const listeners = new Set<(text: string) => void>();
     let closedResolve!: () => void;
@@ -82,6 +91,7 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
     const helloTimer = setTimeout(() => { if (!helloed) refuse("BAD_REQUEST", "say hello first: {\"hello\": {\"token\": …}}"); }, HELLO_WITHIN_MS);
 
     socket.on("data", (chunk: string) => {
+      if (refused) return;
       buf += chunk;
       let lines: string[];
       try {
@@ -218,4 +228,44 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
       if (mine) try { fs.unlinkSync(sockPath); } catch { /* gone */ }
     },
   };
+}
+
+/** `method` answered on the drive socket at `sockPath` as whoever `token` is: what another
+ *  process on this machine, the one serving it, answers. */
+export function askDrive(sockPath: string, token: string, method: string, params: unknown[], timeoutMs = 10_000): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(sockPath);
+    socket.setEncoding("utf8");
+    let settled = false;
+    const done = (fail: ApiError | null, value?: unknown): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (fail) reject(fail);
+      else resolve(value);
+    };
+    const nobody = () => done(new ApiError("UNAVAILABLE", "nothing serves programs on this machine now: start the app or `hive host` again"));
+    const timer = setTimeout(nobody, timeoutMs);
+    socket.on("connect", () => socket.write(`${JSON.stringify({ hello: { token } })}\n`));
+    socket.on("error", nobody);
+    socket.on("close", nobody);
+    let buf = "";
+    socket.on("data", (chunk: string) => {
+      buf += chunk;
+      for (let nl; (nl = buf.indexOf("\n")) >= 0; ) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        let m: { hello?: unknown; id?: unknown; result?: unknown; error?: { code?: string; message?: string } };
+        try {
+          m = JSON.parse(line) as typeof m;
+        } catch {
+          continue;
+        }
+        if (m.hello) socket.write(`${JSON.stringify({ id: 1, method, params })}\n`);
+        else if (m.error && m.id === undefined) done(new ApiError((m.error.code ?? "FAILED") as ErrorCode, m.error.message ?? "refused"));
+        else if (m.id === 1) done(m.error ? new ApiError((m.error.code ?? "FAILED") as ErrorCode, m.error.message ?? "refused") : null, m.result);
+      }
+    });
+  });
 }

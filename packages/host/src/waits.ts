@@ -40,6 +40,8 @@ export interface Wait {
   /** approval: the tool, and what it would do. */
   tool?: string;
   summary?: string;
+  /** approval: the tool's input, as the agent's hook gave it. */
+  input?: unknown;
   /** When it stops waiting on an answer. */
   expiresAt?: number;
   /** Who answers it besides the person: the agent or program that started the agent. */

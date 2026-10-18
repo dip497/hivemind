@@ -1,4 +1,4 @@
-# Workspace API (0.30)
+# Workspace API (0.32)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -21,7 +21,7 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `FORBIDDEN` | The caller may not do this: a peer's role on the workspace does not allow it (below), or no token says who it is. It never ran. |
 | `NOT_FOUND` | What it names is not there: a tile, a frame, a workspace (0.23). |
 | `UNSUPPORTED` | The agent cannot do what it asks: it says no turn end to read a reply by, has no permission system to supervise, or keeps no sessions to resume (0.23). |
-| `RATE_LIMITED`, `DEPTH_EXCEEDED` | Too many started at once, or one started too far below the person: ask again later, or from higher up (0.23). It never ran. |
+| `RATE_LIMITED`, `DEPTH_EXCEEDED` | Too many started at once, or one started too far below the person: ask again later, or from higher up (0.23). It never ran. The limit is 16 agents, tools or widgets a minute for each tree of callers (a grant, an agent the person started, or the person, with every agent started under it), and 64 for the machine; a start refused for anything else uses none of it. |
 | `TIMEOUT` | What it waited on did not come in time (0.23). |
 | `UNAVAILABLE` | It needs one of the person's windows, and none is open here (0.23). |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |
@@ -55,11 +55,13 @@ that Host, and the first frame the launch's token; else it is refused (401, 403)
 Programs on this machine reach the workspace API on `drive.sock` in the app's data folder (0600;
 a named pipe on Windows, named as `hcp.sock`'s is). The app and `hive host` both serve it;
 whichever starts first does, and the other says so. Lines of JSON both ways, 1 MiB each at most.
+A connection that says nothing in 10 s is told so and closed; one with more than 16 MiB sent it
+and not read (a program that stopped reading) is closed.
 
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.30", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.32", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -79,7 +81,10 @@ The first line says who connects: `{"hello": {"token", "workspace"?}}`.
   does a grant reaching several workspaces that does not name one, or one that ran out.
 
 Taking a grant back closes its connections; one that runs out closes them then. The host keeps
-grants in `grants.json` beside `hcp.token`, 0600, each token only as its sha256.
+grants in `grants.json` beside `hcp.token`, 0600, each token only as its sha256. Only the
+process serving the socket keeps them: `grant.*` asked of the other (the app opened beside a
+running `hive host`) is answered by the one serving, and `UNAVAILABLE` when none does. A service's
+grant found as a process begins serving was left behind by the one before, and is taken back.
 
 ## Who asks, and the audit log
 
@@ -234,7 +239,7 @@ log.
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
 | `link.connect` | `src`, `dst` | `null`: each reply of the agent in `src` is handed to the one in `dst` as its next prompt, as `hive ctl connect` (0.23) | target `src->dst` |
 | `link.disconnect` | `src`, `dst`? | `null`: that pipe gone, or every pipe out of `src` (0.23) | target `src` |
-| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18); a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone); each with the session it is in, `session`, when its agent has said (0.22, `agents.md` 0.6) | read |
+| `agent.list` | `repo` | `{seq, agents}`: the workspace's agents as they are now, and the number of the last change (0.18), counted on from when the host began, in ms, so `agent.since` with a number from before it started again is null; a plan an agent waits on a review of is in its `waiting` (`plan`), answered with `agent.answer` (0.21: `plan.list`, `plan.decide` and the `plan.*` events are gone); each with the session it is in, `session`, when its agent has said (0.22, `agents.md` 0.6) | read |
 | `agent.since` | `repo`, `seq` | `{seq, changes, events}`: each change and event after `seq`, or null when the host no longer has them all: list again (0.18) | read |
 | `widget.all` | `repo` | what each widget in the workspace last drew, by its id: never stored, drawn again when its code next runs (0.18) | read |
 | `widget.run` | `repo` | whether the caller runs the workspace's widgets: a window of the person's, on the host's machine or on another of their devices with it open, the first to ask, until it lets go (`widget.release`) or goes; someone else's device never does (0.19) | — |
@@ -244,6 +249,8 @@ log.
 | `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?, acks?, history?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`; `cwd` and `cmd` need not be said with `attachOnly`, 0.23; `acks`: the client acknowledges what it takes, `terminal.ack`, 0.24; `history`: at most this many lines of its scrollback in each screen the client is sent, all the host keeps when not said) | `{pid, joined, asleep?}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first; one put to sleep is started by no client (`asleep`, `pid` -1), nor is a start that would resume a conversation another tile sleeps in (0.29) | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 | `terminal.saved` | `tile`, `lines`? | what the agent in `tile`, put to sleep, last showed, with its newest 1000 lines when `lines` asks for no more (none: all it saved); null when it does not sleep. Read from where it slept, as its workspace says (0.29) | — |
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?, always?}` | `{answered, by?}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), and with `always` every later use of that tool by that agent too, until it closes (0.23), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering"); a plan or supervised tool use answered already says who answered first (`by`: `{person, name}`, 0.21) | target the agent's tile |
+| `agent.approval` | `tile` | `{request, since, tool, summary, input, expiresAt, truncated?}` (0.31): the supervised tool use the agent waits on, `summary` as its supervisor is told it (a command cut to 300 characters, an edit's file alone) and `input` whole, as the agent's hook gave it (text as it is, else JSON, two spaces a level), cut to 262,144 characters, `truncated` then. `NOT_FOUND` when it waits on none. `hive ctl approval <request>` | read |
+| `agent.transcript` | `tile` | `{session, path}` (0.32): the session the agent is in and its file, for a program reading the agent's own records, as its hooks are handed `transcript_path`. Answered only to a caller on this machine (the person, a program or agent on the drive socket) about an agent running on it: else `UNSUPPORTED` (a phone or guest reads it with `agent.conversation`). `NOT_FOUND` when it keeps no session file yet | read |
 | `agent.send` | `tile`, `text` | `{sent}`: a message for the agent, whatever it is doing, a prompt of up to 32768 characters (0.23) typed in as its next prompt once it is at its prompt, Enter after it; the `agent.read` after it waits for the turn it starts; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
 | `agent.startable` | `repo` | `{programs, frames}`: the agents this device starts, with their model and mode choices, and the workspace's frames, each on the machine its folder is on (`agents.md`, "Starting", 0.11) | — |
 | `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | `{tile}`: an agent started as the person launches one at their desktop, their saved options with these on top, never in its unattended mode unless `mode` says so (`agents.md`, 0.11); `supervise` makes its caller its supervisor, and a program or an agent its parent (0.20; an agent, 0.23) | target the new tile |
@@ -254,7 +261,7 @@ log.
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `agent.rename` | `tile`, `name` | `{name}`: what it is called now, on its tile and to the agents it talks to; an empty `name` takes it away, so it is called what its agent says again (0.23) | target the agent's tile |
 | `agent.keys` | `tile`, `keys` | `{keys}`: each key name (`Enter`, `Escape`, `Up`, `C-c`, …) or text typed into its terminal a moment after the last, how many there were (0.23) | target the agent's tile |
-| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23); `waiting` at once when it stops to wait on an answer, with what on (0.26); `asleep` at once when it is asleep or is put to sleep (0.29) | — |
+| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23; a `timeoutMs` past 2³¹−1 ms, about 24.8 days, waits that long); `waiting` at once when it stops to wait on an answer, with what on (0.26); `asleep` at once when it is asleep or is put to sleep (0.29) | — |
 | `agent.output` | `tile`, `lines`? | `{text}`: the last `lines` lines (40) of what it printed, its terminal's escapes taken out, as much as the host keeps; following its output as it comes is `terminal.open` with `attachOnly` (0.23) | — |
 | `agent.sessions` | `place`, `program`, `limit`? | `{agent, resumable, sessions}`: the sessions `program` keeps for that folder, newest first, each one `agent.start`'s `resume` takes; `resumable` false when it says none (0.23) | read |
 | `tool.open` | `repo`, `{tool, frame?, url?}` | `{tile}`: an installed tool's tile (`tool` its id) placed on the board, in `frame` or the one in view (0.23) | target the new tile |

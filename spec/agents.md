@@ -193,6 +193,9 @@ repository answers no files and an empty patch; one on another machine is `FAILE
 
 ## Conversation
 
+A program on the machine the agent runs on may read its session file itself: `agent.transcript(tile)`
+(workspace API 0.32) names it.
+
 `agent.conversation(tile, cursor?, session?)` (0.2; `session` 0.3) answers what the agent of `tile`
 and the person said to each other, as the agent keeps it in its session file (its manifest's
 `session.transcript` maps the file's records), and then sends the caller what is said next, as it
