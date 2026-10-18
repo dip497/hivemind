@@ -1,71 +1,112 @@
 ---
-title: "Settings and appearance"
-description: "Where each setting lives, themes and wallpaper, and the settings file."
+title: "Change how Hivemind looks"
+description: "Pick a theme and accent, set the wallpaper and frosted glass, add overlays, and share your theme as a file."
 ---
 
-Open Settings with ⌘, (Ctrl+,), the gear at the toolbar's right end, or the foot of the Layers
-panel. Changes apply at once.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-<Prompt description="Paste this into your coding agent to change Hivemind's look or settings from the terminal." actions={["copy","cursor"]}>
-Change my Hivemind settings from the terminal, using the `hive theme` and `hive config` commands.
+Change the look when you want other colours, a calmer background, or more contrast. Every change
+applies at once and is saved for you.
 
-1. Show me the themes: `hive theme list`. Ask me which one I want, then `hive theme use <name>`.
-2. Show where the settings file is: `hive config path`. Before changing anything, save a copy of it next to itself.
-3. For anything else I ask to change, read the current value first with `hive config get <dotted.path>` (for example `hive config get appearance.glass.blur`), then set it with `hive config set <dotted.path> '<JSON value>'`. The value is JSON: a number as is (`12`), text in double quotes inside single quotes (`'"nord"'`).
-4. If `hive config set` refuses a value, show me its message and do not edit the file by hand.
+<AgentPrompt description="Paste this into your coding agent to change Hivemind's look from the terminal." page="appearance">{`
+Change how Hivemind looks, from the terminal, with the \`hive theme\` and \`hive config\` commands.
 
-At the end, show the new values with `hive config get`, and tell me the app applies them at once and that the saved copy undoes them.
-</Prompt>
+1. Show me the themes: \`hive theme list\`. Ask me which one I want, then run \`hive theme use <name>\`.
+2. Before changing anything else, save the current look: \`hive theme export ~/hivemind-theme-backup.json\`.
+3. For anything else I ask (blur, wallpaper, glass), read the value first with \`hive config get <dotted.path>\`, for example \`hive config get appearance.glass.blur\`. Then set it with \`hive config set <dotted.path> '<JSON value>'\`. The value is JSON: a number as is (\`12\`), text in double quotes inside single quotes (\`'"ice"'\`), \`true\` or \`false\`.
+4. If \`hive config set\` refuses a value, show me its message. Do not edit the settings file by hand.
 
-## Pages
+At the end, show the new values with \`hive config get appearance\`, and tell me that \`hive theme import ~/hivemind-theme-backup.json\` undoes it all.
+`}</AgentPrompt>
 
-| Group | Page | Holds |
-|---|---|---|
-| General | **Profile** | your name and colour |
-| | **Appearance** | theme, accent, wallpaper, overlays, glass |
-| | **Notifications** | alerts and sounds |
-| | **Shortcuts** | keyboard shortcuts |
-| Connect | **Connect** | pair devices, let people in ([Connect devices](/connect)) |
-| | **API access** | tokens for programs ([API](/api-tokens)) |
-| Plugins | **Plugins** | agents, views, widgets and tools ([Plugins](/plugins)) |
-| Advanced | **In a browser** | serve the app to a browser tab ([Phone and browser](/phone#the-whole-app-in-a-browser-tab)) |
-| | **Servers** | your network server ([Your own network server](/self-hosting)) |
-| | **About and updates** | version, updates, and whether to check for them |
+<Tabs>
+  <Tab title="In the app">
+    <Steps>
+      <Step title="Open Appearance">
+        Open **Settings → Appearance**. Settings is the gear at the right end of the toolbar.
+      </Step>
+      <Step title="Pick a theme">
+        Under **Theme**, pick a **Preset**. Then pick an **Accent**: the colour of buttons,
+        selection and focus.
 
-## Appearance
+        Check: the whole window changes colour at once.
+      </Step>
+      <Step title="Set the background">
+        Under **Workspace**, pick a **Background**: a moving wallpaper, a **Photo**, a **Video**, or
+        **None**. **Media brightness** dims a photo or video. Turn off **Animate the background**
+        for a still one.
 
-Pick a preset and an accent. **Background** sets the wallpaper, **Overlays** adds images and
-videos, **Advanced** holds terminal colours, theme import and **Copy JSON**. **Tools in scene
-views** chooses whether tiles docked in an installed view use your theme or a solid background.
-Wallpaper and glass show under Canvas and Windows; an installed view paints its own background.
+        Check: the background shows behind your tiles.
+      </Step>
+      <Step title="Set the glass">
+        **Glass** makes panels frosted, so the background shows through them. Set **Panel opacity**
+        and **Blur**. Turn on **Frost tool content** to let the background show through terminals
+        and editors too, and set its **Content tint**.
+
+        Check: the Layers panel and toolbar look frosted over the background.
+      </Step>
+      <Step title="Add an overlay, if you like">
+        Open **Overlays** and press **Add overlay**. Pick an image or video to place over the
+        workspace. Transparent WebM, GIF and PNG files work.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="In a terminal">
+    ```bash
+    hive theme list                 # the presets
+    hive theme use nord
+    hive config set appearance.glass.blur 12
+    hive config set appearance.wallpaper.kind '"ice"'
+    ```
+
+    Check: `hive config get appearance.glass.blur` prints `12`, and the open app has changed.
+  </Tab>
+</Tabs>
+
+<Frame caption="Settings → Appearance">
+  <img src="/images/app/settings-appearance.dark.webp" alt="Settings → Appearance: the theme Preset and Accent colours, then the workspace Background, Animation and Glass." />
+</Frame>
+
+## Words on this page
+
+| Word | Means |
+|---|---|
+| **Glass** | Frosted, see-through panels over the background. |
+| **Overlays** | Images or videos placed over the whole workspace, such as a transparent animation. |
+| **Tools in scene views** | How terminals and editors look inside a view you installed: **Use my theme** draws them as on the canvas; **Opaque** gives them a solid background. |
+
+The background, glass and overlays show under the **Canvas** and **Windows** views. A view you
+installed paints its own background.
+
+## Share or keep your theme
+
+Under **Advanced**, **Theme file** has **Copy JSON** and **Import…**. **Terminal colours** sets
+the 16 terminal colours, the background, text, cursor and selection.
 
 ```bash
-hive theme list                # signal (the default), ubuntu, dracula, nord, solarized-dark, one-dark
-hive theme use nord
 hive theme export my-theme.json
 hive theme import my-theme.json
 ```
 
-## The settings file
+A guest who joins your workspace sees your theme, except your photo, video, overlays and fonts.
 
-Everything is one file you own, checked when it is read and written:
+## Check it worked
 
-```text
-$XDG_CONFIG_HOME/hivemind/settings.json     # $HIVE_SETTINGS names another
-```
+- The window shows the theme you picked.
+- `hive config get appearance.preset` prints its name.
 
-```bash
-hive config path
-hive config get appearance.glass.blur
-hive config set appearance.glass.blur 12    # a JSON value: '"nord"' for text
-```
+## If it didn't
 
-Fonts and corner radius are set here or with `hive config`, not on a page.
-
-## Environment variables
-
-| Variable | Does |
+| You see | Do this |
 |---|---|
-| `HIVE_SETTINGS` | use another settings file |
-| `HIVEMIND_SHELL_ENV=0` | tiles get the app's environment as it is |
-| `HIVEMIND_SAFE_MODE=1` | start with no tool plugins loaded |
+| `hive config set` refuses a value | The value must be JSON: text in double quotes inside single quotes (`'"ice"'`). Its range is in the [Settings reference](/settings#appearance). |
+| The text is hard to read over a photo | Lower **Media brightness**, or raise **Panel opacity**. |
+| Something else | [Troubleshooting](/troubleshooting) |
+
+## Related
+
+- [Settings reference](/settings): every page and every setting in the file.
+- [Keyboard shortcuts](/keyboard-shortcuts).
+
+<LastValidated />

@@ -1,198 +1,151 @@
 ---
 title: "Add your own agent"
-description: "Describe an agent's CLI in one YAML file, saying how to start it, read its screen and answer it."
+description: "Teach Hivemind a coding agent it does not know yet, with one agent.yaml file: how to start it, read its screen and answer it."
 ---
 
-An agent is one file, `agent.yaml`. It tells Hivemind which program to start, what it can do, and
-how to read its screen. No code and no rebuild.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-<Prompt description="Paste this into your coding agent to write an agent file for a CLI you use, check it on the real program, and offer it to everyone." actions={["copy","cursor"]}>
-Write a Hivemind agent file (`agent.yaml`) for a coding-agent CLI on this computer, check it against the real program, and, if I want, offer it to everyone.
+Add an <Tooltip tip="A coding agent's own program running in a tile, which Hivemind reads and answers." cta="Glossary" href="/glossary#agent">agent</Tooltip> when you use a coding agent's program that HiveHub does not list yet. You write one file, `agent.yaml`. No code and no rebuild.
 
-1. Ask me which CLI it is. Find it with `command -v`, then run its `--version` and `--help`, and `--help` on its main subcommand. Read its own docs too. Write down, with the line or page that says so, each of these: how a task is passed (an argument, or typed into its screen); whether it has hooks that report when a turn ends or before a tool runs; where it keeps sessions and how to resume one; what its screen shows when it works, when it asks permission and when it asks a question; which keys answer those. Never guess one from another agent; if you cannot find something, say so.
-2. The fields are described on the Hivemind docs page "Add your own agent"; `hive agents validate` also names each field it refuses. Write `~/.config/hivemind/agents/` plus the id plus `/agent.yaml`, with `manifestVersion: 2`, an `id` matching the folder name, `bin` as the bare program name (never a path) and every field under `caps`. Claim a capability only if step 1 proved it: `turnSignal: true` and `supervise: broker` need `launch.hcp` and a hook file, `resume` other than `none` needs `session.resume`. Regular expressions are not allowed in `detect.rules`.
-3. Check it: `hive agents validate` with the folder, until it passes. Then `hive agents install` with the folder, and `hive agents list` shows it with no problem.
-4. If Hivemind is open, try it: `hive ctl spawn --agent` with the id and a small `--prompt`, then `hive ctl stream` with the tile id and `--snapshot` to see its screen, and `hive ctl agents` to see the status Hivemind reads. Make it read working while it works and waiting while it asks. If you set `answer` keys, check each with `hive ctl keys` on a real prompt.
-5. To offer it to everyone, ask me first. New agents are listed by pull request to the GitHub repository dip497/hivemind-plugins, in `agents/` plus the id, with a `README.md`. Use my GitHub account through `gh`; if `gh` is not signed in, ask me to sign in myself.
+<AgentPrompt description="Paste this into your coding agent to write an agent file for a program you use, check it on the real program, and offer it to everyone." page="agent-providers">{`
+Write a Hivemind agent file (\`agent.yaml\`) for a coding-agent program on this computer, check it against the real program, and, if I want, offer it to everyone.
 
-At the end, show me the file, say which capabilities you proved and from where, which you left off and why, and the pull request link if you opened one.
-</Prompt>
+1. Probe the real program first. Never guess one agent from another. Ask me which program it is. Find it with \`command -v\`, then run its \`--version\` and \`--help\`, and \`--help\` on its main subcommand. Read its own docs too. For each of these, write down the answer and the line or page that says so, or "could not find it":
+   - how a task is passed: as an argument, or typed into its screen;
+   - whether it has hooks that run when it finishes replying, or before a tool runs, and whether a hook can block;
+   - where it keeps sessions, and how to resume one;
+   - what its screen shows while it works, when it asks permission, and when it asks a question;
+   - which keys allow, deny, or pick an option on those screens.
+2. Write \`~/.config/hivemind/agents/<id>/agent.yaml\` from the "agent.yaml reference" page: \`manifestVersion: 2\`, an \`id\` equal to the folder name, \`bin\` as the bare program name (never a path), and every field under \`caps\`. Claim a capability only if step 1 proved it. \`turnSignal: true\` and \`supervise: broker\` need \`launch.hcp\` and a hook file beside the manifest. \`resume\` other than \`none\` needs \`session.resume\`. Regular expressions are not allowed in \`detect.rules\`.
+3. Check it: \`hive agents validate <folder>\`, until it passes. Then \`hive agents install <folder>\`, and check \`hive agents list\` shows it with no problem.
+4. If Hivemind is open, try it: \`hive ctl spawn --agent <id> --prompt "list the files here"\`. Watch \`hive ctl agents\`: it must read working while the agent works, and waiting when it asks permission. \`hive ctl stream <tile> --snapshot\` shows its screen. If you set answer keys, check each with \`hive ctl keys\` on a real question.
+5. Offer it to everyone only if I say so. New agents are listed by pull request to the GitHub repository dip497/hivemind-plugins, in \`agents/<id>/\` with a \`README.md\`. Use my GitHub account through \`gh\`; if \`gh\` is not signed in, ask me to sign in myself.
 
-## Write one
+At the end, show me the file. Say which capabilities you proved and from where, which you left off and why, and the pull request link if you opened one.
+`}</AgentPrompt>
 
-Make a folder named after the agent's id, with `agent.yaml` in it:
+## Before you start
 
-```yaml ~/.config/hivemind/agents/acme/agent.yaml
-manifestVersion: 2
-minAppVersion: "2026.9.6"   # optional: the catalog hides it from older Hivemind
-id: acme                 # lowercase letters, digits and dashes
-label: Acme Coder
-bin: acme-coder          # the binary name on your PATH — never a path
-aliases: [acme]          # other names that identify it when you run it yourself
-enabled: true            # false (the default) = recognised for status, not offered to spawn
+- Hivemind is installed. See [Install and run your first agent](/getting-started).
+- The agent's own program is installed and on your `PATH`.
+- You have read its `--help`. Everything you claim in the file must come from the real program.
 
-caps:
-  promptDelivery: typed  # typed: keyed into its TUI · argv: passed as an argument
-  turnSignal: false      # true only with `launch.hcp` + the hook file that reports turns
-  resume: none           # or "cwd"/"tile" once `session.resume` says where sessions live
-  supervise: human       # human or none — "broker" needs the `launch.hcp` pre-tool hook
-  blockedDetection: true
+<Warning>
+An agent file starts a program in your terminal, with your permissions. There is no sandbox. Before
+you install someone else's, read its `bin` and `spawn`, and install only agents whose author you
+trust.
+</Warning>
 
-spawn:
-  args: ["--no-color"]           # always passed
-  label: "acme #{n}"             # tile name; {n} is the tile number
-  titles: ["acme — {task}", "acme"]  # window titles: {task} names the tile, a match without it is ignored
+## Write the file
 
-options:                         # what Settings lets you choose for this agent
-  - id: model                    # `model` and `mode` are what `hive ctl spawn --model/--mode` set
-    label: Model
-    flag: --model                # a choice is passed as `--model <value>`
-  - id: mode
-    label: Approval
-    flag: --approval
-    values:                      # a value that needs other flags than `--approval <value>`
-      yolo: ["--yes"]
+<Steps>
+  <Step title="Learn what the program can do">
+    Run `<program> --help` and read its docs. Write down how it takes a task, whether it has hooks,
+    and where it keeps sessions. Then note what its screen shows while it works and while it waits
+    on you.
 
-detect:
-  default: idle
-  rules:
-    - when: { contains: "approve this?" }
-      then: blocked
-    - when: { line: [{ gerundAfterPrefix: ["braille"] }] }   # "⠋ Reading files…"
-      then: working
-```
+    Check: you have an answer, with a source, for each. "Could not find it" is an answer.
+  </Step>
+  <Step title="Make the folder">
+    The folder name is the agent's id:
 
-Every field under `caps` is required: leaving one out is refused, so each one is a decision.
+    ```bash
+    mkdir -p ~/.config/hivemind/agents/acme
+    ```
+  </Step>
+  <Step title="Write agent.yaml">
+    Start small. Claim only what you proved in step 1:
 
-| `caps` field | Means |
+    ```yaml ~/.config/hivemind/agents/acme/agent.yaml
+    manifestVersion: 2
+    id: acme
+    label: Acme Coder
+    bin: acme-coder          # the program's name on your PATH, never a path
+    enabled: true
+
+    caps:
+      promptDelivery: typed  # typed into its screen; argv if it takes the task as an argument
+      turnSignal: false      # true only with launch.hcp and a hook file
+      resume: none
+      supervise: human       # it has its own permission questions
+      blockedDetection: true
+
+    detect:
+      default: idle
+      rules:
+        - when: { contains: "approve this?" }
+          then: blocked
+        - when: { line: [{ gerundAfterPrefix: ["braille"] }] }   # "⠋ Reading files…"
+          then: working
+    ```
+
+    Every field is described in the [agent.yaml reference](/agent-yaml).
+  </Step>
+  <Step title="Validate it">
+    ```bash
+    hive agents validate ~/.config/hivemind/agents/acme
+    ```
+
+    Check: it passes. If not, it names each field it refuses. Fix them and run it again.
+  </Step>
+  <Step title="Install it">
+    ```bash
+    hive agents install ~/.config/hivemind/agents/acme
+    ```
+
+    Check: `hive agents list` shows `acme`, on, with no problem.
+  </Step>
+</Steps>
+
+## Check it worked
+
+1. Start it in the open app:
+
+   ```bash
+   hive ctl spawn --agent acme --prompt "list the files here"
+   ```
+
+2. Watch its tile. While it works, the tile shows **working**.
+3. Give it a task that needs permission, such as editing a file.
+
+Check: its tile turns amber and shows **needs you**, and the bell in the Layers panel counts it.
+`hive ctl agents` shows the same status.
+
+## If it didn't
+
+| You see | Do this |
 |---|---|
-| `promptDelivery` | `argv`: the task is passed as an argument; `typed`: typed in once its screen reads idle |
-| `turnSignal` | it reports when a turn ends, so other agents can collect its replies |
-| `resume` | `none`, `cwd` (newest session in the folder) or `tile` (its own session) |
-| `supervise` | `human`, `none`, or `broker` (its permission prompts can go to a supervising agent) |
-| `blockedDetection` | its screen shows when it waits on you |
+| `hive agents validate` refuses a capability | You claimed something that needs wiring. Add the block it names, or set the claim to `false` / `none`. |
+| The tile stays **idle** while the agent works | Add a `detect` rule for what its screen shows while it works. Capture the real screen with `hive ctl stream <tile> --snapshot`. |
+| A permission question reads as finished, not **needs you** | Add a `blocked` rule for that screen, and set `blockedDetection: true`. |
+| Something else | [Troubleshooting](/troubleshooting) |
 
-A claim that needs wiring must say how, or the file is refused: resuming needs `session.resume`
-(where the CLI keeps sessions), listing past sessions needs `session.list`, and a turn signal or
-`broker` needs a `launch.hcp` block plus a hook file shipped beside it, which reports back to
-Hivemind.
-
-## Install and check it
-
-```bash
-hive agents validate ./acme     # check it without installing
-hive agents install ./acme      # check, then copy
-hive agents list                # every agent, where it came from, and why any is unavailable
-hive agents remove acme
-```
+## Where agent files live
 
 | Folder | Used for |
 |---|---|
 | `~/.config/hivemind/agents/<id>/agent.yaml` | your agents, in every workspace |
-| `<repo>/.hivemind/agents/<id>/agent.yaml` | agents a repository ships for everyone in it |
+| `<repo>/.hivemind/agents/<id>/agent.yaml` | agents a repository ships for everyone who opens it |
 
-A repository can only add agents: it can never change what an id you already have runs. The
-folder name must match the `id`.
+A repository can only add agents. It can never change what an id you already have runs.
 
-## Launch options
-
-Under `options`, you name each flag; Hivemind runs `<bin> --help` and reads the allowed values
-(`(choices: "a", "b")`, `[possible values: a, b]`, `a|b|c`). A flag with no listed values becomes a
-text field in Settings. `model` and `mode` are what `hive ctl spawn --model` and `--mode` set.
-
-## Read its screen
-
-`detect.rules` are checked in order; the first match sets the status, else `default`. Statuses:
-`idle`, `working`, and three that wait on you: `blocked`, `permission`, `question`.
-
-| Whole-screen test | Matches when |
-|---|---|
-| `contains` / `containsCS` | the text appears (any case / exact case) |
-| `helper: hasConfirmationPrompt` | "do you want" or "would you like" followed by yes or ❯ |
-| `helper: hasInterruptPattern` | an "esc to interrupt" hint |
-| `helper: hasBrailleSpinner` | a line starts with a braille spinner |
-
-`line: [...]` matches when one line passes every test: `contains`, `startsWith`,
-`startsWithAny`, `gerundAfterPrefix` (a mark, then a word ending in -ing), `letterAfterPrefix`,
-`numBeforeWord`, `anyOf`, and `seq` for an exact sequence. Combine with `all`, `any`, `not`; limit
-to the bottom with `scope: { kind: tail, n: 20 }`.
-
-Regular expressions are not allowed: a bad one could stall status for every terminal. Every test
-above runs in time proportional to the line.
-
-## Answer it from your phone
-
-Tell Hivemind which keys answer the agent, as `hive ctl keys` writes them (one to four keys; quote
-digits). Read them from the real program: a wrong key answers the wrong way.
-
-```yaml
-answer:
-  permission:
-    allow: ['1']
-    deny: [escape]
-choose: ['{n}']        # pick option n of a question
-interrupt: [escape]    # stop its turn (Stop on the phone)
-```
-
-A screen that asks something other than a tool's permission (a "trust this folder?" prompt) gets a
-name with `says: trust` on its rule, and its own keys under `answer.trust`.
-
-## Show its conversation on your phone
-
-If the agent writes its session as JSON lines, `session.transcript` maps that file to messages,
-tool uses and results, and the phone shows a chat instead of a terminal. Claude Code's mapping:
-
-```yaml
-session:
-  resume:
-    exists: '{home}/.claude/projects/*/{id}.jsonl'
-  transcript:
-    id: uuid
-    at: timestamp
-    skipWhen: { isSidechain: true, isMeta: true }
-    said:
-    - { require: { type: user }, text: message.content, who: person }
-    - { require: { type: user }, each: message.content, item: { type: text }, text: text, who: person }
-    - require: { type: user }
-      each: message.content
-      item: { type: tool_result }
-      result: { of: tool_use_id, text: content, error: is_error }
-    - { require: { type: assistant }, each: message.content, item: { type: text }, text: text, who: agent }
-    - require: { type: assistant }
-      each: message.content
-      item: { type: tool_use }
-      tool:
-        id: id
-        name: name
-        about: [input.file_path, input.path, input.command, input.pattern, input.url, input.query, input.description]
-        input: input
-        asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
-```
-
-`conformance/conversation.json` in the repository has cases to test a mapping against.
-
-## Icon
-
-Draw it with shapes; Hivemind builds the SVG, so nothing in the file becomes markup:
-
-```yaml
-icon:
-  viewBox: "0 0 24 24"
-  attrs: { fill: currentColor }
-  shapes:
-    - path: { d: "M12 2 2 22h20L12 2z" }
-    - circle: { cx: 12, cy: 16, r: 2 }
+```bash
+hive agents list                # every agent, where it came from, and why any is unavailable
+hive agents remove acme
 ```
 
 ## Share it
 
 New agents are listed on HiveHub by pull request to
 [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins), one folder per agent under
-`agents/`. Once merged, `hive agents install acme` works for everyone, and Hivemind adds it on its
-own on any computer where the `bin` is on the `PATH`.
+`agents/`. Once merged, `hive agents install acme` works for everyone. Hivemind also adds it by
+itself on any computer where its program is on the `PATH`.
 
-<Warning>
-**Before you install someone else's.** An agent file starts a program in your terminal, with your
-permissions. There is no sandbox. Read its `bin` and `spawn` first, and install only agents whose
-author you trust.
-</Warning>
+## Related
+
+- [agent.yaml reference](/agent-yaml): every field.
+- [Run agents](/agents): install, start and put agents to sleep.
+- [Plugins](/plugins): the other kinds of plugin.
+
+<LastValidated />
