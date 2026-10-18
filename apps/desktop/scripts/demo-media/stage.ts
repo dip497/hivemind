@@ -270,9 +270,26 @@ export async function busy(s: Stage, tiles: string[], timeout = 180_000) {
     .toBe(tiles.length).catch((e) => { console.log(s.show()); throw e; });
 }
 
-/** Answers `tile`'s permission question with its first choice, Yes, in the tile itself. */
-export function allow(s: Stage, tile: string) {
-  if (s.census().of(tile)?.waiting?.kind === "permission") s.cli("ctl", "keys", tile, "Enter");
+/** The command a Bash permission question on `screen` is about: the lines under what it says it
+ *  does, joined; "" when there is no such question. Anything unexpected around it stays in. */
+export function askedOn(screen: string): string {
+  const at = screen.lastIndexOf("Bash command");
+  const end = screen.indexOf("Do you want to proceed?", at);
+  if (at < 0 || end < 0) return "";
+  const lines = screen.slice(at + "Bash command".length, end).split("\n").map((l) => l.replace(/│/g, "").trim())
+    .filter((l) => l && !/^─+$/.test(l) && !/^Tip: /.test(l) && l !== "This command requires approval");
+  return lines.slice(1).join(" ");
+}
+
+/** Answers `tile`'s permission question Yes in the tile itself, only when the command it asks
+ *  about is the one this step expects; anything else fails the step and names the command. */
+export function allow(s: Stage, tile: string, expected: RegExp, approved: string[]) {
+  if (s.census().of(tile)?.waiting?.kind !== "permission") return;
+  const command = askedOn(s.cli("ctl", "read", tile, "--poll").stdout);
+  if (!expected.test(command)) throw new Error(`${s.names[tile] ?? tile} asked to run something this step does not expect, left unanswered: ${JSON.stringify(command)}`);
+  console.log(`allowed for ${s.names[tile] ?? tile}: ${command}`);
+  approved.push(command);
+  s.cli("ctl", "keys", tile, "Enter");
 }
 
 /** Waits until every one of `tiles` reports working, or says where each is. */

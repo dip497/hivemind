@@ -31,6 +31,10 @@ test.afterEach(async () => {
   stopDaemons(root);
 });
 
+// The only commands a clip answers Yes to, each the one its job names; anything else fails it.
+const RUFF = /^ruff check fastapi\/?( --[\w-]+)*(; echo "EXIT=\$\?")?$/;
+const FLAKY = /^hive ctl plugin call dip497\/flaky-tests flaky( --json)?$/;
+
 // Jobs a person would give, each about its own folder.
 const JOB = {
   ci: "Run ruff check fastapi, then report the result on the CI light: hive ctl plugin call @dip497/ci-light set with state passed or failed, name ruff, branch main and a short detail line",
@@ -79,16 +83,17 @@ test("widgets", async () => {
   // A real agent drives one: it runs the check and reports it on the CI light.
   cli("ctl", "send", ci, JOB.ci);
   const light = rec.beat("reporting");
+  const approved: string[] = [];
   const said = () => desktop.locator('[data-widget="@dip497/ci-light"]').innerText().catch(() => "");
   const before = await said();
   for (let i = 0; i < 300 && !((await said()) !== before && s.census().of(ci)?.state !== "working"); i++) {
     // What it runs that is not on its list it asks about first; the person allows it.
-    allow(s, ci);
+    allow(s, ci, RUFF, approved);
     await light(); await desktop.waitForTimeout(700);
   }
   expect(await said(), s.show()).not.toBe(before);
   await rec.burst("reported", 6);
-  rec.save({ widgets: SHOWCASE_WIDGETS, light: await said(), agents: { "ci-check": "claude", docstrings: "claude", "routing-review": "claude" } });
+  rec.save({ widgets: SHOWCASE_WIDGETS, light: await said(), approved, agents: { "ci-check": "claude", docstrings: "claude", "routing-review": "claude" } });
 });
 
 test("tools", async () => {
@@ -132,13 +137,14 @@ test("tools", async () => {
   await desktop.waitForTimeout(1500);
   await rec.box(desktop, `.react-flow__node[data-id="${triage}"]`, "triage");
   const asking = rec.beat("asking");
+  const approved: string[] = [];
   for (let i = 0; i < 300 && !(i > 5 && s.census().of(triage)?.state !== "working"); i++) {
     await asking();
-    allow(s, triage);
+    allow(s, triage, FLAKY, approved);
     await desktop.waitForTimeout(700);
   }
   await rec.burst("answered", 6);
-  rec.save({ agents: { "glob-docs": "claude", "test-triage": "claude" }, triage: s.census().of(triage) });
+  rec.save({ agents: { "glob-docs": "claude", "test-triage": "claude" }, approved, triage: s.census().of(triage) });
 });
 
 test("views", async () => {
