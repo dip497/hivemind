@@ -305,6 +305,7 @@ says it is asked at the machine itself.
 | Method | Params | Result | Recorded as |
 |---|---|---|---|
 | `host.status` | | `{workspaces: [{repo, workspace}]}`: what this host serves, each by its folder and its id | read |
+| `host.add` | `folder` | `{repo, workspace}` (0.30): the folder, absolute and on this machine, served as one of its workspaces, with no window, as Open folder does; one served already is answered as it is. `BAD_REQUEST` when it is not a folder here | target the folder |
 | `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `plugin.list` | | `{plugins: [{plugin, kind, instance, label, state, reason?, since, commands}], views: [{id, label, active}]}`: every plugin running in a window (a tool's tile, a widget with code, a community view), `state` `starting` until its code connects, then `ready`; `failed` with its `reason` when it did not start in 15 s or was disabled; and the views the window can show (0.27) | read |

@@ -108,8 +108,6 @@ export interface HeadlessHost {
   where(): Ready | null;
   /** The workspaces it holds, by folder, with their ids once they say whose they are. */
   workspaces(): Array<{ repo: string; workspace: string | null }>;
-  /** Serve the folder `repo` on this machine as one of its workspaces, made if it is new. */
-  add(repo: string): { repo: string; workspace: string };
   /** The person's other devices it was paired with. */
   devices(): PairedDevice[];
   /** Offer a code for one of a person's devices to enter (this host takes the person). `paired`
@@ -639,13 +637,6 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     person: keys.personId,
     where: () => net?.ready ?? null,
     workspaces: () => store.repos().map((repo) => ({ repo, workspace: store.ownership(repo)?.workspaceId ?? null })),
-    add: (repo) => {
-      if (!path.isAbsolute(repo) || !fs.statSync(repo, { throwIfNoEntry: false })?.isDirectory()) {
-        throw new Error(`${repo} is not a folder on this machine`);
-      }
-      if (!store.getCore(repo)) store.setCore(repo, { frames: [], tiles: [] });
-      return { repo, workspace: store.ownership(repo)!.workspaceId as string };
-    },
     devices: () => devices.list(),
     offerPairing: () => {
       mayTake();

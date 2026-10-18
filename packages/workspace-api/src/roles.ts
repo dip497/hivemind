@@ -106,7 +106,7 @@ const LEAST: Record<string, Role> = {
 /** The machine's own methods (0.23): a peer's device is another machine, so they are no peer's,
  *  the person's own devices included. An agent on this machine keeps them, but joining. */
 const MACHINE = new Set(["view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "views.rescan", "agents.rescan",
-  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join"]);
+  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add"]);
 
 /** Why a peer with `access`, or an agent here in `tile`, may not call `method`, in words that name
  *  what works instead. */

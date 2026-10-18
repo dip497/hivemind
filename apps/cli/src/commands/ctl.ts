@@ -31,7 +31,7 @@ import {
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile } from "../hcp.js";
 import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
-import { workspaceNamed, type HostWorkspace } from "../workspace-named.js";
+import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, resolveAgent, superviseOf, workflowPlan } from "../ctl-args.js";
 import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
@@ -111,8 +111,9 @@ async function workspaceOf(d: Drive, repo: unknown): Promise<string> {
   const given = typeof repo === "string" && repo ? repo : null;
   if (d.as !== "person") return given ? path.resolve(given) : d.as.workspace;
   const { workspaces } = (await d.call("host.status", [])) as { workspaces: HostWorkspace[] };
-  const named = workspaceNamed(workspaces, given, process.cwd());
+  const named = workspaceNamed(workspaces, given, process.cwd(), await registered());
   if ("refused" in named) throw new UsageError(named.refused);
+  if ("unserved" in named) throw new UsageError(notServed(named.unserved));
   return named.repo;
 }
 

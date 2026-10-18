@@ -15,7 +15,7 @@ import { err, ok } from "../format.js";
 import { EXIT, HcpCliError } from "../hcp.js";
 import { driveCall, driveSockPath } from "../drive.js";
 import { duration } from "./share.js";
-import { workspaceNamed, type HostWorkspace } from "../workspace-named.js";
+import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 
 const ROLES = ["view", "edit", "terminals", "agents"];
 const json = { json: { type: "boolean" } } as const;
@@ -52,10 +52,12 @@ const createCmd = defineCommand({
       else if (a.startsWith("--workspace=")) given.push(a.slice("--workspace=".length));
     }
     const { workspaces } = (await call(ctx, "host.status")) as { workspaces: HostWorkspace[] };
+    const known = await registered();
     const repos: string[] = [];
     for (const g of given) {
-      const named = workspaceNamed(workspaces, g || null, process.cwd());
+      const named = workspaceNamed(workspaces, g || null, process.cwd(), known);
       if ("refused" in named) return err(ctx, "usage", named.refused, EXIT.usage);
+      if ("unserved" in named) return err(ctx, "usage", notServed(named.unserved), EXIT.usage);
       repos.push(named.repo);
     }
     let expires: number | null = null;
