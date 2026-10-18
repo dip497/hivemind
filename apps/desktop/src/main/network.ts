@@ -734,7 +734,9 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
   // made here has done that already (below).
   try {
     fs.watchFile(networkProfiles().file, { interval: 2_000 }, (now, before) => {
-      if (now.mtimeMs !== before.mtimeMs && now.mtimeMs !== changedHere) restartNetwork();
+      if (now.mtimeMs === before.mtimeMs || now.mtimeMs === changedHere) return;
+      restartNetwork();
+      broadcast("net:network-changed");
     });
   } catch { /* hive-net is not installed: there is no network to change */ }
 
@@ -749,6 +751,7 @@ export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, st
     const used = await networkProfiles().use(given);
     changedHere = fs.statSync(networkProfiles().file).mtimeMs;
     restartNetwork();
+    broadcast("net:network-changed");
     return used;
   });
 
