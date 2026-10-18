@@ -21,7 +21,7 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `FORBIDDEN` | The caller may not do this: a peer's role on the workspace does not allow it (below), or no token says who it is. It never ran. |
 | `NOT_FOUND` | What it names is not there: a tile, a frame, a workspace (0.23). |
 | `UNSUPPORTED` | The agent cannot do what it asks: it says no turn end to read a reply by, has no permission system to supervise, or keeps no sessions to resume (0.23). |
-| `RATE_LIMITED`, `DEPTH_EXCEEDED` | Too many started at once, or one started too far below the person: ask again later, or from higher up (0.23). It never ran. |
+| `RATE_LIMITED`, `DEPTH_EXCEEDED` | Too many started at once, or one started too far below the person: ask again later, or from higher up (0.23). It never ran. The limit is 16 agents, tools or widgets a minute for each caller: the person, each grant, each agent; a start refused for anything else uses none of it. |
 | `TIMEOUT` | What it waited on did not come in time (0.23). |
 | `UNAVAILABLE` | It needs one of the person's windows, and none is open here (0.23). |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |

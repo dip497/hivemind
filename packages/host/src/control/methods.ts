@@ -154,7 +154,8 @@ export interface MethodDeps {
   turns: TurnTracker;
   recorder: OutputRecorder;
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
-  spawnAllowed: () => boolean;
+  /** Whether `by` (a tile, `client:<grant id>`, or "person") may start one more now. */
+  spawnAllowed: (by: string) => boolean;
   /** The agent a spawn with no `agent` starts (the user's default, if installed).
    *  Undefined when no agent is installed. May wait: at boot the PATH the answer
    *  depends on is still being read. */
@@ -379,7 +380,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (childDepth > MAX_SPAWN_DEPTH) {
       throw new ApiError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
     }
-    if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const agent = opts.agent != null ? String(opts.agent) : await deps.defaultAgentId?.();
     // Nothing compiled in to fall back to: an empty catalog means no agent can start.
     if (!agent) throw new ApiError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
@@ -433,6 +433,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const options: SpawnOptions = { ...deps.launchOptions(def.id) };
     if (mode) options.mode = String(mode);
     if (opts.model) options.model = String(opts.model);
+    if (!deps.spawnAllowed(opts.parent ?? "person")) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     // `background` = a silent worker (report:false → gathered in bulk, e.g. a workflow worker):
     // its window does not bring it forward, and does not announce each one finishing.
     const tileId = openTile(place, (ws) => ({
@@ -721,7 +722,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       try { url = new URL(at.url); } catch { throw new ApiError("BAD_REQUEST", "Invalid URL"); }
       if (!["http:", "https:"].includes(url.protocol) && at.url !== "about:blank") throw new ApiError("BAD_REQUEST", "URL must use http or https, or be about:blank");
     }
-    if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
+    if (!deps.spawnAllowed(at.caller ?? "person")) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const url = typeof at.url === "string" ? at.url : undefined;
     return openTile(placeTile(at.caller, at.frame, at.repo), (ws) => ({
       id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
@@ -1043,7 +1044,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Answered once its tile's plugin can be called, as a widget's and a view's are.
         return { tile, ...(await deps.callRenderer("plugin.settle", { instance: tile }, RENDERER_TIMEOUT) as object) };
       }
-      if (kind === "widget" && !deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
+      if (kind === "widget" && !deps.spawnAllowed(caller ?? "person")) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
       return await deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT);
     },
     // Run one, and answer with what the plugin answered.

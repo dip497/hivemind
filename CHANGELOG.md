@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Agents: the limit of 16 starts a minute now counts each caller apart (you, each API token, each agent), so one program starting agents in a loop no longer stops you or other programs starting them; a start refused for another reason no longer counts.
+
 - API access: a program that catches up with `agent.since` after the app or `hive host` restarted is told to list again, instead of being handed the new process's changes as if they followed its own.
 
 - API access: a program that stops reading its connection is disconnected once 16 MiB wait for it, instead of growing the app's memory; one that never says hello is disconnected after 10 s; `agent.read` given more than about 24 days waits instead of answering at once; and a plugin service's log folder deleted while it runs no longer stops the app.

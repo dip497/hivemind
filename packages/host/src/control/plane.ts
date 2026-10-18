@@ -76,7 +76,7 @@ export interface ControlPlaneOptions {
  *  would pin a tile's subagents forever: once the last subagent edge is this old, the plane
  *  reports the rest stopped. Every edge pushes the deadline out. */
 const SUBAGENT_REAP_MS = 120_000;
-/** Anti-fork-bomb: at most this many control-plane spawns a minute. */
+/** Anti-fork-bomb: at most this many control-plane spawns a minute, by each caller. */
 const SPAWNS_A_MINUTE = 16;
 const SCREEN_STATES = new Set<ScreenState>(["idle", "working", "permission", "question", "blocked"]);
 /** What an agent's terminal is told when messages wait in its inbox; never what they say. */
@@ -114,7 +114,8 @@ export class ControlPlane {
   /** Terminals an answer's keys are going into, and the writes held until its last is in. */
   private readonly typing = new Map<string, Array<() => void>>();
   private made: Dispatcher | null = null;
-  private spawnTimes: number[] = [];
+  /** When each caller started what it started in the last minute, by caller. */
+  private spawnTimes = new Map<string, number[]>();
   /** Tiles whose status says a turn is going (working, or waiting within it). */
   private readonly inTurn = new Set<string>();
   /** The session last written for each tile, by the id its hooks name it by. */
@@ -224,7 +225,7 @@ export class ControlPlane {
       waitingOf: (bare) => o.waitingOf?.(bare),
       turns: this.turns,
       recorder: this.recorder,
-      spawnAllowed: () => this.spawnAllowed(),
+      spawnAllowed: (by) => this.spawnAllowed(by),
       connect: (src, dst) => { const ok = this.pipes.connect(src, dst); if (ok) pipe(src, dst, true); return ok; },
       disconnect: (src, dst) => { this.pipes.disconnect(src, dst); pipe(src, dst ?? null, false); },
       forgetPipes: (id) => { this.pipes.forget(id); pipe(id, null, false); },
@@ -468,11 +469,17 @@ export class ControlPlane {
     });
   }
 
-  private spawnAllowed(): boolean {
+  // Each caller its own: one program in a loop does not stop the person or others starting agents.
+  private spawnAllowed(by: string): boolean {
     const now = Date.now();
-    this.spawnTimes = this.spawnTimes.filter((t) => now - t < 60_000);
-    if (this.spawnTimes.length >= SPAWNS_A_MINUTE) return false;
-    this.spawnTimes.push(now);
+    for (const [who, times] of this.spawnTimes) {
+      const recent = times.filter((t) => now - t < 60_000);
+      if (recent.length) this.spawnTimes.set(who, recent);
+      else this.spawnTimes.delete(who);
+    }
+    const times = this.spawnTimes.get(by) ?? [];
+    if (times.length >= SPAWNS_A_MINUTE) return false;
+    this.spawnTimes.set(by, [...times, now]);
     return true;
   }
 }
