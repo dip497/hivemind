@@ -99,7 +99,7 @@ test("widgets", async () => {
 test("tools", async () => {
   test.setTimeout(900_000);
   // The tests flaky-tests runs, built once before the clip so the runs show at their own speed.
-  const tests = "cargo test -p globset --lib -q";
+  const tests = "cargo test -p globset --lib";
   execFileSync("nice", ["-n", "15", "bash", "-c", tests], { cwd: path.join(DEMO, "ripgrep"), stdio: "ignore", timeout: 600_000 });
   const s = await stage(root, apps, { cwd: path.join(DEMO, "ripgrep") });
   const { desktop, cli } = s;
