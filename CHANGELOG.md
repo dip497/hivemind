@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- An agent started with `hive ctl spawn` no longer draws garbled text: the tile's size, given while the session was still starting (seconds on a remote machine), was lost, so the agent kept drawing at 120×36 inside a tile of another size.
+
 - The guide's diagrams are drawn in the site's own colours and fonts; the issue-states diagram now says nothing enforces the order, and the terminal-size and widget diagrams match what the code does.
 
 - The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.
