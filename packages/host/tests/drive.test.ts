@@ -206,6 +206,36 @@ test("a grant made for 30 days keeps its program's connection open", async () =>
   p.socket.destroy();
 });
 
+test("a program that stops reading is cut off once 16 MiB wait for it", async () => {
+  const p = await connect({ token: INSTALL });
+  await p.next((m) => "hello" in m);
+  p.socket.pause();
+  const mib = "x".repeat(1024 * 1024);
+  for (let i = 0; i < 24 && !p.socket.destroyed; i++) {
+    server.relay({ event: "status.changed", params: [{ seq: i, tileId: "t", status: { state: "idle", since: 0, title: mib } }] });
+    await new Promise((r) => setImmediate(r));
+  }
+  // Reading again, it reads what was sent before the cut, and then the end.
+  p.socket.resume();
+  await within(p.closed, "the stalled connection closing", 5000);
+  assert.ok(p.lines.length < 24, `${p.lines.length} of 24 events came`);
+});
+
+test("a connection that says nothing for 10 s is closed, and a hello after that is not answered", { timeout: 20_000 }, async () => {
+  const socket = net.connect({ path: sock, allowHalfOpen: true });
+  opened.add(socket);
+  socket.on("error", () => { /* closed under it */ });
+  socket.setEncoding("utf8");
+  let heard = "";
+  socket.on("data", (d: string) => (heard += d));
+  const closed = new Promise<void>((resolve) => socket.on("close", () => resolve()));
+  await new Promise((r) => setTimeout(r, 10_500));
+  if (!socket.destroyed) socket.write(`${JSON.stringify({ hello: { token: INSTALL } })}\n`);
+  await within(closed, "the silent connection closing");
+  assert.match(heard, /say hello first/);
+  assert.doesNotMatch(heard, /"as":"person"/);
+});
+
 test("the install's token is the person, with every method", async () => {
   const person = await connect({ token: INSTALL });
   assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.30", as: "person" });
@@ -232,6 +262,21 @@ test("an agent's token drives the workspace its tile is in, as that agent at the
   assert.equal(((await elsewhere.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
   const nowhere = await connect({ token: tileToken(INSTALL, "tile-z") });
   assert.equal(((await nowhere.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
+});
+
+test("a program connecting for each command notes its use once, not with every connection", async () => {
+  const { token } = grants.create({ name: "per command", repos: [repoA], role: "view" });
+  const file = path.join(tmp, "grants.json");
+  const first = await connect({ token });
+  await first.next((m) => "hello" in m);
+  const written = fs.statSync(file).ino;
+  for (let i = 0; i < 3; i++) {
+    const again = await connect({ token });
+    await again.next((m) => "hello" in m);
+    again.socket.destroy();
+  }
+  first.socket.destroy();
+  assert.equal(fs.statSync(file).ino, written);
 });
 
 test("a grant is kept as a hash, never its token, in a file only the person reads", () => {

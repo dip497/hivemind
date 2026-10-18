@@ -223,6 +223,8 @@ const CONTROL = { writer: "control" };
 
 const RENDERER_TIMEOUT = 15_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
+/** The longest a timer waits (about 24.8 days): a longer one fires at once. */
+const LONGEST_WAIT_MS = 2 ** 31 - 1;
 /** How much of what an agent printed `agent.output` gives when not asked for more. */
 const DEFAULT_OUTPUT_LINES = 40;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
@@ -937,8 +939,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       return keys.length;
     },
 
-    async read(tile, timeoutMs = DEFAULT_READ_TIMEOUT) {
+    async read(tile, asked = DEFAULT_READ_TIMEOUT) {
       requireTurnSignal(tile, "agent.read");
+      const timeoutMs = Math.min(asked, LONGEST_WAIT_MS);
       const pid = ptyId(tile);
       // Say a gone tile is gone now, rather than wait out the timeout for a turn that cannot
       // come. A tile still starting is in its workspace already.

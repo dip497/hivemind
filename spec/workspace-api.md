@@ -55,6 +55,8 @@ that Host, and the first frame the launch's token; else it is refused (401, 403)
 Programs on this machine reach the workspace API on `drive.sock` in the app's data folder (0600;
 a named pipe on Windows, named as `hcp.sock`'s is). The app and `hive host` both serve it;
 whichever starts first does, and the other says so. Lines of JSON both ways, 1 MiB each at most.
+A connection that says nothing in 10 s is told so and closed; one with more than 16 MiB sent it
+and not read (a program that stopped reading) is closed.
 
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
@@ -257,7 +259,7 @@ log.
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `agent.rename` | `tile`, `name` | `{name}`: what it is called now, on its tile and to the agents it talks to; an empty `name` takes it away, so it is called what its agent says again (0.23) | target the agent's tile |
 | `agent.keys` | `tile`, `keys` | `{keys}`: each key name (`Enter`, `Escape`, `Up`, `C-c`, …) or text typed into its terminal a moment after the last, how many there were (0.23) | target the agent's tile |
-| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23); `waiting` at once when it stops to wait on an answer, with what on (0.26); `asleep` at once when it is asleep or is put to sleep (0.29) | — |
+| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23; a `timeoutMs` past 2³¹−1 ms, about 24.8 days, waits that long); `waiting` at once when it stops to wait on an answer, with what on (0.26); `asleep` at once when it is asleep or is put to sleep (0.29) | — |
 | `agent.output` | `tile`, `lines`? | `{text}`: the last `lines` lines (40) of what it printed, its terminal's escapes taken out, as much as the host keeps; following its output as it comes is `terminal.open` with `attachOnly` (0.23) | — |
 | `agent.sessions` | `place`, `program`, `limit`? | `{agent, resumable, sessions}`: the sessions `program` keeps for that folder, newest first, each one `agent.start`'s `resume` takes; `resumable` false when it says none (0.23) | read |
 | `tool.open` | `repo`, `{tool, frame?, url?}` | `{tile}`: an installed tool's tile (`tool` its id) placed on the board, in `frame` or the one in view (0.23) | target the new tile |

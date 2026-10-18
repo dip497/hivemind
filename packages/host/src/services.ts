@@ -104,13 +104,17 @@ class Log {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.size = fs.existsSync(file) ? fs.statSync(file).size : 0;
   }
+  // Called from the service's output: a log that cannot be written loses lines, never the app.
   write(text: string | Buffer): void {
-    if (this.size >= LOG_MAX) {
-      fs.renameSync(this.file, `${this.file}.1`);
-      this.size = 0;
-    }
-    fs.appendFileSync(this.file, text);
-    this.size += Buffer.byteLength(text);
+    try {
+      if (this.size >= LOG_MAX) {
+        fs.renameSync(this.file, `${this.file}.1`);
+        this.size = 0;
+      }
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
+      fs.appendFileSync(this.file, text);
+      this.size += Buffer.byteLength(text);
+    } catch { /* disk full, or the folder gone and not made again */ }
   }
   say(line: string): void {
     this.write(`— ${new Date().toISOString()} ${line}\n`);

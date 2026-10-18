@@ -135,6 +135,17 @@ test("a failing exit starts it again a second later; a clean one stops it", asyn
   await services.sync([]);
 });
 
+test("its log folder gone while it runs, it is still started again, and its log goes on", async () => {
+  mode("fail");
+  await services.sync([ci({ service: fileService })]);
+  await until("a restart scheduled", () => state()?.state === "restarting");
+  fs.rmSync(path.join(tmp, "services"), { recursive: true, force: true });
+  await until("the next start", () => state()?.state !== "restarting", 3_000);
+  await until("its log written again", () => startedPids().length >= 1, 3_000);
+  mode("stay");
+  await services.sync([]);
+});
+
 test("its grant taken back elsewhere stops it, and it stays stopped", async () => {
   mode("stay");
   await services.sync([ci()]);

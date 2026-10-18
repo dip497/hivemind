@@ -16,6 +16,8 @@ import type { Connection, Domain } from "@hivemind/workspace-api/server";
 const PREFIX = "hgr_";
 /** The longest name a grant is given. */
 const NAME_MAX = 80;
+/** How often a grant's last use is written at most. */
+const USED_EVERY_MS = 60_000;
 
 interface Kept extends ClientGrant {
   /** sha256 of the token, hex. */
@@ -89,12 +91,15 @@ export class Grants {
     return !!kept && (kept.expires === null || Date.now() < kept.expires);
   }
 
-  /** A program connected with grant `id`. */
+  /** A program connected with grant `id`: written at most once a minute, as `hive ctl`
+   *  connects for each command. */
   used(id: string): void {
     const kept = this.grants.find((g) => g.id === id);
-    if (!kept) return;
+    if (!kept || (kept.lastUsed !== null && Date.now() - kept.lastUsed < USED_EVERY_MS)) return;
     kept.lastUsed = Date.now();
-    this.save();
+    try {
+      this.save();
+    } catch { /* noted at the next connection */ }
   }
 
   /** The grants, or none when the file cannot be read: a token then lets nothing in. */

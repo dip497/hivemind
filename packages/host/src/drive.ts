@@ -24,6 +24,8 @@ import type { Grants } from "./grants.js";
 export const DRIVE_API = "0.30";
 /** How long a connection may take to say who it is. */
 const HELLO_WITHIN_MS = 10_000;
+/** What may wait unread for a connection before it is closed: a program that stopped reading. */
+const UNREAD_MAX = 16 * 1024 * 1024;
 
 export interface DriveOptions {
   server: Pick<WorkspaceServer, "connect" | "answer" | "notice">;
@@ -69,10 +71,17 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
 
   const server = net.createServer((socket) => {
     socket.setEncoding("utf8");
-    const write = (line: string): void => { if (!socket.destroyed) socket.write(`${line}\n`); };
+    const write = (line: string): void => {
+      if (socket.destroyed) return;
+      socket.write(`${line}\n`);
+      if (socket.writableLength > UNREAD_MAX) socket.destroy();
+    };
+    let refused = false;
+    // Said why, and closed both ways once said: nothing it sends after is read.
     const refuse = (code: string, message: string): void => {
+      refused = true;
       write(JSON.stringify({ error: { code, message } }));
-      socket.end();
+      socket.end(() => socket.destroy());
     };
     const listeners = new Set<(text: string) => void>();
     let closedResolve!: () => void;
@@ -82,6 +91,7 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
     const helloTimer = setTimeout(() => { if (!helloed) refuse("BAD_REQUEST", "say hello first: {\"hello\": {\"token\": …}}"); }, HELLO_WITHIN_MS);
 
     socket.on("data", (chunk: string) => {
+      if (refused) return;
       buf += chunk;
       let lines: string[];
       try {
