@@ -169,8 +169,8 @@ export interface MethodDeps {
   disconnect: (srcTileId: string, dstTileId?: string) => void;
   /** Drop a tile from the pipe graph entirely (both directions) on close. */
   forgetPipes: (tileId: string) => void;
-  /** Draw/erase the persistent spawn-parentage "wire" (parent → child). ALWAYS
-   *  drawn on spawn, independent of the report/data pipe. Call with parent=null,
+  /** Record/drop the spawn-parentage link (parent → child). ALWAYS
+   *  set on spawn, independent of the report/data pipe. Call with parent=null,
    *  connected=false to drop every spawn link touching `child` (on close). */
   spawnEdge: (child: string, parent: string | null, connected: boolean) => void;
   /** Who started each spawned tile and on what terms, kept across restarts. Main injects a
@@ -358,7 +358,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // Spawn one child tile and wire up its bookkeeping (depth, parent, auto-report,
   // supervision, read epoch), behind the depth/rate gates. Throws ApiError on depth/rate/spawn
-  // failure. `report` defaults to on (draws the auto-report edge to the parent);
+  // failure. `report` defaults to on (pipes the child's reports to the parent);
   // a worker whose reply is read instead (a workflow's) passes report:false.
   const doSpawn = async (opts: {
     agent?: unknown; prompt?: unknown; frame?: unknown; mode?: unknown; model?: unknown;
@@ -446,10 +446,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       ...(opts.parent && sup ? { supervise: sup } : {}),
     });
     if (spawner) {
-      // The parentage WIRE is drawn ALWAYS — for sub-agents AND background
-      // workflow workers (report:false) — so every spawned tile visibly links
-      // to the agent that spawned it. The report/data pipe (animated) is still
-      // separate and only for report:true.
+      // Parentage is recorded for sub-agents AND background workflow workers
+      // (report:false); the report pipe is separate and only for report:true.
       deps.spawnEdge(res.tileId, spawner, true);
       if (opts.report !== false) deps.connect(res.tileId, spawner);
     }

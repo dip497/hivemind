@@ -847,9 +847,9 @@ export type HiveApi = HiveIpc & {
   platform: NodeJS.Platform;
   /** Main asks the renderer to run a control-plane canvas verb (HCP). */
   onHcpCommand: (cb: (cmd: HcpCommand) => void) => () => void;
-  /** An agent pipe was created/removed → draw/erase the data-flow edge. */
+  /** An agent pipe was created or removed. */
   onHcpPipe: (cb: (e: PipeChange) => void) => () => void;
-  /** An agent spawned another → draw/erase the dashed parentage wire. */
+  /** An agent spawned another, or that link ended. */
   onHcpSpawn: (cb: (e: SpawnChange) => void) => () => void;
   /** The control plane is opening a tile: its prompt, and whether to bring it forward. */
   onHcpSpawned: (cb: (e: TileOpened) => void) => () => void;

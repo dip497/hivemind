@@ -104,8 +104,7 @@ parent agent ── hive_approve(reqId, allow|deny|always|never, reason?) ──
   `hive_spawn_agent`. The pending approval also shows in `hive_list_tiles`
   (status `permission` + the requested tool) so a supervisor agent can poll.
 - **CLI**: `hive ctl approve <reqId> allow|deny|always|never [reason]`.
-- **Canvas**: the worker tile shows "needs approval: Bash(…)" and a dashed edge to
-  its supervisor; clicking still lets a human decide in-tile (fail-safe path).
+- **Canvas**: the worker tile shows "needs approval: Bash(…)"; clicking still lets a human decide in-tile (fail-safe path).
 
 ## Files (planned)
 

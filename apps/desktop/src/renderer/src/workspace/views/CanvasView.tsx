@@ -24,7 +24,6 @@ import {
   type NodeMouseHandler,
   type OnSelectionChangeFunc,
   type NodeChange,
-  type Edge,
 } from "@xyflow/react";
 import { Eye, EyeOff, LayoutGrid } from "../../components/icons";
 import { Button } from "../../components/ui/button";
@@ -33,7 +32,6 @@ import { ZoomIsland } from "../../canvas-islands";
 import { setChromeSuppressed } from "../chrome-store";
 import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
 import { useNodeTypes, PinnedLayerContext } from "../../canvas-nodes";
-import { pipeEdgeTypes } from "../../canvas-pipe-edge";
 import { ArrowDraft, BoardArrows, BoardPointer } from "../../board-objects/Arrows";
 import { PresenceLayer, followPerson, onHost, useFollowing, usePeopleHere } from "../../multiplayer/presence";
 import { BoardContext } from "../../board-objects/board-context";
@@ -49,10 +47,9 @@ import { notReady, useAgentPresence } from "../../agent-plugins";
 
 // Stable references for props passed to <ReactFlow>. The xyflow perf guide
 // (reactflow.dev/learn/advanced-use/performance) flags unmemoized object/array
-// props as the #1 cause of re-renders during node movement — a fresh `edges={[]}`
-// or inline `panOnDrag={[1,2]}` every render makes react-flow re-process its
+// props as the #1 cause of re-renders during node movement — an inline
+// `panOnDrag={[1,2]}` every render makes react-flow re-process its
 // internal state each frame. Hoisting them to module scope makes the ref constant.
-const EMPTY_EDGES: Edge[] = [];
 const PAN_ON_DRAG = [1, 2];
 const PRO_OPTIONS = { hideAttribution: true };
 
@@ -99,7 +96,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   const anyAgentReady = useAgents().some((a) => a.enabled && !notReady(presence, a.id));
   const {
     repoPath, tiles, frames, frameOf, selectedTileId,
-    layerTiles, layerFrames, frameActions, links,
+    layerTiles, layerFrames, frameActions,
   } = model;
   const { selectTile, focusTile, closeTile, spawnVis, spawnClaude, addFrame } = commands;
 
@@ -219,22 +216,6 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
       return { from: cur.from, list };
     });
   }, []);
-  // Agent pipes (hive_connect) → animated "data flow" edges; spawn wires →
-  // dashed parentage edges. Only between endpoints that still exist as tiles.
-  const edges = useMemo<Edge[]>(() => {
-    const { pipes, spawnLinks } = links;
-    if (pipes.length === 0 && spawnLinks.length === 0) return EMPTY_EDGES;
-    const ids = new Set(tiles.map((t) => t.id));
-    // Spawn wires (dashed parentage, parent → child) sit UNDER the animated data
-    // pipes. A pipe between the same pair visually wins (higher zIndex).
-    const spawnEdges: Edge[] = spawnLinks
-      .filter((l) => ids.has(l.parent) && ids.has(l.child))
-      .map((l) => ({ id: `spawn-${l.parent}-${l.child}`, source: l.parent, target: l.child, type: "spawn", zIndex: 1900 }));
-    const pipeEdges: Edge[] = pipes
-      .filter((p) => ids.has(p.src) && ids.has(p.dst))
-      .map((p) => ({ id: `flow-${p.src}-${p.dst}`, source: p.src, target: p.dst, type: "dataflow", zIndex: 2000 }));
-    return [...spawnEdges, ...pipeEdges];
-  }, [links, tiles]);
 
   // MiniMap is opt-in — its `pannable zoomable` re-renders every node mini-rect
   // on every pan/zoom frame, a real cost with several live tiles. Off by default.
@@ -589,9 +570,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
         <ReactFlow
           nodes={liveNodes}
           onNodesChange={onNodesChange}
-          edges={edges}
           nodeTypes={nodeTypes}
-          edgeTypes={pipeEdgeTypes}
           defaultViewport={rt.currentViewportRef.current}
           // Low enough for Fit to view to fit a canvas several screens wide; 0.25 left most of it off-screen.
           minZoom={0.1}
@@ -637,7 +616,6 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           // Perf: skip focus rings + ARIA per tile (we manage focus inside
           // tiles ourselves via xterm/Pierre).
           nodesFocusable={false}
-          edgesFocusable={false}
           proOptions={PRO_OPTIONS}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.5} color="var(--color-grid-dot)" />

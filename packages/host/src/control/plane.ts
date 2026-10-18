@@ -108,7 +108,7 @@ export class ControlPlane {
   /** What each tile's screen last showed with text, by bare tile id, as its daemon read it. */
   readonly lines = new Map<string, string>();
   private readonly pipes = new PipeManager();
-  /** Spawn wires drawn now (child → parent): what a client that opens late draws. */
+  /** Spawn links now (child → parent): what a client that opens late starts from. */
   private readonly spawnWires = new Map<string, string>();
   private readonly reaper: SubagentReaper;
   /** Terminals an answer's keys are going into, and the writes held until its last is in. */
@@ -299,7 +299,7 @@ export class ControlPlane {
     }
   }
 
-  /** The pipes between agents and the spawn wires drawn now, for a client that opens late. */
+  /** The pipes between agents and the spawn links now, for a client that opens late. */
   links(): { pipes: Array<{ src: string; dst: string }>; spawns: Array<{ parent: string; child: string }> } {
     return {
       pipes: this.pipes.edges().map(([src, dst]) => ({ src, dst })),
