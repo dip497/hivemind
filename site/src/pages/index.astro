@@ -148,82 +148,9 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
             the whole guide for that kind of plugin. Write your idea at the top and hand the folder
             to your agent.</p>
         </div>
-<<<<<<< HEAD
-
-        <figure class="byo-file">
-          <figcaption>my-agent/agent.yaml</figcaption>
-          <pre><code>{`id: my-agent
-label: My Agent
-bin: my-agent
-
-caps:
-  promptDelivery: typed
-  turnSignal: false
-  resume: none
-  supervise: human
-  blockedDetection: true
-
-detect:
-  default: idle
-  rules:
-    - when: { contains: "esc to interrupt" }
-      then: working
-    - when: { contains: "[y/n]" }
-      then: blocked`}</code></pre>
-        </figure>
-      </div>
-    </div>
-  </section>
-
-  <!-- ─────────── VIEWS ─────────── -->
-  <section class="band alt plate" id="views" data-side="left">
-    <div class="wrap">
-      <header class="head">
-        <h2>Build the workspace you actually want</h2>
-        <p class="sub">Nobody agrees what a workspace should look like — so we stopped deciding. A
-          view draws the whole screen from what we hand it: frames, tiles, names, live status. The
-          terminal inside your scene is the real one, still running. A wall your agents pin notes
-          to, every widget on your phone, or one you build yourself — anything you can draw in a web page.</p>
-        <p class="sub">Canvas and Windows come with the app. Anyone's view can go on <a href={HIVEHUB}>HiveHub</a> and install like any plugin. Build the room you always wanted
-          to work in and put it there too. A view decides how the workspace <em>looks</em> — never
-          what runs.</p>
-      </header>
-
-      <ViewGallery />
-
-      <p class="after"><a href={link('guide/views/')}>Or have your agent build one — <code>hive views new</code> writes it the brief →</a></p>
-    </div>
-  </section>
-
-  <!-- ─────────── PLUGINS: everything is one, and agents drive them ───────────
-       The shot is site-clip.mjs's scene: a stand-in agent ran the commands in its own tile. -->
-  <section class="band" id="plugins">
-    <div class="wrap">
-      <header class="head">
-        <h2>Your agents build the workspace while they work</h2>
-        <p class="sub">Everything on the screen is a plugin: the agents, the view, the tiles, the
-          boxes above them. An agent installs one, opens it, and keeps a widget's steps ticked as it
-          goes, as in the Progress box at the top of this page — nothing for you to click.</p>
-      </header>
-      <div class="byo">
-        <div class="byo-copy">
-          <p>A <b>tool</b> is a kind of tile your code draws, beside the terminals in every view.
-            On HiveHub now: <b>Worktrees</b> (every worktree, its changes and diffs) and <b>CI runs</b> (a failed job's lines, rerun, hand it to an agent). Install one from
-            Settings → Plugins → Tools or with <code>hive tools install dip497/worktrees</code>; it
-            arrives switched off until you turn it on.</p>
-          <p>A <b>widget</b> is a small live box above the board, and a <b>view</b> draws the whole
-            screen. <code>hive views new</code>, <code>hive widgets new</code> and <code>hive tools new</code> each write a starter and a <code>PROMPT.md</code>: put your
-            idea at the top, hand it to your agent, and it builds and installs the thing.</p>
-          <p class="after"><a href="https://hivehub.griiken.workers.dev/publish">Make your own and list it on HiveHub →</a>
-            &nbsp; <a href={link('guide/tool-plugins/')}>Tools →</a>
-            &nbsp; <a href={link('guide/widgets/')}>Widgets →</a></p>
-        </div>
-          <pre class="cmd"><span class="w">$</span> hive ctl plugin list
-=======
         <pre class="cmd" aria-label="Commands"><span class="w">$</span> hive widgets new release
 <span class="c"># your agent builds release/ from PROMPT.md</span>
 <span class="w">$</span> hive widgets install release
->>>>>>> origin/main
 <span class="w">$</span> hive ctl plugin open <span class="s">widget:@dip497/progress</span>
 <span class="w">$</span> hive ctl plugin call @dip497/progress add <span class="g">'&#123;"text":"Run the tests"&#125;'</span></pre>
       </div>
@@ -295,13 +222,11 @@ detect:
       <div class="head">
         <h2 id="waiting-h">See which agent is waiting on you, and answer it</h2>
         <p class="sub">Each agent's manifest says how to read its screen, so every tile shows
-          whether its agent is working, finished or waiting on you. The Queue view lists the
-          waiting ones first with the live terminal beside them, and <kbd>N</kbd> opens the one
-          that has waited longest.</p>
+          whether its agent is working, finished or waiting on you.</p>
       </div>
       <figure class="shot">
-        <img src={link('shots/view-queue.webp')} width="1600" height="1120" loading="lazy" decoding="async"
-          alt="The Queue view: 3 need you and 12 working, grouped by project, with Press N for the one that has waited longest." />
+        <img src={link('shots/view-canvas.webp')} width="1600" height="1120" loading="lazy" decoding="async"
+          alt="The canvas: each agent's tile shows whether it is working, finished or waiting on you." />
       </figure>
       <div class="pair">
         <p>An agent can start others and answer for them. Spawned with <code>--supervise all</code>,
@@ -322,8 +247,8 @@ detect:
       </div>
 
       <div class="row">
-        <Loop name="machines" fallback={shot('view-tiled.webp')}
-          alt="The Tiled view: one pane per agent, tabbed by frame." />
+        <Loop name="machines" fallback={shot('view-canvas.webp')}
+          alt="Agents in frames, one of them on a machine reached over ssh." />
         <div class="row-copy">
           <h3>Machines over ssh</h3>
           <p>Add a Linux machine you can reach with <code>ssh</code> and open one of its folders as
@@ -362,8 +287,8 @@ detect:
       </div>
 
       <div class="row flip">
-        <Loop name="join" fallback={shot('poster.webp', 1280, 800)}
-          alt="The Queue view with one agent asking to edit src/limits.ts, its terminal docked beside the list." />
+        <Loop name="join" fallback={shot('view-windows.webp')}
+          alt="A shared workspace open in a second person's Hivemind." />
         <div class="row-copy">
           <h3>Someone joins your workspace</h3>
           <p>Send an invite link, and the other person opens your workspace in their own Hivemind.
