@@ -128,7 +128,7 @@ hive ctl plugin open <record> [--frame f] [--json]
 hive ctl plugin commands [--json]          # what the ready plugins let you run, with what each takes
 hive ctl plugin call <plugin> <command> ['{"json":"argument"}' | -] [--tile id] [--json]
                                            # runs it and prints what the plugin answered
-hive ctl plugin close <instance> [--plugin p] [--json]
+hive ctl plugin close <instance | record> [--plugin p] [--json]
                                            # close its tile, take the widget off the board,
                                            # leave the view for the canvas
 ```
@@ -153,7 +153,13 @@ hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'   # → {"i
 hive ctl plugin call agent-board post '{"text":"Tests pass","kind":"done"}'   # the example view in examples/views/agent-board
 hive ctl plugin call dip497/worktrees list
 hive ctl plugin close widget-…                                         # the widget leaves the board
+hive ctl plugin close widget:@dip497/progress                          # the same, named as open names it
 ```
+
+`plugin close` takes what `plugin list` names (an instance), a widget's id on the board, or the
+plugin as `plugin open` takes it, when one copy of it is open. A widget drawn without code, such as
+a Checklist, never runs, yet closes the same way. Two copies open are refused (exit 2) with their
+ids, so you can close one of them.
 
 ## `hive ctl` — workflows, supervision, review
 

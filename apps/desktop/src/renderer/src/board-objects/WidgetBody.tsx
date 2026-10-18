@@ -150,20 +150,21 @@ export function WidgetBody({ id, widget, name, repo, drawing }: { id: string; wi
     : draw(drawing.tree, id, { repo, widget })}</>;
 }
 
-/** What a widget shows: its package's `draw` (a widget without code), else what its code drew. */
-export const widgetTree = (object: WidgetObject, pkg: WidgetPackage | undefined, drawing: Drawing | undefined): unknown => coreWidgetTree(object, pkg, drawing?.tree);
-
-/** The colour a widget's drawing asks its card for (`tint`: a note colour), if any. */
-export function widgetTint(tree: unknown): string | null {
-  const t = coreWidgetTint(tree);
-  return t ? `var(--color-note-${t})` : null;
+/** What a widget shows, its package's `draw` (a widget without code) else what its code drew, and
+ *  the note colour that drawing asks its card for (`tint`), if any. */
+export function widgetLook(object: WidgetObject, pkg: WidgetPackage | undefined, drawing: Drawing | undefined): { tree: unknown; tint: string | null } {
+  const tree = coreWidgetTree(object, pkg, drawing?.tree);
+  const tint = coreWidgetTint(tree);
+  return { tree, tint: tint ? `var(--color-note-${tint})` : null };
 }
+
+/** A widget's look as it is drawn now, wherever it sits: on the board, on the screen. */
+export const useWidgetLook = (object: WidgetObject, pkg: WidgetPackage | undefined): { tree: unknown; tint: string | null } => widgetLook(object, pkg, useDrawn(object.id));
 
 /** A widget's content wherever it sits: what it draws, with the fields people write in. */
 export function WidgetContent({ object, pkg, selected = false }: { object: WidgetObject; pkg: WidgetPackage | undefined; selected?: boolean }) {
-  const drawing = useDrawn(object.id);
+  const { tree } = useWidgetLook(object, pkg);
   const board = useBoardContext();
-  const tree = widgetTree(object, pkg, drawing);
   const name = pkg?.name ?? object.widget;
   return <FieldsOf.Provider value={{ object, editing: board.editingId === object.id, selected }}>
     {tree === null

@@ -9,17 +9,10 @@ agents on your computer from the phone. It needs a hivemind network server of yo
 
 The iOS and Android apps are a development preview. They are not published.
 
-```mermaid title="How the phone reaches your computer"
-flowchart TB
-  page["Phone page"]
-  server["Your server<br>hive-net serve"]
-  computer["Your computer"]
-  others["Your other computers<br>and hosts"]
-  page -->|https| server
-  server -->|relay| computer
-  server --> others
-  computer -.->|introduces the phone| others
-```
+<figure class="diagram" style="--min:600px">
+  <div><img src="../../diagrams/phone-reach.svg" width="680" height="316" alt="The phone page talks over https to your own server running hive-net serve. The server relays it to your computer and to your other computers and hosts, and your computer introduces the phone to those other devices. The traffic is encrypted end to end; the server cannot read it." /></div>
+  <figcaption>How the phone reaches your computer</figcaption>
+</figure>
 
 Traffic through the relay is end-to-end encrypted: the server cannot read it. A browser cannot
 reach your computer directly, so the page always goes through the relay.
@@ -120,14 +113,10 @@ your computer could not confirm the answer landed. It is never sent twice; look 
 Open it with the terminal icon in a chat's header, or tap a shell on Home. It opens fitted to the
 phone. Under it: **Esc**, **Tab**, the arrows, **^C**, the keyboard, and **Fit**.
 
-```mermaid title="Who sizes the terminal"
-stateDiagram-v2
-  Desk: Desktop size
-  Phone: Phone size
-  [*] --> Phone: opened on the phone
-  Phone --> Desk: desktop key, Fit off, leave
-  Desk --> Phone: phone key with Fit on
-```
+<figure class="diagram" style="--min:600px">
+  <div><img src="../../diagrams/phone-terminal-size.svg" width="640" height="284" alt="State diagram: a terminal opened on the phone takes the phone's size. A key typed on the desktop, turning Fit off, or closing the terminal or hiding the page gives it the desktop size. A phone key while Fit is on, pressing Fit, or showing the page again gives it the phone's size again. Allow, Deny and choosing an option are not typing." /></div>
+  <figcaption>Who sizes the terminal</figcaption>
+</figure>
 
 Whoever typed last sets the size; the phone's keys count only while **Fit** is on. **Fit** on
 fits it again at once. **Fit** off gives the terminal back the size it had, unless a

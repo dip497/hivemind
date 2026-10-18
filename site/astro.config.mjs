@@ -1,6 +1,5 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import mermaid from './src/lib/mermaid.mjs';
 const base = (process.env.SITE_BASE ?? '/hivemind').replace(/\/$/, '');
 export default defineConfig({
   site: process.env.SITE_URL || 'https://hivemind.griiken.com',
@@ -28,5 +27,5 @@ export default defineConfig({
       { tag: 'link', attrs: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: true } },
       { tag: 'link', attrs: { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap' } },
     ],
-  }), mermaid()],
+  })],
 });

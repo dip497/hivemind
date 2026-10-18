@@ -17,6 +17,12 @@ import type { SettingValue } from "./settings.js";
 
 export const PROTOCOL_VERSION = 1;
 
+/** The values a client holds, each as it is before the host has sent it: what a copy of them kept
+ *  elsewhere (a widget's worker) reads until the real ones arrive. Its keys are `CLIENT_VALUES`. */
+export const CLIENT_VALUES_UNTIL_KNOWN = {
+  hello: null, capabilities: [], viewport: { w: 0, h: 0 }, visible: true, device: { touch: false, compact: false }, settings: {}, features: [],
+};
+
 /** What a manifest may ask for beyond the base set (projection, status,
  *  selection, reveal, surfaces, layout). The host grants exactly what the
  *  manifest lists; an unknown name is refused at install and at load. */

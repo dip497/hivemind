@@ -88,14 +88,14 @@ what runs there: [Machines](../machines/).
 └── .agent.md        regenerated summary of active issues (gitignored)
 ```
 
-An issue moves along one track, and `cancelled` is the way off it. Activity rows are signed by
-the human or the agent that wrote them.
+An issue usually moves along one track, and `cancelled` is the way off it from any state.
+Nothing enforces the order: any state can be set from any other, and each change is an activity
+row. Activity rows are signed by the human or the agent that wrote them.
 
-```mermaid title="One track forward; cancelled is the way off it, from any state"
-flowchart TB
-  backlog --> todo --> in_progress --> in_review --> done
-  in_progress -.-> cancelled
-```
+<figure class="diagram" style="--min:600px">
+  <div><img src="../../diagrams/workspaces-issue-states.svg" width="700" height="316" alt="Issue states: an issue usually moves backlog, todo, in_progress, in_review, done, and can be set to cancelled from any state. The order is not enforced: any state can be set from any other. hive close sets done, hive close --reason sets cancelled, and hive reopen sets todo." /></div>
+  <figcaption>Issues usually move along this track; nothing enforces it</figcaption>
+</figure>
 
 ## Cross-repo work
 

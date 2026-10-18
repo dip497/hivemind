@@ -10,7 +10,7 @@ import { NodeResizer, type NodeTypes } from "@xyflow/react";
 import { Copy, Settings2, Trash } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { BOX_SIZE, type BoardWidget, type BoxObject } from "./board-model";
-import { WidgetContent, widgetTint, widgetTree } from "./WidgetBody";
+import { WidgetContent, useWidgetLook } from "./WidgetBody";
 import { optionsOf, useShownWidgetPackages } from "./widget-runtime";
 import { SettingsForm } from "../plugins/SettingsForm";
 import { useBoardContext } from "./board-context";
@@ -72,7 +72,7 @@ const WidgetBoxNode = memo(function WidgetBoxNode({ id, data, selected }: BoxNod
   const o = data.object;
   const pkg = useShownWidgetPackages().find((p) => p.id === o.widget);
   // A tinted widget (a sticky note) is its colour, as a note is; any other is a card.
-  const tint = widgetTint(widgetTree(o, pkg, undefined));
+  const { tint } = useWidgetLook(o, pkg);
   const bare = pkg?.chrome === "none";
   return (
     <BoxShell id={id} object={o} selected={!!selected}>

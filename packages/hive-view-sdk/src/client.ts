@@ -15,7 +15,7 @@
 import type { SettingValue } from "./settings.js";
 import { chordMatches } from "./commands.js";
 import {
-  COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
+  CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
   ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
@@ -131,7 +131,7 @@ export const CLIENT_CALLS = [
   "on", "subscribeStatus", "supports", "onEvents", "onCustom", "activity", "onPresence", "onParticipants", "onWidgets", "onIssues", "onCommand",
   "pressWidget", "clickWidget", "history", "share", "agents", "sessions", "prompt", "setLayout", "error",
 ] as const satisfies readonly (keyof ViewClient)[];
-export const CLIENT_VALUES = ["hello", "capabilities", "viewport", "visible", "device", "settings", "features"] as const satisfies readonly (keyof ViewClient)[];
+export const CLIENT_VALUES = Object.keys(CLIENT_VALUES_UNTIL_KNOWN) as (keyof typeof CLIENT_VALUES_UNTIL_KNOWN)[] satisfies readonly (keyof ViewClient)[];
 
 /** The workspace's issue methods (1.9), each answered with what the workspace's own returns. */
 export interface ViewIssues {
