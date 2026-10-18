@@ -8,7 +8,7 @@
 //   4. Fill title + description, submit.
 //   5. Assert the markdown file appears on disk at `.hivemind/issues/XX-1.md`
 //      with the expected frontmatter (id, title, state, etc).
-//   6. Assert the issue shows up in the renderer (Board view card).
+//   6. Assert the issue shows up in the renderer (an issue card).
 import { test, expect, type Page } from "@playwright/test";
 import { launchWindow, type AppWindow } from "./helpers/window";
 import path from "node:path";
@@ -75,7 +75,7 @@ test("creates an issue via the modal and persists it to disk", async () => {
 
   // Description (find by its label).
   const desc = page.locator("textarea").first();
-  await desc.fill("acceptance: visible in Board view after submit");
+  await desc.fill("acceptance: visible in the issue list after submit");
 
   // Submit. The submit button reads "Create issue".
   await page.getByRole("button", { name: "Create issue" }).click();

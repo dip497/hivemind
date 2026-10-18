@@ -1,0 +1,8 @@
+{
+  "id": "tile-list",
+  "name": "Tile list",
+  "version": "0.1.0",
+  "entry": "main.js",
+  "protocol": 1,
+  "permissions": []
+}

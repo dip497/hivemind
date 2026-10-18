@@ -21,10 +21,10 @@ node packages/review-room/build.mjs
 hive packages inspect packages/review-room/dist --json
 ```
 
-This combines the Board view with Pi and Claude presets. The report includes:
+This combines a Pi and a Claude reviewer preset. The report includes:
 
 - Every agent prompt, provider, and available supervision.
-- View permissions and a proposed startup plan.
+- The permissions of any view it carries, and a proposed startup plan.
 - File hashes and a digest covering the entire package.
 
 Nothing is installed or started. Inspection does not verify publisher identity or code

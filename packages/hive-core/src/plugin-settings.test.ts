@@ -5,7 +5,7 @@ describe("what is stored for each plugin", () => {
   test("a record under a key that is not a plugin of a known kind is dropped", () => {
     const states = parsePluginStates({
       "agent:claude": { enabled: false },
-      "view:@dip497/board": { options: { island: "top" } },
+      "view:@someone/notes": { options: { island: "top" } },
       "tool:hivemind/web": { enabled: true },
       "widget:pet": { options: { speed: 2 } },
       "agent:../x": { enabled: false },
@@ -15,7 +15,7 @@ describe("what is stored for each plugin", () => {
       "theme:dark": { enabled: true },
       "agent:codex": { enabled: "no", options: { "bad key": 1, n: Infinity } }, // nothing left in it
     });
-    expect(Object.keys(states)).toEqual(["agent:claude", "view:@dip497/board", "tool:hivemind/web", "widget:pet"]);
+    expect(Object.keys(states)).toEqual(["agent:claude", "view:@someone/notes", "tool:hivemind/web", "widget:pet"]);
   });
 
   test("a plugin is on unless its record says off; a kind can default to off", () => {
@@ -53,12 +53,12 @@ describe("what is stored for each plugin", () => {
   test("the keys of a version before plugin state are read into records", () => {
     expect(pluginStatesFromLegacy({
       agents: { disabled: ["codex", 3], options: { claude: { model: "opus", effort: 2 } } },
-      plugins: { disabled: ["@dip497/board"] },
+      plugins: { disabled: ["@someone/notes"] },
       tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser", "noslash"] },
     })).toEqual({
       "agent:codex": { enabled: false },
       "agent:claude": { options: { model: "opus" } },
-      "view:@dip497/board": { enabled: false },
+      "view:@someone/notes": { enabled: false },
       "tool:hivemind/web": { enabled: true, options: { browser: false } },
     });
   });

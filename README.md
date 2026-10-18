@@ -76,7 +76,7 @@ Settings → Shortcuts lists every key.
 | **Terminals that outlive the window** | a detached daemon keeps them running and replays the screen on reopen; a session resumes after a reboot |
 | **Issues as files in your repo** | markdown with YAML frontmatter under `.hivemind/`; no database, no account |
 | **Agents driving agents** | one agent spawns three more, reads their replies and approves their tools — see below |
-| **Views** | Canvas and Windows come with the app; Queue, Tiled and Board are on HiveHub; write your own against a sandboxed API with no files, network or app access |
+| **Views** | Canvas and Windows come with the app; more on HiveHub; write your own against a sandboxed API with no files, network or app access |
 | **Tool plugins and widgets** | a kind of tile your code draws (a commit browser, a pull request panel), or a small live box an agent keeps up to date; from HiveHub or a folder |
 | **Your phone** | the phone page answers questions and permission prompts, sends messages, starts and stops agents; pair it with three words on Settings → Connect |
 | **Sleep and wake** | an idle agent's process ends and frees its memory; waking it continues the same conversation |
@@ -110,9 +110,8 @@ whole screen from the workspace we hand it: frames, tiles, names, live status. T
 inside your scene is the real one, still running; you tell the app where to put it and it
 mounts the session there.
 
-Canvas and Windows come with the app; Queue (if you triage), Board (if you lead) and Tiled are
-on HiveHub. Or build your own: anything you can draw in a web page, with real terminals living
-inside it.
+Canvas and Windows come with the app, and anyone can publish one on HiveHub. Or build your own:
+anything you can draw in a web page, with real terminals living inside it.
 
 ```bash
 hive views new my-view     # a starter you can build, install and publish

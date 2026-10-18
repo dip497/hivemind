@@ -11,13 +11,13 @@ import org.junit.runner.RunWith
 class ViewSiteTest {
     @Test
     fun `a view's origin is its id as the view SDK makes a hostname of it, and what is no view's id has none`() {
-        val origins = listOf("phone-probe", "@dip497/board", "b2", "Board", "a--b", "@dip497/board/x", "a.b", "a/b", "x".repeat(64), "@${"o".repeat(30)}/${"n".repeat(33)}")
+        val origins = listOf("phone-probe", "@someone/notes", "b2", "Board", "a--b", "@someone/notes/x", "a.b", "a/b", "x".repeat(64), "@${"o".repeat(30)}/${"n".repeat(33)}")
             .map { ViewSite.of(it)?.origin }
 
         assertEquals(
             listOf(
                 "https://phone-probe.views.hivemind.invalid",
-                "https://dip497--board.views.hivemind.invalid",
+                "https://someone--notes.views.hivemind.invalid",
                 "https://b2.views.hivemind.invalid",
                 null, null, null, null, null, null, null,
             ),

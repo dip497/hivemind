@@ -64,9 +64,9 @@ test("the bootstrap page carries the response nonce, is laid out at its screen's
   expect(entryUrl("orbit", "index.html")).toBe("hm-view://orbit/index.html");
   expect(entryUrl("orbit", "dist/view.js")).toBe("hm-view://orbit/__entry.html?js=dist%2Fview.js");
   // A scoped view gets an origin of its own: `@` and `/` would make the owner the host.
-  expect(entryUrl("@dip497/board", "index.html")).toBe("hm-view://dip497--board/index.html");
-  expect(new URL(entryUrl("@dip497/board", "index.html")).host).toBe("dip497--board");
-  expect(new URL(entryUrl("@dip497/board", "index.html")).host).not.toBe(new URL(entryUrl("@dip497/queue", "index.html")).host);
+  expect(entryUrl("@someone/notes", "index.html")).toBe("hm-view://someone--notes/index.html");
+  expect(new URL(entryUrl("@someone/notes", "index.html")).host).toBe("someone--notes");
+  expect(new URL(entryUrl("@someone/notes", "index.html")).host).not.toBe(new URL(entryUrl("@someone/tasks", "index.html")).host);
 });
 
 test("every plugin document gets the SDK's import map first, under the response nonce, naming the SDK from where the page is", () => {

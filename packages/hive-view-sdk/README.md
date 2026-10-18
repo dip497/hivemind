@@ -3,7 +3,7 @@
 Write a hivemind workspace view as a sandboxed plugin. A view is a directory:
 
 ```
-hivemind-view.json   { "id": "@you/queue", "name": "Queue", "version": "0.1.0", "entry": "index.html", "permissions": [] }
+hivemind-view.json   { "id": "@you/my-view", "name": "My view", "version": "0.1.0", "entry": "index.html", "permissions": [] }
 index.html           your bundled page (or point `entry` at a .js module)
 ```
 
@@ -87,10 +87,10 @@ host.commands; host.rects; host.refused;          // what the app would run, sho
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
 `spawnClaude` / `addFrame` / `spawnAgent` need `"workspace:spawn"`; `renameTile` /
 `openFolder` need `"workspace:edit"`; `prompt`, and `spawnAgent` with a `prompt`, need
-`"workspace:prompt"`; `sessions`, and `spawnAgent` with `resume`, need `"workspace:sessions"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views: `views/` in
-[the published plugins](https://github.com/dip497/hivemind-plugins) — `queue` (a list with a
-docked terminal), `tiled` (every terminal of a frame laid out as live panes) and `board` (drag,
-keyboard moves, a persisted layout).
+`"workspace:prompt"`; `sessions`, and `spawnAgent` with `resume`, need `"workspace:sessions"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views:
+`examples/views/agent-board` in this repository (a persisted layout and agent commands) and
+`views/widgets` in [the published plugins](https://github.com/dip497/hivemind-plugins) (the
+workspace's widgets, drawn and pressed).
 
 This is not an npm package. The app builds it into itself and serves it to every view at
 `/__sdk.js`, with an import map that resolves `@hivemind/view-sdk` there — so a view leaves it

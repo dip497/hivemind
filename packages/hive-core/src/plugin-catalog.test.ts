@@ -142,8 +142,8 @@ describe("telling the registry an install happened", () => {
 
   test("resolves the plugin against the same registry the index came from", async () => {
     const seen = await withFetch(() =>
-      noteInstall(entry("@dip497/queue"), "https://hivehub.example/api/v1/index.json"));
-    expect(seen).toEqual(["https://hivehub.example/api/v1/plugins/%40dip497/queue/resolve"]);
+      noteInstall(entry("@someone/tasks"), "https://hivehub.example/api/v1/index.json"));
+    expect(seen).toEqual(["https://hivehub.example/api/v1/plugins/%40someone/tasks/resolve"]);
   });
 
   test("an agent is one bare name, and still resolves", async () => {

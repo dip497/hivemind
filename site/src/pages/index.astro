@@ -222,13 +222,11 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       <div class="head">
         <h2 id="waiting-h">See which agent is waiting on you, and answer it</h2>
         <p class="sub">Each agent's manifest says how to read its screen, so every tile shows
-          whether its agent is working, finished or waiting on you. The Queue view lists the
-          waiting ones first with the live terminal beside them, and <kbd>N</kbd> opens the one
-          that has waited longest.</p>
+          whether its agent is working, finished or waiting on you.</p>
       </div>
       <figure class="shot">
-        <img src={link('shots/view-queue.webp')} width="1600" height="1120" loading="lazy" decoding="async"
-          alt="The Queue view: 3 need you and 12 working, grouped by project, with Press N for the one that has waited longest." />
+        <img src={link('shots/view-canvas.webp')} width="1600" height="1120" loading="lazy" decoding="async"
+          alt="The canvas: each agent's tile shows whether it is working, finished or waiting on you." />
       </figure>
       <div class="pair">
         <p>An agent can start others and answer for them. Spawned with <code>--supervise all</code>,
@@ -249,8 +247,8 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       </div>
 
       <div class="row">
-        <Loop name="machines" fallback={shot('view-tiled.webp')}
-          alt="The Tiled view: one pane per agent, tabbed by frame." />
+        <Loop name="machines" fallback={shot('view-canvas.webp')}
+          alt="Agents in frames, one of them on a machine reached over ssh." />
         <div class="row-copy">
           <h3>Machines over ssh</h3>
           <p>Add a Linux machine you can reach with <code>ssh</code> and open one of its folders as
@@ -289,8 +287,8 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       </div>
 
       <div class="row flip">
-        <Loop name="join" fallback={shot('poster.webp', 1280, 800)}
-          alt="The Queue view with one agent asking to edit src/limits.ts, its terminal docked beside the list." />
+        <Loop name="join" fallback={shot('view-windows.webp')}
+          alt="A shared workspace open in a second person's Hivemind." />
         <div class="row-copy">
           <h3>Someone joins your workspace</h3>
           <p>Send an invite link, and the other person opens your workspace in their own Hivemind.

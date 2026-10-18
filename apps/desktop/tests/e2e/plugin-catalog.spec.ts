@@ -15,7 +15,7 @@ let registry: string;
 let xdg: string;
 
 const CODER = "catalog-coder";
-const QUEUE = `${SCOPE}/queue`, TILED = `${SCOPE}/tiled`;
+const TILE_LIST = `${SCOPE}/tile-list`, PEOPLE = `${SCOPE}/people`;
 const AGENT = `manifestVersion: 2
 id: "${CODER}"
 label: Catalog Coder
@@ -61,39 +61,39 @@ test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: tru
 
 test("the catalog lists the published plugins, and search and type filters narrow it", async () => {
   await hub();
-  await expect(entry("view", QUEUE)).toContainText("Queue");
+  await expect(entry("view", TILE_LIST)).toContainText("Tile list");
   await expect(entry("agent", CODER)).toContainText("Catalog Coder");
   await pick(page.getByRole("combobox", { name: "Kind" }), "Agents");
-  await expect(entry("view", QUEUE)).toHaveCount(0);
+  await expect(entry("view", TILE_LIST)).toHaveCount(0);
   await pick(page.getByRole("combobox", { name: "Kind" }), "All kinds");
-  await page.getByLabel("Search plugins").fill("tiled");
+  await page.getByLabel("Search plugins").fill("people");
   await expect(page.locator("[data-catalog-plugin]")).toHaveCount(1);
-  await expect(entry("view", TILED)).toBeVisible();
+  await expect(entry("view", PEOPLE)).toBeVisible();
   await page.getByLabel("Search plugins").fill("");
 });
 
 test("a view installs only after review, and lands in the user's views", async () => {
   await hub();
-  await entry("view", QUEUE).getByRole("button", { name: "Install" }).click();
-  const review = page.getByRole("region", { name: "Review Queue" });
+  await entry("view", TILE_LIST).getByRole("button", { name: "Install" }).click();
+  const review = page.getByRole("region", { name: "Review Tile list" });
   await expect(review).toContainText("matches the checksum");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", QUEUE))).toBe(false);
+  expect(fs.existsSync(path.join(xdg, "hivemind/views", TILE_LIST))).toBe(false);
   await review.getByRole("button", { name: "Install" }).click();
-  await expect(entry("view", QUEUE)).toContainText("Installed");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", QUEUE, "queue.js"))).toBe(true);
+  await expect(entry("view", TILE_LIST)).toContainText("Installed");
+  expect(fs.existsSync(path.join(xdg, "hivemind/views", TILE_LIST, "main.js"))).toBe(true);
   await yours();
-  await expect(page.locator(`[data-plugin-row="view:${QUEUE}"]`)).toBeVisible();
+  await expect(page.locator(`[data-plugin-row="view:${TILE_LIST}"]`)).toBeVisible();
 });
 
 test("a view from the registry runs in a sandbox of its own", async () => {
   // Installed by the test above. `@` and `/` cannot be a hostname, so the view is served as
-  // e2e--queue: if that mapping broke, the frame would load nothing and never say it is ready.
+  // e2e--tile-list: if that mapping broke, the frame would load nothing and never say it is ready.
   await page.keyboard.press("Escape");
-  await page.evaluate((mode) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode } })), QUEUE);
-  const view = page.locator(`[data-community-view="${QUEUE}"]`);
+  await page.evaluate((mode) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode } })), TILE_LIST);
+  const view = page.locator(`[data-community-view="${TILE_LIST}"]`);
   await expect(view).toHaveAttribute("data-community-ready", "1", { timeout: 20_000 });
   const src = await view.locator("iframe").getAttribute("src");
-  expect(new URL(src!).host).toBe("e2e--queue");
+  expect(new URL(src!).host).toBe("e2e--tile-list");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
 });
 
@@ -110,17 +110,17 @@ test("an agent from the catalog becomes a card, and says its CLI is not installe
 });
 
 test("a file that changed after it was listed is refused", async () => {
-  // Not queue: an earlier test installs that one, so a refusal here would be invisible.
-  fs.appendFileSync(path.join(registry, "views", "tiled", "tiled.js"), "\n// tampered");
+  // Not tile-list: an earlier test installs that one, so a refusal here would be invisible.
+  fs.appendFileSync(path.join(registry, "views", "people", "main.js"), "\n// tampered");
   await hub();
-  await entry("view", TILED).getByRole("button", { name: "Install" }).click();
-  await expect(entry("view", TILED).getByRole("alert")).toContainText("changed after it was listed");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", TILED))).toBe(false);
+  await entry("view", PEOPLE).getByRole("button", { name: "Install" }).click();
+  await expect(entry("view", PEOPLE).getByRole("alert")).toContainText("changed after it was listed");
+  expect(fs.existsSync(path.join(xdg, "hivemind/views", PEOPLE))).toBe(false);
 });
 
 test("HiveHub opened again lists what it fetched a moment ago, without waiting on the index", async () => {
   await hub();
-  await expect(entry("view", QUEUE)).toBeVisible();
+  await expect(entry("view", TILE_LIST)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".settings-dialog")).toHaveCount(0);
   const index = path.join(registry, "index.json");
@@ -128,7 +128,7 @@ test("HiveHub opened again lists what it fetched a moment ago, without waiting o
   fs.rmSync(index);
   try {
     await hub();
-    await expect(entry("view", QUEUE)).toBeVisible();
+    await expect(entry("view", TILE_LIST)).toBeVisible();
     await expect(page.getByText("Could not load the plugin catalog")).toHaveCount(0);
   } finally {
     fs.writeFileSync(index, listed);

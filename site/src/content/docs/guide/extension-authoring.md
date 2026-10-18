@@ -84,8 +84,8 @@ hm.on("structure", ({ tiles }) => {
 });
 ```
 
-For a complete view with live docking, name updates, status subscriptions, and saved
-layout, read `views/tiled` in [the published plugins](https://github.com/dip497/hivemind-plugins).
+For a view that keeps its own state with `setLayout` and answers agents' commands, read
+[`examples/views/agent-board`](https://github.com/dip497/hivemind/tree/main/examples/views/agent-board).
 
 `setSurfaceRects` places host-owned tools in your view (a tile's live terminal, where the
 screen places them: `hm.supports("surfaces")`, protocol 1.6; a phone's app draws its own terminal
@@ -280,7 +280,8 @@ kind's icon) as one `<svg>` in `currentColor`: put it in your markup and size it
 - Store camera/placements via `setLayout`; version your blob yourself.
 - A disabled plugin recovers from its layout blob on next mount.
 
-Reference implementations, in [the published plugins](https://github.com/dip497/hivemind-plugins):
-`views/tiled` (surfaces and layout), `queue` (a list, a docked terminal and a WebGL empty state)
-and `board` (drag, keyboard moves, persisted layout). Protocol types: `types/view-sdk/protocol.ts`
-in your view.
+Reference implementations:
+[`examples/views/agent-board`](https://github.com/dip497/hivemind/tree/main/examples/views/agent-board)
+(saved layout and agent commands) and `views/widgets` in
+[the published plugins](https://github.com/dip497/hivemind-plugins) (the workspace's widgets, drawn
+and pressed). Protocol types: `types/view-sdk/protocol.ts` in your view.

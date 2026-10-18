@@ -1,6 +1,6 @@
 // What an agent can do with the plugins in the app, through the CLI it has: get one running, list
 // the commands they declare, run one and read its answer. The example widget, view and tool from the
-// repository: the Progress widget's steps, the Agent board view's notes, the Worktrees tool's list.
+// repository: the Progress widget's steps, the Agent board's notes, the Worktrees tool's list.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";

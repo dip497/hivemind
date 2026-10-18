@@ -47,25 +47,25 @@ describe("view packages", () => {
   });
 
   test("a view from the registry installs as @owner/name, beside a bare one of the same name", async () => {
-    pkg(path.join(tmp, "src", "board"), good("board"));
-    pkg(path.join(tmp, "src", "hub-board"), good("@dip497/board"));
-    await installView(path.join(tmp, "src", "board"));
-    const scoped = await installView(path.join(tmp, "src", "hub-board"));
-    expect(scoped.dir).toBe(path.join(userViewsDir(), "@dip497", "board"));
-    expect((await listInstalledViews()).map((x) => [x.id, x.error])).toEqual([["@dip497/board", null], ["board", null]]);
-    await removeView("@dip497/board");
-    expect((await listInstalledViews()).map((x) => x.id)).toEqual(["board"]);
+    pkg(path.join(tmp, "src", "notes"), good("notes"));
+    pkg(path.join(tmp, "src", "hub-notes"), good("@someone/notes"));
+    await installView(path.join(tmp, "src", "notes"));
+    const scoped = await installView(path.join(tmp, "src", "hub-notes"));
+    expect(scoped.dir).toBe(path.join(userViewsDir(), "@someone", "notes"));
+    expect((await listInstalledViews()).map((x) => [x.id, x.error])).toEqual([["@someone/notes", null], ["notes", null]]);
+    await removeView("@someone/notes");
+    expect((await listInstalledViews()).map((x) => x.id)).toEqual(["notes"]);
     // The nested form is the only one: no other path may reach `rm -rf`.
-    for (const bad of ["dip497/board", "@dip497/../board", "@dip497/board/x"]) {
+    for (const bad of ["someone/notes", "@someone/../notes", "@someone/notes/x"]) {
       await expect(removeView(bad)).rejects.toMatchObject({ code: "invalid_view" });
     }
   });
 
   test("a scoped folder whose manifest names someone else is refused", async () => {
-    pkg(path.join(userViewsDir(), "@dip497", "board"), good("@alice/board"));
+    pkg(path.join(userViewsDir(), "@someone", "notes"), good("@alice/notes"));
     const [v] = await listInstalledViews();
-    expect(v.id).toBe("@dip497/board");
-    expect(v.error).toMatch(/does not match manifest id "@alice\/board"/);
+    expect(v.id).toBe("@someone/notes");
+    expect(v.error).toMatch(/does not match manifest id "@alice\/notes"/);
   });
 
   test("install refuses an invalid package", async () => {

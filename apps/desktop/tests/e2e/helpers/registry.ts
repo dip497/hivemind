@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 export const SCOPE = "@e2e";
 const FIXTURES = path.resolve("tests/e2e/fixtures");
-const VIEWS = ["queue", "tiled"];
+const VIEWS = ["tile-list", "people"];
 
 const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
 const walk = (dir: string, base = dir): string[] => fs.readdirSync(dir).flatMap((n) => {

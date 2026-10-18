@@ -76,9 +76,9 @@ choices. Authors own rendering and hit testing; the host owns validated commands
 availability and permissions. Merely changing the controls must not change authority.
 
 The current SDK already supports workspace selection and live-surface docking from
-sandboxed views. `examples/views/queue` proves that path without a new protocol: its own
-list and keys (J/K, N, Enter, Esc) select and dock through SDK commands, and its only
-animation stops once it settles. It requests no additional permissions. This is a coded
+sandboxed views. The e2e fixture `tests/e2e/fixtures/views/tile-list` proves that path
+without a new protocol: its own list and keys (J/K, Esc) select and dock through SDK
+commands, and it draws only when something changes. It requests no additional permissions. This is a coded
 example, not a visual toolbar authoring application.
 
 The per-view Off preference unmounts the standard toolbar and its handle. Collapsed
@@ -117,7 +117,7 @@ compatibility checks.
 
 ## Custom-controls verification
 
-`tests/e2e/queue-view.spec.ts` runs Queue with the host toolbar off. Three isolated
+`tests/e2e/tile-list-view.spec.ts` runs the tile-list view with the host toolbar off. Three isolated
 Electron cases cover pointer and keyboard docking, preserving the same terminal, the
 view's selection becoming the host's, and no additional frames during an idle interval.
 

@@ -276,12 +276,12 @@ describe("plugin ids in settings", () => {
     let next = setPath(cur, "agents.declined", ["aider", "gemini"]);
     next = setPath(next, "agents.fromCatalog", ["amp"]);
     next = setPath(next, "plugins.state.agent:aider", { options: { model: "big" } });
-    next = setPath(next, "views.chrome", { "@dip497/board": { island: "top" } });
+    next = setPath(next, "views.chrome", { "@someone/notes": { island: "top" } });
     const back = mergeSettings(JSON.parse(JSON.stringify(next)), cur);
     expect(back.agents.declined).toEqual(["aider", "gemini"]);
     expect(back.agents.fromCatalog).toEqual(["amp"]);
     expect(back.plugins.state["agent:aider"]).toEqual({ options: { model: "big" } });
-    expect(Object.keys(back.views.chrome)).toContain("@dip497/board");
+    expect(Object.keys(back.views.chrome)).toContain("@someone/notes");
   });
 
   test("what is not an agent id is dropped — a scope included — and option names stay plain", () => {
@@ -336,7 +336,7 @@ describe("plugin state from a settings.json written before it", () => {
   const OLD = {
     v: 1, browserCdp: true,
     agents: { defaultAgent: "claude", autoInstall: true, declined: ["aider"], fromCatalog: [], disabled: ["codex"], options: { claude: { model: "opus" } } },
-    plugins: { disabled: ["@dip497/board"] },
+    plugins: { disabled: ["@someone/notes"] },
     tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] },
   };
 
@@ -346,7 +346,7 @@ describe("plugin state from a settings.json written before it", () => {
     expect(read.plugins.state).toEqual({
       "agent:codex": { enabled: false },
       "agent:claude": { options: { model: "opus" } },
-      "view:@dip497/board": { enabled: false },
+      "view:@someone/notes": { enabled: false },
       "tool:hivemind/web": { enabled: true, options: { browser: false } },
     });
     await writeSettings(setPath(read, "views.defaultView", "world"));
