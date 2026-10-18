@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Claude: an agent stopped at startup on the "Settings Warning" (a settings rule was skipped) or the one-time Bypass Permissions mode warning now shows as waiting on you, saying which screen it is (`settings-warning`, `bypass`), to programs, the phone and notifications alike. The bypass warning is answered only at its terminal. Comes with the Claude plugin's update.
+
 - Agents: the limit of 16 starts a minute now counts each caller apart (you, each API token, each agent), so one program starting agents in a loop no longer stops you or other programs starting them; a start refused for another reason no longer counts.
 
 - API access: a program that catches up with `agent.since` after the app or `hive host` restarted is told to list again, instead of being handed the new process's changes as if they followed its own.

@@ -63,6 +63,13 @@ answer:
     - '3'
     deny:
     - escape
+  # A settings rule it skipped, from claude 2.1.302: "1. Continue"; "3. Exit and fix manually"
+  # exits (Esc continues too, so it is no deny).
+  settings-warning:
+    allow:
+    - '1'
+    deny:
+    - '3'
 # An option of its AskUserQuestion chooser, read from claude 2.1.296: a digit chooses that option
 # and sends it, for one question with one choice.
 choose:
@@ -108,6 +115,20 @@ detect:
       - contains: Continue without these settings
     then: permission
     says: settings
+  - when:
+      all:
+      - containsCS: Settings Warning
+      - contains: 1. Continue
+    then: permission
+    says: settings-warning
+  # Its one-time warning for its unattended mode, read from the claude 2.1.302 binary. It has no
+  # answer keys: accepting it is the person's own consent, given at the terminal.
+  - when:
+      all:
+      - containsCS: Bypass Permissions mode
+      - contains: Yes, I accept
+    then: permission
+    says: bypass
   - when:
       seq:
       - run: space

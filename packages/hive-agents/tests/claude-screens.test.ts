@@ -23,14 +23,44 @@ const SETTINGS = [
   "  Enter to confirm · Esc to cancel",
 ].join("\n");
 
-test("its trust and settings screens wait on the person, and say which they are", () => {
+// Rendered from claude 2.1.302 with an invalid rule in the folder's .claude/settings.local.json.
+const SETTINGS_WARNING = [
+  "──────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+  "  Settings Warning", "", "  /tmp/new-project/.claude/settings.local.json",
+  "  └ permissions.allow: Invalid permission rule \"Bash(foo:*\" was skipped: Malformed Tool(content) rule. Rules",
+  "    take the form Tool or Tool(content) and must end at the closing \")\"; parentheses inside the content are",
+  "    literal", "", "  The values listed above were skipped; the rest of the file is in effect.", "",
+  "  ❯ 1. Continue", "    2. Fix with Claude", "    3. Exit and fix manually", "",
+  "  Enter to confirm · Esc to cancel",
+].join("\n");
+
+// Its unattended mode's warning, laid out from the text in the claude 2.1.302 binary (the screen
+// itself was not rendered here): the title, what it warns, and its two options.
+const BYPASS = [
+  "────────────────────────────────────────────────────────────────────────────────",
+  "  WARNING: Claude Code running in Bypass Permissions mode", "",
+  "  In Bypass Permissions mode, Claude Code will not ask for your approval before running potentially",
+  "  dangerous commands.",
+  "  This mode should only be used in a sandboxed container/VM that has restricted internet access and can",
+  "  easily be restored if damaged.", "",
+  "  By proceeding, you accept all responsibility for actions taken while running in Bypass Permissions mode.", "",
+  "  ❯ 1. No, exit", "    2. Yes, I accept", "",
+  "  Enter to confirm · Esc to cancel",
+].join("\n");
+
+test("its trust, settings, settings-warning and bypass screens wait on the person, and say which they are", () => {
   expect(claude().detect!(TRUST)).toEqual({ status: "permission", says: "trust" });
   expect(claude().detect!(SETTINGS)).toEqual({ status: "permission", says: "settings" });
+  expect(claude().detect!(SETTINGS_WARNING)).toEqual({ status: "permission", says: "settings-warning" });
+  expect(claude().detect!(BYPASS)).toEqual({ status: "permission", says: "bypass" });
 });
 
 test("each is answered with its own keys, read from the real binary, not a permission's", () => {
   expect(claude().answer?.trust).toEqual({ allow: ["down", "enter"], deny: ["escape"] });
   expect(claude().answer?.settings).toEqual({ allow: ["3"], deny: ["escape"] });
+  expect(claude().answer?.["settings-warning"]).toEqual({ allow: ["1"], deny: ["3"] });
+  // Accepting the bypass warning is the person's consent: nothing answers it from afar.
+  expect(claude().answer?.bypass).toBeUndefined();
   expect(claude().answer?.permission).toEqual({ allow: ["1"], deny: ["escape"] });
 });
 
