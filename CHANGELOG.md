@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A guest who joins a workspace sees its board: when the host's last change was not to its frames and tiles (a tile moved, say), the guest's board stayed empty though connected.
+
 - An agent started with `hive ctl spawn` no longer draws garbled text: the tile's size, given while the session was still starting (seconds on a remote machine), was lost, so the agent kept drawing at 120×36 inside a tile of another size.
 
 - The website's home page is redesigned around agents building the workspace: the 21 agents on HiveHub, widgets, tools and views, the Queue view, machines over ssh, the phone page and a shared workspace, then what stays yours, measured numbers with their load, and the download. It also shows screenshots of twenty example plugins. Each clip slot shows a real screenshot until its recording lands.
