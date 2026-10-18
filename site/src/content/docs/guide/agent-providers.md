@@ -1,40 +1,14 @@
 ---
 title: Add your own agent
-description: Describe a CLI coding agent in one YAML file, and turn any agent on or off.
+description: Describe an agent's CLI in one YAML file, saying how to start it, read its screen and answer it.
 ---
 
-An agent is configuration. Nothing agent-specific ships in the app: every agent, claude,
-codex, pi and the rest, is a manifest from the HiveHub registry, added when its CLI is found on
-your machine (see [Agents](../agents/)). You can add another by writing one file, with no
-rebuild and no code, and switch any agent off, including the ones HiveHub added for you.
-
-## What an agent file can and cannot do
-
-A manifest describes everything Hivemind *reads* about an agent: its name and binary,
-what it can do, its icon, how to start it, and how to tell from its screen whether it
-is working, idle, or waiting for you.
-
-Most of what needs code — resuming a session, reporting that a turn ended — a manifest
-can *declare*, if it also says how it is done:
-
-- **resuming** needs a `session.resume` block naming where the CLI keeps its sessions;
-  the daemon does the reading
-- **listing past sessions** (`hive ctl sessions <agent>`, then `hive ctl spawn --resume <id>`)
-  needs `session.list`: the CLI's own listing command and where each record keeps its id,
-  folder and title (`args`, `idPath`, `cwdPath`, `titlePath`), or, when sessions are the
-  files `session.resume` names, how many of each file's first lines hold them (`lines`)
-- **a turn signal** and **brokering permission prompts** need the manifest to wire the
-  agent to the control plane: `launch.hcp` plus the hook file it ships beside it
-- **a hook entry that reports** (`emit:`) needs `launch.hcp`: each report is signed in with
-  the tile's own token, which only that launch gives the agent
-
-A manifest that claims one of those without saying how is refused when Hivemind reads it.
-A capability that is claimed but never delivered is worse than one that is missing: the
-control plane would wait forever for a signal nothing sends.
+An agent is one file, `agent.yaml`. It tells Hivemind which program to start, what it can do, and
+how to read its screen. No code and no rebuild.
 
 ## Write one
 
-Create a folder named after the agent's id, holding `agent.yaml`:
+Make a folder named after the agent's id, with `agent.yaml` in it:
 
 ```yaml
 # ~/.config/hivemind/agents/acme/agent.yaml
@@ -77,221 +51,84 @@ detect:
       then: working
 ```
 
-Every capability field is required. Leaving one out is refused, because an absence
-must be a decision.
+Every field under `caps` is required: leaving one out is refused, so each one is a decision.
 
-## Launch options
+| `caps` field | Means |
+|---|---|
+| `promptDelivery` | `argv`: the task is passed as an argument; `typed`: typed in once its screen reads idle |
+| `turnSignal` | it reports when a turn ends, so other agents can collect its replies |
+| `resume` | `none`, `cwd` (newest session in the folder) or `tile` (its own session) |
+| `supervise` | `human`, `none`, or `broker` (its permission prompts can go to a supervising agent) |
+| `blockedDetection` | its screen shows when it waits on you |
 
-You name the flag; the values come from the agent itself. When Settings shows an
-agent, Hivemind runs `<bin> --help` and reads the values listed for each flag, in the
-forms argument parsers print: `(choices: "a", "b")`, `[possible values: a, b]`,
-`a|b|c`. A flag whose help lists nothing becomes a text field. An option may name a
-`default` value, which is passed until you choose another; without one, nothing is passed and
-the agent decides.
+A claim that needs wiring must say how, or the file is refused: resuming needs `session.resume`
+(where the CLI keeps sessions), listing past sessions needs `session.list`, and a turn signal or
+`broker` needs a `launch.hcp` block plus a hook file shipped beside it, which reports back to Hivemind.
 
-## Where Hivemind looks
+## Install and check it
+
+```bash
+hive agents validate ./acme     # check it without installing
+hive agents install ./acme      # check, then copy
+hive agents list                # every agent, where it came from, and why any is unavailable
+hive agents remove acme
+```
 
 | Folder | Used for |
 |---|---|
-| `~/.config/hivemind/agents/<id>/agent.yaml` | Agents you installed, for all your workspaces |
-| `<repo>/.hivemind/agents/<id>/agent.yaml` | Agents a repository ships for everyone who works in it |
+| `~/.config/hivemind/agents/<id>/agent.yaml` | your agents, in every workspace |
+| `<repo>/.hivemind/agents/<id>/agent.yaml` | agents a repository ships for everyone in it |
 
-A manifest named `claude` stays attached to the command claude has always launched: an id
-Hivemind has shipped is reserved, and a manifest that takes the name but points it at a
-different program is refused when the manifest is read. A repository can only **add**
-agents. Its manifest for an id you already have is refused and listed with the reason, so
-cloning a repository can never change what the Claude button runs.
+A repository can only add agents: it can never change what an id you already have runs. The
+folder name must match the `id`.
 
-The folder name must match the `id` inside the file.
+## Launch options
 
-## Agents added for you
+Under `options`, you name each flag; Hivemind runs `<bin> --help` and reads the allowed values
+(`(choices: "a", "b")`, `[possible values: a, b]`, `a|b|c`). A flag with no listed values becomes a
+text field in Settings. `model` and `mode` are what `hive ctl spawn --model` and `--mode` set.
 
-The app ships with no agents. They come from the plugin catalog on
-[HiveHub](https://hivehub.griiken.workers.dev): when a listed agent's CLI is on your PATH,
-Hivemind adds it at startup and says so — no questions. The notice says what the agent can
-do, with a Remove button. It only adds when the files match their checksums, the manifest
-names the CLI that was found, and that CLI answers `--version` like one; and it can never
-replace an agent you already have. Remove one and it stays removed. It needs the network,
-and it does not run while the update check is off. Switch it off under
-**Settings ▸ Plugins ▸ Agents ▸ Add agents found on this machine**. Adding the listing itself is a
-pull request to [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).
+## Read its screen
 
-## Install, list and remove
+`detect.rules` are checked in order; the first match sets the status, else `default`. Statuses:
+`idle`, `working`, and three that wait on you: `blocked`, `permission`, `question`.
 
-```bash
-hive agents install ./acme     # checks the file, then copies the folder
-hive agents validate ./acme    # checks it the way an install would, copies nothing
-hive agents list               # every agent, where it came from, where its CLI is, and why any is unavailable
-hive agents list --found       # only the agents whose CLI is on this machine
-hive agents remove acme        # only agents you installed; switch the others off instead
-```
-
-`install` checks the manifest **before** copying, so a broken one never lands on disk.
-Given a name instead of a folder (`hive agents install amp`) it takes the agent from HiveHub;
-given `owner/repo[/dir]` it takes it from GitHub. Both print what the agent does first and
-install only when run again with `--yes`. `--replace` lets your manifest take a reserved id
-and point it at another command.
-If Hivemind is running it picks the change up immediately; otherwise it does so at the
-next start.
-
-## Turn agents on and off
-
-**Settings ▸ Plugins** lists every agent Hivemind found in its Agents group: the ones
-ready on this machine first, then the ones whose command is missing (**Needs setup**, saying
-which command it needs), then the ones you switched off. Open a row for its launch options,
-its README, **Make default**, and its on/off switch (`hive plugins disable agent:<id>` does the
-same). Turning one off removes it from
-every picker and from `hive ctl spawn`; turning it back on restores it. Agents HiveHub
-added can be turned off too, or removed for good.
-
-Anything that failed to load stays in the list with the reason, so you can see why it
-did not appear rather than wondering.
-
-## Reading status from the screen
-
-`detect` is an ordered list of rules. The first rule that matches decides the status;
-if none match, `default` is used. Statuses are `idle`, `working`, and three that wait on
-you: `blocked`, `permission` and `question`.
-
-**Tests on the whole screen:**
-
-| Rule | Matches when |
+| Whole-screen test | Matches when |
 |---|---|
-| `contains: "text"` | the text appears anywhere, ignoring case |
-| `containsCS: "Text"` | the text appears anywhere, exact case |
-| `helper: hasConfirmationPrompt` | "do you want" or "would you like", followed by yes or ❯ |
-| `helper: hasInterruptPattern` | an "esc to interrupt" style hint |
-| `helper: hasBrailleSpinner` | a line starts with a braille spinner glyph |
+| `contains` / `containsCS` | the text appears (any case / exact case) |
+| `helper: hasConfirmationPrompt` | "do you want" or "would you like" followed by yes or ❯ |
+| `helper: hasInterruptPattern` | an "esc to interrupt" hint |
+| `helper: hasBrailleSpinner` | a line starts with a braille spinner |
 
-**Tests on a single line** — `line: [...]` matches when one line passes *every* test in
-the list:
+`line: [...]` matches when one line passes every test: `contains`, `startsWith`,
+`startsWithAny`, `gerundAfterPrefix` (a mark, then a word ending in -ing), `letterAfterPrefix`,
+`numBeforeWord`, `anyOf`, and `seq` for an exact sequence. Combine with `all`, `any`, `not`; limit
+to the bottom with `scope: { kind: tail, n: 20 }`.
 
-| Test | Passes when the line |
-|---|---|
-| `contains` / `containsCS` / `startsWith` | holds or starts with the text |
-| `startsWithAny: ["•", "braille"]` | starts with one of these characters |
-| `gerundAfterPrefix: ["⬡", "braille"]` | starts with one of these, then a word ending in "-ing" |
-| `letterAfterPrefix: ["◔", "●"]` | starts with one of these, then a letter |
-| `numBeforeWord: task, op: gt, value: 0` | has a number before "task" that is greater than 0 |
-| `anyOf: [...]` | passes any one of the tests listed |
+Regular expressions are not allowed: a bad one could stall status for every terminal. Every test
+above runs in time proportional to the line.
 
-For anything finer there is `seq: [...]`, a sequence of terms matched on one line: `lit`
-(the text), `any` (the first of these texts that matches), `run` (a run of `space`, `digit`,
-`word` or the characters given, with `min` and `max`), `upTo`, `notNext` and `end`. Add
-`at: start` to match from the line's start. Claude's manifest uses one to find "2. Yes," on
-its chooser.
+## Answer it from your phone
 
-Combine tests with `all: [...]`, `any: [...]` and `not: {...}`. Limit a rule to the end
-of the screen with `scope: { kind: tail, n: 20 }`.
-
-**Regular expressions are not allowed**, in any manifest. A badly written pattern can
-stall status for every terminal: `(a+)+$` against 41 characters takes about a second, and
-Hivemind checks every agent's screen every 1.2 seconds. Every test above, `seq` included,
-never backtracks, so it runs in time proportional to the line it reads.
-
-## Allow and Deny from your phone
-
-When an agent asks permission on its screen, your phone can show **Allow** and **Deny** on
-the notification and in its list, if the agent's file says which keys answer that prompt:
+Tell Hivemind which keys answer the agent, as `hive ctl keys` writes them (one to four keys; quote
+digits). Read them from the real program: a wrong key answers the wrong way.
 
 ```yaml
 answer:
   permission:
-    allow: ['1']        # the keys that allow what it asks
-    deny: [escape]      # the keys that deny it
-```
-
-Each list is one to four keys, written as `hive ctl keys` takes them: a word such as
-`enter`, `escape`, `up` or `tab`, or anything else typed as it is. Quote a digit (`'1'`),
-or YAML reads it as a number. Hivemind types the keys into the agent's terminal one after
-another, only while the agent still waits on that same prompt, and only once.
-
-Read the keys from the real program, not from memory: a wrong key answers the wrong way.
-Claude Code, for example, takes a digit as that option of its chooser, and its first option
-is always "Yes"; Esc is "No, and tell Claude what to do differently". An agent whose file
-says nothing here is answered on your phone as on its screen, with a line of text.
-
-When the agent keeps a conversation your phone can read ("The conversation on your phone"),
-the prompt shows the tool it waits to use and what that is about, whole: the exact command, the
-file, the address.
-
-### Questions with options
-
-When the agent asks you a question with options to choose from (Claude Code's AskUserQuestion),
-your phone shows the question and each option, never Allow and Deny, if the agent's
-conversation maps the tool's questions (`asks`, below). Tapping an option types the keys that
-choose it, if the agent's file says which keys those are:
-
-```yaml
-choose: ['{n}']         # {n} is the option's number, counting from 1
-```
-
-One to four keys, written as for `answer`, one of them with `{n}` in it. Claude Code 2.1.296
-takes a digit as that option and sends it, for one question with one answer. A question that
-allows several answers, several questions, or an agent whose file says nothing here, is
-answered with a line of text, the options listed above it.
-
-### Screens that ask something else
-
-Some screens ask permission for something other than a tool: Claude Code's "Is this a project
-you trust?" when it opens a new folder, say. Its keys are not a tool prompt's. Give the rule that
-reads the screen a name with `says`, and its keys under that name:
-
-```yaml
-detect:
-  rules:
-    - when: { all: [{ contains: "Yes, I trust this folder" }, { contains: "Enter to confirm" }] }
-      then: permission
-      says: trust
-answer:
-  trust:
-    allow: [down, enter]   # "No, exit" is selected first
+    allow: ['1']
     deny: [escape]
+choose: ['{n}']        # pick option n of a question
+interrupt: [escape]    # stop its turn (Stop on the phone)
 ```
 
-The name is lowercase letters, digits and `-`, and only a rule that waits (`permission`,
-`question`, `blocked`) may give one. Your phone and the agents list show which screen it
-is, and Allow and Deny type that screen's keys. A screen with a name and no keys of its own
-is answered with a line of text, never with a tool prompt's keys.
+A screen that asks something other than a tool's permission (a "trust this folder?" prompt) gets a
+name with `says: trust` on its rule, and its own keys under `answer.trust`.
 
-## Stop from your phone
+## Show its conversation on your phone
 
-Your phone can stop an agent's turn — interrupt what it is doing, as Esc does at your
-desk — if the agent's file says which keys do that:
-
-```yaml
-interrupt: [escape]     # the keys that interrupt its turn
-```
-
-One to four keys, written as for `answer`. Hivemind types them only while the agent is at
-work or waiting, and its status says it was interrupted. Read the key from the real
-program: Claude Code shows "esc to interrupt" while it works. Some CLIs quit on a second
-Ctrl+C, so never guess. An agent whose file says nothing here has no Stop on your phone;
-you can still close it there.
-
-## The conversation on your phone
-
-Your phone can show what the agent and you say to each other as a conversation, rather than
-its terminal, if Hivemind can read the agent's own session file. Hivemind knows no agent's
-format: the manifest maps it under `session.transcript`, beside `resume.exists`, which says where
-the file is. The file is read one JSON record a line; each rule under `said` says which records
-it reads (`require`: fields equal to these values), whether it reads the record itself or each
-item of a list in it (`each`, the items `item` requires), and what it reads there, exactly one of:
-
-- `text` and `who` (`person` or `agent`): what was said, in markdown;
-- `tool`: a tool the agent used, its `id` and `name`, and `about`, the first of these fields
-  that is text (its first line, at most 120 characters; whole, up to 4,000, on a prompt waiting on
-  you), and `asks`, the questions it asks you: `list`, where they are, and in each its
-  `question`, its `options`, each option's `label` and `description` (what it means, shown under
-  it), and `many`, whether several may be chosen; and `input`, the field holding its input, which your phone shows whole when you open
-  the tool's row (text as it is, anything else as JSON);
-- `result`: what a tool gave back, `of` the use it answers, its `text` (text, or a list whose
-  items' `text` are joined a line each, cut to 2,000 characters in the conversation, whole up to
-  256 KiB when you open the tool's row), and `error` when that field is `true`.
-
-Rules over the same list read it together, each item by the first rule that requires it, in the
-list's order. A record with a value under `skipWhen`, or with no `id` or no `at` (an ISO 8601
-time), says nothing. Claude Code's, as its manifest maps it:
+If the agent writes its session as JSON lines, `session.transcript` maps that file to messages,
+tool uses and results, and the phone shows a chat instead of a terminal. Claude Code's mapping:
 
 ```yaml
 session:
@@ -320,16 +157,11 @@ session:
         asks: { list: input.questions, question: question, options: options, label: label, description: description, many: multiSelect }
 ```
 
-Hivemind finds the file for the session the agent's tile is in, reads its end, and sends your
-phone each new piece as it is written. `conformance/conversation.json` has cases to check a mapping
-against. When the agent begins another session (Claude Code's `/clear`), your phone moves to it
-once its file is written; for that, the agent's tracker hook (or `launch.hcp`, which gives the
-agent its tile as `$HIVEMIND_TILE`) has to record the new session for its tile.
+`conformance/conversation.json` in the repository has cases to test a mapping against.
 
-## Icons
+## Icon
 
-Draw the icon with shapes rather than SVG markup. Hivemind builds the markup from your
-values, so nothing in the file can become an element or an event handler.
+Draw it with shapes; Hivemind builds the SVG, so nothing in the file becomes markup:
 
 ```yaml
 icon:
@@ -340,12 +172,7 @@ icon:
     - circle: { cx: 12, cy: 16, r: 2 }
 ```
 
-Shapes can be `path`, `rect`, `circle` or `ellipse`. Leave `icon` out and the generic
-agent icon is used.
+## Before you install someone else's
 
-## Before you install someone else's agent
-
-An agent file tells Hivemind which program to start in your terminal, with your
-permissions, in your project. That is what an agent is for, so there is no sandbox that
-could make it safe. Only install agents whose author you trust, and read the `bin` and
-`spawn` fields first.
+An agent file starts a program in your terminal, with your permissions. There is no sandbox. Read
+its `bin` and `spawn` first, and install only agents whose author you trust.

@@ -14,10 +14,20 @@ export default defineConfig({
     social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/dip497/hivemind' }],
     customCss: ['./src/styles/docs.css'],
     sidebar: [
-      { label: 'Start here', items: [{ label: 'Introduction', slug: 'guide' }, { label: 'Getting started', slug: 'guide/getting-started' }] },
-      { label: 'Use Hivemind', items: ['guide/workspaces', 'guide/agents', 'guide/agent-providers', 'guide/views', 'guide/widgets', 'guide/machines', 'guide/multiplayer', 'guide/phone', 'guide/connect', 'guide/appearance', 'guide/self-hosting'] },
-      { label: 'For agents', items: ['guide/agent-workflows', 'guide/cli'] },
-      { label: 'Build with Hivemind', items: ['guide/packages', 'guide/extension-authoring', 'guide/tool-plugins', 'guide/contributing', 'guide/troubleshooting'] },
+      { label: 'Get started', items: [
+        { label: 'Introduction', slug: 'guide' },
+        { label: 'Install and first agent', slug: 'guide/getting-started' },
+      ] },
+      { label: 'Use Hivemind', items: [
+        { label: 'The workspace', items: ['guide/workspaces', 'guide/views', 'guide/issues', 'guide/review'] },
+        { label: 'Agents', items: ['guide/agents', 'guide/agent-workflows'] },
+        { label: 'Other computers', items: ['guide/machines', 'guide/host'] },
+        { label: 'People and devices', items: ['guide/connect', 'guide/multiplayer', 'guide/phone', 'guide/self-hosting'] },
+        'guide/appearance',
+      ] },
+      { label: 'Extend', items: ['guide/plugins', 'guide/agent-providers', 'guide/extension-authoring', 'guide/widgets', 'guide/tool-plugins'] },
+      { label: 'API', items: ['guide/api', 'guide/api-tokens', 'guide/api-connect', 'guide/api-methods'] },
+      { label: 'Reference', items: ['guide/cli', 'guide/troubleshooting', 'guide/contributing'] },
     ],
     head: [
       { tag: 'link', attrs: { rel: 'alternate', type: 'text/markdown', href: `${base}/llms.txt` } },

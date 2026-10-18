@@ -17,6 +17,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - A new agent starts as the agent you chose in Settings everywhere one starts (Send to agent, a view, a plugin, the toolbar), or the first one installed, never one this machine does not have. Send to agent offers a new tile of every installed agent, your chosen one first, its search finds them, and a prompt sent to an agent tile reaches it whichever agent it runs.
 
+- The guide is reorganised into Get started, Use Hivemind, Extend, API and Reference, with shorter pages and new diagrams, and a new API section on tokens, roles and calling a workspace from your own program.
+
 - Agents keep running through an upgrade on every platform: macOS no longer refuses an upgrade while agents run, Windows keeps each version in a folder of its own, an AppImage started directly keeps its agents when the app quits, and a machine's agents survive an update of `hive` there.
 
 - Agents keep running through an app upgrade: the new app takes over the running terminal daemon, and a tile shows what its agent did meanwhile. When a release changes how the daemon talks, agents finish their turn, then come back in the same conversation.
