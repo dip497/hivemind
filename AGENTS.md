@@ -47,14 +47,14 @@ Run the relevant e2e when you touch canvas/frame/tile/issue behavior.
 - **TypeScript strict.** No `any` escapes without reason.
 - **Comments document _why_**, especially load-bearing trade-offs and the
   non-obvious. Match the density of the surrounding file. No restating the code.
-- **Icons:** `lucide-react` only — never emoji or unicode glyphs as UI icons
+- **Icons:** from `components/icons` only — never emoji or unicode glyphs as UI icons
   (they render inconsistently and aren't theme-colorable).
 - **Design tokens:** use the `var(--color-*)` palette + the `.u-eyebrow` utility;
   don't hard-code hex. Informational text uses `--color-fg2` (passes WCAG AA);
   `--color-fg3` is decoration only. Add `aria-label` to icon-only buttons and a
   focus ring to every input.
-- **Commit messages** end with: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
-  Commit to `main`, in logical chunks. Keep stray files (`.rig/`, scratch) out of
+- **Commits:** no Co-Authored-By or Claude trailers. Work on a branch and open a PR;
+  don't commit to `main`. Commit in logical chunks. Keep stray files (`.rig/`, scratch) out of
   commits — add explicit paths, don't `git add -A` blindly.
 - **CHANGELOG hand-off rule:** anything that ships to users gets a one-line entry
   under `## [Unreleased]` in `CHANGELOG.md` before you hand back.

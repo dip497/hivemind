@@ -1,4 +1,4 @@
-/** Installing by name from HiveHub: `hive views install @owner/name`, `hive widgets install @owner/name`, `hive tools install owner/name`, `hive agents install gemini`. The catalog and the
+/** Installing by name from HiveHub: `hive views install @owner/name`, `hive widgets install @owner/name`, `hive tools install owner/name`, `hive agents install amp`. The catalog and the
  *  download are the app's own (`@hivemind/core/plugin-catalog`), so every file is checked
  *  against the hash HiveHub recorded when it was published — the same check the app makes. */
 import pkg from "../package.json" with { type: "json" };
