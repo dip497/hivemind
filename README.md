@@ -17,8 +17,8 @@
   <a href="https://hivemind.griiken.com/"><img alt="An agent's terminal asking to edit a file, and above it a widget an agent wrote and keeps up to date" src="site/public/shots/hero/poster.webp" /></a>
 </p>
 
-Hivemind is a desktop app for the agent CLIs you already use: Claude Code, Codex, Pi and the
-others on HiveHub. Each agent gets a real terminal on one board, and you see at a glance which one
+Hivemind is a desktop app for every coding agent that runs in a terminal: Claude Code, Codex, Pi,
+and the one that ships tomorrow. Each agent gets a real terminal on one board, and you see at a glance which one
 is working, which is done and which is waiting on you. MIT licensed, on your own computer, with no
 account.
 

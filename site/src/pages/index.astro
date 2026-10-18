@@ -99,7 +99,7 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
     <div class="wrap">
       <div class="hero-copy">
         <h1>Your agents build the workspace they work in.</h1>
-        <p class="lede">Run Claude, Codex and {icons.total - 2} more agent CLIs side by side, and have them write your widgets, tools and views.</p>
+        <p class="lede">Run every coding agent side by side, from Claude and Codex to the one that ships tomorrow, and have them write your widgets, tools and views.</p>
         <div class="hero-act">
           <div class="install">
             <code>{install}</code>
@@ -119,8 +119,8 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
   <section class="band" id="agents" aria-labelledby="agents-h">
     <div class="wrap">
       <div class="head">
-        <h2 id="agents-h">Bring the agents you already use</h2>
-        <p class="sub">The app adds each of the {icons.total} agents on HiveHub once its command is on your machine.</p>
+        <h2 id="agents-h">Every coding agent, even the one that ships tomorrow</h2>
+        <p class="sub">Install an agent's CLI and it is on the board. For one Hivemind has never seen, your agent reads its <code>--help</code> and writes the file that teaches Hivemind to run it.</p>
       </div>
       <ul class="agents">
         {agents.map((a) => (
@@ -132,8 +132,12 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
             <code class="a-id">{a.id}</code>
           </li>
         ))}
+        <li class="a-next">
+          <span class="mono-mark" aria-hidden="true">+</span>
+          <a class="a-name" href={link('guide/agent-providers/')}>Any other</a>
+          <code class="a-id">your agent adds it</code>
+        </li>
       </ul>
-      <p class="after"><a href={link('guide/agent-providers/')}>Add one that is missing</a></p>
     </div>
   </section>
 
@@ -340,7 +344,7 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
         <dt>Is there a phone app?</dt>
         <dd>Not a published one; the phone page runs in your browser.</dd>
         <dt>Which agents work with it?</dt>
-        <dd>The {icons.total} on HiveHub, or any CLI you write a manifest for.</dd>
+        <dd>Any coding agent that runs in a terminal. The ones below are found on their own; your agent adds any other in one file.</dd>
       </dl>
     </div>
   </section>
@@ -524,6 +528,9 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
     font:500 11px/1 var(--f-m);color:var(--fg)}
   .a-name{color:var(--fg);font-size:15px;font-weight:500}
   .a-id{grid-column:2;font-size:12px;color:var(--fg3) !important}
+  .a-next .mono-mark{border-style:dashed}
+  .a-next .a-name{text-decoration:underline;text-decoration-color:var(--line2)}
+  .a-next .a-name:hover{text-decoration-color:var(--fg2)}
 
   /* Plugins: three kinds, each a clip beside what it is. */
   .kinds{display:grid;gap:72px}

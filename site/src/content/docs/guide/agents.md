@@ -21,7 +21,7 @@ hive agents remove codex      # removed, and not added again at start
 ```
 
 To stop automatic adding, switch off **Add agents found on this machine** in Settings ▸ Plugins.
-HiveHub lists 21 agents, among them aider, amp, claude, cline, codex, copilot, cursor, droid,
+Any coding agent that runs in a terminal works. HiveHub already has files for, among others, aider, amp, claude, cline, codex, copilot, cursor, droid,
 kiro, opencode, pi and qwen-code. To write your own: [Add your own agent](../agent-providers/).
 
 ## Switch one off, pick the default
