@@ -133,6 +133,33 @@ test("snoozed tiles leave every list, pinned too, until their time; one that nee
   assert.deepEqual(ids(v.byFrame.get("f1")!), ["asks", "woke"]);
 });
 
+test("hide asleep leaves asleep tiles out of every grouping but Pinned, counts them, and drops a frame left empty", () => {
+  const tiles = [
+    tile("awake"),
+    tile("dozing", { sleeping: true }),
+    tile("pinned-dozing", { sleeping: true }),
+    tile("all-asleep", { sleeping: true, frameId: "f2" }),
+    tile("snoozed-dozing", { sleeping: true, snoozedUntil: NOW + HOUR }),
+    tile("filtered-out", { sleeping: true, status: "exited" }),
+  ];
+  const at = (prefs: Partial<LayersPrefs>, hideAsleep: boolean) =>
+    layersView({ tiles, pinned: ["pinned-dozing"], prefs: { ...DEFAULT_LAYERS_PREFS, ...prefs }, now: NOW, agentLabel: () => "Claude", hideAsleep });
+  const off = at({}, false);
+  assert.deepEqual(ids(off.byFrame.get("f1")!), ["awake", "dozing", "filtered-out"]);
+  assert.equal(off.hiddenAsleep, 0);
+  assert.equal(off.filtering, false);
+  const on = at({}, true);
+  assert.deepEqual(ids(on.pinned), ["pinned-dozing"]);
+  assert.deepEqual(ids(on.byFrame.get("f1")!), ["awake"]);
+  assert.equal(on.byFrame.has("f2"), false);
+  assert.deepEqual(ids(on.snoozed), []);
+  assert.equal(on.hiddenAsleep, 4);
+  assert.equal(on.filtering, true);
+  assert.deepEqual(at({ groupBy: "agent" }, true).buckets.map((b) => [b.label, ids(b.tiles)]), [["Claude", ["awake"]]]);
+  // Only what the other choices would have listed counts as hidden.
+  assert.equal(at({ status: "idle" }, true).hiddenAsleep, 3);
+});
+
 const ROWS = [
   { agent: "claude", id: "a", folder: "/r", updated: NOW - 3 * DAY_MS, prompt: "fix the share dialog" },
   { agent: "codex", id: "b", folder: "/r", updated: NOW - HOUR, prompt: "hooks review" },
