@@ -132,4 +132,99 @@ function issueStates() {
   return d;
 }
 
-export default [connectOffer, phoneReach, phoneTerminal, widgetsRunner, issueStates, homeYours];
+function apiDrive() {
+  const d = new Diagram({
+    slug: 'api-drive', w: 800, h: 260,
+    title: 'How a program drives a workspace',
+    desc: 'Your program connects to the drive socket on this computer and says hello with its token. Each call is checked against the role the token was made with: an allowed call reaches the workspace, its agents, terminals and board; any other call is refused with FORBIDDEN.',
+  });
+  const mid = 58;
+  d.wire([[190, mid], [250, mid]]); d.label(220, mid - 16, 'token');
+  d.wire([[420, mid], [440, mid]]);
+  d.wire([[560, mid], [620, mid]], { accent: true }); d.label(590, mid - 16, 'allowed');
+  d.wire([[500, mid + 42], [500, 150]], { dashed: true }); d.label(512, 125, 'not allowed', { anchor: 'start' });
+  d.node(20, 20, 170, 76, 'Your program', { sub: ['script, dashboard,', 'orchestrator'] });
+  d.node(250, 20, 170, 76, 'Drive socket', { sub: 'drive.sock', mono: true });
+  diamond(d, 500, mid, 60, 42, 'Role', 'of the token');
+  d.node(620, 20, 160, 76, 'The workspace', { sub: ['agents, terminals,', 'board'], focal: true });
+  d.node(420, 150, 160, 56, 'Refused', { sub: 'FORBIDDEN', mono: true });
+  d.note(400, 244, 'Make the token in Settings → API access, or with hive grant create.', { size: 12 });
+  return d;
+}
+
+function pluginKinds() {
+  const d = new Diagram({
+    slug: 'plugins-kinds', w: 700, h: 340,
+    title: 'Where each kind of plugin sits',
+    desc: 'A view draws the whole workspace. Inside it sit tiles: an agent tile started from an agent file, a terminal, and a tool tile drawn by a tool plugin. A widget is a small card that floats above every view.',
+  });
+  d.raw(`<rect x="20" y="20" width="660" height="270" rx="10" fill="none" stroke="${C.ruleSolid}" stroke-width="1"/>`, false);
+  d.note(38, 44, 'Hivemind window', { anchor: 'start', color: C.ink, size: 13, weight: 600 });
+  d.raw(`<rect x="40" y="60" width="430" height="210" rx="8" fill="none" stroke="${C.soft}" stroke-width="1" stroke-dasharray="5,4"/>`, false);
+  d.note(56, 86, 'View: draws the workspace (Canvas, Windows, or one you add)', { anchor: 'start', size: 12 });
+  d.node(60, 110, 120, 76, 'Agent tile', { sub: 'agent.yaml', mono: true });
+  d.node(190, 110, 110, 76, 'Terminal', { sub: 'built in' });
+  d.node(310, 110, 145, 76, 'Tool tile', { sub: 'hivemind-tool.json', mono: true });
+  d.note(255, 226, 'Each tile is lent to the view.', { size: 12 });
+  d.note(255, 244, 'Switching views keeps it running.', { size: 12 });
+  d.node(495, 110, 165, 76, 'Widget', { sub: 'widget.json', mono: true, focal: true });
+  d.note(577, 212, 'a small card that floats', { size: 12 });
+  d.note(577, 230, 'above every view', { size: 12 });
+  d.note(350, 322, 'Install any of them from Settings ▸ Plugins, or from HiveHub with hive.', { size: 12 });
+  return d;
+}
+
+function workflowsLoop() {
+  const d = new Diagram({
+    slug: 'workflows-loop', w: 700, h: 232,
+    title: 'One agent drives others',
+    desc: 'You, or a lead agent, start worker agents and send them work with hive ctl. Each worker replies when its turn ends; you collect it with hive ctl read or from your inbox. A worker that stops to ask something tells your inbox, and you answer or approve it.',
+  });
+  d.wire([[190, 54], [480, 54]]); d.label(335, 38, 'spawn · send');
+  d.wire([[480, 102], [190, 102]], { accent: true }); d.label(335, 118, 'reply: read · inbox');
+  d.wire([[575, 116], [575, 170], [105, 170], [105, 116]], { dashed: true }); d.label(340, 170, 'asks something → inbox → approve');
+  d.node(20, 40, 170, 76, 'You or a lead agent', { sub: 'hive ctl', mono: true, focal: true });
+  d.raw(`<rect x="496" y="24" width="190" height="76" rx="6" fill="${C.paper2}" stroke="${C.ruleSolid}" stroke-width="1"/>`);
+  d.raw(`<rect x="488" y="32" width="190" height="76" rx="6" fill="${C.paper}" stroke="${C.ruleSolid}" stroke-width="1"/>`);
+  d.node(480, 40, 190, 76, 'Worker agents', { sub: 'one per task' });
+  d.note(350, 216, 'hive ctl workflow runs fanout, pipeline and mapreduce over many workers.', { size: 12 });
+  return d;
+}
+
+function machinesSsh() {
+  const d = new Diagram({
+    slug: 'machines-ssh', w: 760, h: 260,
+    title: 'A frame on a machine',
+    desc: 'Your computer reaches the machine over ssh. On the machine, the hive daemon runs the terminals and agents of the frame, in its folder, and keeps them running when the connection drops or the app quits.',
+  });
+  d.raw(`<rect x="290" y="24" width="450" height="180" rx="10" fill="none" stroke="${C.ruleSolid}" stroke-width="1"/>`, false);
+  d.note(306, 48, 'The machine', { anchor: 'start', color: C.ink, size: 13, weight: 600 });
+  d.wire([[200, 108], [320, 108]], { link: true }); d.label(258, 92, 'ssh');
+  d.wire([[500, 108], [540, 108]]);
+  d.node(20, 70, 180, 76, 'Your computer', { sub: 'the Hivemind app', focal: true });
+  d.node(320, 70, 180, 76, 'hive daemon', { sub: 'on the machine' });
+  d.node(540, 70, 180, 76, 'Terminals, agents', { sub: "in the frame's folder" });
+  d.note(515, 180, 'They keep running when the link drops or the app quits.', { size: 12 });
+  d.note(380, 240, 'One ssh connection per machine, with your own keys and ~/.ssh/config.', { size: 12 });
+  return d;
+}
+
+function hostMove() {
+  const d = new Diagram({
+    slug: 'host-move', w: 760, h: 270,
+    title: 'A host keeps a workspace up',
+    desc: 'Move there hands a workspace from your computer to a host that runs hive host; Move here brings it back. While the host has it, guests and your phone reach it there, whatever your computer does.',
+  });
+  d.wire([[200, 104], [300, 104]], { accent: true }); d.label(250, 88, 'Move there');
+  d.wire([[300, 136], [200, 136]]); d.label(250, 152, 'Move here');
+  d.wire([[480, 104], [530, 104], [530, 70], [580, 70]], { start: true });
+  d.wire([[480, 136], [530, 136], [530, 160], [580, 160]], { start: true });
+  d.node(20, 82, 180, 76, 'Your computer', { sub: 'sleeps, travels' });
+  d.node(300, 82, 180, 76, 'Host', { sub: 'hive host', mono: true, focal: true });
+  d.node(580, 40, 160, 60, 'Guests');
+  d.node(580, 130, 160, 60, 'Your phone');
+  d.note(380, 240, 'The workspace, its agents and its people stay up while your computer is off.', { size: 12 });
+  return d;
+}
+
+export default [connectOffer, phoneReach, phoneTerminal, widgetsRunner, issueStates, homeYours, apiDrive, pluginKinds, workflowsLoop, machinesSsh, hostMove];
