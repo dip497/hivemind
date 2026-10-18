@@ -59,7 +59,7 @@ test("capture", async () => {
   await desktop.waitForTimeout(800);
   await s.tidy(Object.values(frameIds));
 
-  const rec = recorder(app, OUT);
+  const rec = recorder(s, OUT);
   const { beat, burst, boxes } = rec;
   const phoneShot = (name: string) => rec.still(phone, `phone-${name}`);
   const tile = (id: string) => `.react-flow__node[data-id="${id}"]`;

@@ -22,10 +22,13 @@ export type Cues = {
   size: { width: number; height: number };
   phone: { width: number; height: number };
   boxes: Record<string, Box>;
-  shots: { beat: string; files: string[]; at: number[] }[];
+  shots: { beat: string; files: string[]; at: number[]; layout?: number[] }[];
   /** The agents' tiles on the board as recorded. */
   tiles?: Box[];
+  /** Where each frame's parts are (its shot's `layout` says which), so no crop cuts through one. */
+  layouts?: Part[][];
 };
+type Part = Box & { what: string };
 /** `box` names one box, or several joined by "+" to frame them together; `lift` raises it by that
  *  share of the view, leaving room below it. */
 type Key = { u: number; box: string; pad?: number; lift?: number };
@@ -174,6 +177,29 @@ function Capture({ cues, shot, t, cam, win }: { cues: Cues; shot: Shot; t: numbe
   );
 }
 
+/** Fails the render when `crop` cuts through a part of `file` side to side: a crop holds a
+ *  part's whole width or none of it. */
+function checkCrop(cues: Cues, file: string, crop: Box, t: number) {
+  const shot = cues.shots.find((s) => s.files.includes(file));
+  const index = shot?.layout?.[shot.files.indexOf(file)];
+  if (index === undefined || !cues.layouts) throw new Error(`${file} was recorded without its layout: record it again`);
+  const e = 2;
+  const across = (x: number, p: Part) => p.x < x - e && p.x + p.w > x + e;
+  const cut = cues.layouts[index]!.find((p) => p.y < crop.y + crop.h - e && p.y + p.h > crop.y + e && (across(crop.x, p) || across(crop.x + crop.w, p)));
+  if (cut) throw new Error(`${t.toFixed(2)} s, ${file}: the crop (x ${Math.round(crop.x)} to ${Math.round(crop.x + crop.w)}) cuts ${cut.what} (x ${Math.round(cut.x)} to ${Math.round(cut.x + cut.w)})`);
+}
+const inside = (b: Box, w: number, h: number): Box => {
+  const x = Math.max(0, b.x), y = Math.max(0, b.y);
+  return { x, y, w: Math.min(w, b.x + b.w) - x, h: Math.min(h, b.y + b.h) - y };
+};
+/** The part of a device's page its pane shows. */
+function paneCrop(pane: Pane): Box {
+  if (pane.part) return pane.part;
+  const s = Math.max(pane.rect.w / pane.size.width, pane.rect.h / pane.size.height);
+  const w = pane.rect.w / s;
+  return { x: (pane.size.width - w) / 2, y: 0, w, h: pane.rect.h / s };
+}
+
 const partScale = (pane: Pane) => pane.rect.w / (pane.part?.w ?? pane.size.width);
 
 /** Another device's page: a browser's or a phone's, flat, with a one-pixel edge. */
@@ -219,12 +245,15 @@ export function Clip({ story, cues }: ClipProps) {
   const ring = pointer?.click !== undefined ? clamp((t - pointer.click) / 0.2) : 0;
   const ending = story.end && t >= story.end.start;
   const framed = isolated(cues, shot, t, win);
+  const away = Math.max(0, ...(story.away ?? []).map((a) => shown(t, a.start, a.end)));
+  if (away < 0.99) checkCrop(cues, frameOf(cues, shot, t), inside(framed.cam, cues.size.width, cues.size.height), t);
+  for (const p of story.panes ?? []) if (t >= p.start && t < p.end) checkCrop(cues, fileAt(p.shots, t), inside(paneCrop(p), p.size.width, p.size.height), t);
 
   return (
     <AbsoluteFill style={{ background: BG }}>
       <div style={{
         position: "absolute", left: framed.win.x, top: framed.win.y, width: framed.win.w, height: framed.win.h, overflow: "hidden",
-        opacity: 1 - Math.max(0, ...(story.away ?? []).map((a) => shown(t, a.start, a.end))),
+        opacity: 1 - away,
         borderRadius: 10, background: BG, boxShadow: `0 0 0 1px ${framed.k > 0.5 ? EDGE : LINE}, 0 10px 30px rgba(0,0,0,.35)`,
       }}>
         <Capture cues={cues} shot={shot} t={t} cam={framed.cam} win={framed.win} />

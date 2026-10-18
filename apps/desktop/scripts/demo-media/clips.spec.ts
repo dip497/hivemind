@@ -72,7 +72,7 @@ test("widgets", async () => {
   await s.tidy([frames.fastapi]);
   await s.quiet();
 
-  const rec = recorder(s.app, path.join(OUT, "widgets"), OUT);
+  const rec = recorder(s, path.join(OUT, "widgets"), OUT);
   await rec.burst("board", 4);
   // One after another, as a person adds them from the Add menu or an agent opens them.
   const adding = rec.beat("adding");
@@ -118,7 +118,7 @@ test("tools", async () => {
   await s.tidy(Object.values(frames));
   await s.quiet();
 
-  const rec = recorder(s.app, path.join(OUT, "tools"), OUT);
+  const rec = recorder(s, path.join(OUT, "tools"), OUT);
   const opened = JSON.parse(cli("ctl", "plugin", "open", "tool:dip497/flaky-tests", "--frame", frames.ripgrep, "--json").stdout || "{}").tile as string;
   expect(opened, "flaky-tests opened in a tile").toBeTruthy();
   await s.emit("hivemind:focus-tile", opened);
@@ -170,7 +170,7 @@ test("views", async () => {
   await s.tidy(Object.values(frames));
   await s.quiet();
 
-  const rec = recorder(s.app, path.join(OUT, "views"), OUT);
+  const rec = recorder(s, path.join(OUT, "views"), OUT);
   await rec.burst("board", 4);
   for (const name of ["agents-by-state", "timeline", "constellation"]) {
     const id = `@dip497/${name}`;
@@ -224,7 +224,7 @@ test("machines", async () => {
   await busy(s, [local]);
   await s.tidy([frames.fastapi]);
 
-  const rec = recorder(s.app, path.join(OUT, "machines"), OUT);
+  const rec = recorder(s, path.join(OUT, "machines"), OUT);
   await rec.burst("one", 4);
   // Added as a person adds one; the address names no user, so ssh logs in as this one.
   await desktop.locator('.hm-layers [data-layers-rail="machines"]').click();
@@ -294,7 +294,7 @@ test("devices", async () => {
   await emit("hivemind:focus-tile", release);
   await desktop.waitForTimeout(1500);
 
-  const rec = recorder(s.app, path.join(OUT, "devices"), OUT);
+  const rec = recorder(s, path.join(OUT, "devices"), OUT);
   await rec.box(desktop, `.react-flow__node[data-id="${release}"]`, "release");
   // The same question on all three; the person answers it on the phone, and all three move on.
   const desk = rec.beat("desktop");
@@ -327,7 +327,7 @@ test("join", async () => {
   const guest = await stage(root, apps, { name: "guest", cwd: elsewhere });
   await guest.desktop.evaluate(() => window.hive.settingsSet("profile.name", "Sam"));
 
-  const rec = recorder(host.app, path.join(OUT, "join"), OUT);
+  const rec = recorder(host, path.join(OUT, "join"), OUT);
   const both = async (name: string, n = 1) => {
     const b = rec.beat(name);
     for (let i = 0; i < n; i++) { await b(); await rec.still(guest.desktop, `${name}-guest-${i}`); await pause(250); }

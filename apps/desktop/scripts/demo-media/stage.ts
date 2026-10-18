@@ -228,22 +228,97 @@ export async function stage(root: string, apps: ElectronApplication[], { name = 
 /** Records a clip into `out`: bursts of the app window, single shots of other pages, and the boxes
  *  the camera frames, all written to `out`/cues.json by `save`. File names in the cues are
  *  relative to `base`, the folder the renderer serves. */
-export function recorder(app: ElectronApplication, out: string, base = out) {
+/** What a crop may show whole or not at all: each visible line of text, terminal screen, tile,
+ *  widget, dialog and side panel, in the page's CSS pixels, and named. Covered ones are left out. */
+export type Part = Box & { what: string };
+const PARTS = '.react-flow__node:not(.react-flow__node-frame), [data-widget], .xterm-screen, [role="dialog"], .hm-layers';
+function partsInFrame(selector: string): Part[] {
+  const parts: Part[] = [];
+  const view = { l: 0, t: 0, r: innerWidth, b: innerHeight };
+  const clips = new Map<Element, typeof view>();
+  const clipOf = (el: Element) => {
+    let c = clips.get(el);
+    if (c) return c;
+    c = { ...view };
+    for (let e: Element | null = el; e && e !== document.documentElement; e = e.parentElement) {
+      const st = getComputedStyle(e);
+      if (st.overflowX === "visible" && st.overflowY === "visible") continue;
+      const r = e.getBoundingClientRect();
+      c = { l: Math.max(c.l, r.left), t: Math.max(c.t, r.top), r: Math.min(c.r, r.right), b: Math.min(c.b, r.bottom) };
+    }
+    clips.set(el, c);
+    return c;
+  };
+  const seen = (el: Element) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  const onTop = (el: Element, x: number, y: number) => { const top = document.elementFromPoint(x, y); return !!top && (el.contains(top) || top.contains(el)); };
+  const add = (r: DOMRect, el: Element, what: string) => {
+    const c = clipOf(el);
+    const l = Math.max(r.left, c.l), t = Math.max(r.top, c.t), rr = Math.min(r.right, c.r), b = Math.min(r.bottom, c.b);
+    if (rr - l < 1 || b - t < 1 || !onTop(el, (l + rr) / 2, (t + b) / 2)) return;
+    parts.push({ x: l, y: t, w: rr - l, h: b - t, what });
+  };
+  for (const el of document.querySelectorAll(selector)) if (seen(el)) add(el.getBoundingClientRect(), el, el.getAttribute("aria-label") || String(el.className).split(" ")[0] || el.tagName);
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const text = n.textContent?.trim();
+    const el = n.parentElement;
+    if (!text || !el || el.closest(".xterm") || !seen(el)) continue;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) add(r, el, JSON.stringify(text.slice(0, 40)));
+  }
+  return parts;
+}
+/** `page`'s parts, its frames' too, in its capture's pixels (`scale` to a CSS pixel). */
+async function partsOf(page: Page, scale: number): Promise<Part[]> {
+  const all: Part[] = [];
+  for (const frame of page.frames()) {
+    const at = frame === page.mainFrame() ? { x: 0, y: 0 } : await (await frame.frameElement().catch(() => null))?.boundingBox();
+    if (!at) continue;
+    const found = await frame.evaluate(partsInFrame, PARTS).catch(() => [] as Part[]);
+    for (const p of found) all.push({ x: (p.x + at.x) * scale, y: (p.y + at.y) * scale, w: p.w * scale, h: p.h * scale, what: p.what });
+  }
+  return all;
+}
+
+/** What no frame may show: the account's usage, which Claude prints in its footer near a limit. */
+const PRIVATE = /session\s*limit|usage-credits|resets\s*\d/i;
+
+/** Records `s`'s window into `out`/frames: each frame with where its parts are, so a render can
+ *  refuse a crop through one, and a frame whose agents' screens show something private fails. */
+export function recorder(s: Stage, out: string, base = out) {
+  const { app, desktop } = s;
   fs.rmSync(path.join(out, "frames"), { recursive: true, force: true });
   fs.mkdirSync(path.join(out, "frames"), { recursive: true });
   const t0 = Date.now();
-  const shots: { beat: string; files: string[]; at: number[] }[] = [];
+  const shots: { beat: string; files: string[]; at: number[]; layout: number[] }[] = [];
+  const layouts: Part[][] = [];
+  const keys = new Map<string, number>();
   const boxes: Record<string, Box> = {};
   const rel = (file: string) => path.relative(base, path.join(out, file));
+  const layout = (parts: Part[]) => {
+    const key = JSON.stringify(parts);
+    if (!keys.has(key)) { keys.set(key, layouts.length); layouts.push(parts); }
+    return keys.get(key)!;
+  };
+  const private_ = (file: string) => {
+    for (const r of s.census().rows) {
+      const screen = s.cli("ctl", "stream", r.tile, "--snapshot", "--lines", "60").stdout;
+      const m = PRIVATE.exec(screen);
+      if (m) throw new Error(`${file}: ${s.names[r.tile] ?? r.tile} shows ${JSON.stringify(m[0])} on its screen`);
+    }
+  };
   const beat = (name: string) => {
-    const s = { beat: name, files: [] as string[], at: [] as number[] };
-    shots.push(s);
+    const shot = { beat: name, files: [] as string[], at: [] as number[], layout: [] as number[] };
+    shots.push(shot);
     return async () => {
-      const file = `frames/${name}-${String(s.files.length).padStart(3, "0")}.png`;
-      s.at.push(Date.now() - t0);
+      const file = `frames/${name}-${String(shot.files.length).padStart(3, "0")}.png`;
+      shot.at.push(Date.now() - t0);
       const png = await app.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0]!.webContents.capturePage()).toPNG().toString("base64"));
+      shot.layout.push(layout(await partsOf(desktop, 2)));
       fs.writeFileSync(path.join(out, file), Buffer.from(png, "base64"));
-      s.files.push(rel(file));
+      shot.files.push(rel(file));
+      private_(file);
     };
   };
   const burst = async (name: string, frames = BURST.frames) => {
@@ -253,8 +328,9 @@ export function recorder(app: ElectronApplication, out: string, base = out) {
   /** A still of another page (a browser, a phone), named `name`. */
   const still = async (page: Page, name: string) => {
     const file = `frames/${name}.png`;
+    const parts = await partsOf(page, 2);
     await page.screenshot({ path: path.join(out, file) });
-    shots.push({ beat: name, files: [rel(file)], at: [Date.now() - t0] });
+    shots.push({ beat: name, files: [rel(file)], at: [Date.now() - t0], layout: [layout(parts)] });
   };
   /** Where `sel` is in the window's capture (twice its CSS pixels). */
   const box = async (page: Page, sel: string, as: string) => {
@@ -263,7 +339,7 @@ export function recorder(app: ElectronApplication, out: string, base = out) {
     return boxes[as]!;
   };
   const save = (more: Record<string, unknown> = {}) => {
-    fs.writeFileSync(path.join(out, "cues.json"), JSON.stringify({ size: { width: SIZE.width * 2, height: SIZE.height * 2 }, phone: { width: 780, height: 1688 }, boxes, shots, ...more }, null, 2));
+    fs.writeFileSync(path.join(out, "cues.json"), JSON.stringify({ size: { width: SIZE.width * 2, height: SIZE.height * 2 }, phone: { width: 780, height: 1688 }, boxes, shots, layouts, ...more }, null, 2));
   };
   return { beat, burst, still, box, boxes, shots, save };
 }
