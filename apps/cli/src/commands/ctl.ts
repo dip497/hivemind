@@ -364,6 +364,16 @@ const approve = sub("approve", "Answer a supervised worker's approval request; a
   });
 });
 
+const approval = sub("approval", "Show what a supervised worker's approval request would do, its tool's input whole", {
+  reqId: { type: "positional", required: true },
+  ...repoArg,
+}, (a) => onDrive(async (d) => {
+  const { agents } = await d.call("agent.list", [await workspaceOf(d, a.repo)]) as { agents: Waiting[] };
+  const asking = agents.find((w) => w.waiting?.approval?.request === a.reqId);
+  if (!asking) throw new HcpCliError("NOT_FOUND", `no approval ${String(a.reqId)} is waiting: it was answered, ran out of time, or its worker stopped waiting`, EXIT.notFound);
+  return d.call("agent.approval", [asking.tile]);
+}));
+
 const report = sub("report", "Deliver a message to the tile that spawned you (the parent agent)", {
   message: { type: "positional", required: true },
   tile: { type: "string", description: "report on behalf of this tile, from a terminal (default: $HIVEMIND_TILE — set inside every spawned agent, which reports only as itself)" },
@@ -640,7 +650,7 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, inbox, "open-review": openReview,
+    agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

@@ -825,7 +825,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
             let timer: ReturnType<typeof setTimeout>;
             // The worker waits on its starter; an answer is the decision its hook gets.
             // No answer: "ask" (claude: its own prompt; pi: blocks).
-            const wait = deps.waits.ask(worker, { kind: "approval", tool, summary, expiresAt: Date.now() + APPROVAL_MAX_WAIT_MS, answerer: parent }, (decision, reason) => {
+            const wait = deps.waits.ask(worker, { kind: "approval", tool, summary, input: p.tool_input, expiresAt: Date.now() + APPROVAL_MAX_WAIT_MS, answerer: parent }, (decision, reason) => {
               clearTimeout(timer);
               resolve(decision ? { decision, ...(reason ? { reason } : {}) } : { decision: "ask" });
             });
