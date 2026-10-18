@@ -29,9 +29,10 @@ async function startDaemon(inHive: boolean, prepare?: (dir: string) => Record<st
   const daemon = path.join(here, "../../../../packages/agent-host/src/pty-daemon.ts");
   const proc = inHive ? spawn(BUN, [daemon, sock], { stdio: "ignore", env }) : spawn(process.execPath, ["--import", "tsx", daemon, sock], { stdio: "ignore", env });
   daemons.push(proc);
-  for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await wait(100);
-  await wait(300);
-  return { dir, sock, hcp: path.join(dir, "hcp.sock"), proc };
+  const hcp = path.join(dir, "hcp.sock");
+  // Every daemon holds the hook socket too: ready once both answer.
+  for (let i = 0; i < 300 && !(fs.existsSync(sock) && fs.existsSync(hcp)); i++) await wait(100);
+  return { dir, sock, hcp, proc };
 }
 
 /** Where a push is sent: the pushes it took. It holds no test open that failed before closing it. */
