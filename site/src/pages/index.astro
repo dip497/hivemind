@@ -16,6 +16,35 @@ const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
 const shot = (file: string, width = 1600, height = 1120) => ({ file, width, height });
+type Example = { id: string; name: string; text: string; w?: number; h?: number; alt?: string };
+const examples: { kind: string; one: string; fit: string; items: Example[] }[] = [
+  { kind: 'Widgets', one: 'widget', fit: 'contain', items: [
+    { id: 'waiting-on-you', name: 'Waiting on you', w: 592, h: 421, text: 'Every agent waiting on you, longest first. Press one to go to it.' },
+    { id: 'agent-pulse', name: 'Agent pulse', w: 592, h: 354, text: 'How many agents are working, waiting or idle, and the turns finished today.' },
+    { id: 'focus-timer', name: 'Focus timer', w: 592, h: 381, text: 'Twenty-five minutes of focus, then a break, shared by everyone in the workspace.' },
+    { id: 'ci-light', name: 'CI light', w: 592, h: 436, text: 'The build as a light. When it turns red, an agent can start on the failure.' },
+    { id: 'test-meter', name: 'Test meter', w: 592, h: 477, text: 'The share of tests passing in the last run, beside the runs before it.' },
+    { id: 'spend-today', name: 'Spend today', w: 592, h: 448, text: 'What your agents report they spent today, against a daily budget.' },
+    { id: 'issue-burndown', name: 'Issue burndown', w: 592, h: 846, text: 'The open issues day by day for the last week.' },
+    { id: 'launchpad', name: 'Launchpad', w: 592, h: 476, text: 'Jobs you often hand to an agent, one press each.' },
+  ] },
+  { kind: 'Tools', one: 'tool', fit: 'cover', items: [
+    { id: 'dependency-audit', name: 'Dependency audit', text: 'Your lockfiles checked against OSV, with the version that fixes each advisory.' },
+    { id: 'flaky-tests', name: 'Flaky tests', text: 'Runs the tests several times and puts the flaky ones first.' },
+    { id: 'changelog-writer', name: 'Changelog writer', text: 'A changelog draft from the commits since the last tag.' },
+    { id: 'release-checklist', name: 'Release checklist', text: 'Six checks on whether the repository is ready to release.' },
+    { id: 'bundle-size', name: 'Bundle size', text: "A build folder's files, largest first, with their gzip sizes." },
+    { id: 'sqlite-browser', name: 'SQLite browser', text: "The repository's SQLite files, read-only, with a box for queries." },
+    { id: 'log-tail', name: 'Log tail', text: 'Follows a log file live, each line coloured by its level.' },
+    { id: 'api-explorer', name: 'API explorer', text: 'The HTTP endpoints your code declares, and a form to try each one.' },
+  ] },
+  { kind: 'Views', one: 'view', fit: 'cover', items: [
+    { id: 'constellation', name: 'Constellation', text: 'The workspace in 3D: frames as stars, agents on orbits coloured by state.' },
+    { id: 'timeline', name: 'Timeline', text: 'Today as one row per agent, with each stretch spent working, waiting or idle.' },
+    { id: 'agents-by-state', name: 'Agents by state', text: 'A board of agents by state, longest waiting first, with a live terminal docked beside it.' },
+    { id: 'workspace-map', name: 'Workspace map', text: 'Frames, worktrees and tiles as a map, with the issues beside it.' },
+  ] },
+];
 ---
 <!doctype html>
 <html lang="en" data-theme="dark">
@@ -128,31 +157,31 @@ const shot = (file: string, width = 1600, height = 1120) => ({ file, width, heig
 
       <div class="kinds">
         <article class="kind">
-          <Loop name="widgets" fallback={shot('widget-progress.webp', 1280, 800)}
-            alt="The Progress widget over an agent's terminal: Ship 2026.10.3, 3 of 4 done." />
+          <Loop name="widgets" fallback={shot('showcase/waiting-on-you-board.webp', 1600, 1000)}
+            alt="The Waiting on you widget at the top of the canvas: 2 agents waiting on you, docs-utils for 11 s and binding-test for 9 s." />
           <div class="kind-copy">
             <h3>Widget</h3>
             <p>A small live box that floats above every view. Its code runs in a worker with no
               network and no files.</p>
-            <p class="ex"><code>@dip497/progress</code> A checklist an agent ticks off as it works.</p>
+            <p class="ex"><code>@dip497/progress</code> On HiveHub. A checklist an agent ticks off as it works.</p>
             <a href={link('guide/widgets/')}>Make a widget</a>
           </div>
         </article>
         <article class="kind">
-          <Loop name="tools" fallback={shot('view-canvas.webp')}
-            alt="The Canvas view: frames as zones on a board, with tiles placed inside them." />
+          <Loop name="tools" fallback={shot('showcase/flaky-tests-board.webp', 1600, 1000)}
+            alt="The Flaky tests tool on the canvas: five tests over 8 runs, two marked flaky, each with Ask an agent to fix." />
           <div class="kind-copy">
             <h3>Tool</h3>
             <p>A kind of tile, beside the terminals in every view. It runs inside the app with the
               app's access, so it arrives switched off, and so does each update.</p>
-            <p class="ex"><code>dip497/worktrees</code> Every worktree, its changes and its diffs.</p>
-            <p class="ex"><code>dip497/ci-runs</code> A failed job's lines, a rerun, or the failure handed to an agent.</p>
+            <p class="ex"><code>dip497/worktrees</code> On HiveHub. Every worktree, its changes and its diffs.</p>
+            <p class="ex"><code>dip497/ci-runs</code> On HiveHub. A failed job's lines, a rerun, or the failure handed to an agent.</p>
             <a href={link('guide/tool-plugins/')}>Make a tool</a>
           </div>
         </article>
         <article class="kind">
-          <Loop name="views" fallback={shot('view-board.webp')}
-            alt="The Board view: sessions in Doing, Needs you, Review and Done columns." />
+          <Loop name="views" fallback={shot('showcase/constellation-board.webp', 1600, 1000)}
+            alt="The Constellation view: each frame a star, its agents lights on orbits coloured by what they are doing." />
           <div class="kind-copy">
             <h3>View</h3>
             <p>Draws the whole screen from the frames, tiles and status the app hands it. It runs
@@ -162,6 +191,27 @@ const shot = (file: string, width = 1600, height = 1120) => ({ file, width, heig
             <a href={link('guide/views/')}>Make a view</a>
           </div>
         </article>
+      </div>
+
+      <div class="examples">
+        <div class="ex-head">
+          <h3>Twenty examples to start from</h3>
+          <p>Example plugins in the repository's <a href={`${repo}/tree/main/examples`}><code>examples</code></a> folder, not on HiveHub yet. Copy one and have your agent change it. The agents in these pictures are stand-ins started for the screenshots.</p>
+        </div>
+        {examples.map((group) => (
+          <div class="ex-group">
+            <h4>{group.kind}</h4>
+            <ul class={`ex-grid ${group.fit}`}>
+              {group.items.map((e) => (
+                <li>
+                  <img src={link(`shots/showcase/${e.id}.webp`)} width={e.w ?? 800} height={e.h ?? 500} loading="lazy" decoding="async" alt={e.alt ?? `The ${e.name} ${group.one}.`} />
+                  <code>{e.id}</code>
+                  <p>{e.text}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
       <p class="after"><a href={HIVEHUB}>Browse the plugins on HiveHub</a></p>
     </div>
@@ -543,6 +593,22 @@ const shot = (file: string, width = 1600, height = 1120) => ({ file, width, heig
   .ex{font-size:14.5px}
   .ex code{display:block;font-size:12.5px;color:var(--fg2)}
 
+  /* Examples: real screenshots, grouped by kind. */
+  .examples{margin-top:96px;padding-top:56px;border-top:1px solid var(--line)}
+  .ex-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:48px;align-items:baseline;margin-bottom:40px}
+  .ex-head h3{font-size:24px;letter-spacing:-.02em}
+  .ex-head p{font-size:15.5px;color:var(--fg3);max-width:62ch}
+  .ex-head a{color:var(--fg);text-decoration:underline;text-decoration-color:var(--line2)}
+  .ex-group + .ex-group{margin-top:48px}
+  .ex-group h4{margin:0 0 16px;font:500 13px var(--f-m);color:var(--fg2)}
+  .ex-grid{list-style:none;margin:0;padding:0;display:grid;gap:32px 20px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  .ex-grid li{display:grid;gap:8px;align-content:start}
+  .ex-grid img{display:block;width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;object-position:top;
+    border:1px solid var(--line);border-radius:8px;background:#0b0d10}
+  .ex-grid.contain img{object-fit:contain;padding:10px}
+  .ex-grid code{font-size:12.5px;color:var(--fg);margin-top:4px}
+  .ex-grid p{font-size:14px;line-height:1.5;color:var(--fg3)}
+
   .shot{margin:0}
   .shot img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:#0b0d10}
   .pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:48px;margin-top:40px;align-items:start}
@@ -607,7 +673,7 @@ const shot = (file: string, width = 1600, height = 1120) => ({ file, width, heig
   @media (hover:hover) and (pointer:fine){ .foot a:hover{color:var(--fg)} }
 
   @media (max-width:960px){
-    .head.split,.kind,.pair,.row,.yours{grid-template-columns:minmax(0,1fr);gap:28px}
+    .head.split,.kind,.pair,.row,.yours,.ex-head{grid-template-columns:minmax(0,1fr);gap:28px}
     .kind:nth-child(2),.row.flip{grid-template-columns:minmax(0,1fr)}
     .kind:nth-child(2) > .loop{order:0}
     .row.flip > .row-copy{order:0}
@@ -630,6 +696,8 @@ const shot = (file: string, width = 1600, height = 1120) => ({ file, width, heig
     .sub{font-size:16px}
     .agents{grid-template-columns:repeat(2,minmax(0,1fr))}
     .agents li{padding:14px}
+    .ex-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 12px}
+    .examples{margin-top:72px}
     .nums thead{display:none}
     .nums tr{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:16px 0;border-bottom:1px solid var(--line)}
     .nums td{padding:0;border:0}

@@ -9,7 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-- The website's home page is redesigned around agents building the workspace: the 21 agents on HiveHub, widgets, tools and views, the Queue view, machines over ssh, the phone page and a shared workspace, then what stays yours, measured numbers with their load, and the download. Each clip slot shows a real screenshot until its recording lands.
+- The website's home page is redesigned around agents building the workspace: the 21 agents on HiveHub, widgets, tools and views, the Queue view, machines over ssh, the phone page and a shared workspace, then what stays yours, measured numbers with their load, and the download. It also shows screenshots of twenty example plugins. Each clip slot shows a real screenshot until its recording lands.
 
 - The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.
 
