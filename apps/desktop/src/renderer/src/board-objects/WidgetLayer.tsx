@@ -13,7 +13,7 @@ import { SettingsForm } from "../plugins/SettingsForm";
 import { Button } from "../components/ui/button";
 import { widgetsOf } from "./board-model";
 import type { Board } from "./useBoard";
-import { WidgetContent } from "./WidgetBody";
+import { WidgetContent, useWidgetLook } from "./WidgetBody";
 import { clickWidget, optionsOf, useDrawn } from "./widget-runtime";
 
 const CARD_W = 240;
@@ -89,6 +89,8 @@ function WidgetCard({ object, pkg, name, spot, onMove, onRemove, onOption, onEdi
   const id = object.id;
   const drawing = useDrawn(id);
   const bare = drawing?.chrome === "none";
+  // A tinted widget is its note colour, as it is on the board.
+  const { tint } = useWidgetLook(object, pkg);
   const el = useRef<HTMLDivElement>(null);
   const [setting, setSetting] = useState(false);
   // How long the move under way glides for: a widget's own move animates, a drag does not.
@@ -134,9 +136,9 @@ function WidgetCard({ object, pkg, name, spot, onMove, onRemove, onOption, onEdi
   };
   return (
     <div ref={el} data-widget={object.widget} data-widget-chrome={bare ? "none" : "card"} aria-label={name}
-      className={`group pointer-events-auto absolute flex cursor-grab flex-col active:cursor-grabbing ${bare ? "" : "hm-island rounded-xl p-3"}`}
+      className={`group pointer-events-auto absolute flex cursor-grab flex-col active:cursor-grabbing ${bare ? "" : tint ? "rounded-md p-3 shadow-[var(--hm-shadow-2)]" : "hm-island rounded-xl p-3"}`}
       // Moved by transform, so the GPU glides it: a moving left/top lays out and repaints every frame.
-      style={{ left: 0, top: 0, transform: `translate3d(${spot.x}px, ${spot.y}px, 0)`, ...(bare ? {} : { width: CARD_W }), ...(glide ? { transition: `transform ${glide}ms linear` } : {}) }}
+      style={{ left: 0, top: 0, transform: `translate3d(${spot.x}px, ${spot.y}px, 0)`, ...(bare ? {} : { width: CARD_W }), ...(tint && !bare ? { background: tint, color: "var(--color-note-ink)" } : {}), ...(glide ? { transition: `transform ${glide}ms linear` } : {}) }}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
       onDoubleClick={() => { if (!setting) onEdit(); }}>
       <div className={`absolute right-1 top-1 z-10 gap-0.5 ${setting ? "flex" : "hidden group-hover:flex"} ${bare ? "hm-island rounded-md" : ""}`}>

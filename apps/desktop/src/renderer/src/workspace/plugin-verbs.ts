@@ -17,7 +17,35 @@ export interface PluginVerbHost {
   /** Whether the widget package `id` has code: one drawn from its `draw` alone never runs. */
   widgetRuns(id: string): boolean;
   closeTile(id: string): void;
+  /** The widgets on the board, those whose code runs and those drawn from their `draw` alone. */
+  widgetsOnBoard(): { id: string; widget: string }[];
   removeWidget(id: string): void;
+}
+
+/** What `plugin close` can close: every plugin running, every widget on the board, the view shown. */
+interface Closable { instance: string; plugin: string; kind: PluginInstance["kind"]; running: boolean }
+
+function closables(host: PluginVerbHost): Closable[] {
+  const running: Closable[] = pluginInstances.list().map((i) => ({ instance: i.instance, plugin: i.plugin, kind: i.kind, running: true }));
+  const has = (kind: string, instance: string) => running.some((c) => c.kind === kind && c.instance === instance);
+  const widgets = host.widgetsOnBoard().filter((w) => !has("widget", w.id)).map((w): Closable => ({ instance: w.id, plugin: w.widget, kind: "widget", running: false }));
+  const view = host.activeView();
+  const shown: Closable[] = view !== FALLBACK_VIEW_ID && !has("view", view) ? [{ instance: view, plugin: view, kind: "view", running: false }] : [];
+  return [...running, ...widgets, ...shown];
+}
+
+/** What `plugin close <which>` names: an instance (`plugin list`), or a plugin as `plugin open` takes
+ *  it (`tool:owner/name[/tool]`, `widget:id`, `view:id`), which must name one copy. */
+function closing(which: string, plugin: string | undefined, host: PluginVerbHost): Closable {
+  const all = closables(host).filter((c) => plugin === undefined || c.plugin === plugin);
+  const byInstance = all.filter((c) => c.instance === which);
+  if (byInstance.length) return byInstance.at(-1)!;
+  const record = /^(tool|widget|view):(.+)$/.exec(which);
+  const copies = record ? all.filter((c) => c.kind === record[1] && (c.plugin === record[2] || (c.kind === "tool" && record[2]!.startsWith(`${c.plugin}/`)))) : [];
+  if (copies.length === 1) return copies[0]!;
+  if (copies.length > 1) throw new PluginError("BAD_REQUEST", `${which} is open ${copies.length} times; close one by its id: ${copies.map((c) => c.instance).join(", ")}`);
+  const open = closables(host).map((c) => `${c.instance} (${c.kind}:${c.plugin})`);
+  throw new PluginError("NOT_FOUND", `nothing open is ${which}${open.length ? `; open: ${open.join(", ")}` : ""}`);
 }
 
 const PLUGIN_VERBS = new Set(["plugin.list", "plugin.commands", "plugin.open", "plugin.settle", "plugin.call", "plugin.close"]);
@@ -72,17 +100,11 @@ export async function pluginVerb(method: string, params: Record<string, unknown>
       return { result: await pluginInstances.call(c.plugin, c.command, c.args, c.tile, Date.now() + PLUGIN_CALL_MS) };
     }
     case "plugin.close": {
-      const instance = String(params.instance ?? "");
-      const plugin = typeof params.plugin === "string" ? params.plugin : undefined;
-      const found = pluginInstances.find({ instance, ...(plugin ? { plugin } : {}) });
-      if (!found) {
-        const running = pluginInstances.list().map((i) => `${i.instance} (${i.plugin})`);
-        throw new PluginError("NOT_FOUND", `no plugin runs as ${instance}${running.length ? `; running: ${running.join(", ")}` : ""}`);
-      }
+      const found = closing(String(params.instance ?? ""), typeof params.plugin === "string" ? params.plugin : undefined, host);
       if (found.kind === "tool") host.closeTile(found.instance);
       else if (found.kind === "widget") host.removeWidget(found.instance);
       else if (host.activeView() === found.instance) host.showView(FALLBACK_VIEW_ID);
-      const stopped = await pluginInstances.gone({ instance: found.instance, plugin: found.plugin }, Date.now() + CLOSE_MS);
+      const stopped = !found.running || await pluginInstances.gone({ instance: found.instance, plugin: found.plugin }, Date.now() + CLOSE_MS);
       if (!stopped) throw new PluginError("TIMEOUT", `${found.plugin} was asked to close and is still running`);
       return { closed: found.instance, plugin: found.plugin, kind: found.kind };
     }
