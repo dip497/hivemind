@@ -453,6 +453,36 @@
         "y": 80,
         "w": 1290,
         "h": 1720
+      },
+      "waiting": {
+        "x": 40,
+        "y": 30,
+        "w": 780,
+        "h": 300
+      },
+      "ready": {
+        "x": 1610,
+        "y": 30,
+        "w": 1550,
+        "h": 560
+      },
+      "names": {
+        "x": 40,
+        "y": 30,
+        "w": 1200,
+        "h": 600
+      },
+      "bars": {
+        "x": 1980,
+        "y": 30,
+        "w": 1180,
+        "h": 600
+      },
+      "agents": {
+        "x": 850,
+        "y": 260,
+        "w": 2140,
+        "h": 1480
       }
     },
     "shots": [
@@ -460,16 +490,17 @@
         "beat": "board",
         "start": 0,
         "end": 2.4,
-        "play": "loop",
+        "play": "last",
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "agents",
+            "pad": 1.1
           },
           {
             "u": 1,
-            "box": "full",
-            "pad": 0.92
+            "box": "agents",
+            "pad": 1.0
           }
         ]
       },
@@ -481,7 +512,15 @@
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "waiting"
+          },
+          {
+            "u": 0.4,
+            "box": "waiting"
+          },
+          {
+            "u": 1,
+            "box": "ready"
           }
         ]
       },
@@ -493,7 +532,15 @@
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "names"
+          },
+          {
+            "u": 0.35,
+            "box": "names"
+          },
+          {
+            "u": 1,
+            "box": "bars"
           }
         ]
       },
@@ -506,7 +553,8 @@
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "full",
+            "pad": 0.77
           }
         ]
       },
@@ -518,7 +566,8 @@
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "full",
+            "pad": 0.77
           }
         ]
       },
@@ -530,10 +579,11 @@
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "full",
+            "pad": 0.77
           },
           {
-            "u": 0.5,
+            "u": 0.4,
             "box": "terminal",
             "pad": 1.05
           },
