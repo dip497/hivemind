@@ -31,18 +31,23 @@ pick.
 
 ## What a token can never do
 
-Whatever its role, a program cannot push, commit, write files, change issues, share the
-workspace, manage people or make other tokens. Those stay yours, at your own window or terminal.
+Whatever its role, a program cannot share the workspace, let people in or change their roles, or
+make or revoke tokens. Those stay yours, at your own window or terminal.
+
+The `terminals` and `agents` roles can still change files and run any command, `git push`
+included: through a shell they type into, or an agent they start.
 
 ## Without writing a client
 
 `hive ctl` speaks the same API. Give it the token and it acts as the program:
 
 ```bash
-export HIVE_DRIVE_TOKEN=hgr_…         # the token
-export HIVE_WORKSPACE=~/work/api       # only if it reaches several workspaces
+export HIVE_DRIVE_TOKEN=hgr_…
+# only when the token reaches several workspaces:
+export HIVE_WORKSPACE=~/work/api
 hive ctl agents --json
-hive ctl spawn --agent claude --prompt "Run the tests"   # needs the agents role
+# needs the agents role:
+hive ctl spawn --agent claude --prompt "Run the tests"
 ```
 
 A [tool plugin's service](../tool-plugins/#a-service-that-keeps-running) gets its own token this
