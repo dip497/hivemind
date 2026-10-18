@@ -73,6 +73,7 @@ workspace.
 | `hive.on("click", fn)` | its card was clicked (not on a button) |
 | `hive.on("start", fn)` | it was placed or the app opened |
 | `hive.on("action", fn)` | one of its buttons was pressed; `fn` gets the button's `action` |
+| `hive.on("hm", fn)` | `hive.hm`'s values arrived or changed |
 | `hive.hm` | the workspace, as a view sees it: see below |
 
 It runs in a worker: no network, no files, nothing of the app but `hive`. What it draws and its
@@ -103,6 +104,8 @@ replaces them.
   when two people type at once, and its lines, ticked, added and reordered. Writing in it is an
   edit, so ⌘Z takes it back.
 - `"$options.<id>"` in a drawing is that option's value; `tint` colours the card as a note.
+  A widget with code tints its card the same way: `hive.render({ type: "stack", tint: "pink", … })`,
+  on the board and floating.
 - Options are `number`, `boolean`, `text` or `choice` (with `values`).
 
 A widget with code can draw these fields too.
@@ -127,7 +130,16 @@ await hive.hm.commands.spawnAgent(null, null, { prompt: "run the tests" }); // y
 ```
 
 In a widget every call returns a promise, and one given a callback returns its unsubscribe at
-once. Its values (`hive.hm.hello`, `settings`, `capabilities`, `features`) are there to read.
+once. Its values (`hive.hm.hello`, `settings`, `capabilities`, `features`) are there to read from
+the first line of your code, each in its usual shape: empty (`[]`, `{}`, `hello` null) until the
+app sends them, when `hive.on("hm", fn)` fires, as it does again when they change. Draw again
+there:
+
+```js
+const draw = () => hive.render({ type: "text", text: hive.hm.capabilities.includes("workspace:spawn") ? "Ready" : "Waiting" });
+hive.on("hm", draw);
+draw();
+```
 
 A widget's page in **Settings ▸ Plugins**, **What it can do**, shows its permissions. A widget
 without permissions reads and points at things, nothing more.
