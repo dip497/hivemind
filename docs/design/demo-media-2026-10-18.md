@@ -34,7 +34,13 @@ the same commits every time.
   widget, does issue FAS-1 and ticks the widget. `encoders-docs` raises a real permission prompt
   that the phone answers. Both run on the login of whoever records, with their settings, hooks,
   plugins, MCP servers and CLAUDE.md files kept out (`--setting-sources project,local`,
-  `--strict-mcp-config`, `claudeMdExcludes`).
+  `--strict-mcp-config`, `claudeMdExcludes`), its git identity replaced and its permission mode
+  `default`. They may run, without asking, only `hive` and commands that read (`ls`, `cat`,
+  `head`, `mkdir`, `rg`, `grep`, `git status|diff|log`, `ruff check`); the builder accepts edits.
+  Anything else asks, and the person allows it from the paired phone, as a person would. The
+  run checks the runner's `~/.claude/settings*.json`, `~/.claude/CLAUDE.md` and `~/.gitconfig`
+  are unchanged, and fails if not. Claude Code still records its sessions and the demo folders
+  it was trusted in under the runner's `~/.claude` and `~/.claude.json`, as any session does.
 - **Stand-ins, eighteen.** The board behind them is eighteen tiles that print real command
   output on the real projects and the screen each agent's own manifest reads, so the status dot
   is the real detector's. They are stand-ins because the opening needs all of them working at the

@@ -3,6 +3,7 @@
 // suite. See docs/design/demo-media-2026-10-18.md.
 import { test, expect, chromium, type ElectronApplication } from "@playwright/test";
 import { execFileSync, spawnSync, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +21,7 @@ const OUT = path.resolve(process.env.DEMO_OUT ?? path.join(os.homedir(), "hivemi
 const SIZE = { width: 1600, height: 1000 };
 const BURST = { frames: 8, every: 250 };
 // What the person types to the agent in the hero, and what the agent on the phone is asked.
-const ASK_WIDGET = "Make a board widget for FAS-1 with hive widgets new, and tick it off as you go";
+const ASK_WIDGET = "Run hive widgets new fas-1-board --owner hivemind here, make it show FAS-1, install it and tick it off as you go";
 const ASK_EDIT = "Add a short docstring to generate_encoders_by_class_tuples in fastapi/encoders.py";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-demo-"));
@@ -39,7 +40,9 @@ test.afterAll(async () => {
 function agentsOnPath(bin: string): void {
   fs.mkdirSync(bin, { recursive: true });
   const realClaude = execFileSync("bash", ["-c", "command -v claude"], { encoding: "utf8" }).trim();
-  const tools = ["Bash(hive:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(mkdir:*)", "Bash(rg:*)", "Bash(grep:*)", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git remote:*)", "Bash(gh api user:*)", "Bash(python3:*)", "Bash(ruff:*)", "Bash(head:*)", "Bash(cp:*)", "Read", "Grep", "Glob"].join(" ");
+  // Only what the beat needs: the hive CLI and commands that read. Edits ask, except in the
+  // builder's tile, which is started accepting edits.
+  const tools = ["Bash(hive:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(mkdir:*)", "Bash(rg:*)", "Bash(grep:*)", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(ruff check:*)", "Read", "Grep", "Glob"].join(" ");
   for (const cli of ["claude", "codex", "pi"]) {
     const real = cli === "claude"
       ? `[ "$1" = "--version" ] && exec "${realClaude}" --version
@@ -110,6 +113,10 @@ test("capture", async () => {
   fs.writeFileSync(path.join(home, ".hushlogin"), "");
   const bin = path.join(root, "bin");
   agentsOnPath(bin);
+  // The runner's own settings: read here and checked unchanged at the end.
+  const theirs = ["settings.json", "settings.local.json", "CLAUDE.md"].map((f) => path.join(os.homedir(), ".claude", f)).concat(path.join(os.homedir(), ".gitconfig"));
+  const sums = () => theirs.map((f) => (fs.existsSync(f) ? createHash("sha256").update(fs.readFileSync(f)).digest("hex") : "none"));
+  const untouched = sums();
   // The real agents read only the demo's own instructions, never the runner's.
   const me = os.homedir();
   fs.mkdirSync(path.join(DEMO, "fastapi/.claude"), { recursive: true });
@@ -310,11 +317,13 @@ test("capture", async () => {
   for (const started = Date.now(); Date.now() - started < 12 * 60_000;) {
     await building();
     const row = census().of(builder);
-    // A person who looks over now and then: Claude's own "proceed?" menu, still open, gets a yes.
-    if (row?.waiting?.kind === "permission" && /Do you want to proceed\?/.test(cli("ctl", "stream", builder, "--snapshot", "--lines", "14").stdout)) {
-      await desktop.waitForTimeout(2500);
-      cli("ctl", "keys", builder, "1");
-      states.push(`${Math.round((Date.now() - started) / 1000)}s answered yes`);
+    // Asked before a command while the issue is open: the person allows it from their phone.
+    if (row?.waiting?.kind === "permission" && !issueDone()) {
+      const allow = phone.getByRole("button", { name: /^allow/i }).first();
+      if (await allow.isVisible().catch(() => false)) {
+        await allow.click();
+        states.push(`${Math.round((Date.now() - started) / 1000)}s allowed from the phone`);
+      }
     }
     const state = `${row?.state}${row?.waiting ? ` ${row.waiting.kind}/${row.waiting.says ?? ""}` : ""}`;
     if (states.at(-1)?.endsWith(` ${state}`) !== true) states.push(`${Math.round((Date.now() - started) / 1000)}s ${state}`);
@@ -369,6 +378,7 @@ test("capture", async () => {
     shots,
   };
   fs.writeFileSync(path.join(OUT, "cues.json"), JSON.stringify(cues, null, 2));
+  expect(sums(), `the runner's settings changed: ${theirs.join(", ")}`).toEqual(untouched);
   // The scene each clip promises: many agents at work, a widget the agent built and ticked, one
   // agent waiting on the phone.
   expect(before.by.working ?? 0, show()).toBeGreaterThanOrEqual(16);
