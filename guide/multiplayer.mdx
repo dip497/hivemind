@@ -1,61 +1,78 @@
 ---
 title: "Share a workspace"
-description: "Let other people into a workspace, give each a role, and see who is there."
+description: "Let other people into a workspace, give each a role, and see who is there and where they point."
 ---
 
-A shared workspace stays on your computer (or your [host](/host)). Guests join from their own
-Hivemind app and see the board and terminals at the role you give them. Nothing is copied to a
-server; traffic goes directly or through a relay that cannot read it.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+import Roles from "/snippets/roles.mdx";
 
-<Prompt description="Paste this into your coding agent to invite someone into one of your workspaces and let them in." actions={["copy","cursor"]}>
-Invite a person into one of my Hivemind workspaces from the terminal, and let them in when they ask.
+Work on one workspace with other people, each in their own Hivemind app. The workspace stays on your computer, or on your [host](/host).
 
-1. Ask me which workspace folder to share, which role to give (`view` sees the board and terminals; `edit` also moves, adds and closes tiles; `terminals` also types into terminals), how many people may use the link and for how long. A link gives at most `terminals`. The `agents` role lets them run commands on my machine: give it only if I ask, once they are in, with `hive people role <person> agents`.
-2. Check this computer can be reached from where they are: `hive network show`. On Local network only people on the same network can join; if they are elsewhere, tell me a network server is needed (the "Your own network server" page) and stop.
-3. Make the link: `hive share <folder> --role <role> --uses <n> --expires <time, e.g. 2d>`. Give me the link to send them; they paste it under Join in their app, or run `hive join '<link>'`.
-4. When I say they have used it, run `hive people requests` and show me who is asking. Let someone in only after I name them: `hive people allow <number>`. Never allow a request I have not confirmed.
+<AgentPrompt description="Paste this into your coding agent to invite someone into one of your workspaces and let them in." page="multiplayer">{`Invite a person into one of my Hivemind workspaces from the terminal, and let them in when they ask.
 
-At the end, run `hive people list` and show me who is in and at which role, and tell me `hive people remove <name>` disconnects someone and stops their link.
-</Prompt>
+1. Ask me which workspace folder to share, which role to give, how many people may use the link and for how long. Roles: \`view\` sees the canvas and terminals; \`edit\` also moves, adds and closes tiles; \`terminals\` also types into terminals. A link gives at most \`terminals\`. The \`agents\` role runs commands on my computer: give it only if I ask, once they are in, with \`hive people role <person> agents\`.
+2. Check this computer can be reached from where they are: \`hive network show\`. If its first line ends with \`(built in: local)\`, only people on the same network can join. If they are elsewhere, tell me a network server comes first (the "Set up your own network server" page) and stop.
+3. Make the link: \`hive share <folder> --role <role> --uses <n> --expires <time, e.g. 2d>\`. Give me the link to send them. They paste it under Join in their app, or run \`hive join '<link>'\`.
+4. When I say they have used it, run \`hive people requests\` and show me who is asking. Let someone in only after I name them: \`hive people allow <number>\`. Never allow a request I have not confirmed.
+
+At the end, run \`hive people list\` and show me who is in, at which role. Tell me \`hive people remove <name>\` disconnects someone and stops their link.`}</AgentPrompt>
+
+Nothing is copied to a server. Traffic goes directly between your apps, or through a relay that cannot read it.
+
+## Before you start
+
+- People on your network need nothing else. People elsewhere need your own [network server](/self-hosting).
+- Each guest has Hivemind installed.
 
 ## Roles
 
-| Role | In the app | Can |
-|---|---|---|
-| `view` | **Can view** | see the board and terminals |
-| `edit` | **Can edit board** | also move, add and close tiles, and press widgets |
-| `terminals` | **Can use terminals** | also type into terminals, once given the keyboard |
-| `agents` | **Can drive agents** | also start and answer agents, which means running commands on your machine. Given only to someone here now, after a warning. |
+A <Tooltip tip="What a person or a program may do: view, edit, terminals or agents." cta="Glossary" href="/glossary#role">role</Tooltip> says what each person may do.
 
-Programs get the same roles through [API tokens](/api-tokens).
+<Roles />
 
 ## Let someone in
 
 <Tabs>
-  <Tab title="From the app">
-    In the workspace's window, Settings → Connect → **Connect**, send **Copy the link**, and answer
-    **Someone else** with a role when the words match. The steps:
-    [Connect devices](/connect).
+  <Tab title="In the app">
+    1. In the workspace's window, open **Settings → Connect** and press **Connect**.
+    2. Send them **Copy the link**.
+    3. When they use it and the three words match, answer **Someone else** with a role.
+
+    The full steps are in [Connect your devices](/connect).
   </Tab>
-  <Tab title="From a terminal">
-    An invite link, for several people if you like:
+  <Tab title="In a terminal">
+    1. Make an invite link, for several people if you like:
 
-    ```bash
-    hive share ~/work/api --role edit --uses 3 --expires 2d
-    ```
+       ```bash
+       hive share ~/work/api --role edit --uses 3 --expires 2d
+       ```
 
-    They paste it under **Join**, or run `hive join '<link>'`. You answer each request in a notice
-    (**Allow** / **Deny**), or:
+    2. They paste it under **Join**, or run `hive join '<link>'`.
+    3. Answer each request in the notice (**Allow** / **Deny**), or in a terminal:
 
-    ```bash
-    hive people requests
-    hive people allow 1             # --role view to lower it
-    hive people rule invite         # let anyone with a valid link in without asking; "ask" goes back
-    ```
+       ```bash
+       hive people requests
+       hive people allow 1             # --role view to lower it
+       ```
+
+    To let anyone with a valid link in without asking, run `hive people rule invite`. `hive people rule ask` goes back.
   </Tab>
 </Tabs>
 
+## Check it worked
+
+The guest's face appears at the top right of your window. `hive people list` shows them, with their role.
+
 ## Who is there
+
+| You see | Means |
+|---|---|
+| Faces, top right | Who else is in. A guest clicks one to follow that person's view. |
+| Named pointers | Where each person points. Their selection is ringed in their colour. |
+| The banner, as a guest | *You're in ⟨workspace⟩ on ⟨host⟩'s machine*, with **Leave**. |
+
+To change a role or remove someone:
 
 ```bash
 hive people list
@@ -63,20 +80,30 @@ hive people role ana terminals
 hive people remove ana          # disconnects them; their link stops working
 ```
 
-In the app, **People in this workspace** on Settings → Connect shows the same, with **Remove**.
-
-| You see | Means |
-|---|---|
-| Faces, top right | who else is in. A guest clicks one to follow that person's view. |
-| Named pointers | where each person points; their selection is ringed in their colour. |
-| The banner (as a guest) | *You're in ⟨workspace⟩ on ⟨host⟩'s machine*, with **Leave**. |
+In the app, **People in this workspace** on **Settings → Connect** shows the same, with **Remove**.
 
 ## One keyboard per terminal
 
-A terminal's title bar says who has its keyboard. Someone who **Can use terminals** presses
-**Ask for keyboard**; the holder answers **Give** or **Not now**. The owner takes it back with
-**Take back** or Ctrl+Shift+K (⌘⇧K).
+A terminal's title bar says who has its keyboard.
 
-## Keep it up while you sleep
+1. Someone who **Can use terminals** presses **Ask for keyboard**.
+2. The holder answers **Give** or **Not now**.
 
-Your laptop asleep means the workspace is offline. Move it to an [always-on host](/host).
+The owner takes it back with **Take back**, or ⌘⇧K / Ctrl+Shift+K in the terminal.
+
+## If it didn't
+
+| You see | Do |
+|---|---|
+| `This invite has expired or was used. Ask for a new one.` | Make a new invite. |
+| The guest waits and nothing happens | Answer the request: a notice on your computer, or `hive people requests`. |
+| The workspace is offline for guests | Your computer is asleep. Move the workspace to a [host](/host). |
+
+More in [Troubleshooting](/troubleshooting).
+
+## Related
+
+- [API tokens](/api-tokens): programs get the same roles.
+- [Security and privacy](/security-and-privacy)
+
+<LastValidated />

@@ -3,3 +3,25 @@ export const validatedFor = "2026.10.3";
 export const LastValidated = () => (
   <p style={{ fontSize: "0.8rem", opacity: 0.6, marginTop: "2.5rem" }}>Last validated for Hivemind {validatedFor}.</p>
 );
+
+export const SdkInstall = () => (
+<Tabs>
+<Tab title="With the app">
+The SDKs come with Hivemind, at the same version as the app.
+<CodeGroup>
+<CodeBlock filename="macOS and Linux" language="bash">{`npm install ~/.hivemind-app/sdk/hivemind-api.tgz
+pip install ~/.hivemind-app/sdk/python`}</CodeBlock>
+<CodeBlock filename="Windows (Command Prompt)" language="bat">{`npm install %LOCALAPPDATA%\\hivemind\\sdk\\hivemind-api.tgz
+pip install %LOCALAPPDATA%\\hivemind\\sdk\\python`}</CodeBlock>
+</CodeGroup>
+</Tab>
+<Tab title="Without Hivemind">
+On a computer without Hivemind, install them from a release. Use the version of the app your program talks to.
+<CodeGroup>
+<CodeBlock filename="npm" language="bash">{`npm install https://github.com/dip497/hivemind/releases/download/v${validatedFor}/hivemind-api-${validatedFor}.tgz`}</CodeBlock>
+<CodeBlock filename="pip" language="bash">{`pip install https://github.com/dip497/hivemind/releases/download/v${validatedFor}/hivemind_api-${validatedFor}-py3-none-any.whl`}</CodeBlock>
+<CodeBlock filename="pip, from the repository" language="bash">{`pip install "git+https://github.com/dip497/hivemind#subdirectory=packages/sdk-python"`}</CodeBlock>
+</CodeGroup>
+</Tab>
+</Tabs>
+);

@@ -1,0 +1,71 @@
+---
+title: "Changelog"
+description: "What changed in each recent Hivemind release, in plain words."
+rss: true
+---
+
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
+
+The latest releases, newest first. Every change, in full, is in [CHANGELOG.md](https://github.com/dip497/hivemind/blob/main/CHANGELOG.md) on GitHub. To update, see [Update and roll back](/update-and-roll-back).
+
+<AgentPrompt description="Paste this into your coding agent to learn what changed since the version you run." page="changelog">{`
+Using this page and \`https://github.com/dip497/hivemind/blob/main/CHANGELOG.md\`, tell me what changed in Hivemind between the version I run and the newest release.
+
+1. Get my version with \`hive --version\`.
+2. List the changes in every release newer than mine, in plain words, breaking changes first.
+3. Say which ones affect how I use it, and whether I should update. Do not update anything.
+`}</AgentPrompt>
+
+<Update label="2026.10.3" description="2026-10-18">
+  - Tools install from HiveHub. **Settings → Plugins** lists them under **Tools**, and `hive tools install owner/name` installs one by its id. A tool arrives switched off, an update too.
+</Update>
+
+<Update label="2026.10.2" description="2026-10-18">
+  **Added**
+  - Put agents to sleep and wake them: from the Layers panel, a frame's menu, or `hive ctl sleep` and `hive ctl wake`. A sleeping agent keeps its conversation.
+  - The full app in a browser tab, from **Settings → In a browser**.
+  - **Settings → Connect** pairs your phone, your other computers and people with one invite: a QR code, a link, or a code.
+  - `hive ctl inbox` reads what other agents sent you.
+  - Each machine shows what kind of computer it is: laptop, desktop, server, virtual machine or container.
+  - Remove a workspace from this computer from the Layers panel's title menu.
+
+  **Changed**
+  - Typing stays fast while other terminals print a lot, and agents changing status no longer slow every window down.
+  - Opening several agents at once no longer freezes the window.
+  - Settings is regrouped by what you do, and **Settings → Plugins** is one list.
+  - A machine is paused, not turned off.
+
+  **Fixed**
+  - A message from your phone or `hive ctl send` to an agent that does not say when it finishes replying is typed at once again.
+  - A question Claude asks still shows on your phone, with its options, after an hour.
+  - The app served to a browser opens in Safari, on an iPhone too.
+  - `hive ctl read` on an agent that has exited says `closed` at once.
+</Update>
+
+<Update label="2026.10.1" description="2026-10-03">
+  - **Breaking:** Hivemind now needs macOS 13 or later.
+  - File pickers open where you last picked, not in Downloads.
+</Update>
+
+<Update label="2026.10.0" description="2026-10-03">
+  - `yolo` is one launch mode for every agent: `hive ctl spawn --mode yolo`. The agent runs without asking you.
+  - An agent's program installed under `~/.npm-global/bin` or `~/.local/bin` is found when you start Hivemind from the desktop.
+  - `hive ctl` waits take units, such as `--timeout 90s` or `10m`.
+  - A tile waiting on a menu of its agent's own shows as needing you, and notifies you.
+  - Moving between tiles on the canvas is a short, straight glide.
+</Update>
+
+<Update label="2026.9.9" description="2026-09-29">
+  - After an upgrade, agents the new version cannot load are repaired from HiveHub.
+</Update>
+
+<Update label="2026.9.8" description="2026-09-28">
+  - **Breaking:** approving one tool use for a supervised agent covers that one use, and nothing more.
+  - A first Codex tile starts working instead of waiting, and Codex tiles say when they finish replying again.
+  - A task given to an agent waits until the agent is at its own prompt.
+  - A tile is named after what its agent is doing. A name you give it still wins.
+  - Installing and upgrading no longer fail when GitHub's request limit is used up.
+</Update>
+
+<LastValidated />

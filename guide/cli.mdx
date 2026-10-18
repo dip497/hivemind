@@ -1,33 +1,35 @@
 ---
 title: "CLI reference"
-description: "Every hive command, grouped, with its exit codes."
+description: "Every hive command, grouped by what it does, with its options and exit codes."
 ---
 
-`hive` does three things: issue commands that edit files and work without the app, `hive ctl`
-that drives the running app or `hive host`, and commands that manage this machine.
-`hive <command> --help` lists every option.
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-- `--json` prints one line of machine-readable output; errors are
-  `{"ok":false,"code":"…","message":"…"}`.
-- In an agent's terminal, `hive ctl` acts as that agent in its workspace. Elsewhere it acts as you,
-  in the workspace `--repo` names, else the open one your folder is in, else the only one open.
-  With `HIVE_DRIVE_TOKEN` set, it acts as that program ([API](/api)).
-- A workspace is named by its folder, its folder's name, its id (four characters or more) or its
-  issue prefix. A name two workspaces share is refused with both listed.
+Every `hive` command, for Hivemind {validatedFor}. `hive <command> --help` lists every option your version has.
 
-<Prompt description="Paste this into your coding agent to turn these commands into a script that hands work to several agents and collects their replies." actions={["copy","cursor"]}>
-Using the `hive` CLI, write a shell script that hands one task to several coding agents in my Hivemind workspace, waits for every reply, and handles each exit code.
+<AgentPrompt description="Paste this into your coding agent to turn these commands into a script that hands work to several agents and collects their replies." page="cli">{`
+Using the hive commands on this page and \`hive <command> --help\`, write a shell script that hands one task to several coding agents in my Hivemind workspace, waits for every reply, and handles each exit code.
 
-1. Check the setup: `hive --version` works, and `hive ctl agents --json` exits 0 inside my project (exit 3 means neither the app nor `hive host` runs; ask me to open the project with `hivemind <folder>`). See which agents can start with `hive agents list --found`.
-2. Ask me for the task and the list of items (files, packages, questions), and which agent to use.
-3. The script, for each item: `hive ctl spawn --agent <agent> --prompt "<task> for <item>" --name "<item>" --json` prints `{"tile": …}`; keep the tile ids. Then for each tile: `hive ctl read <tile> --timeout 10m --json`. Exit codes: 0 the reply; 4 timed out (read again); 5 the tile was closed; 7 the agent is asleep or cannot report turns; 8 it waits on an answer (show me the question from `hive ctl agents --json` and stop). Any other: print the `message` from the JSON error.
-4. Print each item with its reply, then close the tiles with `hive ctl close <tile>` unless I ask to keep them.
+1. Check the setup: \`hive --version\` works, and \`hive ctl agents --json\` exits 0 inside my project. Exit 3 means neither the app nor \`hive host\` runs: ask me to open the project with \`hivemind <folder>\`. See which agents can start with \`hive agents list --found\`.
+2. Ask me for the task, the list of items (files, packages, questions), and which agent to use.
+3. For each item: \`hive ctl spawn --agent <agent> --prompt "<task> for <item>" --name "<item>" --json\` prints \`{"tile": …}\`; keep the tile ids. Then for each tile: \`hive ctl read <tile> --timeout 10m --json\`. Handle the exit codes in the table on this page: 4 read again; 5 the tile was closed; 7 the agent is asleep or cannot say when it finishes; 8 it waits on an answer (show me its question from \`hive ctl agents --json\` and stop).
+4. Print each item with its reply, then close the tiles with \`hive ctl close <tile>\` unless I ask to keep them.
 5. Run it on two small items first and show me the output.
 
-If a step needs anything only I can do (a login, a password), ask me and wait.
-</Prompt>
+If a step needs anything only I can do, such as a login, ask me and wait.
+`}</AgentPrompt>
+
+## How `hive` works
+
+- `--json` prints one line of machine-readable output. Errors are `{"ok":false,"code":"…","message":"…"}`.
+- The issue commands edit files, and work without the app. `hive ctl` drives the running app or `hive host`.
+- In an agent's terminal, `hive ctl` acts as that agent in its workspace. Elsewhere it acts as you: in the workspace `--repo` names, else the open one your folder is in, else the only one open. With `HIVE_DRIVE_TOKEN` set, it acts as that program ([API](/api)).
+- You name a workspace by its folder, its folder's name, its id (four characters or more) or its issue prefix. A name two workspaces share is refused, and both are listed.
 
 ## Exit codes
+
+Every `hive` command exits with one of these. This is the one list; other pages link here.
 
 | Exit | `code` in `--json` | Meaning |
 |---:|---|---|
@@ -41,9 +43,21 @@ If a step needs anything only I can do (a login, a password), ask me and wait.
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 1 | `FAILED` | other |
 
+### `hive ctl read`
+
+`hive ctl read <tile>` waits for an agent to finish replying. Its exit code says how the wait ended:
+
+| Exit | Means | Do |
+|---:|---|---|
+| 0 | The agent replied. | Use the reply it printed. |
+| 4 | It is still working. | Run `read` again. |
+| 5 | Its tile was closed. | Start it again if you still need it. |
+| 7 | It is asleep. | Wake it with `hive ctl wake <tile>`. |
+| 8 | It stopped to ask you something. | Answer it, then `read` again. |
+
 ## Issues
 
-Guide: [Issues](/issues).
+To track work as Markdown files in `.hivemind/`. These work without the app. Guide: [Track work as issues](/issues).
 
 ```text
 hive init --prefix MYP [--no-agentic]   # create tracker (+ agentic stack by default)
@@ -88,7 +102,7 @@ hive ctl list-workspaces
 
 ## `hive ctl`: agents and tiles
 
-Guide: [Coordinate agents](/agent-workflows).
+To start, message, read and close agents and tiles in the running app. Guide: [Coordinate agents](/agent-workflows).
 
 ```text
 hive ctl agents [--watch]               # the workspace's agents, their state and what each waits on
@@ -139,24 +153,36 @@ hive ctl open-review --file plan.md|--plan "…" [--cwd dir] [--timeout 30m] [--
 
 ## `hive ctl`: plugins
 
-Guide: [Plugins](/plugins#commands-agents-can-run).
+To open plugins and run the commands they offer. Guide: [Plugins](/plugins).
 
 ```text
 hive ctl plugin list [--json]              # every plugin running, each starting, ready or failed,
                                            # with its commands; and the views there are
 hive ctl plugin open <record> [--frame f] [--json]
                                            # get it running: a tool's tile opened, a widget added
-                                           # to the board, a view switched to; answers once it
+                                           # to the canvas, a view switched to; answers once it
                                            # can be called
 hive ctl plugin commands [--json]          # what the ready plugins let you run, with what each takes
 hive ctl plugin call <plugin> <command> ['{"json":"argument"}' | -] [--tile id] [--json]
                                            # runs it and prints what the plugin answered
 hive ctl plugin close <instance | record> [--plugin p] [--json]
-                                           # close its tile, take the widget off the board,
+                                           # close its tile, take the widget off the canvas,
                                            # leave the view for the canvas
 ```
 
+The **Windows** view answers these commands while it is the view shown:
+
+```bash
+hive ctl plugin call windows split-right    # also split-down
+hive ctl plugin call windows focus-left     # also focus-right, focus-up, focus-down
+hive ctl plugin call windows maximize       # show the focused pane alone, or bring the others back
+hive ctl plugin call windows close-pane
+hive ctl plugin call windows unsplit
+```
+
 ## Plugins
+
+To install, list and remove agents, views, widgets and tools, and change their settings.
 
 ```text
 hive views list                         # installed view plugins + load errors
@@ -195,7 +221,7 @@ hive plugins workspaces tool:<id> --none       # it drives none: its service sto
 
 ## API tokens
 
-Guide: [Tokens and roles](/api-tokens).
+To let a program of yours drive a workspace. Guide: [Make an API token](/api-tokens).
 
 ```text
 hive grant create <name> -w <folder> [--role agents] [--expires 30d]
@@ -206,7 +232,7 @@ hive grant revoke <id>
 
 ## Settings and upgrade
 
-Guide: [Settings and appearance](/appearance).
+To read and change settings, themes, and the installed version. Guide: [Settings](/settings), [Update and roll back](/update-and-roll-back).
 
 ```text
 hive config path
@@ -221,12 +247,12 @@ hive upgrade [--dev]
 
 ## Host
 
-Guide: [Always-on host](/host).
+To keep workspaces and agents running on a server. Guide: [Keep agents running while your laptop sleeps](/host).
 
 ```text
 hive host run         # serve until stopped (what a service runs); one host per machine
 hive host status      # whether it runs, as which device, where it is reached, its workspaces
-hive host stop        # stop serving; the terminals keep running in the daemon
+hive host stop        # stop serving; the terminals keep running in the background process
 hive host pair        # print six words, a link and a QR code for your app to enter
 hive host add <dir>   # serve a folder on this machine as one of its workspaces (through the app when it runs)
 hive host install     # run it as a service of yours (systemd): at boot, and again if it stops
@@ -235,7 +261,7 @@ hive host uninstall   # stop running it as a service; its terminals keep running
 
 ## Sharing and people
 
-Guide: [Share a workspace](/multiplayer).
+To invite people into a workspace and set their roles. Guide: [Share a workspace](/multiplayer).
 
 ```text
 hive share <workspace> [--role view|edit|terminals] [--uses n] [--expires 7d]
@@ -256,7 +282,7 @@ hive network enrol-link [--data <dir>] [--uses n] [--expires 7d]
 
 ## Review comments
 
-Guide: [Review changes](/review).
+To read and answer comments left on an agent's changes. Guide: [Review an agent's changes](/review).
 
 ```text
 hive review list [--file src/x.ts] [--status open|resolved|all]
@@ -269,10 +295,10 @@ hive review watch [--timeout 300] [--file f]   # wait for the next comment; exit
 
 ## Terminals that outlive the app
 
-Add `--machine <name>` to reach a saved machine.
+To run terminals in the background process, which keeps them alive while the app is closed. Add `--machine <name>` to reach a saved machine.
 
 ```text
-hive daemon start|status|stop           # stop: sessions are kept as snapshots and restored on start
+hive daemon start|status|stop           # the background process; stop keeps sessions as snapshots, restored on start
 hive ps [--machine build-box]           # the sessions running
 hive run [--attach] [--cwd dir] [--id name] -- npm run dev
                                         # start one; with --attach, ctrl-b d detaches
@@ -282,7 +308,7 @@ hive kill <session>                     # end it and its process
 
 ## Machines
 
-Guide: [Machines](/machines).
+To add other computers over ssh. Guide: [Run agents on another computer](/machines).
 
 ```text
 hive machine add me@build-box [--label build] [--install]
@@ -297,7 +323,7 @@ hive machine remove build               # forgotten; its sessions there keep run
 
 ## Network and notifications
 
-Guide: [Your own network server](/self-hosting).
+To choose how your devices reach each other, and to get a push when an agent needs you. Guide: [Set up your own network server](/self-hosting), reference: [hive-net](/hive-net).
 
 ```text
 hive network show                       # which network, who signed it, its servers
@@ -310,6 +336,10 @@ hive push status | test | off
 
 ## Packages (preview)
 
+To check a package before anything installs it. Installing packages is not built yet.
+
 ```text
 hive packages inspect <dir>             # check a bundle and show what it would start, running nothing
 ```
+
+<LastValidated />

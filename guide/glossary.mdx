@@ -3,9 +3,16 @@ title: "Glossary"
 description: "One word per thing: what each Hivemind word means, in a sentence."
 ---
 
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
 import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
 These docs use one word for each thing, the word the app shows.
+
+<AgentPrompt description="Paste this into your coding agent to make your own notes about Hivemind use the same words." page="glossary">{`
+Read the Hivemind glossary in the reference below. Then read the file or text I point you to about Hivemind (a README, notes, an issue).
+List each word that means something in the glossary but is not the glossary's word (for example "offer" for invite, "daemon" for background process, "board" for canvas), with the line it is on and the word to use instead.
+Do not change the file until I say which ones to change.
+`}</AgentPrompt>
 
 ## The workspace
 
@@ -35,6 +42,7 @@ These docs use one word for each thing, the word the app shows.
 | <a id="lead" />**Lead** | The agent, or you in a terminal, that starts other agents with `hive ctl`, sends them work and collects their replies. |
 | <a id="worker" />**Worker** | An agent a lead started to do one piece of the work. |
 | <a id="supervise" />**Supervise** | A worker's permission questions go to the lead's inbox instead of its own screen. |
+| <a id="channel" />**Channel** | Which releases you follow: **stable**, or **nightly** builds. |
 | <a id="background-process" />**Background process** | The `hive` process that keeps terminals and agents running while the app is closed or upgrading. |
 
 ## Plugins

@@ -237,6 +237,139 @@
       "status": "todo",
       "alt": "A guest's face top right, their named pointer, and Ask for keyboard → Give.",
       "why": "A loop video; needs a second person joined."
+    },
+    {
+      "page": "know-who-is-waiting",
+      "name": "bell-and-amber-tile",
+      "status": "todo",
+      "alt": "The bell in the Layers panel shows 1 and the agent's tile is amber: it is waiting on a permission question.",
+      "why": "Needs a real agent asking a permission question."
+    },
+    {
+      "page": "git-worktree",
+      "name": "worktree-menu",
+      "status": "todo",
+      "alt": "A frame's ⋯ menu open on Worktree, offering Create new worktree based on main.",
+      "why": "Menu interaction on a git frame; add a click step."
+    },
+    {
+      "page": "review",
+      "name": "code-tile-changes",
+      "status": "todo",
+      "alt": "The Code tile on Changes, with a line comment and Send review to Claude.",
+      "why": "Needs an agent's edit and a comment."
+    },
+    {
+      "page": "review",
+      "name": "plan-review-tile",
+      "status": "todo",
+      "alt": "The Plan review tile with Approve plan and Request changes.",
+      "why": "Needs a tile id for hive ctl open-review --tile."
+    },
+    {
+      "page": "agents",
+      "name": "sleep-menu",
+      "status": "todo",
+      "alt": "A Layers row's ⋮ menu: Pin, Mark as unread, Snooze, Put to sleep.",
+      "why": "Needs an agent row."
+    },
+    {
+      "page": "plugins",
+      "name": "plugins-hivehub-tab",
+      "status": "todo",
+      "alt": "Settings → Plugins on the HiveHub tab, listing plugins to install.",
+      "why": "Needs a click on the HiveHub tab; add a click step."
+    },
+    {
+      "page": "widgets",
+      "name": "widgets-counter",
+      "status": "todo",
+      "alt": "The counter widget from the tutorial, pressed three times.",
+      "why": "Needs hive widgets new counter built in the run."
+    },
+    {
+      "page": "extension-authoring",
+      "name": "view-pulse",
+      "status": "todo",
+      "alt": "The Pulse starter view showing four tiles, one waiting.",
+      "why": "Needs the starter view built and agents."
+    },
+    {
+      "page": "tool-plugins",
+      "name": "tool-switch",
+      "status": "todo",
+      "alt": "A tool's page in Settings → Plugins with its switch off.",
+      "why": "Needs dip497/worktrees installed in the run's profile."
+    },
+    {
+      "page": "tool-plugins",
+      "name": "tool-branch-tile",
+      "status": "todo",
+      "alt": "The starter tool's tile showing the git branch.",
+      "why": "Needs hive tools new built in the run."
+    },
+    {
+      "page": "appearance",
+      "name": "appearance-glass",
+      "status": "todo",
+      "alt": "The canvas and Layers panel with a wallpaper and glass panels on.",
+      "why": "Needs a wallpaper image in the run."
+    },
+    {
+      "page": "machines",
+      "name": "machines-pane",
+      "status": "todo",
+      "alt": "The Machines pane: one machine online, one grey asking you to sign in.",
+      "why": "Needs two saved machines."
+    },
+    {
+      "page": "connect",
+      "name": "connect-your-devices",
+      "status": "todo",
+      "alt": "Your devices: a host, a computer and a phone, each with Unpair.",
+      "why": "Needs paired devices."
+    },
+    {
+      "page": "multiplayer",
+      "name": "multiplayer-keyboard",
+      "status": "todo",
+      "alt": "A guest asks for the keyboard; the holder sees Give and Not now.",
+      "why": "Needs a second person."
+    },
+    {
+      "page": "host",
+      "name": "host-pair-terminal",
+      "status": "todo",
+      "alt": "hive host pair prints six words, a link and a QR code.",
+      "why": "Needs a host on a network."
+    },
+    {
+      "page": "browser-tab",
+      "name": "browser-tab-settings",
+      "status": "todo",
+      "alt": "Settings → In a browser with Serve the app to a browser on, its link and Open.",
+      "why": "Needs the switch turned on in the run; add a step."
+    },
+    {
+      "page": "update-and-roll-back",
+      "name": "update-restart",
+      "status": "todo",
+      "alt": "The toolbar showing Update available, then Restart to finish.",
+      "why": "Needs a newer release than the running app."
+    },
+    {
+      "page": "install",
+      "name": "first-start-agents-added",
+      "status": "todo",
+      "alt": "The notice listing the agents Hivemind added on first start.",
+      "why": "Needs agent programs on PATH in a fresh profile."
+    },
+    {
+      "page": "troubleshooting",
+      "name": "asleep-tile",
+      "status": "todo",
+      "alt": "A sleeping agent's tile with its Resume button.",
+      "why": "Needs an agent put to sleep."
     }
   ]
 }

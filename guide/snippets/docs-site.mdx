@@ -14,12 +14,14 @@ export const DocsMcpPrompt = () => (
 
 The server is at ${docsUrl}/mcp. Run \`npx add-mcp ${docsUrl}/mcp\` and choose this agent when it asks; or, if this agent has its own command for adding a remote MCP server (for example \`claude mcp add --transport http hivemind-docs ${docsUrl}/mcp\`), use that.
 
-Check it worked: list this agent's MCP servers and confirm the Hivemind docs server is there, then search it for "install" and tell me the install command it returns. If adding a server needs a setting only I can change, tell me which and wait.`}
+Check it worked: list this agent's MCP servers and confirm the Hivemind docs server is there, then search it for "install" and tell me the install command it returns. If adding a server needs a setting only I can change, tell me which and wait.
+
+REFERENCE ${docsUrl}/docs-for-agents.md`}
   </Prompt>
 );
 
 export const AgentPrompt = ({ description, page, children }) => (
-  <Prompt description={description} actions={["copy", "cursor"]}>
-    {`${String(children).trim()}\n\nREFERENCE ${docsUrl}/${page}.md`}
-  </Prompt>
+<Prompt description={description} actions={["copy", "cursor"]}>
+{`${String(children).trim()}\n\nREFERENCE ${docsUrl}/${page}.md`}
+</Prompt>
 );

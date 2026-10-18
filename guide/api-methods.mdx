@@ -1,105 +1,114 @@
 ---
 title: "Methods by role"
-description: "Every method a program's token can call, grouped by the smallest role that allows it."
+description: "Every method a program's token can call, grouped by the smallest role that allows it, with its params and an example."
 ---
 
-A token's role allows its own methods and those of every role above it in this page. `repo` is
-the workspace's folder; `tile` is a tile's id from `agent.list` or `agent.start`. Full parameters
-and results are in [`spec/workspace-api.md`](https://github.com/dip497/hivemind/blob/main/spec/workspace-api.md).
+import { docsUrl, AgentPrompt } from "/snippets/docs-site.mdx";
+import { validatedFor, LastValidated } from "/snippets/version.mdx";
 
-<Prompt description="Paste this into your coding agent to turn the methods on this page into a working script." actions={["copy","cursor"]}>
-Using the Hivemind workspace API methods listed at `https://github.com/dip497/hivemind/blob/main/spec/workspace-api.md`, write a script that watches my workspace and tells me when an agent waits on me.
+Every method a token can call, from workspace API version `0.30`. A role allows its own methods and those of every role above it on this page.
 
-1. Ask me which workspace folder to watch. The script needs only the `view` role. Check Hivemind runs with the folder open (`hive ctl agents` must not exit 3).
-2. Make a token: `hive grant create waiting-watcher -w <folder> --role view --expires 30d --json`. Keep the token out of this chat and out of git: put `HIVE_DRIVE_TOKEN`, `HIVE_DRIVE_SOCK` (the `socket` field) and `HIVE_WORKSPACE` in a git-ignored `.env`.
-3. The script connects to the socket, sends `{"hello": {"token": …, "workspace": …}}` as its first JSON line, then calls `agent.list` with `["<folder>"]` and prints each agent with its state and what it waits on. It then listens for `agent.changed`, `agent.event` and `status.changed` events (one JSON object or a list per line; lines with an `id` are answers) and prints a line whenever an agent starts waiting. When one does, it calls `agent.output` with `["<tile>", 20]` and prints those lines.
-4. Only use methods this page lists under `view`; any other is refused with `FORBIDDEN`.
-5. Run it, start an agent in the app that asks a question, and show me the script's output.
+<AgentPrompt description="Paste this into your coding agent to turn the methods on this page into a script that tells you when an agent waits on you." page="api-methods">{`
+Using the methods on this page, write a script that watches my Hivemind workspace and tells me when an agent waits on me.
 
-At the end, tell me how to stop the script and the command that revokes the token (`hive grant revoke <id>`, the id from `hive grant list`).
-</Prompt>
+1. Ask me which workspace folder to watch. The script needs only the \`view\` role. Check Hivemind runs with the folder open: \`hive ctl agents\` must not exit 3.
+2. Make a token: \`hive grant create waiting-watcher -w <folder> --role view --expires 30d --json\`. Keep the token out of this chat and out of git: put \`HIVE_DRIVE_TOKEN\`, \`HIVE_DRIVE_SOCK\` (the \`socket\` field) and \`HIVE_WORKSPACE\` in a git-ignored \`.env\`.
+3. Connect and say hello as the Protocol page shows. Call \`agent.list\` with \`["<folder>"]\` and print each agent with its state and what it waits on.
+4. Listen for \`agent.event\` events. When one has kind \`waiting\`, call \`agent.output\` with \`["<tile>", 20]\` and print those lines.
+5. Use only methods this page lists under view; any other is refused with \`FORBIDDEN\`.
+6. Run it, start an agent in the app that asks a question, and show me the script's output.
+
+At the end, tell me how to stop the script and how to revoke the token: \`hive grant revoke <id>\`, the id from \`hive grant list\`.
+`}</AgentPrompt>
+
+`repo` is the workspace's folder. `tile` is a tile's id from `agent.list` or `agent.start`. Each call is sent as `{"id": 1, "method": "…", "params": [...]}` ([Protocol](/api-protocol)). The example column shows `params`.
 
 ## view
 
-**Agents**
+### Agents
 
-| Method | Params | Returns |
+| Method | Params | Returns | Example params |
+|---|---|---|---|
+| <a id="agent-list" />`agent.list` | `repo` | `{seq, agents}`: every agent now, its state and what it waits on | `["/home/you/work/api"]` |
+| <a id="agent-since" />`agent.since` | `repo`, `seq` | the changes and events after `seq`, or null: list again | `["/home/you/work/api", 41]` |
+| <a id="agent-read" />`agent.read` | `tile`, `timeoutMs`? | its reply when it finishes: `{text, finalStatus, truncated}` | `["t-3f2a", 600000]` |
+| <a id="agent-output" />`agent.output` | `tile`, `lines`? | the last lines it printed (40 by default), as plain text | `["t-3f2a", 20]` |
+| <a id="agent-diff" />`agent.diff` | `tile` | `{files, patch, truncated}`: what it changed since its last commit | `["t-3f2a"]` |
+| <a id="agent-sessions" />`agent.sessions` | `place`, `program`, `limit`? | past sessions of that agent in a folder, to resume | `["/home/you/work/api", "claude", 10]` |
+| <a id="agent-startable" />`agent.startable` | `repo` | the agents that can start, their models and modes, and the frames | `["/home/you/work/api"]` |
+| <a id="agent-conversation" />`agent.conversation` | `tile`, `cursor`? | what the agent and you said, from its session file | `["t-3f2a"]` |
+| <a id="agent-tool" />`agent.tool` | `tile`, `use` | one tool use from that conversation, in full | `["t-3f2a", "toolu_01"]` |
+| <a id="status-all" />`status.all` | | every agent's status | `[]` |
+| <a id="link-list" />`link.list` | | which agent pipes into which, and which started which | `[]` |
+
+### Files, git and issues
+
+| Method | Params | Returns | Example params |
+|---|---|---|---|
+| <a id="git-status" />`git.status` | `repo` | branch, ahead and behind, changed files | `["/home/you/work/api"]` |
+| <a id="git-diff" />`git.diff` | `repo`, `scope`, `file`? | `{patch}` | `["/home/you/work/api", {"kind": "working"}]` |
+| <a id="git-listfiles" />`git.listFiles` | `repo` | tracked and untracked files | `["/home/you/work/api"]` |
+| <a id="git-listbranches" />`git.listBranches` | `repo` | `{current, local, remote}` | `["/home/you/work/api"]` |
+| <a id="git-filecontents" />`git.fileContents` | `repo`, `file`, `rev` | a file at `HEAD`, `INDEX` or `WORKING` | `["/home/you/work/api", "README.md", "HEAD"]` |
+| <a id="worktree-list" />`worktree.list` | `repo` | the repository's worktrees | `["/home/you/work/api"]` |
+| <a id="file-read" />`file.read` | `repo`, `file` | a file's text, inside the workspace | `["/home/you/work/api", "package.json"]` |
+| <a id="issue-list" />`issue.list` | `root` | issues; `root` is the workspace's `.hivemind` folder | `["/home/you/work/api/.hivemind"]` |
+| <a id="issue-read" />`issue.read` | `root`, `id` | one issue, with its sections | `["/home/you/work/api/.hivemind", "API-4"]` |
+| <a id="review-list" />`review.list` | `repo` | comments left on diffs | `["/home/you/work/api"]` |
+
+### Canvas, widgets, terminals and views
+
+| Method | Returns or does | Example params |
 |---|---|---|
-| `agent.list` | `repo` | `{seq, agents}`: every agent now, with its state and what it waits on |
-| `agent.since` | `repo`, `seq` | the changes and events after `seq` (null: list again) |
-| `agent.read` | `tile`, `timeoutMs`? | its reply when the turn ends: `{text, finalStatus, truncated}` |
-| `agent.output` | `tile`, `lines`? | the last lines it printed (40 by default), as plain text |
-| `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed since its last commit |
-| `agent.sessions` | `place`, `program`, `limit`? | past sessions of that agent in a folder, to resume |
-| `agent.startable` | `repo` | the agents that can be started, their models and modes, and the frames |
-| `agent.conversation` | `tile`, `cursor`? | what the agent and you said, read from its session file |
-| `agent.tool` | `tile`, `use` | one tool use from that conversation, in full |
-| `status.all` | | every agent's status |
-| `link.list` | | which agent pipes into which, and which started which |
-
-**Files, git, issues**
-
-| Method | Params | Returns |
-|---|---|---|
-| `git.status` | `repo` | branch, ahead/behind, changed files |
-| `git.diff` | `repo`, `scope`, `file`? | `{patch}` |
-| `git.listFiles`, `git.listBranches`, `git.fileContents` | `repo`, … | files, branches, a file at `HEAD`, `INDEX` or `WORKING` |
-| `worktree.list` | `repo` | the repository's worktrees |
-| `file.read` | `repo`, `file` | a file's text (path inside the workspace) |
-| `issue.list`, `issue.read` | `root`, `id`? | issues (`root` is the workspace's `.hivemind` folder) |
-| `review.list` | `repo` | comments left on diffs |
-
-**Board, widgets, terminals, views**
-
-| Method | Returns or does |
-|---|---|
-| `store.open`, `store.core`, `store.view`, `store.objects`, `store.objectsWithIds` | the board's layout and objects |
-| `widget.all`, `widget.packages`, `widget.asset` | what widgets draw, which are installed, their images |
-| `terminal.open` with `attachOnly` | watch a running terminal; output arrives as `terminal.data` |
-| `terminal.show`, `terminal.history`, `terminal.flow`, `terminal.ack`, `terminal.detach`, `terminal.watchActivity`, `terminal.saved` | follow terminals; `terminal.saved` is what a sleeping agent last showed |
-| `presence.set` | where your pointer is, for others in the workspace |
-| `appearance.get` | the host's theme |
-| `view.list`, `view.file`, `view.open`, `view.post`, `view.screen`, `view.close` | open an installed phone-ready view |
+| <a id="store" />`store.open`, `store.core`, `store.view`, `store.objects`, `store.objectsWithIds` | the canvas layout and objects | `["/home/you/work/api"]` |
+| <a id="widget-all" />`widget.all`, `widget.packages`, `widget.asset` | what widgets draw, which are installed, their images | `["/home/you/work/api"]` |
+| <a id="terminal-open-attach" />`terminal.open` with `attachOnly` | watch a running terminal; output comes as `terminal.data` | `[{"tileId": "t-3f2a", "attachOnly": true, "cols": 120, "rows": 40}]` |
+| <a id="terminal-follow" />`terminal.show`, `terminal.history`, `terminal.flow`, `terminal.ack`, `terminal.detach`, `terminal.watchActivity` | follow terminals; these get no answer | `["t-3f2a", true]` |
+| <a id="terminal-saved" />`terminal.saved` | what a sleeping agent last showed | `["t-3f2a"]` |
+| <a id="presence-set" />`presence.set` | where your pointer is, for others in the workspace | `["/home/you/work/api", null]` |
+| <a id="appearance-get" />`appearance.get` | the app's theme | `[]` |
+| <a id="view" />`view.list`, `view.file`, `view.open`, `view.post`, `view.screen`, `view.close` | open an installed view that is ready for phones | `[]` |
 
 ## edit
 
-| Method | Params | Does |
-|---|---|---|
-| `widget.press` | `repo`, `id`, `{action}` or `{click: true}` | press a widget's button or card |
-| `tool.open` | `repo`, `{tool, frame?, url?}` | place a tool's tile, `{tile}` |
-| `git.handOff` | `repo`, `branch`, `bundle` | hand over a branch of your own; it lands as `handoff/<name>/<branch>` |
+| Method | Params | Does | Example params |
+|---|---|---|---|
+| <a id="widget-press" />`widget.press` | `repo`, `id`, `{action}` or `{click: true}` | press a widget's button or card | `["/home/you/work/api", "w-1", {"click": true}]` |
+| <a id="tool-open" />`tool.open` | `repo`, `{tool, frame?, url?}` | place a tool's tile; returns `{tile}` | `["/home/you/work/api", {"tool": "dip497/worktrees"}]` |
+| <a id="git-handoff" />`git.handOff` | `repo`, `branch`, `bundle` | hand over a branch of your own; it lands as `handoff/<name>/<branch>` | `["/home/you/work/api", "fix", "<base64 bundle>"]` |
 
 ## terminals
 
-| Method | Params | Does |
-|---|---|---|
-| `terminal.write` | `tile`, `data` | type into a terminal, while you hold its keyboard |
-| `terminal.resize`, `terminal.fit` | `tile`, `cols`, `rows` | size it |
-| `terminal.keyboard.ask`, `terminal.keyboard.give` | `tile`, … | ask for its keyboard, hand it on |
+| Method | Params | Does | Example params |
+|---|---|---|---|
+| <a id="terminal-write" />`terminal.write` | `tile`, `data` | type into a terminal, while you hold its keyboard | `["t-3f2a", "ls\r"]` |
+| <a id="terminal-resize" />`terminal.resize`, `terminal.fit` | `tile`, `cols`, `rows` | size it | `["t-3f2a", 120, 40]` |
+| <a id="terminal-keyboard" />`terminal.keyboard.ask`, `terminal.keyboard.give` | `tile`, … | ask for its keyboard, or hand it on | `["t-3f2a"]` |
 
 ## agents
 
-| Method | Params | Does |
-|---|---|---|
-| `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | start an agent, `{tile}`; with `supervise`, its permission prompts come to you |
-| `agent.send` | `tile`, `text` | a message, typed in as its next prompt |
-| `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?, always?}` | answer what it waits on: a question, a permission, a plan |
-| `agent.interrupt` | `tile` | stop its turn |
-| `agent.keys` | `tile`, `keys` | type keys (`Enter`, `Escape`, `Up`, `C-c`, …) |
-| `agent.rename` | `tile`, `name` | rename it (empty: back to its own name) |
-| `agent.sleep`, `agent.wake` | `repo`, `target`?, `force`? | put to sleep or wake a tile, a frame, or every agent |
-| `agent.close` | `tile` | end it and take its tile off the board |
-| `agent.places`, `agent.folders` | `repo`, `folder`? | where in the workspace an agent may be started |
-| `frame.open` | `repo`, `{path}` or `{worktree: {branch, base?}}` | a frame on a folder or a new worktree of the workspace |
-| `frame.close` | `repo`, `frame`, `{closeTiles?, removeWorktree?, force?}`? | close a frame |
-| `terminal.open`, `terminal.close` | | start or end a terminal |
-| `link.connect`, `link.disconnect` | `src`, `dst`? | pipe one agent's replies into another as prompts |
+| Method | Params | Does | Example params |
+|---|---|---|---|
+| <a id="agent-start" />`agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | start an agent; returns `{tile}`. With `supervise`, its permission questions come to you. | `["/home/you/work/api", {"program": "claude", "prompt": "Run the tests"}]` |
+| <a id="agent-send" />`agent.send` | `tile`, `text` | a message, typed in as its next prompt | `["t-3f2a", "Now fix the failing test"]` |
+| <a id="agent-answer" />`agent.answer` | `tile`, `since`, `{text}`, `{decision, feedback?, always?}` or `{answers}` | answer what it waits on: a question, a permission, a plan. `since` is the `waiting.since` that `agent.list` shows; `decision` is `allow` or `deny`. | `["t-3f2a", 1760000000000, {"decision": "allow"}]` |
+| <a id="agent-interrupt" />`agent.interrupt` | `tile` | stop its current reply | `["t-3f2a"]` |
+| <a id="agent-keys" />`agent.keys` | `tile`, `keys` | type keys: `Enter`, `Escape`, `Up`, `C-c`, … | `["t-3f2a", ["Down", "Enter"]]` |
+| <a id="agent-rename" />`agent.rename` | `tile`, `name` | rename it; empty goes back to its own name | `["t-3f2a", "tests"]` |
+| <a id="agent-sleep" />`agent.sleep`, `agent.wake` | `repo`, `target`?, `force`? | put to sleep or wake a tile, a frame, or every agent | `["/home/you/work/api", "t-3f2a"]` |
+| <a id="agent-close" />`agent.close` | `tile` | end it and take its tile off the canvas | `["t-3f2a"]` |
+| <a id="agent-places" />`agent.places`, `agent.folders` | `repo`, `folder`? | where in the workspace an agent may start | `["/home/you/work/api"]` |
+| <a id="frame-open" />`frame.open` | `repo`, `{path}` or `{worktree: {branch, base?}}` | a frame on a folder, or on a new worktree | `["/home/you/work/api", {"worktree": {"branch": "fix-login"}}]` |
+| <a id="frame-close" />`frame.close` | `repo`, `frame`, `{closeTiles?, removeWorktree?, force?}`? | close a frame | `["/home/you/work/api", "f-2", {"closeTiles": true}]` |
+| <a id="terminal-open" />`terminal.open`, `terminal.close` | | start or end a terminal | |
+| <a id="link-connect" />`link.connect`, `link.disconnect` | `src`, `dst`? | pipe one agent's replies into another as prompts | `["t-3f2a", "t-9c1b"]` |
 
 ## No role
 
-No token can call the methods that commit, push, pull, stage or discard; write files; create or
-change issues and review comments; create or remove worktrees; let people in or change their
-roles; or make or revoke tokens.
+No token can call the methods that commit, push, pull, stage or discard; write files; create or change issues and review comments; create or remove worktrees; let people in or change their roles; or make or revoke tokens.
 
-That does not keep a program away from your files: with `terminals` it types into a shell, and
-with `agents` it starts agents, and either can run any command there.
+That does not keep a program away from your files. With `terminals` it types into a shell, and with `agents` it starts agents. Either can run any command there.
+
+Full parameters and results are in [`spec/workspace-api.md`](https://github.com/dip497/hivemind/blob/main/spec/workspace-api.md).
+
+<LastValidated />
