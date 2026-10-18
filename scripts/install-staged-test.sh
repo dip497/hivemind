@@ -57,6 +57,15 @@ case "$url" in
   *api.github.com*)
     if [ "$(cat "$TMP_API_403" 2>/dev/null || echo 0)" = 1 ]; then printf '\n403'; exit 22; fi
     printf '{"tag_name": "%s"}\n' "$want";;
+  # The API SDKs: the npm tarball, and the Python package's source as an sdist lays it out.
+  *hivemind-api.tgz)
+    [ "$(cat "$TMP_NO_SDK" 2>/dev/null || echo 0)" = 1 ] && exit 22
+    printf 'npm %s\n' "$want" > "$out";;
+  *hivemind-api-python.tar.gz)
+    [ "$(cat "$TMP_NO_SDK" 2>/dev/null || echo 0)" = 1 ] && exit 22
+    src=$(mktemp -d); mkdir -p "$src/hivemind_api-x"
+    printf '# python %s\n' "$want" > "$src/hivemind_api-x/pyproject.toml"
+    tar -czf "$out" -C "$src" hivemind_api-x; rm -rf "$src";;
   *hive-net*)
     [ "$(cat "$TMP_NO_NET" 2>/dev/null || echo 0)" = 1 ] && exit 22
     printf '#!/usr/bin/env bash\necho hive-net %s\n' "$want" > "$out"; chmod +x "$out";;
@@ -82,7 +91,7 @@ esac
 SHIM
 chmod +x "$TMP/shims"/*
 export PATH="$TMP/shims:$PATH"
-export TMP_LATEST="$TMP/latest" TMP_RUNNING="$TMP/running" TMP_URLS="$TMP/urls" TMP_API_403="$TMP/api403" TMP_NO_REDIRECT="$TMP/noredirect" TMP_NO_NET="$TMP/nonet"
+export TMP_LATEST="$TMP/latest" TMP_RUNNING="$TMP/running" TMP_URLS="$TMP/urls" TMP_API_403="$TMP/api403" TMP_NO_REDIRECT="$TMP/noredirect" TMP_NO_NET="$TMP/nonet" TMP_NO_SDK="$TMP/nosdk"
 echo v9.9.9 > "$TMP_LATEST"
 echo 0 > "$TMP_RUNNING"
 
@@ -94,6 +103,8 @@ check "first install stamps what runs" "v9.9.9" "$(stamp .installed-version)"
 check "nothing is waiting" "(none)" "$(stamp .staged-version)"
 check "the build is in place" "yes" "$([ -f "$APP/hivemind-extracted/AppRun" ] && echo yes || echo no)"
 check "hive-net is on PATH beside hive" "hive-net v9.9.9" "$("$HIVEMIND_BIN_DIR/hive-net" 2>&1)"
+check "the npm SDK is under its stable name" "npm v9.9.9" "$(cat "$APP/sdk/hivemind-api.tgz" 2>&1)"
+check "the Python SDK is a folder pip installs" "# python v9.9.9" "$(cat "$APP/sdk/python/pyproject.toml" 2>&1)"
 # A shared cache answers with the release before this one for its first minute, so the
 # question has to be one nobody has stored.
 # The tag comes from the redirect, which no cache and no hourly limit stands in front of.
@@ -159,6 +170,16 @@ check "the rest of it is installed" "v9.9.13" "$(stamp .installed-version)"
 check "it says hive-net is not in it" "yes" "$(grep -qi "hive-net is not in v9.9.13" "$TMP/out7" && echo yes || echo no)"
 check "the hive-net there before stays" "hive-net v9.9.12" "$("$HIVEMIND_BIN_DIR/hive-net" 2>&1)"
 echo 0 > "$TMP_NO_NET"
+
+# ── 7b. a release without the API SDKs ───────────────────────────────────
+echo 1 > "$TMP_NO_SDK"
+echo v9.9.13b > "$TMP_LATEST"
+run_installer > "$TMP/out7b" || true
+check "the rest of it is installed without the SDKs" "v9.9.13b" "$(stamp .installed-version)"
+check "it says the SDKs are not in it" "yes" "$(grep -qi "the API SDKs are not in v9.9.13b" "$TMP/out7b" && echo yes || echo no)"
+check "the SDKs there before stay" "# python v9.9.13" "$(cat "$APP/sdk/python/pyproject.toml" 2>&1)"
+check "and no download is left behind" "none" "$(ls -d "$APP"/sdk.*.new 2>/dev/null || echo none)"
+echo 0 > "$TMP_NO_SDK"
 
 # A selected nightly uses the newest pre-release and keeps that channel on upgrade.
 echo nightly-20261003-123 > "$TMP_LATEST"

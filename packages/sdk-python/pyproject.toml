@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hivemind-api"
+dynamic = ["version"]
+description = "Drive a Hivemind workspace from a program: agents, frames and terminals over the drive socket, with a token."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = []
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/dip497/hivemind"
+Source = "https://github.com/dip497/hivemind/tree/main/packages/sdk-python"
+
+[tool.setuptools.dynamic]
+version = { attr = "hivemind_api.__version__" }
+
+[tool.setuptools.package-data]
+hivemind_api = ["py.typed"]

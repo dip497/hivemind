@@ -22,7 +22,8 @@ import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
 // The host itself is loaded when `hive host run` starts it, not by every `hive` command.
 import type { HeadlessHost, HeadlessHostOptions } from "@hivemind/host/headless";
 import type { PairedDevice } from "@hivemind/workspace-host/devices";
-import { appData, hiveNetBin } from "../app-data.js";
+import { appData } from "@hivemind/core/app-data";
+import { hiveNetBin } from "../app-data.js";
 import { err, ok } from "../format.js";
 import { EXIT, HcpCliError } from "../hcp.js";
 import { driveCall } from "../drive.js";

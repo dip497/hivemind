@@ -1,0 +1,9 @@
+{
+  "extends": "@hivemind/tsconfig/base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "types": ["bun", "node"]
+  },
+  "include": ["src/**/*", "tests/**/*", "scripts/**/*"],
+  "exclude": ["dist", "node_modules"]
+}

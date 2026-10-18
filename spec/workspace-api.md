@@ -473,3 +473,10 @@ presence, people, the store, community views on a remote screen), which the app'
 and `hive host` serve, each over its own way of running a session and its own
 store. A view's host is `packages/view-host`, the window's and a remote screen's both. Rust: the
 phone's core, `crates/hive-phone` (`views.rs` for the views).
+
+A program's client of the drive socket, in TypeScript (`packages/sdk`, the package `hivemind-api`,
+which the `hive` CLI drives through) and Python (`packages/sdk-python`, `hivemind_api`), each in every release:
+`connect`, any method by name, events heard singly whether they come one to a line or as a list,
+and the common jobs (agents, frames, terminals) with the workspace's folder filled in. Both pass
+`conformance/drive.json`, the drive socket message by message. Design:
+`docs/design/api-sdks-2026-10-18.md`.

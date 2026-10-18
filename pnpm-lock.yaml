@@ -337,6 +337,9 @@ importers:
       citty:
         specifier: 'catalog:'
         version: 0.2.2
+      hivemind-api:
+        specifier: workspace:*
+        version: link:../../packages/sdk
       uqr:
         specifier: 'catalog:'
         version: 0.1.3
@@ -766,6 +769,31 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/sdk:
+    dependencies:
+      zod:
+        specifier: ^4
+        version: 4.6.5
+    devDependencies:
+      '@hivemind/core':
+        specifier: workspace:*
+        version: link:../hive-core
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@hivemind/workspace-api':
+        specifier: workspace:*
+        version: link:../workspace-api
+      '@types/bun':
+        specifier: ^1.4.2
+        version: 1.4.2
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

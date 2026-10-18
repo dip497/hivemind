@@ -188,6 +188,31 @@ function Remove-UnusedApps {
 }
 
 # ---------------------------------------------------------------- prebuilt ---
+# The API SDKs, for programs that drive a workspace: `npm install <AppDir>\sdk\hivemind-api.tgz`
+# and `pip install <AppDir>\sdk\python`. A release without them installs the rest.
+function Install-Sdk ($tag) {
+  $base = "https://github.com/$Repo/releases/download/$tag"
+  $dir = Join-Path $AppDir "sdk"
+  $tmp = Join-Path $AppDir "sdk.$PID.new"
+  try {
+    Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path (Join-Path $tmp "python") | Out-Null
+    Invoke-WebRequest -Uri "$base/hivemind-api.tgz" -OutFile (Join-Path $tmp "hivemind-api.tgz") -UseBasicParsing
+    Invoke-WebRequest -Uri "$base/hivemind-api-python.tar.gz" -OutFile (Join-Path $tmp "python.tar.gz") -UseBasicParsing
+    tar -xzf (Join-Path $tmp "python.tar.gz") -C (Join-Path $tmp "python") --strip-components=1
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $tmp "python\pyproject.toml"))) { throw "the Python SDK did not unpack" }
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Move-Item -Force (Join-Path $tmp "hivemind-api.tgz") (Join-Path $dir "hivemind-api.tgz")
+    Remove-Item -Recurse -Force (Join-Path $dir "python") -ErrorAction SilentlyContinue
+    Move-Item -Force (Join-Path $tmp "python") (Join-Path $dir "python")
+    Ok "API SDKs in ${dir}: npm install $(Join-Path $dir 'hivemind-api.tgz') - pip install $(Join-Path $dir 'python')"
+  } catch {
+    Warn "the API SDKs are not in $tag; the rest is installed without them"
+  } finally {
+    Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+  }
+}
+
 function Install-Prebuilt {
   New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
@@ -271,6 +296,7 @@ function Install-Prebuilt {
     } catch {
       Warn "hive-net is not in $tag; the rest is installed without it"
     }
+    Install-Sdk $tag
 
     Say "downloading desktop app"
     Invoke-WebRequest -Uri $appUrl -OutFile $tmpApp -UseBasicParsing

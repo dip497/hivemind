@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- API SDKs: `hivemind-api` for TypeScript (Node and Bun) and Python (3.9+, standard library only) connects a program to a workspace with a token from `hive grant create`, calls any method, hears events, and lists, starts, reads and answers agents without hand-writing the drive socket protocol. Each release carries them (`hivemind-api-<version>.tgz`, `hivemind_api-<version>-py3-none-any.whl`), and the installers put them in `sdk/` beside `hive`: `npm install ~/.hivemind-app/sdk/hivemind-api.tgz`, `pip install ~/.hivemind-app/sdk/python`. `hive` now drives the socket through the TypeScript one.
+
 - API access: `agent.transcript` (Workspace API 0.32) tells a program on this machine which session an agent is in and where its session file is, so it can follow the agent's own records. A phone, a guest, or an agent on another machine is pointed to `agent.conversation` instead.
 
 - API access: `agent.approval` (Workspace API 0.31) and `hive ctl approval <request>` show what a supervised worker's approval request would do, with its tool's input in full (an edit's text, not only its file), so a program or a person answering it sees what it allows.
