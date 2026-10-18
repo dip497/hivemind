@@ -23,7 +23,7 @@ for (const name of FILES) {
   const script = readFileSync(source, "utf8");
   if (check) {
     const current = existsSync(out) ? readFileSync(out, "utf8") : "";
-    if (current !== script) { console.error(`${name} is stale: run \`npm run install:sync\` in docs/`); process.exit(1); }
+    if (current !== script) { console.error(`${name} is stale: run \`npm run install:sync\` in site/`); process.exit(1); }
     console.log(`${name} current`);
   } else {
     writeFileSync(out, script);

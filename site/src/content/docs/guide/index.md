@@ -8,8 +8,8 @@ browser — in one window, on one canvas. Agents work in parallel; the workspace
 on you.
 
 <figure>
-  <img src="../shots/view-canvas.webp" alt="The canvas: two frames, each holding agent and shell tiles, on a shared wallpaper." />
-  <figcaption>The canvas — one frame per repository, tiles inside them</figcaption>
+  <img src="../shots/showcase/waiting-on-you-board.webp" alt="The canvas: the Layers list of projects and their agents, an agent's terminal, and a widget listing the two agents waiting on you." />
+  <figcaption>The canvas, with the Layers list beside it</figcaption>
 </figure>
 
 ## The model, in one picture
