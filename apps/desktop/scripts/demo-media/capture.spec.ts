@@ -13,7 +13,7 @@ import { DEMO, OUT, WWW, demoInstructions, recorder, runnerSettings, stage } fro
 
 // Each agent's job, as a person would give it. The docs agent asks before its edit and waits on
 // the person; the reviewer is asked for a fix later, which the person allows from the phone.
-const ASK_WIDGET = "Run hive widgets new fas-1-board --owner hivemind here, make it show FAS-1 and install it. Then do FAS-1, ticking each criterion as you go";
+const ASK_WIDGET = "Run hive widgets new fas-1-board --owner hivemind here, make it show FAS-1 with its whole title, wrapped rather than cut short, and install it. Then do FAS-1, ticking each criterion as you go";
 const ASK_EDIT = "Add a short docstring to generate_encoders_by_class_tuples in fastapi/encoders.py";
 const ASK_GLOB = "Read how --glob and --iglob are combined in crates/core/flags/defs.rs and crates/globset/src/lib.rs, then add a short paragraph to GUIDE.md on the order they apply in, with one example";
 const ASK_REVIEW = "Review this branch: read git diff main, then packages/element/src/binding.ts and its tests, and list what could break";
@@ -178,6 +178,10 @@ test("capture", async () => {
   const ab = (await allow.boundingBox())!;
   boxes.allow = { x: ab.x * 2, y: ab.y * 2, w: ab.width * 2, h: ab.height * 2 };
   await allow.click();
+  // The answer as it lands, before the agent goes on to its next step.
+  await phone.waitForTimeout(800);
+  await phoneShot("answered");
+  await burst("answered-close", 3);
   // A fix can take more than one edit; each one it asks about, the person allows there too.
   for (let i = 0; i < 60 && census().of(reviewer)?.waiting; i++) {
     await phone.waitForTimeout(1000);
@@ -185,9 +189,6 @@ test("capture", async () => {
   }
   if (census().of(reviewer)?.waiting) await phone.screenshot({ path: path.join(OUT, "frames/phone-stuck.png") });
   expect(census().of(reviewer)?.waiting, `${show()}\n--- its screen:\n${cli("ctl", "read", reviewer, "--poll").stdout.slice(-1500)}`).toBeUndefined();
-  await phone.waitForTimeout(2500);
-  await phoneShot("answered");
-  await burst("answered-close");
   await browser.close();
 
   rec.save({

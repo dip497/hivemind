@@ -1,18 +1,10 @@
 {
   "hero": {
-    "boxes": {
-      "widget": {
-        "x": 2688,
-        "y": 128,
-        "w": 480,
-        "h": 406
-      }
-    },
     "shots": [
       {
         "beat": "working",
         "start": 0,
-        "end": 2.6,
+        "end": 3.2,
         "play": "loop",
         "camera": [
           {
@@ -20,161 +12,205 @@
             "box": "full"
           },
           {
-            "u": 0.4,
+            "u": 0.35,
             "box": "full"
           },
           {
             "u": 1,
-            "box": "builderWide",
-            "pad": 2.2
+            "box": "askerWide",
+            "pad": 1.6
           }
         ]
       },
       {
-        "beat": "builder-close",
-        "start": 2.3,
-        "end": 4.0,
-        "fade": 0.35,
+        "beat": "asking-close",
+        "start": 3.2,
+        "end": 7.6,
         "play": "loop",
         "camera": [
           {
             "u": 0,
-            "box": "builderClose",
-            "pad": 1.02
+            "box": "askerClose",
+            "pad": 1.05
+          },
+          {
+            "u": 1,
+            "box": "askerClose",
+            "pad": 0.9,
+            "lift": 0.08
           }
         ]
       },
       {
+        "beat": "answering",
+        "start": 7.6,
+        "end": 10.2,
+        "play": "lapse",
+        "skip": "+30 s",
+        "camera": [
+          {
+            "u": 0,
+            "box": "askerClose",
+            "pad": 0.9,
+            "lift": 0.08
+          },
+          {
+            "u": 1,
+            "box": "askerClose",
+            "pad": 1.0
+          }
+        ],
+        "range": [
+          0.29,
+          1
+        ]
+      },
+      {
         "beat": "typing",
-        "start": 4.0,
-        "end": 6.2,
+        "start": 10.2,
+        "end": 13.0,
         "play": "steps",
         "camera": [
           {
             "u": 0,
             "box": "builderClose",
             "pad": 1.02
-          }
-        ]
-      },
-      {
-        "beat": "building",
-        "start": 6.2,
-        "end": 9.0,
-        "play": "lapse",
-        "range": [
-          0,
-          0.37
-        ],
-        "camera": [
-          {
-            "u": 0,
-            "box": "builderClose",
-            "pad": 1.02
-          }
-        ]
-      },
-      {
-        "beat": "building",
-        "start": 9.0,
-        "end": 11.0,
-        "play": "lapse",
-        "range": [
-          0.37,
-          1
-        ],
-        "camera": [
-          {
-            "u": 0,
-            "box": "builderClose",
-            "pad": 1.02
           },
           {
-            "u": 0.45,
+            "u": 1,
+            "box": "builderClose",
+            "pad": 0.95
+          }
+        ]
+      },
+      {
+        "beat": "building",
+        "start": 13.0,
+        "end": 18.0,
+        "play": "lapse",
+        "skip": "+2 m 26 s",
+        "camera": [
+          {
+            "u": 0,
+            "box": "builderClose",
+            "pad": 0.95
+          },
+          {
+            "u": 0.55,
+            "box": "builderClose",
+            "pad": 1.05
+          },
+          {
+            "u": 1,
             "box": "widget",
-            "pad": 1.36,
-            "lift": 0.12
+            "pad": 1.5,
+            "lift": 0.1
           }
         ]
       },
       {
         "beat": "built-close",
-        "start": 11.0,
-        "end": 17.4,
+        "start": 18.0,
+        "end": 25.6,
         "play": "loop",
         "camera": [
           {
             "u": 0,
             "box": "widget",
-            "pad": 1.36,
-            "lift": 0.12
+            "pad": 1.5,
+            "lift": 0.1
+          },
+          {
+            "u": 1,
+            "box": "widget",
+            "pad": 1.4,
+            "lift": 0.1
           }
         ]
       }
     ],
     "captions": [
       {
-        "text": "Twenty agents, one board.",
-        "start": 0.2,
-        "end": 2.4
+        "text": "Every agent on a real job.",
+        "start": 0.3,
+        "end": 3.0
       },
       {
-        "text": "Ask one for a widget.",
-        "start": 3.8,
+        "text": "One is waiting on you.",
+        "start": 3.5,
         "end": 6.0
       },
       {
-        "text": "It builds it, installs it, uses it.",
-        "start": 6.4,
-        "end": 9.2
+        "text": "You answer it.",
+        "start": 6.3,
+        "end": 8.2
+      },
+      {
+        "text": "Ask another for a widget.",
+        "start": 10.4,
+        "end": 12.8
+      },
+      {
+        "text": "It builds it, installs it, ticks it off.",
+        "start": 13.4,
+        "end": 17.6
       },
       {
         "text": "Your workspace, built by your agents.",
-        "start": 11.6,
-        "end": 14.4
+        "start": 18.4,
+        "end": 22.6
       }
     ],
     "pointer": [
       {
-        "start": 2.7,
-        "end": 3.7,
+        "start": 6.6,
+        "end": 7.6,
         "from": [
-          980,
+          900,
           640
         ],
         "to": {
-          "shot": "builder-close",
-          "box": "builderClose"
+          "shot": "asking-close",
+          "box": "yes"
         },
-        "click": 3.4
-      }
-    ],
-    "stills": {
-      "start": 0,
-      "asked": 5.8,
-      "built": 13.0,
-      "end": 16.5
-    },
-    "rings": [
-      {
-        "start": 9.9,
-        "end": 11.0,
-        "shot": "building",
-        "box": "widget"
+        "click": 7.4
       }
     ],
     "end": {
-      "start": 14.6,
-      "title": "Download Hivemind",
+      "start": 23.0,
+      "title": "Hivemind",
       "command": "bash <(curl -fsSL https://hivemind.griiken.com/install.sh)"
+    },
+    "boxes": {
+      "yes": {
+        "x": 885,
+        "y": 1385,
+        "w": 120,
+        "h": 40
+      }
+    },
+    "stills": {
+      "start": 1.0,
+      "asking": 5.5,
+      "answered": 9.2,
+      "typing": 12.4,
+      "building": 15.5,
+      "built": 21.0,
+      "end": 24.8
     }
   },
   "phone": {
+    "win": {
+      "x": 40,
+      "y": 100,
+      "w": 848,
+      "h": 530
+    },
     "shots": [
       {
         "beat": "asking",
         "start": 0,
-        "end": 2.4,
+        "end": 2.8,
         "play": "loop",
         "camera": [
           {
@@ -187,34 +223,65 @@
           },
           {
             "u": 1,
-            "box": "askerWide",
-            "pad": 2.6
+            "box": "reviewerWide",
+            "pad": 1.5
           }
         ]
       },
       {
-        "beat": "asking-close",
-        "start": 2.0,
-        "end": 5.7,
-        "fade": 0.4,
+        "beat": "review-close",
+        "start": 2.8,
+        "end": 7.2,
         "play": "loop",
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "askerClose",
+            "pad": 1.0
           }
         ]
       },
       {
         "beat": "answered-close",
-        "start": 5.7,
-        "end": 9.0,
-        "fade": 0.3,
+        "start": 7.2,
+        "end": 11.0,
         "play": "loop",
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "askerClose",
+            "pad": 1.0
+          }
+        ]
+      }
+    ],
+    "panes": [
+      {
+        "start": 3.4,
+        "end": 11.0,
+        "rect": {
+          "x": 920,
+          "y": 40,
+          "w": 320,
+          "h": 692
+        },
+        "look": "phone",
+        "size": {
+          "width": 780,
+          "height": 1688
+        },
+        "shots": [
+          {
+            "file": "frames/phone-needs.png",
+            "start": 3.4
+          },
+          {
+            "file": "frames/phone-asks.png",
+            "start": 5.0
+          },
+          {
+            "file": "frames/phone-answered.png",
+            "start": 7.2
           }
         ]
       }
@@ -222,51 +289,39 @@
     "captions": [
       {
         "text": "One agent needs you.",
-        "start": 0.2,
-        "end": 2.4
+        "start": 0.3,
+        "end": 2.6
       },
       {
         "text": "Answer it from your phone.",
-        "start": 2.8,
-        "end": 8.8
+        "start": 3.0,
+        "end": 6.8
+      },
+      {
+        "text": "It goes on with the fix.",
+        "start": 7.4,
+        "end": 10.8
       }
     ],
-    "phone": {
-      "start": 2.6,
-      "end": 9.0,
-      "shots": [
-        {
-          "file": "frames/phone-needs.png",
-          "start": 2.6
-        },
-        {
-          "file": "frames/phone-asks.png",
-          "start": 4.2
-        },
-        {
-          "file": "frames/phone-answered.png",
-          "start": 5.6
-        }
-      ]
-    },
     "pointer": [
       {
-        "start": 4.4,
-        "end": 5.6,
+        "start": 5.6,
+        "end": 7.2,
         "from": [
-          760,
-          700
+          1180,
+          720
         ],
         "to": {
-          "phone": "allow"
+          "pane": 0,
+          "box": "allow"
         },
-        "click": 5.3
+        "click": 6.9
       }
     ],
     "stills": {
       "asking": 1.5,
-      "asks": 5.0,
-      "answered": 7.5
+      "asks": 6.0,
+      "answered": 9.0
     }
   }
 }
