@@ -80,7 +80,7 @@ export type ClientMsg =
    *  and still hears what agents report there, for its other viewers and its pushes. Answered by
    *  `control`. */
   | { t: "control"; reqId: string; sock: string }
-  /** Ask the daemon to exit (used to replace a stale daemon after a rebuild). */
+  /** Ask the daemon to exit (to replace one of another protocol). */
   | { t: "shutdown" };
 
 /** daemon → client */
@@ -103,7 +103,7 @@ export type ServerMsg =
    *  not be saved. */
   | { t: "slept"; reqId: string; id: string; error?: string }
   | { t: "sessions"; reqId: string; ids: string[]; detail?: SessionInfo[] }
-  | { t: "pong"; reqId: string; buildStamp?: number }
+  | { t: "pong"; reqId: string; protocol?: number }
   /** Answers `screen`, in order with the session's data: bytes before it are older than it. */
   | { t: "screen"; reqId: string; id: string; replay: string | null }
   /** Answers `control`; `error` when `sock` is not an absolute path. */
@@ -113,6 +113,11 @@ export type ServerMsg =
   | { t: "error"; reqId?: string; message: string };
 
 export const SOCKET_NAME = "pty-daemon.sock";
+
+/** The daemon's contract with whoever starts its sessions: these messages, the snapshots it saves,
+ *  the hook scripts it writes and its hook door. An app keeps a running daemon of the same version
+ *  across its own upgrades, so this is raised when an app needs what an older daemon cannot do. */
+export const DAEMON_PROTOCOL_VERSION = 1;
 
 /** Printed by `hive daemon bridge` once connected; anything before it is shell-profile noise. */
 export const BRIDGE_READY = "HIVE-BRIDGE-READY\n";

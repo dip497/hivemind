@@ -6,10 +6,9 @@
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDown, ArrowUp, FolderOpen, FolderMinus, GitBranch, GitCommit, LayoutGrid, Moon, Palette, Pencil, Play, Server, ServerOff, SquarePen, Trash, Unlink, AddWidget } from "./components/icons";
-import { optionChoices, preferredAgent } from "@hivemind/agents";
-import { AgentIcon, useAgents } from "./agents";
-import { notReady, useAgentPresence } from "./agent-plugins";
-import { useSettings } from "./settings-store";
+import { optionChoices } from "@hivemind/agents";
+import { AgentIcon } from "./agents";
+import { useReadyAgents } from "./agent-choice";
 import { FRAME_SWATCHES } from "./frame-color";
 import { WorktreePicker } from "./WorktreePicker";
 import {
@@ -82,15 +81,11 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
   onClose: () => void;
   onRename: () => void;
 }) {
-  const agents = useAgents();
-  const presence = useAgentPresence();
-  const chosen = useSettings().agents.defaultAgent;
+  const { ordered: ready, first } = useReadyAgents();
   const fid = frame.id;
   const worktree = !!frame.parentFrameId;
   const repo = actions.repoPathForFrame(fid);
-  const first = preferredAgent(chosen, (d) => !notReady(presence, d.id))?.id;
   const { awake, asleep } = actions.agentsIn(fid);
-  const ready = agents.filter((a) => a.enabled && !notReady(presence, a.id)).sort((a, b) => Number(b.id === first) - Number(a.id === first));
   // Keys while it is open, as a row's menu has them.
   const keys: Record<string, () => void> = { r: onRename, d: () => actions.onDelete(fid) };
 

@@ -5,12 +5,13 @@
  */
 import net from "node:net";
 import path from "node:path";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
-import { type ServerMsg, type SessionInfo, SOCKET_NAME, frame, makeLineDecoder } from "@hivemind/agent-host/pty-protocol";
+import { type SessionInfo, DAEMON_PROTOCOL_VERSION, SOCKET_NAME } from "@hivemind/agent-host/pty-protocol";
+import { daemonProtocol, retireDaemon, socketAt, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { reachDaemon } from "@hivemind/agent-host/daemon-start";
+import { lastingDaemon } from "@hivemind/agent-host/daemon-runtime";
 import { ipcPath } from "./platform.js";
 import { hiveNetBin } from "./hive-net-bin.js";
 
@@ -30,77 +31,60 @@ interface SpawnOpts {
 
 const socketPath = () => ipcPath(app.getPath("userData"), SOCKET_NAME);
 const daemonScript = () => path.join(__dirname, "pty-daemon.js");
+/** How the daemon is started: ELECTRON_RUN_AS_NODE runs this app's binary as plain Node, from a
+ *  place that outlives the app. */
+const daemonCommand = async (sp: string): Promise<string[]> => {
+  const [runtime, script] = await lastingDaemon({
+    runtime: process.execPath, script: daemonScript(), appImage: process.env.APPIMAGE, mount: process.env.APPDIR,
+    dir: path.join(app.getPath("userData"), "runtime"), version: app.getVersion(),
+  });
+  return [runtime, script, sp];
+};
 // The daemon runs agents' hooks through hive-net when it is named here.
 const daemonEnv = (): NodeJS.ProcessEnv => {
   const hiveNet = hiveNetBin();
   return { ...process.env, ELECTRON_RUN_AS_NODE: "1", ...(hiveNet ? { HIVEMIND_HIVE_NET: hiveNet } : {}) };
 };
-const delay = (ms: number) =>
-  new Promise((r) => {
-    const t = setTimeout(r, ms);
-    t.unref?.();
-  });
-
-/** CONTENT hash (FNV-1a) of the on-disk daemon bundle. Using content — not mtime
- *  — means a rebuild that doesn't change the daemon's code keeps the same stamp,
- *  so renderer/main-only rebuilds DON'T trigger a respawn that would tear down
- *  live claude sessions. Must match pty-daemon.ts's BUILD_STAMP byte-for-byte. */
-function currentBuildStamp(): number {
-  try {
-    const b = readFileSync(daemonScript());
-    let h = 0x811c9dc5;
-    for (let i = 0; i < b.length; i++) { h ^= b[i]!; h = Math.imul(h, 0x01000193); }
-    return h >>> 0;
-  } catch { return 0; }
-}
+/** The sessions a daemon replacement waits on (agents mid-turn); null when none is waiting. */
+let waitingOn: string[] | null = null;
+let onWaiting: (ids: string[] | null) => void = () => {};
+let cutWait: (() => void) | null = null;
+/** Who hears which sessions a daemon replacement waits on, and when it waits no more (null). */
+export function setDaemonWaitSink(fn: (ids: string[] | null) => void): void { onWaiting = fn; }
+export function daemonWaitingOn(): string[] | null { return waitingOn; }
+/** Stop waiting for agents to finish their turns: they are put to sleep now. */
+export function restartAgentsNow(): void { cutWait?.(); }
 
 /**
- * If a daemon is already running but was launched from an OLDER build of the
- * daemon script (i.e. you rebuilt since it started), tell it to exit so the next
- * connect spawns a fresh one carrying the new code (hooks, env injection, …).
- * Sessions persist via on-disk snapshots, so the new daemon replays + respawns
- * them. No-op when no daemon is running or it's already current. Call ONCE at
- * startup; every connection waits for it, so the window need not.
+ * A daemon of this app's protocol is kept, whatever build started it: its agents run on through
+ * the app's upgrade. One of another protocol is replaced once no agent is mid-turn, each session
+ * put to sleep and woken in the new one. Call ONCE at startup; every connection waits for it.
  */
 let freshness: Promise<void> | null = null;
 export function ensureFreshDaemon(): Promise<void> {
-  freshness ??= replaceStaleDaemon();
+  freshness ??= replaceOtherProtocol();
   return freshness;
 }
 
-async function replaceStaleDaemon(): Promise<void> {
-  const want = currentBuildStamp();
-  if (!want) return; // can't stat the script — don't risk disrupting a live daemon
+async function replaceOtherProtocol(): Promise<void> {
   const sp = socketPath();
-  const probe = await new Promise<{ stamp: number; sock: net.Socket } | null>((resolve) => {
-    const s = net.connect(sp);
-    let settled = false;
-    const fin = (v: { stamp: number; sock: net.Socket } | null) => { if (settled) return; settled = true; resolve(v); };
-    const timer = setTimeout(() => { try { s.destroy(); } catch { /* */ } fin(null); }, 1000);
-    timer.unref?.();
-    s.once("error", () => { clearTimeout(timer); try { s.destroy(); } catch { /* */ } fin(null); }); // no daemon
-    s.on("data", makeLineDecoder((line) => {
-      try {
-        const m = JSON.parse(line) as ServerMsg;
-        if (m.t === "pong") { clearTimeout(timer); fin({ stamp: m.buildStamp ?? 0, sock: s }); }
-      } catch { /* ignore */ }
-    }));
-    s.once("connect", () => { try { s.write(frame({ t: "ping", reqId: "fresh" })); } catch { fin(null); } });
-  });
-  if (!probe) return;                       // nothing running → fresh spawns on demand
-  if (probe.stamp === want) { try { probe.sock.destroy(); } catch { /* */ } return; } // current
-  // Stale build → replace it.
-  try { probe.sock.write(frame({ t: "shutdown" })); } catch { /* */ }
-  try { probe.sock.end(); } catch { /* */ }
-  await delay(300); // let it exit + unlink the socket so the next connect spawns fresh
+  const protocol = await daemonProtocol(socketAt(sp));
+  if (protocol === null || protocol === DAEMON_PROTOCOL_VERSION) return;
+  const show = (ids: string[] | null) => { waitingOn = ids; onWaiting(ids); };
+  const retired = await retireDaemon(socketAt(sp), {
+    waiting: (ids) => show(ids.length ? ids : null),
+    now: new Promise<void>((resolve) => { cutWait = resolve; }),
+  }).finally(() => { cutWait = null; show(null); });
+  if (!retired.asleep.length) return;
+  const s = await reachDaemon(sp, await daemonCommand(sp), { env: daemonEnv() });
+  await wakeSessions(s, retired.asleep);
 }
 
 /** This computer's daemon, started if it is not running; never keeping quit waiting on it. */
 async function doConnect(): Promise<net.Socket> {
   await freshness?.catch(() => undefined);
   const sp = socketPath();
-  // ELECTRON_RUN_AS_NODE: Electron runs the daemon as plain Node, no Chromium.
-  const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: daemonEnv() });
+  const s = await reachDaemon(sp, await daemonCommand(sp), { env: daemonEnv() });
   s.unref();
   return s;
 }

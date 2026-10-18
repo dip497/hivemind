@@ -762,6 +762,10 @@ handleEffect("runUpgrade", () => ({}), () => new Promise<{ ok: boolean; code: nu
 // The repo passed on the CLI (`hivemind .`), or null for a bare launch (then
 // the renderer falls back to its persisted last-project).
 handle("getLaunchTarget", (e) => launchTargets.get(e.sender) ?? null, { local: true });
+// Agents mid-turn that a daemon of another protocol waits on before it is replaced.
+ptyDaemon.setDaemonWaitSink((ids) => broadcast("daemon:waiting", ids));
+handle("daemon:waiting", () => ptyDaemon.daemonWaitingOn(), { local: true });
+handle("daemon:restart-now", () => ptyDaemon.restartAgentsNow(), { local: true });
 // A New Window command: another window on the workspace the asking one shows.
 handle("window:new", (e) => createWindow(workspaceShownBy(e.sender)), { local: true });
 
@@ -1537,8 +1541,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
-    // A daemon left by an older build is replaced before anything connects to it: each connection
-    // waits for this, the window does not. A failure is shown once, as its hooks may be wrong.
+    // A daemon of another protocol is replaced before anything connects to it: each connection
+    // waits for this, the window does not.
     ptyDaemon.ensureFreshDaemon().catch((e: unknown) => {
       pushAppError(`Couldn't refresh the PTY daemon: ${(e as Error).message ?? "unknown error"}`, "pty-daemon");
     });
