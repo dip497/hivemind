@@ -15,6 +15,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - A widget's `hive.d.ts` now types issues: `onIssues` and `issues.read` say each field, and an issue's `assignee` is `{ type, id }`, so a widget that printed it as text showed `[object Object]` and now fails its own type check instead.
 
+- A widget can show a long line whole: a `text` node with `wrap: true` goes on to the next line instead of being cut short with …, as every widget line was, a title too.
+
 ## [2026.10.3] — 2026-10-18
 
 ### Added

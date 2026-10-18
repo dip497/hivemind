@@ -71,7 +71,8 @@ export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Writt
 type Node =
   | { type: "stack"; children: Node[]; fill?: boolean; tint?: string }
   | { type: "row"; children: Node[] }
-  | { type: "text"; text: string | number; size?: "large"; muted?: boolean }
+  /** One line, cut short with … when too long, unless \`wrap\`: then whole, on as many lines as it needs. */
+  | { type: "text"; text: string | number; size?: "large"; muted?: boolean; wrap?: boolean }
   | { type: "number"; value: number | string; label?: string }
   | { type: "meter"; value: number; max?: number; label?: string }
   | { type: "button"; label: string; action: unknown }
