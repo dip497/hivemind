@@ -71,3 +71,27 @@ test("an agent that goes is told its wait ended, and nothing waits on it after",
   assert.deepEqual(h.replies, ["t1 deny the agent closed"]);
   assert.equal(h.waits.of("t1"), undefined);
 });
+
+test("an agent whose status its machine's daemon keeps waits while the wait held here lasts, whatever that daemon says meanwhile", () => {
+  const h = host();
+  const daemon = { state: "working", source: "hooks", since: 5, subagents: [], background: 0, compacting: false } as const;
+  h.status.mirror("t1", { ...daemon });
+  const wait = h.waits.ask("t1", { kind: "approval", tool: "Bash", summary: "rm -rf dist" }, (d) => h.replies.push(`t1 ${d}`));
+  assert.deepEqual(pick(h.status.get("t1")!), { state: "waiting", kind: "approval", since: wait.since });
+  // The daemon reads its screen and hooks on, knowing nothing of the wait.
+  h.status.mirror("t1", { ...daemon, title: "Cleaning up" });
+  assert.deepEqual(pick(h.status.get("t1")!), { state: "waiting", kind: "approval", since: wait.since });
+  assert.equal(h.status.get("t1")!.title, "Cleaning up");
+  assert.deepEqual(h.waits.answer("t1", wait.since, "deny"), { answered: true });
+  assert.deepEqual(h.replies, ["t1 deny"]);
+  assert.equal(h.status.get("t1")!.state, "working");
+  // A second wait is a new one, never named by the first's `since`.
+  const next = h.waits.ask("t1", { kind: "approval", tool: "Bash", summary: "make" }, (d) => h.replies.push(`next ${d}`));
+  assert.notEqual(next.since, wait.since);
+  h.status.mirror("t1", { ...daemon, state: "exited" });
+  assert.equal(h.status.get("t1")!.state, "exited");
+});
+
+function pick({ state, kind, since }: { state: string; kind?: string; since: number }) {
+  return { state, kind, since };
+}

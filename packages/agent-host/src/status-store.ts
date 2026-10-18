@@ -14,9 +14,10 @@
  *
  * The machine that runs a session is the one that derives its status (docs/design/
  * multiplayer-2026-09-28.md, R6). A session another machine hosts is mirrored: the status is
- * taken as that host has it, and nothing seen here is folded into it, except that it ended.
+ * taken as that host has it, and nothing seen here is folded into it, except that it ended and a
+ * wait held here (a supervised tool use, a plan), which only this host knows of.
  */
-import { INITIAL_STATUS, INPUT_KINDS, SESSION_STATES, foldStatus, type AgentStatus, type SessionState, type StatusInput } from "@hivemind/agents";
+import { INITIAL_STATUS, INPUT_KINDS, SESSION_STATES, foldStatus, type AgentStatus, type InputKind, type SessionState, type StatusInput } from "@hivemind/agents";
 
 export type StatusSource = "hooks" | "screen";
 
@@ -74,6 +75,10 @@ export class StatusStore {
   private sessions = new Map<string, SessionStatus>();
   /** Sessions another machine hosts, whose status is that host's. */
   private mirrored = new Set<string>();
+  /** Each mirrored session's status as its host last sent it, under any wait held here. */
+  private hosted = new Map<string, SessionStatus>();
+  /** What each session waits on that this host holds the answer to (`waitOn`), and since when. */
+  private heldHere = new Map<string, { kind: InputKind; since: number }>();
   /** Sessions whose hook-reported turn the screen is overriding (see the header). */
   private screenHeld = new Set<string>();
   /** Each session's last screen reading, whoever its authority is. */
@@ -184,13 +189,43 @@ export class StatusStore {
     this.apply(tileId, cur?.source ?? null, (s) => ({ ...s, title: title || undefined }), cur?.says);
   }
 
-  /** The session's status as the machine that runs it has it. From now on it is that host's. */
+  /** The session's status as the machine that runs it has it. From now on it is that host's,
+   *  but for a wait held here. */
   mirror(tileId: string, status: SessionStatus): void {
     this.mirrored.add(tileId);
-    this.put(tileId, status);
+    this.hosted.set(tileId, status);
+    this.put(tileId, this.withHeldWait(tileId, status));
+  }
+
+  /** The session waits on an answer this host holds: its status waits on it until `waitOver`,
+   *  whatever its host says meanwhile. */
+  waitOn(tileId: string, kind: InputKind): void {
+    if (!this.mirrored.has(tileId)) return this.event(tileId, { event: "input.requested", kind });
+    const since = Math.max(this.now(), (this.sessions.get(tileId)?.since ?? 0) + 1);
+    this.heldHere.set(tileId, { kind, since });
+    this.put(tileId, this.withHeldWait(tileId, this.hosted.get(tileId)!));
+  }
+
+  /** The wait held here ended: the session's status is what it was without it. */
+  waitOver(tileId: string): void {
+    if (!this.mirrored.has(tileId)) return this.event(tileId, { event: "input.resolved" });
+    const held = this.heldHere.get(tileId);
+    this.heldHere.delete(tileId);
+    const shown = this.sessions.get(tileId);
+    if (!held || shown?.state === "exited") return;
+    this.put(tileId, { ...this.hosted.get(tileId)!, since: Math.max(this.now(), held.since + 1) });
+  }
+
+  private withHeldWait(tileId: string, status: SessionStatus): SessionStatus {
+    const held = this.heldHere.get(tileId);
+    if (!held || status.state === "exited") return status;
+    const { says: _screen, ...rest } = status;
+    return { ...rest, state: "waiting", kind: held.kind, since: held.since };
   }
 
   forget(tileId: string): void {
+    this.hosted.delete(tileId);
+    this.heldHere.delete(tileId);
     this.sessions.delete(tileId);
     this.readings.delete(tileId);
     this.mirrored.delete(tileId);
