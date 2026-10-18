@@ -73,6 +73,7 @@ workspace.
 | `hive.on("click", fn)` | its card was clicked (not on a button) |
 | `hive.on("start", fn)` | it was placed or the app opened |
 | `hive.on("action", fn)` | one of its buttons was pressed; `fn` gets the button's `action` |
+| `hive.on("hm", fn)` | `hive.hm`'s values arrived or changed |
 | `hive.hm` | the workspace, as a view sees it: see below |
 
 It runs in a worker: no network, no files, nothing of the app but `hive`. What it draws and its
@@ -103,6 +104,8 @@ replaces them.
   when two people type at once, and its lines, ticked, added and reordered. Writing in it is an
   edit, so ⌘Z takes it back.
 - `"$options.<id>"` in a drawing is that option's value; `tint` colours the card as a note.
+  A widget with code tints its card the same way: `hive.render({ type: "stack", tint: "pink", … })`,
+  on the board and floating.
 - Options are `number`, `boolean`, `text` or `choice` (with `values`).
 
 A widget with code can draw these fields too.
@@ -127,7 +130,16 @@ await hive.hm.commands.spawnAgent(null, null, { prompt: "run the tests" }); // y
 ```
 
 In a widget every call returns a promise, and one given a callback returns its unsubscribe at
-once. Its values (`hive.hm.hello`, `settings`, `capabilities`, `features`) are there to read.
+once. Its values (`hive.hm.hello`, `settings`, `capabilities`, `features`) are there to read from
+the first line of your code, each in its usual shape: empty (`[]`, `{}`, `hello` null) until the
+app sends them, when `hive.on("hm", fn)` fires, as it does again when they change. Draw again
+there:
+
+```js
+const draw = () => hive.render({ type: "text", text: hive.hm.capabilities.includes("workspace:spawn") ? "Ready" : "Waiting" });
+hive.on("hm", draw);
+draw();
+```
 
 A widget's page in **Settings ▸ Plugins**, **What it can do**, shows its permissions. A widget
 without permissions reads and points at things, nothing more.
@@ -150,17 +162,14 @@ the screen.
 
 ## Where they run
 
-```mermaid title="One window runs a widget; everyone sees it"
-flowchart TB
-  run["The one window that runs widget.js"]
-  seen["Guests' windows, your other windows,<br>your phone"]
-  run -->|what it draws, live| seen
-  seen -.->|a press| run
-```
+<figure class="diagram" style="--min:600px">
+  <div><img src="../../diagrams/widgets-runner.svg" width="640" height="330" alt="One window runs widget.js: the first of your own windows with the workspace open to ask. What it draws goes live to guests' windows, your other windows on any of your devices, and your phone through a widgets view; a press from any of them goes back to that window. Guests can press only if they can edit the board. Nothing it draws is saved." /></div>
+  <figcaption>One window runs a widget; everyone sees it</figcaption>
+</figure>
 
-The window that runs it is on the machine that hosts the workspace, or, for a workspace on a
-`hive host` with no window, your own laptop or desktop that has it open. Nobody else's computer
-runs your code, and nobody installs anything to see it. What it draws is never saved. A guest who
+The window that runs it is the first of your own windows with the workspace open to ask: on the
+machine that hosts the workspace or on another of your devices (a `hive host` has no window of its
+own). When that window closes, another of yours takes over. Nobody else's computer runs your code, and nobody installs anything to see it. What it draws is never saved. A guest who
 can edit the board can press its buttons; one who can only view cannot.
 
 On your phone, a view that shows widgets draws them and its buttons work, for example

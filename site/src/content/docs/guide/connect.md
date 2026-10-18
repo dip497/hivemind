@@ -6,22 +6,10 @@ description: Pair your phone or another computer, or let someone into a workspac
 One offer, made on **Settings → Connect**, serves your phone, another computer, or someone else.
 You say which when the other device uses it.
 
-```mermaid title="One offer, three answers"
-flowchart TB
-  offer["Settings → Connect → Connect"]
-  words["The other device uses it;<br>both show three words"]
-  prompt{"Your computer"}
-  none["Nothing kept"]
-  guest["In the workspace"]
-  check{"Other device:<br>words match?"}
-  paired["Paired as you"]
-  offer --> words --> prompt
-  prompt -->|Deny| none
-  prompt -->|Someone else| guest
-  prompt -->|It's me| check
-  check -->|Yes| paired
-  check -->|No| none
-```
+<figure class="diagram" style="--min:600px">
+  <div><img src="../../diagrams/connect-offer.svg" width="640" height="596" alt="Flowchart: you make an offer on Settings → Connect; the other device uses it and both show three words. On your computer you answer Deny (nothing is kept), Someone else (they join the workspace at the role you pick) or It's me; then the other device asks whether the words match: Yes pairs it as you, No keeps nothing. A request left unanswered for about three minutes counts as Deny." /></div>
+  <figcaption>One offer, three answers</figcaption>
+</figure>
 
 ## Make an offer
 
