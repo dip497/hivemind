@@ -13,9 +13,9 @@ import { connectPage, offerToConnect } from "../../tests/e2e/helpers/phone";
 import { stopDaemons } from "../../tests/e2e/helpers/daemons";
 import { DEMO, OUT, ROOT, WWW, demoInstructions, recorder, runnerSettings, stage, working } from "./stage";
 
-const HIVEHUB = "https://hivehub.griiken.workers.dev/api/v1/index.json";
-const WIDGETS = path.resolve("scripts/demo-media/widgets");
-const PROGRESS = path.join(ROOT, "examples/widgets/progress");
+// The showcase plugins, from their own examples folder.
+const SHOWCASE = process.env.SHOWCASE ?? path.join(os.homedir(), "projects/hivemind-showcase/examples");
+const SHOWCASE_WIDGETS = ["agent-pulse", "waiting-on-you", "issue-burndown", "launchpad", "ci-light"];
 
 let root = "";
 const apps: ElectronApplication[] = [];
@@ -33,7 +33,8 @@ test.afterEach(async () => {
 
 // Jobs a person would give, each about its own folder.
 const JOB = {
-  release: "Track the release on the Progress widget with hive ctl plugin call @dip497/progress: set-title Release 0.116.2, add the steps Bump the version, Write the release notes and Tag and push, then read git log --oneline -n 20 and tick each of the first two steps as you check it. Then hive ctl set-state FAS-2 done",
+  ci: "Run ruff check fastapi, then report the result on the CI light: hive ctl plugin call @dip497/ci-light set with state passed or failed, name ruff, branch main and a short detail line",
+  triage: "Ask the flaky-tests tool for the last runs with hive ctl plugin call dip497/flaky-tests flaky, then say in two lines which tests to look at first",
   routing: "Read fastapi/routing.py and list three functions that have no docstring",
   docstrings: "Add a short docstring to generate_encoders_by_class_tuples in fastapi/encoders.py",
   review: "Review this branch: read git diff main, then packages/element/src/binding.ts and its tests, and list what could break",
@@ -48,140 +49,105 @@ test.beforeEach(() => {
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 test("widgets", async () => {
-  test.setTimeout(600_000);
+  test.setTimeout(900_000);
   const s = await stage(root, apps);
-  const { desktop, cli, emit } = s;
+  const { desktop, cli } = s;
   const frames = await s.openFrames(["fastapi"]);
-  const release = await s.agent(frames.fastapi, "release", "acceptEdits");
+  const ci = await s.agent(frames.fastapi, "ci-check", "acceptEdits");
+  const asker = await s.agent(frames.fastapi, "docstrings", "default", JOB.docstrings);
   const routing = await s.agent(frames.fastapi, "routing-review", "default", JOB.routing);
+  await expect.poll(() => s.census().of(asker)?.waiting?.kind ?? "", { timeout: 300_000, intervals: [1000] }).toBe("permission");
   await working(s, [routing]);
-  for (const dir of [PROGRESS, ...["agents", "issues", "next-up"].map((w) => path.join(WIDGETS, w))]) {
-    const r = cli("widgets", "install", dir, "--json");
-    expect(r.status, r.stderr).toBe(0);
+  for (const name of SHOWCASE_WIDGETS) {
+    const r = cli("widgets", "install", path.join(SHOWCASE, "widgets", name), "--json");
+    expect(r.status, r.stdout + r.stderr).toBe(0);
   }
   await desktop.evaluate(() => window.dispatchEvent(new Event("focus")));
   await s.tidy([frames.fastapi]);
-  // Room under the frame for a row of widgets.
-  await emit("hivemind:zoom", "out");
-  await desktop.waitForTimeout(800);
+  await s.quiet();
 
   const rec = recorder(s.app, path.join(OUT, "widgets"), OUT);
-  await rec.box(desktop, `.react-flow__node[data-id="${frames.fastapi}"]`, "frame");
-  await rec.burst("board", 6);
-  // Each board widget goes where the pointer is when Add opens: in a row under the frame.
-  const f = rec.boxes.frame!;
+  await rec.burst("board", 4);
+  // One after another, as a person adds them from the Add menu or an agent opens them.
   const adding = rec.beat("adding");
-  const add = async (name: string, at?: { x: number; y: number }) => {
-    if (at) await desktop.mouse.move(at.x, at.y);
-    await emit("hivemind:open-add");
-    await desktop.waitForTimeout(500);
-    await adding();
-    await desktop.locator("[data-board-choice^='widget:']", { hasText: name }).first().click();
-    await desktop.waitForTimeout(900);
-    await adding();
-  };
-  const y = (f.y + f.h) / 2 + 30;
-  // Each next one beside the last, a gap apart, wherever Add puts a widget against the pointer.
-  let at = { x: f.x / 2 + f.w / 6, y };
-  for (const [i, name] of ["Agents", "Issues", "Next up"].entries()) {
-    await add(name, at);
-    await desktop.keyboard.press("Escape");
-    const b = await rec.box(desktop, `.react-flow__node-widget >> nth=${i}`, "_");
-    const right = (b.x + b.w) / 2;
-    at = { x: right + b.w / 20 + (at.x - b.x / 2), y };
+  for (const name of SHOWCASE_WIDGETS) {
+    expect(cli("ctl", "plugin", "open", `widget:@dip497/${name}`).status).toBe(0);
+    for (let i = 0; i < 3; i++) { await desktop.waitForTimeout(400); await adding(); }
   }
-  delete rec.boxes._;
-  // Closer, as a person zooms in on what they added: round the row's middle until it reads.
-  const row = await rec.box(desktop, ".react-flow__node-widget >> nth=1", "issues");
-  await desktop.mouse.move(row.x / 2 + row.w / 4, row.y / 2 + row.h / 4);
-  for (let i = 0; i < 16 && (await rec.box(desktop, ".react-flow__node-widget >> nth=1", "issues")).w < 300; i++) {
-    await desktop.keyboard.down("Control");
-    await desktop.mouse.wheel(0, -120);
-    await desktop.keyboard.up("Control");
-    await desktop.waitForTimeout(250);
-  }
-  await desktop.mouse.move(10, 500);
-  await desktop.waitForTimeout(600);
-  for (const [i, name] of ["agents", "issues", "nextUp"].entries()) await rec.box(desktop, `.react-flow__node-widget >> nth=${i}`, name);
-  await rec.burst("close", 4);
-  const close = rec.beat("ticking");
-  await emit("hivemind:open-add");
-  await desktop.waitForTimeout(500);
-  await desktop.locator("[data-board-choice^='widget:']", { hasText: "Progress" }).first().click();
-  await desktop.waitForTimeout(900);
-  await close();
-  // The release agent keeps the progress widget and closes its issue; the issue widgets follow.
-  cli("ctl", "send", release, JOB.release);
-  const fas2 = () => { try { return JSON.parse(cli("show", "FAS-2", "--json").stdout).data.state as string; } catch { return ""; } };
-  for (let i = 0; i < 300 && !(fas2() === "done" && s.census().of(release)?.state !== "working"); i++) { await close(); await desktop.waitForTimeout(700); }
-  expect(fas2(), s.show()).toBe("done");
-  await rec.box(desktop, "[data-widget-layer] [data-widget]", "progress");
-  await rec.burst("widgets", 8);
-  rec.save({ agents: { release: "claude", "routing-review": "claude" } });
-  await expect(desktop.locator(".react-flow__node-widget")).toHaveCount(3);
+  for (const name of SHOWCASE_WIDGETS) await rec.box(desktop, `[data-widget="@dip497/${name}"]`, name);
+  await rec.box(desktop, "[data-widget-layer]", "layer").catch(() => {});
+  // A real agent drives one: it runs the check and reports it on the CI light.
+  cli("ctl", "send", ci, JOB.ci);
+  const light = rec.beat("reporting");
+  const said = () => desktop.locator('[data-widget="@dip497/ci-light"]').innerText().catch(() => "");
+  const before = await said();
+  for (let i = 0; i < 300 && !((await said()) !== before && s.census().of(ci)?.state !== "working"); i++) { await light(); await desktop.waitForTimeout(700); }
+  expect(await said(), s.show()).not.toBe(before);
+  await rec.burst("reported", 6);
+  rec.save({ widgets: SHOWCASE_WIDGETS, light: await said(), agents: { "ci-check": "claude", docstrings: "claude", "routing-review": "claude" } });
 });
 
 test("tools", async () => {
-  test.setTimeout(600_000);
-  const s = await stage(root, apps, { cwd: path.join(DEMO, "excalidraw"), more: { HIVEMIND_PLUGIN_INDEX: HIVEHUB } });
+  test.setTimeout(900_000);
+  // The tests flaky-tests runs, built once before the clip so the runs show at their own speed.
+  const tests = "cargo test -p globset --lib -q";
+  execFileSync("nice", ["-n", "15", "bash", "-c", tests], { cwd: path.join(DEMO, "ripgrep"), stdio: "ignore", timeout: 600_000 });
+  const s = await stage(root, apps, { cwd: path.join(DEMO, "ripgrep") });
   const { desktop, cli } = s;
-  // The CI runs tool asks `gh`; it answers for the demo's repositories with the runner's GitHub login.
-  const gh = execFileSync("bash", ["-c", "command -v gh"], { encoding: "utf8" }).trim();
-  fs.writeFileSync(path.join(root, "bin/gh"), `#!/usr/bin/env bash\nGH_CONFIG_DIR="${os.homedir()}/.config/gh" exec "${gh}" "$@"\n`, { mode: 0o755 });
-  const frames = await s.openFrames(["excalidraw", "arrow-binding"]);
-  const review = await s.agent(frames["arrow-binding"], "arrow-review", "default", JOB.review);
-  await working(s, [review]);
-  await s.tidy([frames.excalidraw, frames["arrow-binding"]]);
+  for (const name of ["flaky-tests", "changelog-writer"]) {
+    const r = cli("tools", "install", path.join(SHOWCASE, "tools", name), "--json");
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+    expect(cli("plugins", "enable", `tool:dip497/${name}`, "--json").status).toBe(0);
+  }
+  for (const [k, v] of [["command", tests], ["runs", "8"]]) cli("plugins", "set", "tool:dip497/flaky-tests", k!, v!);
+  const frames = await s.openFrames(["ripgrep", "glob-order"]);
+  const glob = await s.agent(frames["glob-order"], "glob-docs", "default", JOB.glob);
+  const triage = await s.agent(frames.ripgrep, "test-triage", "default");
+  await working(s, [glob]);
+  await s.tidy(Object.values(frames));
+  await s.quiet();
 
   const rec = recorder(s.app, path.join(OUT, "tools"), OUT);
-  // HiveHub, in Plugins: both tools are there to install.
-  await s.emit("hivemind:open-settings", { page: "plugins" });
-  await desktop.locator('[data-plugins-scope="hub"]').click();
-  await desktop.getByLabel("Search plugins").fill("worktrees");
-  const entry = desktop.locator("[data-catalog-plugin*='worktrees']").first();
-  await expect(entry).toBeVisible({ timeout: 30_000 });
-  await rec.burst("hub", 4);
-  const hub = rec.beat("installing");
-  await entry.getByRole("button", { name: "Install" }).click();
-  await hub();
-  await desktop.getByRole("button", { name: "Install", exact: true }).last().click();
-  await expect(desktop.getByRole("button", { name: "Open its page" })).toBeVisible({ timeout: 60_000 });
-  await hub();
-  const ci = cli("tools", "install", "dip497/ci-runs", "--json");
-  expect(ci.status, ci.stdout + ci.stderr).toBe(0);
-  for (const id of ["tool:dip497/worktrees", "tool:dip497/ci-runs"]) expect(cli("plugins", "enable", id, "--json").status).toBe(0);
-  await desktop.keyboard.press("Escape");
-  await desktop.waitForTimeout(600);
-
-  const opening = rec.beat("opening");
-  expect(cli("ctl", "open-tool", "dip497/worktrees/worktrees", "--frame", frames.excalidraw).status).toBe(0);
-  const wt = desktop.locator('[data-tool-plugin="dip497/worktrees"]');
-  await expect(wt).toContainText("fix/arrow-binding", { timeout: 30_000 });
-  await s.emit("hivemind:focus-tile", await wt.evaluate((n) => n.closest(".react-flow__node")?.getAttribute("data-id")));
-  await desktop.waitForTimeout(1200);
-  await opening();
-  await rec.burst("worktrees", 8);
-  expect(cli("ctl", "open-tool", "dip497/ci-runs/runs", "--frame", frames.excalidraw).status).toBe(0);
-  const runs = desktop.locator('[data-tool-plugin="dip497/ci-runs"]');
-  await expect(runs.locator("[data-run]").first()).toBeVisible({ timeout: 60_000 });
-  await s.emit("hivemind:focus-tile", await runs.evaluate((n) => n.closest(".react-flow__node")?.getAttribute("data-id")));
-  await desktop.waitForTimeout(1200);
-  await rec.burst("runs", 6);
-  await runs.locator("[data-run]").first().click();
+  const opened = JSON.parse(cli("ctl", "plugin", "open", "tool:dip497/flaky-tests", "--frame", frames.ripgrep, "--json").stdout || "{}").tile as string;
+  expect(opened, "flaky-tests opened in a tile").toBeTruthy();
+  await s.emit("hivemind:focus-tile", opened);
   await desktop.waitForTimeout(2500);
-  await rec.burst("run", 8);
-  rec.save({ agents: { "arrow-review": "claude" } });
+  await rec.box(desktop, `.react-flow__node[data-id="${opened}"]`, "tool");
+  await rec.burst("tool", 3);
+  const running = rec.beat("running");
+  await desktop.getByRole("button", { name: /^Run 8 times/ }).first().click();
+  for (let i = 0; i < 400; i++) {
+    await running();
+    if (await desktop.getByRole("button", { name: /^Run 8 times/ }).first().isEnabled().catch(() => false) && i > 3) break;
+    await desktop.waitForTimeout(600);
+  }
+  await rec.burst("ran", 4);
+  // An agent asks the same tool, from its own terminal.
+  cli("ctl", "send", triage, JOB.triage);
+  await s.emit("hivemind:focus-tile", triage);
+  await desktop.waitForTimeout(1500);
+  await rec.box(desktop, `.react-flow__node[data-id="${triage}"]`, "triage");
+  const asking = rec.beat("asking");
+  for (let i = 0; i < 300 && !(i > 5 && s.census().of(triage)?.state !== "working"); i++) {
+    await asking();
+    if (s.census().of(triage)?.waiting) break;
+    await desktop.waitForTimeout(700);
+  }
+  await rec.burst("answered", 6);
+  rec.save({ agents: { "glob-docs": "claude", "test-triage": "claude" }, triage: s.census().of(triage) });
 });
 
 test("views", async () => {
-  test.setTimeout(600_000);
-  const s = await stage(root, apps, { more: { HIVEMIND_PLUGIN_INDEX: HIVEHUB } });
+  test.setTimeout(900_000);
+  const s = await stage(root, apps);
   const { desktop, cli } = s;
-  for (const v of ["@dip497/queue", "@dip497/tiled"]) {
-    const r = cli("views", "install", v, "--json");
+  for (const name of ["agents-by-state", "timeline", "constellation"]) {
+    const r = cli("views", "install", path.join(SHOWCASE, "views", name), "--json");
     expect(r.status, r.stdout + r.stderr).toBe(0);
   }
+  cli("plugins", "set", "view:@dip497/constellation", "frameRate", "30");
   const frames = await s.openFrames(["fastapi", "arrow-binding", "glob-order"]);
+  const asker = await s.agent(frames.fastapi, "docstrings", "default", JOB.docstrings);
   const busy = [
     await s.agent(frames["arrow-binding"], "arrow-review", "default", JOB.review),
     await s.agent(frames["glob-order"], "glob-order", "default", JOB.glob),
@@ -189,26 +155,25 @@ test("views", async () => {
   ];
   await working(s, busy);
   await s.tidy(Object.values(frames));
+  await s.quiet();
 
   const rec = recorder(s.app, path.join(OUT, "views"), OUT);
-  await rec.burst("board", 6);
-  const to = async (view: string) => {
-    const name = view.replace(/^@[^/]+\//, "");
-    const picking = rec.beat(`pick-${name}`);
-    await desktop.locator("[data-view-switch]").click();
-    await desktop.waitForTimeout(400);
-    await picking();
-    await desktop.locator(`[data-view-choice="${view}"]`).click();
-    await desktop.waitForTimeout(2000);
-    await rec.burst(name, 8);
-  };
-  const ids = await desktop.locator("[data-view-switch]").click().then(() => desktop.locator("[data-view-choice]").evaluateAll((els) => els.map((e) => e.getAttribute("data-view-choice"))));
-  await desktop.keyboard.press("Escape");
-  const pick = (part: string) => ids.find((id) => id?.includes(part)) ?? part;
-  await to(pick("queue"));
-  await to(pick("tiled"));
-  await to("canvas");
-  rec.save({ views: ids, agents: { "arrow-review": "claude", "glob-order": "claude", "routing-review": "claude" } });
+  await rec.burst("board", 4);
+  for (const name of ["agents-by-state", "timeline", "constellation"]) {
+    const id = `@dip497/${name}`;
+    expect(cli("ctl", "plugin", "open", `view:${id}`).status).toBe(0);
+    await expect(desktop.locator(`[data-community-view="${id}"][data-community-ready="1"]`)).toHaveCount(1, { timeout: 30_000 });
+    await desktop.waitForTimeout(1500);
+    await rec.burst(name, name === "constellation" ? 16 : 5);
+  }
+  // The constellation docks the terminal of the agent waiting on you.
+  const docking = rec.beat("docking");
+  await docking();
+  const r = cli("ctl", "plugin", "call", "@dip497/constellation", "show", JSON.stringify({ name: "docstrings" }));
+  expect(r.status, r.stdout + r.stderr).toBe(0);
+  for (let i = 0; i < 8; i++) { await desktop.waitForTimeout(400); await docking(); }
+  await rec.burst("docked", 6);
+  rec.save({ agents: { docstrings: "claude", "arrow-review": "claude", "glob-order": "claude", "routing-review": "claude" }, waiting: s.census().of(asker)?.waiting?.kind ?? null });
 });
 
 test("machines", async () => {

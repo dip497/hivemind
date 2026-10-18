@@ -2,26 +2,35 @@
 // A muted loop recorded from the real app (docs/design/demo-media-2026-10-18.md), over its own
 // first frame. The hero's starts once the page has loaded; the others while they are on screen.
 // Reduced motion keeps the poster; the button always stops or starts it.
-interface Props { name: string; alt: string; eager?: boolean }
-const { name, alt, eager = false } = Astro.props;
-const src = (file: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/shots/${name}/${file}`;
+// Until a clip's files exist, `fallback` names a real screenshot under shots/ to show instead.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+interface Props { name: string; alt: string; eager?: boolean; fallback?: { file: string; width: number; height: number; fit?: "cover" | "contain" } }
+const { name, alt, eager = false, fallback } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const src = (file: string) => `${base}/shots/${name}/${file}`;
+const has = (file: string) => existsSync(join(process.cwd(), "public/shots", name, file));
+const still = fallback && !has('poster.webp') ? fallback : null;
+const moving = has('clip.webm') || has('clip.mp4');
 ---
-<div class="loop" data-eager={eager ? "" : undefined}>
-  <img class="poster" src={src('poster.webp')} width="1280" height="800" alt={alt}
+<div class="loop" data-eager={eager ? "" : undefined} data-fit={still?.fit}>
+  <img class="poster" src={still ? `${base}/shots/${still.file}` : src('poster.webp')} width={still?.width ?? 1280} height={still?.height ?? 800} alt={alt}
     fetchpriority={eager ? "high" : undefined} loading={eager ? undefined : "lazy"} decoding={eager ? undefined : "async"} />
-  <video muted playsinline loop preload="none" aria-hidden="true" tabindex="-1" width="1280" height="800">
+  {moving && <video muted playsinline loop preload="none" aria-hidden="true" tabindex="-1" width="1280" height="800">
     <source src={src('clip.webm')} type='video/webm; codecs="av01.0.05M.08"' />
     <source src={src('clip.mp4')} type="video/mp4" />
-  </video>
-  <button type="button" class="loop-pause" aria-pressed="false">Pause</button>
+  </video>}
+  {moving && <button type="button" class="loop-pause" aria-pressed="false">Pause</button>}
 </div>
 
 <style>
   .loop{position:relative;aspect-ratio:16/10;border:1px solid var(--line);border-radius:12px;
     overflow:hidden;background:#0b0d10;box-shadow:0 18px 50px rgba(0,0,0,.45)}
   .poster,video{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .poster{object-fit:cover;object-position:top}
+  .loop[data-fit="contain"] .poster{object-fit:contain;object-position:center}
   /* The video shows only once it plays; until then the poster is what loads and what you see. */
-  video{opacity:0;transition:opacity .3s ease-out}
+  video{opacity:0;transition:opacity .2s ease-out}
   .loop[data-started] video{opacity:1}
   @media (prefers-reduced-motion:reduce){video{transition:none}}
   .loop-pause{position:absolute;right:10px;bottom:10px;padding:5px 11px;border-radius:999px;
@@ -40,6 +49,7 @@ const src = (file: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/sh
     }
   }, { threshold: 0.4 });
   for (const loop of document.querySelectorAll<HTMLElement & { play?: () => void }>(".loop")) {
+    if (!loop.querySelector("video")) continue;
     const video = loop.querySelector("video")!;
     const button = loop.querySelector(".loop-pause")!;
     const show = (playing: boolean) => {

@@ -4,27 +4,29 @@
       {
         "beat": "working",
         "start": 0,
-        "end": 3.2,
+        "end": 2.4,
         "play": "loop",
         "camera": [
           {
             "u": 0,
-            "box": "full"
+            "box": "tiles",
+            "pad": 1.05
           },
           {
-            "u": 0.35,
-            "box": "full"
+            "u": 0.15,
+            "box": "tiles",
+            "pad": 1.05
           },
           {
             "u": 1,
             "box": "askerWide",
-            "pad": 1.6
+            "pad": 1.25
           }
         ]
       },
       {
         "beat": "asking-close",
-        "start": 3.2,
+        "start": 2.4,
         "end": 7.6,
         "play": "loop",
         "camera": [
@@ -119,26 +121,25 @@
             "box": "widget",
             "pad": 1.5,
             "lift": 0.1
-          },
-          {
-            "u": 1,
-            "box": "widget",
-            "pad": 1.4,
-            "lift": 0.1
           }
-        ]
+        ],
+        "isolate": {
+          "box": "widget",
+          "from": 0.03,
+          "to": 0.26
+        }
       }
     ],
     "captions": [
       {
         "text": "Every agent on a real job.",
-        "start": 0.3,
-        "end": 3.0
+        "start": 0.2,
+        "end": 2.4
       },
       {
         "text": "One is waiting on you.",
-        "start": 3.5,
-        "end": 6.0
+        "start": 2.7,
+        "end": 5.6
       },
       {
         "text": "You answer it.",

@@ -1,1 +1,0 @@
-{ "name": "Next up", "description": "The issues waiting to be picked up, newest first.", "placement": "board", "permissions": ["workspace:issues"], "size": { "w": 380, "h": 150 } }

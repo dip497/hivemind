@@ -21,6 +21,8 @@ export type Cues = {
   phone: { width: number; height: number };
   boxes: Record<string, Box>;
   shots: { beat: string; files: string[]; at: number[] }[];
+  /** The agents' tiles on the board as recorded. */
+  tiles?: Box[];
 };
 /** `lift` raises the box by that share of the view, leaving room below it. */
 type Key = { u: number; box: string; pad?: number; lift?: number };
@@ -32,6 +34,9 @@ type Shot = {
   range?: [number, number];
   skip?: string;
   camera: Key[];
+  /** From `from` to `to` (shares of the shot) the window closes in on `box` alone, which ends
+   *  centred on the flat background with nothing around it cut. */
+  isolate?: { box: string; from: number; to: number };
 };
 type Caption = { text: string; start: number; end: number };
 type Still = { file: string; start: number };
@@ -54,7 +59,8 @@ export type Story = {
 export type ClipProps = { story: Story; cues: Cues };
 
 // The window leaves a strip under it for the caption, so a caption never covers the product.
-const WIN = { x: 64, y: 24, w: 1152, h: 720 };
+const WIN = { x: 80, y: 20, w: 1120, h: 700 };
+const CAPTION = 36;
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
@@ -62,11 +68,17 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 /
 const shown = (t: number, start: number, end: number) => clamp((t - start) / FADE) * clamp((end - t) / FADE);
 const fileAt = (shots: Still[], t: number) => ([...shots].reverse().find((s) => t >= s.start) ?? shots[0]!).file;
 
+function around(boxes: Box[]): Box {
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  return { x, y, w: Math.max(...boxes.map((b) => b.x + b.w)) - x, h: Math.max(...boxes.map((b) => b.y + b.h)) - y };
+}
+
 /** The part of the capture the camera shows: `box` grown by `pad`, widened to the window's shape,
  *  kept inside the capture. */
 function view(cues: Cues, key: Key): Box {
   const { width: W, height: H } = cues.size;
-  const b = key.box === "full" ? { x: 0, y: 0, w: W, h: H } : cues.boxes[key.box]!;
+  const b = key.box === "full" ? { x: 0, y: 0, w: W, h: H } : key.box === "tiles" ? around(cues.tiles!) : cues.boxes[key.box]!;
   const pad = key.pad ?? 1;
   let w = b.w * pad;
   let h = b.h * pad;
@@ -126,8 +138,27 @@ function onClip(cues: Cues, shot: Shot, box: Box, t: number, win: Box): [number,
   return [win.x + (box.x + box.w / 2 - cam.x) * s, win.y + (box.y + box.h / 2 - cam.y) * s];
 }
 
-function Capture({ cues, shot, t, win }: { cues: Cues; shot: Shot; t: number; win: Box }) {
+/** The window and the part of the capture in it, while a shot closes in on one box: both move
+ *  evenly from the camera's view in the window to the box alone, centred above the caption strip. */
+function isolated(cues: Cues, shot: Shot, t: number, win: Box): { win: Box; cam: Box } {
   const cam = camera(cues, shot, t);
+  if (!shot.isolate) return { win, cam };
+  const u = clamp((t - shot.start) / (shot.end - shot.start));
+  const k = easeInOut(clamp((u - shot.isolate.from) / (shot.isolate.to - shot.isolate.from)));
+  const b = cues.boxes[shot.isolate.box]!;
+  const h = Math.min(win.h * 0.8, (win.w * 0.7 * b.h) / b.w);
+  const end = { w: (h * b.w) / b.h, h, x: 0, y: 0 };
+  end.x = (1280 - end.w) / 2;
+  end.y = win.y + (win.h - h) / 2;
+  const mix = (a: number, z: number) => a + (z - a) * k;
+  const to = { x: mix(win.x, end.x), y: mix(win.y, end.y), w: mix(win.w, end.w), h: mix(win.h, end.h) };
+  const s = to.w / mix(cam.w, b.w);
+  const cx = mix(cam.x + cam.w / 2, b.x + b.w / 2);
+  const cy = mix(cam.y + cam.h / 2, b.y + b.h / 2);
+  return { win: to, cam: { x: cx - to.w / s / 2, y: cy - to.h / s / 2, w: to.w / s, h: to.h / s } };
+}
+
+function Capture({ cues, shot, t, cam, win }: { cues: Cues; shot: Shot; t: number; cam: Box; win: Box }) {
   const s = win.w / cam.w;
   return (
     <Img src={staticFile(frameOf(cues, shot, t))} style={{
@@ -177,14 +208,15 @@ export function Clip({ story, cues }: ClipProps) {
   }
   const ring = pointer?.click !== undefined ? clamp((t - pointer.click) / 0.2) : 0;
   const ending = story.end && t >= story.end.start;
+  const framed = isolated(cues, shot, t, win);
 
   return (
     <AbsoluteFill style={{ background: BG }}>
       <div style={{
-        position: "absolute", left: win.x, top: win.y, width: win.w, height: win.h, overflow: "hidden",
+        position: "absolute", left: framed.win.x, top: framed.win.y, width: framed.win.w, height: framed.win.h, overflow: "hidden",
         borderRadius: 10, background: BG, boxShadow: `0 0 0 1px ${LINE}, 0 10px 30px rgba(0,0,0,.35)`,
       }}>
-        <Capture cues={cues} shot={shot} t={t} win={win} />
+        <Capture cues={cues} shot={shot} t={t} cam={framed.cam} win={framed.win} />
       </div>
       {story.panes?.filter((p) => t >= p.start && t < p.end).map((p, i) => <Device key={i} pane={p} t={t} />)}
       {pointerAt && (
@@ -200,20 +232,20 @@ export function Clip({ story, cues }: ClipProps) {
       {/* The strip under the window: the caption, and a skip's length while one plays. */}
       {caption && (
         <div style={{
-          position: "absolute", left: win.x, top: win.y + win.h + 14, opacity: shown(t, caption.start, caption.end),
-          font: `400 19px/1.3 ${SANS}`, color: TEXT, letterSpacing: "-0.005em",
+          position: "absolute", left: win.x, top: win.y + win.h + 18, opacity: shown(t, caption.start, caption.end),
+          font: `400 ${CAPTION}px/1.2 ${SANS}`, whiteSpace: "nowrap", color: TEXT, letterSpacing: "-0.005em",
         }}>{caption.text}</div>
       )}
       {shot.skip && (
         <div style={{
-          position: "absolute", right: 1280 - win.x - win.w, top: win.y + win.h + 16, opacity: shown(t, shot.start, shot.end),
-          font: `400 15px/1.3 ${MONO}`, color: MUTED,
+          position: "absolute", right: 1280 - win.x - win.w, top: win.y + win.h + 24, opacity: shown(t, shot.start, shot.end),
+          font: `400 26px/1.3 ${MONO}`, color: MUTED,
         }}>{shot.skip}</div>
       )}
       {ending && (
-        <AbsoluteFill style={{ background: BG, opacity: clamp((t - story.end!.start) / FADE), alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 18 }}>
-          <div style={{ font: `500 34px/1.1 ${SANS}`, color: TEXT, letterSpacing: "-0.02em" }}>{story.end!.title}</div>
-          <div style={{ font: `400 17px/1.3 ${MONO}`, color: MUTED }}>{story.end!.command}</div>
+        <AbsoluteFill style={{ background: BG, opacity: clamp((t - story.end!.start) / FADE), alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 28 }}>
+          <div style={{ font: `500 64px/1.1 ${SANS}`, color: TEXT, letterSpacing: "-0.02em" }}>{story.end!.title}</div>
+          <div style={{ font: `400 28px/1.3 ${MONO}`, color: MUTED }}>{story.end!.command}</div>
         </AbsoluteFill>
       )}
     </AbsoluteFill>

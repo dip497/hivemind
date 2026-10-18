@@ -1,1 +1,0 @@
-{ "name": "Issues", "description": "This workspace's issues by state, and how many are done.", "placement": "board", "permissions": ["workspace:issues"], "size": { "w": 240, "h": 150 } }

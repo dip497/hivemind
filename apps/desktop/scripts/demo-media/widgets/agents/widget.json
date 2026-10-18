@@ -1,1 +1,0 @@
-{ "name": "Agents", "description": "How many agents in this workspace are working, and how many wait on you.", "placement": "board", "size": { "w": 240, "h": 130 } }

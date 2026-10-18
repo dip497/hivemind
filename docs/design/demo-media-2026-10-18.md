@@ -16,7 +16,7 @@ themselves.
 **The look.** Flat: the app's own background (`#0d0e10`), the window flat with no tilt, glow or
 gradient behind it. The real canvas is on screen within 3 s, one continuous camera move per clip,
 at most one hard cut. One short sentence per caption in Geist, labels and commands in JetBrains
-Mono, fading over 180 ms. Real speed, except a marked skip shown as a plain `+40 s`. The end card
+Mono, fading over 180 ms; 36 px captions, so they still read when the page shows the clip 600 px wide. Real speed, except a marked skip shown as a plain `+40 s`. The end card
 is the name and the install command, held 2.5 s.
 
 ## The demo workspace
@@ -90,7 +90,7 @@ render/render.mjs   →  site/public/shots/<clip>/clip.webm, clip.mp4, poster.we
 | words on screen at once | ≤ 8 (the render refuses more) |
 | caption fades | 150–200 ms; the real canvas within 3 s |
 
-On the page the poster is an `<img fetchpriority="high">` and `site/src/components/Loop.astro` (`name`, `alt`, `eager`)
+On the page the poster is an `<img fetchpriority="high">` and `site/src/components/Loop.astro` (`name`, `alt`, `eager`, and a `fallback` screenshot until the clip exists)
 plays it: the hero's from `load`, the others while on screen; the `<video muted playsinline loop
 preload="none">` over it starts after `load` and shows only once it plays. A Pause button is always
 there. With `prefers-reduced-motion: reduce` the video does not start; the button can start it.
