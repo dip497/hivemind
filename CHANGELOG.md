@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Settings → Servers: on a fresh install, "Set up my server with an agent" is the first thing on the page; the page shows and checks a network an agent switched to with `hive network use`, without a refresh.
+
 - An agent's notification card is drawn over widgets instead of behind them; dialogs now open over Settings and a fullscreen tile, and tooltips over dialogs.
 
 - Layers: "Hide asleep" in the View menu leaves asleep agents out of the list; a line at the end says how many are hidden and shows them again when clicked.
