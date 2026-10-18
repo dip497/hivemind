@@ -62,7 +62,7 @@ for (const [id, story] of Object.entries(stories)) {
 
   const out = path.join(site, id);
   fs.mkdirSync(out, { recursive: true });
-  ffmpeg(...input, "-c:v", "libsvtav1", "-preset", "4", "-crf", "42", "-g", "240", "-pix_fmt", "yuv420p", "-svtav1-params", "tune=0", ...EXACT, path.join(out, "clip.webm"));
+  ffmpeg(...input, "-c:v", "libsvtav1", "-preset", "4", "-crf", "43", "-g", "240", "-pix_fmt", "yuv420p", "-svtav1-params", "tune=0", ...EXACT, path.join(out, "clip.webm"));
   ffmpeg(...input, "-c:v", "libx264", "-preset", "slow", "-crf", "30", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart", ...EXACT, path.join(out, "clip.mp4"));
   // The poster is the clip's first frame, so the video takes over from it without a jump.
   for (const q of [82, 74, 66, 58, 50]) {
