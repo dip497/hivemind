@@ -8,9 +8,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { type SessionInfo, DAEMON_PROTOCOL_VERSION, SOCKET_NAME } from "@hivemind/agent-host/pty-protocol";
-import { daemonProtocol, retireDaemon, wakeSessions } from "@hivemind/agent-host/daemon-replace";
+import { daemonProtocol, retireDaemon, socketAt, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { reachDaemon } from "@hivemind/agent-host/daemon-start";
+import { lastingDaemon } from "@hivemind/agent-host/daemon-runtime";
 import { ipcPath } from "./platform.js";
 import { hiveNetBin } from "./hive-net-bin.js";
 
@@ -30,6 +31,15 @@ interface SpawnOpts {
 
 const socketPath = () => ipcPath(app.getPath("userData"), SOCKET_NAME);
 const daemonScript = () => path.join(__dirname, "pty-daemon.js");
+/** How the daemon is started: ELECTRON_RUN_AS_NODE runs this app's binary as plain Node, from a
+ *  place that outlives the app. */
+const daemonCommand = async (sp: string): Promise<string[]> => {
+  const [runtime, script] = await lastingDaemon({
+    runtime: process.execPath, script: daemonScript(), appImage: process.env.APPIMAGE, mount: process.env.APPDIR,
+    dir: path.join(app.getPath("userData"), "runtime"), version: app.getVersion(),
+  });
+  return [runtime, script, sp];
+};
 // The daemon runs agents' hooks through hive-net when it is named here.
 const daemonEnv = (): NodeJS.ProcessEnv => {
   const hiveNet = hiveNetBin();
@@ -58,15 +68,15 @@ export function ensureFreshDaemon(): Promise<void> {
 
 async function replaceOtherProtocol(): Promise<void> {
   const sp = socketPath();
-  const protocol = await daemonProtocol(sp);
+  const protocol = await daemonProtocol(socketAt(sp));
   if (protocol === null || protocol === DAEMON_PROTOCOL_VERSION) return;
   const show = (ids: string[] | null) => { waitingOn = ids; onWaiting(ids); };
-  const retired = await retireDaemon(sp, {
+  const retired = await retireDaemon(socketAt(sp), {
     waiting: (ids) => show(ids.length ? ids : null),
     now: new Promise<void>((resolve) => { cutWait = resolve; }),
   }).finally(() => { cutWait = null; show(null); });
   if (!retired.asleep.length) return;
-  const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: daemonEnv() });
+  const s = await reachDaemon(sp, await daemonCommand(sp), { env: daemonEnv() });
   await wakeSessions(s, retired.asleep);
 }
 
@@ -74,8 +84,7 @@ async function replaceOtherProtocol(): Promise<void> {
 async function doConnect(): Promise<net.Socket> {
   await freshness?.catch(() => undefined);
   const sp = socketPath();
-  // ELECTRON_RUN_AS_NODE: Electron runs the daemon as plain Node, no Chromium.
-  const s = await reachDaemon(sp, [process.execPath, daemonScript(), sp], { env: daemonEnv() });
+  const s = await reachDaemon(sp, await daemonCommand(sp), { env: daemonEnv() });
   s.unref();
   return s;
 }

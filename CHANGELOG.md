@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Agents keep running through an upgrade on every platform: macOS no longer refuses an upgrade while agents run, Windows keeps each version in a folder of its own, an AppImage started directly keeps its agents when the app quits, and a machine's agents survive an update of `hive` there.
+
 - Agents keep running through an app upgrade: the new app takes over the running terminal daemon, and a tile shows what its agent did meanwhile. When a release changes how the daemon talks, agents finish their turn, then come back in the same conversation.
 
 - **Breaking:** `hive daemon status --json` reports `protocol` instead of `buildStamp`.

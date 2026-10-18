@@ -73,7 +73,7 @@ if ([Environment]::Is64BitOperatingSystem -eq $false) { Die "hivemind needs 64-b
 # from a terminal doesn't pin the console open.
 function Write-Launcher {
   $launcher = Join-Path $BinDir "hivemind.cmd"
-  $appExe = Join-Path $AppDir "app\hivemind.exe"
+  $appExe = Join-Path $AppHome "hivemind.exe"
   @"
 @echo off
 setlocal
@@ -98,7 +98,7 @@ param([switch]`$Purge)
 Write-Host "hivemind: uninstalling..."
 Get-Process -Name hivemind | Stop-Process -Force
 Start-Sleep -Milliseconds 300
-Remove-Item -Recurse -Force "$AppDir\app"
+Get-ChildItem -Path "$AppDir" -Directory | Where-Object { `$_.Name -eq "app" -or `$_.Name -like "app-*" } | Remove-Item -Recurse -Force
 Remove-Item -Force "$(Join-Path ([Environment]::GetFolderPath('Programs')) 'hivemind.lnk')"
 if (`$Purge) {
   # Two homes on Windows: Electron's userData, and the XDG-style registry the
@@ -133,8 +133,8 @@ function Add-StartMenuShortcut {
   $lnk = Join-Path ([Environment]::GetFolderPath("Programs")) "hivemind.lnk"
   $shell = New-Object -ComObject WScript.Shell
   $s = $shell.CreateShortcut($lnk)
-  $s.TargetPath = Join-Path $AppDir "app\hivemind.exe"
-  $s.WorkingDirectory = Join-Path $AppDir "app"
+  $s.TargetPath = Join-Path $AppHome "hivemind.exe"
+  $s.WorkingDirectory = $AppHome
   $s.Description = "Infinite canvas for Claude Code & AI coding agents"
   $s.Save()
   Ok "Start Menu shortcut"
@@ -147,15 +147,19 @@ function Test-AppRunning {
   [bool](Get-Process -Name hivemind -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 })
 }
 
-# Unpack the release zip.
+# Unpack the release zip into a folder of its own, app-<version>.
 #
 # NO staged-upgrade path, matching macOS and unlike Linux. Two reasons, either
 # sufficient: Windows holds a lock on a running .exe, so the swap cannot happen
 # at all while the app is up; and the Start Menu shortcut launches the bundle
 # directly, so a staged dir would sit unapplied while the user kept starting the
 # old build. The caller refuses to touch a running install instead.
-function Install-App ($zip) {
-  $dest = Join-Path $AppDir "app"
+#
+# The terminal daemon the app leaves running is hivemind.exe from the version that
+# started it, and Windows will not delete a running exe: each version keeps its own
+# folder, and one is removed only once nothing runs from it.
+function Install-App ($zip, $name) {
+  $dest = Join-Path $AppDir $name
   $staging = Join-Path $AppDir "unpack"
   Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
   Expand-Archive -Path $zip -DestinationPath $staging -Force
@@ -168,6 +172,19 @@ function Install-App ($zip) {
   Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
   Move-Item $root $dest
   Remove-Item -Recurse -Force $staging -ErrorAction SilentlyContinue
+  $script:AppHome = $dest
+  Remove-UnusedApps
+}
+
+# Every app folder but the current one that no process runs from.
+function Remove-UnusedApps {
+  $running = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object { $_.Path } | Where-Object { $_ })
+  Get-ChildItem -Path $AppDir -Directory | Where-Object { ($_.Name -eq "app" -or $_.Name -like "app-*") -and $_.FullName -ne $AppHome } | ForEach-Object {
+    $dir = $_.FullName + [IO.Path]::DirectorySeparatorChar
+    if (-not ($running | Where-Object { $_.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) })) {
+      Remove-Item -Recurse -Force $_.FullName -ErrorAction SilentlyContinue
+    }
+  }
 }
 
 # ---------------------------------------------------------------- prebuilt ---
@@ -211,8 +228,10 @@ function Install-Prebuilt {
   if (-not $tag) { Die "no published releases for $Repo. Use -Dev to build from source." }
   Say "target version: $tag"
 
+  $bare = $tag.TrimStart("v")
+  $script:AppHome = Join-Path $AppDir "app-$bare"
   if ((Test-Path $VersionFile) -and ((Get-Content $VersionFile -Raw).Trim() -eq $tag)) {
-    if (Test-Path (Join-Path $AppDir "app\hivemind.exe")) {
+    if (Test-Path (Join-Path $AppHome "hivemind.exe")) {
       Write-Launcher; Write-Uninstaller; Add-StartMenuShortcut; Add-ToUserPath
       Ok "launcher up to date"
     }
@@ -226,7 +245,6 @@ function Install-Prebuilt {
     return
   }
 
-  $bare = $tag.TrimStart("v")
   $cliUrl = "https://github.com/$Repo/releases/download/$tag/hive-windows-x64.exe"
   $netUrl = "https://github.com/$Repo/releases/download/$tag/hive-net-windows-x64.exe"
   $appAsset = if ($tag -match '^nightly-') { "hivemind-windows-x64.zip" } else { "hivemind-$bare-x64-win.zip" }
@@ -257,7 +275,7 @@ function Install-Prebuilt {
     Say "downloading desktop app"
     Invoke-WebRequest -Uri $appUrl -OutFile $tmpApp -UseBasicParsing
     Say "unpacking"
-    Install-App $tmpApp
+    Install-App $tmpApp "app-$bare"
     Write-Launcher; Write-Uninstaller; Add-StartMenuShortcut; Add-ToUserPath
     # Stamped only after the app actually landed — a failed download throws, so
     # the `hivemind upgrade` we tell the user to re-run isn't a no-op (the bug
@@ -291,11 +309,15 @@ function Install-Dev {
     Say "packaging app"; pnpm --filter "@hivemind/desktop" run dist:win
     $zip = Get-ChildItem (Join-Path $src "apps\desktop\dist-electron") -Filter *.zip | Select-Object -First 1
     if (-not $zip) { Die "no zip produced - check the electron-builder output" }
-    Install-App $zip.FullName
+    Install-App $zip.FullName "app-dev-$(Get-Date -Format yyyyMMddHHmmss)"
     Write-Launcher; Write-Uninstaller; Add-StartMenuShortcut; Add-ToUserPath
     Ok "dev install ready"
   } finally { Pop-Location }
 }
+
+# Test seam, as install.sh has: `$env:HIVEMIND_LIB_ONLY = "1"; . ./install.ps1` stops here with every
+# function defined, so the Windows release job drives the real install helpers.
+if ($env:HIVEMIND_LIB_ONLY -eq "1") { return }
 
 # --------------------------------------------------------------------- run ---
 Say "mode: $(if ($Dev) { 'dev' } else { 'prebuilt' })"

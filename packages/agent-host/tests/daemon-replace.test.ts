@@ -7,7 +7,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { frame, makeLineDecoder, type ServerMsg } from "../src/pty-protocol.ts";
-import { retireDaemon, wakeSessions } from "../src/daemon-replace.ts";
+import { retireDaemon, socketAt, wakeSessions } from "../src/daemon-replace.ts";
 
 const DAEMON = path.join(import.meta.dir, "../src/pty-daemon.ts");
 const dir = fs.mkdtempSync("/tmp/hdr-");
@@ -73,7 +73,7 @@ test.skipIf(!unix)("a daemon is replaced only once no agent is mid-turn, and eac
 
   const waited: string[][] = [];
   let retired = false;
-  const retiring = retireDaemon(sock, { waiting: (ids) => waited.push(ids), now: new Promise(() => {}) }).finally(() => { retired = true; });
+  const retiring = retireDaemon(socketAt(sock), { waiting: (ids) => waited.push(ids), now: new Promise(() => {}) }).finally(() => { retired = true; });
   expect(await wait(() => waited.length > 0)).toBe(true);
   expect(waited[0]).toEqual(["busy"]);
   await new Promise((r) => setTimeout(r, 1500));

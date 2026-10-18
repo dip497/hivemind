@@ -71,10 +71,14 @@ IMG
   *) printf '#!/usr/bin/env bash\nexit 0\n' > "$out"; chmod +x "$out";;
 esac
 SHIM
-# "Is the app live?" — the test decides, by writing 0 or 1 into $TMP_RUNNING.
-cat > "$TMP/shims/pgrep" <<'SHIM'
+# What runs: the test decides, by writing into $TMP_RUNNING 0 (nothing), 1 (the app's window) or
+# daemon (only the terminal daemon the app left running).
+cat > "$TMP/shims/ps" <<'SHIM'
 #!/usr/bin/env bash
-[ "$(cat "$TMP_RUNNING" 2>/dev/null || echo 0)" = 1 ]
+case "$(cat "$TMP_RUNNING" 2>/dev/null || echo 0)" in
+  1) echo "$HIVEMIND_APP_DIR/hivemind-extracted/hivemind --no-sandbox" ;;
+  daemon) echo "$HIVEMIND_APP_DIR/hivemind-extracted/hivemind $HIVEMIND_APP_DIR/hivemind-extracted/resources/app.asar/out/main/pty-daemon.js $HOME/.config/hivemind/pty-daemon.sock" ;;
+esac
 SHIM
 chmod +x "$TMP/shims"/*
 export PATH="$TMP/shims:$PATH"
@@ -117,6 +121,14 @@ echo 0 > "$TMP_RUNNING"
 check "the staged build was applied" "yes" "$(grep -q "AppRun v9.9.10" "$APP/hivemind-extracted/AppRun" && echo yes || echo no)"
 check "the stamp follows what runs" "v9.9.10" "$(stamp .installed-version)"
 check "nothing is waiting any more" "(none)" "$(stamp .staged-version)"
+
+# ── 4b. only the terminal daemon runs: its agents keep running, the build goes in place ──
+echo v9.9.10b > "$TMP_LATEST"
+echo daemon > "$TMP_RUNNING"
+run_installer > "$TMP/out4b"
+check "a running daemon does not hold the upgrade" "v9.9.10b" "$(stamp .installed-version)"
+check "nothing is staged for it" "no" "$([ -d "$APP/hivemind-extracted.staged" ] && echo yes || echo no)"
+echo 0 > "$TMP_RUNNING"
 
 # ── 5. the api is rate-limited: the version still resolves ───────────────
 echo 1 > "$TMP_API_403"

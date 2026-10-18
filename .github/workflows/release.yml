@@ -622,6 +622,35 @@ jobs:
           if ($missing) { throw "not unpacked in the bundle: $($missing -join ', ') - the terminal would be dead" }
           foreach ($name in @($need.Keys)) { Write-Host "ok: $($need[$name].FullName)" }
 
+      - name: "Smoke: an upgrade leaves the terminal daemon running"
+        # The daemon is hivemind.exe from the version that started it, and Windows will not delete
+        # a running exe: install.ps1 puts each version in a folder of its own and removes one only
+        # once nothing runs from it.
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem desktop-deploy/dist-electron -Filter *.zip | Select-Object -First 1
+          if (-not $zip) { throw "no zip produced" }
+          $env:HIVEMIND_APP_DIR = "$env:RUNNER_TEMP\hm-app"
+          $env:HIVEMIND_LIB_ONLY = "1"
+          . ./install.ps1
+          Remove-Item Env:\HIVEMIND_LIB_ONLY
+          Install-App $zip.FullName "app-1.0.0"
+          $old = $AppHome
+          Set-Content -Path "$env:RUNNER_TEMP\idle.js" -Value "setInterval(() => {}, 1000);" -Encoding UTF8
+          $env:ELECTRON_RUN_AS_NODE = "1"
+          $daemon = Start-Process -FilePath (Join-Path $old "hivemind.exe") -ArgumentList "`"$env:RUNNER_TEMP\idle.js`"" -PassThru -NoNewWindow
+          Remove-Item Env:\ELECTRON_RUN_AS_NODE
+          Start-Sleep -Seconds 3
+          Install-App $zip.FullName "app-1.0.1"
+          if ($daemon.HasExited) { throw "the daemon ended with the upgrade" }
+          if (-not (Test-Path (Join-Path $old "hivemind.exe"))) { throw "the folder the daemon runs from was removed under it" }
+          if (-not (Test-Path (Join-Path $AppHome "hivemind.exe"))) { throw "the new version is not installed" }
+          Stop-Process -Id $daemon.Id -Force
+          $daemon.WaitForExit()
+          Remove-UnusedApps
+          if (Test-Path $old) { throw "the old folder stayed once nothing ran from it" }
+          Write-Host "ok: the daemon kept its folder through the upgrade, which went once it stopped"
+
       - name: "Smoke: the compiled CLI runs"
         # The Linux jobs go further (sessions.test.ts against the binary); here
         # the binary is at least executed, so a broken compile cannot ship.
