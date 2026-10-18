@@ -347,8 +347,7 @@
         "camera": [
           {
             "u": 0,
-            "box": "tool",
-            "pad": 1.02
+            "box": "head"
           }
         ]
       },
@@ -357,12 +356,15 @@
         "start": 1.6,
         "end": 4.6,
         "play": "lapse",
-        "skip": "+10 s",
+        "skip": "+20 s",
         "camera": [
           {
             "u": 0,
-            "box": "tool",
-            "pad": 1.02
+            "box": "head"
+          },
+          {
+            "u": 1,
+            "box": "list"
           }
         ]
       },
@@ -374,13 +376,7 @@
         "camera": [
           {
             "u": 0,
-            "box": "tool",
-            "pad": 1.02
-          },
-          {
-            "u": 1,
-            "box": "tool",
-            "pad": 0.95
+            "box": "list"
           }
         ]
       },
@@ -392,8 +388,7 @@
         "camera": [
           {
             "u": 0,
-            "box": "triage",
-            "pad": 0.95
+            "box": "answer"
           }
         ]
       },
@@ -405,13 +400,7 @@
         "camera": [
           {
             "u": 0,
-            "box": "triage",
-            "pad": 0.95
-          },
-          {
-            "u": 1,
-            "box": "triage",
-            "pad": 0.9
+            "box": "answer"
           }
         ]
       }
@@ -423,7 +412,7 @@
         "end": 4.4
       },
       {
-        "text": "It shows which ones only fail sometimes.",
+        "text": "290 tests, none flaky this time.",
         "start": 4.7,
         "end": 7.3
       },
@@ -443,6 +432,26 @@
       "ran": 6.0,
       "asking": 9.5,
       "answered": 13.0
+    },
+    "boxes": {
+      "head": {
+        "x": 1030,
+        "y": 360,
+        "w": 1300,
+        "h": 560
+      },
+      "list": {
+        "x": 1026,
+        "y": 360,
+        "w": 1800,
+        "h": 900
+      },
+      "answer": {
+        "x": 826,
+        "y": 259,
+        "w": 2200,
+        "h": 1000
+      }
     }
   },
   "views": {
