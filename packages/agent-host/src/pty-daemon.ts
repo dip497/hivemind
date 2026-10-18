@@ -38,6 +38,7 @@ import { ScreenWatcher } from "./screen-status.js";
 import { StatusStore } from "./status-store.js";
 import { cleanName } from "@hivemind/agents";
 import { driveSockPath, holderOf, speaksFor, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
+import { installCarried } from "./agent-package.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
@@ -619,7 +620,8 @@ const server = net.createServer((sock) => {
         }
         // The spawn/restore checkpoint: an agent installed after boot is wired here,
         // before its spec is transformed.
-        void ensureAgentsCurrent()
+        void installCarried(msg.noSpawn ? undefined : msg.agent)
+          .then(() => ensureAgentsCurrent())
           .then(() => manager.createOrAttach(msg.id, msg.spec, viewer, view, linesOf(msg.lines), msg.wake === true))
           .then((r) => {
             ready = true;

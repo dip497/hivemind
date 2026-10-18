@@ -12,6 +12,13 @@ export interface SpawnSpecWire {
   env?: Record<string, string>;
 }
 
+/** The manifest folder of the agent a start runs (agent-package.ts): its files by their path in
+ *  it, base64. A daemon with no agent of that id installs it before starting the session. */
+export interface AgentPackage {
+  id: string;
+  files: Record<string, string>;
+}
+
 /** One row of `list {detail:true}`. */
 export interface SessionInfo {
   id: string;
@@ -41,7 +48,7 @@ export type ClientMsg =
    *  base: the environment of whoever starts sessions, as it is now (the app's, after it read the
    *  person's shell): what a session starts from, under its own `spec.env`. Never saved.
    *  wake: a session put to sleep is restored; any other attach to it is answered `asleep`. */
-  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean; base?: Record<string, string>; lines?: number; wake?: boolean }
+  | { t: "attach"; reqId: string; id: string; spec: SpawnSpecWire; noSpawn?: boolean; liveOnly?: boolean; since?: { seq: number; epoch: string }; view?: boolean; base?: Record<string, string>; lines?: number; wake?: boolean; agent?: AgentPackage }
   /** Capabilities of this client; "resync" = may be sent a fresh screen instead of every byte when behind. */
   | { t: "hello"; caps: string[] }
   | { t: "write"; id: string; data: string; /** A message pasted into the TUI, not keystrokes (see paste.ts). */ paste?: boolean }

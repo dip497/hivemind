@@ -1,6 +1,7 @@
 /** One PTY daemon connection over any transport: attach, stream, and re-attach live tiles after a drop. */
 import type { Duplex } from "node:stream";
 import { type ClientMsg, type ServerMsg, type SessionInfo, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
+import { agentPackageFor } from "./agent-package.js";
 
 export interface SpawnOpts {
   tileId: string;
@@ -309,7 +310,8 @@ export class DaemonEndpoint {
       t.unref?.();
     });
     try {
-      await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}), ...(opts.wake ? { wake: true } : {}) });
+      const agent = opts.noSpawn ? undefined : agentPackageFor(spec.cmd);
+    await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(agent ? { agent } : {}), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}), ...(opts.wake ? { wake: true } : {}) });
     } catch (e) {
       // Unreachable now (e.g. offline): keep retrying so the tile attaches once it is back.
       const msg = e instanceof Error ? e.message : String(e);
