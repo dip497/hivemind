@@ -67,6 +67,10 @@ A view runs in a sandboxed frame on its own origin: no files, network or app API
 workspace through `@hivemind/view-sdk` and does only what its permissions allow. Traffic that is
 malformed, flooded or CPU-heavy switches it off for the session.
 
+In `examples/views` of the repository: `constellation` (your agents in 3D, drawn with three.js
+shipped in the view's folder), `timeline` (today's work per agent), `agents-by-state` (a board by
+what each agent is doing) and `workspace-map` (frames, worktrees, agents and issues).
+
 ## Write one
 
 ```bash

@@ -1,0 +1,14 @@
+{
+  "id": "@dip497/ci-light",
+  "name": "CI light",
+  "version": "1.0.0",
+  "description": "The build's status as a light, set by your CI, a git hook or an agent; when it is red, ask an agent to fix it.",
+  "category": "monitoring",
+  "icon": "icon.svg",
+  "size": { "w": 280, "h": 140 },
+  "permissions": ["workspace:spawn", "workspace:prompt"],
+  "commands": [
+    { "name": "set", "description": "Report the build: passed, failed, running or unknown, with what it is, the branch and a line of detail.", "args": "{ \"state\": \"passed\" | \"failed\" | \"running\" | \"unknown\", \"name\"?: string, \"branch\"?: string, \"detail\"?: string }" },
+    { "name": "status", "description": "The last report." }
+  ]
+}

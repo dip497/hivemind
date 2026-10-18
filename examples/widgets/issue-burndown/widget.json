@@ -1,0 +1,16 @@
+{
+  "id": "@dip497/issue-burndown",
+  "name": "Issue burndown",
+  "version": "1.0.0",
+  "description": "The workspace's open issues day by day for the last week, read live from its issues.",
+  "category": "productivity",
+  "icon": "icon.svg",
+  "size": { "w": 320, "h": 300 },
+  "permissions": ["workspace:issues"],
+  "options": [
+    { "id": "days", "label": "Days to show", "type": "number", "min": 3, "max": 14, "default": 7 }
+  ],
+  "commands": [
+    { "name": "burndown", "description": "How many issues were open at the end of each of the days shown." }
+  ]
+}

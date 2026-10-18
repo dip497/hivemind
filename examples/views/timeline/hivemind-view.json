@@ -1,0 +1,16 @@
+{
+  "id": "@dip497/timeline",
+  "name": "Timeline",
+  "version": "1.0.0",
+  "entry": "index.js",
+  "protocol": 1,
+  "permissions": [],
+  "category": "monitoring",
+  "toolbar": "bottom",
+  "settings": [
+    { "id": "everyTile", "label": "Show every tile, not only agents", "type": "boolean", "default": false }
+  ],
+  "commands": [
+    { "name": "summary", "description": "Today, per agent: minutes working, waiting on the person and idle, and the turns it finished." }
+  ]
+}
