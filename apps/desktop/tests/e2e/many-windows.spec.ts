@@ -91,14 +91,13 @@ test.afterAll(async () => {
   for (const d of [repo, fakeBin, home]) fs.rmSync(d, { recursive: true, force: true });
 });
 
-test("a second window on the workspace shows its terminals live and the wires drawn, and what the control plane spawns, names and closes", async () => {
+test("a second window on the workspace shows its terminals live, and what the control plane spawns, names and closes", async () => {
   // Quotes split each marker in what is typed, so only the output carries it whole.
   const parent: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "twin-parent", "--prompt", 'echo early""-words', "--json"]).json.tile;
   expect(hive(["ctl", "read", parent, "--timeout", "40000", "--json"]).json).toMatchObject({ text: "early-words" });
   const child: string = hive(["ctl", "spawn", "--agent", "claude", "--name", "twin-child", "--prompt", "echo child", "--no-report", "--json"], asAgent(parent)).json.tile;
-  const wire = `[data-testid="rf__edge-spawn-${parent}-${child}"]`;
-  // A wire is drawn once both tiles are measured, which a window just opened on a busy machine takes seconds to do.
-  await expect(page.locator(wire)).toHaveCount(1, { timeout: 15_000 });
+  const childTile = `.react-flow__node[data-id="${child}"]`;
+  await expect(page.locator(childTile)).toHaveCount(1, { timeout: 15_000 });
 
   // Another project was opened last: the new window opens on the one this window shows anyway.
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), "hm-xprov-else-"));
@@ -107,9 +106,9 @@ test("a second window on the workspace shows its terminals live and the wires dr
   const [second] = await Promise.all([app.waitForEvent("window"), page.evaluate(() => window.hive.newWindow())]);
   await second.waitForSelector(".react-flow", { timeout: 15_000 });
   const windows = [page, second];
-  // It opens on the terminal as it is, and on the wire drawn before it opened.
+  // It opens on the terminal as it is, and on the tile spawned before it opened.
   await expect.poll(() => screenOf(second, parent), { timeout: 15_000 }).toContain("early-words");
-  await expect(second.locator(wire)).toHaveCount(1);
+  await expect(second.locator(childTile)).toHaveCount(1);
   expect(hive(["ctl", "send", parent, 'sleep 3; echo live""-in-both']).code).toBe(0);
   // One status for the agent in both, from its host: working while the turn runs, then not.
   const working = (w: Page) => w.locator(`.hm-layers [data-layer-tile="${parent}"] [aria-label="working"]`);
@@ -117,10 +116,9 @@ test("a second window on the workspace shows its terminals live and the wires dr
   for (const w of windows) await expect.poll(() => screenOf(w, parent), { timeout: 15_000 }).toContain("live-in-both");
   for (const w of windows) await expect(working(w)).toHaveCount(0);
 
-  // Both windows are told of a spawn, mount it and draw its wire; its typed first task is typed once.
+  // Both windows are told of a spawn and mount it; its typed first task is typed once.
   const typed: string = hive(["ctl", "spawn", "--agent", "droid", "--name", "twin-typed", "--prompt", 'echo once""-only', "--no-report", "--json"], asAgent(parent)).json.tile;
   for (const w of windows) await expect(w.locator(`.react-flow__node[data-id="${typed}"]`)).toHaveCount(1);
-  for (const w of windows) await expect(w.locator(`[data-testid="rf__edge-spawn-${parent}-${typed}"]`)).toHaveCount(1);
   expect(hive(["ctl", "read", typed, "--timeout", "40000", "--json"]).json).toMatchObject({ text: "once-only" });
   await page.waitForTimeout(4_000); // a second copy would be typed as the agent settles again
   const output = hive(["ctl", "stream", typed, "--lines", "200", "--snapshot"]).stdout;

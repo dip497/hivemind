@@ -170,10 +170,9 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // All open tiles, every kind, as instances. Mirror to a ref so callbacks
   // declared before later state can read the latest list without re-creating.
   const [tiles, setTiles, tilesRef] = useStateWithRef<TileInstance[]>(initial.tiles ?? []);
-  // Live agent pipes (HCP hive_connect) → animated data-flow edges. Ephemeral.
+  // Live agent pipes (HCP hive_connect). Ephemeral.
   const [pipes, setPipes] = useState<{ src: string; dst: string }[]>([]);
-  // Spawn-parentage wires (parent → child) — a spawned sub-agent / workflow worker
-  // shows a persistent dashed line to the agent that spawned it. Ephemeral.
+  // Spawn parentage (parent → child): which agent spawned each sub-agent / workflow worker. Ephemeral.
   const [spawnLinks, setSpawnLinks] = useState<{ parent: string; child: string }[]>([]);
   // Files opened in each editor tile — tabs keyed by editor tile id.
   const [editorTabs, setEditorTabs] = useState<Record<string, string[]>>(initial.editorTabs ?? {});
@@ -1040,8 +1039,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     });
     return () => { live = false; };
   }, []);
-  // HCP pipes → animated data-flow edges. Add on connect; on disconnect remove
-  // the one edge (dst set) or all of src's edges (dst null).
+  // HCP pipes. Add on connect; on disconnect remove the one pipe (dst set) or all of src's (dst null).
   useEffect(() => {
     return window.hive.onHcpPipe((ev) => {
       setPipes((cur) => {
@@ -1054,7 +1052,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     });
   }, []);
 
-  // HCP spawn wires → dashed parentage edges.
+  // HCP spawn parentage.
   useEffect(() => {
     return window.hive.onHcpSpawn((ev) => {
       setSpawnLinks((cur) => {

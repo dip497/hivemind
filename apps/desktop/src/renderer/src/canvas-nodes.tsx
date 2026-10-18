@@ -21,7 +21,7 @@ import {
   createContext, type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Handle, NodeResizer, Position, useReactFlow, type NodeTypes } from "@xyflow/react";
+import { NodeResizer, useReactFlow, type NodeTypes } from "@xyflow/react";
 import { Pin, X } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { clampAnchor } from "./pin-anchor";
@@ -351,11 +351,6 @@ function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, hea
   );
 }
 
-// Agent pipes and spawn wires (canvas-pipe-edge.tsx) are react-flow edges, and react-flow draws
-// an edge only between nodes with a handle of each kind, whatever the edge does with it. These
-// are a tile's: hidden and inert, as the edges find their own ends on the tiles' borders.
-const LINK_ANCHOR = { visibility: "hidden" } as const;
-
 /** Shared shell for every tile node. Unpinned: renders the tile inline with the
  *  pin badge + NodeResizer. Pinned: portals the SAME content into the fixed
  *  pinned layer as a screen-fixed floating panel, and renders nothing in-canvas
@@ -405,8 +400,6 @@ function TileShell({
         minHeight={minHeight ?? RESIZER_PROPS.minHeight}
         onResizeEnd={(_e, p) => onResize(id, p.width, p.height, p.x, p.y)}
       />
-      <Handle type="source" position={Position.Right} isConnectable={false} style={LINK_ANCHOR} />
-      <Handle type="target" position={Position.Left} isConnectable={false} style={LINK_ANCHOR} />
       {children}
     </div>
   );

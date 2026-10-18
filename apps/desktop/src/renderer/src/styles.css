@@ -529,16 +529,6 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
 /* A view plugin's frame: the same scheme as the page inside it (the SDK keeps `normal`), or the
    browser paints the frame's backdrop opaque white over the wallpaper. */
 iframe[name^="hm-view:"] { color-scheme: normal; }
-/* A pipe's travelling dot (canvas-pipe-edge.tsx): placed by its animation's transform. */
-.hm-pipe-dot {
-  position: absolute;
-  left: -4px;
-  top: -4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-brand);
-}
 
 /* Scrollbar (Webkit) — thin, accent on hover */
 ::-webkit-scrollbar {

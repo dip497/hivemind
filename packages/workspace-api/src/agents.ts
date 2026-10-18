@@ -1,5 +1,5 @@
 /**
- * What the workspace API says about agents: their status, and the links drawn between them (a
+ * What the workspace API says about agents: their status, and the links between them (a
  * pipe that carries one's reports to another, a spawn wire from a parent to the worker it
  * started). Node-free.
  */
@@ -21,8 +21,8 @@ export interface PipeChange {
   connected: boolean;
 }
 
-/** An agent spawned another (a workflow's worker, `hive ctl spawn`), or the wire between them
- *  went: drawn from parent to child whatever the pipes do. */
+/** An agent spawned another (a workflow's worker, `hive ctl spawn`), or the link between them
+ *  went: from parent to child whatever the pipes do. */
 export interface SpawnChange {
   child: string;
   parent: string | null;
