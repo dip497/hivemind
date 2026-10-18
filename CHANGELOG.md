@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The website's home page is redesigned around agents building the workspace: the 21 agents on HiveHub, widgets, tools and views, the Queue view, machines over ssh, the phone page and a shared workspace, then what stays yours, measured numbers with their load, and the download. It also shows screenshots of twenty example plugins. Each clip slot shows a real screenshot until its recording lands.
+
 - The website's home page opens on a video recorded from the real app: a Claude Code agent writes a widget for its issue, installs it and ticks off the steps as it works. 
 - The guide's diagrams are drawn in the site's own colours and fonts; the issue-states diagram now says nothing enforces the order, and the terminal-size and widget diagrams match what the code does.
 
