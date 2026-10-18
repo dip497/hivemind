@@ -289,7 +289,7 @@ test("devices", async () => {
     await page.waitForTimeout(1500);
     return page;
   };
-  const web = await open({ width: 1024, height: 640 }, false);
+  const web = await open({ width: 640, height: 720 }, false);
   const phone = await open({ width: 390, height: 844 }, true);
   await emit("hivemind:focus-tile", release);
   await desktop.waitForTimeout(1500);
