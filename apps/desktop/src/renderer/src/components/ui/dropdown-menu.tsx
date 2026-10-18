@@ -95,25 +95,43 @@ const DropdownMenuItem = React.forwardRef<
 ))
 DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName
 
+/** `checkSide="end"`: the check sits at the right, where a submenu row shows its value, so the item
+ *  lines up with plain items and submenu rows instead of leaving a gutter on the left. */
 const DropdownMenuCheckboxItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
->(({ className, children, checked, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem> & {
+    checkSide?: "start" | "end"
+  }
+>(({ className, children, checked, checkSide = "start", ...props }, ref) => (
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-md py-1.5 pl-8 pr-2 text-label outline-none transition-colors focus:bg-secondary focus:text-secondary-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex cursor-default select-none items-center rounded-md py-1.5 text-label outline-none transition-colors focus:bg-secondary focus:text-secondary-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      checkSide === "end" ? "gap-2 px-2" : "pl-8 pr-2",
       className
     )}
     checked={checked}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-      <DropdownMenuPrimitive.ItemIndicator data-menu-checked>
-        <Check className="size-3.5" />
-      </DropdownMenuPrimitive.ItemIndicator>
-    </span>
-    {children}
+    {checkSide === "end" ? (
+      <>
+        <span className="flex-1">{children}</span>
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          <DropdownMenuPrimitive.ItemIndicator data-menu-checked>
+            <Check className="size-3.5" />
+          </DropdownMenuPrimitive.ItemIndicator>
+        </span>
+      </>
+    ) : (
+      <>
+        <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+          <DropdownMenuPrimitive.ItemIndicator data-menu-checked>
+            <Check className="size-3.5" />
+          </DropdownMenuPrimitive.ItemIndicator>
+        </span>
+        {children}
+      </>
+    )}
   </DropdownMenuPrimitive.CheckboxItem>
 ))
 DropdownMenuCheckboxItem.displayName =

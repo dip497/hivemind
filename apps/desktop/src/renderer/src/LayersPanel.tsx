@@ -147,8 +147,8 @@ const LABEL = "text-label font-medium text-[var(--color-fg2)]";
 const COUNT = "text-count tabular-nums text-[var(--color-fg2)]";
 
 /** This person's own for this workspace: pinned tiles (in pin order), the groups they folded, when
- *  they last looked at each tile, and the tiles they snoozed, until when. */
-interface Mine { pinned: string[]; collapsed: string[]; seen?: Record<string, number>; snoozed?: Record<string, number> }
+ *  they last looked at each tile, the tiles they snoozed, until when, and whether asleep agents are hidden. */
+interface Mine { pinned: string[]; collapsed: string[]; seen?: Record<string, number>; snoozed?: Record<string, number>; hideAsleep?: boolean }
 const MINE = { viewId: "layers", version: 1, initial: (): Mine => ({ pinned: [], collapsed: [], seen: {}, snoozed: {} }), personal: true } as const;
 
 /** Snooze choices: until when, from now. */
@@ -439,6 +439,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     return { ...m, snoozed };
   }), [setMine]);
   const setPref = (key: keyof LayersPrefs, value: unknown) => patchSettings(`views.layers.${key}`, value);
+  const hideAsleep = !!mine.hideAsleep;
+  const setHideAsleep = useCallback((on: boolean) => setMine((m) => ({ ...m, hideAsleep: on })), [setMine]);
 
   // Frame forest: top-level (repo) frames each own their worktree sub-frames.
   const topFrames = frames.filter((f) => !f.parentFrameId || !frames.some((p) => p.id === f.parentFrameId));
@@ -491,7 +493,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     });
   }, [modelTiles, selectedTileId, mine.seen, mine.snoozed, setMine]);
   const agentLabel = (t: ModelTile) => (t.kind === AGENT_TILE_KIND ? agentById(t.agent)?.label ?? t.agent ?? "Agent" : tileKind(t.kind).title ?? "Other");
-  const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query });
+  const view = layersView({ tiles: modelTiles, pinned: mine.pinned, prefs, now, agentLabel, query, hideAsleep });
   // What the panel lists, in its order whatever is searched for, told to main: the person's phone
   // lists Home so (spec/home.md).
   const listed = useMemo(() => {
@@ -777,13 +779,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {tiles.length > 0 && nothing && (
           <div className="px-4 py-3 text-label text-[var(--color-fg3)]" data-layers-nothing>
             Nothing matches.{" "}
-            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy }); setQuery(""); }}>Show everything</button>
+            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy }); setHideAsleep(false); setQuery(""); }}>Show everything</button>
           </div>
         )}
         {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
         <div className={`mt-2 flex h-7 items-center pl-5 pr-2 ${LABEL}`}>
           <span>{view.tree && !groupByMachine ? "Projects" : "Tiles"}</span>
-          <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} /></span>
+          <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} hideAsleep={hideAsleep} setHideAsleep={setHideAsleep} /></span>
         </div>
         {tiles.length === 0 && frames.length === 0 && <div className={`pl-5 pr-3 py-1.5 ${LABEL} font-normal`} data-layers-empty>Nothing open yet: start an agent, or open a project.</div>}
         {view.tree ? (
@@ -841,6 +843,12 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             </div>
             {looseTiles.map((t) => renderTile(t, 1))}
           </div>
+        )}
+        {view.hiddenAsleep > 0 && (
+          <button type="button" data-layers-asleep-hidden title="Show asleep agents" onClick={() => setHideAsleep(false)}
+            className="mt-1.5 flex h-7 w-full items-center pl-5 pr-3 text-label text-[var(--color-fg3)] transition-colors duration-150 hover:text-[var(--color-fg)]">
+            {view.hiddenAsleep} asleep hidden
+          </button>
         )}
       </div>
       )}
@@ -1133,7 +1141,9 @@ function ViewChoices() {
 }
 
 /** The panel's View menu: which tiles (status, last activity, machines), grouped and ordered how. */
-function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (k: keyof LayersPrefs, v: unknown) => void; machines: MachineGroup[] }) {
+function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
+  prefs: LayersPrefs; setPref: (k: keyof LayersPrefs, v: unknown) => void; machines: MachineGroup[]; hideAsleep: boolean; setHideAsleep: (on: boolean) => void;
+}) {
   const radio = <K extends "status" | "activity" | "groupBy" | "sortBy">(key: K, label: string) => (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger data-layers-view={key}>
@@ -1151,8 +1161,8 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
   const toggleMachine = (key: string) => setPref("machines", chosen.includes(key) ? chosen.filter((m) => m !== key) : [...chosen, key]);
   // The tiles' choices only: how Recents groups is its own menu's, and a reset here keeps it.
   const tilesDefault = { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy };
-  const altered = JSON.stringify(prefs) !== JSON.stringify(tilesDefault);
-  const filtered = prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
+  const altered = hideAsleep || JSON.stringify(prefs) !== JSON.stringify(tilesDefault);
+  const filtered = hideAsleep || prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
   const [open, setOpen] = useState(false);
   // Opened by the button, anchored under it: the app's menus open from code, as the row menus do.
   return (
@@ -1183,11 +1193,12 @@ function ViewMenu({ prefs, setPref, machines }: { prefs: LayersPrefs; setPref: (
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DropdownMenuCheckboxItem checked={hideAsleep} onCheckedChange={(on) => setHideAsleep(on === true)} onSelect={(e) => e.preventDefault()} checkSide="end" data-layers-hide-asleep>Hide asleep</DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
         {radio("groupBy", "Group by")}
         {radio("sortBy", "Sort by")}
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={!altered} onSelect={() => patchSettings("views.layers", tilesDefault)} data-layers-reset>Reset to defaults</DropdownMenuItem>
+        <DropdownMenuItem disabled={!altered} onSelect={() => { patchSettings("views.layers", tilesDefault); setHideAsleep(false); }} data-layers-reset>Reset to defaults</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
