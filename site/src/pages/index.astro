@@ -17,8 +17,8 @@ const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
 const shot = (file: string, width = 1600, height = 1120) => ({ file, width, height });
 type Example = { id: string; name: string; w?: number; h?: number; alt?: string };
-const examples: { kind: string; one: string; fit: string; items: Example[] }[] = [
-  { kind: 'Widgets', one: 'widget', fit: 'contain', items: [
+const examples: { kind: string; one: string; fit: string; scope: string; items: Example[] }[] = [
+  { kind: 'Widgets', one: 'widget', fit: 'contain', scope: '@dip497/', items: [
     { id: 'waiting-on-you', name: 'Waiting on you', w: 592, h: 421 },
     { id: 'agent-pulse', name: 'Agent pulse', w: 592, h: 354 },
     { id: 'focus-timer', name: 'Focus timer', w: 592, h: 381 },
@@ -27,8 +27,9 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     { id: 'spend-today', name: 'Spend today', w: 592, h: 448 },
     { id: 'issue-burndown', name: 'Issue burndown', w: 592, h: 846 },
     { id: 'launchpad', name: 'Launchpad', w: 592, h: 476 },
+    { id: 'dog', name: 'Dog', w: 960, h: 600, alt: 'The Dog widget: Biscuit barks when an agent waits on you, then walks to the right edge.' },
   ] },
-  { kind: 'Tools', one: 'tool', fit: 'cover', items: [
+  { kind: 'Tools', one: 'tool', fit: 'cover', scope: 'dip497/', items: [
     { id: 'dependency-audit', name: 'Dependency audit' },
     { id: 'flaky-tests', name: 'Flaky tests' },
     { id: 'changelog-writer', name: 'Changelog writer' },
@@ -38,7 +39,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
     { id: 'log-tail', name: 'Log tail' },
     { id: 'api-explorer', name: 'API explorer' },
   ] },
-  { kind: 'Views', one: 'view', fit: 'cover', items: [
+  { kind: 'Views', one: 'view', fit: 'cover', scope: '@dip497/', items: [
     { id: 'constellation', name: 'Constellation' },
     { id: 'timeline', name: 'Timeline' },
     { id: 'agents-by-state', name: 'Agents by state' },
@@ -175,8 +176,8 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
 
       <div class="examples">
         <div class="ex-head">
-          <h3>Twenty examples to start from</h3>
-          <p>In the repository's <a href={`${repo}/tree/main/examples`}><code>examples</code></a> folder. The agents in the pictures are stand-ins.</p>
+          <h3>Examples to start from</h3>
+          <p>On <a href={HIVEHUB}>HiveHub</a>, published from <a href="https://github.com/dip497/hivemind-plugins">hivemind-plugins</a>: install one from Settings ▸ Plugins. The agents in the pictures are stand-ins.</p>
         </div>
         {examples.map((group) => (
           <div class="ex-group">
@@ -185,7 +186,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
               {group.items.map((e) => (
                 <li>
                   <img src={link(`shots/showcase/${e.id}.webp`)} width={e.w ?? 800} height={e.h ?? 500} loading="lazy" decoding="async" alt={e.alt ?? `The ${e.name} ${group.one}.`} />
-                  <code>{e.id}</code>
+                  <a href={`${HIVEHUB}p/${group.scope}${e.id}`}><code>{e.id}</code></a>
                 </li>
               ))}
             </ul>

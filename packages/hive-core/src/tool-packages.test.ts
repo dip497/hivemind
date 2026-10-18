@@ -71,15 +71,10 @@ test("a tile kind an app tool already draws cannot be taken by an added one", as
   expect(() => createToolRegistry([...BUNDLED_TOOL_PLUGINS, p])).toThrow("Tile kind already contributed: browser");
 });
 
-test("every example in the repository is a tool plugin this app loads", async () => {
-  const root = path.resolve(import.meta.dir, "../../../examples/tools");
-  const names = fs.readdirSync(root);
-  expect(names.length).toBeGreaterThanOrEqual(3);
-  for (const name of names) {
-    const p = await readToolPackage(path.join(root, name), null);
-    expect([p.id, p.problem]).toEqual([`dip497/${name}`, null]);
-    expect(() => createToolRegistry([...BUNDLED_TOOL_PLUGINS, p])).not.toThrow();
-  }
+test("the tool the e2e suite loads is one this app reads, with its command and icon, beside the app's own tools", async () => {
+  const p = await readToolPackage(path.resolve(import.meta.dir, "../../../apps/desktop/tests/e2e/fixtures/tools/commits"), null);
+  expect([p.id, p.problem, p.pluginCommands.map((c) => c.name), p.tiles.commits?.icon?.startsWith("data:image/svg+xml")]).toEqual(["example/commits", null, ["list"], true]);
+  expect(() => createToolRegistry([...BUNDLED_TOOL_PLUGINS, p])).not.toThrow();
 });
 
 test("an update is installed off: switching one on trusted the code that was there, not what replaces it", async () => {

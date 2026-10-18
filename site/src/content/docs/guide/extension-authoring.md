@@ -35,8 +35,8 @@ refused.
 A view may also say what an agent can run in it while it is the view shown, under
 `"commands"`, each answered by `hm.onCommand(name, handler)` (protocol 1.10, feature `invoke`):
 what the handler returns is what `hive ctl plugin call <view> <command>` prints, and
-`hive ctl plugin commands` lists what the running plugins offer. `examples/views/agent-board` in
-the Hivemind repository is one: agents pin notes to it.
+`hive ctl plugin commands` lists what the running plugins offer. The Agent board
+(`@dip497/agent-board` on HiveHub) is one: agents pin notes to it.
 
 A command may also name the keys that run it, `"keys": "mod+alt+k"`: modifiers (`mod`, which is
 Cmd on a Mac and Ctrl elsewhere, `ctrl`, `meta`, `alt`, `shift`) and one key, with at least one of
@@ -85,7 +85,7 @@ hm.on("structure", ({ tiles }) => {
 ```
 
 For a view that keeps its own state with `setLayout` and answers agents' commands, read
-[`examples/views/agent-board`](https://github.com/dip497/hivemind/tree/main/examples/views/agent-board).
+[`views/agent-board`](https://github.com/dip497/hivemind-plugins/tree/main/views/agent-board) in the published plugins.
 
 `setSurfaceRects` places host-owned tools in your view (a tile's live terminal, where the
 screen places them: `hm.supports("surfaces")`, protocol 1.6; a phone's app draws its own terminal
@@ -281,7 +281,7 @@ kind's icon) as one `<svg>` in `currentColor`: put it in your markup and size it
 - A disabled plugin recovers from its layout blob on next mount.
 
 Reference implementations:
-[`examples/views/agent-board`](https://github.com/dip497/hivemind/tree/main/examples/views/agent-board)
+[`views/agent-board`](https://github.com/dip497/hivemind-plugins/tree/main/views/agent-board)
 (saved layout and agent commands) and `views/widgets` in
 [the published plugins](https://github.com/dip497/hivemind-plugins) (the workspace's widgets, drawn
 and pressed). Protocol types: `types/view-sdk/protocol.ts` in your view.

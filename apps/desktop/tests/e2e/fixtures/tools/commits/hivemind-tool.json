@@ -1,0 +1,28 @@
+{
+  "id": "example/commits",
+  "name": "Commits",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "git",
+  "description": "A test tool: the repository's commits and each one's diff.",
+  "entry": "index.js",
+  "permissions": ["workspace:spawn", "workspace:prompt"],
+  "settings": [
+    { "id": "match", "label": "Only commits whose subject holds", "type": "text", "default": "", "maxLength": 100 }
+  ],
+  "commands": [
+    { "name": "list", "description": "The commits shown, newest first." }
+  ],
+  "tools": [
+    {
+      "key": "commits",
+      "label": "Commits",
+      "description": "The repository's commits, with their diffs.",
+      "tileKind": "commits",
+      "size": { "width": 900, "height": 600 },
+      "needsRepo": true,
+      "singleton": true,
+      "icon": "icon.svg"
+    }
+  ]
+}

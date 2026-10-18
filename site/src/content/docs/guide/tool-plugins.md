@@ -15,7 +15,8 @@ your logins. So one you add is off until you switch it on, on its page in **Sett
 with `hive plugins enable tool:<owner>/<name>`. Switch on only what you trust. If one makes the
 app misbehave, start it in safe mode, where none loads: `HIVEMIND_SAFE_MODE=1 hivemind`.
 
-The examples are in the repository, in `examples/tools`:
+The project's own are on [HiveHub](https://hivehub.griiken.workers.dev/), published from
+[dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins/tree/main/tools):
 
 | Example | What it shows |
 |---|---|
@@ -33,8 +34,7 @@ The examples are in the repository, in `examples/tools`:
 | `log-tail` | follows a log file with level colours, filters, and errors handed to an agent |
 | `api-explorer` | the HTTP endpoints the code declares, and a panel to send one a request |
 
-On HiveHub today: `dip497/worktrees` and `dip497/ci-runs`. Install one by its id (from 2026.10.3),
-or from the **HiveHub** tab of Settings ▸ Plugins (pick **Tools** to see only tools). It arrives
+Install one by its id, `dip497/<name>` (from 2026.10.3), or from the **HiveHub** tab of Settings ▸ Plugins (pick **Tools** to see only tools). It arrives
 switched off, an update too, so turn it on:
 
 ```bash
@@ -43,7 +43,7 @@ hive plugins enable tool:dip497/worktrees
 hive ctl plugin open tool:dip497/worktrees
 ```
 
-The others are folders in this repository: `hive tools install examples/tools/git-history` takes one.
+A folder works too: `hive tools install tools/git-history` in a checkout of the plugins repository.
 
 ## Make one
 
