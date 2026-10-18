@@ -51,6 +51,11 @@ hive join 'hivemind://join/…'
 
 `hive join` waits while the owner decides, up to about three minutes.
 
+Joining is the person's, at their own machine: an agent's tile, a program and your other devices
+are refused (*joining a workspace is the person's, at this machine: run `hive join <link>` in a
+terminal of your own…*). Your own devices need no link at all: a workspace on another of your
+devices opens from **Open recent → On your devices** in the app.
+
 ## Answer someone asking to join
 
 In the app, a notice reads *⟨name⟩ wants to join ⟨workspace⟩ as ⟨role⟩*, with **Allow** and

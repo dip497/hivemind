@@ -296,7 +296,8 @@ hive people role <person> <role> # view, edit, terminals, or agents (only while 
 hive people remove <person>      # take them off; their link stops working
 hive people rule [ask|invite]    # ask (default): you answer each request;
                                  #   invite: anyone with a valid link is let in at once
-hive join <link>                 # join a workspace someone shared, waiting while they decide
+hive join <link>                 # join a workspace someone shared, waiting while they decide;
+                                 #   yours to run in a terminal of your own, not from an agent's tile
 hive network enrol-link [--data <dir>] [--uses n] [--expires 7d]
                                  # on your network's server: a link that puts a device on it
 ```

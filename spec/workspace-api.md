@@ -298,7 +298,9 @@ Nobody answering within 170 s is a no. A workspace whose rule is `invite` asks n
 
 The machine's own methods (0.23): the person's, at a window or on the drive socket, and an agent's
 on this machine, as on the control plane, but `host.join`. No peer asks them, the person's own
-other devices included, nor a program.
+other devices included, nor a program. Refused, `host.join` says who may join and how (the person, with
+`hive join <link>` in a terminal of their own; their own devices need no link), and another of these
+says it is asked at the machine itself.
 
 | Method | Params | Result | Recorded as |
 |---|---|---|---|

@@ -108,6 +108,16 @@ const LEAST: Record<string, Role> = {
 const MACHINE = new Set(["view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "views.rescan", "agents.rescan",
   "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join"]);
 
+/** Why a peer with `access`, or an agent here in `tile`, may not call `method`, in words that name
+ *  what works instead. */
+export function refusalOf(who: { access: Access; tile?: string }, method: string): string {
+  if (method === "host.join") {
+    return "joining a workspace is the person's, at this machine: run `hive join <link>` in a terminal of your own, not from an agent's tile or another device. Your own devices need no link: what they hold opens from Open recent → On your devices in the app";
+  }
+  if (MACHINE.has(method) && who.tile === undefined) return `${method} is this machine's own: ask it at the machine, in its app or with \`hive\` there`;
+  return `${method} is not open to your role on this workspace`;
+}
+
 /** Whether a peer with `access`, or an agent here in `tile`, may call `method`. */
 export function mayCall(who: { access: Access; tile?: string }, method: string): boolean {
   if (MACHINE.has(method)) return who.tile !== undefined && method !== "host.join";

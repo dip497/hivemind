@@ -72,6 +72,12 @@ describe.skipIf(!unix)("hive share/people/join on the drive socket", () => {
     expect(asked.slice(n).map((a) => a.method)).toEqual(["host.status"]);
   });
 
+  test("refused a join, an agent is told who joins and how: the person, with `hive join` in a terminal of their own", async () => {
+    const r = await hive(["join", "hivemind://join/x", "--json"], { env: env(sock, tileToken(TOKEN, "hm:w-1")) });
+    expect(r.json).toMatchObject({ ok: false, code: "refused" });
+    expect((r.json as { error: string }).error).toContain("run `hive join <link>` in a terminal of your own, not from an agent's tile");
+  });
+
   test("with neither the app nor hive host running, it says so", async () => {
     const r = await hive(["people", "list", "--json"], { env: env(path.join(dir, "none.sock")) });
     expect(r.code).toBe(3);
