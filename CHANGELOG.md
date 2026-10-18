@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
+
 - A supervised agent's tool use waits on its starter again: `hive ctl approve` and the drive API's `agent.answer` find it in the agent list, waiting on approval, until it is answered. The machine's terminal daemon keeps each session's status, and it overwrote the wait the app held.
 
 - An agent's issue brief quotes a review comment as it really arrives, and the server set-up brief checks enrolment where `hive network use` prints it.

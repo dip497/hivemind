@@ -182,6 +182,15 @@ test("a grant that runs out closes its program's connection then, and lets nothi
   assert.equal(((await again.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
 });
 
+test("a grant made for 30 days keeps its program's connection open", async () => {
+  const { token } = grants.create({ name: "month", repos: [repoA], role: "agents", expires: Date.now() + 30 * 24 * 3600_000 });
+  const p = await connect({ token, workspace: repoA });
+  await p.next((m) => "hello" in m);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(p.socket.destroyed, false);
+  p.socket.destroy();
+});
+
 test("the install's token is the person, with every method", async () => {
   const person = await connect({ token: INSTALL });
   assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.30", as: "person" });
