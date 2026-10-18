@@ -1,4 +1,4 @@
-# Workspace API (0.29)
+# Workspace API (0.30)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -59,7 +59,7 @@ whichever starts first does, and the other says so. Lines of JSON both ways, 1 M
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.29", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.30", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -203,7 +203,7 @@ sends, and one participant per device.
 | `git.handOff` | `repo`, `branch`, `bundle` (a git bundle of it, base64, 32 MB at most) | `{branch, base}`: the branch it landed as, `handoff/<who>/<branch>` (`who` the caller's name, made plain), and the branch checked out here that a Diff tile on the board now shows it against. The bundle is checked against the repo first (`FAILED`, saying the repo lacks commits it builds on, when it does: send its whole history); the repo's working tree, index and own branches are untouched, and a branch lands only over a hand-off of the same person's | target `repo`, detail the branch |
 | `worktree.list` | `repo` | `[{path, branch, head, locked, prunable, bare}]` | read |
 | `worktree.create` | `repo`, `{branch, base?, path?, sparse?, partial?, includeFiles?}` (`base`, 0.20: where a new branch starts; an existing branch is checked out as it is) | `{path, branch}` | target `repo`, detail the branch |
-| `frame.open` | `repo`, `{path}` or `{worktree: {branch, base?}}`, with `title?`, `parent?` | `{frame, path, opened, created}` (0.20): the frame bound to that folder, made when there is none (`opened`), on a worktree made when the branch has none (`created`); a worktree frame nests in the workspace's own frame unless `parent` says another. A guest or a program names only the workspace's folders. A window shows a frame it is handed with no place in the next free slot | target `repo`, detail the branch or folder |
+| `frame.open` | `repo`, `{path, machine?}` or `{worktree: {branch, base?}}`, with `title?`, `parent?` | `{frame, path, opened, created}` (0.20): the frame bound to that folder, made when there is none (`opened`), on a worktree made when the branch has none (`created`); a worktree frame nests in the workspace's own frame unless `parent` says another. A guest or a program names only the workspace's folders. `machine` (0.30): `path` is on that machine, a saved machine or another of the person's devices, named by its id or, in any case, its name; `path` is then `machine://<id><path>`. A name two machines share is `BAD_REQUEST` listing each with its id, one no machine has `NOT_FOUND`; only the person, the owner's devices and an agent on this machine name one (else `FORBIDDEN`). A window shows a frame it is handed with no place in the next free slot | target `repo`, detail the branch or folder |
 | `frame.close` | `repo`, `frame`, `{closeTiles?, removeWorktree?, force?}`? | `{closed, tilesClosed, worktreeRemoved}` (0.20): the frame and those nested in it go; one holding tiles only with `closeTiles`, which ends them; its worktree only with `removeWorktree`, removed first, so git refusing one with changes (without `force`) closes nothing | target the frame |
 | `worktree.remove` | `repo`, `worktree`, `force`? | `null` | target the worktree |
 | `worktree.prune` | `repo` | `{removed}` | target `repo` |
@@ -297,12 +297,17 @@ Nobody answering within 170 s is a no. A workspace whose rule is `invite` asks n
 | `store.redo` | `repo` | whether it was made again | likewise |
 
 The machine's own methods (0.23): the person's, at a window or on the drive socket, and an agent's
-on this machine, as on the control plane, but `host.join`. No peer asks them, the person's own
-other devices included, nor a program.
+on this machine, as on the control plane, but `host.join` and `host.add` (an agent is kept to its
+workspace; serving another folder, or joining one, is the person's). No peer asks them, the person's own
+other devices included, nor a program. Refused, `host.join` says who may join and how (the person, with
+`hive join <link>` in a terminal of their own; their own devices need no link), `host.add` that the
+person runs `hive host add <folder>` in a terminal of their own, and another of these
+says it is asked at the machine itself.
 
 | Method | Params | Result | Recorded as |
 |---|---|---|---|
 | `host.status` | | `{workspaces: [{repo, workspace}]}`: what this host serves, each by its folder and its id | read |
+| `host.add` | `folder` | `{repo, workspace}` (0.30): the folder, absolute and on this machine, served as one of its workspaces, with no window, as Open folder does; one served already is answered as it is. `BAD_REQUEST` when it is not a folder here | target the folder |
 | `host.join` | `link` | what joining a workspace by its link answers, as `hive join` | target the link's workspace |
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `plugin.list` | | `{plugins: [{plugin, kind, instance, label, state, reason?, since, commands}], views: [{id, label, active}]}`: every plugin running in a window (a tool's tile, a widget with code, a community view), `state` `starting` until its code connects, then `ready`; `failed` with its `reason` when it did not start in 15 s or was disabled; and the views the window can show (0.27) | read |

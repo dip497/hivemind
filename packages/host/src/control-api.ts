@@ -17,7 +17,7 @@ import type { ControlWork } from "./control/methods.js";
 type Method =
   | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
   | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus"
-  | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join";
+  | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join" | "host.add";
 
 export interface ControlApiOptions {
   /** The control plane's work, once it is ready. */
@@ -87,6 +87,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "settings.reload": done((w) => w.reloadSettings()),
       "host.status": async () => (await o.control()).hostStatus(),
       "host.join": async (_from, link) => (await o.control()).join(text(link, "link")),
+      "host.add": async (_from, folder) => (await o.control()).serve(text(folder, "folder")),
       "agent.sleep": async (_from, repo, target, force) => (await o.control()).sleep(text(repo, "repo"), targetOf(target), force === true),
       "agent.wake": async (_from, repo, target) => (await o.control()).wake(text(repo, "repo"), targetOf(target)),
     },
@@ -105,6 +106,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "widgets.rescan": () => ({}),
       "tools.rescan": () => ({}),
       "settings.reload": () => ({}),
+      "host.add": (folder) => ({ target: named(folder) }),
       "agent.sleep": (repo, target) => ({ target: named(target) ?? named(repo) }),
       "agent.wake": (repo, target) => ({ target: named(target) ?? named(repo) }),
     },

@@ -265,10 +265,18 @@ export class Terminals {
   }
 
   /** Start `opts` through the backend, unless it would resume a conversation another tile sleeps in. */
-  private begin(opts: StartOpts, out: SessionOutput): ReturnType<SessionBackend["start"]> {
+  private async begin(opts: StartOpts, out: SessionOutput): ReturnType<SessionBackend["start"]> {
     const sleeper = opts.wake || opts.attachOnly ? undefined : this.opts.conversationAsleep?.(opts);
-    if (sleeper) return Promise.reject(new Error(`that conversation is asleep in tile ${sleeper}: wake it instead`));
-    return this.opts.backend.start(opts, out);
+    if (sleeper) throw new Error(`that conversation is asleep in tile ${sleeper}: wake it instead`);
+    const started = await this.opts.backend.start(opts, out);
+    // A size given while it started reached no process, yet every client was told it: it takes it
+    // now, or its program draws at one width while they show it at another.
+    const tile = opts.tileId;
+    const size = this.sizes.get(tile);
+    if (started.pid !== -1 && !started.asleep && size && !this.machines.has(tile) && (size.cols !== opts.cols || size.rows !== opts.rows)) {
+      this.opts.backend.resize(tile, size.cols, size.rows);
+    }
+    return started;
   }
 
   /** Whether a session here is open on another device. */

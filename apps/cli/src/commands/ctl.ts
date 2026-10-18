@@ -31,6 +31,8 @@ import {
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile } from "../hcp.js";
 import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
+import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
+import { isRemote } from "@hivemind/core/remote-uri";
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, resolveAgent, superviseOf, workflowPlan } from "../ctl-args.js";
 import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
@@ -104,20 +106,19 @@ async function onDrive<T>(use: (d: Drive) => Promise<T>): Promise<T> {
   }
 }
 
-/** The workspace a command acts on: `--repo`, else an agent's own, else of those open here the one
- *  this folder is in, or the only one. */
+/** The workspace a command acts on: for the person, the one `--repo` names or else the one this
+ *  folder is in (`workspaceNamed`); for an agent or a program, `--repo`'s folder, else its own. */
 async function workspaceOf(d: Drive, repo: unknown): Promise<string> {
-  if (typeof repo === "string" && repo) return path.resolve(repo);
-  if (d.as !== "person") return d.as.workspace;
-  const open = ((await d.call("host.status", [])) as { workspaces: Array<{ repo: string }> }).workspaces.map((w) => w.repo);
-  const here = process.cwd();
-  const within = open.filter((r) => here === r || here.startsWith(r + path.sep)).sort((a, b) => b.length - a.length);
-  if (within.length) return within[0]!;
-  if (open.length === 1) return open[0]!;
-  throw new UsageError(open.length ? `which workspace? run this inside one, or give --repo: ${open.join(", ")}` : "no workspace is open: open one in the app, or `hive host add <folder>`");
+  const given = typeof repo === "string" && repo ? repo : null;
+  if (d.as !== "person") return given ? (isRemote(given) ? given : path.resolve(given)) : d.as.workspace;
+  const { workspaces } = (await d.call("host.status", [])) as { workspaces: HostWorkspace[] };
+  const named = workspaceNamed(workspaces, given, process.cwd(), await registered());
+  if ("refused" in named) throw new UsageError(named.refused);
+  if ("unserved" in named) throw new UsageError(notServed(named.unserved));
+  return named.repo;
 }
 
-const repoArg = { repo: { type: "string", description: "the workspace's folder (default: your own, as an agent; else the one this folder is in)" } } as const;
+const repoArg = { repo: { type: "string", description: "the workspace: its folder, name or id (default: your own, as an agent; else the one this folder is in)" } } as const;
 
 type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string } };
 type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };
@@ -165,6 +166,22 @@ const agents = defineCommand({
 
 const frames = sub("frames", "The workspace's frames, where an agent may be started (id, name, machine)", repoArg,
   (a) => onDrive(async (d) => ((await d.call("agent.startable", [await workspaceOf(d, a.repo)])) as { frames: unknown[] }).frames));
+
+const frameAdd = sub("add", "Open a frame on a folder: on another machine with --machine (a saved machine or another of your devices, by id or name); prints { frame, path, opened }. A folder that has a frame already gives that frame", {
+  folder: { type: "string", required: true, description: "the folder, given in full (on that machine with --machine)" },
+  machine: { type: "string", description: "the machine the folder is on, by its id or name (`hive machine list`, Settings ▸ Devices); default: this one" },
+  name: { type: "string", description: "the frame's name (default: the folder's)" },
+  ...repoArg,
+}, (a) => onDrive(async (d) => d.call("frame.open", [await workspaceOf(d, a.repo), {
+  path: String(a.folder),
+  ...(a.machine ? { machine: String(a.machine) } : {}),
+  ...(a.name ? { title: String(a.name) } : {}),
+}])));
+
+const frame = defineCommand({
+  meta: { name: "frame", description: "Make frames: `add` opens one on a folder, here or on another machine" },
+  subCommands: { add: frameAdd },
+});
 
 /** `--frame`: a frame of the workspace by its id, or by its name in any case, as `frames` lists them. */
 async function frameIn(d: Drive, repo: string, given: string): Promise<string> {
@@ -623,7 +640,7 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    agents, frames, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, inbox, "open-review": openReview,
+    agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,

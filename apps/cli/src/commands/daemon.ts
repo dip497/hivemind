@@ -59,7 +59,6 @@ async function runForeground(sock: string): Promise<never> {
   }
   // The daemon reads its socket from argv[2] and runs on import.
   process.argv = [process.argv[0]!, process.argv[1]!, sock];
-  process.env.HIVEMIND_DAEMON_STANDALONE = "1";
   // The daemon runs agents' hooks through hive-net when it is named here.
   const hiveNet = hiveNetBin();
   if (hiveNet) process.env.HIVEMIND_HIVE_NET = hiveNet;

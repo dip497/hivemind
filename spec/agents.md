@@ -116,6 +116,12 @@ and these on top: never in its unattended mode unless `mode` says so, or an agen
 socket starts it (`hive ctl spawn`) unsupervised, where no one is at its tile. It answers `{ "tile":
 "<the new tile>" }`. Anything else is `BAD_REQUEST`.
 
+An agent runs its launch (hooks, its tile id) from the manifests installed on the machine it runs
+on. A start on another machine carries the agent's manifest folder as the starting machine has it
+installed (the daemon's `attach` takes `agent: { id, files }`, each file base64, 2 MB at most); a
+daemon with no agent of that id installs it first, validated as `hive agents install` validates
+one, and a daemon that has one keeps its own. An agent of a repository is never carried.
+
 ## Places
 
 (0.8) `agent.places(workspace)` answers where an agent may be started in the workspace: each

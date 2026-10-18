@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { configDir } from "./app-data.js";
+import { EXIT } from "./hcp.js";
 
 export const UNIT = "hive-host.service";
 
@@ -30,6 +31,8 @@ export function unitFile(argv: string[], env: Record<string, string>): string {
     `ExecStart=${[...argv, "host", "run"].map(quoted).join(" ")}`,
     ...Object.entries(env).map(([k, v]) => `Environment=${quoted(`${k}=${v}`)}`),
     "Restart=on-failure",
+    // Refused for good (the app serves this machine, or no daemon can run here): not started again.
+    `RestartPreventExitStatus=${EXIT.unavailable}`,
     "RestartSec=5",
     "# Only the host: the PTY daemon it started, and the terminals and agents in it, keep running.",
     "KillMode=process",
