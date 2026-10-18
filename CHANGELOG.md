@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A widget with no card reaches the right edge of the screen when it moves there; it stopped as far short as a card is wider than it.
+
 - A new agent starts as the agent you chose in Settings everywhere one starts (Send to agent, a view, a plugin, the toolbar), or the first one installed, never one this machine does not have. Send to agent offers a new tile of every installed agent, your chosen one first, its search finds them, and a prompt sent to an agent tile reaches it whichever agent it runs.
 
 - Agents keep running through an upgrade on every platform: macOS no longer refuses an upgrade while agents run, Windows keeps each version in a folder of its own, an AppImage started directly keeps its agents when the app quits, and a machine's agents survive an update of `hive` there.
