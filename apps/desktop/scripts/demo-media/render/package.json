@@ -1,0 +1,14 @@
+{
+  "name": "hivemind-demo-render",
+  "private": true,
+  "type": "module",
+  "description": "Renders the website's demo clips from a recording made by ../capture.spec.ts",
+  "dependencies": {
+    "@remotion/bundler": "4.0.531",
+    "@remotion/google-fonts": "4.0.531",
+    "@remotion/renderer": "4.0.531",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.531"
+  }
+}

@@ -29,4 +29,11 @@ chooser shown while the fold says `working` is `waiting` until the screen moves 
 comes, and a `waiting` status ends (`idle`) when the screen moves from a chooser to the agent's
 prompt.
 
+## Who keeps it
+
+One place folds a session's status: the PTY daemon of the machine the session runs on, since every
+hook it runs reports there (`hook-protocol.md`). It sends the status as `agent.status` to every
+connection that asked for events, and each of them, the app on the same machine included, shows that
+status as it is sent and folds nothing of its own into it but the session's end.
+
 Cases: `../conformance/status.json`.

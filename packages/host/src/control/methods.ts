@@ -7,6 +7,8 @@
  *     pipes, and the machine's own methods. The API records each effect, as its caller's; a
  *     window's work (view.emit, plugin.*, tile.focus, rescans) goes to `deps.callRenderer`.
  */
+import fs from "node:fs";
+import path from "node:path";
 import { speaksFor } from "@hivemind/agent-host/hooks/token";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
@@ -179,7 +181,7 @@ export interface MethodDeps {
   waits: Waits;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
    *  their windows follow. */
-  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership" | "setSleeping">;
+  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "setCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership" | "setSleeping">;
   /** The workspace the window the user is at shows, and the frame the user is in there, if
    *  any: what a caller in no tile (a terminal, a script) acts on. */
   shownWorkspace: () => { repo: string; frame: string | null } | null;
@@ -262,6 +264,9 @@ export interface ControlWork {
   /** Wake the sleeping agents of `target` in the workspace of `repo` (none: all of them). */
   wake(repo: string, target: string | undefined): Promise<WakeAnswer>;
   join(link: string): Promise<unknown>;
+  /** Serve the folder `folder` on this machine as one of its workspaces (`hive host add`), as the
+   *  app's own Open folder does, with no window: a layout of its own in the store, and so an id. */
+  serve(folder: string): { repo: string; workspace: string };
 }
 
 export interface Dispatcher {
@@ -1063,6 +1068,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // it runs, reads it again and tells the windows.
     reloadSettings: () => deps.reloadSettings(),
     hostStatus: () => ({ workspaces: deps.workspaces.repos().map((repo) => ({ repo, workspace: deps.workspaces.ownership(repo)?.workspaceId ?? null })) }),
+    serve(folder) {
+      if (!path.isAbsolute(folder) || !fs.statSync(folder, { throwIfNoEntry: false })?.isDirectory()) throw new ApiError("BAD_REQUEST", `${folder} is not a folder on this machine`);
+      if (!deps.workspaces.getCore(folder)) deps.workspaces.setCore(folder, { frames: [], tiles: [] });
+      return { repo: folder, workspace: deps.workspaces.ownership(folder)!.workspaceId as string };
+    },
     async join(link) {
       if (!deps.join) throw new ApiError("UNSUPPORTED", "joining is not served here");
       return await deps.join(link);

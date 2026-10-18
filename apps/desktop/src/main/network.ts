@@ -555,6 +555,11 @@ function keepPaired(device: PairedDevice): void {
  *  to: their computers and hosts. A phone runs nothing (spec/pairing.md 0.3). */
 const placesToRun = (): PairedDevice[] => pairedDevices().list().filter((d) => d.kind !== "phone");
 
+/** The other machines a frame may run on: the saved machines and the person's computers and hosts. */
+export function machinesToRunOn(): Array<{ id: string; name: string }> {
+  return [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...placesToRun().map((d) => ({ id: d.device, name: d.name }))];
+}
+
 /** Whether `device` is one of this person's computers or hosts, paired here. */
 export function isYourDevice(device: string): boolean {
   return placesToRun().some((d) => d.device === device);

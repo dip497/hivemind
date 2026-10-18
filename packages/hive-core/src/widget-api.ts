@@ -74,7 +74,8 @@ type Node =
   /** \`tint\` on the outermost stack colours the card as a note (\`yellow\`, \`pink\`, \`blue\`…). */
   | { type: "stack"; children: Node[]; fill?: boolean; tint?: string }
   | { type: "row"; children: Node[] }
-  | { type: "text"; text: string | number; size?: "large"; muted?: boolean }
+  /** One line, cut short with … when too long, unless \`wrap\`: then whole, on as many lines as it needs. */
+  | { type: "text"; text: string | number; size?: "large"; muted?: boolean; wrap?: boolean }
   | { type: "number"; value: number | string; label?: string }
   | { type: "meter"; value: number; max?: number; label?: string }
   | { type: "button"; label: string; action: unknown }
@@ -118,14 +119,37 @@ interface Hm {
     [name: string]: (...args: any[]) => Promise<unknown>;
   };
   /** The workspace's issues, now and on each change. Needs "workspace:issues". */
-  onIssues(cb: (issues: any[]) => void): () => void;
+  onIssues(cb: (issues: IssueSummary[]) => void): () => void;
   /** Its issue methods (\`read\`, \`create\`, \`update\`, \`setState\`, \`comment\`, \`delete\`, \`link\`,
    *  \`unlink\`, \`move\`). Need "workspace:issues". */
-  issues: { [call: string]: (...args: any[]) => Promise<any> };
+  issues: { read(id: string): Promise<Issue>; [call: string]: (...args: any[]) => Promise<any> };
   /** Answer the command \`name\` your widget.json declares when an agent runs it
    *  (\`hive ctl plugin call\`): what the handler returns is the agent's answer. */
   onCommand(name: string, handler: (args: any) => unknown): () => void;
   [name: string]: any;
+}
+
+/** Who an issue is given to: an agent or a person, by id. Not text: show \`assignee.id\`. */
+interface Assignee { type: "agent" | "member"; id: string; model?: string }
+interface IssueSummary {
+  id: string;
+  title: string;
+  state: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled";
+  parent: string | null;
+  labels: string[];
+  assignee: Assignee | null;
+  github?: number | null;
+  created: string;
+  updated: string;
+}
+/** One issue read in full: its sections as written in its Markdown file. */
+interface Issue extends IssueSummary {
+  links?: { id: string; type: string }[];
+  sections: {
+    description: string;
+    acceptanceCriteria: { done: boolean; text: string }[];
+    activity: { at: string; who: string; message: string }[];
+  };
 }
 
 interface Hive {

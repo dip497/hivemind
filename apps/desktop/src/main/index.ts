@@ -71,14 +71,14 @@ import { ControlPlane } from "@hivemind/host/control/plane";
 import { REATTACH_RESET } from "@hivemind/agent-host/daemon-endpoint";
 import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
-import { driveSockPath, hcpSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
+import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { agentFeed, dialDevice, homeChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { agentFeed, dialDevice, homeChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { broadcast, openWindows, registerWindow, tabsOpen, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -1369,7 +1369,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
   peopleHere.domain,
   grantsDomain(grants),
-  framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare) }),
+  framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn }),
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
@@ -1943,7 +1943,10 @@ function startViewHost(): void {
 }
 
 function startHcpControlPlane(): void {
-  control.listen(hcpSockPath(app.getPath("userData")), (err: Error) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"));
+  void control.serveBehind(ptyDaemon.daemonEndpoint, {
+    onWarn: (m) => console.warn(`[hcp] ${m}`),
+    onError: (err) => pushAppError(`Agent control plane is off: ${err.message}. \`hive ctl\` cannot reach this app.`, "hcp"),
+  });
   // Programs drive workspaces here through the workspace API, held to what they were granted.
   try {
     const driveSock = driveSockPath(app.getPath("userData"));
@@ -1962,10 +1965,11 @@ function startHcpControlPlane(): void {
   } catch (e) {
     pushAppError(`Programs cannot drive this app: ${(e as Error).message}`, "drive");
   }
-  // A machine's daemon keeps the status of the sessions it runs (R6): shown here as it has it.
-  // Only a machine's own report does that: from then on the session's local reports are ignored.
+  // A machine's daemon keeps the status of the sessions it runs (R6), this computer's too: shown here
+  // as it has it. Only a machine's own report does that: from then on the session's local reports
+  // are ignored.
   setRemoteEventSink((topic, data) => control.fromMachine(topic, data));
-  ptyDaemon.setDaemonEventSink((method, params) => control.event(method, params));
+  ptyDaemon.setDaemonEventSink((topic, data) => control.fromMachine(topic, data));
 }
 
 // The normal quit hangs (~60s): this UI process owns no PTY

@@ -18,6 +18,8 @@ const dir = unix ? fs.realpathSync(fs.mkdtempSync("/tmp/hive-share-")) : "";
 const sock = path.join(dir, "drive.sock");
 const repo = path.join(dir, "team");
 const TOKEN = "t0k3n";
+/** Two of the host's workspaces in folders of one name: the person's old checkout, and the one shared. */
+const twins = [{ repo: path.join(dir, "manageark"), workspace: "ws-aaaa1111" }, { repo: path.join(dir, "work", "manageark"), workspace: "ws-bbbb2222" }];
 const asked: Array<{ method: string; params: unknown[]; actor: Actor }> = [];
 const env = (s = sock, token = TOKEN) => ({ XDG_CONFIG_HOME: dir, HIVEMIND_APP_DATA: path.join(dir, "hivemind"), HIVE_DRIVE_SOCK: s, HCP_TOKEN: token });
 let drive: DriveServer;
@@ -30,7 +32,10 @@ const answer = (method: string, reply: (...params: unknown[]) => unknown) => [me
 beforeAll(async () => {
   fs.mkdirSync(repo);
   const answers = Object.fromEntries([
-    answer("host.status", () => ({ workspaces: [{ repo, workspace: "ws-1234" }] })),
+    answer("host.status", () => ({ workspaces: [{ repo, workspace: "ws-1234" }, ...twins] })),
+    answer("people.invite", (at) => `hivemind://join/${path.basename(String(at))}`),
+    answer("people.requests", () => ({ answering: "ask", requests: [] })),
+    answer("agent.list", () => ({ seq: 0, agents: [] })),
     answer("people.list", () => [{ person: "p-guest", name: "Guest", role: "edit", present: true }]),
     answer("people.answer", () => ({ answered: false })),
     answer("host.join", (link) => ({ ok: link === "hivemind://join/x", role: "edit" })),
@@ -70,6 +75,25 @@ describe.skipIf(!unix)("hive share/people/join on the drive socket", () => {
       expect(r.json).toMatchObject({ ok: false, code: "refused" });
     }
     expect(asked.slice(n).map((a) => a.method)).toEqual(["host.status"]);
+  });
+
+  test("refused a join, an agent is told who joins and how: the person, with `hive join` in a terminal of their own", async () => {
+    const r = await hive(["join", "hivemind://join/x", "--json"], { env: env(sock, tileToken(TOKEN, "hm:w-1")) });
+    expect(r.json).toMatchObject({ ok: false, code: "refused" });
+    expect((r.json as { error: string }).error).toContain("run `hive join <link>` in a terminal of your own, not from an agent's tile");
+  });
+
+  test("a name two of the host's workspaces answer to is refused by share, people, grant and ctl alike, each listed with its id and folder; its id names one", async () => {
+    const n = asked.length;
+    for (const args of [["share", "manageark"], ["people", "list", "-w", "manageark"], ["grant", "create", "bot", "-w", "manageark"], ["ctl", "agents", "--repo", "manageark"]]) {
+      const r = await hive([...args, "--json"], { env: env(), cwd: dir });
+      expect(r.code).toBe(2);
+      const said = JSON.stringify(r.json);
+      for (const t of twins) expect(said).toContain(`manageark (${t.workspace}) at ${t.repo}`);
+    }
+    expect(asked.slice(n).map((a) => a.method).filter((m) => m !== "host.status")).toEqual([]);
+    const byId = await hive(["share", "ws-bbbb", "--json"], { env: env(), cwd: dir });
+    expect(byId.json).toMatchObject({ ok: true, data: { workspace: twins[1]!.repo, link: "hivemind://join/manageark" } });
   });
 
   test("with neither the app nor hive host running, it says so", async () => {

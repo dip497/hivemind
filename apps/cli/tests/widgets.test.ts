@@ -72,4 +72,27 @@ describe("hive widgets", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 60_000);
+
+  test("an issue's assignee is a who, not text: a widget that prints it as text fails its own check", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-widget-issue-"));
+    const env = { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
+    const tsc = path.join(import.meta.dir, "../../../node_modules/.bin/tsc");
+    try {
+      hive(["widgets", "new", "board", "--owner", "ada", "--json"], { cwd: tmp, env });
+      const dir = path.join(tmp, "board");
+      const check = (line: string) => {
+        fs.writeFileSync(path.join(dir, "widget.js"), `/// <reference path="./hive.d.ts" />
+hive.hm.issues.read("FAS-1").then((issue) => {
+  ${line}
+  hive.render({ type: "text", text: \`\${issue.title}: \${who}\` });
+});
+`);
+        try { execFileSync(tsc, ["-p", path.join(dir, "jsconfig.json")], { encoding: "utf8" }); return ""; } catch (e) { return String((e as { stdout?: string }).stdout); }
+      };
+      expect(check("/** @type {string} */ const who = issue.assignee;")).toContain("widget.js");
+      expect(check("const who = issue.assignee?.id ?? \"nobody\";")).toBe("");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

@@ -1,0 +1,38 @@
+{
+  "id": "dip497/sqlite-browser",
+  "name": "SQLite browser",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "code",
+  "description": "The repository's SQLite files, read-only: tables with their row counts, a table's rows, and any query you write.",
+  "entry": "index.js",
+  "permissions": [],
+  "commands": [
+    {
+      "name": "tables",
+      "description": "The database's tables and views, each with its row count.",
+      "args": "{ \"file\"?: string } — a database file from the repository's top; the one open in the tile when left out"
+    },
+    {
+      "name": "query",
+      "description": "Run a read-only SQL query and answer with its rows (at most 1000). Writes are refused.",
+      "args": "{ \"sql\": string, \"file\"?: string }"
+    }
+  ],
+  "tools": [
+    {
+      "key": "browser",
+      "label": "SQLite browser",
+      "description": "Tables and rows of the repository's SQLite files.",
+      "tileKind": "sqlite-browser",
+      "size": {
+        "width": 1100,
+        "height": 700
+      },
+      "needsRepo": true,
+      "singleton": true,
+      "glyph": "⛁",
+      "icon": "icon.svg"
+    }
+  ]
+}
