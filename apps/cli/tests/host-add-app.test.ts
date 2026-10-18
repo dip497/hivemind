@@ -15,6 +15,7 @@ import { serveDrive, type DriveServer } from "@hivemind/host/drive";
 import { controlApi } from "@hivemind/host/control-api";
 import { makeDispatch, type MethodDeps } from "@hivemind/host/control/methods";
 import { Grants } from "@hivemind/host/grants";
+import { tileToken } from "@hivemind/agent-host/hooks/token";
 import { hive, hiveAsync } from "./helpers.js";
 
 const unix = process.platform !== "win32";
@@ -40,7 +41,7 @@ beforeAll(async () => {
   // Who is let in by a link is not what is under test here.
   const people = { answers: { "people.invite": async (_f: unknown, repo: unknown) => `hivemind://join/${path.basename(String(repo))}`, "people.requests": async () => ({ answering: "ask", requests: [] }) }, effects: {} };
   const server = new WorkspaceServer([controlApi({ control: async () => api }), people], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
-  drive = serveDrive(sock, { server, installToken: () => TOKEN, grants: new Grants(path.join(dir, "grants.json")), repos: () => store.repos(), workspaceOf: () => null, nameOf: () => "" });
+  drive = serveDrive(sock, { server, installToken: () => TOKEN, grants: new Grants(path.join(dir, "grants.json")), repos: () => store.repos(), workspaceOf: () => served, nameOf: () => "" });
   while (!fs.existsSync(sock)) await new Promise((r) => setTimeout(r, 10));
 });
 afterAll(() => {
@@ -57,6 +58,15 @@ describe.skipIf(!unix)("with the app serving this machine", () => {
     expect(r.json).toMatchObject({ ok: true, data: { repo: extra } });
     expect(store.repos()).toContain(extra);
     expect(store.ownership(extra)?.workspaceId).toBe((r.json as { data: { workspace: string } }).data.workspace);
+  });
+
+  test("an agent's tile may not serve a folder: it is refused, told the person runs `hive host add`, and nothing is served", async () => {
+    const home = path.join(dir, "home");
+    fs.mkdirSync(home);
+    const r = await hiveAsync(["host", "add", home, "--json"], { env: { HIVE_DRIVE_SOCK: sock, HCP_TOKEN: tileToken(TOKEN, "hm:me-1") } });
+    expect(r.code).not.toBe(0);
+    expect(JSON.stringify(r.json)).toContain("run `hive host add <folder>` in a terminal of your own");
+    expect(store.repos()).not.toContain(home);
   });
 
   test("a name three folders answer to is refused with each; the folder's path, or its prefix, shares it, served first", async () => {

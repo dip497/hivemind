@@ -372,14 +372,14 @@ test("naming an agent, typing keys to it and piping its replies to another drive
   expect(ran.map((r) => r.what)).toEqual(["agent.rename", "agent.keys", "link.connect", "link.disconnect", "link.disconnect"]);
 });
 
-test("the machine's own methods are no peer's, the person's own devices included; an agent on this machine keeps them, but joining, for its workspace's tiles", async () => {
-  const machine = [["plugin.call", "p", "c"], ["tools.rescan"], ["tile.focus", "in-1"], ["host.join", "hive://x"]] as const;
+test("the machine's own methods are no peer's, the person's own devices included; an agent on this machine keeps them, but joining and serving a folder, for its workspace's tiles", async () => {
+  const machine = [["plugin.call", "p", "c"], ["tools.rescan"], ["tile.focus", "in-1"], ["host.join", "hive://x"], ["host.add", "/"]] as const;
   for (const access of ["agents", "owner"] as const) {
     const peer = connect(access);
     for (const [m, ...args] of machine) expect(await code(peer.client.call(m, ...args))).toBe("FORBIDDEN");
   }
   const agent = connect("agents", undefined, REPO, "in-9");
-  expect(await Promise.all(machine.map(([m, ...args]) => code(agent.client.call(m, ...args))))).toEqual(["ok", "ok", "ok", "FORBIDDEN"]);
+  expect(await Promise.all(machine.map(([m, ...args]) => code(agent.client.call(m, ...args))))).toEqual(["ok", "ok", "ok", "FORBIDDEN", "FORBIDDEN"]);
   expect(await code(agent.client.call("tile.focus", "out-1"))).toBe("FORBIDDEN");
   expect(ran.map((r) => r.what)).toEqual(["plugin.call", "tools.rescan", "tile.focus"]);
 });

@@ -266,7 +266,8 @@ hive host uninstall   # stop running it as a service; its terminals keep running
 The host is the same device the app would be on that machine (it uses the app's keys), so it
 does not run while the app does: `hive host run` and `hive host install` refuse then, once, and
 say so. The app serves the machine's workspaces itself, and `hive host add <dir>` and `hive share
-<dir>` ask it to serve one more, with no window opening. Pairing makes it you: in the app, **Settings → Connect → Have a code?
+<dir>` ask it to serve one more, with no window opening. They are yours, in a terminal of your
+own: from an agent's tile they are refused, as an agent is kept to its own workspace. Pairing makes it you: in the app, **Settings → Connect → Have a code?
 Join** takes the six words `hive host pair` prints, which find the host on your network, or
 its link, which finds it from anywhere; from then on **Open recent → On your devices** lists the
 workspaces it serves. A workspace opened from there is yours; its terminals and
