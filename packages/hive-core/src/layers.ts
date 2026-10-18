@@ -29,6 +29,8 @@ export interface ModelTile {
   seen?: number | null;
   /** Kept out of the list until then (ms), unless it needs the person sooner. */
   snoozedUntil?: number;
+  /** An agent put to sleep: its process stopped until it is woken. */
+  sleeping?: boolean;
 }
 
 /** Done since the person last looked: it changed after they saw it and is not still at work. A tile
@@ -60,6 +62,8 @@ export interface LayersView {
   /** The tiles listed under another, by that tile's id: started by it and in the same list. The
    *  lists above hold only the tiles under no other. */
   kids: Map<string, ModelTile[]>;
+  /** How many asleep tiles `hideAsleep` left out. */
+  hiddenAsleep: number;
 }
 
 const HOUR = 3_600_000;
@@ -118,17 +122,25 @@ export function layersView(input: {
   agentLabel: (t: ModelTile) => string;
   /** Searched for: only the tiles whose name or agent holds it, pinned ones too. */
   query?: string;
+  /** Leave asleep tiles out of every list but Pinned. */
+  hideAsleep?: boolean;
 }): LayersView {
   const { prefs, now } = input;
   const q = input.query?.trim().toLowerCase() ?? "";
   const found = (t: ModelTile) => !q || `${t.name} ${input.agentLabel(t)}`.toLowerCase().includes(q);
   const byId = new Map(input.tiles.map((t) => [t.id, t]));
-  const asleep = (t: ModelTile) => isSnoozed(t, now);
-  const pinned = input.pinned.map((id) => byId.get(id)).filter((t): t is ModelTile => !!t && found(t) && !asleep(t));
+  const snoozedNow = (t: ModelTile) => isSnoozed(t, now);
+  const pinned = input.pinned.map((id) => byId.get(id)).filter((t): t is ModelTile => !!t && found(t) && !snoozedNow(t));
   const pinnedIds = new Set(input.pinned);
-  const rest = sorted(input.tiles.filter((t) => !pinnedIds.has(t.id) && found(t) && !asleep(t) && passes(t, prefs, now)), prefs.sortBy);
-  const snoozed = input.tiles.filter((t) => found(t) && asleep(t)).sort((a, b) => a.snoozedUntil! - b.snoozedUntil!);
-  const filtering = !!q || prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0;
+  let hiddenAsleep = 0;
+  const shown = (t: ModelTile) => {
+    if (!input.hideAsleep || !t.sleeping) return true;
+    hiddenAsleep++;
+    return false;
+  };
+  const rest = sorted(input.tiles.filter((t) => !pinnedIds.has(t.id) && found(t) && !snoozedNow(t) && passes(t, prefs, now) && shown(t)), prefs.sortBy);
+  const snoozed = input.tiles.filter((t) => found(t) && snoozedNow(t) && shown(t)).sort((a, b) => a.snoozedUntil! - b.snoozedUntil!);
+  const filtering = !!q || prefs.status !== "all" || prefs.activity !== "all" || prefs.machines.length > 0 || hiddenAsleep > 0;
   const tree = prefs.groupBy === "machine" || prefs.groupBy === "group";
   const byFrame = new Map<string | null, ModelTile[]>();
   const buckets: Bucket[] = [];
@@ -163,7 +175,7 @@ export function layersView(input: {
   const kids = new Map<string, ModelTile[]>();
   for (const [key, list] of byFrame) byFrame.set(key, nest(list, kids));
   for (const b of buckets) b.tiles = nest(b.tiles, kids);
-  return { pinned, tree, byFrame, buckets, filtering, kids, snoozed };
+  return { pinned, tree, byFrame, buckets, filtering, kids, snoozed, hiddenAsleep };
 }
 
 /** `list` without the tiles whose starter is in it too, which go into `kids` under it, in list

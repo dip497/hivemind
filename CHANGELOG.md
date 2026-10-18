@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Layers: "Hide asleep" in the View menu leaves asleep agents out of the list; a line at the end says how many are hidden and shows them again when clicked.
+
 - New widgets stack down the right edge by their real height, so a tall widget is no longer covered by the ones added after it; a column that reaches the bottom goes on to its left.
 
 - A guest who joins a workspace sees its board: when the host's last change was not to its frames and tiles (a tile moved, say), the guest's board stayed empty though connected.
