@@ -40,7 +40,7 @@ export default function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }
 
   return (
     <div
-      className="hm-popover fixed z-[9999] w-[300px] flex flex-col gap-1"
+      className="hm-popover fixed z-[calc(var(--layer-machines-panel)+1)] w-[300px] flex flex-col gap-1"
       style={{ top: anchor.bottom + 6, left: Math.max(8, Math.min(anchor.left, window.innerWidth - 308)) }}
       onClick={(e) => e.stopPropagation()}
       role="dialog"

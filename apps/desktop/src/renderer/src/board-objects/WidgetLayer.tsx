@@ -66,7 +66,7 @@ export function WidgetLayer({ repo, board, packages }: {
 
   if (!repo || widgets.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed inset-0 z-40" data-widget-layer={hidden ? "hidden" : "shown"}>
+    <div className="pointer-events-none fixed inset-0 z-(--layer-widgets)" data-widget-layer={hidden ? "hidden" : "shown"}>
       {!hidden && widgets.map((w) => (
         <WidgetCard key={w.id} object={w} pkg={packages.find((p) => p.id === w.widget)} name={nameOf(w.widget)} onEdit={() => board.edit(w.id)}
           spot={onScreen(spots[w.id] ?? stacked[w.id]!)} onMove={place} onSize={sized} onRemove={() => board.remove(w.id)}

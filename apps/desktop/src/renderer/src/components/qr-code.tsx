@@ -48,7 +48,7 @@ export function QrCode({ text, label, ...rest }: { text: string; label: string }
     </button>
     <Dialog open={large} onOpenChange={setLarge}>
       {/* Above Settings, which a code is shown from. */}
-      <DialogContent padding="none" closeButton={false} className="qr-large z-[90]" data-qr-large>
+      <DialogContent padding="none" closeButton={false} className="qr-large" data-qr-large>
         <DialogTitle className="sr-only">{label}</DialogTitle>
         <DialogDescription className="sr-only">Point the phone's camera at it. Esc closes it.</DialogDescription>
         <QrSvg text={text} label={label} />

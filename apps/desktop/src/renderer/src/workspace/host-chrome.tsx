@@ -76,7 +76,7 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
       {island.onBoard && <AddDialog repoPath={island.repoPath} onBoard={island.onBoard} onTile={island.onTile} boardItems={!!island.boardItems} />}
       {showIsland && (
         <div
-          className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[calc(100vw-24px)] -translate-x-1/2 ${placement}`}
+          className={`pointer-events-none absolute left-1/2 z-(--layer-panels) w-max max-w-[calc(100vw-24px)] -translate-x-1/2 ${placement}`}
           data-host-island={chrome.island}
           ref={islandRef}
         >
@@ -93,7 +93,7 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
           aria-label={expanded ? "hide tools" : "show tools"}
           aria-expanded={expanded}
           title={expanded ? "Hide tools" : "Tools (spawn, frame, appearance)"}
-          className={`absolute left-1/2 z-30 -translate-x-1/2 ${expanded ? "bottom-[3.75rem]" : "bottom-3"}`}
+          className={`absolute left-1/2 z-(--layer-panels) -translate-x-1/2 ${expanded ? "bottom-[3.75rem]" : "bottom-3"}`}
           data-host-island-handle
         >
           <Wrench />

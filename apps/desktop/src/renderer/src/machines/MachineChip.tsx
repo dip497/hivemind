@@ -33,7 +33,7 @@ export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: 
       </button>
       {open && btn.current && createPortal(
         <>
-          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-(--layer-machines-panel)" onClick={() => setOpen(false)} />
           <Suspense fallback={null}>
             <MachinePanel
               anchor={btn.current.getBoundingClientRect()}
