@@ -13,6 +13,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - `hive agents install --help` and the installer name amp, an agent on HiveHub, as the example instead of gemini.
 
+- A widget's `hive.d.ts` now types issues: `onIssues` and `issues.read` say each field, and an issue's `assignee` is `{ type, id }`, so a widget that printed it as text showed `[object Object]` and now fails its own type check instead.
+
 ## [2026.10.3] — 2026-10-18
 
 ### Added
