@@ -2,7 +2,8 @@
 // A muted loop recorded from the real app (docs/design/demo-media-2026-10-18.md), over its own
 // first frame. The hero's starts once the page has loaded; the others while they are on screen.
 // Reduced motion keeps the poster; the button always stops or starts it.
-// Until a clip's files exist, `fallback` names a real screenshot under shots/ to show instead.
+// Until a clip's files exist, `fallback` names a real screenshot under shots/ to show instead;
+// with neither, nothing is drawn.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 interface Props { name: string; alt: string; eager?: boolean; fallback?: { file: string; width: number; height: number; fit?: "cover" | "contain" } }
@@ -12,7 +13,9 @@ const src = (file: string) => `${base}/shots/${name}/${file}`;
 const has = (file: string) => existsSync(join(process.cwd(), "public/shots", name, file));
 const still = fallback && !has('poster.webp') ? fallback : null;
 const moving = has('clip.webm') || has('clip.mp4');
+const shown = still !== null || has('poster.webp');
 ---
+{shown && (
 <div class="loop" data-eager={eager ? "" : undefined} data-fit={still?.fit}>
   <img class="poster" src={still ? `${base}/shots/${still.file}` : src('poster.webp')} width={still?.width ?? 1280} height={still?.height ?? 800} alt={alt}
     fetchpriority={eager ? "high" : undefined} loading={eager ? undefined : "lazy"} decoding={eager ? undefined : "async"} />
@@ -22,6 +25,7 @@ const moving = has('clip.webm') || has('clip.mp4');
   </video>}
   {moving && <button type="button" class="loop-pause" aria-pressed="false">Pause</button>}
 </div>
+)}
 
 <style>
   .loop{position:relative;aspect-ratio:16/10;border:1px solid var(--line);border-radius:12px;

@@ -321,7 +321,7 @@ test("inside the desktop, what a session's hooks report reaches every device wat
   laptop.c.write(frame({ t: "attach", reqId: "r1", id, spec: { cwd: d.dir, cmd: "bash", args: ["-c", "sleep 30"], cols: 80, rows: 24 } }));
   await report(d, { tileId: id, event: "turn.started" });
   await report(d, { tileId: id, event: "turn.ended" });
-  await until(() => laptop.events.filter((e) => e.topic === "agent.event").length === 2 && laptop.stateOf(id) === "done");
+  await until(() => laptop.events.filter((e) => e.topic === "agent.event").length === 2 && laptop.stateOf(id) === "done" && plane.heard.length >= 2);
   assert.deepEqual(laptop.events.filter((e) => e.topic === "agent.event"), [{ topic: "agent.event", tileId: id }, { topic: "agent.event", tileId: id }], "the device that started it hears its turn end");
   assert.equal(laptop.stateOf(id), "done", "and its status, as this machine keeps it");
   assert.deepEqual(plane.heard.map((h) => (h.params as { event: string }).event), ["turn.started", "turn.ended"], "the app hears each report once");
