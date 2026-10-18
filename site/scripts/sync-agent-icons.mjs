@@ -59,7 +59,7 @@ for (const f of readdirSync(PUBLISHED).filter((n) => !n.startsWith(".") && n !==
 const payload = JSON.stringify({ count: agents.length, total, agents }, null, 2) + "\n";
 if (check) {
   const current = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
-  if (current !== payload) { console.error("agent icons are stale: run `npm run icons:sync` in docs/"); process.exit(1); }
+  if (current !== payload) { console.error("agent icons are stale: run `npm run icons:sync` in site/"); process.exit(1); }
   console.log(`agent icons current — ${agents.length}`);
 } else if (agents.length) {
   mkdirSync(path.dirname(OUT), { recursive: true });

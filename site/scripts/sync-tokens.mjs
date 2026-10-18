@@ -14,7 +14,7 @@ const ROOT = path.resolve(here, "../..");
 const SOURCE = "apps/desktop/src/renderer/src/styles.css";
 const OUT = path.resolve(here, "../src/generated/tokens.json");
 
-// A container (or any checkout of docs/ alone) has no app beside it. The vendored JSON is
+// A container (or any checkout of site/ alone) has no app beside it. The vendored JSON is
 // committed precisely so a build there still works; only --check insists on the real file.
 const sourcePath = path.join(ROOT, SOURCE);
 if (!existsSync(sourcePath)) {
@@ -44,7 +44,7 @@ const payload = JSON.stringify({ source: SOURCE, count: Object.keys(tokens).leng
 if (process.argv.includes("--check")) {
   const current = existsSync(OUT) ? readFileSync(OUT, "utf8") : "";
   if (current !== payload) {
-    console.error(`tokens are stale: run \`npm run tokens:sync\` in docs/ (${SOURCE} changed)`);
+    console.error(`tokens are stale: run \`npm run tokens:sync\` in site/ (${SOURCE} changed)`);
     process.exit(1);
   }
   console.log(`tokens current — ${Object.keys(tokens).length} from ${SOURCE}`);

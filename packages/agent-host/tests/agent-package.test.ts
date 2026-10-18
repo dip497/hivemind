@@ -40,11 +40,12 @@ beforeAll(async () => {
   daemon = spawn(process.execPath, [DAEMON, sock], { stdio: "ignore", env: { ...process.env, HOME: dir, XDG_CONFIG_HOME: path.join(dir, "machine"), PATH: `${bin}:${process.env.PATH}` } });
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 100));
   ep = new DaemonEndpoint({
-    connect: async () => { const s = net.connect(sock); await new Promise((r) => s.once("connect", r)); return s; },
+    connect: () => new Promise((res, rej) => { const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }),
     onEvent: (topic, data) => { events.push({ topic, data: data as never }); },
   });
 });
 afterAll(() => {
+  ep?.close();
   daemon?.kill("SIGKILL");
   fs.rmSync(dir, { recursive: true, force: true });
 });
