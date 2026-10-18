@@ -24,6 +24,8 @@ const repoA = path.join(dir, "a");
 const repoB = path.join(dir, "b");
 /** A workspace in another's folder, as a worktree's may be. */
 const nested = path.join(repoA, "sub");
+/** A workspace on another machine, named by its address. */
+const onBox = "ssh://build-box/srv/api";
 const TOKEN = "t0k3n";
 const calls: Array<{ method: string; params: unknown[]; by: Actor }> = [];
 let reads = 0;
@@ -45,7 +47,7 @@ const answer = (method: string, reply: (...params: unknown[]) => unknown) => [me
 beforeAll(async () => {
   for (const r of [repoA, repoB]) fs.mkdirSync(path.join(r, "sub"), { recursive: true });
   const answers = Object.fromEntries([
-    answer("host.status", () => ({ workspaces: [repoA, nested, repoB].map((repo) => ({ repo, workspace: null })) })),
+    answer("host.status", () => ({ workspaces: [repoA, nested, repoB, onBox].map((repo) => ({ repo, workspace: null })) })),
     answer("agent.list", () => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking] })),
     answer("agent.answer", (_tile, since) => ({ answered: since === 77 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
@@ -126,7 +128,15 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     await hive(["ctl", "agents", "--json"], { cwd: nested, env: env() });
     expect(last("agent.list").params).toEqual([nested]);
     const which = await hive(["ctl", "agents", "--json"], { cwd: dir, env: env() });
-    expect([which.code, (which.json as { message: string }).message]).toEqual([2, `say which of the host's workspaces: a (not shared) at ${repoA}; sub (not shared) at ${nested}; b (not shared) at ${repoB}`]);
+    expect([which.code, (which.json as { message: string }).message]).toEqual([2, `say which of the host's workspaces: a (not shared) at ${repoA}; sub (not shared) at ${nested}; b (not shared) at ${repoB}; api (not shared) at ${onBox}`]);
+  });
+
+  test("--repo names a workspace on another machine by its address, or its name", async () => {
+    const r = await hive(["ctl", "agents", "--repo", onBox, "--json"], { cwd: dir, env: env() });
+    expect(r.code).toBe(0);
+    expect(last("agent.list").params).toEqual([onBox]);
+    expect((await hive(["ctl", "agents", "--repo", "api", "--json"], { cwd: dir, env: env() })).code).toBe(0);
+    expect(last("agent.list").params).toEqual([onBox]);
   });
 
   test("as an agent, by its tile's token, it drives its own workspace as itself; another is refused", async () => {

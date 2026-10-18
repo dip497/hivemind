@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { listWorkspaces } from "@hivemind/core";
+import { isRemote } from "@hivemind/core/remote-uri";
 
 /** A workspace as `host.status` lists it. */
 export interface HostWorkspace {
@@ -40,7 +41,8 @@ export function workspaceNamed(workspaces: HostWorkspace[], given: string | null
   };
   const all = (): string => [...served].map(shown).join("; ") || "none yet (`hive host add <folder>`)";
   if (given) {
-    const at = path.resolve(cwd, given);
+    // A workspace on another machine is named by its address (ssh://, machine://), never a folder here.
+    const at = isRemote(given) ? given : path.resolve(cwd, given);
     const upper = given.toUpperCase();
     const found = new Set<string>();
     for (const w of workspaces) {
