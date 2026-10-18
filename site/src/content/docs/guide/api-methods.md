@@ -85,6 +85,9 @@ and results are in `spec/workspace-api.md`.
 
 ## No role
 
-Only you, at your own window or with `hive`, can: commit, push, pull, stage or discard; write
-files; create or change issues and review comments; create or remove worktrees; let people in or
-change their roles; make or revoke tokens. A token is refused these whatever its role.
+No token can call the methods that commit, push, pull, stage or discard; write files; create or
+change issues and review comments; create or remove worktrees; let people in or change their
+roles; or make or revoke tokens.
+
+That does not keep a program away from your files: with `terminals` it types into a shell, and
+with `agents` it starts agents, and either can run any command there.

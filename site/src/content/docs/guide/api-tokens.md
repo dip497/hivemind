@@ -17,10 +17,14 @@ this once.
 hive grant create dashboard -w ~/work/api --role view --expires 30d
 ```
 
+It prints the token first, shown once (the long lines are wrapped here):
+
 ```text
-hgr_…                                   ← the token, shown once
-dashboard may view in api, until 2026-11-17T09:00:00Z (`hive grant revoke 1a2b3c4d5e6f`).
-It connects to ~/.config/hivemind/drive.sock and says {"hello": {"token": "<this token>", "workspace": "<the folder>"}}.
+hgr_…
+dashboard may view in api, until 2026-11-17T09:00:00Z
+  (`hive grant revoke 1a2b3c4d5e6f`).
+It connects to ~/.config/hivemind/drive.sock and says
+  {"hello": {"token": "<this token>", "workspace": "<the folder>"}}.
 ```
 
 | Option | Means |

@@ -73,9 +73,10 @@ is refused. It runs on Linux and macOS (a Unix socket).
 ```python
 import json, os, socket
 
-SOCK = os.environ["HIVE_DRIVE_SOCK"]       # the path hive grant create printed
-TOKEN = os.environ["HIVE_DRIVE_TOKEN"]     # the token
-FOLDER = os.environ["HIVE_WORKSPACE"]      # the workspace's folder
+# from hive grant create, and the workspace's folder
+SOCK = os.environ["HIVE_DRIVE_SOCK"]
+TOKEN = os.environ["HIVE_DRIVE_TOKEN"]
+FOLDER = os.environ["HIVE_WORKSPACE"]
 
 s = socket.socket(socket.AF_UNIX)
 s.connect(SOCK)
@@ -89,12 +90,12 @@ def call(id, method, *params):
     send({"id": id, "method": method, "params": list(params)})
     while True:
         msg = json.loads(f.readline())
-        if isinstance(msg, dict) and msg.get("id") == id:   # skip events
+        if isinstance(msg, dict) and msg.get("id") == id:  # not an event
             return msg
 
 send({"hello": {"token": TOKEN, "workspace": FOLDER}})
-print(f.readline())                        # {"hello": {"api": "0.30", "as": {…}}}
-print(call(1, "agent.list", FOLDER))       # {'id': 1, 'result': {'seq': 0, 'agents': []}}
+print(f.readline())                   # {"hello": {"api": "0.30", "as": {…}}}
+print(call(1, "agent.list", FOLDER))  # {'id': 1, 'result': {'seq': 0, …}}
 print(call(2, "agent.start", FOLDER, {"program": "claude", "prompt": "Run the tests"}))
 ```
 
