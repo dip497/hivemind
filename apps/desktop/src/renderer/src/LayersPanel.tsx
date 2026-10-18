@@ -1193,7 +1193,7 @@ function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuCheckboxItem checked={hideAsleep} onCheckedChange={(on) => setHideAsleep(on === true)} onSelect={(e) => e.preventDefault()} data-layers-hide-asleep>Hide asleep</DropdownMenuCheckboxItem>
+        <DropdownMenuCheckboxItem checked={hideAsleep} onCheckedChange={(on) => setHideAsleep(on === true)} onSelect={(e) => e.preventDefault()} checkSide="end" data-layers-hide-asleep>Hide asleep</DropdownMenuCheckboxItem>
         <DropdownMenuSeparator />
         {radio("groupBy", "Group by")}
         {radio("sortBy", "Sort by")}
