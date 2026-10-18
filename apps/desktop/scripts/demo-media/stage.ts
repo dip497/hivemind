@@ -185,11 +185,8 @@ export async function stage(root: string, apps: ElectronApplication[], { name = 
     names[tile] = label;
     for (let i = 0; ; i++) {
       const row = census().of(tile);
-      // An agent on another machine is not in this workspace's feed; its screen says how it is.
-      const seen = row ? "" : screen(tile);
       if (row?.waiting?.says === "trust") { cli("ctl", "keys", tile, "Down,Enter"); await desktop.waitForTimeout(2000); }
-      else if (/trust\s*this\s*folder/i.test(seen)) { cli("ctl", "keys", tile, /❯.*Yes/.test(seen) ? "Enter" : "Down,Enter"); await desktop.waitForTimeout(2000); }
-      else if (row ? !row.waiting && row.state !== "starting" : /\?\s*for\s*shortcuts/.test(seen)) break;
+      else if (row && !row.waiting && row.state !== "starting") break;
       if (i > 60) throw new Error(`${label} never got ready:\n${show()}\n--- its screen:\n${screen(tile).slice(-2500)}`);
       await desktop.waitForTimeout(1000);
     }
@@ -225,7 +222,7 @@ export async function stage(root: string, apps: ElectronApplication[], { name = 
     await desktop.waitForTimeout(1500);
   };
 
-  return { desktop, app, env, cli, emit, openFrames, agent, census, screen, show, names, tidy, fit, quiet, home };
+  return { desktop, app, env, cli, emit, openFrames, agent, census, show, names, tidy, fit, quiet, home };
 }
 
 /** Records a clip into `out`: bursts of the app window, single shots of other pages, and the boxes
@@ -273,8 +270,7 @@ export function recorder(app: ElectronApplication, out: string, base = out) {
 
 /** Waits until every one of `tiles` is at its job: working, or asking the person something. */
 export async function busy(s: Stage, tiles: string[], timeout = 180_000) {
-  const on = (t: string) => { const r = s.census().of(t); return r ? r.state === "working" || !!r.waiting : /esc\s*to\s*interrupt|Do\s*you\s*want/.test(s.screen(t)); };
-  await expect.poll(() => tiles.filter(on).length, { timeout, intervals: [1000] })
+  await expect.poll(() => tiles.filter((t) => { const r = s.census().of(t); return r?.state === "working" || !!r?.waiting; }).length, { timeout, intervals: [1000] })
     .toBe(tiles.length).catch((e) => { console.log(s.show()); throw e; });
 }
 
