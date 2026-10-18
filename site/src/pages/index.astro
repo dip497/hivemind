@@ -109,7 +109,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
         <p class="fine">MIT licensed, on your computer, no account.</p>
       </div>
       <figure class="hero-media">
-        <Loop name="hero" eager fallback={shot('agent-plugins.webp')}
+        <Loop name="hero" eager
           alt="The Hivemind app: an agent's terminal asking to edit a file, and above it a Progress widget an agent keeps up to date, 3 of 4 done." />
       </figure>
     </div>
@@ -203,8 +203,8 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
         <p class="sub">Every tile shows whether its agent is working, finished or waiting on you.</p>
       </div>
       <figure class="shot">
-        <img src={link('shots/view-canvas.webp')} width="1600" height="1120" loading="lazy" decoding="async"
-          alt="The canvas: each agent's tile shows whether it is working, finished or waiting on you." />
+        <img src={link('shots/showcase/agents-by-state.webp')} width="800" height="500" loading="lazy" decoding="async"
+          alt="Agents by state: docs-utils and binding-test wait on you for permission, five are working, three are ready, and docs-utils' prompt is open beside them." />
       </figure>
       <p class="after"><code>hive ctl spawn --supervise all</code> sends a Claude or Kiro worker's permission prompts to you. <a href={link('guide/agent-workflows/')}>Agents running agents</a></p>
     </div>
@@ -217,7 +217,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       </div>
 
       <div class="row">
-        <Loop name="machines" fallback={shot('view-canvas.webp')}
+        <Loop name="machines"
           alt="Agents in frames, one of them on a machine reached over ssh." />
         <div class="row-copy">
           <h3>Machines over ssh</h3>
@@ -228,8 +228,8 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       </div>
 
       <div class="row flip">
-        <Loop name="devices" fallback={shot('view-windows.webp')}
-          alt="The Windows view: projects and their agents in the Layers list, an agent's terminal beside it." />
+        <Loop name="devices"
+          alt="The same agent's permission prompt on the desktop, in a browser tab and on a phone." />
         <div class="row-copy">
           <h3>The same workspace on desktop, browser and phone</h3>
           <p>The app, a browser tab on the same computer, or your phone.</p>
@@ -248,7 +248,7 @@ const examples: { kind: string; one: string; fit: string; items: Example[] }[] =
       </div>
 
       <div class="row flip">
-        <Loop name="join" fallback={shot('view-windows.webp')}
+        <Loop name="join"
           alt="A shared workspace open in a second person's Hivemind." />
         <div class="row-copy">
           <h3>Someone joins your workspace</h3>

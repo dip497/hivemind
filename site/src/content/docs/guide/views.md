@@ -18,8 +18,8 @@ title menu, or **Use this view** on a view's page in **Settings ▸ Plugins**.
 | **Windows** | Tiles as tabs in panes you split, with the Layers panel beside them. No toolbar. Each person keeps their own arrangement. |
 
 <figure>
-  <img src="../../shots/view-canvas.webp" alt="Canvas: frames as coloured zones on an infinite board, tiles placed inside them." />
-  <figcaption>Canvas — frames as zones, tiles placed where you put them</figcaption>
+  <img src="../../shots/showcase/waiting-on-you-board.webp" alt="The canvas: an agent's terminal on the board, the Layers list beside it and a widget above it." />
+  <figcaption>The canvas</figcaption>
 </figure>
 
 In Windows:
