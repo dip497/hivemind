@@ -1,0 +1,80 @@
+---
+title: "API overview"
+description: "Let a program of your own drive a workspace (start agents, read replies, follow status) with a scoped token."
+---
+
+The API lets a program on your computer drive a workspace the way you do: an orchestrator that
+hands work to agents, a dashboard that shows who is waiting, a script your CI calls. You give the
+program a **token**; the token reaches only the workspaces you pick, and only at the **role** you
+pick.
+
+<Prompt description="Paste this into your coding agent to have it build a small program that drives your Hivemind workspace." actions={["copy","cursor"]}>
+Write me a small program that drives my Hivemind workspace through its API.
+
+1. Ask me what the program should do (for example: list my agents and which ones wait on me; or start an agent with a prompt and print its reply) and which project folder is the workspace. Pick the smallest role that does the job: `view` to read, `agents` to start or answer agents.
+2. Make sure Hivemind is running with that folder open (`hive ctl agents` exits 3 when it is not). If it is not running, ask me to open it with `hivemind <folder>`.
+3. Make the token: `hive grant create <program-name> -w <folder> --role <role> --expires 30d --json`. The output holds `token` and `socket`. Never print the token in this chat, never write it into a file that git tracks; put it in an environment variable `HIVE_DRIVE_TOKEN` (or a git-ignored `.env`), with `HIVE_DRIVE_SOCK` set to the socket path and `HIVE_WORKSPACE` to the folder.
+4. Before writing a client, check the token works: `hive ctl agents --json` with those variables set prints the workspace's agents.
+5. Write the program in the language I prefer (Node or Python if I do not say). Protocol: connect to the socket (a Unix socket on Linux and macOS, a named pipe on Windows), send one line of JSON `{"hello": {"token": …, "workspace": …}}` within 10 seconds, read the hello answer, then send calls as one JSON line each, `{"id": n, "method": "…", "params": [...]}`, and match answers by `id`. Lines without an `id` are events. Every method, its params and the role it needs are in `spec/workspace-api.md` at `https://github.com/dip497/hivemind/blob/main/spec/workspace-api.md`; read it before choosing methods.
+6. Run it and show me the output.
+
+At the end, tell me the token's id from `hive grant list` and the command that revokes it: `hive grant revoke <id>`.
+</Prompt>
+
+<Frame caption="Every call is checked against the token's role">
+  <img src="/images/api-drive.svg" alt="Your program connects to the drive socket on this computer and says hello with its token. Each call is checked against the role the token was made with: an allowed call reaches the workspace, its agents, terminals and board; any other call is refused with FORBIDDEN." />
+</Frame>
+
+## How it works
+
+| Piece | What it is |
+|---|---|
+| **Drive socket** | `drive.sock` in the app's data folder (a named pipe on Windows). The app or `hive host` serves it, whichever runs. Only your user can open it. |
+| **Token** | Made in **Settings → API access** or with `hive grant create`. Shown once. |
+| **Role** | `view`, `edit`, `terminals` or `agents`: the same roles people get in a [shared workspace](/multiplayer#roles). |
+| **Messages** | One line of JSON per message, both ways: your calls, the answers, and events about the workspace. |
+
+## In four steps
+
+<Steps>
+  <Step title="Make a token">
+    [Make a token](/api-tokens) for one workspace, at the smallest role that does the job.
+  </Step>
+  <Step title="Connect">
+    [Connect and say hello](/api-connect) with it.
+  </Step>
+  <Step title="Call methods">
+    Call [methods](/api-methods) such as `agent.list`, `agent.start` and `agent.read`.
+  </Step>
+  <Step title="Revoke">
+    [Revoke](/api-tokens#revoke-and-expiry) the token when the program is done; its connections close at once.
+  </Step>
+</Steps>
+
+## What a token can never do
+
+Whatever its role, a program cannot share the workspace, let people in or change their roles, or
+make or revoke tokens. Those stay yours, at your own window or terminal.
+
+<Warning>
+The `terminals` and `agents` roles can still change files and run any command, `git push`
+included: through a shell they type into, or an agent they start.
+</Warning>
+
+## Without writing a client
+
+`hive ctl` speaks the same API. Give it the token and it acts as the program:
+
+```bash
+export HIVE_DRIVE_TOKEN=hgr_…
+# only when the token reaches several workspaces:
+export HIVE_WORKSPACE=~/work/api
+hive ctl agents --json
+# needs the agents role:
+hive ctl spawn --agent claude --prompt "Run the tests"
+```
+
+A [tool plugin's service](/tool-plugins#a-service-that-keeps-running) gets its own token this
+way, made when it starts and revoked when it stops.
+
+The full protocol is [`spec/workspace-api.md`](https://github.com/dip497/hivemind/blob/main/spec/workspace-api.md) in the repository.

@@ -1,0 +1,72 @@
+---
+title: "Always-on host"
+description: "Keep workspaces and their agents running on a server while your computer sleeps."
+---
+
+A host is a machine running `hive host`, with no desktop. It keeps workspaces, their agents and
+their people up while your laptop is off. You reach it through your [network](/self-hosting),
+not ssh.
+
+<Prompt description="Paste this into your coding agent on the server to make it an always-on Hivemind host." actions={["copy","cursor"]}>
+Make this Linux server an always-on Hivemind host that keeps my workspaces and agents running while my laptop sleeps.
+
+1. If `hive --version` fails, install Hivemind: `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`, then check `hive --version` again (add `~/.local/bin` to PATH if needed).
+2. Check the Hivemind app is not running on this machine; a host is refused while it runs.
+3. Join my network: ask me for my network link (it starts with `hivemind://network/`, and I get one from `hive network enrol-link` on my network server). Run `hive network use <link>`, then `hive network show` must say enrolled and `hive network doctor` must say every relay answers.
+4. Run it as a service that starts at boot: `hive host install`. If systemd needs something only I can do (a sudo, enabling lingering for my user), ask me and wait. Never type a password.
+5. Ask me which folders to serve as workspaces, and for each run `hive host add <folder>`.
+6. Run `hive host pair` and leave it running: it prints a code of words, a link and a QR code, then waits. Give me the words and the link, and tell me to enter one of them in the app under Settings → Connect → Have a code? Join. The code works once, for five minutes; the command ends with "Paired with …" when I have entered it.
+
+At the end, show `hive host status` (it must say the host runs, as which device, and list the workspaces), and tell me that `hive host stop` stops serving and `hive host uninstall` removes the service.
+</Prompt>
+
+<Frame caption="Move a workspace to a host and back">
+  <img src="/images/host-move.svg" alt="Move there hands a workspace from your computer to a host running hive host; Move here brings it back. While the host has it, guests and your phone reach it there." />
+</Frame>
+
+## Set it up
+
+<Steps>
+  <Step title="On the server">
+    ```bash
+    hive network use <your network link>   # see Your own network server
+    hive host install                      # run at boot (systemd); or: hive host run
+    hive host pair                         # prints six words, a link and a QR code
+    ```
+  </Step>
+  <Step title="On your computer">
+    **Settings → Connect → Have a code? Join**, then enter the words (same network) or the link
+    (anywhere). The host is now one of your devices: **Open recent → On your devices** lists its
+    workspaces.
+  </Step>
+</Steps>
+
+## Move a workspace there
+
+| Do | Where |
+|---|---|
+| **Move there** | Settings → Connect, under **People in this workspace** |
+| **Move here** | the workspace's banner, to bring it back |
+| **Host it here** | if the host is gone: carry on from the board as your computer last saw it |
+
+The board, notes, people and invite links move with it. Terminals in frames on your computer keep
+running there, reached through the host.
+
+## Serve and share from the host
+
+```bash
+hive host add ~/work/api               # serve a folder as a workspace
+hive share api --role edit --expires 2d
+hive people requests                   # then: hive people allow 1
+hive host status
+```
+
+More on people and invites: [Share a workspace](/multiplayer).
+
+## Good to know
+
+- One host per machine, and not while the app runs there: then the app serves the workspaces.
+- `hive ctl` works on the host as with the app; commands that need a window (`focus`,
+  `open-review`, views) are refused.
+- Restarting or upgrading the host leaves its terminals and agents running.
+- `hive host stop` stops serving; `hive host uninstall` removes the service.

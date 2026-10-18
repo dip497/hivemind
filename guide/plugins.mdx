@@ -1,0 +1,97 @@
+---
+title: "Plugins"
+description: "The four kinds of plugin, where each sits, and how to install, make and publish one."
+---
+
+Almost everything in Hivemind is a plugin, the app's own parts included. There are four kinds.
+
+<Prompt description="Paste this into your coding agent to find a plugin on HiveHub and install it." actions={["copy","cursor"]}>
+Find a Hivemind plugin on HiveHub that does what I want, and install it on this computer.
+
+1. Ask me what I want the plugin to do, or which plugin I already have in mind.
+2. To search, get the `hivehub` command (searching needs no account): `curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub` (it needs Node 20 or newer). Then run `hivehub search` with a few words, and `hivehub info` with an id for one plugin in full. Show me the best matches, what kind each is (agent, view, widget or tool) and what each asks for. Wait for my pick.
+3. Install it by its kind: an agent with `hive agents install` and its name; a view with `hive views install @owner/name`; a widget with `hive widgets install @owner/name`; a tool with `hive tools install owner/name`. An agent downloaded from elsewhere prints what it runs first: show me, and re-run with `--yes` only after I agree.
+4. A tool arrives switched off because it runs with my access to files and programs. Ask me before switching it on with `hive plugins enable tool:owner/name`.
+5. Check: `hive plugins list` shows it, on, with no problem. If Hivemind is open, show it: `hive ctl plugin open tool:owner/name`, `hive ctl plugin open widget:@owner/name` or `hive ctl plugin open view:@owner/name`.
+
+At the end, tell me what you installed, what it may do, and the command that removes it again.
+</Prompt>
+
+<Frame caption="Where each kind sits">
+  <img src="/images/plugins-kinds.svg" alt="A view draws the whole workspace. Inside it sit tiles: an agent tile started from an agent file, a terminal, and a tool tile drawn by a tool plugin. A widget is a small card that floats above every view." />
+</Frame>
+
+<CardGroup cols={2}>
+  <Card title="Agent" icon="robot" href="/agent-providers">
+    An agent CLI Hivemind can start and read. Runs the CLI in your terminal. One file: `agent.yaml`.
+  </Card>
+  <Card title="View" icon="table-columns" href="/extension-authoring">
+    A whole new way to draw the workspace. A sandboxed page: no files, no network. `hivemind-view.json`.
+  </Card>
+  <Card title="Widget" icon="square" href="/widgets">
+    A small live card over every view. A worker: no files, no network. `widget.json`.
+  </Card>
+  <Card title="Tool" icon="wrench" href="/tool-plugins">
+    A new kind of tile. Runs inside the app, with your access. `hivemind-tool.json`.
+  </Card>
+</CardGroup>
+
+## Install
+
+**Settings ▸ Plugins** has two tabs: **Installed** and **HiveHub**. Installing from HiveHub checks
+every file against the checksum HiveHub recorded and shows what the plugin may do first. Each
+plugin's page has **Settings**, **Read me** and **What it can do**.
+
+```bash
+hive plugins list                            # every plugin here, on or off
+hive agents install claude                   # or: views, widgets, tools
+hive plugins enable tool:dip497/worktrees    # a tool arrives switched off
+hive plugins set view:@you/board columns all # a setting the plugin declares
+```
+
+<Warning>
+A tool runs with your access, so it starts switched off: turn on only the ones you trust. If one
+breaks the app, start it with `HIVEMIND_SAFE_MODE=1 hivemind`.
+</Warning>
+
+## Make one
+
+```bash
+hive views new my-view      # or: hive widgets new, hive tools new
+```
+
+Each starter includes `PROMPT.md`, the whole API and its rules in one file. Write what you want at
+the top and hand it to a coding agent. **Add ▸ Make your own** in Settings ▸ Plugins (or **Make
+your own…** in the toolbar's **Add**) writes that prompt for you.
+
+## Publish
+
+Give the plugin an id in your own GitHub scope (`@you/name`) and a version, push it to GitHub,
+then:
+
+```bash
+curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub
+hivehub login                # GitHub sign-in with a device code, once
+hivehub publish ./my-plugin  # the folder, at its pushed commit
+```
+
+HiveHub publishes the pushed commit, never your disk: an unpushed commit is refused. A higher
+version is offered as an update to everyone who has it. A `README.md` beside the manifest is shown
+on HiveHub and in Settings. `"category"` (`code`, `git`, `agents`, `productivity`, `monitoring`,
+`team`, `web`, `fun` or `other`) groups it in the Add menu and on HiveHub. New agents are listed by
+pull request to [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins).
+
+## Commands agents can run
+
+A view, widget or tool can declare `"commands"` in its manifest and answer them in its code. An
+agent lists and runs them while the plugin is open:
+
+```bash
+hive ctl plugin commands
+hive ctl plugin call dip497/worktrees list
+```
+
+## Packages (preview)
+
+`hive packages inspect <dir>` checks a bundle of up to eight views and sixteen agent presets and
+shows what it would start. Installing a package is not built yet.

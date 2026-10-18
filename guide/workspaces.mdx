@@ -1,0 +1,74 @@
+---
+title: "Canvas, frames and tiles"
+description: "Frames, worktrees, the Layers panel, and what is kept when the app closes."
+---
+
+A workspace is one project folder. Inside it, **frames** group tiles by folder, and every tile in a
+frame runs in that folder.
+
+<Prompt description="Paste this into your coding agent to lay out a project for parallel agents." actions={["copy","cursor"]}>
+Set up this project in Hivemind so several agents can work in parallel, each on its own branch.
+
+1. Check Hivemind is installed: `hive --version` prints a version. If not, stop and tell me to install it first with `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`.
+2. Ask me which branches or tasks I want worked on at the same time, and which agent to use (`hive agents list --found` lists the agents whose CLI is on this machine).
+3. For each task, make a git worktree beside the project: `git worktree add ../<project>-<task> -b <branch>`.
+4. Open the project: `hivemind .`. Then tell me to open each worktree as a frame from a frame's ⋯ menu → **Worktree ▸**, and to start an agent in each with ⋯ → **New agent ▸**.
+5. Once I say the frames are open, run `hive ctl agents` and check one agent is listed per worktree.
+
+Do not delete or reset any branch. At the end, list each worktree, its branch, and the agent running there.
+</Prompt>
+
+## Frames
+
+| A frame on | Make it with | Tiles run |
+|---|---|---|
+| The project folder | the default | in that folder |
+| A git worktree | a frame's ⋯ → **Worktree ▸** | in the worktree, on its branch (nested under the project) |
+| A folder on a machine | **Open folder here…** in the Machines pane | on that machine, over ssh ([Machines](/machines)) |
+
+A frame's ⋯ menu also arranges its tiles as **Columns**, **Rows** or **Grid**, starts an agent in it
+(**New agent ▸**), and adds a tool or widget. Deleting a frame that holds tiles asks whether to
+**Keep them** or close them with it.
+
+<Tip>
+One agent per frame is the usual way to run agents in parallel: a worktree per branch with an
+agent in each, or a frame on a machine.
+</Tip>
+
+## The Layers panel
+
+⌘B (Ctrl+B outside a terminal) shows and hides it. Its rail picks what it lists:
+
+| Pane | Lists |
+|---|---|
+| **Tiles** | **Pinned**, then each project with its worktrees and tiles. Agents a tile started fold under it. |
+| **Recents** | Past agent sessions, newest first. One click resumes one. |
+| **Machines** | This computer and every machine you added, with its link and how many agents there need you. |
+
+The panel's title menu switches workspace, opens a folder, joins a shared workspace and switches
+views (**Show as**). Its bell jumps to the next agent that needs you.
+
+| On a row | Does |
+|---|---|
+| **P** or ⋮ → **Pin** | keep it at the top |
+| **R** / **D** | rename / close |
+| **U** | mark read or unread (a dot means it finished while you looked away) |
+| **Snooze** | hide it for 30 min to tomorrow 9:00; it comes back early if it needs you |
+| Ctrl+1 … Ctrl+9 (⌘ on a Mac) | go to that row's tile, from a terminal too |
+
+The **View** menu (the tiles' heading) filters by status, last activity or machine, groups by
+project, machine, date, status or agent, and sorts. It is yours in every workspace
+(`hive config set views.layers.groupBy '"status"'`). Pins, snoozes and what you have read are
+yours alone, on this computer, even in a shared workspace.
+
+## What is kept
+
+| When | What happens |
+|---|---|
+| You close the window | Terminals keep running in a background daemon. |
+| The daemon restarts or the computer reboots | Agents that can resume continue their conversation; others start fresh. Screens replay from disk. |
+| You close a tile (×) | Its process ends. |
+| You put an agent to sleep | Its process ends; its tile keeps its name and conversation, with **Resume**. See [Run agents](/agents#sleep-and-resume). |
+
+Frames, tile positions, the viewport and open files are saved per project, on this computer, not
+in the repository.

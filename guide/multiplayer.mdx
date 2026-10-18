@@ -1,0 +1,82 @@
+---
+title: "Share a workspace"
+description: "Let other people into a workspace, give each a role, and see who is there."
+---
+
+A shared workspace stays on your computer (or your [host](/host)). Guests join from their own
+Hivemind app and see the board and terminals at the role you give them. Nothing is copied to a
+server; traffic goes directly or through a relay that cannot read it.
+
+<Prompt description="Paste this into your coding agent to invite someone into one of your workspaces and let them in." actions={["copy","cursor"]}>
+Invite a person into one of my Hivemind workspaces from the terminal, and let them in when they ask.
+
+1. Ask me which workspace folder to share, which role to give (`view` sees the board and terminals; `edit` also moves, adds and closes tiles; `terminals` also types into terminals), how many people may use the link and for how long. A link gives at most `terminals`. The `agents` role lets them run commands on my machine: give it only if I ask, once they are in, with `hive people role <person> agents`.
+2. Check this computer can be reached from where they are: `hive network show`. On Local network only people on the same network can join; if they are elsewhere, tell me a network server is needed (the "Your own network server" page) and stop.
+3. Make the link: `hive share <folder> --role <role> --uses <n> --expires <time, e.g. 2d>`. Give me the link to send them; they paste it under Join in their app, or run `hive join '<link>'`.
+4. When I say they have used it, run `hive people requests` and show me who is asking. Let someone in only after I name them: `hive people allow <number>`. Never allow a request I have not confirmed.
+
+At the end, run `hive people list` and show me who is in and at which role, and tell me `hive people remove <name>` disconnects someone and stops their link.
+</Prompt>
+
+## Roles
+
+| Role | In the app | Can |
+|---|---|---|
+| `view` | **Can view** | see the board and terminals |
+| `edit` | **Can edit board** | also move, add and close tiles, and press widgets |
+| `terminals` | **Can use terminals** | also type into terminals, once given the keyboard |
+| `agents` | **Can drive agents** | also start and answer agents, which means running commands on your machine. Given only to someone here now, after a warning. |
+
+Programs get the same roles through [API tokens](/api-tokens).
+
+## Let someone in
+
+<Tabs>
+  <Tab title="From the app">
+    In the workspace's window, Settings → Connect → **Connect**, send **Copy the link**, and answer
+    **Someone else** with a role when the words match. The steps:
+    [Connect devices](/connect).
+  </Tab>
+  <Tab title="From a terminal">
+    An invite link, for several people if you like:
+
+    ```bash
+    hive share ~/work/api --role edit --uses 3 --expires 2d
+    ```
+
+    They paste it under **Join**, or run `hive join '<link>'`. You answer each request in a notice
+    (**Allow** / **Deny**), or:
+
+    ```bash
+    hive people requests
+    hive people allow 1             # --role view to lower it
+    hive people rule invite         # let anyone with a valid link in without asking; "ask" goes back
+    ```
+  </Tab>
+</Tabs>
+
+## Who is there
+
+```bash
+hive people list
+hive people role ana terminals
+hive people remove ana          # disconnects them; their link stops working
+```
+
+In the app, **People in this workspace** on Settings → Connect shows the same, with **Remove**.
+
+| You see | Means |
+|---|---|
+| Faces, top right | who else is in. A guest clicks one to follow that person's view. |
+| Named pointers | where each person points; their selection is ringed in their colour. |
+| The banner (as a guest) | *You're in ⟨workspace⟩ on ⟨host⟩'s machine*, with **Leave**. |
+
+## One keyboard per terminal
+
+A terminal's title bar says who has its keyboard. Someone who **Can use terminals** presses
+**Ask for keyboard**; the holder answers **Give** or **Not now**. The owner takes it back with
+**Take back** or Ctrl+Shift+K (⌘⇧K).
+
+## Keep it up while you sleep
+
+Your laptop asleep means the workspace is offline. Move it to an [always-on host](/host).

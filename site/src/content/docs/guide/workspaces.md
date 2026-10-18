@@ -44,7 +44,7 @@ views (**Show as**). Its bell jumps to the next agent that needs you.
 
 The **View** menu (the tiles' heading) filters by status, last activity or machine, groups by
 project, machine, date, status or agent, and sorts. It is yours in every workspace
-(`hive config set views.layers.groupBy status`). Pins, snoozes and what you have read are yours
+(`hive config set views.layers.groupBy '"status"'`). Pins, snoozes and what you have read are yours
 alone, on this computer, even in a shared workspace.
 
 ## What is kept

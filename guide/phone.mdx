@@ -1,0 +1,79 @@
+---
+title: "Phone and browser"
+description: "Answer and drive your agents from your phone's browser, or open the whole app in a browser tab."
+---
+
+The phone page is a web page your phone's browser opens. From it you answer your agents, start and
+stop them, and watch their terminals. It comes from your own [network server](/self-hosting)
+and all its traffic goes through it, encrypted end to end.
+
+<Prompt description="Paste this into your coding agent to check your phone can reach this computer, then pair it." actions={["copy","cursor"]}>
+Get my phone ready to answer my Hivemind agents from its browser.
+
+1. Check this computer is on a network server of mine: `hive network show`. If it is on the local network only, stop and tell me a network server comes first: in the app, Settings → Servers → Set up my server with an agent (or the "Your own network server" page).
+2. Run `hive network doctor`; every relay must answer.
+3. Ask me for the server's public address and check that `https://<address>/phone/manifest.webmanifest` answers 200 (for example `curl -sS -o /dev/null -w '%{http_code}' https://<address>/phone/manifest.webmanifest`). A phone's browser needs HTTPS with a trusted certificate; if it does not answer 200, tell me what is wrong and stop.
+4. Then walk me through pairing, which only I can do: in the app, Settings → Connect → Connect, pick the Phone browser tab, scan the QR code with the phone and tap Connect; if both screens show the same three words, press "It's me — the words match" on the computer, then Yes on the phone.
+
+At the end, ask me to confirm the phone shows Home with my agents, and suggest adding the page to the phone's home screen.
+</Prompt>
+
+<Frame caption="How the phone reaches your computer">
+  <img src="/images/phone-reach.svg" alt="The phone page talks over https to your own server running hive-net serve. The server relays it to your computer and to your other computers and hosts, and your computer introduces the phone to those other devices. The traffic is encrypted end to end; the server cannot read it." />
+</Frame>
+
+## Before you start
+
+You need a network server that serves the page, with a public name (a phone's browser needs
+https). The Docker setup in [Your own network server](/self-hosting) serves it at `/phone/`.
+Or let an agent set it up: **Settings → Connect → Connect** → **Phone browser** tab →
+**Set it up with an agent**.
+
+## Pair
+
+<Steps>
+  <Step title="Show the code">
+    On the computer: **Settings → Connect → Connect**, tab **Phone browser**.
+  </Step>
+  <Step title="Scan it">
+    Scan the QR code with the phone. Tap **Connect**.
+  </Step>
+  <Step title="Compare the words">
+    If both screens show the same three words, press **It's me — the words match** on the
+    computer, then **Yes** on the phone.
+  </Step>
+</Steps>
+
+Add the page to your home screen: it opens at once, offline too, and updates itself. To unpair,
+**Unpair** under **Your devices**, or **Devices → Forget this computer** on the phone.
+
+## What you can do
+
+| Screen | Does |
+|---|---|
+| **Home** | What needs you first, then working agents, pinned tiles, then every project. Hold or swipe a row to **Stop** or **Close**. **+** starts an agent (with up to four photos). |
+| An agent's chat | The conversation, with each tool use folded into one line. The round button sends, or stops the turn. |
+| A question | **Allow** / **Deny**, the options to tap, or **Approve** for a plan. Or type your own answer. |
+| Terminal | Fitted to the phone, with **Esc**, **Tab**, arrows, **^C** and **Fit**. Whoever typed last sets its size. |
+| **Views** | Installed views marked for phones, including ones that show your [widgets](/widgets). |
+
+A paired phone cannot open a plain terminal, edit the board, or host a frame. The first answer
+counts, from the phone or the desktop.
+
+### Who sizes a terminal
+
+<Frame caption="Whoever typed last sets the size">
+  <img src="/images/phone-terminal-size.svg" alt="State diagram: a terminal opened on the phone takes the phone's size. A key typed on the desktop, turning Fit off, or closing the terminal or hiding the page gives it the desktop size. A phone key while Fit is on, pressing Fit, or showing the page again gives it the phone's size again. Allow, Deny and choosing an option are not typing." />
+</Frame>
+
+## The whole app in a browser tab
+
+**Settings → In a browser → Serve the app to a browser** serves the full app at
+`http://127.0.0.1:4483/#token=…`, for this computer only. The token changes each time the app
+starts.
+
+<Warning>
+Anyone with the link can use your terminals. Do not share it.
+</Warning>
+
+The iOS and Android apps are development previews and not published.

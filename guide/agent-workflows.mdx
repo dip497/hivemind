@@ -1,0 +1,108 @@
+---
+title: "Coordinate agents"
+description: "One agent starts others, sends them work, collects replies and answers their questions with hive ctl."
+---
+
+`hive ctl` drives the running app from a terminal. Run inside an agent's tile, it acts as that
+agent; anywhere else, as you. That is how one agent runs a team of others.
+
+<Prompt description="Paste this into an agent running inside Hivemind to have it lead a team of worker agents." actions={["copy","cursor"]}>
+You are running inside a Hivemind tile. Lead a small team of worker agents with `hive ctl` to review this project.
+
+1. Check you can reach the app: `hive ctl agents --json` answers. If it fails, tell me Hivemind must be open on this project and stop.
+2. Ask me which parts of the project to review (for example three folders or modules) and which agent the workers should be. Only an agent that reports when its turn ends can be a worker: claude, codex, droid, hermes, kiro, opencode or pi.
+3. Run one worker per part: `hive ctl workflow --shape fanout --agent <agent> --items "<part one> || <part two> || <part three>" --prompt "Review the {item} code and list concrete bugs with file and line." --close --json`. Keep `--timeout` below your own tool's time limit (for example `--timeout 10m`).
+4. If a worker stops to ask something, it is in `hive ctl inbox --wait 90s`. Questions only I can answer (a password, a choice about the product), bring to me; never type a password.
+5. Merge the replies into one list, remove duplicates, and sort by how serious each bug is.
+
+At the end, show me the merged list and say how many workers ran and whether any failed or timed out.
+</Prompt>
+
+<Frame caption="Start, send, collect, answer">
+  <img src="/images/workflows-loop.svg" alt="You or a lead agent start worker agents and send them work with hive ctl spawn and send. Each worker's reply comes back through hive ctl read or the inbox. A worker that asks something tells the inbox, and you answer or approve it." />
+</Frame>
+
+## Start and follow workers
+
+```bash
+hive ctl agents --watch                  # every agent, its state, what it waits on
+hive ctl spawn --agent pi --prompt "Review the current diff and list concrete bugs."
+hive ctl read <tile> --timeout 90s       # its reply when the turn ends
+hive ctl send <tile> "Now fix the first one"
+hive ctl inbox --wait 90s                # replies, reports and questions sent to you
+```
+
+| `hive ctl read` exits | Means |
+|---|---|
+| 0 | the reply |
+| 4 | still working: call `read` again |
+| 5 | the tile was closed |
+| 7 | the agent is asleep: wake it first |
+| 8 | it stopped to ask something; the question is in the output |
+
+Durations take units (`90s`, `10m`). Keep `--timeout` below your own tool's time limit.
+
+## Run many at once
+
+```bash
+hive ctl workflow --shape fanout --items "auth || billing || search" \
+  --prompt "Review the {item} module and list concrete bugs." --close --json
+```
+
+| Shape | Does |
+|---|---|
+| `fanout` | one worker per item, same prompt |
+| `pipeline` | each stage's output is the next stage's input (`--stages`) |
+| `mapreduce` | fanout, then one worker merges the results (`--reduce-prompt`) |
+
+A workflow refuses an agent that does not report turn ends before starting anything.
+
+## Answer what workers ask
+
+```bash
+hive ctl spawn --agent claude --supervise all --prompt "…"
+hive ctl approve <request id> allow      # or deny, always, never
+```
+
+With `--supervise`, a worker's permission prompts come to your inbox instead of its screen.
+`always` and `never` are remembered for that worker and tool.
+
+## The steps an agent follows on an issue
+
+`hive init` installs skills that teach agents this contract:
+
+<Steps>
+  <Step title="Read">
+    `hive show MYP-42 --json`: read the issue and its acceptance criteria.
+  </Step>
+  <Step title="Claim">
+    `hive ctl set-state MYP-42 in_progress` and assign itself.
+  </Step>
+  <Step title="Plan">
+    `hive ctl add-comment MYP-42 "plan: …"`.
+  </Step>
+  <Step title="Work">
+    After each criterion, `hive ctl mark-acceptance MYP-42 <n>` (counting from 0).
+  </Step>
+  <Step title="Check">
+    Check tests and build; commit with the id.
+  </Step>
+  <Step title="Hand back">
+    End every session with `hive ctl set-state`: `in_review`, `done`, `in_progress --note`, or
+    `cancelled --note`.
+  </Step>
+</Steps>
+
+## Let agents use a browser and plugins
+
+- **Browser**: switch on the Browser tool, then **Agent browser control** on its page in
+  Settings ▸ Plugins, and restart the app. Agents then drive the Browser tile you see.
+- **Plugins**: an agent opens one and runs its commands:
+
+```bash
+hive ctl plugin open widget:@dip497/progress
+hive ctl plugin commands
+hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
+```
+
+A program of your own can do all of this too, with a token: see the [API](/api).

@@ -1,0 +1,57 @@
+---
+title: "Connect devices"
+description: "Pair your phone or another computer, or let someone in, with one offer from Settings → Connect."
+---
+
+One offer from **Settings → Connect** serves your phone, another computer of yours, or another
+person. You decide which when the other device uses it.
+
+<Prompt description="Paste this into your coding agent to check that two of your computers can connect, then pair them." actions={["copy","cursor"]}>
+Help me pair another computer of mine with this one in Hivemind, so its workspaces are mine on both.
+
+1. Check Hivemind is installed here: `hive --version`. Ask me whether the other computer has it too; if not, tell me the install command (`bash <(curl -fsSL https://hivemind.griiken.com/install.sh)` on Linux and macOS, `irm https://hivemind.griiken.com/install.ps1 | iex` in PowerShell on Windows).
+2. Run `hive network show` here. If it says Local network, the six words work only when both computers are on the same network; ask me whether they are. If they are not, tell me a network server is needed first (see the "Your own network server" page) and stop.
+3. If this computer is on a network server, run `hive network doctor` and check every relay answers; ask me to run `hive network show` on the other computer and confirm it names the same network.
+4. Then walk me through the pairing, which only I can do in the app: on this computer, Settings → Connect → Connect; on the other one, Have a code? Join, then paste the link or type the six words and press Connect; both screens show three words; if they match, I press "It's me — the words match" here and Yes on the other computer.
+
+At the end, ask me to confirm the other computer is listed under Connected → Your devices on Settings → Connect, and tell me Unpair there cuts it off.
+</Prompt>
+
+<Frame caption="One offer, three answers">
+  <img src="/images/connect-offer.svg" alt="Flowchart: you make an offer on Settings → Connect; the other device uses it and both show three words. On your computer you answer Deny (nothing is kept), Someone else (they join the workspace at the role you pick) or It's me; then the other device asks whether the words match: Yes pairs it as you, No keeps nothing. A request left unanswered for about three minutes counts as Deny." />
+</Frame>
+
+<Steps>
+  <Step title="Make an offer">
+    Open **Settings → Connect** and press **Connect**. To let a person into a workspace, do it in
+    that workspace's window. The offer shows a QR code, six words and **Copy the link**. It lasts a
+    day, until one device uses it, or until you make another.
+
+    The six words work on the same network only. From elsewhere, send the link; that needs a
+    [network server](/self-hosting).
+  </Step>
+  <Step title="Use it on the other device">
+    | Device | Do |
+    |---|---|
+    | Another computer | **Have a code? Join** (Home or Settings → Connect), paste the link or type the words, **Connect**. |
+    | A phone | Pick the **Phone browser** tab first, then scan the code: [Phone and browser](/phone#pair). |
+  </Step>
+  <Step title="Answer on your computer">
+    Both screens show three words. Answer only if they match.
+
+    | Answer | Result |
+    |---|---|
+    | **Deny** | Nothing is kept. Closing the notice, or waiting about three minutes, is the same. |
+    | **Someone else** + a role | That person joins this workspace at **Can view**, **Can edit board** or **Can use terminals**. |
+    | **It's me — the words match** | After **Yes** on the other device, it is paired as you: your workspaces are its workspaces. |
+
+    **Someone else** is not offered for a phone or for an offer made from Home. **It's me** is not
+    offered for a computer that already shares a workspace with someone.
+  </Step>
+</Steps>
+
+## Your devices
+
+**Connected → Your devices** lists each paired device: *Always on* (a host), *A computer*, or
+*Phone or browser*. **Unpair** cuts it off from this computer. A host pairs from its own terminal:
+`hive host pair` ([Always-on host](/host)).

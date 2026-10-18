@@ -1,0 +1,175 @@
+---
+title: "Connect and call"
+description: "Open the drive socket, say hello with your token, call a method, and hear events."
+---
+
+Every message is one line of JSON. The first line you send says who you are; after that you send
+calls and receive answers and events.
+
+<Prompt description="Paste this into your coding agent to make an API token and write a client that connects, calls a method and listens for events." actions={["copy","cursor"]}>
+Make a Hivemind API token and write a small client that connects to my workspace, calls a method and prints the events it hears.
+
+1. Ask me which workspace folder to drive and whether the client only reads (`view`) or also starts agents (`agents`). Check Hivemind runs with the folder open: `hive ctl agents` must not exit 3; if it does, ask me to run `hivemind <folder>`.
+2. Make the token: `hive grant create api-client -w <folder> --role <role> --expires 7d --json`. Keep the `token` out of this chat and out of git: write `HIVE_DRIVE_TOKEN`, `HIVE_DRIVE_SOCK` (the `socket` field) and `HIVE_WORKSPACE` (the folder) to a git-ignored `.env`.
+3. Write the client in Node (`node:net`, `node:readline`) or Python (`socket`), whichever I prefer. The protocol, one JSON object per line both ways:
+   - Connect to `HIVE_DRIVE_SOCK` (a Unix socket on Linux and macOS, a named pipe on Windows).
+   - Within 10 seconds send `{"hello": {"token": "<token>", "workspace": "<folder>"}}`. The answer is `{"hello": {"api": "…", "as": {"client", "role", "workspace"}}}`, or `{"error": {"code", "message"}}` and the connection closes.
+   - A call is `{"id": 1, "method": "agent.list", "params": ["<folder>"]}`; its answer has the same `id` and a `result` or an `error` with a `code` (`FORBIDDEN`, `BAD_REQUEST`, `NOT_FOUND`, `UNSUPPORTED`, `TIMEOUT`, `UNAVAILABLE`, `RATE_LIMITED`, `FAILED`). Answers can come out of order: match by `id`.
+   - A line without an `id` is an event, `{"event": "…", "params": [...]}`, or a JSON list of them. Print `agent.changed`, `agent.event` and `status.changed`.
+4. With an `agents` token, also start one agent: `agent.start` with params `["<folder>", {"program": "<an agent from hive agents list>", "prompt": "Say hello"}]` returns `{"tile"}`; then `agent.read` with `["<tile>", 600000]` waits for its reply.
+5. Run it for 30 seconds and show me what it printed.
+
+At the end, tell me the token's id from `hive grant list` and how to revoke it (`hive grant revoke <id>`).
+</Prompt>
+
+## 1. Find the socket
+
+`hive grant create` prints its path (`socket` with `--json`). By default:
+
+| System | Drive socket |
+|---|---|
+| Linux | `~/.config/hivemind/drive.sock` (or `$XDG_CONFIG_HOME/hivemind/drive.sock`) |
+| macOS | `~/Library/Application Support/hivemind/drive.sock` |
+| Windows | a named pipe; use the path `hive grant create` prints |
+
+The app or `hive host` must be running, with the workspace open.
+
+## 2. Say hello
+
+Send within 10 seconds of connecting:
+
+```json
+{"hello": {"token": "hgr_…", "workspace": "/home/you/work/api"}}
+```
+
+`workspace` is the workspace's folder. Leave it out when the token reaches only one workspace.
+
+| You get back | Means |
+|---|---|
+| `{"hello": {"api": "0.30", "as": {"client": "dashboard", "role": "view", "workspace": "/home/you/work/api"}}}` | you are in; `role` is what you may do |
+| `{"error": {"code": "FORBIDDEN", "message": "…"}}` | wrong, revoked or expired token, or a workspace it does not reach; the connection closes |
+| `{"error": {"code": "BAD_REQUEST", "message": "…"}}` | no hello, no workspace named, or the workspace is not open; the connection closes |
+
+## 3. Call a method
+
+A call has an `id` you choose, a `method` and a list of `params`. The answer carries the same `id`
+and either a `result` or an `error`:
+
+```json
+{"id": 1, "method": "agent.list", "params": ["/home/you/work/api"]}
+{"id": 1, "result": {"seq": 0, "agents": []}}
+```
+
+```json
+{"id": 2, "method": "agent.start", "params": ["/home/you/work/api", {"program": "claude", "prompt": "Run the tests"}]}
+{"id": 2, "error": {"code": "FORBIDDEN", "message": "agent.start is not open to your role on this workspace"}}
+```
+
+Wherever a method takes a folder (`repo`), give the workspace's folder. Answers can come out of
+order, so match them by `id`.
+
+## 4. Hear events
+
+Lines without an `id` are events, `{"event": "…", "params": [...]}`, about the workspace's tiles
+only. Several events from one moment may arrive as a JSON list on one line. Useful ones:
+
+| Event | Tells you |
+|---|---|
+| `agent.changed` | an agent appeared, changed or went |
+| `agent.event` | a turn ended, an agent is waiting, was answered, or reported |
+| `status.changed` | an agent's status changed |
+| `terminal.data` | output of a terminal you opened |
+| `file.changed` | files changed in the workspace |
+
+## A whole example
+
+This connects, lists the agents and tries to start one. With a `view` token the start is
+refused. Both run on Linux and macOS (a Unix socket).
+
+<CodeGroup>
+```python Python
+import json, os, socket
+
+# from hive grant create, and the workspace's folder
+SOCK = os.environ["HIVE_DRIVE_SOCK"]
+TOKEN = os.environ["HIVE_DRIVE_TOKEN"]
+FOLDER = os.environ["HIVE_WORKSPACE"]
+
+s = socket.socket(socket.AF_UNIX)
+s.connect(SOCK)
+f = s.makefile("rw")
+
+def send(msg):
+    f.write(json.dumps(msg) + "\n")
+    f.flush()
+
+def call(id, method, *params):
+    send({"id": id, "method": method, "params": list(params)})
+    while True:
+        msg = json.loads(f.readline())
+        if isinstance(msg, dict) and msg.get("id") == id:  # not an event
+            return msg
+
+send({"hello": {"token": TOKEN, "workspace": FOLDER}})
+print(f.readline())                   # {"hello": {"api": "0.30", "as": {…}}}
+print(call(1, "agent.list", FOLDER))  # {'id': 1, 'result': {'seq': 0, …}}
+print(call(2, "agent.start", FOLDER, {"program": "claude", "prompt": "Run the tests"}))
+```
+
+```js Node
+import net from "node:net";
+import readline from "node:readline";
+
+const { HIVE_DRIVE_SOCK, HIVE_DRIVE_TOKEN, HIVE_WORKSPACE } = process.env;
+const socket = net.connect(HIVE_DRIVE_SOCK);
+const waiting = new Map();
+let next = 1;
+
+const call = (method, ...params) => new Promise((resolve) => {
+  const id = next++;
+  waiting.set(id, resolve);
+  socket.write(JSON.stringify({ id, method, params }) + "\n");
+});
+
+readline.createInterface({ input: socket }).on("line", (line) => {
+  const msg = JSON.parse(line);
+  if (waiting.has(msg.id)) { waiting.get(msg.id)(msg); waiting.delete(msg.id); }
+  else console.log(line);                // the hello, then events
+});
+
+socket.write(JSON.stringify({ hello: { token: HIVE_DRIVE_TOKEN, workspace: HIVE_WORKSPACE } }) + "\n");
+console.log(await call("agent.list", HIVE_WORKSPACE));
+console.log(await call("agent.start", HIVE_WORKSPACE, { program: "claude", prompt: "Run the tests" }));
+socket.end();
+```
+</CodeGroup>
+
+## Start an agent and wait for its reply
+
+With an `agents` token:
+
+```json
+{"id": 3, "method": "agent.start", "params": ["/home/you/work/api", {"program": "claude", "prompt": "Run the tests"}]}
+{"id": 3, "result": {"tile": "…"}}
+{"id": 4, "method": "agent.read", "params": ["<tile>", 600000]}
+{"id": 4, "result": {"text": "…", "finalStatus": "turn", "truncated": false}}
+```
+
+`agent.read` waits up to the milliseconds you give for the turn to end. `finalStatus` is `turn`
+(the reply), `timeout` (ask again), `closed`, `waiting` (it asks something: answer with
+`agent.answer`) or `asleep`.
+
+## Error codes
+
+| Code | Means |
+|---|---|
+| `FORBIDDEN` | the role does not allow it; nothing ran |
+| `BAD_REQUEST` | wrong params, or a path outside the workspace |
+| `UNKNOWN_METHOD` | no method by that name |
+| `NOT_FOUND` | no such tile, frame or workspace |
+| `UNSUPPORTED` | the agent cannot do that (no turn signal, no sessions) |
+| `TIMEOUT` | what it waited on did not come in time |
+| `UNAVAILABLE` | it needs one of your windows open |
+| `RATE_LIMITED` | too many started at once; ask again later |
+| `DEPTH_EXCEEDED` | agents started by agents, too many levels deep; start it from higher up |
+| `FAILED` | it ran and failed; `message` says why |
