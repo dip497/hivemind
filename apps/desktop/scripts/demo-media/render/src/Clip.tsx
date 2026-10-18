@@ -26,7 +26,8 @@ export type Cues = {
   /** The agents' tiles on the board as recorded. */
   tiles?: Box[];
 };
-/** `lift` raises the box by that share of the view, leaving room below it. */
+/** `box` names one box, or several joined by "+" to frame them together; `lift` raises it by that
+ *  share of the view, leaving room below it. */
 type Key = { u: number; box: string; pad?: number; lift?: number };
 /** A shot plays its beat at the speed it was recorded, unless it is a marked skip: `skip` says
  *  how much time it leaves out ("+40 s"), shown while it plays. Shots meet in hard cuts. */
@@ -80,7 +81,7 @@ function around(boxes: Box[]): Box {
  *  kept inside the capture. */
 function view(cues: Cues, key: Key): Box {
   const { width: W, height: H } = cues.size;
-  const b = key.box === "full" ? { x: 0, y: 0, w: W, h: H } : key.box === "tiles" ? around(cues.tiles!) : cues.boxes[key.box]!;
+  const b = key.box === "full" ? { x: 0, y: 0, w: W, h: H } : key.box === "tiles" ? around(cues.tiles!) : around(key.box.split("+").map((n) => cues.boxes[n]!));
   const pad = key.pad ?? 1;
   let w = b.w * pad;
   let h = b.h * pad;

@@ -11,7 +11,7 @@ import net from "node:net";
 import { hiveNetBuilt, note, ownNetwork, share } from "../../tests/e2e/helpers/multiplayer";
 import { connectPage, offerToConnect } from "../../tests/e2e/helpers/phone";
 import { stopDaemons } from "../../tests/e2e/helpers/daemons";
-import { DEMO, OUT, ROOT, WWW, demoInstructions, recorder, runnerSettings, stage, working } from "./stage";
+import { DEMO, OUT, ROOT, WWW, allow, busy, demoInstructions, recorder, runnerSettings, stage } from "./stage";
 
 // The showcase plugins, from their own examples folder.
 const SHOWCASE = process.env.SHOWCASE ?? path.join(os.homedir(), "projects/hivemind-showcase/examples");
@@ -57,7 +57,7 @@ test("widgets", async () => {
   const asker = await s.agent(frames.fastapi, "docstrings", "default", JOB.docstrings);
   const routing = await s.agent(frames.fastapi, "routing-review", "default", JOB.routing);
   await expect.poll(() => s.census().of(asker)?.waiting?.kind ?? "", { timeout: 300_000, intervals: [1000] }).toBe("permission");
-  await working(s, [routing]);
+  await busy(s, [routing]);
   for (const name of SHOWCASE_WIDGETS) {
     const r = cli("widgets", "install", path.join(SHOWCASE, "widgets", name), "--json");
     expect(r.status, r.stdout + r.stderr).toBe(0);
@@ -81,7 +81,11 @@ test("widgets", async () => {
   const light = rec.beat("reporting");
   const said = () => desktop.locator('[data-widget="@dip497/ci-light"]').innerText().catch(() => "");
   const before = await said();
-  for (let i = 0; i < 300 && !((await said()) !== before && s.census().of(ci)?.state !== "working"); i++) { await light(); await desktop.waitForTimeout(700); }
+  for (let i = 0; i < 300 && !((await said()) !== before && s.census().of(ci)?.state !== "working"); i++) {
+    // What it runs that is not on its list it asks about first; the person allows it.
+    allow(s, ci);
+    await light(); await desktop.waitForTimeout(700);
+  }
   expect(await said(), s.show()).not.toBe(before);
   await rec.burst("reported", 6);
   rec.save({ widgets: SHOWCASE_WIDGETS, light: await said(), agents: { "ci-check": "claude", docstrings: "claude", "routing-review": "claude" } });
@@ -103,7 +107,7 @@ test("tools", async () => {
   const frames = await s.openFrames(["ripgrep", "glob-order"]);
   const glob = await s.agent(frames["glob-order"], "glob-docs", "default", JOB.glob);
   const triage = await s.agent(frames.ripgrep, "test-triage", "default");
-  await working(s, [glob]);
+  await busy(s, [glob]);
   await s.tidy(Object.values(frames));
   await s.quiet();
 
@@ -130,7 +134,7 @@ test("tools", async () => {
   const asking = rec.beat("asking");
   for (let i = 0; i < 300 && !(i > 5 && s.census().of(triage)?.state !== "working"); i++) {
     await asking();
-    if (s.census().of(triage)?.waiting) break;
+    allow(s, triage);
     await desktop.waitForTimeout(700);
   }
   await rec.burst("answered", 6);
@@ -148,12 +152,12 @@ test("views", async () => {
   cli("plugins", "set", "view:@dip497/constellation", "frameRate", "30");
   const frames = await s.openFrames(["fastapi", "arrow-binding", "glob-order"]);
   const asker = await s.agent(frames.fastapi, "docstrings", "default", JOB.docstrings);
-  const busy = [
+  const agents = [
     await s.agent(frames["arrow-binding"], "arrow-review", "default", JOB.review),
     await s.agent(frames["glob-order"], "glob-order", "default", JOB.glob),
     await s.agent(frames.fastapi, "routing-review", "default", JOB.routing),
   ];
-  await working(s, busy);
+  await busy(s, agents);
   await s.tidy(Object.values(frames));
   await s.quiet();
 
@@ -208,7 +212,7 @@ test("machines", async () => {
   fs.copyFileSync(path.join(root, "bin/claude"), path.join(dir, "rhome/bin/claude"));
   const frames = await s.openFrames(["fastapi"]);
   const local = await s.agent(frames.fastapi, "routing-review", "default", JOB.routing);
-  await working(s, [local]);
+  await busy(s, [local]);
   await s.tidy([frames.fastapi]);
 
   const rec = recorder(s.app, path.join(OUT, "machines"), OUT);
@@ -243,7 +247,7 @@ test("machines", async () => {
   await expect.poll(() => desktop.locator(`.react-flow__node[data-id="${remoteFrame}"] button[aria-label="machine build-box"]`).getAttribute("data-machine-state"), { timeout: 60_000 }).toBe("online");
   const there = await s.agent(remoteFrame, "flag-count", "default", JOB.flags);
   await s.tidy([frames.fastapi, remoteFrame]);
-  await working(s, [there]);
+  await busy(s, [there]);
   await rec.box(desktop, `.react-flow__node[data-id="${remoteFrame}"]`, "remote");
   await rec.burst("running", 8);
   rec.save({ remote: s.census().of(there), agents: { "routing-review": "claude on studio", "flag-count": "claude on build-box" } });
@@ -259,7 +263,7 @@ test("devices", async () => {
   const frames = await s.openFrames(["fastapi"]);
   const release = await s.agent(frames.fastapi, "docstrings", "default", JOB.docstrings);
   const routing = await s.agent(frames.fastapi, "routing-review", "default", JOB.routing);
-  await working(s, [routing]);
+  await busy(s, [routing]);
   await expect.poll(() => s.census().of(release)?.waiting?.kind ?? "", { timeout: 300_000, intervals: [1000] }).toBe("permission");
   await s.tidy([frames.fastapi]);
 
@@ -303,11 +307,11 @@ test("join", async () => {
   const host = await stage(root, apps, { name: "host" });
   await host.desktop.evaluate(() => window.hive.settingsSet("profile.name", "Ada"));
   const frames = await host.openFrames(["fastapi"]);
-  const busy = [
+  const agents = [
     await host.agent(frames.fastapi, "routing-review", "default", JOB.routing),
     await host.agent(frames.fastapi, "docstrings", "default", JOB.docstrings),
   ];
-  await working(host, busy.slice(0, 1));
+  await busy(host, agents.slice(0, 1));
   await host.tidy([frames.fastapi]);
   const elsewhere = path.join(root, "elsewhere");
   fs.mkdirSync(elsewhere);

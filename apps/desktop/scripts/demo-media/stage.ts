@@ -264,6 +264,17 @@ export function recorder(app: ElectronApplication, out: string, base = out) {
   return { beat, burst, still, box, boxes, shots, save };
 }
 
+/** Waits until every one of `tiles` is at its job: working, or asking the person something. */
+export async function busy(s: Stage, tiles: string[], timeout = 180_000) {
+  await expect.poll(() => tiles.filter((t) => { const r = s.census().of(t); return r?.state === "working" || !!r?.waiting; }).length, { timeout, intervals: [1000] })
+    .toBe(tiles.length).catch((e) => { console.log(s.show()); throw e; });
+}
+
+/** Answers `tile`'s permission question with its first choice, Yes, in the tile itself. */
+export function allow(s: Stage, tile: string) {
+  if (s.census().of(tile)?.waiting?.kind === "permission") s.cli("ctl", "keys", tile, "Enter");
+}
+
 /** Waits until every one of `tiles` reports working, or says where each is. */
 export async function working(s: Stage, tiles: string[], timeout = 180_000) {
   await expect.poll(() => tiles.filter((t) => s.census().of(t)?.state === "working").length, { timeout, intervals: [1000] })
