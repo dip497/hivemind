@@ -303,6 +303,36 @@ FAIL src/cart.test.js
   expect([...flaky.parseRun(coloured)]).toEqual([["top ok", true], ["top bad", false]]);
 });
 
+test("flaky tests reads cargo test's lines: ok and FAILED count, ignored and the failures list do not", () => {
+  // Real `cargo test` output (libtest), from a crate with one passing, one failing and one ignored test.
+  const cargo = `
+running 3 tests
+test tests::adds_an_item ... ok
+test tests::slow_checkout ... ignored
+test tests::totals_in_cents ... FAILED
+
+failures:
+
+---- tests::totals_in_cents stdout ----
+
+thread 'tests::totals_in_cents' (1530351) panicked at src/lib.rs:6:28:
+assertion \`left == right\` failed
+  left: 2
+ right: 3
+note: run with \`RUST_BACKTRACE=1\` environment variable to display a backtrace
+
+
+failures:
+    tests::totals_in_cents
+
+test result: FAILED. 1 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+`;
+  expect([...flaky.parseRun(cargo)]).toEqual([["tests::adds_an_item", true], ["tests::totals_in_cents", false]]);
+  // From ripgrep's globset, as \`cargo test -p globset --lib\` prints it.
+  const globset = "running 290 tests\ntest glob::tests::allow_unclosed_class_brace2 ... ok\ntest glob::tests::allow_unclosed_class_brace3 ... ok\n";
+  expect([...flaky.parseRun(globset)]).toEqual([["glob::tests::allow_unclosed_class_brace2", true], ["glob::tests::allow_unclosed_class_brace3", true]]);
+});
+
 test("a test that passed in some runs and failed in others is flaky, and listed before the rest", () => {
   const runs = [
     new Map([["steady", true], ["races", true], ["broken", false]]),

@@ -15,7 +15,8 @@ const TIME = /\s+(\[\d+(\.\d+)?\s*m?s\]|\(\d+(\.\d+)?\s*m?s\)|\d+(\.\d+)?\s*m?s)
 /**
  * Each test's outcome in one run, from what the runner printed: bun `(pass) name`, TAP and
  * node's test runner `ok 1 - name`, pytest -v `file::name PASSED`, and the check marks jest,
- * vitest and node's spec reporter print. A test named twice failed if either failed.
+ * vitest and node's spec reporter print, and cargo test's `test name ... ok`. A test named twice
+ * failed if either failed.
  */
 export function parseRun(output) {
   const outcomes = new Map();
@@ -32,6 +33,7 @@ export function parseRun(output) {
       if (!/#\s*(SKIP|TODO)\b/i.test(m[2])) put(m[2], m[1] === "ok");
     } else if ((m = /^(\S+::\S+(?:\[[^\]]*\])?)\s+(PASSED|FAILED|ERROR|XPASS|XFAIL)\b/.exec(line))) put(m[1], m[2] === "PASSED" || m[2] === "XFAIL");
     else if ((m = /^(FAILED|ERROR) (\S+::\S+?(?:\[[^\]]*\])?)(?: - .*)?$/.exec(line))) put(m[2], false);
+    else if ((m = /^test (\S+) \.\.\. (ok|FAILED)$/.exec(line))) put(m[1], m[2] === "ok");
     else if ((m = /^\s*([✓✔√]|[✕✖×✗✘])\s+(.+)$/.exec(line))) {
       // A file's summary line ("✓ a.test.ts (3 tests) 5ms") is not a test.
       if (!/\(\d+ tests?\b/.test(m[2])) put(m[2], /[✓✔√]/.test(m[1]));

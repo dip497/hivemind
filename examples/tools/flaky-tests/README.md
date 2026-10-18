@@ -7,7 +7,8 @@ frame with the test and its history (you read the prompt before it is sent). A m
 runs finish; stop after the current one at any time.
 
 It reads the per-test lines of `bun test`, `node --test` (TAP and the spec reporter), any TAP
-runner, `pytest -v`, `jest --verbose` and `vitest --reporter=verbose`.
+runner, `pytest -v`, `jest --verbose`, `vitest --reporter=verbose` and `cargo test` (without `-q`,
+which prints dots in place of names).
 
 ```bash
 hive tools install examples/tools/flaky-tests
