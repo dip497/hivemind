@@ -117,7 +117,7 @@ function Flaky({ tile, hm, host }) {
       progress ? h(Loading, { label: "Running the tests" })
         : h("div", { style: { padding: 24, textAlign: "center" } },
           h("div", { style: { fontSize: 13 } }, "Run the tests a few times to find the ones that only fail sometimes."),
-          h("div", { style: { ...muted, marginTop: 4 } }, "It reads bun, node --test, TAP, pytest -v, jest --verbose and vitest's verbose reporter.")));
+          h("div", { style: { ...muted, marginTop: 4 } }, "It reads bun, node --test, TAP, pytest -v, jest --verbose, vitest's verbose reporter and cargo test.")));
   }
   return h("div", { style: { display: "flex", flexDirection: "column", height: "100%", color: "var(--color-fg)" } }, header, meter,
     h("div", { style: { display: "flex", gap: 4, alignItems: "center", padding: "8px 14px", borderBottom: "1px solid var(--color-line)" } },
