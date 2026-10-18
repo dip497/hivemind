@@ -124,7 +124,7 @@ hive ctl plugin commands                          # what every running plugin le
 hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
 hive ctl plugin call @dip497/progress check '{"index":0}'
 hive ctl plugin list                              # each starting, ready or failed, with why
-hive ctl plugin close widget-…                    # takes it off the board
+hive ctl plugin close widget:@dip497/progress     # takes it off the board (or its id, widget-…)
 
 hive tools install dip497/worktrees && hive plugins enable tool:dip497/worktrees
 hive ctl plugin open tool:dip497/worktrees
