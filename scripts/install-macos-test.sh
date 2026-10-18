@@ -85,6 +85,15 @@ check "~/Applications alias"      [ -L "$HOME/Applications/hivemind.app" ]
 # Launching forwards argv to the bundle (the reason we don't use `open -a`).
 check "launcher forwards args"    bash -c "[ \"\$('$BIN_DIR/hivemind' /some/repo)\" = 'hivemind stub /some/repo' ]"
 
+# The terminal daemon left running from the bundle is not the app running: it does not hold the
+# upgrade back. A window of the app does.
+daemon_args="$APP_DIR/hivemind.app/Contents/MacOS/hivemind $APP_DIR/hivemind.app/Contents/Resources/app.asar/out/main/pty-daemon.js $HOME/pty-daemon.sock"
+(exec -a "$daemon_args" sleep 30) & daemon=$!
+check "a running daemon is not the app" bash -c "! (HIVEMIND_LIB_ONLY=1 HIVEMIND_OS=Darwin HIVEMIND_ARCH=arm64 source '$REPO_ROOT/install.sh'; APP_DIR='$APP_DIR'; hivemind_running)"
+(exec -a "$APP_DIR/hivemind.app/Contents/MacOS/hivemind --no-sandbox" sleep 30) & window=$!
+check "a running app window is"       bash -c "HIVEMIND_LIB_ONLY=1 HIVEMIND_OS=Darwin HIVEMIND_ARCH=arm64 source '$REPO_ROOT/install.sh'; APP_DIR='$APP_DIR'; hivemind_running"
+kill "$daemon" "$window" 2>/dev/null || true
+
 # `hivemind uninstall` (no --purge) removes the app but keeps user data.
 mkdir -p "$HOME/Library/Application Support/hivemind" "$HOME/.config/hivemind"
 "$BIN_DIR/hivemind" uninstall 2>/dev/null

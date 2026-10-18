@@ -4,7 +4,7 @@
 import { setPluginsScope } from "./plugins/scope";
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import { setCatalog, defsFromWire, type AgentWireEntry } from "@hivemind/agents";
+import { setCatalog, defsFromWire, preferredAgent, type AgentProviderDef, type AgentWireEntry } from "@hivemind/agents";
 import { getSettings, patchSettings, saveSettingsNow, setPluginEnabled } from "./settings-store";
 
 export interface AgentScanProblem {
@@ -44,6 +44,12 @@ export function useAgentPresence(): Presence {
 /** True only when the last PATH check found no binary; unknown counts as installed. */
 export function agentMissing(id: string): boolean {
   return notReady(presence, id);
+}
+
+/** The agent a new tile starts when none is named, everywhere one is started or named: your
+ *  chosen agent if it is installed here, else the first agent that is. */
+export function agentToStart(chosen = getSettings().agents.defaultAgent, now: Presence = presence): AgentProviderDef | undefined {
+  return preferredAgent(chosen, (d) => !notReady(now, d.id));
 }
 
 /** Refuse to open a tile for an agent whose CLI is not installed, and say where to get it. */

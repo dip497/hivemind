@@ -62,10 +62,10 @@ for (const [k, v] of [
   ["appearance.wallpaper.kind", opt("image", null) ? "image" : WALLPAPER],
   ["appearance.terminal.background", "#121416"],
 ]) cli("config", "set", k, JSON.stringify(v));
-// A widget from HiveHub and a tool from this repository's examples, added as their guides say.
+// A widget and a tool from HiveHub, added as their guides say.
 const WIDGET = "@dip497/progress";
 cli("widgets", "install", WIDGET);
-cli("tools", "install", path.join(repo, "examples/tools/git-history"));
+cli("tools", "install", "dip497/git-history");
 for (const id of ["tool:dip497/git-history", `widget:${WIDGET}`]) cli("plugins", "enable", id);
 
 const app = await electron.launch({

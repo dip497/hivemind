@@ -8,7 +8,7 @@ import { EXIT } from "../hcp.js";
 import { connect, defaultSocket, listSessions, MAX_SOCKET_PATH, ping } from "../pty-client.js";
 import { compiledSelf } from "../remote.js";
 import { hiveNetBin } from "../app-data.js";
-import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
+import { BRIDGE_READY, DAEMON_PROTOCOL_VERSION } from "@hivemind/agent-host/pty-protocol";
 import { startDaemon } from "@hivemind/agent-host/daemon-start";
 
 /** Set by scripts/build.ts so bun embeds the addon; absent when running from source. */
@@ -94,10 +94,11 @@ const statusCmd = defineCommand({
     const ctx = { json: !!args.json };
     const sock = String(args.socket || defaultSocket());
     const pong = await ping(sock);
-    if (!pong) return ok(ctx, { socket: sock, running: false }, () => `not running (${sock})`);
+    // speaks: the protocol a daemon this `hive` starts runs; protocol: the one running there.
+    if (!pong) return ok(ctx, { socket: sock, running: false, speaks: DAEMON_PROTOCOL_VERSION }, () => `not running (${sock})`);
     const sessions = await listSessions(sock).catch(() => []);
     const live = sessions.filter((s) => s.state === "live").length;
-    return ok(ctx, { socket: sock, running: true, protocol: pong.protocol, sessions: sessions.length, live },
+    return ok(ctx, { socket: sock, running: true, protocol: pong.protocol, speaks: DAEMON_PROTOCOL_VERSION, sessions: sessions.length, live },
       () => `running on ${sock} · ${sessions.length} session(s), ${live} live`);
   },
 });

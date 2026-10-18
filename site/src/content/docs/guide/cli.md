@@ -150,7 +150,7 @@ threw is the message).
 ```sh
 hive ctl plugin open widget:@dip497/progress                           # → added widget widget-…: ready (set-title, add, …)
 hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'   # → {"index": 0}
-hive ctl plugin call agent-board post '{"text":"Tests pass","kind":"done"}'   # the example view in examples/views/agent-board
+hive ctl plugin call @dip497/agent-board post '{"text":"Tests pass","kind":"done"}'   # the Agent board view, from HiveHub
 hive ctl plugin call dip497/worktrees list
 hive ctl plugin close widget-…                                         # the widget leaves the board
 hive ctl plugin close widget:@dip497/progress                          # the same, named as open names it

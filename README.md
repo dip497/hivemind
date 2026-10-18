@@ -53,7 +53,12 @@ account.
   </tr>
 </table>
 
-More widgets, tools and views to try are in [`examples/`](examples/).
+<p align="center">
+  <a href="https://hivehub.griiken.workers.dev/p/@dip497/dog"><img alt="Biscuit, a pixel-art dog at the bottom of the window, barks when an agent asks to run a command, then walks to the right edge" src="site/public/shots/showcase/dog.webp" width="720" /></a><br />
+  <sub>A widget that moves: Biscuit barks when an agent waits on you</sub>
+</p>
+
+More widgets, tools and views to try are on [HiveHub](https://hivehub.griiken.workers.dev/).
 
 ## Install
 

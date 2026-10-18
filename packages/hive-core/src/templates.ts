@@ -191,7 +191,7 @@ When you start work on issue \`$KEY\`:
 
 ## Handling review feedback
 
-A review comment on your diff arrives as a prompt like \`Review comment on src/x.ts:42 (new): <text>\`:
+A review comment on your diff arrives as a prompt like \`Address this review comment — src/x.ts:42:\` followed by its text:
 
 1. Record it: \`hive ctl add-comment $KEY "review: src/x.ts:42 — <comment>"\`.
 2. Address it, re-verify, commit (\`git commit -am "$KEY: address review on <file>"\`).

@@ -13,8 +13,9 @@ import { connectPage, offerToConnect } from "../../tests/e2e/helpers/phone";
 import { stopDaemons } from "../../tests/e2e/helpers/daemons";
 import { DEMO, OUT, ROOT, WWW, allow, busy, demoInstructions, recorder, runnerSettings, stage } from "./stage";
 
-// The showcase plugins, from their own examples folder.
-const SHOWCASE = process.env.SHOWCASE ?? path.join(os.homedir(), "projects/hivemind-showcase/examples");
+// The showcase plugins, from a checkout of dip497/hivemind-plugins (its widgets/, tools/ and views/):
+// SHOWCASE names it, else ~/projects/hivemind-plugins.
+const SHOWCASE = process.env.SHOWCASE ?? path.join(os.homedir(), "projects/hivemind-plugins");
 const SHOWCASE_WIDGETS = ["agent-pulse", "waiting-on-you", "issue-burndown", "launchpad", "ci-light"];
 
 let root = "";

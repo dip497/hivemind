@@ -529,6 +529,8 @@ export interface HiveIpc {
   networkHealth(): Promise<NetworkHealth>;
   /** Use another network: a built-in's name, a network link, or a signed profile. */
   useNetwork(given: string): Promise<NetworkProfile>;
+  /** The network in use changed, here or by `hive network use`. */
+  onNetworkChanged(cb: () => void): () => void;
   // ── app version + self-update ─────────────────────────────
   /** This app's version string (from apps/desktop/package.json). */
   getAppVersion(): Promise<string>;
