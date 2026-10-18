@@ -100,31 +100,66 @@ hive-net is `UNSUPPORTED`. The path is found as `agent.conversation` finds the f
 
 | Item | Design |
 |---|---|
-| #1 grants | the file is the truth: read again when its size or time changed, at every `holder`/`live`/`list`, written by read-change-write; `fs.watchFile` (2 s) tells the serving process of a grant gone, which closes its connections; read when first needed |
-| #2 service grants | the process that starts serving `drive.sock` takes back every service grant: services run only there, so any found are left behind |
+| #1, #2 grants | one owner, below |
 | #3 slow reader | a connection whose unsent bytes pass 16 MiB is closed with `{"error": {"code": "TOO_SLOW"}}` written first when there is room |
 | #4, #5 | timeouts capped at 2³¹−1 ms; the hello deadline destroys the socket |
 | #6 | `seq` starts at the clock (ms), so a cursor from an earlier process is below the oldest kept: `null`, list again |
 | #8 | log and grant writes caught; `lastUsed` written at most once a minute |
 | #88 | rules from claude 2.1.302: the bypass warning (`says: bypass`, text read from the binary) and the settings warning (`says: settings-warning`, rendered: `1` continues, `3` exits). The bypass warning gets no answer keys: accepting it is the person's consent, typed at the terminal |
 
+## Who owns grants (first principles)
+
+| | |
+|---|---|
+| Goal | A token taken back anywhere stops working everywhere at once. |
+| Done when | With `hive host` serving and the app open, a grant made in Settings drives at once, and one taken back there closes its program's connection and lets nothing in. |
+
+| Assumption | Kind | Evidence |
+|---|---|---|
+| Two processes may run on one machine, the app opened after `hive host` | fact | `hive host run` refuses beside the app (#102), but nothing stops the app beside a running host; `serveDrive` says "whichever came first serves" |
+| Only one serves `drive.sock` | fact | `listenExclusive` (`socket-claim.ts`) |
+| Services run only where `drive.sock` is served | fact | `startServices` and `headless.ts` wait for `serving` (D8) |
+| Each process that may serve keeps its own grants | habit | both build `new Grants` since D1 (61e4d4f); no reason recorded |
+| Settings answers `grant.*` from its own process | habit | `grantsDomain(() => grants())` in `index.ts`, the same since D1 |
+
+| Design | Owner | Lost because |
+|---|---|---|
+| A. the file is the truth, both read it when it changes, watched every 2 s | none: two | two writers race read-change-write; a revoke reaches the other process up to 2 s late |
+| B. **the process serving `drive.sock` owns grants and services; the other's Settings asks it over `drive.sock`, as the person** | one | — |
+| C. the app refuses to open beside a running host | one | stops the person's app because a service is running; a larger change of who serves workspaces |
+
+B: `grantsDomain` answers from the owner: its own grants when it serves, else a call on `drive.sock`
+with the install's token. A service grant found when a process begins serving was left behind by
+the one before (services run only where it is served), so it is taken back then. Ceiling: when the
+host stops, the app does not take `drive.sock` over until it starts again (as today).
+
+## Dropped (for the maintainer to confirm)
+
+| Choice or habit | From | Why it no longer holds |
+|---|---|---|
+| Each process that may serve `drive.sock` keeps grants | D1 (61e4d4f), habit | two owners of one file: a revoke in Settings did not reach the host |
+| A service's leftover grant is taken back when its own plugin starts again | D8 | a plugin switched off never starts again: its token held for ever |
+| One spawn limit for every caller | the control plane (cb4273c), made when only agents spawned | programs share it now; one loop locks out the person |
+| No transcript path anywhere (`agent.conversation` only) | D6 | its reason (a guest or phone gets this machine's paths) does not hold for a program on this machine |
+| The agent feed's `seq` counts from 0 in each process | habit | a cursor from the process before reads as current |
+
 ## Pre-mortem
 
 | A year on, it failed because | Changed |
 |---|---|
-| `fs.watch` missed a revoke on some file system, so a revoked program kept hearing events | `fs.watchFile` polls the size and time; every call checks `live()` against the file |
+| The app's Settings showed grants while nothing served `drive.sock` | `grant.*` from a process that does not serve answers `UNAVAILABLE`, naming who should |
 | Claude reworded its bypass warning and workers stalled unnamed again | the rule matches two literals from the binary; the fixture test names the version; the golden fails on a manifest change |
 | An approval's input carried a secret to a `view` grant | `agent.approval` takes the role `agent.tool` takes; the audit names who read it |
 
 Ceilings: 16 MiB × stalled connections (100 = 1.6 GB); a service restarts once a minute for ever
 while it fails (VS Code's 3-in-5-minutes give-up is the upgrade); 1,000 agent changes replayed.
 
-## Build order (each a PR on the one before)
+## Build order (one PR, a commit each)
 
 | # | PR | Checked by |
 |---|---|---|
 | 1 | this document | — |
-| 2 | grants shared by the app and `hive host`; service grants left behind taken back (#87) | two `Grants` on one file: a revoke in one closes the other's connection |
+| 2 | one owner of grants, the process serving `drive.sock`; service grants left behind taken back (#87) | host serving, app's Settings makes and takes back a grant: it drives, then is closed out |
 | 3 | drive socket limits: slow reader, hello deadline, `agent.read` timeout, feed `seq`, log/grant writes | a client that never reads is closed; a 3e9 ms read waits; a restarted feed answers `null` |
 | 4 | a spawn limit per caller | one caller at its limit, another still starts |
 | 5 | Claude's bypass and settings-warning screens (#88), with the plugins repo's manifest | screens from 2.1.302 read as `bypass` and `settings-warning` |
