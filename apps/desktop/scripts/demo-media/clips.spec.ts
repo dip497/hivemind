@@ -27,7 +27,7 @@ test.afterEach(async () => {
   settingsUnchanged([DEMO, root]);
   for (const a of apps.splice(0)) await Promise.race([a.close(), new Promise((r) => setTimeout(r, 8000))]);
   for (const p of procs.splice(0)) p.kill("SIGKILL");
-  for (const f of after.splice(0)) f();
+  for (const f of after.splice(0).reverse()) f();
   stopDaemons(root);
 });
 
