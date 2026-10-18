@@ -1,0 +1,59 @@
+---
+// A muted loop recorded from the real app (docs/design/demo-media-2026-10-18.md), over its own
+// first frame. The hero's starts once the page has loaded; the others while they are on screen.
+// Reduced motion keeps the poster; the button always stops or starts it.
+interface Props { name: string; alt: string; eager?: boolean }
+const { name, alt, eager = false } = Astro.props;
+const src = (file: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/shots/${name}/${file}`;
+---
+<div class="loop" data-eager={eager ? "" : undefined}>
+  <img class="poster" src={src('poster.webp')} width="1280" height="800" alt={alt}
+    fetchpriority={eager ? "high" : undefined} loading={eager ? undefined : "lazy"} decoding={eager ? undefined : "async"} />
+  <video muted playsinline loop preload="none" aria-hidden="true" tabindex="-1" width="1280" height="800">
+    <source src={src('clip.webm')} type='video/webm; codecs="av01.0.05M.08"' />
+    <source src={src('clip.mp4')} type="video/mp4" />
+  </video>
+  <button type="button" class="loop-pause" aria-pressed="false">Pause</button>
+</div>
+
+<style>
+  .loop{position:relative;aspect-ratio:16/10;border:1px solid var(--line);border-radius:12px;
+    overflow:hidden;background:#0b0d10;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .poster,video{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* The video shows only once it plays; until then the poster is what loads and what you see. */
+  video{opacity:0;transition:opacity .3s ease-out}
+  .loop[data-started] video{opacity:1}
+  @media (prefers-reduced-motion:reduce){video{transition:none}}
+  .loop-pause{position:absolute;right:10px;bottom:10px;padding:5px 11px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.18);background:rgba(10,12,15,.72);color:#e9ecf0;
+    font:500 12px/1.2 var(--f-m);cursor:pointer}
+  .loop-pause:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+</style>
+
+<script>
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const seen = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const loop = e.target as HTMLElement & { play?: () => void; stop?: () => void };
+      if (e.isIntersecting && !loop.dataset.stopped) loop.play?.();
+      else if (!e.isIntersecting) loop.querySelector("video")!.pause();
+    }
+  }, { threshold: 0.4 });
+  for (const loop of document.querySelectorAll<HTMLElement & { play?: () => void }>(".loop")) {
+    const video = loop.querySelector("video")!;
+    const button = loop.querySelector(".loop-pause")!;
+    const show = (playing: boolean) => {
+      if (playing) loop.dataset.started = "";
+      button.textContent = playing ? "Pause" : "Play";
+      button.setAttribute("aria-pressed", String(!playing));
+    };
+    loop.play = () => { video.preload = "auto"; video.play().then(() => show(true), () => show(false)); };
+    button.addEventListener("click", () => {
+      // Stopped by hand, it stays stopped when it scrolls back into view.
+      if (video.paused) { delete loop.dataset.stopped; loop.play!(); } else { loop.dataset.stopped = ""; video.pause(); show(false); }
+    });
+    if (still) { show(false); continue; }
+    if (loop.dataset.eager === undefined) seen.observe(loop);
+    else if (document.readyState === "complete") loop.play(); else addEventListener("load", loop.play, { once: true });
+  }
+</script>
