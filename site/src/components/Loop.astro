@@ -30,7 +30,7 @@ const moving = has('clip.webm') || has('clip.mp4');
   .poster{object-fit:cover;object-position:top}
   .loop[data-fit="contain"] .poster{object-fit:contain;object-position:center}
   /* The video shows only once it plays; until then the poster is what loads and what you see. */
-  video{opacity:0;transition:opacity .3s ease-out}
+  video{opacity:0;transition:opacity .2s ease-out}
   .loop[data-started] video{opacity:1}
   @media (prefers-reduced-motion:reduce){video{transition:none}}
   .loop-pause{position:absolute;right:10px;bottom:10px;padding:5px 11px;border-radius:999px;
