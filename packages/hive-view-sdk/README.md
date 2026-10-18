@@ -88,9 +88,8 @@ host.commands; host.rects; host.refused;          // what the app would run, sho
 `spawnClaude` / `addFrame` / `spawnAgent` need `"workspace:spawn"`; `renameTile` /
 `openFolder` need `"workspace:edit"`; `prompt`, and `spawnAgent` with a `prompt`, need
 `"workspace:prompt"`; `sessions`, and `spawnAgent` with `resume`, need `"workspace:sessions"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views:
-`examples/views/agent-board` in this repository (a persisted layout and agent commands) and
-`views/widgets` in [the published plugins](https://github.com/dip497/hivemind-plugins) (the
-workspace's widgets, drawn and pressed).
+`views/agent-board` (a persisted layout and agent commands) and `views/widgets` (the workspace's
+widgets, drawn and pressed) in [the published plugins](https://github.com/dip497/hivemind-plugins).
 
 This is not an npm package. The app builds it into itself and serves it to every view at
 `/__sdk.js`, with an import map that resolves `@hivemind/view-sdk` there — so a view leaves it

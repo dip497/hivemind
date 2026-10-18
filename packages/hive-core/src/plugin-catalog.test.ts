@@ -56,7 +56,7 @@ describe("reading the index", () => {
   });
 
   test("a tool is listed under the id the app gives it, owner/name with no @", () => {
-    const tool = { id: "dip497/worktrees", type: "tool", name: "Worktrees", description: "d", author: "dip497", version: "1.0.0", path: "examples/tools/worktrees", files: [{ path: "index.js", sha256: "0".repeat(64) }] };
+    const tool = { id: "dip497/worktrees", type: "tool", name: "Worktrees", description: "d", author: "dip497", version: "1.0.0", path: "tools/worktrees", files: [{ path: "index.js", sha256: "0".repeat(64) }] };
     expect(parseCatalog({ version: 1, plugins: [tool] }).map((e) => `${e.type}:${e.id}`)).toEqual(["tool:dip497/worktrees"]);
     const bad = (id: string) => () => parseCatalog({ version: 1, plugins: [{ ...tool, id }] });
     expect(bad("@dip497/worktrees")).toThrow(/a tool id — it must be owner\/name/);

@@ -202,10 +202,11 @@ hive.hm.onCommand("add", (a) => { save({ steps: [...steps(), { text: a.text, don
 hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
 ```
 
-`examples/widgets/progress` is a widget agents keep: a task's steps, added and ticked off by them.
-The other examples there: `waiting-on-you`, `agent-pulse` and `issue-burndown` read the workspace;
+`@dip497/progress` on [HiveHub](https://hivehub.griiken.workers.dev/) is a widget agents keep: a task's steps, added and ticked
+off by them. The project's others: `waiting-on-you`, `agent-pulse` and `issue-burndown` read the workspace;
 `ci-light`, `test-meter` and `spend-today` show what agents, hooks or CI report to them;
-`focus-timer` keeps time, and `launchpad` starts agents with jobs you set.
+`focus-timer` keeps time, `launchpad` starts agents with jobs you set, and `dog` walks along the
+bottom of the screen and barks when an agent waits on you.
 
 A `"category"` in `widget.json` says what it is for: `code`, `git`, `agents`, `productivity`, `monitoring`, `team`, `web`, `fun` or `other` (the default). The Add menu
 groups widgets by it, beside the tools.

@@ -1,6 +1,6 @@
 // What an agent can do with the plugins in the app, through the CLI it has: get one running, list
-// the commands they declare, run one and read its answer. The example widget, view and tool from the
-// repository: the Progress widget's steps, the Agent board's notes, the Worktrees tool's list.
+// the commands they declare, run one and read its answer. A widget, a view and a tool from the
+// test fixtures: the Progress widget's steps, the Agent board's notes, the Commits tool's list.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
@@ -15,7 +15,7 @@ const repo = path.join(root, "repo");
 const env = { ...process.env, XDG_CONFIG_HOME: xdg, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
-const examples = path.resolve(process.cwd(), "../../examples");
+const fixtures = path.resolve(process.cwd(), "tests/e2e/fixtures");
 let hcp: Record<string, string> = {};
 /** The CLI an agent runs, with what it prints and how it exits. Never run synchronously: the test
  *  process must stay free to let the app's new workers start, which Playwright holds until then. */
@@ -39,11 +39,11 @@ test.beforeAll(async () => {
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: repo });
   for (const [kind, dir, record] of [
-    ["widgets", "widgets/progress", "widget:@dip497/progress"],
+    ["widgets", "widgets/progress", "widget:@example/progress"],
     ["views", "views/agent-board", "view:agent-board"],
-    ["tools", "tools/worktrees", "tool:dip497/worktrees"],
+    ["tools", "tools/commits", "tool:example/commits"],
   ] as const) {
-    const installed = await hive(kind, "install", path.join(examples, dir));
+    const installed = await hive(kind, "install", path.join(fixtures, dir));
     expect(installed.status, installed.err).toBe(0);
     expect((await hive("plugins", "enable", record)).status).toBe(0);
   }
@@ -61,41 +61,41 @@ const running = async () => JSON.parse((await hive("ctl", "plugin", "list", "--j
 
 test("a widget's commands: an agent lists them, adds and ticks steps, and the card shows what it did", async () => {
   // Not running yet: nothing to call, the agent is told how to get it running, and its exit says not found.
-  expect((await commands()).plugins.find((p) => p.plugin === "@dip497/progress")).toBeUndefined();
-  const absent = await call("@dip497/progress", "list");
+  expect((await commands()).plugins.find((p) => p.plugin === "@example/progress")).toBeUndefined();
+  const absent = await call("@example/progress", "list");
   expect([absent.status, absent.data.code]).toEqual([5, "NOT_FOUND"]);
   expect(absent.data.message).toContain("is not running here");
 
   // Opened, it answers once its code can be called: the first call straight after it runs.
-  const opened = await hive("ctl", "plugin", "open", "widget:@dip497/progress", "--json");
+  const opened = await hive("ctl", "plugin", "open", "widget:@example/progress", "--json");
   expect(opened.status, opened.err).toBe(0);
   const widget = JSON.parse(opened.out) as { widget: string; instance: string; state: string; commands: Array<{ name: string }> };
   expect(widget.widget).toMatch(/^widget-/);
   expect([widget.instance, widget.state, widget.commands.map((c) => c.name)]).toEqual([widget.widget, "ready", ["set-title", "add", "check", "list", "clear"]]);
-  expect((await call("@dip497/progress", "set-title", '{"title":"Ship the release"}')).data.result).toEqual({ title: "Ship the release" });
+  expect((await call("@example/progress", "set-title", '{"title":"Ship the release"}')).data.result).toEqual({ title: "Ship the release" });
   expect((await running()).plugins.find((p) => p.instance === widget.widget)?.state).toBe("ready");
-  expect((await call("@dip497/progress", "add", '{"text":"Run the tests"}')).data.result).toEqual({ index: 0 });
-  expect((await call("@dip497/progress", "add", '{"text":"Tag it"}')).data.result).toEqual({ index: 1 });
-  expect((await call("@dip497/progress", "check", '{"index":0}')).data.result).toEqual({ text: "Run the tests", done: true });
+  expect((await call("@example/progress", "add", '{"text":"Run the tests"}')).data.result).toEqual({ index: 0 });
+  expect((await call("@example/progress", "add", '{"text":"Tag it"}')).data.result).toEqual({ index: 1 });
+  expect((await call("@example/progress", "check", '{"index":0}')).data.result).toEqual({ text: "Run the tests", done: true });
   await expect(page.getByText("Ship the release")).toBeVisible();
   await expect(page.getByText("1 of 2 done")).toBeVisible();
   await expect(page.getByRole("button", { name: /✓\s+Run the tests/ })).toBeVisible();
-  expect((await call("@dip497/progress", "list")).data.result).toEqual({
+  expect((await call("@example/progress", "list")).data.result).toEqual({
     title: "Ship the release", steps: [{ text: "Run the tests", done: true }, { text: "Tag it", done: false }],
   });
 
   // What the plugin refuses, and a command it does not have, come back as the agent's error.
-  const bad = await call("@dip497/progress", "check", '{"index":7}');
+  const bad = await call("@example/progress", "check", '{"index":7}');
   expect([bad.status, bad.data.code]).toEqual([1, "FAILED"]);
   expect(bad.data.message).toContain("there is no step 7");
-  const launch = await call("@dip497/progress", "launch");
+  const launch = await call("@example/progress", "launch");
   expect([launch.status, launch.data.code]).toEqual([5, "NOT_FOUND"]);
   expect(launch.data.message).toContain('has no command "launch"');
 
   // Closed, it leaves the board and the plugins that run.
   const closed = await hive("ctl", "plugin", "close", widget.widget, "--json");
   expect(closed.status, closed.err).toBe(0);
-  expect(JSON.parse(closed.out)).toEqual({ closed: widget.widget, plugin: "@dip497/progress", kind: "widget" });
+  expect(JSON.parse(closed.out)).toEqual({ closed: widget.widget, plugin: "@example/progress", kind: "widget" });
   expect((await running()).plugins.find((p) => p.instance === widget.widget)).toBeUndefined();
   await expect(page.getByText("Ship the release")).toHaveCount(0);
 });
@@ -113,14 +113,13 @@ test("a view's commands: an agent pins notes to the Agent board while it is the 
   await expect.poll(async () => (await commands()).plugins.find((p) => p.plugin === "agent-board")).toBeUndefined();
 });
 
-test("a tool's commands: an agent asks an open Worktrees tile what is there", async () => {
+test("a tool's commands: an agent asks an open Commits tile what is there", async () => {
   // Named by its plugin alone: its first tool opens.
-  const opened = await hive("ctl", "plugin", "open", "tool:dip497/worktrees", "--json");
+  const opened = await hive("ctl", "plugin", "open", "tool:example/commits", "--json");
   expect(opened.status, opened.err).toBe(0);
   const tool = JSON.parse(opened.out) as { tile: string; instance: string; state: string };
   expect([tool.instance, tool.state]).toEqual([tool.tile, "ready"]);
-  const r = await call("dip497/worktrees", "list");
-  expect((r.data.result as Array<{ branch: string; main: boolean }>).map((w) => [w.branch, w.main])).toEqual([["main", true]]);
+  await expect.poll(async () => (await call("example/commits", "list")).data.result).toEqual(["init"]);
   // Closed by its instance, as `plugin list` names it: its tile goes.
   expect((await hive("ctl", "plugin", "close", tool.tile, "--json")).status).toBe(0);
   expect((await running()).plugins.find((p) => p.instance === tool.tile)).toBeUndefined();
