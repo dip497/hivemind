@@ -154,7 +154,9 @@ export interface MethodDeps {
   turns: TurnTracker;
   recorder: OutputRecorder;
   /** Sliding-window spawn gate (reuse the ptySpawn rate-limit). false → refuse. */
-  spawnAllowed: () => boolean;
+  /** Whether `by` (the top of a tree of agents: a tile, `client:<grant id>`, or "person") may
+   *  start one more now. */
+  spawnAllowed: (by: string) => boolean;
   /** The agent a spawn with no `agent` starts (the user's default, if installed).
    *  Undefined when no agent is installed. May wait: at boot the PATH the answer
    *  depends on is still being read. */
@@ -223,6 +225,8 @@ const CONTROL = { writer: "control" };
 
 const RENDERER_TIMEOUT = 15_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
+/** The longest a timer waits (about 24.8 days): a longer one fires at once. */
+const LONGEST_WAIT_MS = 2 ** 31 - 1;
 /** How much of what an agent printed `agent.output` gives when not asked for more. */
 const DEFAULT_OUTPUT_LINES = 40;
 const REVIEW_TIMEOUT = 24 * 60 * 60 * 1000; // human review may take a long time
@@ -356,6 +360,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     return () => { if (pendingSend.get(pid) === p) pendingSend.delete(pid); done(); };
   };
 
+  // Who answers for a start, and so whose limit it uses: the top of the tree of agents it is
+  // started from (a program, an agent the person started, or the person), so a tree shares one.
+  const rootOf = (caller: string | undefined): string => {
+    let at = caller;
+    for (let i = 0; at && !isClient(at) && i <= MAX_SPAWN_DEPTH; i++) {
+      const up = deps.spawnRecords.get(at)?.parent;
+      if (!up) break;
+      at = up;
+    }
+    return at ?? "person";
+  };
+
   // Spawn one child tile and wire up its bookkeeping (depth, parent, auto-report,
   // supervision, read epoch), behind the depth/rate gates. Throws ApiError on depth/rate/spawn
   // failure. `report` defaults to on (pipes the child's reports to the parent);
@@ -377,7 +393,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (childDepth > MAX_SPAWN_DEPTH) {
       throw new ApiError("DEPTH_EXCEEDED", `agent spawn depth ${childDepth} exceeds max ${MAX_SPAWN_DEPTH}`);
     }
-    if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const agent = opts.agent != null ? String(opts.agent) : await deps.defaultAgentId?.();
     // Nothing compiled in to fall back to: an empty catalog means no agent can start.
     if (!agent) throw new ApiError("BAD_REQUEST", "no agent installed — install one from Settings ▸ Plugins");
@@ -431,6 +446,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const options: SpawnOptions = { ...deps.launchOptions(def.id) };
     if (mode) options.mode = String(mode);
     if (opts.model) options.model = String(opts.model);
+    if (!deps.spawnAllowed(rootOf(opts.parent))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     // `background` = a silent worker (report:false → gathered in bulk, e.g. a workflow worker):
     // its window does not bring it forward, and does not announce each one finishing.
     const tileId = openTile(place, (ws) => ({
@@ -719,7 +735,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       try { url = new URL(at.url); } catch { throw new ApiError("BAD_REQUEST", "Invalid URL"); }
       if (!["http:", "https:"].includes(url.protocol) && at.url !== "about:blank") throw new ApiError("BAD_REQUEST", "URL must use http or https, or be about:blank");
     }
-    if (!deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
+    if (!deps.spawnAllowed(rootOf(at.caller))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const url = typeof at.url === "string" ? at.url : undefined;
     return openTile(placeTile(at.caller, at.frame, at.repo), (ws) => ({
       id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
@@ -809,7 +825,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
             let timer: ReturnType<typeof setTimeout>;
             // The worker waits on its starter; an answer is the decision its hook gets.
             // No answer: "ask" (claude: its own prompt; pi: blocks).
-            const wait = deps.waits.ask(worker, { kind: "approval", tool, summary, expiresAt: Date.now() + APPROVAL_MAX_WAIT_MS, answerer: parent }, (decision, reason) => {
+            const wait = deps.waits.ask(worker, { kind: "approval", tool, summary, input: p.tool_input, expiresAt: Date.now() + APPROVAL_MAX_WAIT_MS, answerer: parent }, (decision, reason) => {
               clearTimeout(timer);
               resolve(decision ? { decision, ...(reason ? { reason } : {}) } : { decision: "ask" });
             });
@@ -937,8 +953,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       return keys.length;
     },
 
-    async read(tile, timeoutMs = DEFAULT_READ_TIMEOUT) {
+    async read(tile, asked = DEFAULT_READ_TIMEOUT) {
       requireTurnSignal(tile, "agent.read");
+      const timeoutMs = Math.min(asked, LONGEST_WAIT_MS);
       const pid = ptyId(tile);
       // Say a gone tile is gone now, rather than wait out the timeout for a turn that cannot
       // come. A tile still starting is in its workspace already.
@@ -1040,7 +1057,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
         // Answered once its tile's plugin can be called, as a widget's and a view's are.
         return { tile, ...(await deps.callRenderer("plugin.settle", { instance: tile }, RENDERER_TIMEOUT) as object) };
       }
-      if (kind === "widget" && !deps.spawnAllowed()) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
+      if (kind === "widget" && !deps.spawnAllowed(rootOf(caller))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
       return await deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT);
     },
     // Run one, and answer with what the plugin answered.

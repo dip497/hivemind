@@ -111,8 +111,8 @@ test("followed, what is written next is handed on as it comes, a line once it en
 
 /** A server of conversations, the agent of `t1` keeping the session `kept()` says, and how to
  *  connect a caller to it. */
-function served(kept: () => Transcript | null) {
-  const server = new WorkspaceServer([conversations({ transcriptOf: (tile) => (tile === "t1" ? kept() : null) })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+function served(kept: () => Transcript | null, runsHere = (tile: string) => tile === "t1") {
+  const server = new WorkspaceServer([conversations({ transcriptOf: (tile) => (tile === "t1" || tile === "t2" ? kept() : null), runsHere })], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {
     const closing = new AbortController();
     const got: EventMessage[] = [];
@@ -444,4 +444,19 @@ test("a tool use is looked for only in what the caller was shown of the conversa
   } finally {
     phone.go();
   }
+});
+
+test("a program on this machine is told the session file of an agent here; a phone, a guest and an agent on another machine are not", async () => {
+  const at = sessionFile(said(0));
+  // t1 runs here; t2 on another machine, its file there.
+  const { server } = served(() => ({ session: "s1", file: at, format: FORMAT }));
+  const as = (actor: Connection["actor"]): Connection => ({ actor, send: () => {}, closed: new AbortController().signal });
+  const program = as({ kind: "peer", person: "client:g1", device: "client:g1", access: "view", client: "orchestrator" });
+  const phone = as({ kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access: "owner" });
+  const codeOf = (a: unknown) => (a as { error?: { code: string } }).error?.code;
+  assert.deepEqual(await server.answer("agent.transcript", ["hm:t1"], program), { result: { session: "s1", path: at } });
+  assert.deepEqual(await server.answer("agent.transcript", ["t1"], as({ kind: "person" })), { result: { session: "s1", path: at } });
+  assert.equal(codeOf(await server.answer("agent.transcript", ["t1"], phone)), "UNSUPPORTED");
+  assert.equal(codeOf(await server.answer("agent.transcript", ["t2"], program)), "UNSUPPORTED");
+  assert.equal(codeOf(await server.answer("agent.transcript", ["t9"], program)), "NOT_FOUND");
 });

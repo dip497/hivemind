@@ -134,6 +134,18 @@ test("a read on an agent that stops to wait on an answer says so at once, and on
   assert.equal(r.waiting?.kind, "question");
 });
 
+test("a read given longer than a timer holds waits for the turn, not answering at once", async () => {
+  const { p, hook, turn } = plane();
+  const api = await p.api();
+  api.send("w", "go");
+  hook("w", "turn.started");
+  const reading = api.read("w", 30 * 24 * 3600_000);
+  const early = await Promise.race([reading.then((r) => r.finalStatus), new Promise((r) => setTimeout(() => r("still waiting"), 300))]);
+  assert.equal(early, "still waiting");
+  turn("w", "R1");
+  assert.deepEqual(await reading, { text: "R1", finalStatus: "turn", truncated: false });
+});
+
 test("a read on an agent that has exited says so at once, rather than wait out its time", async () => {
   const { p, hook } = plane();
   const api = await p.api();

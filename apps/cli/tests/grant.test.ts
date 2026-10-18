@@ -26,7 +26,7 @@ beforeAll(async () => {
   grants = new Grants(path.join(dir, "grants.json"));
   // The host's workspaces, as the app answers `host.status`: `-w` names them.
   const host = { answers: { "host.status": async () => ({ workspaces: [repoA, repoB].map((repo) => ({ repo, workspace: null })) }) }, effects: {} };
-  const server = new WorkspaceServer([grantsDomain(() => grants), host], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
+  const server = new WorkspaceServer([grantsDomain({ serving: async () => true, grants: () => grants, elsewhere: () => { throw new Error("this process serves"); } }), host], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   drive = serveDrive(sock, { server, installToken: () => TOKEN, grants, repos: () => [repoA, repoB], workspaceOf: () => null, nameOf: (tile) => tile });
   while (!fs.existsSync(sock)) await new Promise((r) => setTimeout(r, 10));
 });

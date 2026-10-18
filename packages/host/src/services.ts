@@ -104,13 +104,17 @@ class Log {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.size = fs.existsSync(file) ? fs.statSync(file).size : 0;
   }
+  // Called from the service's output: a log that cannot be written loses lines, never the app.
   write(text: string | Buffer): void {
-    if (this.size >= LOG_MAX) {
-      fs.renameSync(this.file, `${this.file}.1`);
-      this.size = 0;
-    }
-    fs.appendFileSync(this.file, text);
-    this.size += Buffer.byteLength(text);
+    try {
+      if (this.size >= LOG_MAX) {
+        fs.renameSync(this.file, `${this.file}.1`);
+        this.size = 0;
+      }
+      fs.mkdirSync(path.dirname(this.file), { recursive: true });
+      fs.appendFileSync(this.file, text);
+      this.size += Buffer.byteLength(text);
+    } catch { /* disk full, or the folder gone and not made again */ }
   }
   say(line: string): void {
     this.write(`— ${new Date().toISOString()} ${line}\n`);
@@ -135,8 +139,6 @@ class Runner {
     this.again = null;
     if (this.ending) return;
     const { want, o } = this;
-    // One left behind by an app that was killed lets nothing in from now.
-    o.grants.revokePlugin(want.plugin);
     if (want.workspaces.length === 0) return this.set({ state: "stopped", why: "no workspace is picked for it" });
     if (!(ROLES as readonly string[]).includes(want.service.role)) return this.set({ state: "stopped", why: `it asks for the role "${want.service.role}", which is none of ${ROLES.join(", ")}` });
     const found = program(want, process.env);
@@ -246,7 +248,9 @@ export class Services {
   private readonly runners = new Map<string, Runner>();
   private readonly offRevoked: () => void;
 
+  /** Made by the process that serves the drive socket, once it does. */
   constructor(private readonly o: ServicesOptions) {
+    o.grants.revokeServices();
     this.offRevoked = o.grants.onRevoked((id) => { for (const r of this.runners.values()) r.revoked(id); });
   }
 

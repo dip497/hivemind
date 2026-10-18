@@ -170,6 +170,19 @@ export interface ToolUse {
   truncated?: true;
 }
 
+/** The supervised tool use an agent waits on (0.31): the wait (`request`, `since`), the tool, its
+ *  summary as its supervisor is told it, and its input whole as the agent's hook gave it (text as
+ *  it is, else JSON), cut to `TOOL_MAX` characters, `truncated` then. */
+export interface Approval {
+  request: string;
+  since: number;
+  tool: string;
+  summary: string;
+  input: string;
+  expiresAt: number;
+  truncated?: true;
+}
+
 /** What an agent changed in the folder it runs in, against its last commit (spec/agents.md
  *  "Changes"). */
 export interface AgentChanges {

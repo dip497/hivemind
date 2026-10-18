@@ -11,6 +11,28 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - API SDKs: `hivemind-api` for TypeScript (Node and Bun) and Python (3.9+, standard library only) connects a program to a workspace with a token from `hive grant create`, calls any method, hears events, and lists, starts, reads and answers agents without hand-writing the drive socket protocol. Each release carries them (`hivemind-api-<version>.tgz`, `hivemind_api-<version>-py3-none-any.whl`), and the installers put them in `sdk/` beside `hive`: `npm install ~/.hivemind-app/sdk/hivemind-api.tgz`, `pip install ~/.hivemind-app/sdk/python`. `hive` now drives the socket through the TypeScript one.
 
+- API access: `agent.transcript` (Workspace API 0.32) tells a program on this machine which session an agent is in and where its session file is, so it can follow the agent's own records. A phone, a guest, or an agent on another machine is pointed to `agent.conversation` instead.
+
+- API access: `agent.approval` (Workspace API 0.31) and `hive ctl approval <request>` show what a supervised worker's approval request would do, with its tool's input in full (an edit's text, not only its file), so a program or a person answering it sees what it allows.
+
+- Claude: an agent stopped at startup on the "Settings Warning" (a settings rule was skipped) or the one-time Bypass Permissions mode warning now shows as waiting on you, saying which screen it is (`settings-warning`, `bypass`), to programs, the phone and notifications alike. The bypass warning is answered only at its terminal. Comes with the Claude plugin's update.
+
+- Agents: the limit of 16 starts a minute now counts each program apart (you, each API token, each agent you started, each with the agents started under it), under 64 a minute for the machine, so one program starting agents in a loop no longer stops you or other programs starting them; a start refused for another reason no longer counts.
+
+- API access: a program that catches up with `agent.since` after the app or `hive host` restarted is told to list again, instead of being handed the new process's changes as if they followed its own.
+
+- API access: a program that stops reading its connection is disconnected once 16 MiB wait for it, instead of growing the app's memory; one that never says hello is disconnected after 10 s; `agent.read` given more than about 24 days waits instead of answering at once; and a plugin service's log folder deleted while it runs no longer stops the app.
+
+- API access: with `hive host` running, tokens made and taken back in the app's Settings now work there at once; before, a new one was refused and one taken back kept working. A plugin service's token left behind by an app that was killed stops working as soon as the app or host starts again.
+
+- API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
+
+- API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
+
+- A supervised agent's tool use waits on its starter again: `hive ctl approve` and the drive API's `agent.answer` find it in the agent list, waiting on approval, until it is answered. The machine's terminal daemon keeps each session's status, and it overwrote the wait the app held.
+
+- An agent's issue brief quotes a review comment as it really arrives, and the server set-up brief checks enrolment where `hive network use` prints it.
+
 - The example widgets, tools and views are on HiveHub, published from dip497/hivemind-plugins; install one with `hive widgets install @dip497/<name>`, `hive tools install dip497/<name>` or `hive views install @dip497/<name>`, or from Settings ▸ Plugins. The Agent board view is `@dip497/agent-board`, and a new widget, Dog, barks when an agent waits on you.
 
 - A widget with no card reaches the right edge of the screen when it moves there; it stopped as far short as a card is wider than it.

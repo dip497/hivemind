@@ -11,7 +11,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Domain } from "@hivemind/workspace-api/server";
 import { tileToken } from "@hivemind/agent-host/hooks/token";
-import { serveDrive } from "../src/drive.ts";
+import { askDrive, serveDrive } from "../src/drive.ts";
 import { Grants, grantsDomain } from "../src/grants.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-drive-"));
@@ -37,7 +37,7 @@ const domain = {
 
 const grants = new Grants(path.join(tmp, "grants.json"));
 const auditFile = path.join(tmp, "audit.jsonl");
-const server = new WorkspaceServer([domain, grantsDomain(() => grants)], new Intents(new AuditLog({ file: auditFile })));
+const server = new WorkspaceServer([domain, grantsDomain({ serving: async () => true, grants: () => grants, elsewhere: () => assert.fail("this process serves") })], new Intents(new AuditLog({ file: auditFile })));
 const sock = path.join(tmp, "drive.sock");
 const drive = serveDrive(sock, {
   server,
@@ -107,7 +107,7 @@ async function connect(hello: Record<string, unknown>) {
 test("a program with a grant drives its workspace at its role, and is refused what its role does not reach", async () => {
   const { token } = grants.create({ name: "review-bot", repos: [repoA], role: "agents" });
   const p = await connect({ token, workspace: repoA });
-  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.30", as: { client: "review-bot", role: "agents", workspace: repoA } });
+  assert.deepEqual((await p.next((m) => "hello" in m)).hello, { api: "0.32", as: { client: "review-bot", role: "agents", workspace: repoA } });
   const started = await p.call("agent.start", [repoA, { program: "claude" }]);
   assert.equal((started.result as { by: { client?: string } }).by.client, "review-bot");
   const pushed = await p.call("git.push", [repoA]);
@@ -119,14 +119,14 @@ test("a program with a grant drives its workspace at its role, and is refused wh
 
 test("a grant that reaches one workspace needs it named no more than an agent does; one that reaches several names one", async () => {
   const one = await connect({ token: grants.create({ name: "one", repos: [repoA], role: "view" }).token });
-  assert.deepEqual((await one.next((m) => "hello" in m)).hello, { api: "0.30", as: { client: "one", role: "view", workspace: repoA } });
+  assert.deepEqual((await one.next((m) => "hello" in m)).hello, { api: "0.32", as: { client: "one", role: "view", workspace: repoA } });
   one.socket.destroy();
   const both = grants.create({ name: "both", repos: [repoA, repoB], role: "view" }).token;
   const unnamed = await connect({ token: both });
   assert.equal(((await unnamed.next((m) => "error" in m)).error as { code: string }).code, "BAD_REQUEST");
   await within(unnamed.closed, "the unnamed connection closing");
   const named = await connect({ token: both, workspace: repoB });
-  assert.deepEqual((await named.next((m) => "hello" in m)).hello, { api: "0.30", as: { client: "both", role: "view", workspace: repoB } });
+  assert.deepEqual((await named.next((m) => "hello" in m)).hello, { api: "0.32", as: { client: "both", role: "view", workspace: repoB } });
   named.socket.destroy();
 });
 
@@ -173,6 +173,21 @@ test("taking a grant back closes the program's connection, and its token lets no
   person.socket.destroy();
 });
 
+test("Settings in a process that does not serve the drive socket makes and takes back grants with the one that does", async () => {
+  // The app opened beside a running `hive host`: its grants are the host's.
+  const appsOwn = new Grants(path.join(tmp, "grants.json"));
+  const app = new WorkspaceServer([grantsDomain({ serving: async () => false, grants: () => appsOwn, elsewhere: (method, params) => askDrive(sock, INSTALL, method, params) })], new Intents(new AuditLog({ file: path.join(tmp, "app-audit.jsonl") })));
+  const atWindow = { actor: { kind: "person" as const }, send: () => {}, closed: new AbortController().signal };
+  const made = (await app.answer("grant.create", [{ name: "made in Settings", repos: [repoA], role: "agents" }], atWindow)) as { result: { grant: { id: string }; token: string } };
+  const p = await connect({ token: made.result.token, workspace: repoA });
+  assert.deepEqual(((await p.next((m) => "hello" in m)).hello as { as: unknown }).as, { client: "made in Settings", role: "agents", workspace: repoA });
+  assert.ok(((await app.answer("grant.list", [], atWindow)) as { result: Array<{ id: string }> }).result.some((g) => g.id === made.result.grant.id));
+  assert.deepEqual(await app.answer("grant.revoke", [made.result.grant.id], atWindow), { result: { revoked: true } });
+  await within(p.closed, "the program's connection closing");
+  const again = await connect({ token: made.result.token, workspace: repoA });
+  assert.equal(((await again.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
+});
+
 test("a grant that runs out closes its program's connection then, and lets nothing in after", async () => {
   const { token } = grants.create({ name: "brief", repos: [repoA], role: "agents", expires: Date.now() + 300 });
   const p = await connect({ token, workspace: repoA });
@@ -182,16 +197,55 @@ test("a grant that runs out closes its program's connection then, and lets nothi
   assert.equal(((await again.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
 });
 
+test("a grant made for 30 days keeps its program's connection open", async () => {
+  const { token } = grants.create({ name: "month", repos: [repoA], role: "agents", expires: Date.now() + 30 * 24 * 3600_000 });
+  const p = await connect({ token, workspace: repoA });
+  await p.next((m) => "hello" in m);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(p.socket.destroyed, false);
+  p.socket.destroy();
+});
+
+test("a program that stops reading is cut off once 16 MiB wait for it", async () => {
+  const p = await connect({ token: INSTALL });
+  await p.next((m) => "hello" in m);
+  p.socket.pause();
+  const mib = "x".repeat(1024 * 1024);
+  for (let i = 0; i < 24 && !p.socket.destroyed; i++) {
+    server.relay({ event: "status.changed", params: [{ seq: i, tileId: "t", status: { state: "idle", since: 0, title: mib } }] });
+    await new Promise((r) => setImmediate(r));
+  }
+  // Reading again, it reads what was sent before the cut, and then the end.
+  p.socket.resume();
+  await within(p.closed, "the stalled connection closing", 5000);
+  assert.ok(p.lines.length < 24, `${p.lines.length} of 24 events came`);
+});
+
+test("a connection that says nothing for 10 s is closed, and a hello after that is not answered", { timeout: 20_000 }, async () => {
+  const socket = net.connect({ path: sock, allowHalfOpen: true });
+  opened.add(socket);
+  socket.on("error", () => { /* closed under it */ });
+  socket.setEncoding("utf8");
+  let heard = "";
+  socket.on("data", (d: string) => (heard += d));
+  const closed = new Promise<void>((resolve) => socket.on("close", () => resolve()));
+  await new Promise((r) => setTimeout(r, 10_500));
+  if (!socket.destroyed) socket.write(`${JSON.stringify({ hello: { token: INSTALL } })}\n`);
+  await within(closed, "the silent connection closing");
+  assert.match(heard, /say hello first/);
+  assert.doesNotMatch(heard, /"as":"person"/);
+});
+
 test("the install's token is the person, with every method", async () => {
   const person = await connect({ token: INSTALL });
-  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.30", as: "person" });
+  assert.deepEqual((await person.next((m) => "hello" in m)).hello, { api: "0.32", as: "person" });
   assert.deepEqual(((await person.call("git.push", [repoA])).result as { by: unknown }).by, { kind: "person" });
   person.socket.destroy();
 });
 
 test("an agent's token drives the workspace its tile is in, as that agent at the role agents, while its tile is there; no other workspace, and none with no tile", async () => {
   const agent = await connect({ token: tileToken(INSTALL, "hm:tile-a") });
-  assert.deepEqual((await agent.next((m) => "hello" in m)).hello, { api: "0.30", as: { agent: "tile-a", role: "agents", workspace: repoA } });
+  assert.deepEqual((await agent.next((m) => "hello" in m)).hello, { api: "0.32", as: { agent: "tile-a", role: "agents", workspace: repoA } });
   const started = await agent.call("agent.start", [repoA, { program: "claude" }]);
   assert.deepEqual((started.result as { by: unknown }).by, { kind: "peer", person: "tile-a", device: "tile-a", access: "agents", client: "the tile-a agent", tile: "tile-a" });
   assert.equal(((await agent.call("git.push", [repoA])).error as { code: string }).code, "FORBIDDEN");
@@ -208,6 +262,21 @@ test("an agent's token drives the workspace its tile is in, as that agent at the
   assert.equal(((await elsewhere.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
   const nowhere = await connect({ token: tileToken(INSTALL, "tile-z") });
   assert.equal(((await nowhere.next((m) => "error" in m)).error as { code: string }).code, "FORBIDDEN");
+});
+
+test("a program connecting for each command notes its use once, not with every connection", async () => {
+  const { token } = grants.create({ name: "per command", repos: [repoA], role: "view" });
+  const file = path.join(tmp, "grants.json");
+  const first = await connect({ token });
+  await first.next((m) => "hello" in m);
+  const written = fs.statSync(file).ino;
+  for (let i = 0; i < 3; i++) {
+    const again = await connect({ token });
+    await again.next((m) => "hello" in m);
+    again.socket.destroy();
+  }
+  first.socket.destroy();
+  assert.equal(fs.statSync(file).ino, written);
 });
 
 test("a grant is kept as a hash, never its token, in a file only the person reads", () => {

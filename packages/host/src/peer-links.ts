@@ -90,7 +90,7 @@ const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, i
  *  until it goes (`terminal.fit`); never otherwise to size one, or to give or take a keyboard. */
 const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask", "terminal.ack", "terminal.fit",
-  "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation", "agent.tool",
+  "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation", "agent.tool", "agent.approval",
   "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close", "widget.press",
   // Someone asking to join, answered from the notice that told it (spec/push.md "Join").
   "people.answer",
