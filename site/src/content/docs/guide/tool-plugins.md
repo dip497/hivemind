@@ -24,6 +24,14 @@ The examples are in the repository, in `examples/tools`:
 | `todo-finder` | every TODO and FIXME by file; open one, or hand it to an agent; its markers are a setting |
 | `ci-runs` | GitHub Actions runs: a failed job's lines, rerun or cancel, hand the failure to an agent (through `gh`) |
 | `worktrees` | every git worktree: uncommitted changes, ahead and behind the base, its diffs; review one with an agent, remove the merged ones |
+| `dependency-audit` | known vulnerabilities in the repository's lockfiles, from the OSV database; ask an agent to upgrade |
+| `flaky-tests` | runs the tests several times and shows which pass only sometimes |
+| `changelog-writer` | the commits since the last tag, grouped into a changelog draft |
+| `release-checklist` | clean tree, right branch, up to date, tests, changelog, no new TODOs: each checked, each fixable by an agent |
+| `bundle-size` | the files of a build folder by size and gzip size, against a baseline you keep |
+| `sqlite-browser` | a SQLite file's tables and rows, and read-only queries |
+| `log-tail` | follows a log file with level colours, filters, and errors handed to an agent |
+| `api-explorer` | the HTTP endpoints the code declares, and a panel to send one a request |
 
 On HiveHub today: `dip497/worktrees` and `dip497/ci-runs`. Install one by its id (from 2026.10.3),
 or from the **HiveHub** tab of Settings ▸ Plugins (pick **Tools** to see only tools). It arrives
