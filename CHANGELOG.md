@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The guide's diagrams are drawn in the site's own colours and fonts; the issue-states diagram now says nothing enforces the order, and the terminal-size and widget diagrams match what the code does.
+
 - The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.
 
 - `hive agents install --help` and the installer name amp, an agent on HiveHub, as the example instead of gemini.
@@ -16,6 +18,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A widget's `hive.d.ts` now types issues: `onIssues` and `issues.read` say each field, and an issue's `assignee` is `{ type, id }`, so a widget that printed it as text showed `[object Object]` and now fails its own type check instead.
 
 - A widget can show a long line whole: a `text` node with `wrap: true` goes on to the next line instead of being cut short with …, as every widget line was, a title too.
+
+- A widget's `hive.hm.capabilities`, `features` and `settings` are an array or an object from its first line of code, empty until the app sends them, instead of a function that threw on `.includes()`; `hive.on("hm")` fires when they arrive or change.
+
+- A `tint` a widget's code draws colours its card, on the board and floating, as a sticky note's colour does.
+
+- `hive ctl plugin close` takes the plugin as `plugin open` names it (`widget:@owner/name`, `tool:owner/name`, `view:id`) when one copy is open, as well as its instance.
+
+- `hive ctl plugin close` takes any widget off the board by its id, a built-in one drawn without code (Checklist, Sticky note, Text) too.
 
 ## [2026.10.3] — 2026-10-18
 

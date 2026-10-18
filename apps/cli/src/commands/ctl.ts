@@ -610,8 +610,8 @@ const pluginList = defineCommand({
   },
 });
 
-const pluginClose = sub("close", "Stop a running plugin: close a tool's tile, take a widget off the board, leave a view for the canvas", {
-  instance: { type: "positional", required: true, description: "which one, as `hive ctl plugin list` names it" },
+const pluginClose = sub("close", "Close a plugin: close a tool's tile, take a widget off the board (one drawn without code too), leave a view for the canvas", {
+  instance: { type: "positional", required: true, description: "which one: its instance, as `hive ctl plugin list` names it, a widget's id on the board, or the plugin as `plugin open` takes it (widget:@owner/name, tool:owner/name, view:id) when one copy is open" },
   plugin: { type: "string", description: "the plugin it must be (refused when another runs as that instance)" },
 }, (args) => onDrive((d) => d.call("plugin.close", [String(args.instance), ...(args.plugin ? [String(args.plugin)] : [])])));
 

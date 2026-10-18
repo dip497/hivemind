@@ -448,6 +448,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     addWidget: (id) => addBoardRef.current(`widget:${id}` as BoardChoice),
     widgetRuns: (id) => !!widgetPackages.find((w) => w.id === id)?.code,
     closeTile: (id) => closeTile(id),
+    widgetsOnBoard: () => board.objects.flatMap((o) => (o.kind === "widget" ? [{ id: o.id, widget: o.widget }] : [])),
     removeWidget: (id) => board.remove(id),
   };
 

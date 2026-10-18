@@ -9,11 +9,13 @@
  * calls return promises; one given a callback returns its unsubscribe at once.
  */
 
+import { CLIENT_VALUES_UNTIL_KNOWN } from "@hivemind/view-sdk/protocol";
+
 /** Run first in a widget's worker: defines `hive` over the messages its runner sends and takes. */
 export const WIDGET_PRELUDE = `const hive = (() => {
   const on = {}; let state; let options = {}; let spot = { x: 1, y: 0 };
   // hive.hm: each call goes to the client the window holds for this widget, by name.
-  const waiting = new Map(); const fns = new Map(); let n = 0; let values = {};
+  const waiting = new Map(); const fns = new Map(); let n = 0; let values = ${JSON.stringify(CLIENT_VALUES_UNTIL_KNOWN)};
   const call = (path, args) => {
     const req = ++n; let sub = false;
     const wire = args.map((a) => { if (typeof a !== "function") return a; sub = true; const id = ++n; fns.set(id, a); return { __fn: id }; });
@@ -30,7 +32,7 @@ export const WIDGET_PRELUDE = `const hive = (() => {
     const m = e.data;
     if (m.type === "init") { state = m.state; options = m.options; }
     if (m.type === "options") options = m.payload;
-    if (m.type === "hm-values") { values = m.values; return; }
+    if (m.type === "hm-values") { values = m.values; fire("hm"); return; }
     if (m.type === "hm-reply") { const w = waiting.get(m.req); waiting.delete(m.req); if (w) m.ok ? w.resolve(m.value) : w.reject(new Error(m.error)); return; }
     if (m.type === "hm-cb" && !m.answer) { const f = fns.get(m.fn); if (f) try { f(...m.args); } catch (e) { console.error(e); } return; }
     // A callback asked for its answer (a command's handler): what it returns, or why it failed.
@@ -69,6 +71,7 @@ export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Writt
 
 /** Something to draw. The app draws it in the theme; a widget never draws pixels itself. */
 type Node =
+  /** \`tint\` on the outermost stack colours the card as a note (\`yellow\`, \`pink\`, \`blue\`…). */
   | { type: "stack"; children: Node[]; fill?: boolean; tint?: string }
   | { type: "row"; children: Node[] }
   /** One line, cut short with … when too long, unless \`wrap\`: then whole, on as many lines as it needs. */
@@ -86,8 +89,10 @@ type Node =
   | { type: "list"; title?: boolean; placeholder?: string };
 
 /** \`hive.hm\`: the client a view has (\`@hivemind/view-sdk\` ViewClient), reached from the
- *  worker. Its values (\`hello\`, \`settings\`, \`capabilities\`, \`features\`…) are there to read;
- *  every call returns a promise, and one given a callback returns its unsubscribe at once. */
+ *  worker. Its values (\`hello\`, \`settings\`, \`capabilities\`, \`features\`…) are there to read
+ *  from the first line of code: empty (\`[]\`, \`{}\`, \`hello\` null) until the window sends them,
+ *  when \`hive.on("hm")\` fires. Every call returns a promise, and one given a callback returns its
+ *  unsubscribe at once. */
 interface Hm {
   readonly hello: any;
   readonly capabilities: readonly string[];
@@ -168,6 +173,8 @@ interface Hive {
   /** The card was clicked, not on a button. */
   on(event: "click", f: () => void): void;
   on(event: "options", f: (options: Record<string, string | number | boolean>) => void): void;
+  /** \`hive.hm\`'s values arrived from the window, or changed (its settings). */
+  on(event: "hm", f: () => void): void;
 }
 
 declare const hive: Hive;
