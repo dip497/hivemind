@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The website moved from `docs/` to `site/`; `docs/` keeps the engineering notes, and a change there no longer redeploys the site.
+
 - `hive agents install --help` and the installer name amp, an agent on HiveHub, as the example instead of gemini.
 
 ## [2026.10.3] — 2026-10-18

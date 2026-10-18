@@ -1,6 +1,6 @@
 # The site as a container for Cloud Run: built once here, then served by node's own http
 # server (server.mjs). The design tokens are vendored into src/generated, so this build needs
-# nothing from outside docs/ and the build context stays small.
+# nothing from outside site/ and the build context stays small.
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./

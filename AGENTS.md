@@ -82,5 +82,6 @@ No previous sessions found.
 </claude-mem-context>
 ## Website hosting
 
-The website and docs live in `docs/` and use the GitHub Pages workflow. Do not create
-or deploy ChatGPT Sites for this project.
+The website and its guide live in `site/`. `.github/workflows/site.yml` deploys it to Cloud Run
+when a change under `site/` reaches main. `docs/` holds engineering notes (design, plans,
+reviews) and is not published. Do not create or deploy ChatGPT Sites for this project.

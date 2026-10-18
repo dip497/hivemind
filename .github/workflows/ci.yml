@@ -130,10 +130,10 @@ jobs:
         # shimmed), so the mac install/uninstall path is covered on this ubuntu box.
         run: bash scripts/install-macos-test.sh
 
-      - name: The docs site's vendored copies
-        # The site's container builds from docs/ alone and serves the committed installers and
+      - name: The site's vendored copies
+        # The site's container builds from site/ alone and serves the committed installers and
         # design tokens, so they have to match the repository's.
-        run: node docs/scripts/sync-install.mjs --check && node docs/scripts/sync-tokens.mjs --check && node docs/scripts/sync-agent-icons.mjs --check
+        run: node site/scripts/sync-install.mjs --check && node site/scripts/sync-tokens.mjs --check && node site/scripts/sync-agent-icons.mjs --check
 
   # The files hive-net, hive-phone and compose read, hashed. A job whose files passed it before, on
   # this pull request or on main, is skipped, and a skipped check counts as passed. The hash is of

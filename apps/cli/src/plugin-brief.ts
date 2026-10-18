@@ -1,8 +1,8 @@
 /** The brief `hive widgets|tools|views new` writes as PROMPT.md: what a coding agent needs to build
  *  the plugin and check its own work, with the kind's guide itself, so the two never disagree. */
-import widgetGuide from "../../../docs/src/content/docs/guide/widgets.md" with { type: "text" };
-import toolGuide from "../../../docs/src/content/docs/guide/tool-plugins.md" with { type: "text" };
-import viewGuide from "../../../docs/src/content/docs/guide/extension-authoring.md" with { type: "text" };
+import widgetGuide from "../../../site/src/content/docs/guide/widgets.md" with { type: "text" };
+import toolGuide from "../../../site/src/content/docs/guide/tool-plugins.md" with { type: "text" };
+import viewGuide from "../../../site/src/content/docs/guide/extension-authoring.md" with { type: "text" };
 
 export type PluginKind = "widget" | "tool" | "view";
 
