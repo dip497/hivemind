@@ -638,5 +638,283 @@
       "constellation": 9.5,
       "docked": 14.8
     }
+  },
+  "devices": {
+    "recording": "devices",
+    "shots": [
+      {
+        "beat": "desktop",
+        "start": 0,
+        "end": 12.4,
+        "play": "first",
+        "camera": [
+          {
+            "u": 0,
+            "box": "ask"
+          }
+        ]
+      }
+    ],
+    "panes": [
+      {
+        "start": 3.6,
+        "end": 12.4,
+        "rect": {
+          "x": 80,
+          "y": 20,
+          "w": 1120,
+          "h": 700
+        },
+        "look": "browser",
+        "size": {
+          "width": 2048,
+          "height": 1280
+        },
+        "shots": [
+          {
+            "file": "devices/frames/browser-asks-0.png",
+            "start": 3.6
+          },
+          {
+            "file": "devices/frames/browser-asks-1.png",
+            "start": 4.5
+          },
+          {
+            "file": "devices/frames/browser-asks-2.png",
+            "start": 5.4
+          },
+          {
+            "file": "devices/frames/browser-asks-3.png",
+            "start": 6.3
+          },
+          {
+            "file": "devices/frames/browser-answered-0.png",
+            "start": 7.8
+          },
+          {
+            "file": "devices/frames/browser-answered-1.png",
+            "start": 8.5
+          },
+          {
+            "file": "devices/frames/browser-answered-2.png",
+            "start": 9.2
+          },
+          {
+            "file": "devices/frames/browser-answered-3.png",
+            "start": 9.9
+          },
+          {
+            "file": "devices/frames/browser-answered-4.png",
+            "start": 10.6
+          },
+          {
+            "file": "devices/frames/browser-answered-5.png",
+            "start": 11.3
+          }
+        ]
+      },
+      {
+        "start": 4.2,
+        "end": 12.4,
+        "rect": {
+          "x": 860,
+          "y": 40,
+          "w": 300,
+          "h": 649
+        },
+        "look": "phone",
+        "size": {
+          "width": 780,
+          "height": 1688
+        },
+        "shots": [
+          {
+            "file": "devices/frames/phone-asks-0.png",
+            "start": 3.6
+          },
+          {
+            "file": "devices/frames/phone-asks-1.png",
+            "start": 4.5
+          },
+          {
+            "file": "devices/frames/phone-asks-2.png",
+            "start": 5.4
+          },
+          {
+            "file": "devices/frames/phone-asks-3.png",
+            "start": 6.3
+          },
+          {
+            "file": "devices/frames/phone-answered-0.png",
+            "start": 7.8
+          },
+          {
+            "file": "devices/frames/phone-answered-1.png",
+            "start": 8.5
+          },
+          {
+            "file": "devices/frames/phone-answered-2.png",
+            "start": 9.2
+          },
+          {
+            "file": "devices/frames/phone-answered-3.png",
+            "start": 9.9
+          },
+          {
+            "file": "devices/frames/phone-answered-4.png",
+            "start": 10.6
+          },
+          {
+            "file": "devices/frames/phone-answered-5.png",
+            "start": 11.3
+          }
+        ]
+      }
+    ],
+    "captions": [
+      {
+        "text": "An agent asks before it edits a file.",
+        "start": 0.3,
+        "end": 3.4
+      },
+      {
+        "text": "Your browser and phone ask too.",
+        "start": 3.9,
+        "end": 6.6
+      },
+      {
+        "text": "Answer it on your phone.",
+        "start": 7.0,
+        "end": 9.2
+      },
+      {
+        "text": "Every screen moves on.",
+        "start": 9.6,
+        "end": 12.2
+      }
+    ],
+    "pointer": [
+      {
+        "start": 6.4,
+        "end": 7.9,
+        "from": [
+          640,
+          640
+        ],
+        "to": {
+          "pane": 1,
+          "box": "allow"
+        },
+        "click": 7.6
+      }
+    ],
+    "stills": {
+      "asks": 2.0,
+      "devices": 6.0,
+      "answered": 10.5
+    },
+    "boxes": {
+      "ask": {
+        "x": 830,
+        "y": 655,
+        "w": 2150,
+        "h": 1344
+      }
+    }
+  },
+  "machines": {
+    "recording": "machines",
+    "shots": [
+      {
+        "beat": "one",
+        "start": 0,
+        "end": 2.8,
+        "play": "first",
+        "camera": [
+          {
+            "u": 0,
+            "box": "full"
+          }
+        ]
+      },
+      {
+        "beat": "adding",
+        "start": 2.8,
+        "end": 6.0,
+        "play": "last",
+        "camera": [
+          {
+            "u": 0,
+            "box": "dialog"
+          }
+        ]
+      },
+      {
+        "beat": "running",
+        "start": 6.0,
+        "end": 12.4,
+        "play": "loop",
+        "camera": [
+          {
+            "u": 0,
+            "box": "local+remote"
+          },
+          {
+            "u": 0.4,
+            "box": "local+remote"
+          },
+          {
+            "u": 0.75,
+            "box": "remote"
+          },
+          {
+            "u": 1,
+            "box": "remote"
+          }
+        ]
+      }
+    ],
+    "captions": [
+      {
+        "text": "An agent works on this computer.",
+        "start": 0.3,
+        "end": 2.6
+      },
+      {
+        "text": "Add a machine you reach over SSH.",
+        "start": 3.0,
+        "end": 5.8
+      },
+      {
+        "text": "Agents start there, beside yours.",
+        "start": 6.3,
+        "end": 9.0
+      },
+      {
+        "text": "Each asks you before it runs a command.",
+        "start": 9.3,
+        "end": 12.2
+      }
+    ],
+    "stills": {
+      "one": 1.5,
+      "adding": 4.5,
+      "running": 7.5,
+      "remote": 11.5
+    },
+    "boxes": {
+      "dialog": {
+        "x": 950,
+        "y": 420,
+        "w": 1310,
+        "h": 1170
+      },
+      "local": {
+        "x": 872,
+        "y": 632,
+        "w": 1032,
+        "h": 725
+      }
+    }
   }
 }
