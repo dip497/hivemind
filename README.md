@@ -1,3 +1,5 @@
+<sub>Everything below was written by AI. This line wasn't. — dip497</sub>
+
 <p align="center">
   <img src="assets/icon.png" alt="Hivemind" width="76" />
 </p>
@@ -75,7 +77,3 @@ irm https://hivemind.griiken.com/install.ps1 | iex
 ```
 
 [Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)
-
----
-
-<sub>Everything above was written by AI. This line wasn't. — dip497</sub>
