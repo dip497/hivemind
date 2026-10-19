@@ -1,51 +1,65 @@
 ---
 import { HIVEHUB } from "../hivehub";
-import Loop from '../components/Loop.astro';
+import HeroStage from '../components/HeroStage.astro';
 import icons from '../generated/agent-icons.json';
+import tokens from '../generated/tokens.json';
+import { resolve } from '../lib/tokens';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const link = (path: string) => `${base}/${path}`;
 const title = 'Hivemind: your agents build the workspace they work in';
 const description =
-  'Personal software for people who code with agents. Run agent CLIs side by side and have them write the widgets, tools and views you work with. MIT licensed, on your own computer, with no account.';
+  'Personal software for people who code with agents. Every coding agent in a real terminal, and the views, tools and widgets around them written by your agents. MIT licensed, on your own computer, with no account.';
 const repo = 'https://github.com/dip497/hivemind';
 const changelog = `${repo}/blob/main/CHANGELOG.md#2026103--2026-10-18`;
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
+const agentPrompt = 'Install Hivemind on this computer with `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`, then open this folder in it with `hivemind .`. Its docs for agents are at https://hivemind.griiken.com/guide/llms.txt.';
 const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 // Every file link goes through /download/<key>, which the server sends on to the current release.
 const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
-const shot = (file: string, width = 1600, height = 1120) => ({ file, width, height });
-type Example = { id: string; name: string; w?: number; h?: number; alt?: string };
-const examples: { kind: string; one: string; fit: string; scope: string; items: Example[] }[] = [
-  { kind: 'Widgets', one: 'widget', fit: 'contain', scope: '@dip497/', items: [
-    { id: 'waiting-on-you', name: 'Waiting on you', w: 592, h: 421 },
-    { id: 'agent-pulse', name: 'Agent pulse', w: 592, h: 354 },
-    { id: 'focus-timer', name: 'Focus timer', w: 592, h: 381 },
-    { id: 'ci-light', name: 'CI light', w: 592, h: 436 },
-    { id: 'test-meter', name: 'Test meter', w: 592, h: 477 },
-    { id: 'spend-today', name: 'Spend today', w: 592, h: 448 },
-    { id: 'issue-burndown', name: 'Issue burndown', w: 592, h: 846 },
-    { id: 'launchpad', name: 'Launchpad', w: 592, h: 476 },
-    { id: 'dog', name: 'Dog', w: 960, h: 600, alt: 'The Dog widget: Biscuit barks when an agent waits on you, then walks to the right edge.' },
-  ] },
-  { kind: 'Tools', one: 'tool', fit: 'cover', scope: 'dip497/', items: [
-    { id: 'dependency-audit', name: 'Dependency audit' },
-    { id: 'flaky-tests', name: 'Flaky tests' },
-    { id: 'changelog-writer', name: 'Changelog writer' },
-    { id: 'release-checklist', name: 'Release checklist' },
-    { id: 'bundle-size', name: 'Bundle size' },
-    { id: 'sqlite-browser', name: 'SQLite browser' },
-    { id: 'log-tail', name: 'Log tail' },
-    { id: 'api-explorer', name: 'API explorer' },
-  ] },
-  { kind: 'Views', one: 'view', fit: 'cover', scope: '@dip497/', items: [
-    { id: 'constellation', name: 'Constellation' },
-    { id: 'timeline', name: 'Timeline' },
-    { id: 'agents-by-state', name: 'Agents by state' },
-    { id: 'workspace-map', name: 'Workspace map' },
-  ] },
+
+// The page paints in the app's own colours, read from the app's stylesheet at build time.
+const app = tokens.tokens as Record<string, { value: string }>;
+const tk = (name: string) => resolve(resolve(app[name].value));
+const appColours = `:root{--bg:${tk('color-bg')};--bg2:${tk('color-bg2')};--bg3:${tk('color-bg3')};--line:${tk('color-line')};--line2:${tk('color-line2')};--fg:${tk('color-fg')};--fg2:${tk('color-fg2')};--fg3:${tk('color-fg3')};--term:${tk('color-terminal-bg')};--grid-dot:${tk('color-grid-dot')};--st-working:${tk('color-status-working')};--st-attention:${tk('color-status-attention')};--st-done:${tk('color-status-done')};--st-idle:${tk('color-status-idle')};--st-failed:${tk('color-status-failed')};--ease:${tk('hm-ease-out')};--sh2:${tk('hm-shadow-2')};--sh3:${tk('hm-shadow-3')};--note-blue:${tk('color-note-blue')};--note-violet:${tk('color-note-violet')}}`;
+
+const views = [
+  { id: 'agents-by-state', name: 'Agents by state', line: 'Columns of who is working, waiting and ready.' },
+  { id: 'timeline', name: 'Timeline', line: 'Today, one lane per agent.' },
+  { id: 'constellation', name: 'Constellation', line: 'Each project a star, its agents in orbit.' },
+  { id: 'workspace-map', name: 'Workspace map', line: 'Projects, agents and issues as one tree.' },
 ];
+const widgets = [
+  { id: 'test-meter', name: 'Test meter', w: 592, h: 477 },
+  { id: 'agent-pulse', name: 'Agent pulse', w: 592, h: 354 },
+  { id: 'launchpad', name: 'Launchpad', w: 592, h: 476 },
+];
+const code: Record<string, [string, string][]> = {
+  ctl: [
+    ['c', '# from inside any agent: hive ctl is on its PATH'],
+    ['p', 'hive ctl spawn --agent codex --prompt "Fix the flaky cart test"'],
+    ['p', 'hive ctl read $TILE    # wait for its reply'],
+    ['p', 'hive ctl workflow --items "api||web||cli" --prompt "Review {item}"'],
+    ['p', 'hive tools new flaky-tests'],
+    ['p', 'hive views install @dip497/timeline'],
+  ],
+  ts: [
+    ['k', 'import { connect } from "hivemind-api";'],
+    ['', ''],
+    ['', 'const hive = await connect();'],
+    ['', 'const { tile } = await hive.agents.start({ program: "claude", prompt: "Run the tests" });'],
+    ['', 'const reply = await hive.agents.read(tile);'],
+    ['', 'console.log(reply.text);'],
+  ],
+  py: [
+    ['k', 'from hivemind_api import connect'],
+    ['', ''],
+    ['', 'with connect() as hive:'],
+    ['', '    tile = hive.agents.start({"program": "claude", "prompt": "Run the tests"})["tile"]'],
+    ['', '    print(hive.agents.read(tile)["text"])'],
+  ],
+};
 ---
 <!doctype html>
 <html lang="en" data-theme="dark">
@@ -66,7 +80,8 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <style set:html={appColours}></style>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -82,10 +97,10 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
       Hivemind
     </a>
     <nav class="links" aria-label="Main">
-      <a href="#agents">Agents</a>
-      <a href="#plugins">Plugins</a>
-      <a href="#elsewhere">Machines and phone</a>
-      <a href="#faq">Questions</a>
+      <a href="#views">Views</a>
+      <a href="#plugins">Widgets and tools</a>
+      <a href="#api">Agents and API</a>
+      <a href="#reach">Anywhere</a>
       <a href={link('guide/')}>Docs</a>
       <a href={repo}>GitHub</a>
     </nav>
@@ -98,261 +113,199 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
   <section class="hero">
     <div class="wrap">
       <div class="hero-copy">
-        <h1>Your agents build the workspace they work in.</h1>
-        <p class="lede">Run every coding agent side by side, from Claude and Codex to the one that ships tomorrow, and have them write your widgets, tools and views.</p>
-        <div class="hero-act">
-          <div class="install">
-            <code>{install}</code>
-            <button class="copy" type="button" data-copy={install} aria-label="Copy the install command">Copy</button>
-          </div>
-          <a class="btn primary" href="#download">Download</a>
+        <div class="hero-say">
+          <h1>Your agents build the workspace they work in.</h1>
         </div>
-        <p class="fine">MIT licensed, on your computer, no account.</p>
+        <div class="hero-do">
+          <p class="eyebrow"><span class="dot"></span>Free and open source · MIT</p>
+          <p class="lede">Every coding agent in a real terminal. Ask one for a view, a tool or a widget, and it writes it, installs it and keeps it live.</p>
+          <div class="hero-act">
+            <div class="install">
+              <code>{install}</code>
+              <button class="copy" type="button" data-copy={install} aria-label="Copy the install command">Copy</button>
+            </div>
+            <a class="btn primary" href="#download" data-dl-label>Download</a>
+          </div>
+          <p class="fine">On your computer. No account. <button class="copy-prompt" type="button" data-copy={agentPrompt} data-label="Copied the prompt">Or copy a prompt for your agent</button></p>
+        </div>
       </div>
-      <figure class="hero-media">
-        <Loop name="hero" eager
-          alt="The Hivemind app: an agent's terminal asking to edit a file, and above it a Progress widget an agent keeps up to date, 3 of 4 done." />
-      </figure>
+      <HeroStage />
     </div>
   </section>
 
-  <section class="band" id="agents" aria-labelledby="agents-h">
-    <div class="wrap">
-      <div class="head">
-        <h2 id="agents-h">Every coding agent, even the one that ships tomorrow</h2>
-        <p class="sub">Install an agent's CLI and it is on the board. For one Hivemind has never seen, your agent reads its <code>--help</code> and writes the file that teaches Hivemind to run it.</p>
+  <section class="band" id="views" aria-labelledby="views-h">
+    <div class="wrap split views">
+      <div class="head reveal">
+        <p class="kicker">Views</p>
+        <h2 id="views-h">The canvas is only where it starts.</h2>
+        <p class="sub">A view draws the whole screen around the same live terminals. Ask for one and your agent writes it, in a sandbox, for you alone.</p>
+        <div class="vtabs" role="tablist" aria-label="Views written as plugins">
+          {views.map((v, i) => (
+            <button type="button" role="tab" aria-selected={i === 0 ? 'true' : 'false'} data-v={i}>
+              <b>{v.name}</b><span>{v.line}</span>
+            </button>
+          ))}
+        </div>
+        <p class="links-row"><a href={link('guide/views/')}>Make a view</a><a href={HIVEHUB}>Views on HiveHub</a></p>
       </div>
-      <ul class="agents">
-        {agents.map((a) => (
-          <li>
-            {a.icon
-              ? <svg viewBox={a.icon.viewBox} width="20" height="20" fill="currentColor" fill-rule={a.icon.fillRule} aria-hidden="true">{a.icon.paths.map((d) => <path d={d} />)}</svg>
-              : <span class="mono-mark" aria-hidden="true">{a.label.slice(0, 1)}</span>}
-            <span class="a-name">{a.label}</span>
-            <code class="a-id">{a.id}</code>
-          </li>
+      <div class="fan" data-fan>
+        {views.map((v, i) => (
+          <figure class="fan-card" data-i={i} data-pos={i}>
+            <img src={link(`shots/showcase/${v.id}.webp`)} width="800" height="500" loading="lazy" decoding="async"
+              alt={`The ${v.name} view, written as a plugin: ${v.line.toLowerCase()}`} />
+            <figcaption><span>View</span>{v.name}</figcaption>
+          </figure>
         ))}
-        <li class="a-next">
-          <span class="mono-mark" aria-hidden="true">+</span>
-          <a class="a-name" href={link('guide/agent-providers/')}>Any other</a>
-          <code class="a-id">your agent adds it</code>
-        </li>
-      </ul>
+      </div>
     </div>
   </section>
 
   <section class="band" id="plugins" aria-labelledby="plugins-h">
     <div class="wrap">
-      <div class="head">
-        <h2 id="plugins-h">Widgets, tools and views, written by your agent</h2>
-        <p class="sub"><code>hive widgets new</code> writes a starter and a <code>PROMPT.md</code>; hand the folder to your agent.</p>
+      <div class="head reveal center">
+        <p class="kicker">Widgets and tools</p>
+        <h2 id="plugins-h">Ask for a tool. It lands on the canvas, and stays up to date.</h2>
       </div>
-
-      <div class="kinds">
-        <article class="kind">
-          <Loop name="widgets" fallback={shot('showcase/waiting-on-you-board.webp', 1600, 1000)}
-            alt="The Waiting on you widget at the top of the canvas: 2 agents waiting on you, docs-utils for 11 s and binding-test for 9 s." />
-          <div class="kind-copy">
-            <h3>Widget</h3>
-            <p>A small live box above every view, with no network and no files.</p>
-            <a href={link('guide/widgets/')}>Make a widget</a>
-          </div>
-        </article>
-        <article class="kind">
-          <Loop name="tools" fallback={shot('showcase/flaky-tests-board.webp', 1600, 1000)}
+      <div class="bento">
+        <article class="b-card b-tool reveal">
+          <img src={link('shots/showcase/flaky-tests-tool.webp')} width="950" height="340" loading="lazy" decoding="async"
             alt="The Flaky tests tool on the canvas: five tests over 8 runs, two marked flaky, each with Ask an agent to fix." />
-          <div class="kind-copy">
-            <h3>Tool</h3>
-            <p>A kind of tile with the app's access, so it arrives switched off.</p>
-            <a href={link('guide/tool-plugins/')}>Make a tool</a>
-          </div>
+          <div class="b-copy"><p class="b-k">Tool</p><p>A tile with the app's access, so it arrives switched off until you turn it on.</p></div>
         </article>
-        <article class="kind">
-          <Loop name="views" fallback={shot('showcase/constellation-board.webp', 1600, 1000)}
-            alt="The Constellation view: each frame a star, its agents lights on orbits coloured by what they are doing." />
-          <div class="kind-copy">
-            <h3>View</h3>
-            <p>Draws the whole screen, sandboxed, around the real terminals. Canvas and Windows come with the app.</p>
-            <a href={link('guide/views/')}>Make a view</a>
-          </div>
+        <article class="b-card b-steps reveal">
+          <p class="b-k">How one is made</p>
+          <ol>
+            <li><span>You</span>“A widget for the release checklist.”</li>
+            <li><span>Agent</span><code>hive widgets new release</code> writes a starter and its <code>PROMPT.md</code>.</li>
+            <li><span>Agent</span>Fills it in, installs it, and updates it as the work moves.</li>
+          </ol>
+          <a href={link('guide/widgets/')}>Make a widget</a>
         </article>
-      </div>
-
-      <div class="examples">
-        <div class="ex-head">
-          <h3>Examples to start from</h3>
-          <p>On <a href={HIVEHUB}>HiveHub</a>, published from <a href="https://github.com/dip497/hivemind-plugins">hivemind-plugins</a>: install one from Settings ▸ Plugins. The agents in the pictures are stand-ins.</p>
-        </div>
-        {examples.map((group) => (
-          <div class="ex-group">
-            <h4>{group.kind}</h4>
-            <ul class={`ex-grid ${group.fit}`}>
-              {group.items.map((e) => (
-                <li>
-                  <img src={link(`shots/showcase/${e.id}.webp`)} width={e.w ?? 800} height={e.h ?? 500} loading="lazy" decoding="async" alt={e.alt ?? `The ${e.name} ${group.one}.`} />
-                  <a href={`${HIVEHUB}p/${group.scope}${e.id}`}><code>{e.id}</code></a>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {widgets.map((w) => (
+          <article class="b-card b-widget reveal">
+            <img src={link(`shots/showcase/${w.id}.webp`)} width={w.w} height={w.h} loading="lazy" decoding="async" alt={`The ${w.name} widget.`} />
+            <p class="b-name"><span>Widget</span>{w.name}</p>
+          </article>
         ))}
       </div>
-      <p class="after"><a href={HIVEHUB}>Browse the plugins on HiveHub</a></p>
+      <p class="after center">Widgets and views get no files and no network. <a href={HIVEHUB}>Browse the plugins on HiveHub</a></p>
     </div>
   </section>
 
-  <section class="band" id="waiting" aria-labelledby="waiting-h">
-    <div class="wrap">
-      <div class="head">
-        <h2 id="waiting-h">See which agent is waiting on you, and answer it</h2>
-        <p class="sub">Every tile shows whether its agent is working, finished or waiting on you.</p>
+  <section class="band" id="api" aria-labelledby="api-h">
+    <div class="wrap split rev">
+      <div class="head reveal">
+        <p class="kicker">Agents and API</p>
+        <h2 id="api-h">Everything you can click, an agent can call.</h2>
+        <p class="sub"><code>hive ctl</code> is on every agent's PATH, so agents start agents, read their replies and open tools. Your own scripts get the same API, with a token you can take back.</p>
+        <ul class="ticks">
+          <li>Agents run agents: fan out, pipe, gather.</li>
+          <li>Tokens by role: view, edit, terminals, agents.</li>
+          <li>SDKs for TypeScript and Python ship with the app.</li>
+        </ul>
+        <p class="links-row"><a href={link('guide/agent-workflows/')}>Agents running agents</a><a href={link('guide/api/')}>The API</a></p>
       </div>
-      <figure class="shot">
-        <img src={link('shots/showcase/agents-by-state.webp')} width="800" height="500" loading="lazy" decoding="async"
-          alt="Agents by state: docs-utils and binding-test wait on you for permission, five are working, three are ready, and docs-utils' prompt is open beside them." />
-      </figure>
-      <p class="after"><code>hive ctl spawn --supervise all</code> sends a Claude or Kiro worker's permission prompts to you. <a href={link('guide/agent-workflows/')}>Agents running agents</a></p>
+      <div class="codebox reveal" data-code>
+        <div class="code-tabs" role="tablist" aria-label="Ways to drive a workspace">
+          <button type="button" role="tab" aria-selected="true" data-c="ctl">hive ctl</button>
+          <button type="button" role="tab" aria-selected="false" data-c="ts">TypeScript</button>
+          <button type="button" role="tab" aria-selected="false" data-c="py">Python</button>
+        </div>
+        {Object.entries(code).map(([k, lines], i) => (
+          <pre class="code" data-pane={k} hidden={i !== 0}>{lines.map(([kind, text]) => (
+            <span class={`l ${kind}`}>{kind === 'p' && <span class="pr">$ </span>}{text}{'\n'}</span>
+          ))}</pre>
+        ))}
+      </div>
     </div>
   </section>
 
-  <section class="band" id="elsewhere" aria-labelledby="elsewhere-h">
+  <section class="band" id="reach" aria-labelledby="reach-h">
     <div class="wrap">
-      <div class="head">
-        <h2 id="elsewhere-h">On your other machines, and on your other screens</h2>
+      <div class="head reveal center">
+        <p class="kicker">Anywhere</p>
+        <h2 id="reach-h">Your machines. Your phone. Your people.</h2>
+        <p class="sub">Every hop is a machine you run. No server of ours sits in the path.</p>
       </div>
-
-      <div class="row">
-        <Loop name="machines"
-          alt="Agents in frames, one of them on a machine reached over ssh." />
-        <div class="row-copy">
-          <h3>Machines over ssh</h3>
-          <p>Open a folder on a Linux machine over your own ssh; its terminals and agents run there.</p>
-          <pre class="cmd"><span class="w">$</span> hive machine add dev@build-box <span class="g">--label</span> build <span class="g">--install</span></pre>
+      <div class="reach">
+        <article class="r-card r-phone reveal">
+          <div class="phone"><img src={link('shots/phone-home.webp')} width="780" height="1688" loading="lazy" decoding="async"
+            alt="The phone page's Home: a permission card for Editing Nav.tsx with Allow and Deny, above a list of agents." /></div>
+          <div class="r-copy">
+            <h3>On your phone</h3>
+            <p>Follow your agents and answer them from your phone's browser, through a <code>hive-net</code> server of yours.</p>
+            <a href={link('guide/phone/')}>Set up the phone page</a>
+          </div>
+        </article>
+        <article class="r-card reveal">
+          <h3>On your other machines</h3>
+          <p>Open a folder on a Linux box over your own ssh. Its terminals and agents run there.</p>
+          <pre class="mini"><span class="pr">$ </span>hive machine add dev@build-box --install</pre>
           <a href={link('guide/machines/')}>Add a machine</a>
-        </div>
-      </div>
-
-      <div class="row flip">
-        <Loop name="devices"
-          alt="The same agent's permission prompt on the desktop, in a browser tab and on a phone." />
-        <div class="row-copy">
-          <h3>The same workspace on desktop, browser and phone</h3>
-          <p>The app, a browser tab on the same computer, or your phone.</p>
-          <a href={link('guide/browser-tab/')}>Open it in a browser</a>
-        </div>
-      </div>
-
-      <div class="row" id="phone">
-        <Loop name="phone" fallback={{ file: 'phone-home.webp', width: 780, height: 1688, fit: 'contain' }}
-          alt="The phone page's Home: a permission card for Editing Nav.tsx with Allow and Deny." />
-        <div class="row-copy">
-          <h3>Answer from your phone</h3>
-          <p>Answer your agents from your phone's browser, through a <code>hive-net</code> server of yours.</p>
-          <a href={link('guide/phone/')}>Set up the phone page</a>
-        </div>
-      </div>
-
-      <div class="row flip">
-        <Loop name="join"
-          alt="A shared workspace open in a second person's Hivemind." />
-        <div class="row-copy">
-          <h3>Someone joins your workspace</h3>
-          <p>Send an invite link; if both screens show the same three words, you choose what they may do.</p>
-          <pre class="cmd"><span class="w">$</span> hive share ~/work/api <span class="g">--role</span> edit <span class="g">--uses</span> 3 <span class="g">--expires</span> 2d</pre>
+        </article>
+        <article class="r-card reveal">
+          <h3>With someone else</h3>
+          <p>Send an invite link. If both screens show the same three words, you choose what they may do.</p>
+          <pre class="mini"><span class="pr">$ </span>hive share ~/work/api --role edit --expires 2d</pre>
           <a href={link('guide/multiplayer/')}>Share a workspace</a>
-        </div>
+        </article>
       </div>
     </div>
   </section>
 
-  <section class="band" id="yours" aria-labelledby="yours-h">
+  <section class="band" id="agents" aria-labelledby="agents-h">
     <div class="wrap">
-      <div class="head">
-        <h2 id="yours-h">Yours, not ours</h2>
-        <p class="sub">Your agents, your keys, your machines. No account and no server of ours.</p>
+      <div class="head reveal center">
+        <p class="kicker">Agents</p>
+        <h2 id="agents-h">Every coding agent, even the one that ships tomorrow.</h2>
+        <p class="sub">Install its CLI and it is on the board. For one Hivemind has never seen, your agent reads its <code>--help</code> and writes the file that teaches Hivemind to run it.</p>
       </div>
-      <div class="yours">
-        <figure class="map" aria-labelledby="map-cap">
-          <svg viewBox="0 0 560 300" role="img" aria-labelledby="map-cap">
-            <g class="m-box"><rect x="1" y="20" width="168" height="84" rx="8" /></g>
-            <text class="m-lab" x="16" y="46">YOUR PHONE</text>
-            <text class="m-txt" x="16" y="72">phone page</text>
-            <text class="m-dim" x="16" y="92">in its browser</text>
-
-            <g class="m-box"><rect x="196" y="20" width="168" height="84" rx="8" /></g>
-            <text class="m-lab" x="211" y="46">YOUR SERVER</text>
-            <text class="m-txt" x="211" y="72">hive-net serve</text>
-            <text class="m-dim" x="211" y="92">reads none of it</text>
-
-            <g class="m-box"><rect x="391" y="20" width="168" height="84" rx="8" /></g>
-            <text class="m-lab" x="406" y="46">YOUR COMPUTER</text>
-            <text class="m-txt" x="406" y="72">Hivemind</text>
-            <circle class="m-dot ok" cx="410" cy="88" r="4" /><circle class="m-dot work" cx="424" cy="88" r="4" /><circle class="m-dot wait" cx="438" cy="88" r="4" />
-
-            <path class="m-line" d="M170 62 H195" /><path class="m-line" d="M365 62 H390" />
-            <text class="m-dim" x="170" y="128">https</text>
-            <text class="m-dim" x="300" y="128">end-to-end encrypted</text>
-
-            <g class="m-box"><rect x="391" y="196" width="168" height="84" rx="8" /></g>
-            <text class="m-lab" x="406" y="222">YOUR MACHINES</text>
-            <text class="m-txt" x="406" y="248">hive daemon</text>
-            <text class="m-dim" x="406" y="268">over your ssh</text>
-            <path class="m-line" d="M475 105 V195" />
-          </svg>
-          <figcaption id="map-cap">Everything in the path is a machine you run.</figcaption>
-        </figure>
-        <dl class="facts">
-          <dt>MIT licensed</dt>
-          <dd>The app, <code>hive</code> and <code>hive-net</code>, in one repository. <a href={repo}>Read the source</a>.</dd>
-          <dt>Your own server for the phone</dt>
-          <dd><code>hive-net</code> relays traffic it cannot read. <a href={link('guide/self-hosting/')}>Run your own</a>.</dd>
-          <dt>What a plugin can touch</dt>
-          <dd>Views and widgets have no files or network; a tool stays off until you switch it on.</dd>
-        </dl>
-      </div>
+      <ul class="dock reveal" aria-label="Agents Hivemind finds on its own">
+        {agents.map((a) => (
+          <li title={a.label}>
+            {a.icon
+              ? <svg viewBox={a.icon.viewBox} width="22" height="22" fill="currentColor" fill-rule={a.icon.fillRule as any} aria-hidden="true">{a.icon.paths.map((d) => <path d={d} />)}</svg>
+              : <span class="mono-mark" aria-hidden="true">{a.label.slice(0, 1)}</span>}
+            <span class="d-name">{a.label}</span>
+          </li>
+        ))}
+        <li class="d-next"><a href={link('guide/agent-providers/')}><span class="mono-mark" aria-hidden="true">+</span><span class="d-name">Yours</span></a></li>
+      </ul>
     </div>
   </section>
 
   <section class="band" id="numbers" aria-labelledby="numbers-h">
     <div class="wrap">
-      <div class="head">
-        <h2 id="numbers-h">Measured, with the load it ran under</h2>
-        <p class="sub">From the <a href={changelog}>2026.10.3 changelog</a>, on 16 CPUs.</p>
+      <div class="head reveal">
+        <p class="kicker">Measured</p>
+        <h2 id="numbers-h">Fast with many agents, measured under load.</h2>
+        <p class="sub">From the <a href={changelog}>2026.10.3 changelog</a>, on 16 CPUs, with the load each ran under.</p>
       </div>
-      <table class="nums">
-        <thead><tr><th scope="col">Result</th><th scope="col">What was measured</th><th scope="col">Load</th></tr></thead>
-        <tbody>
-          <tr><td>3–7 ms</td><td>Key echo while another terminal prints 10 MB (was 162 ms).</td><td>22–50</td></tr>
-          <tr><td>11–39 ms</td><td>Longest daemon pause with 30 terminals on screen (was 2.3–2.7 s).</td><td>12–16</td></tr>
-          <tr><td>0.23 ms</td><td>Cost of one agent event, with 72 or 600 agents (was 1.9 ms).</td><td>about 100</td></tr>
-          <tr><td>10 ms</td><td>Your phone's agent list for 600 agents (was 1.6 s).</td><td>about 80</td></tr>
-        </tbody>
-      </table>
+      <dl class="nums reveal">
+        <div><dt>3–7 ms</dt><dd>Key echo while another terminal prints 10 MB. It was 162 ms.</dd></div>
+        <div><dt>0.23 ms</dt><dd>Cost of one agent event, the same with 72 or 600 agents. It was 1.9 ms.</dd></div>
+        <div><dt>10 ms</dt><dd>Your phone's agent list for 600 agents. It was 1.6 s.</dd></div>
+      </dl>
     </div>
   </section>
 
   <section class="band" id="faq" aria-labelledby="faq-h">
-    <div class="wrap">
-      <div class="head"><h2 id="faq-h">Questions</h2></div>
-      <dl class="faq">
-        <dt>Why not roll my own?</dt>
-        <dd>You can, here. Hivemind keeps the terminals and agents alive; you write the rest.</dd>
-        <dt>Does my code go anywhere?</dt>
-        <dd>No. Agents run on your computer or your ssh machines.</dd>
-        <dt>Which platforms does it run on?</dt>
-        <dd>Linux x86_64, macOS on Apple Silicon and Windows x64; an Intel Mac or Linux arm64 builds with <code>--dev</code>.</dd>
-        <dt>Is there a phone app?</dt>
-        <dd>Not a published one; the phone page runs in your browser.</dd>
-        <dt>Which agents work with it?</dt>
-        <dd>Any coding agent that runs in a terminal. The ones below are found on their own; your agent adds any other in one file.</dd>
-      </dl>
+    <div class="wrap faq-wrap">
+      <h2 id="faq-h" class="reveal">Questions</h2>
+      <div class="faq">
+        <details><summary>Why not roll my own?</summary><p>You can, here. Hivemind keeps the terminals and agents alive; you and your agents write the rest.</p></details>
+        <details><summary>Does my code go anywhere?</summary><p>No. Agents run on your computer or your ssh machines.</p></details>
+        <details><summary>What can a plugin touch?</summary><p>Views and widgets have no files and no network. A tool stays off until you switch it on.</p></details>
+        <details><summary>Which platforms does it run on?</summary><p>Linux x86_64, macOS on Apple Silicon and Windows x64. An Intel Mac or Linux arm64 builds with <code>--dev</code>.</p></details>
+        <details><summary>Is there a phone app?</summary><p>Not a published one. The phone page runs in your phone's browser.</p></details>
+      </div>
     </div>
   </section>
 
   <section class="band dl" id="download" aria-labelledby="download-h">
     <div class="wrap">
-      <div class="head">
-        <h2 id="download-h">Download Hivemind</h2>
+      <div class="dl-head reveal">
+        <h2 id="download-h">Start with one repo.</h2>
         <p class="sub">One command installs the app and the <code>hive</code> CLI.</p>
       </div>
       <div class="dl-grid">
@@ -375,254 +328,320 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
           <p class="dl-note">Run least so far.</p>
         </article>
       </div>
-      <p class="dl-more">CLI only: <a href={dl('cli-linux-x86_64')}>Linux x86_64</a>, <a href={dl('cli-linux-arm64')}>Linux arm64</a>, <a href={dl('cli-macos-arm64')}>macOS</a>, <a href={dl('cli-windows-x64')}>Windows</a>. <a href={dl('notes')}>Release notes</a>.</p>
-    </div>
-  </section>
-
-  <section class="close">
-    <div class="wrap close-in">
-      <h2>Start with one repo.</h2>
-      <div class="cta">
-        <a class="btn primary" href="#download">Download</a>
-        <a class="btn ghost" href={link('guide/getting-started/')}>Read the quickstart</a>
-      </div>
+      <p class="dl-more">CLI only: <a href={dl('cli-linux-x86_64')}>Linux x86_64</a>, <a href={dl('cli-linux-arm64')}>Linux arm64</a>, <a href={dl('cli-macos-arm64')}>macOS</a>, <a href={dl('cli-windows-x64')}>Windows</a>. <a href={dl('notes')}>Release notes</a>. <a href={link('guide/getting-started/')}>Quickstart</a>.</p>
     </div>
   </section>
 </main>
 
 <footer class="foot">
-  <div class="wrap foot-in">
-    <span>Hivemind, MIT licensed.</span>
-    <nav aria-label="Footer">
-      <a href={link('guide/')}>Docs</a>
-      <a href={link('guide/cli/')}>CLI reference</a>
-      <a href={HIVEHUB}>HiveHub</a>
-      <a href={link('guide/docs-for-agents/')}>For agents</a>
-      <a href={repo}>GitHub</a>
-    </nav>
+  <div class="wrap">
+    <div class="foot-in">
+      <span>Hivemind, MIT licensed.</span>
+      <nav aria-label="Footer">
+        <a href={link('guide/')}>Docs</a>
+        <a href={link('guide/cli/')}>CLI reference</a>
+        <a href={HIVEHUB}>HiveHub</a>
+        <a href={link('guide/docs-for-agents/')}>For agents</a>
+        <a href={repo}>GitHub</a>
+      </nav>
+    </div>
+    <p class="wordmark" aria-hidden="true">Hivemind</p>
   </div>
 </footer>
 
 <script is:inline>
-  // This computer's card goes first; a wrong guess costs nothing, and no script loses nothing.
+  // This computer's card goes first and the hero button names it; a wrong guess costs nothing.
   (() => {
-    const grid = document.querySelector('.dl-grid');
-    if (!grid) return;
     const ua = navigator.userAgent;
-    const os = /Windows|Win32|Win64/.test(ua) ? 'windows' : /Mac OS X|Macintosh/.test(ua) ? 'macos' : /Linux|X11|CrOS/.test(ua) ? 'linux' : null;
-    const mine = os && grid.querySelector(`.dl-card[data-os="${os}"]`);
+    const os = /Windows|Win32|Win64/.test(ua) ? 'windows' : /Mac OS X|Macintosh/.test(ua) ? 'macos' : /Linux|X11|CrOS/.test(ua) && !/Android/.test(ua) ? 'linux' : null;
+    const name = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }[os];
+    const btn = document.querySelector('[data-dl-label]');
+    if (btn && name) btn.textContent = `Download for ${name}`;
+    const grid = document.querySelector('.dl-grid');
+    const mine = os && grid && grid.querySelector(`.dl-card[data-os="${os}"]`);
     if (!mine) return;
     mine.dataset.me = '1';
     mine.querySelector('h3')?.insertAdjacentHTML('beforeend', ' <span class="dl-me">this computer</span>');
     grid.prepend(mine);
   })();
-  document.querySelectorAll('.copy').forEach((b) => {
+  document.querySelectorAll('.copy, .copy-prompt').forEach((b) => {
     b.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(b.dataset.copy);
         const was = b.textContent;
-        b.textContent = 'Copied'; b.dataset.done = '';
+        b.textContent = b.dataset.label || 'Copied'; b.dataset.done = '';
         setTimeout(() => { b.textContent = was; delete b.dataset.done; }, 1600);
       } catch { /* clipboard blocked: the command is still selectable */ }
     });
   });
 </script>
 
-<style is:global>
-  @import "../styles/workspace.css";
+<script>
+  // Views: a fanned stack of real views; a tab brings one forward, and it turns on its own while in sight.
+  const fan = document.querySelector<HTMLElement>('[data-fan]');
+  const vtabs = [...document.querySelectorAll<HTMLButtonElement>('.vtabs [role="tab"]')];
+  if (fan && vtabs.length) {
+    const cards = [...fan.querySelectorAll<HTMLElement>('.fan-card')];
+    let at = 0, auto = true, timer = 0;
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const go = (i: number) => {
+      at = i;
+      cards.forEach((c, j) => { c.dataset.pos = String((j - i + cards.length) % cards.length); });
+      vtabs.forEach((t, j) => t.setAttribute('aria-selected', String(j === i)));
+    };
+    vtabs.forEach((t, i) => t.addEventListener('click', () => { auto = false; go(i); }));
+    cards.forEach((c, i) => c.addEventListener('click', () => { auto = false; go(i); }));
+    if (!still) new IntersectionObserver(([e]) => {
+      clearInterval(timer);
+      if (e.isIntersecting) timer = window.setInterval(() => { if (auto) go((at + 1) % cards.length); }, 3200);
+    }, { threshold: 0.4 }).observe(fan);
+  }
+  // Code: three ways to say the same thing.
+  const box = document.querySelector<HTMLElement>('[data-code]');
+  if (box) {
+    const tabs = [...box.querySelectorAll<HTMLButtonElement>('[data-c]')];
+    tabs.forEach((t) => t.addEventListener('click', () => {
+      tabs.forEach((x) => x.setAttribute('aria-selected', String(x === t)));
+      box.querySelectorAll<HTMLElement>('[data-pane]').forEach((p) => { p.hidden = p.dataset.pane !== t.dataset.c; });
+    }));
+  }
+</script>
 
+<style is:global>
   :root{
-    --bg:   oklch(0.165 0.004 250);
-    --bg2:  oklch(0.19 0.004 250);
-    --bg3:  oklch(0.215 0.005 250);
-    --line: oklch(0.262 0.006 250);
-    --line2:oklch(0.34 0.008 250);
-    --fg:   oklch(0.93 0.003 250);
-    --fg2:  oklch(0.83 0.005 250);
-    --fg3:  oklch(0.70 0.008 250);
-    --gut: 32px;
+    --f:"Geist",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --f-m:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --ease-move:cubic-bezier(0.77,0,0.175,1);
+    --glow:oklch(0.62 0.05 250);
+    --gut:32px;
+    color-scheme:dark;
   }
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth;scroll-padding-top:72px;scrollbar-color:var(--line2) var(--bg)}
+  html{scroll-behavior:smooth;scroll-padding-top:72px;scrollbar-color:var(--line2) var(--bg);overflow-x:clip}
   body{margin:0;background:var(--bg);color:var(--fg2);font-family:var(--f);font-size:16px;line-height:1.6;
-    -webkit-font-smoothing:antialiased;caret-color:var(--idle)}
+    -webkit-font-smoothing:antialiased;overflow-x:clip}
   a{color:inherit;text-underline-offset:3px;text-decoration-thickness:1px}
-  ::selection{background:color-mix(in oklab,var(--idle) 35%,transparent);color:var(--fg)}
-  :focus-visible{outline:2px solid var(--idle);outline-offset:3px;border-radius:3px}
+  ::selection{background:color-mix(in oklab,var(--fg) 25%,transparent);color:var(--fg)}
+  :focus-visible{outline:2px solid var(--fg2);outline-offset:3px;border-radius:3px}
   .skip{position:absolute;left:16px;top:-60px;background:var(--fg);color:var(--bg);padding:10px 14px;z-index:200;border-radius:5px}
   .skip:focus{top:12px}
   .wrap{max-width:1240px;margin:0 auto;padding:0 var(--gut)}
 
-  h1,h2,h3{color:var(--fg);margin:0;text-wrap:balance;font-weight:600}
-  h1{font-size:clamp(38px,5.4vw,68px);line-height:1.02;letter-spacing:-.034em;max-width:15ch}
-  h2{font-size:clamp(26px,2.9vw,38px);line-height:1.12;letter-spacing:-.026em;max-width:24ch}
-  h3{font-size:18px;line-height:1.3;letter-spacing:-.012em}
+  h1,h2,h3{color:var(--fg);margin:0;text-wrap:balance}
+  h1{font-size:clamp(42px,6.4vw,92px);line-height:.98;letter-spacing:-.045em;font-weight:700;max-width:14ch}
+  h2{font-size:clamp(32px,4.4vw,60px);line-height:1.02;letter-spacing:-.04em;font-weight:700;max-width:17ch}
+  h3{font-size:19px;line-height:1.3;letter-spacing:-.015em;font-weight:600}
   p{margin:0}
-  code,kbd,.cmd{font-family:var(--f-m)}
-  :not(pre)>code{font-size:.9em;color:var(--fg);white-space:nowrap}
-  kbd{font-size:.82em;border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--fg)}
-  .sub{font-size:17px;line-height:1.6;color:var(--fg3);max-width:62ch;margin-top:16px;text-wrap:pretty}
-  .sub a,.facts a,.dl-more a,.after a,.kind-copy a,.row-copy a{color:var(--fg);text-decoration:underline;text-decoration-color:var(--line2)}
+  code,.code,.mini{font-family:var(--f-m)}
+  :not(pre)>code{font-size:.88em;color:var(--fg);white-space:nowrap}
+  .sub{font-size:18px;line-height:1.55;color:var(--fg3);max-width:52ch;margin-top:20px;text-wrap:pretty}
+  .sub a,.after a,.dl-more a,.links-row a,.r-card a,.b-steps a{color:var(--fg);text-decoration:underline;text-decoration-color:var(--line2)}
   @media (hover:hover) and (pointer:fine){
-    .sub a:hover,.facts a:hover,.dl-more a:hover,.after a:hover,.kind-copy a:hover,.row-copy a:hover{text-decoration-color:var(--fg2)}
+    .sub a:hover,.after a:hover,.dl-more a:hover,.links-row a:hover,.r-card a:hover,.b-steps a:hover{text-decoration-color:var(--fg2)}
   }
+  .kicker{font:500 12px/1 var(--f-m);letter-spacing:.12em;text-transform:uppercase;color:var(--fg3);margin-bottom:18px}
 
-  /* Chrome: a hairline under an opaque bar, as the app draws its own. */
-  .nav{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--line)}
+  .nav{position:sticky;top:0;z-index:50;background:color-mix(in oklab,var(--bg) 82%,transparent);
+    backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid var(--line)}
   .nav-in{max-width:1240px;margin:0 auto;padding:0 var(--gut);height:56px;display:flex;align-items:center;gap:24px}
   .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;color:var(--fg);text-decoration:none;letter-spacing:-.01em}
   .links{display:flex;gap:22px;margin-left:auto;font-size:14px}
-  .links a{color:var(--fg3);text-decoration:none;transition:color var(--d2) ease}
+  .links a{color:var(--fg3);text-decoration:none;transition:color .15s ease}
   @media (hover:hover) and (pointer:fine){ .links a:hover{color:var(--fg)} }
 
-  .btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 18px;
-    border-radius:6px;font-size:14px;font-weight:500;text-decoration:none;border:1px solid transparent;white-space:nowrap;
-    transition-property:background-color,border-color,transform;transition-duration:var(--d2);transition-timing-function:ease}
-  .btn.small{height:32px;padding:0 13px;font-size:13px;border-color:var(--line2);color:var(--fg)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 20px;
+    border-radius:8px;font-size:15px;font-weight:600;text-decoration:none;border:1px solid transparent;white-space:nowrap;
+    transition-property:background-color,border-color,transform,box-shadow;transition-duration:.15s;transition-timing-function:ease}
+  .btn.small{height:32px;padding:0 13px;font-size:13px;font-weight:500;border-color:var(--line2);color:var(--fg);border-radius:6px}
   .btn:active{transform:scale(.97)}
-  .btn.primary{background:var(--fg);color:var(--bg)}
-  .btn.ghost{border-color:var(--line2);color:var(--fg)}
+  .btn.primary{background:var(--fg);color:var(--bg);box-shadow:0 0 0 1px oklch(1 0 0 / .1),0 8px 28px -6px oklch(0.93 0.004 250 / .35)}
   @media (hover:hover) and (pointer:fine){
-    .btn.primary:hover{background:var(--fg2)}
-    .btn.ghost:hover,.btn.small:hover{border-color:var(--fg3)}
+    .btn.primary:hover{background:oklch(1 0 0);box-shadow:0 0 0 1px oklch(1 0 0 / .2),0 10px 36px -6px oklch(0.93 0.004 250 / .5)}
+    .btn.small:hover{border-color:var(--fg3)}
   }
 
-  /* The install line is a terminal, so it is drawn as one. */
-  .install{display:flex;align-items:center;gap:12px;min-width:0;height:40px;padding:0 6px 0 14px;
-    background:var(--bg2);border:1px solid var(--line);border-radius:6px;font-size:13px}
+  .install{display:flex;align-items:center;gap:12px;min-width:0;height:44px;padding:0 6px 0 14px;
+    background:var(--bg2);border:1px solid var(--line2);border-radius:8px;font-size:13px}
   .install code{color:var(--fg2);white-space:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0}
   .install code::-webkit-scrollbar{display:none}
   .install code::before{content:"$ ";color:var(--fg3)}
   .copy{margin-left:auto;flex-shrink:0;font:500 12px/1 var(--f-m);cursor:pointer;color:var(--fg3);background:transparent;
-    border:1px solid var(--line2);border-radius:4px;padding:6px 10px;transition:color var(--d2) ease,border-color var(--d2) ease}
-  .copy[data-done]{color:var(--ok);border-color:color-mix(in oklab,var(--ok) 45%,transparent)}
+    border:1px solid var(--line2);border-radius:5px;padding:8px 10px;transition:color .15s ease,border-color .15s ease}
+  .copy[data-done]{color:var(--st-done);border-color:color-mix(in oklab,var(--st-done) 45%,transparent)}
   @media (hover:hover) and (pointer:fine){ .copy:hover{color:var(--fg);border-color:var(--fg3)} }
 
-  /* Hero: the sentence, the command, then the product as large as the page allows. */
-  .hero{padding:96px 0 112px}
-  .hero-copy{max-width:760px}
-  .lede{font-size:clamp(18px,1.45vw,21px);line-height:1.5;color:var(--fg2);max-width:52ch;margin-top:24px;text-wrap:pretty}
-  .hero-act{display:flex;gap:10px;margin-top:36px;max-width:640px}
+  /* Hero: one sentence, the command, and the workspace changing shape under it. */
+  .hero{position:relative;padding:48px 0 96px;overflow:clip}
+  .hero-copy{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.85fr);gap:24px 56px;align-items:end;margin:0 0 44px}
+  .hero h1{font-size:clamp(42px,4.6vw,68px);max-width:14ch}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 12.5px/1 var(--f-m);color:var(--fg2);
+    padding:7px 12px;border:1px solid var(--line2);border-radius:999px;background:var(--bg2);margin-bottom:20px}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--st-done);box-shadow:0 0 10px var(--st-done)}
+  .lede{font-size:clamp(17px,1.35vw,19.5px);line-height:1.5;color:var(--fg2);max-width:40ch;text-wrap:pretty}
+  .hero-act{display:flex;gap:10px;margin-top:24px}
   .hero-act .install{flex:1 1 auto}
-  .fine{margin-top:14px;font-size:14px;color:var(--fg3)}
-  .hero-media{margin:72px 0 0}
+  .fine{margin-top:12px;font-size:14px;color:var(--fg3)}
+  .copy-prompt{font:inherit;color:var(--fg2);background:none;border:0;padding:0;margin-left:6px;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
+  .copy-prompt[data-done]{color:var(--st-done);text-decoration:none}
+  @media (hover:hover) and (pointer:fine){.copy-prompt:hover{color:var(--fg)}}
+  @media (prefers-reduced-motion:no-preference){
+    .hero-say>*,.hero-do>*{animation:rise .8s var(--ease) both}
+    .hero-do>:nth-child(1){animation-delay:.08s}
+    .hero-do>:nth-child(2){animation-delay:.14s}
+    .hero-do>:nth-child(n+3){animation-delay:.2s}
+    @keyframes rise{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+  }
+  @media (max-width:1000px){
+    .hero-copy{grid-template-columns:minmax(0,1fr)}
+  }
 
-  /* Sections: one ground, divided by hairlines. */
-  .band{padding:120px 0;border-top:1px solid var(--line)}
-  .head{margin-bottom:48px}
-  .after{margin-top:28px;font-size:15px;color:var(--fg3)}
+  .band{padding:136px 0;border-top:1px solid var(--line);position:relative}
+  .head{margin-bottom:56px}
+  .center{text-align:center}
+  .head.center{display:grid;justify-items:center}
+  .head.center .sub{margin-inline:auto}
+  .after{margin-top:32px;font-size:15px;color:var(--fg3)}
+  .links-row{display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:28px;font-size:15px}
+  .split{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr);gap:64px;align-items:center}
+  .split.rev{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+  .split .head{margin:0}
+  .split.views{grid-template-columns:minmax(0,.72fr) minmax(0,1.45fr)}
 
-  .cmd{margin:0;font-size:12.5px;line-height:1.8;color:var(--fg2);background:var(--bg2);border:1px solid var(--line);
-    border-radius:6px;padding:14px 16px;white-space:pre-wrap;word-break:keep-all;overflow-wrap:normal;min-width:0}
-  .cmd .w,.cmd .c{color:var(--fg3)}
-  .cmd .g{color:var(--idle);white-space:nowrap}
-  .cmd .s{color:var(--ok)}
+  /* Scroll reveals: visible by default; only browsers that can tie them to scroll animate. */
+  @supports (animation-timeline: view()){
+    @media (prefers-reduced-motion:no-preference){
+      .reveal{animation:reveal linear both;animation-timeline:view();animation-range:entry 0% entry 55%}
+      @keyframes reveal{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+    }
+  }
 
-  /* Agents: the same marks the app draws, one tile each. */
-  .agents{list-style:none;margin:0;padding:0;display:grid;border:1px solid var(--line);
-    border-radius:8px;overflow:hidden;grid-template-columns:repeat(auto-fill,minmax(176px,1fr))}
-  .agents li{display:grid;grid-template-columns:20px minmax(0,1fr);column-gap:12px;align-items:center;padding:16px 18px;
-    margin:0 -1px -1px 0;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
-  .agents svg{color:var(--fg)}
-  .mono-mark{width:20px;height:20px;display:grid;place-items:center;border:1px solid var(--line2);border-radius:4px;
-    font:500 11px/1 var(--f-m);color:var(--fg)}
-  .a-name{color:var(--fg);font-size:15px;font-weight:500}
-  .a-id{grid-column:2;font-size:12px;color:var(--fg3) !important}
-  .a-next .mono-mark{border-style:dashed}
-  .a-next .a-name{text-decoration:underline;text-decoration-color:var(--line2)}
-  .a-next .a-name:hover{text-decoration-color:var(--fg2)}
+  /* Views: a fanned stack in depth. */
+  .vtabs{display:grid;gap:4px;margin-top:32px}
+  .vtabs button{display:grid;gap:2px;text-align:left;font:inherit;background:transparent;border:0;border-left:2px solid var(--line);
+    padding:10px 0 10px 16px;cursor:pointer;color:var(--fg3);transition:border-color .2s,color .2s}
+  .vtabs b{font-weight:600;color:var(--fg2);font-size:16px}
+  .vtabs span{font-size:14.5px}
+  .vtabs [aria-selected="true"]{border-left-color:var(--fg)}
+  .vtabs [aria-selected="true"] b{color:var(--fg)}
+  @media (hover:hover) and (pointer:fine){.vtabs button:hover b{color:var(--fg)}}
+  .fan{position:relative;aspect-ratio:16/11.5;perspective:1600px}
+  .fan::before{content:"";position:absolute;inset:-10%;background:radial-gradient(50% 45% at 50% 50%,oklch(0.62 0.05 250 / .22),transparent 70%);pointer-events:none}
+  .fan-card{position:absolute;left:1%;top:20%;width:86%;margin:0;border-radius:12px;overflow:hidden;cursor:pointer;
+    border:1px solid var(--line2);background:var(--term);box-shadow:var(--sh3);transform-origin:50% 100%;
+    transition:transform .8s var(--ease),filter .6s var(--ease)}
+  .fan-card img{display:block;width:100%;height:auto}
+  .fan-card figcaption{position:absolute;left:12px;bottom:12px;display:flex;gap:8px;align-items:center;font:500 12px/1 var(--f);
+    color:var(--fg);padding:7px 10px;border-radius:999px;background:oklch(0.17 0.004 250 / .85);border:1px solid var(--line2)}
+  .fan-card figcaption span{font-family:var(--f-m);color:var(--fg3);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px}
+  .fan-card[data-pos="0"]{z-index:4;transform:rotateX(6deg) rotateY(-12deg)}
+  .fan-card[data-pos="1"]{z-index:3;transform:rotateX(6deg) rotateY(-12deg) translate3d(6%,-9%,-110px);filter:brightness(.6)}
+  .fan-card[data-pos="2"]{z-index:2;transform:rotateX(6deg) rotateY(-12deg) translate3d(12%,-18%,-220px);filter:brightness(.42)}
+  .fan-card[data-pos="3"]{z-index:1;transform:rotateX(6deg) rotateY(-12deg) translate3d(18%,-27%,-330px);filter:brightness(.28)}
 
-  /* Plugins: three kinds, each a clip beside what it is. */
-  .kinds{display:grid;gap:72px}
-  .kind{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:48px;align-items:center}
-  .kind:nth-child(2){grid-template-columns:minmax(0,1fr) minmax(0,1.6fr)}
-  .kind:nth-child(2) > .loop{order:2}
-  .kind-copy{display:grid;gap:12px;justify-items:start;font-size:16px;color:var(--fg3);max-width:44ch}
-  .kind-copy h3{font-family:var(--f-m);font-size:13px;font-weight:500;letter-spacing:.02em;color:var(--fg2)}
-  .kind-copy > p:first-of-type{font-size:19px;line-height:1.45;color:var(--fg);letter-spacing:-.01em}
+  /* Widgets and tools: a bento of the real things. */
+  .bento{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+  .b-card{position:relative;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--bg2),var(--bg));overflow:hidden;min-width:0}
+  .b-tool{grid-column:span 3;display:grid;grid-template-rows:1fr auto;background:var(--term)}
+  .b-tool img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
+  .b-copy{padding:18px 22px;border-top:1px solid var(--line);display:flex;gap:16px;align-items:baseline;color:var(--fg2)}
+  .b-k{font:500 11px/1 var(--f-m);letter-spacing:.1em;text-transform:uppercase;color:var(--fg3);flex:none}
+  .b-steps{grid-row:span 2;padding:24px;display:grid;align-content:start;gap:18px}
+  .b-steps ol{list-style:none;margin:0;padding:0;display:grid;gap:16px;counter-reset:s}
+  .b-steps li{display:grid;gap:4px;color:var(--fg);font-size:15px;line-height:1.45;padding-left:28px;position:relative;counter-increment:s}
+  .b-steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;
+    border:1px solid var(--line2);font:500 11px/17px var(--f-m);text-align:center;color:var(--fg3)}
+  .b-steps li span{font:500 11px/1 var(--f-m);letter-spacing:.08em;text-transform:uppercase;color:var(--fg3)}
+  .b-steps li code{white-space:normal}
+  .b-steps a{font-size:14px;margin-top:auto}
+  .b-widget{display:grid;place-items:center;padding:18px 18px 44px;aspect-ratio:1/1}
+  .b-widget img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:10px}
+  .b-name{position:absolute;left:16px;bottom:14px;font-size:13.5px;color:var(--fg);display:flex;gap:8px;align-items:baseline}
+  .b-name span{font:500 10.5px/1 var(--f-m);letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}
+  @media (hover:hover) and (pointer:fine){
+    .b-card{transition:border-color .2s,transform .3s var(--ease)}
+    .b-card:hover{border-color:var(--line2);transform:translateY(-2px)}
+  }
 
-  /* Examples: real screenshots, grouped by kind. */
-  .examples{margin-top:96px;padding-top:56px;border-top:1px solid var(--line)}
-  .ex-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:48px;align-items:baseline;margin-bottom:40px}
-  .ex-head h3{font-size:24px;letter-spacing:-.02em}
-  .ex-head p{font-size:15.5px;color:var(--fg3);max-width:62ch}
-  .ex-head a{color:var(--fg);text-decoration:underline;text-decoration-color:var(--line2)}
-  .ex-group + .ex-group{margin-top:48px}
-  .ex-group h4{margin:0 0 16px;font:500 13px var(--f-m);color:var(--fg2)}
-  .ex-grid{list-style:none;margin:0;padding:0;display:grid;gap:32px 20px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
-  .ex-grid li{display:grid;gap:8px;align-content:start}
-  .ex-grid img{display:block;width:100%;height:auto;aspect-ratio:16/10;object-fit:cover;object-position:top;
-    border:1px solid var(--line);border-radius:8px;background:#0b0d10}
-  .ex-grid.contain img{object-fit:contain;padding:10px}
-  .ex-grid code{font-size:12.5px;color:var(--fg);margin-top:4px}
+  /* Agents and API */
+  .ticks{list-style:none;margin:28px 0 0;padding:0;display:grid;gap:10px;color:var(--fg2);font-size:15.5px}
+  .ticks li{padding-left:24px;position:relative}
+  .ticks li::before{content:"";position:absolute;left:2px;top:.55em;width:8px;height:8px;border-radius:2px;background:var(--fg3)}
+  .codebox{border:1px solid var(--line2);border-radius:14px;background:var(--term);box-shadow:var(--sh3),0 30px 90px -30px oklch(0.62 0.05 250 / .35);overflow:hidden;min-width:0}
+  .code-tabs{display:flex;gap:2px;padding:8px;border-bottom:1px solid var(--line);background:var(--bg2)}
+  .code-tabs button{font:500 12.5px/1 var(--f-m);color:var(--fg3);background:transparent;border:1px solid transparent;border-radius:6px;padding:8px 12px;cursor:pointer}
+  .code-tabs [aria-selected="true"]{color:var(--fg);background:var(--bg3);border-color:var(--line2)}
+  .code{margin:0;padding:22px 24px 26px;font-size:13.5px;line-height:1.85;color:var(--fg2);overflow-x:auto;white-space:pre}
+  .code .c{color:var(--fg3)} .code .k{color:var(--fg)} .code .pr{color:var(--fg3)} .code .p{color:var(--fg)}
 
-  .shot{margin:0}
-  .shot img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:#0b0d10}
+  /* Anywhere */
+  .reach{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .r-card{border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--bg2),var(--bg));padding:28px;display:grid;gap:12px;align-content:start;color:var(--fg3);min-width:0}
+  .r-card p{max-width:46ch}
+  .r-card a{font-size:14.5px;justify-self:start}
+  .r-phone{grid-row:span 2;grid-template-columns:minmax(0,.8fr) minmax(0,1fr);align-items:center;gap:28px;padding:28px 28px 0}
+  .r-copy{display:grid;gap:12px;align-content:center;padding-bottom:28px}
+  .phone{align-self:end;border:6px solid oklch(0.26 0.005 250);border-bottom:0;border-radius:34px 34px 0 0;overflow:hidden;
+    box-shadow:0 -20px 60px -20px oklch(0.62 0.05 250 / .35);max-height:420px}
+  .phone img{display:block;width:100%;height:auto}
+  .mini{margin:4px 0 0;font-size:12.5px;line-height:1.6;color:var(--fg);background:var(--term);border:1px solid var(--line);
+    border-radius:8px;padding:12px 14px;white-space:pre;overflow-x:auto;min-width:0}
+  .mini .pr{color:var(--fg3)}
 
-  /* Elsewhere: a clip and what it shows, alternating sides. */
-  .row{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:48px;align-items:center}
-  .row + .row{margin-top:96px}
-  .row.flip{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}
-  .row.flip > .row-copy{order:-1}
-  .row-copy{display:grid;gap:14px;justify-items:start;font-size:16px;color:var(--fg3)}
-  .row-copy p{max-width:50ch}
-  .row-copy .cmd{justify-self:stretch}
+  /* Agents: a dock of the marks the app draws. */
+  .dock{list-style:none;margin:0 auto;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:10px;max-width:980px}
+  .dock li,.dock .d-next a{display:inline-flex;align-items:center;gap:10px;padding:10px 16px 10px 12px;border:1px solid var(--line);
+    border-radius:999px;background:var(--bg2);color:var(--fg);font-size:14.5px;text-decoration:none}
+  .dock .d-next{padding:0;border:0;background:transparent}
+  .dock .d-next a{border-style:dashed;border-color:var(--line2)}
+  .mono-mark{width:22px;height:22px;display:grid;place-items:center;border:1px solid var(--line2);border-radius:5px;font:500 11px/1 var(--f-m);color:var(--fg)}
+  @media (hover:hover) and (pointer:fine){ .dock li{transition:border-color .2s} .dock li:hover,.dock .d-next a:hover{border-color:var(--fg3)} }
 
-  /* Yours: a map of where things run, and the facts beside it. */
-  .yours{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:start}
-  .map{margin:0}
-  .map svg{width:100%;height:auto;display:block}
-  .m-box rect{fill:var(--bg2);stroke:var(--line2)}
-  .m-line{stroke:var(--fg3);stroke-width:1;fill:none}
-  .m-lab{font:500 10px var(--f-m);letter-spacing:.08em;fill:var(--fg3)}
-  .m-txt{font:500 15px var(--f);fill:var(--fg)}
-  .m-dim{font:400 11px var(--f-m);fill:var(--fg3)}
-  .m-dot.ok{fill:var(--ok)} .m-dot.work{fill:var(--working)} .m-dot.wait{fill:var(--idle)}
-  .map figcaption{margin-top:14px;font-size:14px;color:var(--fg3)}
-  .facts{margin:0}
-  .facts dt{color:var(--fg);font-weight:500;padding-top:20px;border-top:1px solid var(--line)}
-  .facts dt:first-child{padding-top:0;border-top:0}
-  .facts dd{margin:6px 0 20px;color:var(--fg3);font-size:15.5px}
+  /* Numbers */
+  .nums{margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line2)}
+  .nums div{padding:32px 32px 0 0}
+  .nums div+div{padding-left:32px;border-left:1px solid var(--line)}
+  .nums dt{font:500 clamp(40px,4.6vw,64px)/1 var(--f-m);letter-spacing:-.04em;color:var(--fg);font-variant-numeric:tabular-nums}
+  .nums dd{margin:16px 0 0;color:var(--fg3);font-size:15.5px;max-width:30ch}
 
-  /* Numbers: a table, because they are data. */
-  .nums{width:100%;border-collapse:collapse;font-size:15px}
-  .nums th{text-align:left;font:500 12px var(--f-m);color:var(--fg3);padding:0 16px 12px 0;border-bottom:1px solid var(--line2)}
-  .nums td{padding:18px 16px 18px 0;border-bottom:1px solid var(--line);vertical-align:baseline;color:var(--fg3)}
-  .nums td:first-child{font:500 22px/1.2 var(--f-m);color:var(--fg);white-space:nowrap;font-variant-numeric:tabular-nums;width:9.5em}
-  .nums td:last-child{font-family:var(--f-m);font-size:13px;white-space:nowrap;text-align:right;padding-right:0}
-  .nums th:last-child{text-align:right;padding-right:0}
+  .faq-wrap{display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1.3fr);gap:48px;align-items:start}
+  .faq details{border-top:1px solid var(--line);padding:4px 0}
+  .faq details:last-child{border-bottom:1px solid var(--line)}
+  .faq summary{cursor:pointer;list-style:none;padding:18px 32px 18px 0;color:var(--fg);font-size:18px;font-weight:500;position:relative}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:"+";position:absolute;right:4px;top:16px;font:400 22px/1 var(--f-m);color:var(--fg3);transition:transform .2s var(--ease)}
+  .faq details[open] summary::after{transform:rotate(45deg)}
+  .faq details p{padding:0 0 20px;color:var(--fg3);max-width:62ch}
 
-  .faq{margin:0;max-width:780px}
-  .faq dt{color:var(--fg);font-weight:500;font-size:18px;padding-top:24px;border-top:1px solid var(--line)}
-  .faq dt:first-child{padding-top:0;border-top:0}
-  .faq dd{margin:8px 0 24px;color:var(--fg3);font-size:16px;max-width:66ch}
-
+  .dl{background:radial-gradient(60% 70% at 50% 0%,oklch(0.62 0.05 250 / .16),transparent 70%)}
+  .dl-head{display:grid;justify-items:center;text-align:center;margin-bottom:48px}
+  .dl-head h2{font-size:clamp(40px,6vw,84px);max-width:none}
   .dl-grid{display:grid;gap:12px;margin-bottom:24px;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr))}
-  .dl-card{border:1px solid var(--line);border-radius:8px;padding:18px;background:var(--bg)}
-  .dl-card[data-me="1"]{border-color:var(--line2);background:var(--bg2)}
+  .dl-card{border:1px solid var(--line);border-radius:12px;padding:20px;background:var(--bg);min-width:0}
+  .dl-card[data-me="1"]{border-color:var(--line2);background:var(--bg2);box-shadow:0 20px 60px -30px oklch(0.62 0.05 250 / .5)}
   .dl-card h3{margin:0 0 12px;font-size:15px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
   .dl-arch,.dl-me{font:400 12px var(--f-m);color:var(--fg3)}
-  .dl-me{color:var(--ok)}
+  .dl-me{color:var(--st-done)}
   .dl-file{display:inline-block;margin-top:12px;font-size:13px;color:var(--fg2)}
   .dl-note{margin-top:12px;font-size:13px;color:var(--fg3)}
-  .dl-more{font-size:14px;color:var(--fg3);max-width:78ch}
+  .dl-more{font-size:14px;color:var(--fg3);text-align:center}
 
-  .close{padding:96px 0;border-top:1px solid var(--line)}
-  .close-in{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px}
-  .cta{display:flex;flex-wrap:wrap;gap:10px}
-  .foot{border-top:1px solid var(--line);padding:28px 0;font-size:14px;color:var(--fg3)}
+  .foot{border-top:1px solid var(--line);padding:28px 0 0;font-size:14px;color:var(--fg3);overflow:hidden}
   .foot-in{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
   .foot nav{display:flex;flex-wrap:wrap;gap:8px 22px}
   .foot a{color:var(--fg2);text-decoration:none}
   @media (hover:hover) and (pointer:fine){ .foot a:hover{color:var(--fg)} }
+  .wordmark{font-weight:800;font-size:clamp(72px,19vw,280px);line-height:.8;letter-spacing:-.06em;text-align:center;margin:56px 0 -.12em;
+    color:transparent;background:linear-gradient(180deg,oklch(0.93 0.004 250 / .16),oklch(0.93 0.004 250 / 0) 85%);-webkit-background-clip:text;background-clip:text;user-select:none}
 
   @media (max-width:960px){
-    .kind,.row,.yours,.ex-head{grid-template-columns:minmax(0,1fr);gap:28px}
-    .kind:nth-child(2),.row.flip{grid-template-columns:minmax(0,1fr)}
-    .kind:nth-child(2) > .loop{order:0}
-    .row.flip > .row-copy{order:0}
-    .kinds{gap:64px}
-    .row + .row{margin-top:72px}
+    .split,.split.rev,.split.views,.faq-wrap{grid-template-columns:minmax(0,1fr);gap:40px}
+    .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .b-tool{grid-column:1 / -1;grid-row:auto}
+    .b-steps{grid-column:1 / -1;grid-row:auto}
+    .reach{grid-template-columns:minmax(0,1fr)}
+    .r-phone{grid-row:auto}
+    .nums{grid-template-columns:minmax(0,1fr)}
+    .nums div,.nums div+div{padding:24px 0;border-left:0;border-bottom:1px solid var(--line)}
   }
   @media (max-width:640px){
     :root{--gut:16px}
@@ -631,24 +650,26 @@ const examples: { kind: string; one: string; fit: string; scope: string; items: 
     .links::-webkit-scrollbar{display:none}
     .links a{white-space:nowrap}
     .nav-in > .btn{margin-left:auto}
-    .hero{padding:56px 0 72px}
-    .hero-act{flex-direction:column}
-    .hero-act .btn{align-self:flex-start}
-    .hero-media{margin-top:48px}
-    .band{padding:80px 0}
-    .head{margin-bottom:32px}
-    .sub{font-size:16px}
-    .agents{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .agents li{padding:14px}
-    .ex-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 12px}
-    .examples{margin-top:72px}
-    .nums thead{display:none}
-    .nums tr{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:16px 0;border-bottom:1px solid var(--line)}
-    .nums td{padding:0;border:0}
-    .nums td:first-child{width:auto}
-    .nums td:nth-child(2){grid-column:1 / -1;grid-row:2}
-    .nums td:last-child{text-align:right}
-    .nums td:last-child::before{content:"load ";color:var(--fg3)}
+    .hero{padding:36px 0 64px}
+    .hero-copy{margin-bottom:32px}
+    .eyebrow{margin-bottom:18px}
+    .hero-act{flex-direction:column;align-items:stretch}
+    .band{padding:88px 0}
+    .head{margin-bottom:36px}
+    .sub{font-size:16.5px}
+    .fan{aspect-ratio:16/12.5}
+    .fan-card{width:90%;left:2%}
+    .fan-card[data-pos="1"]{transform:rotateX(6deg) rotateY(-12deg) translate3d(3%,-8%,-70px)}
+    .fan-card[data-pos="2"]{transform:rotateX(6deg) rotateY(-12deg) translate3d(6%,-16%,-140px)}
+    .fan-card[data-pos="3"]{transform:rotateX(6deg) rotateY(-12deg) translate3d(9%,-24%,-210px)}
+    .vtabs span{display:none}
+    .b-copy{flex-direction:column;gap:8px}
+    .r-phone{grid-template-columns:minmax(0,1fr);padding:24px 24px 0}
+    .r-phone .phone{order:2;max-width:240px;justify-self:center;max-height:300px}
+    .r-copy{padding-bottom:0}
+    .r-card{padding:24px}
+    .code{font-size:12px;padding:18px}
+    .dock li,.dock .d-next a{font-size:13px;padding:8px 12px 8px 10px}
   }
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}

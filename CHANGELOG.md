@@ -10,6 +10,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - The website and README say Hivemind runs every coding agent, not a count of them; the agent grid ends with "Any other", which your agent adds in one file.
+- The website's home page leads with what only Hivemind does: its hero is the workspace drawn live, where an agent writes a view and the same agents move into it, then a widget and a tool appear; the README lists your own views, tools and widgets and the agent-driven workspace first.
 - The guide at hivemind.griiken.com/guide has tabs, search, light and dark, a copy-ready prompt on each page, **Copy page** and a menu to open a page in ChatGPT, Claude or Cursor; every page is also Markdown at `/guide/<page>.md`, and all of them are in `/guide/llms.txt` and `/guide/llms-full.txt`.
 - API SDKs: `hivemind-api` for TypeScript (Node and Bun) and Python (3.9+, standard library only) connects a program to a workspace with a token from `hive grant create`, calls any method, hears events, and lists, starts, reads and answers agents without hand-writing the drive socket protocol. Each release carries them (`hivemind-api-<version>.tgz`, `hivemind_api-<version>-py3-none-any.whl`), and the installers put them in `sdk/` beside `hive`: `npm install ~/.hivemind-app/sdk/hivemind-api.tgz`, `pip install ~/.hivemind-app/sdk/python`. `hive` now drives the socket through the TypeScript one.
 

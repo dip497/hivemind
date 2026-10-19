@@ -24,15 +24,17 @@ account.
 
 ## What you can do
 
-- **See who is waiting on you.** Every tile shows its agent's state, and you answer a permission
-  prompt where it shows up.
-- **Let your agents build your tools.** Widgets, tools and views are plugins. An agent writes one
-  with `hive widgets new`, installs it and keeps it up to date while it works.
-- **Let agents run agents.** `hive ctl` is on every agent's PATH, so one agent can start others,
-  read their answers and approve their prompts.
+- **Make the workspace your own.** The canvas is only the view it starts with. Views, tools and
+  widgets are plugins, and your agents write them: `hive widgets new` makes a starter, the agent
+  fills it in, installs it and keeps it up to date while it works.
+- **Drive it from agents and code.** `hive ctl` is on every agent's PATH, so an agent can open
+  tiles, start other agents, read their answers and approve their prompts. The same workspace has an
+  API with TypeScript and Python SDKs.
 - **Work on other machines.** Open a folder on any machine you reach over ssh; its agents run there.
 - **Answer from your phone, or bring someone in.** A phone page through your own `hive-net`
   server, and invite links that let another person join your workspace.
+- **Every coding agent, in a real terminal.** Each tile shows whether its agent is working or
+  needs you, and you answer its prompt in place.
 
 <table>
   <tr>
