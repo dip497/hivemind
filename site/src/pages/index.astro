@@ -558,7 +558,7 @@ const code: Record<string, [string, string][]> = {
   .btn.ghost[data-done]{color:var(--st-done);border-color:color-mix(in oklab,var(--st-done) 45%,transparent)}
   @media (hover:hover) and (pointer:fine){.btn.ghost:hover{border-color:var(--fg3)}}
   @media (prefers-reduced-motion:no-preference){
-    .hero-say>*,.hero-do>*{animation:rise .55s cubic-bezier(.16,1,.3,1) both}
+    .hero-say>*,.hero-do>*{animation:rise .55s cubic-bezier(.16,1,.3,1) backwards}
     .hero-do>:nth-child(1){animation-delay:.1s}
     .hero-do>:nth-child(n+2){animation-delay:.15s}
     @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
@@ -600,15 +600,19 @@ const code: Record<string, [string, string][]> = {
   .fan::before{content:"";position:absolute;inset:-10%;background:radial-gradient(50% 45% at 50% 50%,oklch(0.62 0.05 250 / .22),transparent 70%);pointer-events:none}
   .fan-card{position:absolute;left:1%;top:20%;width:86%;margin:0;border-radius:12px;overflow:hidden;cursor:pointer;
     border:1px solid var(--line2);background:var(--term);box-shadow:var(--sh3);transform-origin:50% 100%;
-    transition:transform .8s var(--ease),filter .6s var(--ease)}
+    transition:transform .8s var(--ease)}
+  .fan-card::after{content:"";position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .6s var(--ease)}
   .fan-card img{display:block;width:100%;height:auto}
   .fan-card figcaption{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:baseline;font:500 13px/1.2 var(--f);
     color:var(--fg);padding:28px 16px 14px;background:linear-gradient(to top,oklch(0.14 0.004 250 / .92),transparent)}
   .fan-card figcaption span{color:var(--fg3);font-size:12.5px;font-weight:400}
   .fan-card[data-pos="0"]{z-index:4;transform:rotateX(6deg) rotateY(-12deg)}
-  .fan-card[data-pos="1"]{z-index:3;transform:rotateX(6deg) rotateY(-12deg) translate3d(6%,-9%,-110px);filter:brightness(.6)}
-  .fan-card[data-pos="2"]{z-index:2;transform:rotateX(6deg) rotateY(-12deg) translate3d(12%,-18%,-220px);filter:brightness(.42)}
-  .fan-card[data-pos="3"]{z-index:1;transform:rotateX(6deg) rotateY(-12deg) translate3d(18%,-27%,-330px);filter:brightness(.28)}
+  .fan-card[data-pos="1"]{z-index:3;transform:rotateX(6deg) rotateY(-12deg) translate3d(6%,-9%,-110px)}
+  .fan-card[data-pos="2"]{z-index:2;transform:rotateX(6deg) rotateY(-12deg) translate3d(12%,-18%,-220px)}
+  .fan-card[data-pos="3"]{z-index:1;transform:rotateX(6deg) rotateY(-12deg) translate3d(18%,-27%,-330px)}
+  .fan-card[data-pos="1"]::after{opacity:.4}
+  .fan-card[data-pos="2"]::after{opacity:.58}
+  .fan-card[data-pos="3"]::after{opacity:.72}
 
   /* Widgets and tools: a bento of the real things. */
   .bento{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
@@ -719,10 +723,12 @@ const code: Record<string, [string, string][]> = {
   }
   @media (max-width:640px){
     :root{--gut:16px}
+    /* Phones: a solid bar; blurring what scrolls under it costs every frame. */
+    .nav{background:color-mix(in oklab,var(--bg) 96%,transparent);backdrop-filter:none;-webkit-backdrop-filter:none}
     .nav-in{height:auto;min-height:52px;padding:8px var(--gut);flex-wrap:wrap;gap:6px 14px}
-    .links{order:3;width:100%;margin:0 calc(var(--gut) * -1);padding:4px var(--gut) 6px;overflow-x:auto;gap:18px;scrollbar-width:none}
+    .links{order:3;width:100%;margin:0 calc(var(--gut) * -1);padding:0 var(--gut);overflow-x:auto;gap:18px;scrollbar-width:none}
     .links::-webkit-scrollbar{display:none}
-    .links a{white-space:nowrap}
+    .links a{white-space:nowrap;padding:6px 0}
     .nav-in > .btn{margin-left:auto}
     .hero{padding:28px 0 64px}
     .hero-copy{margin-bottom:28px;gap:18px}
@@ -734,9 +740,12 @@ const code: Record<string, [string, string][]> = {
     .sub{font-size:16.5px}
     .fan{aspect-ratio:16/12.5}
     .fan-card{width:90%;left:2%}
-    .fan-card[data-pos="1"]{transform:rotateX(6deg) rotateY(-12deg) translate3d(3%,-8%,-70px)}
-    .fan-card[data-pos="2"]{transform:rotateX(6deg) rotateY(-12deg) translate3d(6%,-16%,-140px)}
-    .fan-card[data-pos="3"]{transform:rotateX(6deg) rotateY(-12deg) translate3d(9%,-24%,-210px)}
+    /* Phones: the same stack, flat, so the cards are not held as layers in depth while it turns. */
+    .fan{perspective:none}
+    .fan-card[data-pos="0"]{transform:none}
+    .fan-card[data-pos="1"]{transform:translate(3%,-8%) scale(.955)}
+    .fan-card[data-pos="2"]{transform:translate(6%,-16%) scale(.91)}
+    .fan-card[data-pos="3"]{transform:translate(9%,-24%) scale(.865)}
     .vtabs span{display:none}
     .b-copy{flex-direction:column;gap:8px}
     .r-phone{grid-template-columns:minmax(0,1fr);padding:24px 24px 0}
@@ -745,6 +754,7 @@ const code: Record<string, [string, string][]> = {
     .r-card{padding:24px}
     .code{font-size:12px;padding:18px}
     .dock li,.dock .d-next a{font-size:13px;padding:6px 10px 6px 0}
+    .links-row a,.r-card a,.b-steps>a{display:inline-block;padding:6px 0;margin:-6px 0}
   }
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}
