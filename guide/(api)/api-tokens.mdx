@@ -1,0 +1,123 @@
+---
+title: "Make an API token"
+description: "Make a token so one of your programs can drive a workspace, choose its role, and revoke it when you are done."
+---
+
+Make a <Tooltip tip="A secret a program of yours uses to drive a workspace, with one role." cta="Glossary" href="/glossary#token">token</Tooltip> when a program of yours should drive a workspace: a dashboard, a script, an orchestrator.
+
+<AgentPrompt description="Paste this into your coding agent to make an API token at the right role and keep it out of chat and git." page="api-tokens">{`
+Make a Hivemind API token for one of my programs, at the smallest role it needs, and store it safely.
+
+1. Ask me what the program is called, which workspace folder it drives, and what it does. Choose the role from that: \`view\` only reads; \`edit\` also presses widgets and opens tool tiles; \`terminals\` also types into terminals; \`agents\` also starts, answers and closes agents. Tell me the role you chose and why.
+2. Check Hivemind runs with that folder open: \`hive ctl agents\` must not exit 3. If it does, ask me to open the folder with \`hivemind <folder>\`.
+3. Make it, with an expiry unless I ask otherwise: \`hive grant create <name> -w <folder> --role <role> --expires 30d --json\`. The output holds \`token\` (shown only this once) and \`socket\`.
+4. Never show the token in this chat and never put it in a file git tracks. Write it to a git-ignored \`.env\` beside the program as \`HIVE_DRIVE_TOKEN=…\`, with \`HIVE_DRIVE_SOCK=<socket>\` and \`HIVE_WORKSPACE=<folder>\`. Check \`git check-ignore .env\` confirms it is ignored; add it to \`.gitignore\` if not.
+5. Check it works: with those variables loaded, \`hive ctl agents --json\` prints the workspace's agents.
+
+At the end, tell me the token's id and role from \`hive grant list\`, where the token is stored, and that \`hive grant revoke <id>\` takes it back.
+`}</AgentPrompt>
+
+## Before you start
+
+- Hivemind is running with the workspace open, or `hive host` serves it.
+- You know what the program does, so you can pick the smallest role. See [Choose a role](#choose-a-role).
+
+## Make the token
+
+<Tabs>
+  <Tab title="In the app">
+    <Steps>
+      <Step title="Open API access">
+        Open the workspace, then **Settings → API access**.
+      </Step>
+      <Step title="Name it and pick a role">
+        Under **New token**, name what uses it, for example *my dashboard*. Pick what it may do.
+      </Step>
+      <Step title="Create and copy">
+        Press **Create token**, then **Copy**. The token is shown this once.
+      </Step>
+    </Steps>
+
+    A token made in Settings reaches the workspace in that window and never expires.
+  </Tab>
+  <Tab title="In a terminal">
+    To make a read-only token that lasts 30 days, run:
+
+    ```bash
+    hive grant create dashboard -w ~/work/api --role view --expires 30d
+    ```
+
+    It prints the token first, shown once (long lines wrapped here):
+
+    ```text
+    hgr_…
+    dashboard may view in api, until 2026-11-17T09:00:00Z
+      (`hive grant revoke 1a2b3c4d5e6f`).
+    It connects to ~/.config/hivemind/drive.sock and says
+      {"hello": {"token": "<this token>", "workspace": "<the folder>"}}.
+    ```
+
+    | Option | Means |
+    |---|---|
+    | `<name>` | What the program is called. It shows in the token list and the audit log. |
+    | `-w`, `--workspace` | A workspace it may drive: its folder, name or id. Repeat it for more. |
+    | `--role` | `view`, `edit`, `terminals` or `agents`. Without it, `agents`. |
+    | `--expires` | How long it lasts: `12h`, `30d`. Without it, until you revoke it. |
+    | `--json` | Prints `{grant, token, socket}`. |
+  </Tab>
+</Tabs>
+
+<Note>
+Hivemind keeps only a hash of each token. A lost token cannot be shown again, so make a new one.
+</Note>
+
+<Frame caption="Settings → API access">
+  <img src="/images/app/settings-api-access.dark.webp" alt="Settings → API access: the New token form with a name, a role menu set to Drive agents, and Create token; the Tokens list is empty." />
+</Frame>
+
+## Choose a role
+
+<include>../snippets/roles.mdx</include>
+
+A dashboard needs `view`; an orchestrator that starts agents needs `agents`. A call the role does not allow is answered `FORBIDDEN` and never runs. The full list is on [Methods by role](/api-methods).
+
+## Check it worked
+
+To see your tokens, run:
+
+```bash
+hive grant list
+```
+
+```text
+1a2b3c4d5e6f  dashboard  view  /home/you/work/api  expires 2026-11-17T09:00:00Z  last used never
+```
+
+**Settings → API access** shows the same list, with when each token was last used.
+
+## Revoke a token
+
+Press **Revoke** in **Settings → API access**, or run it with the id from `hive grant list`:
+
+```bash
+hive grant revoke 1a2b3c4d5e6f
+```
+
+Revoking closes the program's connections at once. An expired token closes them at that moment too.
+
+## If it didn't work
+
+| What you see | Fix |
+|---|---|
+| `hive ctl` exits 3 | Neither the app nor `hive host` is running. Open the workspace with `hivemind <folder>`. |
+| `FORBIDDEN` on hello | The token is wrong, revoked or expired, or does not reach that workspace. Make a new one. |
+| `BAD_REQUEST` on hello | Name the workspace's folder, and open it in the app first. |
+
+More in [Troubleshooting](/troubleshooting).
+
+## Related
+
+- [API overview](/api): how tokens and roles fit together.
+- [Connect and call](/api-connect): use the token from a program.
+
+<LastValidated />

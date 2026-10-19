@@ -1,27 +1,12 @@
-# The site as a container for Cloud Run: built once here, then served by node's own http
-# server (server.mjs). The design tokens are vendored into src/generated, so this build needs
-# nothing from outside site/ and the build context stays small.
-FROM node:22-alpine AS build
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci --no-audit --no-fund
-COPY . .
-# The site is served from the root of its own domain, not from a GitHub Pages sub-path.
-ARG SITE_BASE=""
-ARG SITE_URL="https://hivemind.griiken.com"
-ENV SITE_BASE=$SITE_BASE SITE_URL=$SITE_URL
-# `npm run build`, not `astro build`: the lifecycle also vendors the design tokens (prebuild)
-# and exports llms.txt + the Markdown copies for agents (postbuild step in the script).
-RUN npm run build
-
+# The site as a container for Cloud Run, served by node's own http server (server.mjs). The site
+# and its guide are built before this, by `npm run build` in site/ (the deploy workflow does it),
+# because the guide's pages live outside site/, in guide/. The image only carries the result.
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/dist ./dist
+COPY dist ./dist
 # Everything the server imports, or the container exits before it listens and Cloud Run can
 # only say "the container failed to listen on PORT".
-COPY server.mjs downloads.mjs guide-redirect.mjs ./
-# The old /guide pages move to the docs site when this names it, e.g. https://docs.example.com.
-ENV DOCS_SITE_URL=""
+COPY server.mjs downloads.mjs redirects.mjs ./
 EXPOSE 8080
 CMD ["node", "server.mjs"]

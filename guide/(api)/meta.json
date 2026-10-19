@@ -1,0 +1,12 @@
+{
+  "title": "API",
+  "description": "Drive a workspace from your own program.",
+  "root": true,
+  "pages": [
+    "api",
+    "api-tokens",
+    "api-connect",
+    "api-methods",
+    "api-protocol"
+  ]
+}

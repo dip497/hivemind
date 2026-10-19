@@ -1,0 +1,110 @@
+---
+title: "Plugins"
+description: "The four kinds of plugin, where each sits on screen, what each can touch, and how to add one."
+---
+
+A <Tooltip tip="Something you add to Hivemind: an agent, a view, a widget or a tool." cta="Glossary" href="/glossary#plugin">plugin</Tooltip> adds something to Hivemind. Almost everything in the app is one, its own parts included.
+
+<AgentPrompt description="Paste this into your coding agent to find out what your plugins can do, or which one fits a job." page="plugins">{`
+Tell me about the Hivemind plugins on this computer. Do not change anything.
+
+1. Run \`hive plugins list --json\`. For each plugin, say its kind (agent, view, widget or tool), whether it is on, and any problem it reports.
+2. Say which ones can read my files or run programs (agents and tools can), and which run with no files and no network (views and widgets).
+3. If I said what I want to add, find a match: get the \`hivehub\` command with \`curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub\` (it needs Node), run \`hivehub search\` with a few words, and \`hivehub info\` with the best id. Show me what it asks for. Do not install it.
+
+At the end, list what I have, what each may touch, and the command that would install your suggestion.
+`}</AgentPrompt>
+
+<Frame caption="Where each kind sits">
+  <img src="/images/plugins-kinds.svg" alt="A view draws the whole workspace. Inside it sit tiles: an agent tile started from an agent file, a terminal, and a tool tile drawn by a tool plugin. A widget is a small card that floats above every view." />
+</Frame>
+
+## The four kinds
+
+| Kind | What it adds | Where it sits | What it can touch | Its file |
+|---|---|---|---|---|
+| **Agent** | a coding agent's own program, which Hivemind starts and reads | a tile | everything you can: it runs in your terminal | `agent.yaml` |
+| **View** | a way of drawing the whole workspace | the window, instead of **Canvas** | only what its permissions allow: no files, no network | `hivemind-view.json` |
+| **Widget** | a small live card | on the <Tooltip tip="The view that lays your frames, tiles and widgets out on one endless surface." cta="Glossary" href="/glossary#canvas">canvas</Tooltip>, in every view | only what its permissions allow: no files, no network | `widget.json` |
+| **Tool** | a new kind of tile | a tile, beside terminals | everything you can: it runs inside the app | `hivemind-tool.json` |
+
+<CardGroup cols={2}>
+  <Card title="Constellation, a view" img="/images/shots/showcase/constellation.webp" href="/extension-authoring">
+    Your agents as stars, grouped by project. Amber ones wait on you.
+  </Card>
+  <Card title="Waiting on you, a widget" img="/images/shots/showcase/waiting-on-you.webp" href="/widgets">
+    A card that lists the agents waiting on you.
+  </Card>
+  <Card title="Flaky tests, a tool" img="/images/shots/showcase/flaky-tests.webp" href="/tool-plugins">
+    A tile that runs your tests several times and shows which fail only sometimes.
+  </Card>
+  <Card title="Your own agent" icon="robot" href="/agent-providers">
+    One `agent.yaml` file tells Hivemind how to start an agent and read its screen.
+  </Card>
+</CardGroup>
+
+## Why tools start switched off
+
+A view and a widget run in a sandbox. They see only what their permissions allow, and they can
+never read a file or reach the network.
+
+A tool runs inside the app, with your access to files, programs and logins. An agent runs in your
+terminal. So a tool you add starts switched off, and you turn it on yourself. If one breaks the
+app, start Hivemind with `HIVEMIND_SAFE_MODE=1 hivemind`: no added tool loads.
+
+Installing from <Tooltip tip="The catalogue Hivemind installs agents and plugins from." cta="Glossary" href="/glossary#hivehub">HiveHub</Tooltip> checks every file against the checksum HiveHub recorded. It shows what the plugin may do before anything is copied.
+
+## Add one
+
+1. Open **Settings → Plugins** and pick the **HiveHub** tab.
+2. Pick a plugin. Its page shows **Read me** and **What it can do**.
+3. Install it. A tool also needs switching on, on its page.
+
+From a terminal:
+
+```bash
+hive plugins list                            # every plugin here, on or off
+hive agents install claude                   # or: hive views, hive widgets, hive tools
+hive plugins enable tool:dip497/worktrees    # a tool arrives switched off
+hive plugins set view:@you/board columns all # a setting the plugin declares
+```
+
+Each plugin's page in **Settings → Plugins** has **Settings**, **Read me** and **What it can do**.
+
+<Frame caption="Settings → Plugins">
+  <img src="/images/app/settings-plugins.dark.webp" alt="Settings → Plugins: the Installed and HiveHub tabs, a search box, and the installed agents, views and widgets, each with its count." />
+</Frame>
+
+## Make one
+
+To make your own, use **Add → Make your own…** in the toolbar, or **Add → Make your own** in
+**Settings → Plugins**. Both write a prompt you hand to a coding agent.
+
+From a terminal, each kind has a starter:
+
+```bash
+hive widgets new my-widget    # or: hive views new, hive tools new
+```
+
+Each starter includes `PROMPT.md`: the whole contract for that kind in one file. Write what you
+want at the top, then hand the file to a coding agent.
+
+## Agents can run a plugin's commands
+
+A view, widget or tool can declare `"commands"` in its file and answer them in its code. An agent
+lists and runs them while the plugin is open:
+
+```bash
+hive ctl plugin commands
+hive ctl plugin call dip497/worktrees list
+```
+
+## What to do next
+
+- [Build a widget](/widgets), the quickest way to start.
+- [Write a view](/extension-authoring) or [Write a tool](/tool-plugins).
+- [Add your own agent](/agent-providers).
+- [Publish to HiveHub](/publish-to-hivehub), so others can install it.
+- What leaves your computer: [Security and privacy](/security-and-privacy).
+
+<LastValidated />

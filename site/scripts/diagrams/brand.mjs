@@ -3,9 +3,12 @@ import { readFileSync } from 'node:fs';
 
 const site = new URL('../../', import.meta.url);
 const tokens = JSON.parse(readFileSync(new URL('src/generated/tokens.json', site), 'utf8')).tokens;
-const css = readFileSync(new URL('src/styles/docs.css', site), 'utf8');
-// The dark block comes first in docs.css and the site is dark only, so the first match is the one.
-const fromCss = (name) => css.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim();
+// The diagram's own surfaces, beside the app's: a raised panel, a link and its tint.
+const OWN = {
+  'hm-surface': 'oklch(0.216 0.0025 230.82)',
+  'hm-accent': 'oklch(0.76 0.07 242)',
+  'hm-accent-soft': 'oklch(0.26 0.012 245)',
+};
 const fromTokens = (name) => tokens[name]?.value;
 
 function oklchToHex(value, from) {
@@ -26,7 +29,7 @@ function oklchToHex(value, from) {
 }
 
 const token = (name) => oklchToHex(fromTokens(name), `tokens.json ${name}`);
-const style = (name) => oklchToHex(fromCss(name), `docs.css --${name}`);
+const style = (name) => oklchToHex(OWN[name], name);
 
 export const C = {
   paper: token('color-bg'),

@@ -1,0 +1,106 @@
+---
+title: "hive-net reference"
+description: "Every hive-net serve option, port, certificate setting, push key and file to back up, for your own network server."
+---
+
+`hive-net` is the program that runs your [network server](/self-hosting). It comes with Hivemind, beside `hive`. This page lists what it takes.
+
+<AgentPrompt description="Paste this into your coding agent to write the hive-net command for your setup, without running it." page="hive-net">{`Using the hive-net reference, write the \`hive-net serve\` command (or the docker compose command from \`infra/\`) for my network server. Ask me first: does the server have a public DNS name, do I have my own certificate or a proxy that ends TLS, which ports may it open, and should anyone be able to use it or only my devices.
+
+Show the command, and explain each option in one line. List the ports I must open in my firewall and the files in its data folder I must back up. Do not run anything.`}</AgentPrompt>
+
+## Roles
+
+`hive-net serve` runs up to four roles on one port. `--all` runs all four.
+
+| Flag | Role | Does |
+|---|---|---|
+| `--relay` | relay | Carries traffic between devices that cannot reach each other directly. The traffic stays encrypted end to end. |
+| `--lookup` | lookup | Lets devices find each other, and the device that hosts a workspace, by id. |
+| `--access` | access | Decides who may use the relay. |
+| `--push` | push | Tells your phones when an agent needs you, through UnifiedPush, Apple or Google. |
+
+## Serve options
+
+| Option | Default | Does |
+|---|---|---|
+| `--data <dir>` | none | Keeps every role's state. |
+| `--url <base>` | from `--domain` or `--bind` | How devices reach this server, when that is not what `--domain` or `--bind` says. With it, the network's link is printed. |
+| `--name <name>` | none | Names the network. |
+| `--bind <ip:port>` | port 3340 on every address, 443 with HTTPS | Where it listens. |
+| `--domain <name>` | none | Gets a certificate from Let's Encrypt for this name. |
+| `--contact <email>` | none | Your email address for Let's Encrypt. |
+| `--cert <pem>` `--key <pem>` | none | Your own certificate. Both files are read again every hour. |
+| `--http-bind <ip:port>` | port 80 | With HTTPS, the captive-portal check. |
+| `--quic-bind <ip:port>` | port 7842 | With HTTPS, address discovery, which helps devices connect directly. |
+| `--policy closed\|open-pow` | `closed` | `closed` lets in only devices you enrol and guests they vouch for. `open-pow` lets in anyone who solves a proof-of-work puzzle. |
+| `--pow-bits <n>` | 20 | How hard the puzzle is, with `open-pow`. |
+| `--admin-id <key>` | the admin key in `--data` | The network admin's public key. |
+| `--access-url <url>` | none | A relay without the access role asks this access service instead. |
+| `--access-cache <s>` | 300 | How long a relay remembers a yes from that service. |
+| `--dns-bind <ip:port>` | none | The lookup also answers DNS there. |
+| `--lookup-limit per-address\|off` | `per-address` | Rate limit on lookups. |
+| `--phone <dir>` | none | Serves the [phone page](/phone) at `/phone/`. |
+| `--views <port>` | none | Serves the phone page's views on that port, an origin of their own. |
+| `--push-allow <cidr>` | none | Also delivers push to UnifiedPush servers on this network. Repeat it for each. |
+| `--apns-key <.p8>` `--apns-key-id` `--apns-team` `--apns-topic` | none | Push to iPhones through Apple, for an app build you sign yourself. |
+| `--fcm <service account .json>` | none | Push to Android through Google, for an app build you sign yourself. |
+
+## Ports
+
+| Port | For |
+|---|---|
+| 443/tcp, or 3340/tcp without a certificate (`--bind`) | relay, lookup, access and push |
+| 80/tcp (`--http-bind`) | the captive-portal check, with HTTPS |
+| 7842/udp (`--quic-bind`) | address discovery |
+| 3341 or 8443 (`--views`) | the phone page's views. The Docker files use 3341 inside a building and 8443 with a public name. |
+
+## Certificates
+
+| You have | Use |
+|---|---|
+| A DNS name pointing at the server | `--domain` alone. Let's Encrypt issues and renews it. Port 443 must be reachable. |
+| Your own certificate | `--cert fullchain.pem --key privkey.pem` |
+| A proxy that ends TLS | Serve plain HTTP and set `--url https://…`. The proxy must pass WebSockets. |
+
+## Enrol and remove devices
+
+| Command | Does |
+|---|---|
+| `hive network enrol-link --data <dir> --uses <n> --expires <time>` | On the server: a link that puts `n` devices on the network. Defaults: 1 use, 7 days. |
+| `hive network use '<link>'` | On a device: join the network. |
+| `hive-net access revoke <access url> <device id> --admin <dir>/admin.key` | Takes a device's admission back. |
+| `hive-net access register <access url>` | Registers this device on an `open-pow` network. |
+
+## Back up
+
+| File in `--data` | Why |
+|---|---|
+| `admin.key` | Whoever holds it runs the network. Lose it and you can no longer enrol devices. |
+| `access.json` | Who may use the relays. |
+| `push-vapid.key` | Lose it and every phone registers for push again. |
+
+`lookup/`, `network.json` and `push.json` rebuild themselves.
+
+## Several relays
+
+Relays in different regions can share one access service:
+
+```bash
+hive-net serve --relay --access-url https://access.example.com/access --data /var/lib/hive-net
+hive-net profile sign profile.json --admin admin.key > signed.json
+hive-net profile link signed.json
+```
+
+`profile.json` describes the network and lists its relays. `profile sign` prints it signed by the network's admin. `profile link` prints the link devices use.
+
+## Other commands
+
+| Command | Does |
+|---|---|
+| `hive-net id` | Prints this device's id. |
+| `hive-net ping <id>` | Pings a device by its id. |
+| `hive-net doctor` | Whether the network's servers answer, as JSON. `hive network doctor` says the same in words. |
+| `hive-net host-record resolve --workspace <id>` | Which device hosts a workspace, as JSON. |
+
+<LastValidated />

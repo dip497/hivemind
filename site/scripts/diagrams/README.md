@@ -1,7 +1,8 @@
 # Diagrams
 
 The guide's diagrams, drawn as code. `npm run diagrams` (in `site/`) draws every one to
-`public/diagrams/<slug>.svg` and `.png`, and to `html/<slug>.html`, a page to open and look at.
+`guide/images/<slug>.svg` at the top of the repository, and to `html/<slug>.html` and `.png`, to
+open and look at.
 `npm run diagrams -- <slug>` draws one. The same input gives the same files, so a rerun with
 nothing changed leaves `git status` clean.
 
@@ -11,7 +12,7 @@ Once per machine, Playwright needs a Chromium: `npx playwright install chromium`
 |---|---|
 | `diagrams.mjs` | One function per diagram: its boxes, wires, labels and notes, by coordinate. |
 | `draw.mjs` | The builder: boxes, rounded right-angle wires, masked labels, the SVG. |
-| `brand.mjs` | The colours, read from `src/generated/tokens.json` and `src/styles/docs.css`. |
+| `brand.mjs` | The colours, read from `src/generated/tokens.json`, plus the diagram's own three. |
 | `build.mjs` | Subsets the fonts into each SVG and writes the SVG, PNG and HTML. |
 
 ## Change a diagram
@@ -19,7 +20,7 @@ Once per machine, Playwright needs a Chromium: `npx playwright install chromium`
 1. Read the code the diagram describes first. A diagram that disagrees with the code is worse
    than none.
 2. Edit its function in `diagrams.mjs`, run `npm run diagrams -- <slug>`, open the PNG.
-3. Commit the `.svg`, `.png` and `html/` page with the change.
+3. Commit the `.svg` and the `html/` page with the change.
 
 ## Add one
 
@@ -31,11 +32,10 @@ Once per machine, Playwright needs a Chromium: `npx playwright install chromium`
 3. One or two `focal` boxes at most. Sentence case, mono only for commands and wire labels.
 4. Put it in the page:
 
-   ```html
-   <figure class="diagram" style="--min:600px">
-     <div><img src="../../diagrams/<slug>.svg" width="W" height="H" alt="What it shows, in words." /></div>
-     <figcaption>Caption</figcaption>
-   </figure>
+   ```mdx
+   <Frame caption="Caption">
+     <img src="/images/<slug>.svg" alt="What it shows, in words." />
+   </Frame>
    ```
 
    The alt text says what the diagram says, not what it looks like.

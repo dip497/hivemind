@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* The app's own palette (apps/desktop/src/renderer/src/styles.css): neutral graphite, with
+   colour kept for meaning. Links and the current page take the app's blue for something new. */
+@theme {
+  --color-fd-background: oklch(0.99 0.002 250);
+  --color-fd-foreground: oklch(0.22 0.006 250);
+  --color-fd-muted: oklch(0.955 0.003 250);
+  --color-fd-muted-foreground: oklch(0.48 0.008 250);
+  --color-fd-popover: oklch(1 0 0);
+  --color-fd-popover-foreground: oklch(0.22 0.006 250);
+  --color-fd-card: oklch(0.975 0.002 250);
+  --color-fd-card-foreground: oklch(0.22 0.006 250);
+  --color-fd-border: oklch(0.89 0.004 250);
+  --color-fd-primary: oklch(0.5 0.15 258);
+  --color-fd-primary-foreground: oklch(0.99 0.002 250);
+  --color-fd-secondary: oklch(0.955 0.003 250);
+  --color-fd-secondary-foreground: oklch(0.22 0.006 250);
+  --color-fd-accent: oklch(0.93 0.004 250);
+  --color-fd-accent-foreground: oklch(0.22 0.006 250);
+  --color-fd-ring: oklch(0.62 0.006 250);
+  --font-sans: var(--font-geist), -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'SFMono-Regular', ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+
+.dark {
+  --color-fd-background: oklch(0.165 0.004 250);
+  --color-fd-foreground: oklch(0.93 0.004 250);
+  --color-fd-muted: oklch(0.195 0.004 250);
+  --color-fd-muted-foreground: oklch(0.62 0.006 250);
+  --color-fd-popover: oklch(0.23 0.005 250);
+  --color-fd-popover-foreground: oklch(0.93 0.004 250);
+  --color-fd-card: oklch(0.195 0.004 250);
+  --color-fd-card-foreground: oklch(0.93 0.004 250);
+  --color-fd-border: oklch(0.27 0.005 250);
+  --color-fd-primary: oklch(0.7 0.14 250);
+  --color-fd-primary-foreground: oklch(0.165 0.004 250);
+  --color-fd-secondary: oklch(0.23 0.005 250);
+  --color-fd-secondary-foreground: oklch(0.93 0.004 250);
+  --color-fd-accent: oklch(0.27 0.005 250);
+  --color-fd-accent-foreground: oklch(0.93 0.004 250);
+  --color-fd-ring: oklch(0.62 0.006 250);
+}
+
+.dark #nd-sidebar {
+  --color-fd-muted: oklch(0.23 0.005 250);
+  --color-fd-secondary: oklch(0.23 0.005 250);
+  --color-fd-muted-foreground: oklch(0.72 0.005 250);
+}
+
+@theme static {
+  --color-fd-info: oklch(0.6 0.12 250);
+  --color-fd-warning: oklch(0.72 0.14 72);
+  --color-fd-error: oklch(0.6 0.15 32);
+  --color-fd-success: oklch(0.62 0.11 155);
+  --color-fd-idea: oklch(0.72 0.14 72);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* A picture or clip with its caption, as the guide frames its screenshots and diagrams. */
+.guide-frame img,
+.guide-frame video {
+  margin: 0;
+  width: 100%;
+  border-radius: 0.5rem;
+}

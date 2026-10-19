@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - "site/**"
+      - "guide/**"
       - ".github/workflows/site.yml"
   workflow_dispatch:
 
@@ -28,6 +29,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      # The guide's pages live in guide/, outside site/, so the site and its guide are built here
+      # and the container only carries dist/.
+      - name: Build the site and its guide
+        run: npm ci --no-audit --no-fund && npm ci --no-audit --no-fund --prefix docs && npm run build
+        working-directory: site
+
       - uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -41,6 +52,8 @@ jobs:
       - name: The service answers
         run: |
           url=$(gcloud run services describe hivemind-site --region europe-west1 --format='value(status.url)')
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "$url")
-          echo "$url → $code"
-          [ "$code" = 200 ]
+          for path in / /guide/ /guide/llms.txt; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$url$path")
+            echo "$url$path → $code"
+            [ "$code" = 200 ]
+          done

@@ -1,0 +1,110 @@
+---
+title: "Run agents"
+description: "Add an agent, make it your default, switch one off, and put agents to sleep to free memory."
+---
+
+Add the coding agents you use, pick the one that starts by default, and put idle ones to sleep.
+
+<AgentPrompt description="Paste this into your coding agent to add another agent to Hivemind and make it the default." page="agents">{`
+Add a coding agent to Hivemind on this computer.
+
+1. Check Hivemind is installed: \`hive --version\` prints a version.
+2. Run \`hive agents list\` and show me the agents already added. Run \`hive agents list --found\` for the ones whose program is on this computer.
+3. Ask me which agent to add. The full list is on HiveHub: \`https://hivehub.griiken.workers.dev\`. If the agent's own program is not installed, tell me how to install it and ask before you do.
+4. Run \`hive agents install <name>\` and show me what it says it would run. Only after I say yes, run \`hive agents install <name> --yes\`.
+5. Check: \`hive agents list --found\` now lists it.
+6. Ask whether it should be my default agent. If yes, tell me to open it in Settings → Plugins and press Make default.
+
+At the end, tell me the agent added, whether it is the default, and that pressing 2 on the canvas starts the default agent.
+`}</AgentPrompt>
+
+## Before you start
+
+- Hivemind is installed: [Install and run your first agent](/getting-started).
+- The agent's own program is installed, for example `claude`, `codex` or `opencode`.
+
+## Add an agent
+
+Every agent is a small file from <Tooltip tip="The catalogue Hivemind installs agents and plugins from." cta="Glossary" href="/glossary#hivehub">HiveHub</Tooltip>.
+The file tells Hivemind how to start the agent's program and read its screen.
+
+<Tabs>
+  <Tab title="Automatically">
+    1. Install the agent's own program.
+    2. Start Hivemind. It adds every HiveHub agent whose program is on your `PATH`.
+    3. Check: a notice names the agents it added, each with **Remove**.
+
+    To stop this, switch off **Add agents found on this machine** in **Settings → Plugins**.
+  </Tab>
+  <Tab title="In the app">
+    1. Open **Settings → Plugins** and choose the **HiveHub** tab.
+    2. Find the agent and press **Install**.
+    3. Check: the agent appears under **Installed**.
+  </Tab>
+  <Tab title="In a terminal">
+    1. To see what the agent would run, type `hive agents install codex`.
+    2. To install it, add `--yes`: `hive agents install codex --yes`.
+    3. Check: `hive agents list --found` lists it.
+  </Tab>
+</Tabs>
+
+To remove an agent, run `hive agents remove codex`. Hivemind does not add it again at start.
+To write an agent file yourself, see [Add your own agent](/agent-providers).
+
+## Pick your default agent
+
+The default agent is the one **2** and the toolbar's agent button start.
+
+1. Open the agent's page in **Settings → Plugins**.
+2. Press **Make default**.
+3. Check: press **2** on the canvas, and that agent starts in the selected frame.
+
+The same page sets the agent's launch options, such as its model and permission mode.
+
+## Switch an agent off
+
+To hide an agent from every menu and from `hive ctl spawn`, switch it off on its page in
+**Settings → Plugins**. In a terminal:
+
+```bash
+hive plugins disable agent:codex
+hive plugins enable agent:codex
+```
+
+## Put agents to sleep
+
+Sleep ends an agent's program to free memory. Its <Tooltip tip="One thing in a frame: an agent, a terminal, the Code tile, a browser or a tool." cta="Glossary" href="/glossary#tile">tile</Tooltip>
+keeps its name and conversation, and shows **Resume**.
+
+| Where | Sleep | Wake |
+|---|---|---|
+| A tile | the moon button in its title bar | **Resume** |
+| A row in the Layers panel | ⋮ → **Put to sleep** | ⋮ → **Resume** |
+| A frame | ⋯ → **Put agents to sleep** | ⋯ → **Resume sleeping agents** |
+| A terminal | `hive ctl sleep [tile or frame]` | `hive ctl wake [tile or frame]` |
+
+An agent that is working or waiting on you sleeps only after you confirm. In a terminal, add
+`--force`. A message sent to a sleeping agent waits until the agent is back at its prompt.
+
+## Check it worked
+
+- `hive agents list --found` lists the agent.
+- Press **2** on the canvas: the default agent's tile opens and shows **working** as it starts.
+- After sleep, the tile shows **Resume**.
+
+## If it didn't
+
+| You see | Do |
+|---|---|
+| `hive agents list --found` does not list the agent | The program is not on your `PATH`. Open a new terminal, or install the program. |
+| **2** starts a different agent | Press **Make default** on the agent you want. |
+| The agent never shows **needs you** | See [Troubleshooting](/troubleshooting). |
+
+## Related
+
+- [Agent states](/agent-states): what working, needs you and idle mean.
+- [Know who is waiting](/know-who-is-waiting): the bell, notifications and push.
+- [Coordinate agents](/agent-workflows): one agent drives others.
+- [Track work as issues](/issues): give agents work to pick up.
+
+<LastValidated />
