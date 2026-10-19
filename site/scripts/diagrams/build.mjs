@@ -1,6 +1,6 @@
 // npm run diagrams [-- <slug>]: draws every diagram in diagrams.mjs to
 // scripts/diagrams/html/<slug>.html (a page to open and look at) and
-// public/diagrams/<slug>.svg + .png (what the guide shows). Rerunning rewrites the same files.
+// guide/images/<slug>.svg (what the guide shows), with a PNG beside the HTML page. Rerunning rewrites the same files.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import subsetFont from 'subset-font';
@@ -11,7 +11,7 @@ import diagrams from './diagrams.mjs';
 const require = createRequire(import.meta.url);
 const here = new URL('./', import.meta.url);
 const htmlDir = new URL('html/', here);
-const outDir = new URL('../../public/diagrams/', here);
+const outDir = new URL('../../../guide/images/', here);
 mkdirSync(htmlDir, { recursive: true });
 mkdirSync(outDir, { recursive: true });
 
@@ -54,7 +54,7 @@ for (const d of chosen) {
   await page.setViewportSize({ width: d.w, height: d.h });
   await page.setContent(`<html><body style="margin:0;background:${C.paper}">${svg}</body></html>`);
   await page.evaluate(() => document.fonts.ready);
-  await page.locator('svg').screenshot({ path: new URL(`${d.slug}.png`, outDir).pathname });
+  await page.locator('svg').screenshot({ path: new URL(`${d.slug}.png`, htmlDir).pathname });
   console.log(`${d.slug}.svg  ${d.w}x${d.h}`);
 }
 await browser.close();

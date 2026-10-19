@@ -1,0 +1,61 @@
+---
+title: "FAQ"
+description: "Short answers: what Hivemind costs, which agents it runs, what leaves your computer, and which systems it supports."
+---
+
+Short answers, each with a link to the full one.
+
+<AgentPrompt description="Paste this into your coding agent to answer a question about Hivemind from these docs and this computer." page="faq">{`
+Answer my question about Hivemind: <my question>.
+
+Use this page first, then the rest of the Hivemind docs. Where the answer depends on this computer, check it read-only: \`hive --version\`, \`hive agents list\`, \`hive plugins list\`, \`hive network show\`. Quote the page you used, and say plainly when the docs do not answer it. Do not change anything.
+`}</AgentPrompt>
+
+## Is Hivemind free?
+
+Yes. Hivemind is open source under the [MIT license](https://github.com/dip497/hivemind/blob/main/LICENSE). The coding agents you run in it are separate programs, with their own accounts and prices.
+
+## Which agents does it run?
+
+Every agent on [HiveHub](https://hivehub.griiken.workers.dev/), such as Claude Code, Codex and opencode. Install the agent's own program, and Hivemind adds it when it starts. To run one that is not listed, [add your own agent](/agent-providers).
+
+## Do I need an account?
+
+No. There is no Hivemind account. Your agents may need their own accounts.
+
+## Does my code leave my computer?
+
+Hivemind does not send your code anywhere. What does leave your computer:
+
+- **Your agents' own traffic.** Each agent sends what it sends to its own provider. Hivemind does not change that.
+- **The update check.** The app asks GitHub whether a newer release is out.
+- **HiveHub.** Hivemind downloads its list of plugins, and the files of each plugin you install.
+- **Your own network server**, if you set one up. It passes traffic between your devices, encrypted end to end, and cannot read it.
+
+More in [Security and privacy](/security-and-privacy).
+
+## What does HiveHub receive?
+
+A request for its list, one for each file of a plugin you install, and one that counts the install. The counting request carries no id and no machine name. HiveHub counts one install per plugin, per address, per day.
+
+## Does it run on Windows?
+
+The Windows app is built and checked automatically for each release, but it is not yet tested on real hardware. [Tell us what breaks](https://github.com/dip497/hivemind/issues). See [System requirements](/system-requirements).
+
+## Does it run on an Intel Mac?
+
+There is no prebuilt app for Intel Macs. Build it from source with `bash install.sh --dev`. See [Install](/install).
+
+## Do I need a server to use my phone?
+
+Yes. Your phone reaches your computer through your own network server, with an https address. See [Set up your own network server](/self-hosting), then [Answer agents from your phone](/phone).
+
+## What happens to my agents when I close the app?
+
+They keep running. A background process keeps your terminals and agents alive while the app is closed or updating. A restart of your computer ends it.
+
+## How do I remove it?
+
+Run `hivemind uninstall`. See [Uninstall](/uninstall).
+
+<LastValidated />

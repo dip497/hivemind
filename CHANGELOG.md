@@ -10,6 +10,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - The website and README say Hivemind runs every coding agent, not a count of them; the agent grid ends with "Any other", which your agent adds in one file.
+- The website's home page leads with what only Hivemind does: its hero is the workspace drawn live, where an agent writes a view and the same agents move into it, then a widget and a tool appear; the README lists your own views, tools and widgets and the agent-driven workspace first.
+- The guide at hivemind.griiken.com/guide has tabs, search, light and dark, a copy-ready prompt on each page, **Copy page** and a menu to open a page in ChatGPT, Claude or Cursor; every page is also Markdown at `/guide/<page>.md`, and all of them are in `/guide/llms.txt` and `/guide/llms-full.txt`.
 - API SDKs: `hivemind-api` for TypeScript (Node and Bun) and Python (3.9+, standard library only) connects a program to a workspace with a token from `hive grant create`, calls any method, hears events, and lists, starts, reads and answers agents without hand-writing the drive socket protocol. Each release carries them (`hivemind-api-<version>.tgz`, `hivemind_api-<version>-py3-none-any.whl`), and the installers put them in `sdk/` beside `hive`: `npm install ~/.hivemind-app/sdk/hivemind-api.tgz`, `pip install ~/.hivemind-app/sdk/python`. `hive` now drives the socket through the TypeScript one.
 
 - API access: `agent.transcript` (Workspace API 0.32) tells a program on this machine which session an agent is in and where its session file is, so it can follow the agent's own records. A phone, a guest, or an agent on another machine is pointed to `agent.conversation` instead.
@@ -42,7 +44,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - A new agent starts as the agent you chose in Settings everywhere one starts (Send to agent, a view, a plugin, the toolbar), or the first one installed, never one this machine does not have. Send to agent offers a new tile of every installed agent, your chosen one first, its search finds them, and a prompt sent to an agent tile reaches it whichever agent it runs.
 
-- The guide moves to its own docs site, built from `guide/`: Get started, Use Hivemind, Concepts, Extend, API, Reference and Help, with a first-agent tutorial that ends with you answering the agent, screenshots of the real app, and new pages for keyboard shortcuts, troubleshooting by symptom, the FAQ, a glossary, install, update and uninstall. Every page starts with a prompt to paste into your coding agent; the docs have an MCP server and `llms.txt`. The old `/guide` pages send you there once the site sets `DOCS_SITE_URL`.
+- The guide is rewritten, from `guide/`: Get started, Use Hivemind, Concepts, Extend, API, Reference and Help, with a first-agent tutorial that ends with you answering the agent, screenshots of the real app, and new pages for keyboard shortcuts, troubleshooting by symptom, the FAQ, a glossary, install, update and uninstall. Every page starts with a prompt to paste into your coding agent.
 
 - Agents keep running through an upgrade on every platform: macOS no longer refuses an upgrade while agents run, Windows keeps each version in a folder of its own, an AppImage started directly keeps its agents when the app quits, and a machine's agents survive an update of `hive` there.
 

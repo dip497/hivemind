@@ -1,0 +1,17 @@
+{
+  "title": "Help",
+  "description": "Fix problems, report bugs, install, update and uninstall.",
+  "root": true,
+  "pages": [
+    "---Help---",
+    "troubleshooting",
+    "faq",
+    "logs-and-bug-reports",
+    "changelog",
+    "---Install and update---",
+    "install",
+    "system-requirements",
+    "update-and-roll-back",
+    "uninstall"
+  ]
+}

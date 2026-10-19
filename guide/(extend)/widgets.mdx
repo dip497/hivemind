@@ -1,0 +1,234 @@
+---
+title: "Build a widget"
+description: "Make a small live card for your canvas in a few lines of JavaScript, try it, and share it."
+---
+
+Build a counter <Tooltip tip="A small live card on the canvas, drawn by a few lines of code." cta="Glossary" href="/glossary#widget">widget</Tooltip>, put it on your canvas and change it. It takes about ten minutes.
+
+<AgentPrompt description="Paste this into your coding agent to build a widget, put it on your canvas and publish it." page="widgets">{`
+Build a Hivemind widget (a small live card on the canvas, drawn by its own code in a worker) and, if I want, publish it on HiveHub.
+
+1. Ask me what the widget should show and do, and its name (lowercase letters, digits and dashes).
+2. Start it: \`hive widgets new <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`widget.json\`, \`widget.js\`, \`hive.d.ts\`, \`README.md\` and \`PROMPT.md\`.
+3. Read \`PROMPT.md\` in full: it is the whole contract. Write what I asked for under its "What I want". The widget has no network and no files. What it draws and its state are each up to 16 KB.
+4. Install it, again after each change: \`hive widgets install <folder>\`. Check it prints "app updated".
+5. Put one on the canvas: \`hive ctl plugin open widget:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable widget:@owner/name\`.
+6. Declare one command in \`widget.json\` under "commands", answered with \`hive.hm.onCommand\`, that reports what the widget shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
+7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, and \`README.md\` says what it does.
+8. Publish only if I say so. Follow the "Publish to HiveHub" page: push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
+
+At the end, tell me the widget's id, the command others use to install it (\`hive widgets install @owner/name\`), and anything you could not check.
+`}</AgentPrompt>
+
+## What others have built
+
+Each of these is a widget on HiveHub, as `@dip497/<name>`.
+
+<CardGroup cols={3}>
+  <Card title="waiting-on-you" img="/images/shots/showcase/waiting-on-you.webp">The agents waiting on you, and for how long.</Card>
+  <Card title="agent-pulse" img="/images/shots/showcase/agent-pulse.webp">How many agents are busy right now.</Card>
+  <Card title="ci-light" img="/images/shots/showcase/ci-light.webp">A light your CI or hooks turn green or red.</Card>
+  <Card title="test-meter" img="/images/shots/showcase/test-meter.webp">Passing and failing tests, as your scripts report them.</Card>
+  <Card title="issue-burndown" img="/images/shots/showcase/issue-burndown.webp">Open issues, day by day.</Card>
+  <Card title="launchpad" img="/images/shots/showcase/launchpad.webp">Buttons that start agents with jobs you set.</Card>
+  <Card title="focus-timer" img="/images/shots/showcase/focus-timer.webp">A timer for a block of focused work.</Card>
+  <Card title="spend-today" img="/images/shots/showcase/spend-today.webp">What your agents report they spent today.</Card>
+  <Card title="dog" img="/images/shots/showcase/dog.webp">A dog that walks the screen and barks when an agent waits on you.</Card>
+</CardGroup>
+
+## What you'll learn
+
+- How to start a widget from the starter and put it on the canvas.
+- How a widget draws, keeps state and answers a button.
+- How to change it and see the change.
+
+## Before you start
+
+- Hivemind is installed and open on a project. See [Install and run your first agent](/getting-started).
+- You know a little JavaScript.
+
+<Steps>
+  <Step title="Start the widget">
+    Make a starter widget called `counter`:
+
+    ```bash
+    hive widgets new counter
+    ```
+
+    Check: it prints `created @<your login>/counter`. The `counter` folder holds `widget.json`,
+    `widget.js`, `hive.d.ts`, `README.md` and `PROMPT.md`. If it asks for an owner, add
+    `--owner <your GitHub login>`.
+  </Step>
+  <Step title="Install it">
+    ```bash
+    hive widgets install counter
+    ```
+
+    Check: it prints `installed @<your login>/counter (Counter)` and `app updated`.
+  </Step>
+  <Step title="Put it on the canvas">
+    Open the toolbar's **Add** menu and pick **Counter**.
+
+    Check: a card shows **0** and **presses**, with a **Press** button. Press it and the number
+    goes up.
+  </Step>
+  <Step title="Read the code">
+    The starter is two files. `widget.json` names the widget and its options. `widget.js` draws
+    it and answers its button.
+
+    <CodeGroup>
+    ```json widget.json
+    {
+      "id": "@you/counter",
+      "name": "Counter",
+      "version": "0.1.0",
+      "description": "Counts presses.",
+      "icon": "icon.svg",
+      "options": [{ "id": "step", "label": "Step", "type": "number", "min": 1, "max": 100, "default": 1 }]
+    }
+    ```
+
+    ```js widget.js
+    const draw = () => hive.render({ type: "stack", children: [
+      { type: "number", value: hive.state?.n ?? 0, label: "presses" },
+      { type: "button", label: "Press", action: "inc" },
+    ] });
+
+    hive.on("start", draw);
+    hive.on("action", (a) => {
+      if (a === "inc") { hive.setState({ n: (hive.state?.n ?? 0) + Number(hive.options.step ?? 1) }); draw(); }
+    });
+    ```
+    </CodeGroup>
+
+    `hive.state` is saved with the workspace, so the count survives a restart.
+  </Step>
+  <Step title="Change it">
+    In `widget.js`, change `label: "presses"` to `label: "clicks"`. Then install it again:
+
+    ```bash
+    hive widgets install counter
+    ```
+
+    Check: the card now reads **clicks**.
+  </Step>
+  <Step title="Set its option">
+    Hover the card and press its gear. Set **Step** to 5.
+
+    Check: each press now adds 5. Everyone in the workspace sees the same option.
+  </Step>
+</Steps>
+
+## What you did
+
+- You started a widget with `hive widgets new` and installed it with `hive widgets install`.
+- You drew it with `hive.render`, kept its count in `hive.state`, and answered its button.
+- You changed it and gave it an option people can set.
+
+## Next
+
+- Want an agent to build the rest? Write your idea at the top of `PROMPT.md` and hand it the file.
+- Share it: [Publish to HiveHub](/publish-to-hivehub).
+- Something wrong? See [Troubleshooting](/troubleshooting).
+
+## Widget reference
+
+### What your code gets
+
+| Call | What it does |
+|---|---|
+| `hive.render(tree)` | draws the widget |
+| `hive.state`, `hive.setState(value)` | what it keeps, saved in the workspace |
+| `hive.options` | its options, as set, or else their defaults |
+| `hive.on("options", fn)` | the person changed its options |
+| `hive.notify(text)` | shows a desktop notification |
+| `hive.moveTo({ x, y }, { over })` | moves its card: `x` and `y` from 0 to 1 across the screen (`y: "bottom"`), over `over` ms |
+| `hive.spot` | where it last moved to |
+| `hive.on("click", fn)` | its card was clicked, not on a button |
+| `hive.on("start", fn)` | it was placed, or the app opened |
+| `hive.on("action", fn)` | one of its buttons was pressed; `fn` gets the button's `action` |
+| `hive.on("hm", fn)` | the values in `hive.hm` arrived or changed |
+| `hive.hm` | the workspace, as a view sees it (below) |
+
+It runs in a worker: no network, no files. What it draws and its state are each up to 16 KB.
+
+### What it can draw
+
+| Node | Fields |
+|---|---|
+| `stack`, `row` | `children` |
+| `text` | `text`, `size: "large"`, `muted: true` |
+| `number` | `value`, `label` |
+| `meter` | `value`, `max`, `label` |
+| `button` | `label`, `action` |
+| `image` | `src` (an image in its folder), `w`, `h` |
+| `sprite` | `src` (a sheet of frames), `frameW`, `frameH`, `row`, `frames`, `fps`, `scale`, `flip` |
+
+Images (`.png`, `.gif`, `.webp`, `.jpg`, `.svg`, up to 1 MB) go in the widget's folder.
+`"chrome": "none"` drops the card, for a pet that walks the screen.
+
+### Options
+
+`options` uses the settings fields every plugin uses: `boolean`, `number`, `text` and `choice`,
+each with a `default`. What someone sets is shared with everyone in the workspace.
+
+### A widget without code
+
+A widget can be data and a drawing alone. The built-in Sticky note, Checklist and Text are made
+this way:
+
+```json
+{
+  "name": "Sticky note",
+  "placement": "board",
+  "size": { "w": 220, "h": 180 },
+  "options": [{ "id": "color", "label": "Colour", "type": "choice",
+                "values": ["yellow", "pink", "blue"], "default": "yellow" }],
+  "draw": { "type": "stack", "fill": true, "tint": "$options.color",
+            "children": [{ "type": "textarea", "placeholder": "Write something" }] }
+}
+```
+
+`"placement": "board"` pins it to the canvas, so it moves with its frame. `input`, `textarea` and
+`list` are what people write in. Two people typing at once merge, and undo takes it back.
+
+### Read and drive the workspace
+
+`hive.hm` is the same client a view has ([Write a view](/extension-authoring)). It is held to the
+permissions `widget.json` asks for:
+
+```json
+{ "name": "Agents at work", "permissions": ["workspace:spawn", "workspace:prompt"] }
+```
+
+```js
+hive.hm.onEvents(["turn", "needsInput"], (e) => hive.notify(`${e.kind} in ${e.tileId}`));
+hive.on("hm", draw);
+```
+
+An agent can run a command the widget declares under `"commands"`. The widget answers with
+`hive.hm.onCommand(name, handler)`:
+
+```bash
+hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
+```
+
+### Where it runs
+
+<Frame caption="One window runs a widget; everyone sees it">
+  <img src="/images/widgets-runner.svg" alt="One window runs widget.js: the first of your own windows with the workspace open. What it draws goes live to guests' windows, your other windows on any of your devices, and your phone through a widgets view; a press from any of them goes back to that window. Guests can press only if they can edit the board. Nothing it draws is saved." />
+</Frame>
+
+The first of your own windows with the workspace open runs it. Nobody else's computer runs your
+code. A guest with **Can edit board** can press its buttons. On your phone, a view that shows
+widgets draws them (`hive views install @dip497/widgets`).
+
+### Commands
+
+```bash
+hive widgets list                       # the app's own widgets and the ones you added
+hive widgets install <folder>|@owner/name
+hive widgets remove <id>                # what each placed one holds stays on its canvas
+```
+
+<LastValidated />

@@ -1,0 +1,135 @@
+---
+title: "Run agents on another computer"
+description: "Add a server, a VM or a second laptop over ssh, open one of its folders, and run terminals and agents there."
+---
+
+Run agents on a bigger or always-on computer while you watch them from your own. You reach it with `ssh`.
+
+<AgentPrompt description="Paste this into your coding agent to add a computer over ssh and open one of its folders in Hivemind." page="machines">{`Add a computer I reach over ssh to Hivemind as a machine, and open one of its project folders as a frame.
+
+1. Ask me for the ssh destination (\`user@host\` or an alias from \`~/.ssh/config\`), a short name for it, and the folder on it to open.
+2. Check ssh works without questions: \`ssh -o BatchMode=yes user@host true\`. If it asks about the host key or for a password, stop. Ask me to run \`ssh user@host\` once myself and answer it. Never type a password.
+3. Check the platform: \`ssh user@host uname -sm\`. It must be Linux (x86_64 or arm64) or macOS on arm64. Otherwise stop and tell me.
+4. Add it: \`hive machine add user@host --label <name> --install\`. Then \`hive machine check <name>\` must print \`<name>: reachable\`, the platform and a hive version.
+5. With the Hivemind app open, open the folder as a frame: \`hive ctl frame add --machine <name> --folder <full path> --name <frame name>\`.
+6. Ask me which agent to start there. Its program must be installed on that machine: check with \`ssh user@host command -v <agent program>\`. Start it with \`hive ctl spawn --frame <frame name> --agent <agent> --prompt "<task>"\` only if I gave a task.
+
+At the end, tell me the machine's name, what \`hive machine check\` printed, and the frame that opened. Tell me \`hive ps --machine <name>\` lists what runs there.`}</AgentPrompt>
+
+<Frame caption="A frame on a machine">
+  <img src="/images/machines-ssh.svg" alt="Your computer reaches the machine over ssh. On the machine, a background hive process runs the frame's terminals and agents in its folder, and keeps them running when the connection drops or the app quits." />
+</Frame>
+
+## Before you start
+
+- The computer runs Linux (x86_64 or arm64) or macOS on Apple Silicon, with an ssh server you can log in to.
+- You answered its host-key question once, in a terminal: `ssh user@host`.
+- The agent programs you want to run there are installed on it.
+
+Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A password, if you use one, goes in the system keychain.
+
+## Add the machine
+
+<Tabs>
+  <Tab title="In the app">
+    1. Open the <Tooltip tip="The list beside the canvas of your projects, frames and tiles." cta="Glossary" href="/glossary#layers-panel">Layers panel</Tooltip> (⌘B / Ctrl+B) and choose **Machines**.
+    2. Press **New machine**.
+    3. Fill in **Host** (`user@host` or an ssh alias) and **Name**.
+    4. Leave **Install hive if missing** on, and press **Add**.
+
+    Check: the machine shows in the **Machines** pane, not grey.
+  </Tab>
+  <Tab title="In a terminal">
+    1. Add it, and install `hive` there if it is missing:
+
+       ```bash
+       hive machine add dev@build-box --label build --install
+       ```
+
+    2. Check it:
+
+       ```bash
+       hive machine check build
+       ```
+
+       It prints a line like `build: reachable, linux-x86_64, 2026.10.3 at /home/dev/.local/bin/hive`.
+  </Tab>
+</Tabs>
+
+<Frame caption="Add a machine">
+  <img src="/images/app/new-machine.dark.webp" alt="The Add a machine dialog: Host for user@host or an ssh config alias, an optional Name, Use a password instead, and Install hive if missing switched on." />
+</Frame>
+
+## Open a folder on it
+
+<Tabs>
+  <Tab title="In the app">
+    1. In the **Machines** pane, press **+** on the machine, or ⋯ → **Open folder here…**.
+    2. Pick a folder.
+
+    Check: it opens as a new <Tooltip tip="A named area bound to one folder: the project, a git worktree, or a folder on another computer." cta="Glossary" href="/glossary#frame">frame</Tooltip>. Terminals, agents and the Code tile in it all run on the machine.
+  </Tab>
+  <Tab title="In a terminal">
+    ```bash
+    hive ctl frame add --machine build --folder /srv/web --name web
+    hive ctl spawn --frame web --agent claude --prompt "Run the tests and fix what fails"
+    ```
+  </Tab>
+</Tabs>
+
+## Check it worked
+
+Run `pwd` in a terminal in the new frame. It prints the folder on the machine.
+
+## Sessions outlive the connection
+
+A <Tooltip tip="The hive process that keeps terminals and agents running while the app is closed or upgrading." cta="Glossary" href="/glossary#background-process">background process</Tooltip> on the machine runs its terminals. They keep running when the network drops, your laptop sleeps or the app quits. They reattach when you are back.
+
+To reach them without the app:
+
+```bash
+hive ps --machine build
+hive attach <session> --machine build     # ctrl-b d detaches
+hive run --machine build --cwd /srv/web -- npm test
+hive kill <session> --machine build
+```
+
+## Manage it
+
+A machine's ⋯ menu in the **Machines** pane has:
+
+| Item | Does |
+|---|---|
+| **Check now** | Connects again and checks it. |
+| **Pause** | Stops connecting. Nothing on the machine stops. **Resume** connects again. |
+| **Manage machines…** | Edit it, **Install hive**, **Update hive** or **Remove…** it. |
+
+To be told when an agent there needs you, even with your laptop closed, run this on the machine:
+
+```bash
+hive push set https://ntfy.sh/your-topic
+hive push test
+```
+
+## If it didn't
+
+| You see | Do |
+|---|---|
+| The machine is grey | It is paused or unreachable. Press **Check now**. |
+| **Sign in** on the machine | It asks for a password. Give it once, or set up an ssh key. |
+| `hive is not installed on …` | Add it again with `--install`, or turn on **Install hive if missing**. |
+| `unsupported remote platform` | Windows cannot be a machine. |
+
+More in [Troubleshooting](/troubleshooting).
+
+## Good to know
+
+- Issues are read from your own computer, not from the machine's folder.
+- A machine without `hive` runs plain ssh terminals. They end when the connection drops.
+
+## Related
+
+- [Keep agents running while your laptop sleeps](/host): a computer that keeps whole workspaces up, with no desktop.
+- [CLI reference](/cli)
+
+<LastValidated />

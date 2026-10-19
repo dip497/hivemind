@@ -1,0 +1,75 @@
+---
+title: "Hivemind"
+sidebarTitle: "Introduction"
+description: "Run your coding agents side by side, see which one is waiting on you, and answer it from anywhere."
+mode: "wide"
+---
+
+Hivemind runs your coding agents side by side and shows you which one is waiting on you.
+
+<Frame caption="Agents at work in one project, each in its own tile.">
+  <video autoPlay src="/images/shots/hero/clip.mp4" poster="/images/shots/hero/poster.webp" />
+</Frame>
+
+## Install
+
+<Tabs>
+  <Tab title="Linux and macOS">
+    ```bash
+    bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
+    ```
+    Then open a project: `cd ~/my-project && hivemind .`
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    irm https://hivemind.griiken.com/install.ps1 | iex
+    ```
+    Then open a project: `hivemind .` in its folder.
+  </Tab>
+  <Tab title="Setup prompt">
+    <AgentPrompt description="Paste this into Claude Code, Codex or any coding agent. It installs Hivemind and starts your first agent." page="getting-started">{`
+Install Hivemind on this computer and start my first agent in it.
+
+1. Run the installer. On Linux or macOS: \`bash <(curl -fsSL https://hivemind.griiken.com/install.sh)\`. On Windows, in PowerShell: \`irm https://hivemind.griiken.com/install.ps1 | iex\`. On an Intel Mac, stop and tell me: there is no prebuilt app.
+2. Check: \`hive --version\` prints a version. If \`hive\` is not found, tell me the line that adds \`~/.local/bin\` to PATH in my shell profile.
+3. Check which agent programs are on PATH: \`command -v claude codex opencode\`. Ask me which one to use. If I have none, ask before installing one.
+4. Add it: \`hive agents install <name> --yes\`. Check: \`hive agents list --found\` lists it.
+5. Ask me which project folder to open, then run \`hivemind <folder>\`.
+
+Never type a password; if a step needs sudo, ask me to run it. At the end, tell me the version installed and the agent added, and that pressing 2 in the app starts that agent.
+`}</AgentPrompt>
+  </Tab>
+</Tabs>
+
+Linux arm64 gets the command line only, and Intel Macs build from source: see [System requirements](/system-requirements).
+
+## Start here
+
+<CardGroup cols={2}>
+  <Card title="Install and run your first agent" icon="rocket" href="/getting-started">Five minutes, from the install command to answering your agent's first question.</Card>
+  <Card title="Run many agents at once" icon="layer-group" href="/run-many-agents">Give each agent its own worktree and watch them all from one window.</Card>
+  <Card title="Answer from your phone" icon="mobile" href="/phone">Approve, answer and stop your agents from your phone's browser.</Card>
+  <Card title="Build your own widget" icon="puzzle-piece" href="/widgets">A small live card on your canvas, in a few lines of code.</Card>
+</CardGroup>
+
+## Popular
+
+<CardGroup cols={2}>
+  <Card title="Run agents on another computer" icon="server" href="/machines">Over ssh, from the same window.</Card>
+  <Card title="Share a workspace" icon="users" href="/multiplayer">Let someone in, with a role.</Card>
+  <Card title="Make an API token" icon="key" href="/api-tokens">Drive a workspace from your own program.</Card>
+  <Card title="CLI reference" icon="terminal" href="/cli">Every `hive` command.</Card>
+</CardGroup>
+
+## What's new
+
+In Hivemind <Version />:
+
+- Tool plugins install from HiveHub, and each one arrives switched off until you turn it on.
+- Agents open, call and close plugins in the app with `hive ctl plugin`.
+- You can remove a workspace from this computer in the Layers panel. Its folder and files stay.
+
+Every release is in the [Changelog](/changelog). New words are in the [Glossary](/glossary). To let
+your coding agent read these docs, see [Use these docs from your agent](/docs-for-agents).
+
+<LastValidated />

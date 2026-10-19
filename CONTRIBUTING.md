@@ -63,7 +63,7 @@ crates/hive-phone, hive-web   the phone's core, and the same core in a browser
 spec/, conformance/     the agent events and wire protocol, and shared test cases
 templates/              the hive-browser skill source
 docs/design/            architecture notes
-guide/                  the user guide (Mintlify); see guide/AGENTS.md
+guide/                  the user guide's pages, served by site/docs; see guide/AGENTS.md
 ```
 
 Agents, views, widgets and tools are not in this repository. They live in

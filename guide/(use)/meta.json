@@ -1,0 +1,25 @@
+{
+  "title": "Use Hivemind",
+  "description": "Run agents, review their work, and reach them from other computers and people.",
+  "root": true,
+  "pages": [
+    "---Agents---",
+    "agents",
+    "know-who-is-waiting",
+    "agent-workflows",
+    "review",
+    "issues",
+    "git-worktree",
+    "views",
+    "---Other computers and people---",
+    "self-hosting",
+    "machines",
+    "host",
+    "connect",
+    "multiplayer",
+    "phone",
+    "browser-tab",
+    "---Settings---",
+    "appearance"
+  ]
+}
