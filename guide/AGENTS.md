@@ -72,6 +72,17 @@ Anything only I can do (a sudo, a DNS record, a sign-in): ask me and wait. Never
 
 ## Pictures
 
-Diagrams are SVG files in `images/`, shown with `<Frame caption="…"><img src="/images/x.svg" alt="…" /></Frame>`,
-or Mermaid code blocks for simple flows. Every image has `alt` text that says what it shows.
-Screenshots of the app come from `apps/desktop/scripts/docs-shots.mjs`, listed in `docs-shots.json`.
+Diagrams are drawn as code in `site/scripts/diagrams/` (see its README) and saved as
+`images/<name>.svg`. Show one with `<Diagram name="<name>" caption="…" />`: it sits inline, so its
+text is selectable and its colours follow the light or dark theme. Right under it, list its boxes
+and arrows in a few short lines. That list is the diagram for the Markdown copy, `llms.txt` and
+any reader who cannot see it, so the page's prose does not say it again.
+
+Screenshots of the app come from `apps/desktop/scripts/docs-shots.mjs`, listed in `docs-shots.json`,
+and go in `<Frame caption="…"><img src="/images/…" alt="…" /></Frame>`. Every image has `alt` text
+that says what it shows.
+
+## One home per fact
+
+Each fact lives on one page. Another page that needs it links there in one line. The pages under
+**How it works** own how the parts work; the other tabs own how to do things with them.

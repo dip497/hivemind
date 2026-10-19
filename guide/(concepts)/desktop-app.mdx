@@ -1,0 +1,30 @@
+---
+title: "The desktop app"
+description: "What a window, the main process and its helpers each do, and the sockets the app listens on."
+---
+
+The desktop app is one program. Each window draws a workspace. One main process does the rest:
+it keeps your settings and workspaces, and starts the helpers that run your agents and reach
+your other devices.
+
+<Diagram name="desktop-processes" caption="Inside the desktop app" />
+
+- **Window** ↔ **main process**: the app's own messages (IPC). A window draws the canvas, tiles and views. It opens no file and no connection itself.
+- **hive ctl, programs** → main process: `drive.sock`, with a token. See [The hive command](/hive-cli).
+- **Browser tab** → main process: a WebSocket on 127.0.0.1. See [Open the app in a browser tab](/browser-tab).
+- Main process ↔ **background process**: a local socket. See [Terminals and the background process](/background-process).
+- Main process ↔ **hive-net**: a local socket. See [Devices and hive-net](/how-devices-connect).
+- Close every window: the background process keeps your terminals and agents running.
+
+## Windows and workspaces
+
+Each window shows one workspace. Open a second window for a second project; both share the one
+main process and the one background process. The main process saves each workspace's layout as
+you change it, and each window's size and place. Where: [Data and where it is stored](/data-and-storage).
+
+## Plugins in a window
+
+A window runs views, widgets and tools, each in a different place. What each can reach:
+[Trust, permissions and privacy](/security-and-privacy).
+
+<LastValidated />

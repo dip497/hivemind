@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The guide's **How it works** tab explains the system: an architecture overview of what runs where, a page for each part (the desktop app, the background process, the `hive` command, plugins, hive-net, the phone page, machines and hosts) and the core ideas, with diagrams drawn inline in the page's light or dark theme, each followed by its facts as text for the Markdown copy and `llms.txt`.
 - Widgets: `hive.reducedMotion` and `hive.on("motion")` tell a widget's code that the person asked for less motion, so a widget that moves its card can hold still.
 - The website and README say Hivemind runs every coding agent, not a count of them; the agent grid ends with "Any other", which your agent adds in one file.
 - The website's home page leads with what only Hivemind does: its hero is a recording of the real app, sharp on retina screens, where an agent switches the workspace to the Island view, then adds a CI light widget and the Flaky tests tool; the README lists your own views, tools and widgets and the agent-driven workspace first.

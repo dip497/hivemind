@@ -1,0 +1,39 @@
+---
+title: "The hive command and its sockets"
+sidebarTitle: "The hive command"
+description: "What hive does on its own, how hive ctl reaches the app or a host, and the two local sockets behind it."
+---
+
+`hive` is one command for you and your agents. Most of it works alone: issues, plugins,
+machines, your network. `hive ctl` drives a running workspace: the app, or `hive host` on a
+server. An agent in a tile uses the same `hive ctl` you type.
+
+<AgentPrompt description="Paste this into your coding agent to check that hive can reach your workspace." page="hive-cli">{`
+Check that the hive command can drive my Hivemind workspace. Do not change anything.
+
+1. Run \`hive --version\`.
+2. Run \`hive ctl agents --json\` in this project. If it exits 3, the app is not open here and no host runs; tell me and stop. Otherwise summarise what it lists.
+3. Run \`hive ctl list-workspaces\` and tell me which workspaces this computer knows.
+4. If \`$HIVEMIND_TILE\` is set, tell me I am an agent in a tile, and which one.
+`}</AgentPrompt>
+
+<Diagram name="drive-sockets" caption="Two local sockets" />
+
+- **hive ctl** and **your program** → **drive socket** (`drive.sock`): a hello with a token, then calls. The app or `hive host` checks the token's role. See [API](/api).
+- **Agent hook** → **control socket** (`hcp.sock`): one `agent.event` each time the agent starts a turn, asks, or finishes.
+- The background process owns the control socket, works out the agent's state, and passes each event on to the app or host (`hcp-host.sock`).
+- `hive ctl report` and `hive ctl inbox` use the control socket too.
+- Like the drive socket, the control socket opens only for your user: a file with mode 0600, or a named pipe on Windows.
+
+## Inside a tile
+
+Hivemind starts each agent with `HIVEMIND_TILE` set to its tile's id, and a token for that tile.
+So `hive ctl` in a tile acts as that agent: a worker it spawns is its own, and `hive ctl report`
+answers its lead. The variables are in [Environment variables](/environment-variables).
+
+## Teach your agent
+
+The `hive` skills teach an agent every `hive ctl` command: [Use these docs from your agent](/docs-for-agents).
+Every command is in the [CLI reference](/cli).
+
+<LastValidated />

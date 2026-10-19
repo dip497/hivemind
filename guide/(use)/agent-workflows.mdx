@@ -18,9 +18,12 @@ You are running inside a Hivemind tile. Lead a small team of other agents with \
 Check: the workflow's JSON has one reply per part. At the end, show me the merged list, how many workers ran, and whether any failed or timed out.
 `}</AgentPrompt>
 
-<Frame caption="Start, send, collect, answer">
-  <img src="/images/workflows-loop.svg" alt="You or a lead agent start workers and send them work with hive ctl spawn and send. Each worker's reply comes back through hive ctl read or the inbox. A worker that asks something lands in the inbox, and you answer or approve it." />
-</Frame>
+<Diagram name="workflows-loop" caption="Start, send, collect, answer" />
+
+- **You or a lead agent** → **worker agents**: start them and send them work, with `hive ctl spawn` and `send`.
+- Workers → you: each reply, through `hive ctl read` or the inbox.
+- A worker that asks something → your inbox. You answer or approve it.
+- `hive ctl workflow` runs fanout, pipeline and mapreduce over many workers.
 
 ## Words on this page
 

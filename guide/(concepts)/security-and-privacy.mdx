@@ -1,26 +1,35 @@
 ---
-title: "Security and privacy"
-description: "What each kind of plugin can touch, what leaves your computer, what HiveHub learns, and how tokens, roles and the relay keep things private."
+title: "Trust, permissions and privacy"
+sidebarTitle: "Trust and privacy"
+description: "What can reach your files and network, how plugin permissions work, what leaves your computer, and what HiveHub learns."
 ---
 
-Hivemind runs on your own computers. This page says what can touch your files, and what leaves your machine.
+Hivemind runs on your own computers. This page says what can reach what, and what leaves your
+machine.
 
-<AgentPrompt description="Paste this into your coding agent to review what can reach your files and your network, without changing anything." page="security-and-privacy">{`Review my Hivemind setup for what can touch my files and what leaves this computer, using the "Security and privacy" page. Run only read-only commands: \`hive plugins list --json\`, \`hive grant list\`, \`hive network show\` and \`hive config get network\`.
+<AgentPrompt description="Paste this into your coding agent to review what can reach your files and your network, without changing anything." page="security-and-privacy">{`Review my Hivemind setup for what can touch my files and what leaves this computer, using the "Trust, permissions and privacy" page. Run only read-only commands: \`hive plugins list --json\`, \`hive grant list\`, \`hive network show\` and \`hive config get network\`.
 
 Tell me: which tool plugins are switched on (they run with my access), which API tokens exist with their roles and expiry, which network and servers this computer uses, and whether the update check is on. Suggest what to switch off or revoke, but do not change anything.`}</AgentPrompt>
 
-## What each plugin can touch
+<Diagram name="trust-boundary" caption="What can reach what" />
 
-A <Tooltip tip="Something you add to Hivemind: an agent, a view, a widget or a tool." cta="Glossary" href="/glossary#plugin">plugin</Tooltip> is one of four kinds. Each can reach different things.
+- **Runs as you**: **agents**, in your terminals, and **tools**, inside the app. They reach your files, programs, logins and network.
+- **Sandbox**: **views**, in a frame with no Node, and **widgets**, in a worker. No files, no network. They reach **the workspace** only through the permissions they asked for.
+- **Guests** come in with a [role](/multiplayer#roles), **your programs** with an [API token](/api-tokens). A call the role does not allow is refused before it runs.
+- **Your server** sees only encrypted traffic: see [Encrypted end to end](/how-devices-connect#encrypted-end-to-end).
+- **HiveHub** files are checked before they install: see below.
 
-| Kind | Runs as | Files and network |
-|---|---|---|
-| Agent | The agent's own program, in a terminal, as you | Everything you can reach. It is the coding agent you chose to run. |
-| View | A web page in a sandbox | No files, no network, no Node. It sees the workspace only through the permissions it asks for. |
-| Widget | Code in a worker | No files, no network. It sees the workspace only through the permissions it asks for. |
-| Tool | Code inside the app, with your access | Your files, programs and logins. So a tool you add starts switched off. |
+## Permissions
 
-A view that floods the app or runs away with the CPU is switched off for the session. If a tool breaks the app, start it with `HIVEMIND_SAFE_MODE=1 hivemind`: then no tool plugin loads.
+- A view or widget lists its permissions in its file. You see them in words, under **What it can do**, before you install it. An unknown one is refused.
+- Each message it sends is checked against them. With `workspace:prompt`, you also confirm each prompt it writes.
+- What each permission allows: [Permissions](/extension-authoring#permissions). What else the sandbox stops: [The sandbox](/extension-authoring#the-sandbox).
+
+## Tools start switched off
+
+A tool you install starts switched off, and you turn it on yourself. The tools that ship with
+the app start on. If a tool breaks the app, start it with `HIVEMIND_SAFE_MODE=1 hivemind`: only
+the tools that ship with the app load.
 
 ## What you install from HiveHub
 
@@ -40,33 +49,16 @@ A view that floods the app or runs away with the CPU is switched off for the ses
 
 With the update check off, the app reaches nothing your network does not name, until you browse plugins yourself. Your agents' own programs talk to their providers as they always do.
 
-## The relay cannot read your traffic
+## Before you let someone in
 
-Traffic between your devices is encrypted end to end with each device's own key. The relay passes it on but cannot read it. Push notices to your phone are encrypted to the phone. See [How devices connect](/how-devices-connect).
-
-## People and roles
-
-A guest gets a [role](/multiplayer#roles): `view`, `edit`, `terminals` or `agents`. `agents` means they can run commands on your computer. A person gets it only while they are in the workspace, after a warning. An invite link gives at most `terminals`.
-
-Before you let anyone in, both screens show three words. If they differ, someone sits between you: press **Deny**.
-
-## API tokens
-
-- A <Tooltip tip="A secret a program of yours uses to drive a workspace, with one role." cta="Glossary" href="/glossary#token">token</Tooltip> is shown once. Hivemind keeps only its SHA-256 hash.
-- Programs reach the app through a local connection only your user can open: a socket file with mode 0600, or a named pipe on Windows.
-- Each token has one role. A call its role does not allow is refused with `FORBIDDEN` and never runs.
-- `hive grant revoke <id>` ends a token at once.
-
-More in [Tokens and roles](/api-tokens).
-
-## The browser tab
-
-[Open the app in a browser tab](/browser-tab) listens on this computer only. Its link carries a key that changes each time the app starts. Anyone with the link can use your terminals.
+Both screens show three words. If they differ, someone sits between you: press **Deny**. An
+invite link gives at most `terminals`. How: [Share a workspace](/multiplayer).
 
 ## Related
 
-- [How devices connect](/how-devices-connect)
+- [Devices and hive-net](/how-devices-connect)
+- [Make an API token](/api-tokens)
+- [Open the app in a browser tab](/browser-tab): anyone with its link can use your terminals.
 - [Plugins](/plugins)
-- [Share a workspace](/multiplayer)
 
 <LastValidated />

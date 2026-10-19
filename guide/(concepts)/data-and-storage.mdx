@@ -1,0 +1,46 @@
+---
+title: "Data and where it is stored"
+description: "Every file Hivemind keeps, which folder it is in, and what is never written down."
+---
+
+Hivemind keeps your data on your own computers: in two folders, and in your project's own
+`.hivemind/` folder.
+
+<AgentPrompt description="Paste this into your coding agent to list what Hivemind keeps on this computer." page="data-and-storage">{`
+List what Hivemind keeps on this computer, using the "Data and where it is stored" page. Do not change or print the contents of any key or token file.
+
+1. Find the app data folder for this system from the page (or \`$HIVEMIND_APP_DATA\` if set) and the config folder (\`$XDG_CONFIG_HOME/hivemind\`, else \`~/.config/hivemind\`).
+2. For each row of the page's tables, say whether the file or folder exists here and how big it is.
+3. Say which ones I would back up, and which a reinstall would make again.
+`}</AgentPrompt>
+
+## The two folders
+
+| Folder | Linux | macOS | Windows |
+|---|---|---|---|
+| Config folder | `~/.config/hivemind` | `~/.config/hivemind` | `~/.config/hivemind` |
+| App data folder | `~/.config/hivemind` | `~/Library/Application Support/hivemind` | `%APPDATA%\hivemind` |
+
+`XDG_CONFIG_HOME`, when set, replaces `~/.config`. `HIVEMIND_APP_DATA` names another app data
+folder.
+
+## What is where
+
+| What | Where | Note |
+|---|---|---|
+| Settings | config folder, `settings.json` | shared by the app and `hive`. Every setting: [Settings](/settings) |
+| Agent files, views, widgets, tools | config folder, `agents/`, `views/`, `widgets/`, `tools/` | a project may add its own in `.hivemind/agents/` and `.hivemind/views/` |
+| Saved machines | config folder, `machines.json` | |
+| Each workspace's layout: frames, tiles, viewport | app data folder, `workspaces/` | one file per project; shared workspaces in `shared/` |
+| Window sizes and places | app data folder, `window-state.json` | |
+| Saved screens | app data folder, `sessions/` | kept 30 days, so a screen survives a reboot |
+| This device's keys | app data folder, `identity/` | never leave this computer |
+| API tokens | app data folder, `grants.json` | only a hash of each token |
+| Issues | your project, `.hivemind/` | Markdown, in your repository |
+| Logs | app data folder | which file for what: [Logs and bug reports](/logs-and-bug-reports) |
+
+A host keeps the same files in its own data folder on the server.
+
+What a widget draws is never saved: it is drawn again each time.
+
+<LastValidated />

@@ -1,8 +1,10 @@
 // A small SVG builder for the guide's diagrams, after the rules of diagram-design (MIT).
 import { C } from './brand.mjs';
 export { C };
-export const SANS = "'Geist', ui-sans-serif, system-ui, sans-serif";
-export const MONO = "'JetBrains Mono', ui-monospace, monospace";
+import { STYLE } from './brand.mjs';
+// Fonts come from the page (or the SVG's own style): sans is the default, `class="m"` is mono.
+export const SANS = '__SANS__';
+export const MONO = '__MONO__';
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // Width budget from the style guide: 0.60em sans, 0.62em mono per character.
@@ -43,8 +45,9 @@ export class Diagram {
     this.use(mono ? 'mono400' : weight >= 600 ? 'sans600' : 'sans400', s);
   }
   // Node: name (Geist 600) and optional lines below it (sublabel in mono, or plain sans).
-  node(x, y, w, h, name, { sub = [], mono = false, focal = false, rx = 6, dashed = false, tag = null } = {}) {
-    const fill = focal ? C.accentTint : C.paper2, stroke = focal ? C.accent : C.ruleSolid;
+  node(x, y, w, h, name, { sub = [], mono = false, focal = false, warn = false, rx = 6, dashed = false, tag = null, plain = false } = {}) {
+    const fill = focal ? C.accentTint : warn ? C.warnTint : plain ? C.paper : C.paper2;
+    const stroke = focal ? C.accent : warn ? C.warn : C.ruleSolid;
     this.front.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${C.paper}"/>`);
     this.front.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="1"${dashed ? ' stroke-dasharray="4,3"' : ''}/>`);
     const lines = [].concat(sub);
@@ -64,15 +67,40 @@ export class Diagram {
       this.use('mono400', tag);
     }
   }
+  // A dashed region (a process, a computer, a trust boundary) with its name on a mask over the line.
+  zone(x, y, w, h, name, { dashed = true, sub = null, color = C.soft } = {}) {
+    this.zones = this.zones ?? [];
+    this.zones.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="none" stroke="${C.ruleSolid}" stroke-width="1"${dashed ? ' stroke-dasharray="5,4"' : ''}/>`);
+    const tw = Math.ceil(name.length * 11 * (0.62 + 0.08) + 14);
+    this.zones.push(`<rect x="${x + 14}" y="${y - 8}" width="${tw}" height="16" fill="${C.paper}"/>`);
+    this.zones.push(`<text x="${x + 20}" y="${y + 4}" fill="${color}" font-size="11" font-family="${MONO}" letter-spacing="0.08em">${esc(name.toUpperCase())}</text>`);
+    if (sub) {
+      this.zones.push(`<text x="${x + w - 14}" y="${y + h - 12}" fill="${C.soft}" font-size="11.5" font-family="${SANS}" text-anchor="end">${esc(sub)}</text>`);
+    }
+  }
+  // A sequence actor's lifeline: a dashed line down from the box.
+  lifeline(x, y1, y2) {
+    this.back.push(`<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" stroke="${C.rule}" stroke-width="1" stroke-dasharray="4,4"/>`);
+  }
   raw(s, front = true, textKind = null, textStr = '') { (front ? this.front : this.back).push(s); if (textKind) this.use(textKind, textStr); }
   defs() {
     const m = (id, col, start) => `<marker id="${this.slug}-${id}${start ? '-start' : ''}" markerWidth="8" markerHeight="6" refX="${start ? 1 : 7}" refY="3" orient="auto"><polygon points="${start ? '8 0, 0 3, 8 6' : '0 0, 8 3, 0 6'}" fill="${col}"/></marker>`;
     return [m('arrow', C.soft), m('arrow-accent', C.accent), m('arrow-link', C.link), m('arrow', C.soft, true), m('arrow-accent', C.accent, true)].join('');
   }
-  svg(fontCss = '') {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${this.w} ${this.h}" width="${this.w}" height="${this.h}" role="img" aria-labelledby="${this.slug}-title ${this.slug}-desc">` +
+  svg() {
+    const body = `<rect width="100%" height="100%" fill="${C.paper}"/>` + (this.zones ?? []).join('') + this.back.join('') + this.front.join('');
+    return `<svg xmlns="http://www.w3.org/2000/svg" class="hm-diagram" viewBox="0 0 ${this.w} ${this.h}" width="${this.w}" height="${this.h}" role="img" aria-labelledby="${this.slug}-title ${this.slug}-desc">` +
       `<title id="${this.slug}-title">${esc(this.title)}</title><desc id="${this.slug}-desc">${esc(this.desc)}</desc>` +
-      `<defs>${fontCss ? `<style>${fontCss}</style>` : ''}${this.defs()}</defs>` +
-      `<rect width="100%" height="100%" fill="${C.paper}"/>` + this.back.join('') + this.front.join('') + `</svg>`;
+      `<defs><style>${STYLE}</style>${themed(this.defs())}</defs>` + themed(body) + `</svg>`;
   }
+}
+
+// A colour that names a CSS variable has to be a style, not an attribute, to follow the theme.
+function themed(markup) {
+  return markup.replace(/<(\w+)([^>]*?)(\/?)>/g, (tag, name, attrs, close) => {
+    const styles = [];
+    let rest = attrs.replace(/\s(fill|stroke)="(var\([^"]*\))"/g, (_, prop, value) => { styles.push(`${prop}:${value}`); return ''; });
+    rest = rest.replace(/\sfont-family="__SANS__"/g, '').replace(/\sfont-family="__MONO__"/g, ' class="m"');
+    return `<${name}${rest}${styles.length ? ` style="${styles.join(';')}"` : ''}${close}>`;
+  });
 }
