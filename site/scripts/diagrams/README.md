@@ -27,25 +27,13 @@ Once per machine, Playwright needs a Chromium: `npx playwright install chromium`
 
 ## Add one
 
-1. Add a function to `diagrams.mjs` that returns a `new Diagram({ slug, w, h, title, desc })`,
-   and add it to the list at the bottom. Name the slug `<page>-<what>`. Keep `w` at 800 or
-   less: the page draws it at its own size, so its words show at the size they are drawn (12px and
-   up), and a narrower screen scrolls it. A `<slug>-phone` diagram, about 320 wide, replaces it on
-   phone screens.
-2. Draw wires and labels first, boxes last, so lines sit behind boxes. Wires take points that
-   share an x or a y; corners are rounded for you. A label sits 16px off its wire, in open space,
-   never over a box.
-3. One or two `focal` boxes at most. Sentence case, mono only for commands and wire labels.
-4. Put it in the page, with its boxes and arrows as a short list right under it:
+1. Add a function to `diagrams.mjs` (or `how-it-works.mjs`) that returns a
+   `new Diagram({ slug, w, h, title, desc })`, and add it to the list at the bottom. Name the
+   slug `<page>-<what>`.
+2. Put it in the page with `<Diagram name="<slug>" caption="…" />` and its text list.
 
-   ```mdx
-   <Diagram name="<slug>" caption="Caption" />
-
-   - **A** → **B**: what goes, and how.
-   ```
-
-   The list says what the diagram says, not what it looks like. The Markdown copy of the page
-   shows the list and a link to the SVG.
+How to draw it (sizes, contrast, labels, phone layouts, the text list, checks) is in
+[the maintaining-docs skill](../../../.claude/skills/maintaining-docs/references/diagrams.md).
 
 ## Credit
 
