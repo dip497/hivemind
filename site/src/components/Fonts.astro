@@ -1,0 +1,23 @@
+---
+// The page's fonts, served from this site. Geist is one variable file for every weight and is
+// preloaded; its fallback is sized to Geist's metrics, so the swap moves nothing. The mono face
+// is used only for small labels and commands, so it is fetched after the page has loaded and
+// never competes with the first paint; until then the system's mono face, the same width, stands in.
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const font = (f: string) => `${base}/fonts/${f}`;
+const faces = `
+@font-face{font-family:"Geist";src:url(${font('geist-latin.woff2')}) format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Geist Fallback";src:local("Arial"),local("Liberation Sans"),local("Helvetica");size-adjust:104.65%;ascent-override:96.03%;descent-override:28.19%;line-gap-override:0%}`;
+const mono = [[400, font('jetbrains-mono-latin-400.woff2')], [500, font('jetbrains-mono-latin-500.woff2')]];
+---
+<link rel="preload" href={font('geist-latin.woff2')} as="font" type="font/woff2" crossorigin />
+<style set:html={faces}></style>
+<script is:inline define:vars={{ mono }}>
+  addEventListener('load', () => {
+    const add = () => mono.forEach(([weight, url]) => {
+      const face = new FontFace('JetBrains Mono', `url(${url}) format("woff2")`, { weight: String(weight), display: 'swap' });
+      face.load().then((f) => document.fonts.add(f)).catch(() => {});
+    });
+    'requestIdleCallback' in window ? requestIdleCallback(add, { timeout: 3000 }) : setTimeout(add, 500);
+  }, { once: true });
+</script>

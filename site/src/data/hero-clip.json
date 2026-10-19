@@ -1,28 +1,23 @@
 {
   "width": 2560,
   "height": 1600,
-  "poster": "step-canvas.webp",
-  "duration": 64.8,
+  "phone": {
+    "width": 720,
+    "height": 900
+  },
+  "duration": 41.5,
   "steps": [
     {
-      "key": "canvas",
-      "at": 0,
-      "focus": 8
-    },
-    {
       "key": "view",
-      "at": 5,
-      "focus": 35
+      "at": 0
     },
     {
       "key": "widget",
-      "at": 32,
-      "focus": 78
+      "at": 7.52
     },
     {
       "key": "tool",
-      "at": 41.1,
-      "focus": 55
+      "at": 23.92
     }
   ]
 }

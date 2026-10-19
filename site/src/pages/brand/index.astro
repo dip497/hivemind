@@ -59,7 +59,6 @@ const meanings: Record<string, string> = {
     <main class="bp-main">
       <header class="bp-hero">
         <div>
-          <p class="pill">v0.1 <span>·</span> DESIGN SYSTEM</p>
           <h1>Built from the app, not beside it.</h1>
           <p class="lede">Hivemind's colours, type, status meanings and motion live in the
             renderer's stylesheet. This page reads that file at build time, so what you see here
@@ -76,7 +75,6 @@ const meanings: Record<string, string> = {
 
       <!-- 01 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="foundations">
-        <p class="eyebrow"><b>01</b><span>Foundations</span></p>
         <h2>Two surfaces. One of them is canonical.</h2>
         <p class="intro">The app is where the system lives: <code>{source}</code> holds the palette,
           the status meanings, the curves and the tracking. The website vendors those values at build
@@ -102,7 +100,6 @@ const meanings: Record<string, string> = {
 
       <!-- 02 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="mark">
-        <p class="eyebrow"><b>02</b><span>The mark</span></p>
         <h2>Three cells. One of them is lit.</h2>
         <p class="intro">A hive of three rounded cells, with the top one at full strength and the
           others at 40%. It is the product's whole argument in one glyph: several agents, one of
@@ -121,7 +118,6 @@ const meanings: Record<string, string> = {
 
       <!-- 03 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="type">
-        <p class="eyebrow"><b>03</b><span>Typography</span></p>
         <h2>Two faces. Each with one job.</h2>
         <p class="intro">Geist sets everything a person reads. JetBrains Mono carries anything the
           machine produced — commands, paths, status lines, ids, counts. The split is the point: mono
@@ -150,7 +146,6 @@ const meanings: Record<string, string> = {
 
       <!-- 04 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="colour">
-        <p class="eyebrow"><b>04</b><span>Colour</span></p>
         <h2>Graphite everywhere, colour only where it means something.</h2>
         <p class="intro">Signal is the default palette: neutral surfaces in one hue family, and the
           few colours that remain are meanings. Every swatch below is read from the app's stylesheet,
@@ -178,7 +173,6 @@ const meanings: Record<string, string> = {
 
       <!-- 05 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="status">
-        <p class="eyebrow"><b>05</b><span>Status</span></p>
         <h2>One state is one colour, everywhere.</h2>
         <p class="intro">Layers rows, tile headers, the canvas, and every installed view through the
           SDK's <code>--hm-status-*</code> variables paint from the same six tokens. A preset changes
@@ -208,7 +202,6 @@ const meanings: Record<string, string> = {
 
       <!-- 06 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="surfaces">
-        <p class="eyebrow"><b>06</b><span>Surfaces</span></p>
         <h2>Hairlines, not shadows.</h2>
         <p class="intro">Panels separate by a one-pixel rule and a step in surface colour, not by
           elevation. A dark app full of drop shadows reads as a dashboard; a dark app full of
@@ -228,7 +221,6 @@ const meanings: Record<string, string> = {
 
       <!-- 07 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="motion">
-        <p class="eyebrow"><b>07</b><span>Motion</span></p>
         <h2>Motion is a state, not a flourish.</h2>
         <p class="intro">Two curves and three durations, all from the app. Something moves because it
           is telling you it is running; when nothing is happening, nothing moves.</p>
@@ -245,7 +237,6 @@ const meanings: Record<string, string> = {
 
       <!-- 08 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="imagery">
-        <p class="eyebrow"><b>08</b><span>Imagery</span></p>
         <h2>Marble on the page, the product in the frame.</h2>
         <p class="intro">Five public-domain museum photographs (Met Open Access, CC0) sit behind the
           site's sections, each chosen for the claim beside it. They never appear inside the product,
@@ -262,7 +253,6 @@ const meanings: Record<string, string> = {
 
       <!-- 09 ─────────────────────────────────────────────────────────────── -->
       <section class="sec" id="tokens">
-        <p class="eyebrow"><b>09</b><span>Tokens</span></p>
         <h2>The file this page was built from.</h2>
         <p class="intro">Generated from <code>{source}</code> at build time. Copy a line and it is
           the same string the renderer uses.</p>
@@ -302,8 +292,6 @@ const meanings: Record<string, string> = {
   .bp-hero { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 56px; align-items: start;
     padding: 72px 0 80px; }
   @media (max-width: 900px) { .bp-hero { grid-template-columns: 1fr } }
-  .pill { display: inline-flex; gap: 8px; font-family: var(--f-m); font-size: 11px; letter-spacing: .08em;
-    color: var(--fg3); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; margin: 0 0 18px; }
   .bp h1 { font-size: var(--t-display); line-height: 1.0; letter-spacing: var(--tr-display); font-weight: 600;
     color: var(--fg); margin: 0; text-wrap: balance; }
   .lede { margin-top: 20px; font-size: 20px; line-height: 1.45; color: var(--fg2); max-width: 56ch; text-wrap: pretty; }
@@ -317,12 +305,6 @@ const meanings: Record<string, string> = {
   .spec-row b { font-size: 12px; font-weight: 400; color: var(--fg2); }
 
   .sec { padding: 96px 0; border-top: 1px solid var(--line); }
-  .eyebrow { display: inline-flex; align-items: stretch; gap: 0; margin: 0 0 26px;
-    border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-  .eyebrow b, .eyebrow span { font-family: var(--f-m); font-size: 11px; letter-spacing: .08em;
-    padding: 6px 13px; font-weight: 400; }
-  .eyebrow b { background: var(--bg2); color: var(--fg3); }
-  .eyebrow span { color: var(--fg2); text-transform: uppercase; }
   .sec h2 { font-size: var(--t-heading); line-height: 1.06; letter-spacing: var(--tr-heading); font-weight: 600;
     color: var(--fg); margin: 0; text-wrap: balance; }
   .intro, .body { margin-top: 18px; font-size: 16px; line-height: 1.6; color: var(--fg3); max-width: 64ch; text-wrap: pretty; }
