@@ -1,0 +1,142 @@
+---
+// The hero: a recording of the real app (apps/desktop/scripts/site-clip.mjs), its steps as tabs.
+// Each step's caption is what the person asked; a tab jumps the video to that step.
+import clip from '../data/hero-clip.json';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const shot = (f: string) => `${base}/shots/hero/${f}`;
+const STEPS: Record<string, { tab: string; who: string; say: string; alt: string }> = {
+  canvas: { tab: 'Canvas', who: 'The canvas, where it starts', say: 'Agents at work, each in a real terminal.',
+    alt: 'The Hivemind canvas: three projects, each with coding agents working in their own terminals.' },
+  view: { tab: 'A view', who: 'You, to claude', say: '“Show my workspace as islands.”',
+    alt: 'The same agents in the Island view: each project is an island and each agent works at its own workshop.' },
+  widget: { tab: 'A widget', who: 'You, to claude', say: '“Put a CI light where I can see it.”',
+    alt: 'A CI light widget over the Island view, green after the build passed, beside the agent’s terminal.' },
+  tool: { tab: 'A tool', who: 'You, to claude', say: '“Find the flaky tests.”',
+    alt: 'The Flaky tests tool on the canvas, each test with one square per run.' },
+};
+const steps = clip.steps.map((s) => ({ ...s, ...STEPS[s.key] }));
+---
+
+<figure class="hc" data-hc data-steps={JSON.stringify(clip.steps)} aria-label="A recording of Hivemind: agents on the canvas, then a view, a widget and a tool that an agent adds.">
+  <p class="hc-say" aria-live="polite"><span class="hc-who" data-who>{steps[0].who}</span><span class="hc-q" data-say>{steps[0].say}</span></p>
+  <div class="hc-frame" style={`aspect-ratio:${clip.width}/${clip.height}`}>
+    <video class="hc-video" muted playsinline loop preload="none" width={clip.width} height={clip.height}
+      poster={shot(clip.poster)} data-src-webm={shot('clip.webm')} data-src-mp4={shot('clip.mp4')}
+      data-src-webm-small={shot('clip-small.webm')} data-src-mp4-small={shot('clip-small.mp4')} aria-hidden="true"></video>
+    <img class="hc-still" src={shot(`step-${steps[0].key}.webp`)} alt={steps[0].alt} width={clip.width} height={clip.height} decoding="async" data-still />
+  </div>
+  <div class="hc-steps" role="tablist" aria-label="What happens in the recording">
+    {steps.map((s, i) => (
+      <button type="button" role="tab" aria-selected={i === 0 ? 'true' : 'false'} data-i={i}
+        data-still={shot(`step-${s.key}.webp`)} data-alt={s.alt} data-who={s.who} data-say={s.say}>{s.tab}<i></i></button>
+    ))}
+    <button type="button" class="hc-pause" aria-pressed="false" data-pause>Pause</button>
+  </div>
+</figure>
+
+<style is:global>
+  .hc{position:relative;margin:0}
+  .hc::before{content:"";position:absolute;inset:-6% -6% 10%;pointer-events:none;z-index:0;
+    background:radial-gradient(52% 46% at 50% 46%,oklch(0.62 0.05 250 / .22),transparent 70%)}
+  .hc-say{position:relative;z-index:1;display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:6px 14px;margin:0 0 18px;text-align:center;min-height:1.6em}
+  .hc-who{font:500 12.5px/1 var(--f-m);letter-spacing:.06em;text-transform:uppercase;color:var(--fg2)}
+  .hc-q{font-size:clamp(18px,1.6vw,23px);font-weight:500;letter-spacing:-.015em;color:var(--fg);transition:opacity .25s var(--ease),transform .35s var(--ease)}
+  .hc-say[data-swap] .hc-q{opacity:0;transform:translateY(6px)}
+  .hc-frame{position:relative;z-index:1;border-radius:14px;overflow:hidden;background:var(--bg2);
+    border:1px solid var(--line2);box-shadow:0 40px 120px -20px oklch(0 0 0 / .7),inset 0 1px 0 oklch(1 0 0 / .06)}
+  .hc-video,.hc-still{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:var(--focus,50%) 50%;display:block}
+  .hc-still{transition:opacity .3s ease}
+  .hc[data-playing] .hc-still{opacity:0}
+  .hc-steps{position:relative;z-index:1;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:20px}
+  .hc-steps button{position:relative;font:500 14px/1 var(--f);color:var(--fg2);background:transparent;
+    border:1px solid transparent;border-radius:999px;padding:10px 15px;cursor:pointer;overflow:hidden;transition:color .15s,border-color .15s,background-color .15s}
+  .hc-steps [role="tab"][aria-selected="true"]{color:var(--fg);border-color:var(--line2);background:var(--bg2)}
+  .hc-steps [role="tab"] i{position:absolute;left:15px;right:15px;bottom:4px;height:1px;background:var(--fg2);transform:scaleX(var(--p,0));transform-origin:left}
+  .hc-pause{border-color:var(--line2)!important;font-family:var(--f-m)!important;font-size:12.5px!important}
+  @media (hover:hover) and (pointer:fine){.hc-steps button:hover{color:var(--fg)}}
+  @media (max-width:640px){
+    .hc-frame{aspect-ratio:4/5!important;border-radius:12px}
+    .hc-say{justify-content:flex-start;text-align:left;flex-direction:column;gap:6px;margin-bottom:14px}
+    .hc-steps{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;margin:14px calc(var(--gut) * -1) 0;padding:0 var(--gut)}
+    .hc-steps::-webkit-scrollbar{display:none}
+    .hc-steps button{flex:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .hc-steps [role="tab"] i,.hc-pause{display:none}
+    .hc-q,.hc-still{transition:none}
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-hc]');
+  if (root) {
+    const steps: { key: string; at: number; focus?: number; focusSmall?: number }[] = JSON.parse(root.dataset.steps!);
+    const video = root.querySelector<HTMLVideoElement>('video')!;
+    const still = root.querySelector<HTMLImageElement>('[data-still]')!;
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const pause = root.querySelector<HTMLButtonElement>('[data-pause]')!;
+    const say = root.querySelector<HTMLElement>('.hc-say')!;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    const small = matchMedia('(max-width: 640px)');
+    let current = -1, paused = false, loaded = false;
+
+    // On a phone the frame is cropped to 4:5, centred on where each step happens.
+    const show = (i: number) => {
+      const s = steps[i];
+      root.style.setProperty('--focus', `${(small.matches ? s.focusSmall ?? s.focus : s.focus) ?? 50}%`);
+      if (i === current) return;
+      current = i;
+      tabs.forEach((t, n) => t.setAttribute('aria-selected', n === i ? 'true' : 'false'));
+      const t = tabs[i];
+      say.setAttribute('data-swap', '');
+      requestAnimationFrame(() => {
+        root.querySelector('[data-who]')!.textContent = t.dataset.who!;
+        root.querySelector('[data-say]')!.textContent = t.dataset.say!;
+        requestAnimationFrame(() => say.removeAttribute('data-swap'));
+      });
+      if (!root.hasAttribute('data-playing')) { still.src = t.dataset.still!; still.alt = t.dataset.alt!; }
+    };
+    const stepAt = (time: number) => { let i = 0; steps.forEach((s, n) => { if (time >= s.at) i = n; }); return i; };
+    const progress = () => {
+      const i = stepAt(video.currentTime);
+      const end = steps[i + 1]?.at ?? video.duration;
+      tabs.forEach((t, n) => t.style.setProperty('--p', n === i ? String(Math.min(1, (video.currentTime - steps[i].at) / (end - steps[i].at))) : '0'));
+      show(i);
+    };
+    const load = () => {
+      if (loaded) return;
+      loaded = true;
+      const pick = small.matches ? 'Small' : '';
+      for (const [type, key] of [['video/webm', `srcWebm${pick}`], ['video/mp4', `srcMp4${pick}`]]) {
+        const source = document.createElement('source');
+        source.type = type; source.src = video.dataset[key]!;
+        video.append(source);
+      }
+      video.preload = 'auto';
+      video.load();
+    };
+    const play = () => {
+      if (reduce.matches || paused) return;
+      load();
+      video.play().then(() => root.setAttribute('data-playing', '')).catch(() => {});
+    };
+    video.addEventListener('timeupdate', progress);
+    video.addEventListener('playing', () => root.setAttribute('data-playing', ''));
+    tabs.forEach((t, i) => t.addEventListener('click', () => {
+      if (reduce.matches || !loaded) { show(i); if (!reduce.matches) { paused = false; play(); video.currentTime = steps[i].at; } return; }
+      video.currentTime = steps[i].at + 0.05;
+      show(i);
+      if (!paused) video.play().catch(() => {});
+    }));
+    pause.addEventListener('click', () => {
+      paused = !paused;
+      pause.setAttribute('aria-pressed', String(paused));
+      pause.textContent = paused ? 'Play' : 'Pause';
+      if (paused) video.pause(); else play();
+    });
+    show(0);
+    // Fetched only once the hero is on screen, and it stops when it is not.
+    new IntersectionObserver(([e]) => { if (e.isIntersecting) play(); else video.pause(); }, { rootMargin: '120px' }).observe(root);
+    reduce.addEventListener('change', () => { if (reduce.matches) { video.pause(); root.removeAttribute('data-playing'); } else play(); });
+  }
+</script>

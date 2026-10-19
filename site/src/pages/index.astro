@@ -1,6 +1,6 @@
 ---
 import { HIVEHUB } from "../hivehub";
-import HeroStage from '../components/HeroStage.astro';
+import HeroClip from '../components/HeroClip.astro';
 import icons from '../generated/agent-icons.json';
 import tokens from '../generated/tokens.json';
 import { resolve } from '../lib/tokens';
@@ -129,7 +129,7 @@ const code: Record<string, [string, string][]> = {
           <p class="fine">On your computer. No account. <button class="copy-prompt" type="button" data-copy={agentPrompt} data-label="Copied the prompt">Or copy a prompt for your agent</button></p>
         </div>
       </div>
-      <HeroStage />
+      <HeroClip />
     </div>
   </section>
 
@@ -462,7 +462,7 @@ const code: Record<string, [string, string][]> = {
 
   .install{display:flex;align-items:center;gap:12px;min-width:0;height:44px;padding:0 6px 0 14px;
     background:var(--bg2);border:1px solid var(--line2);border-radius:8px;font-size:13px}
-  .install code{color:var(--fg2);white-space:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0}
+  .install code{font-size:13px;color:var(--fg2);white-space:nowrap;overflow-x:auto;scrollbar-width:none;min-width:0}
   .install code::-webkit-scrollbar{display:none}
   .install code::before{content:"$ ";color:var(--fg3)}
   .copy{margin-left:auto;flex-shrink:0;font:500 12px/1 var(--f-m);cursor:pointer;color:var(--fg3);background:transparent;

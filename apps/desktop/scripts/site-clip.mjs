@@ -1,10 +1,14 @@
-// A screen recording of the real app, for the website's hero. Same setup as site-shots.mjs —
-// own profile, own HOME, no PTY daemon, a clone of this repository — and ffmpeg records the
-// X display it runs on, so what lands in the file is the app itself, not a re-enactment.
+// The website's hero: a screen recording of the real app. Its own profile, its own HOME, no PTY
+// daemon, a clone of this repository; ffmpeg records the X display, so what lands in the file is
+// the app itself. Recorded at twice the window's size, so its text stays sharp on a retina screen.
 //
-//   cd apps/desktop && xvfb-run -a -s "-screen 0 1600x1000x24" node scripts/site-clip.mjs <out-dir>
+//   cd apps/desktop && env -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS XDG_SESSION_TYPE=x11 \
+//     xvfb-run -n 91 -s "-screen 0 2560x1600x24" node scripts/site-clip.mjs <out-dir> --plugins <dir>
 //
-// Out: clip.webm (VP9) + clip.mp4 (H.264) + poster.png, all at the recorded size.
+// --plugins is a checkout of hivemind-plugins: the Island view, the CI light widget and the
+// Flaky tests tool are installed from it, the way an agent installs a plugin it just wrote.
+// Out: raw.mkv (lossless), beats.json (when each step starts, in seconds) and poster.png.
+// scripts/site-clip-encode.mjs cuts one or more recordings into what the site serves.
 import { _electron as electron } from "@playwright/test";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -18,22 +22,21 @@ const CLI = path.join(ROOT, "apps/cli/src/index.ts");
 const args = process.argv.slice(2);
 const OUT = path.resolve(args[0] ?? "site-clip");
 const opt = (name, fallback) => { const i = args.indexOf(`--${name}`); return i > 0 ? args[i + 1] : fallback; };
-const SIZE = { width: Number(opt("width", 1600)), height: Number(opt("height", 1000)) };
+const SIZE = { width: Number(opt("width", 1280)), height: Number(opt("height", 800)) };
+const SCALE = Number(opt("scale", 2));
 const FPS = Number(opt("fps", 30));
+const PLUGINS = path.resolve(opt("plugins", path.join(ROOT, "../hivemind-plugins")));
 
 fs.mkdirSync(OUT, { recursive: true });
 const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), p));
-const XDG = tmp("hm-clip-xdg-"), HOME = tmp("hm-clip-home-"), WORK = tmp("hm-clip-work-"), BIN = tmp("hm-clip-bin-");
+const HOME = tmp("home-"), BIN = path.join(HOME, ".bin"), XDG = path.join(HOME, ".config");
+fs.mkdirSync(BIN, { recursive: true });
+fs.mkdirSync(XDG, { recursive: true });
 
-// The clip needs agent tiles. The CLI they run is a stand-in that prints the screens the real
-// status detector reads — the statuses and views are real.
-// One stand-in per bundled agent, so a shot can show the workspace holding several different
-// ones rather than the same CLI three times.
+// The agents run under each agent's published manifest; the CLI each one runs is a stand-in that
+// prints the screens the real status detector reads, so statuses and views are real. A prompt
+// reaches claude and pi as argv and codex typed at its prompt.
 for (const cli of ["claude", "codex", "pi"]) {
-  // A prompt reaches a real CLI either as argv or typed at its prompt — each manifest says which
-  // (pi and claude take argv, codex is typed). A stand-in that only reads stdin leaves every
-  // argv agent sitting at an empty prompt, which the detector correctly calls idle. codex's own
-  // flags carry values (`-c key=value`), so its stand-in reads only what is typed.
   fs.writeFileSync(path.join(BIN, cli), `#!/usr/bin/env bash
 [ "$1" = "--version" ] && { echo "0.0.0 (clip stand-in)"; exit 0; }
 cmd=""
@@ -47,46 +50,64 @@ exec bash -c "$line"
 }
 
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) =>
-  !k.startsWith("CLAUDE") && !k.startsWith("HIVE") && !["ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "HCP_TOKEN"].includes(k)));
-Object.assign(env, { XDG_CONFIG_HOME: XDG, HOME, HIVEMIND_SHELL_ENV: "0", PATH: `${BIN}:${process.env.PATH}` });
+  !k.startsWith("CLAUDE") && !k.startsWith("HIVE") && !k.startsWith("GIT_") &&
+  !["ELECTRON_RUN_AS_NODE", "ELECTRON_RENDERER_URL", "HCP_TOKEN", "USER", "LOGNAME", "MAIL", "OLDPWD"].includes(k)));
+Object.assign(env, {
+  XDG_CONFIG_HOME: XDG, HOME, USER: "you", LOGNAME: "you", HIVEMIND_SHELL_ENV: "0", HIVEMIND_PTY_DAEMON: "0",
+  PATH: `${BIN}:${path.dirname(process.execPath)}:${path.dirname(spawnSync("which", ["bun"], { encoding: "utf8" }).stdout.trim())}:/usr/local/bin:/usr/bin:/bin`,
+});
+
+// `hive` on the agents' PATH is this checkout's CLI.
+const bun = spawnSync("which", ["bun"], { encoding: "utf8" }).stdout.trim();
+fs.writeFileSync(path.join(BIN, "hive"), `#!/usr/bin/env bash\nexec ${bun} ${CLI} "$@"\n`, { mode: 0o755 });
 
 const profile = 'PS1="\\[\\e[38;5;244m\\]\\W\\[\\e[0m\\] \\$ "\nexport GIT_PAGER=cat PAGER=cat LESS=FRX\n';
 fs.writeFileSync(path.join(HOME, ".bash_profile"), profile);
 fs.writeFileSync(path.join(HOME, ".bashrc"), profile);
 for (const quiet of [".hushlogin", ".sudo_as_admin_successful"]) fs.writeFileSync(path.join(HOME, quiet), "");
 
-const repo = path.join(WORK, "hivemind");
+const repo = path.join(HOME, "hivemind");
 execFileSync("git", ["clone", "-q", "--depth", "40", `file://${ROOT}`, repo]);
-execFileSync("git", ["-C", repo, "config", "user.email", "site@hivemind.dev"]);
-execFileSync("git", ["-C", repo, "config", "user.name", "hivemind"]);
-const change = spawnSync("git", ["-C", ROOT, "diff", "HEAD", "--", "CHANGELOG.md"], { encoding: "utf8" }).stdout;
-if (change) spawnSync("git", ["-C", repo, "apply", "-"], { input: change });
+execFileSync("git", ["-C", repo, "remote", "set-url", "origin", "https://github.com/dip497/hivemind.git"]);
+execFileSync("git", ["-C", repo, "config", "user.email", "you@example.com"]);
+execFileSync("git", ["-C", repo, "config", "user.name", "you"]);
+// The clone's tests run against this checkout's installed packages.
+for (const dir of [".", ...["apps", "packages"].flatMap((d) => fs.readdirSync(path.join(ROOT, d)).map((x) => path.join(d, x)))]) {
+  const nm = path.join(ROOT, dir, "node_modules");
+  if (fs.existsSync(nm) && fs.existsSync(path.join(repo, dir))) fs.symlinkSync(nm, path.join(repo, dir, "node_modules"));
+}
+
+const plugins = path.join(HOME, "plugins");
+// The Island view installs from its build, dist/.
+for (const [from, to] of [["views/island/dist", "island"], ["widgets/ci-light", "ci-light"], ["tools/flaky-tests", "flaky-tests"]]) {
+  if (!fs.existsSync(path.join(PLUGINS, from))) throw new Error(`no ${from} in ${PLUGINS}`);
+  fs.cpSync(path.join(PLUGINS, from), path.join(plugins, to), { recursive: true });
+}
 
 let hcp = {};
-const cli = (...a) => spawnSync("bun", [CLI, ...a], { cwd: repo, encoding: "utf8", env: { ...env, ...hcp } });
+const cli = (...a) => spawnSync(bun, [CLI, ...a], { cwd: repo, encoding: "utf8", env: { ...env, ...hcp } });
 
 for (const [k, v] of [
   ["appearance.mode", "dark"],
   ["appearance.glass.enabled", true],
   ["appearance.glass.contentGlass", true],
-  ["appearance.glass.opacity", Number(opt("panel", 0.82))],
-  ["appearance.glass.contentOpacity", Number(opt("content", 0.57))],
-  ["appearance.glass.blur", Number(opt("blur", 22))],
-  ["appearance.wallpaper.kind", opt("video", null) ? "video" : opt("wallpaper", "mono")],
+  ["appearance.glass.opacity", 0.82],
+  ["appearance.glass.contentOpacity", 0.57],
+  ["appearance.glass.blur", 22],
+  ["appearance.wallpaper.kind", "mono"],
   ["appearance.terminal.background", "#121416"],
 ]) cli("config", "set", k, JSON.stringify(v));
+for (const a of ["claude", "codex", "pi"]) {
+  const r = cli("agents", "install", a, "--yes");
+  if (r.status !== 0) throw new Error(`agents install ${a}: ${r.stdout}${r.stderr}`);
+}
 
-// No agent ships in the box: the stand-ins above run under each agent's published manifest.
-for (const a of ["claude", "codex", "pi"]) cli("agents", "install", a, "--yes");
-
-// Stills are for the website, where they are shown at up to 1200 CSS px: capture at 2x so the
-// text in a tile survives the downscale.
-const STILL = opt("still", null);
 const app = await electron.launch({
-  args: [path.join(APP, "out/main/index.js"), "--no-sandbox", ...(STILL ? ["--force-device-scale-factor=2"] : [])],
+  args: [path.join(APP, "out/main/index.js"), "--no-sandbox", `--force-device-scale-factor=${SCALE}`],
   cwd: repo, env,
 });
 const page = await app.firstWindow();
+page.setDefaultTimeout(120_000);
 page.on("pageerror", (e) => console.error("[renderer]", e.message));
 await app.evaluate(({ app: a, ipcMain }) => {
   ipcMain.removeHandler("checkForUpdate");
@@ -109,81 +130,20 @@ const userData = await (async () => {
   throw new Error("the app never opened its control socket");
 })();
 hcp = { HIVEMIND_APP_DATA: userData, HIVE_HCP_SOCK: path.join(userData, "hcp.sock"), HCP_TOKEN: fs.readFileSync(path.join(userData, "hcp.token"), "utf8").trim() };
-
-// A video wallpaper, imported the way the app's own picker does: copied into the profile's media
-// directory and addressed by hivemedia://. It is scaled to the window first — a 4K source costs
-// far more to decode than the window can show, and under software rendering that drops frames.
-const VIDEO = opt("video", null), IMAGE = opt("image", null);
-if (IMAGE) {
-  // A still wallpaper, imported the way the app's picker does it.
-  const media = path.join(userData, "media");
-  fs.mkdirSync(media, { recursive: true });
-  const name = `background-${Date.now()}${path.extname(IMAGE) || ".jpg"}`;
-  fs.copyFileSync(path.resolve(IMAGE), path.join(media, name));
-  cli("config", "set", "appearance.wallpaper.kind", JSON.stringify("image"));
-  cli("config", "set", "appearance.wallpaper.imageSrc", JSON.stringify(`hivemedia://media/${name}`));
-  cli("config", "set", "appearance.wallpaper.brightness", JSON.stringify(Number(opt("brightness", 0.55))));
-  await page.reload();
-  await page.waitForSelector(".react-flow", { timeout: 30_000 });
-  await page.waitForTimeout(2000);
-}
-if (VIDEO) {
-  const media = path.join(userData, "media");
-  fs.mkdirSync(media, { recursive: true });
-  const name = `background-${Date.now()}.mp4`;
-  execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", path.resolve(VIDEO),
-    "-vf", `scale=${SIZE.width}:-2`, "-c:v", "libx264", "-crf", "24", "-preset", "veryfast",
-    "-pix_fmt", "yuv420p", "-an", path.join(media, name)]);
-  cli("config", "set", "appearance.wallpaper.videoSrc", JSON.stringify(`hivemedia://media/${name}`));
-  cli("config", "set", "appearance.wallpaper.brightness", JSON.stringify(Number(opt("brightness", 0.6))));
-  await page.reload();
-  await page.waitForSelector(".react-flow", { timeout: 30_000 });
-  await page.waitForTimeout(2500);
-}
+// The agents' own `hive` reaches this app.
+fs.writeFileSync(path.join(BIN, "hive"), `#!/usr/bin/env bash\nexport HIVEMIND_APP_DATA='${hcp.HIVEMIND_APP_DATA}' HIVE_HCP_SOCK='${hcp.HIVE_HCP_SOCK}' HCP_TOKEN='${hcp.HCP_TOKEN}'\nexec ${bun} ${CLI} "$@"\n`, { mode: 0o755 });
 
 const wait = (ms) => page.waitForTimeout(ms);
 const emit = (name, detail) => page.evaluate(([n, d]) => window.dispatchEvent(new CustomEvent(n, { detail: d })), [name, detail]);
-const terminalIds = () => page.$$eval(".react-flow__node-terminal", (els) => els.map((e) => e.getAttribute("data-id")));
 const island = (title) => page.locator(`button[title^="${title}"]`).first();
 
-async function shell(frameId, command) {
-  const before = new Set(await terminalIds());
-  if (frameId) await emit("hivemind:frame-open", { frameId, kind: "shell" });
-  else await emit("hivemind:canvas-toggle", "shell");
-  let id;
-  for (let i = 0; i < 60 && !id; i++) { await wait(200); id = (await terminalIds()).find((t) => !before.has(t)); }
-  if (!id) throw new Error(`no shell appeared for: ${command}`);
-  await page.locator(`.react-flow__node[data-id="${id}"] .xterm`).waitFor({ timeout: 10_000 });
-  await wait(700);
-  await page.locator(`.react-flow__node[data-id="${id}"] .xterm-helper-textarea`).focus();
-  return id;
-}
-/** Type into a tile at reading speed: the clip should look like someone working, not a macro. */
-async function type(id, text) {
-  await page.locator(`.react-flow__node[data-id="${id}"] .xterm-helper-textarea`).focus();
-  await page.keyboard.type(text, { delay: 55 });
-  await page.keyboard.press("Enter");
-}
-const toView = async (mode) => {
-  await emit("hivemind:set-view-mode", { mode });
-  await wait(1400);
-};
-
-// The screens the real status detector reads — and each provider reads its own. A single generic
-// spinner leaves pi idle (it looks for the literal "Working...") and codex unblocked, so every
-// stand-in prints what its own manifest in packages/hive-agents/manifests looks for.
 const WORKING = {
   claude: (task) => `(i=0; while :; do for g in ✻ ✶ ✳ ✢; do i=$((i+1)); printf '\\r%s ${task}… (%ss · esc to interrupt)  ' "$g" $((i*4/10)); sleep 0.4; done; done)`,
   codex: (task) => `(i=0; while :; do i=$((i+1)); printf '\\r• Working (%ss) · ${task}  ' $((i*4/10)); sleep 0.4; done)`,
   pi: (task) => `(i=0; while :; do i=$((i+1)); printf '\\rWorking... ${task} (%ss)  ' $((i*4/10)); sleep 0.4; done)`,
 };
-// pi is absent on purpose: its manifest declares blockedDetection false — it never asks.
-const BLOCKED = {
-  claude: (file, then) => `printf '\\n Edit ${file}\\n\\n Do you want to make this edit to ${file}?\\n ❯ 1. Yes\\n   2. Yes, and don\\x27t ask again this session\\n   3. No, and tell Claude what to do differently\\n'; IFS= read -r _ans; clear; ${then}`,
-  codex: (cmd, then) => `printf '\\n  $ ${cmd}\\n\\n  Allow command? [y/n] '; IFS= read -r _ans; clear; ${then}`,
-};
-const agent = (name, frame, script, kind = "claude") => {
-  const r = cli("ctl", "spawn", "--agent", kind, "--name", name, ...(frame ? ["--frame", frame] : []), "--prompt", `${script}; sleep 3600`, "--json");
+const agent = (name, frame, script, kind) => {
+  const r = cli("ctl", "spawn", "--agent", kind, "--name", name, ...(frame ? ["--frame", frame] : []), "--prompt", script, "--json");
   if (r.status !== 0) console.error(`spawn ${name}: ${r.stdout}${r.stderr}`);
   const out = JSON.parse(r.stdout || "{}");
   return out.data?.tile ?? out.tile;
@@ -200,163 +160,157 @@ async function namedFrame(title) {
 }
 
 // ── the scene, built before the camera runs ──────────────────────────────────
-// docs/design/demo-scene-2026-09-18.md is the spec: twenty agents across five frames of one
-// real repository, three of them waiting on a person. Every screen below is real output of the
-// command named in it — the shim and the permission prompt are the only stand-ins.
-const FRAMES = ["views", "cli", "packages", "docs", "site"];
-const frameIds = {};
-for (const f of FRAMES) frameIds[f] = await namedFrame(f);
+// Three frames of this repository, an agent of each kind at real work in them. Each screen is the
+// real output of the command named in it, then the spinner its provider's detector reads.
+for (const f of ["views", "cli", "packages"]) await namedFrame(f);
+const work = (kind, cmd, task) => `clear; ${cmd} 2>&1 | head -n 16; printf '\\n'; ${WORKING[kind](task)}`;
+for (const [frame, kind, name, script] of [
+  ["views", "codex", "trace-glass", work("codex", "grep -rn 'effectiveGlass' apps/desktop/src --include=*.ts | cut -c1-90", "Tracing effectiveGlass")],
+  ["views", "pi", "renderer-diff", work("pi", "git diff --stat HEAD~3 -- apps/desktop | tail -n 8", "Summarising the renderer diff")],
+  ["cli", "claude", "ctl-history", work("claude", "git log --oneline -n 10 -- apps/cli", "Reading the ctl history")],
+  ["cli", "pi", "last-commit", work("pi", "git show --stat --oneline HEAD | head -n 10", "Checking the last commit")],
+  ["packages", "codex", "protocol", work("codex", "grep -rn 'PROTOCOL_VERSION' packages --include=*.ts | cut -c1-90", "Checking the protocol version")],
+]) agent(name, frame, script, kind);
 
-/** Real output first, then the spinner the provider's own detector reads. */
-const work = (kind, cmd, task) => `clear; ${cmd} 2>&1 | head -n 22; printf '\\n'; ${WORKING[kind](task)}`;
-/** The last commit that touched the file, then the question about editing it. */
-const ask = (file, task) =>
-  `clear; git log -p -n 1 --format='commit %h  %s' -- ${file} 2>&1 | head -n 18; ` +
-  BLOCKED.claude(file, WORKING.claude(task));
-
-const SCENE = [
-  // frame, kind, script
-  ["views", "claude", ask("apps/desktop/src/renderer/src/theme-store.ts", "Editing theme-store.ts")],
-  ["views", "claude", work("claude", "git log --oneline --decorate=no -n 14", "Reading the view registry")],
-  ["views", "codex", work("codex", "grep -rn 'effectiveGlass' apps/desktop/src --include=*.ts", "Tracing effectiveGlass")],
-  ["views", "pi", work("pi", "git diff --stat HEAD~3 -- apps/desktop", "Summarising the renderer diff")],
-
-  ["cli", "claude", ask("apps/cli/src/commands/ctl.ts", "Editing ctl.ts")],
-  ["cli", "claude", work("claude", "git log --oneline -n 12 -- apps/cli", "Reading the ctl history")],
-  ["cli", "pi", work("pi", "git show --stat --oneline HEAD", "Checking the last commit")],
-
-  ["packages", "codex", `clear; git log --oneline -n 8 -- packages 2>&1 | head -n 12; ` +
-    BLOCKED.codex("pnpm --filter @hivemind/desktop test:unit", WORKING.codex("Running the unit tests"))],
-  ["packages", "codex", work("codex", "grep -rn 'PROTOCOL_VERSION' packages --include=*.ts", "Checking the protocol version")],
-  ["packages", "pi", work("pi", "ls apps/desktop/src/renderer/src/workspace/views", "Reading the built-in views")],
-
-  ["docs", "claude", work("claude", "find docs/src/content -name '*.md' | sort", "Drafting the upgrade note")],
-  ["docs", "claude", work("claude", "sed -n '1,22p' CHANGELOG.md", "Reading the changelog")],
-  ["docs", "codex", work("codex", "git log --oneline -n 10 -- docs", "Checking what changed in docs")],
-
-  ["site", "claude", work("claude", "wc -l apps/desktop/src/renderer/src/*.tsx | sort -n | tail -12", "Measuring the renderer")],
-  ["site", "pi", work("pi", "git branch -a", "Listing the branches")],
-  // One that has finished, and says what it did.
-  ["site", "codex", `clear; git show --stat --oneline HEAD 2>&1 | head -n 12; printf '\\nDone.\\n'`],
+// The agent the person talks to. Each request it reads runs the next step: it says what it will
+// do, runs the real hive commands for it, and is ready for the next one.
+const steps = path.join(HOME, "steps");
+fs.mkdirSync(steps, { recursive: true });
+const say = (t) => `printf '\\n\\e[37m⏺\\e[0m %s\\n' "${t}"`;
+/** One real command as the agent runs it, with the first lines of what it printed. */
+const run = (c, lines = 2) => `printf '\\n\\e[32m⏺\\e[0m \\e[1mBash\\e[0m(%s)\\n' "${c.replace(/"/g, '\\"')}"; (${c}) 2>&1 | sed -e "s#$HOME#~#g" -e 's/;.*//' -e 's/^/  \\x1b[38;5;244m⎿  /' -e 's/$/\\x1b[0m/' | head -n ${lines}`;
+const spin = (task, s) => `end=$((SECONDS+${s})); i=0; while [ $SECONDS -lt $end ]; do for g in ✻ ✶ ✳ ✢; do i=$((i+1)); printf '\\r\\e[38;5;208m%s\\e[0m ${task}… (%ss · esc to interrupt)  ' "$g" $((i*4/10)); sleep 0.4; done; done; printf '\\r\\e[K'`;
+const STEP = [
+  [spin("Reading the views guide", 2), say("I'll add the Island view and switch to it."),
+    run("hive views install ~/plugins/island && hive plugins enable view:@dip497/island", 1),
+    // Software rendering on a recording display: the view's own settings for less drawing.
+    "hive plugins set view:@dip497/island shadows false >/dev/null; hive plugins set view:@dip497/island frameRate 30 >/dev/null",
+    spin("Checking the islands", 1),
+    run("hive ctl plugin open view:@dip497/island", 1)],
+  [spin("Reading the widgets guide", 2), say("I'll put a CI light on the board and run the build."),
+    run("hive widgets install ~/plugins/ci-light && hive plugins enable widget:@dip497/ci-light", 1),
+    run("hive ctl plugin open widget:@dip497/ci-light", 1),
+    run(`hive ctl plugin call @dip497/ci-light set '{"state":"running","name":"CI"}'`, 0),
+    spin("Running the build", 2),
+    run(`hive ctl plugin call @dip497/ci-light set '{"state":"passed","name":"CI","detail":"typecheck, build and unit tests"}'`, 0)],
+  [spin("Reading the tools guide", 2), say("I'll add the Flaky tests tool and open it on the canvas."),
+    run("hive tools install ~/plugins/flaky-tests && hive plugins enable tool:dip497/flaky-tests", 1),
+    run(`hive plugins set tool:dip497/flaky-tests command "bun test screens" && hive plugins set tool:dip497/flaky-tests runs 3`, 0),
+    run("hive ctl plugin open view:canvas && hive ctl open-tool dip497/flaky-tests/flaky", 0),
+    `for i in $(seq 30); do hive ctl plugin call dip497/flaky-tests run >/dev/null 2>&1 && break; sleep 0.5; done`,
+    run("hive ctl plugin call dip497/flaky-tests flaky", 3)],
 ];
-const tiles = SCENE.map(([frame, kind, script]) => ({ frame, kind, id: agent(kind, frame, script, kind) }));
-// The first agent scripted to ask for permission: the clip answers it.
-const waiting = tiles[0];
+STEP.forEach((s, i) => fs.writeFileSync(path.join(steps, `${i + 1}.sh`), `${s.join("\n")}\n`));
+// It starts on what it last looked at: the repository's recent commits.
+fs.writeFileSync(path.join(HOME, "lead.sh"), `${run("git log --oneline -n 6", 6)}
+n=0
+while :; do
+  printf '\\n\\e[38;5;244m❯\\e[0m '; IFS= read -r ask; [ -z "$ask" ] && continue
+  n=$((n+1)); [ -f ~/steps/$n.sh ] && bash ~/steps/$n.sh
+done
+`);
+const lead = agent("my-workspace", "views", "clear; cd ~/hivemind; bash ~/lead.sh", "claude");
+if (!lead) throw new Error("the lead agent did not start");
+
 await wait(6000);
-
-const first = await shell(frameIds.views, "");
-await type(first, "clear; git log --oneline --decorate=no -n 10");
-await wait(1500);
-
-// What the detector actually made of the scene. A shot of an idle workspace sells nothing, so the
-// scene reports itself before the camera.
-const census = () => {
-  const r = cli("ctl", "agents", "--json");
-  let rows = [];
-  try { rows = JSON.parse(r.stdout || "{}").agents ?? []; } catch { /* reported below */ }
-  const by = {};
-  for (const t of rows) by[t.state ?? "?"] = (by[t.state ?? "?"] ?? 0) + 1;
-  return { rows, by };
-};
-for (let i = 0; i < 20; i++) {
-  const { rows, by } = census();
-  const blocked = (by.blocked ?? 0) + (by.permission ?? 0) + (by.waiting ?? 0);
-  if (blocked >= 1 && (by.working ?? 0) >= 2) { console.log(`scene: ${rows.length} tiles — ${JSON.stringify(by)}`); break; }
-  if (i === 19) console.log(`scene NOT LOADED: ${rows.length} tiles — ${JSON.stringify(by)}`);
-  await wait(1000);
-}
 await island("Fit to view").click();
-await wait(600);
-await island("Zoom in").click();
-await wait(1200);
+/** The pointer leaves what it clicked, so no tooltip stays in the shot. */
+const rest = () => page.mouse.move(SIZE.width * 0.5, SIZE.height * 0.6);
+await rest();
+await wait(4000);
 
-// ── stills ───────────────────────────────────────────────────────────────────
-// The same populated scene the clip records, held still.
-if (STILL) {
-  const dir = path.resolve(STILL);
-  fs.mkdirSync(dir, { recursive: true });
-  for (const mode of ["canvas", "windows"]) {
-    await toView(mode);
-    await wait(1200);
-    await page.screenshot({ path: path.join(dir, `view-${mode}.png`) });
-    console.log(`still view-${mode}`);
-  }
-  // An agent builds out its own workspace while it works: it installs a tool and a widget from
-  // HiveHub with the hive on its PATH, opens both, and keeps the widget's steps up to date.
-  const call = (cmd, json) => `c ${cmd} '${JSON.stringify(json)}'`;
-  const leadScript = [
-    "clear",
-    "hive tools install dip497/worktrees && hive plugins enable tool:dip497/worktrees",
-    "hive widgets install @dip497/progress && hive plugins enable widget:@dip497/progress",
-    "hive ctl plugin open tool:dip497/worktrees && hive ctl plugin open widget:@dip497/progress",
-    // A widget can refuse a command right after the last one; the agent asks again.
-    `c() { for i in $(seq 20); do hive ctl plugin call @dip497/progress "$@" >/dev/null && echo "progress $1 $2" && return; sleep 0.3; done; }`,
-    call("set-title", { title: "Ship 2026.10.3" }),
-    ...["Merge the branch", "Run the full e2e", "Tag the release", "Publish the plugins"].map((text) => call("add", { text })),
-    ...[0, 1, 2].map((index) => call("check", { index })),
-    WORKING.claude("Publishing the plugins"),
-  ].join("; ");
-  // Sixteen spawns a moment ago use up the spawn rate: wait for room for one more.
-  let lead;
-  for (let i = 0; i < 30 && !lead; i++) { lead = agent("claude", "site", leadScript, "claude"); if (!lead) await wait(2000); }
-  for (let i = 0; i < 60; i++) {
-    const r = cli("ctl", "plugin", "call", "@dip497/progress", "list", "{}", "--json");
-    if ((r.stdout.match(/"done":\s*true/g) ?? []).length >= 3) break;
-    await wait(1000);
-  }
-  const running = JSON.parse(cli("ctl", "plugin", "list", "--json").stdout.trim().split("\n").pop() || "{}");
-  console.log(`agent ${lead} opened: ${(running.plugins ?? []).map((p) => `${p.plugin} ${p.state}`).join(", ")}`);
-  const focused = cli("ctl", "focus", lead);
-  if (focused.status !== 0) console.error(`focus ${lead}: ${focused.stdout}${focused.stderr}`);
-  await toView("windows");
-  await wait(1500);
-  await page.screenshot({ path: path.join(dir, "agent-plugins.png") });
-  console.log("still agent-plugins");
-  await app.close();
-  process.exit(0);
+/** Click into the terminal that fills most of the screen, the way a person would. */
+const clickTerminal = async () => {
+  const i = await page.$$eval(".xterm-screen", (els) => {
+    let best = -1, area = 0;
+    els.forEach((e, n) => {
+      if (!e.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return;
+      const r = e.getBoundingClientRect();
+      const v = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+      if (v > area) { area = v; best = n; }
+    });
+    return best;
+  });
+  if (i < 0) throw new Error("no terminal on screen");
+  await page.locator(".xterm-screen").nth(i).click();
+};
+const ask = async (text) => {
+  await clickTerminal();
+  await page.keyboard.type(text, { delay: 45 });
+  await wait(350);
+  await page.keyboard.press("Enter");
+  await rest();
+};
+/** Ask until `ok` or the time is up; each ask is a CLI start, slow on a busy machine. */
+const until = async (ok, ms) => { const end = Date.now() + ms; while (Date.now() < end && !ok()) await wait(300); };
+const pluginOpen = (id) => until(() => cli("ctl", "plugin", "list").stdout.includes(id), 60_000);
+
+const PROBE = args.includes("--probe");
+const beats = [];
+let t0 = Date.now(), rec;
+const mark = async (key) => {
+  beats.push({ key, at: Math.round((Date.now() - t0) / 100) / 10 });
+  if (PROBE) await page.screenshot({ path: path.join(OUT, `probe-${beats.length}-${key}.png`) });
+};
+if (!PROBE) {
+  const W = SIZE.width * SCALE, H = SIZE.height * SCALE;
+  rec = spawn("ffmpeg", [
+    "-loglevel", "error", "-y", "-f", "x11grab", "-draw_mouse", "0", "-framerate", String(FPS),
+    "-video_size", `${W}x${H}`, "-i", `${process.env.DISPLAY}+0,0`,
+    "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0", path.join(OUT, "raw.mkv"),
+  ], { stdio: "inherit" });
+  await wait(800);
+  t0 = Date.now();
 }
-
-// ── record ───────────────────────────────────────────────────────────────────
-const raw = path.join(OUT, "raw.mkv");
-const rec = spawn("ffmpeg", [
-  "-loglevel", "error", "-y", "-f", "x11grab", "-framerate", String(FPS),
-  "-video_size", `${SIZE.width}x${SIZE.height}`, "-i", `${process.env.DISPLAY}+0,0`,
-  "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0", raw,
-], { stdio: "inherit" });
-await wait(1200);
 
 try {
-  // 1. work lands in a tile, on the canvas
-  const third = await shell(frameIds.docs, "");
-  await type(third, "clear; git diff --stat HEAD~4..HEAD | tail -n 12");
-  await wait(2400);
-
-  // 2. the same tiles as windows
-  await toView("windows");
-  await wait(2200);
-
-  // 3. back on the canvas, the beat the product is about: the one that needs you is answered,
-  // and it goes back to work.
-  await toView("canvas");
-  await page.locator(`.react-flow__node[data-id="${waiting.id}"] .xterm-helper-textarea`).focus().catch(() => {});
-  await page.keyboard.type("1", { delay: 90 });
-  await wait(700);
-  await page.keyboard.press("Enter");
-  await wait(2600);
+  // 1. agents at work on the canvas
+  await mark("canvas");
+  await wait(2500);
+  await page.locator('button[title^="Focus views"]').first().click();
+  await rest();
+  await wait(3000);
+  await page.getByText("my-workspace", { exact: true }).first().click();
+  await rest();
+  await wait(1500);
+  await island("Zoom out").click();
+  await rest();
+  await wait(1500);
+  // 2. it writes a view, and the app switches to it
+  await mark("view");
+  await ask("Show my workspace as islands.");
+  await pluginOpen("view @dip497/island");
+  await mark("switched");
+  await until(() => cli("ctl", "plugin", "call", "@dip497/island", "census").status === 0, 20_000);
+  await mark("drawn");
+  await wait(3500);
+  await mark("island");
+  // The island docks the agent's terminal beside it; ask again until it is on screen.
+  const terminalShown = () => page.$$eval(".xterm-screen", (els) => els.some((e) => e.checkVisibility({ opacityProperty: true, visibilityProperty: true })));
+  for (const end = Date.now() + 90_000; Date.now() < end && !(await terminalShown());) {
+    const r = cli("ctl", "plugin", "call", "@dip497/island", "show", '{"name":"my-workspace"}');
+    if (r.status !== 0) console.error(`island show: ${r.stdout}${r.stderr}`.trim());
+    await wait(1500);
+  }
+  await wait(2500);
+  // 3. a widget
+  await mark("widget");
+  await ask("Put a CI light where I can see it.");
+  await until(() => cli("ctl", "plugin", "call", "@dip497/ci-light", "status").stdout.includes("passed"), 90_000);
+  await wait(3000);
+  // 4. a tool
+  await mark("tool");
+  await ask("Find the flaky tests.");
+  await until(() => cli("ctl", "plugin", "call", "dip497/flaky-tests", "flaky").status === 0, 60_000);
+  await wait(4000);
+  await mark("end");
 } finally {
-  rec.kill("SIGINT");
-  await new Promise((r) => rec.on("close", r));
+  if (rec) { rec.kill("SIGINT"); await new Promise((r) => rec.on("close", r)); }
   await page.screenshot({ path: path.join(OUT, "poster.png") });
+  fs.writeFileSync(path.join(OUT, "beats.json"), `${JSON.stringify(beats, null, 2)}\n`);
   const pid = app.process().pid;
   await Promise.race([app.close(), new Promise((r) => setTimeout(r, 8000))]);
   try { process.kill(pid, "SIGKILL"); } catch {}
-  for (const d of [XDG, HOME, WORK]) fs.rmSync(d, { recursive: true, force: true });
+  fs.rmSync(HOME, { recursive: true, force: true });
 }
-
-// ── encode ───────────────────────────────────────────────────────────────────
-const enc = (a) => execFileSync("ffmpeg", ["-loglevel", "error", "-y", "-i", raw, ...a], { stdio: "inherit" });
-const W = Number(opt("out-width", 1280));
-enc(["-vf", `scale=${W}:-2`, "-c:v", "libvpx-vp9", "-crf", "36", "-b:v", "0", "-row-mt", "1", "-an", path.join(OUT, "clip.webm")]);
-enc(["-vf", `scale=${W}:-2`, "-c:v", "libx264", "-crf", "27", "-preset", "slow", "-movflags", "+faststart", "-pix_fmt", "yuv420p", "-an", path.join(OUT, "clip.mp4")]);
-fs.rmSync(raw, { force: true });
-for (const f of ["clip.webm", "clip.mp4", "poster.png"]) console.log(f, `${(fs.statSync(path.join(OUT, f)).size / 1024).toFixed(0)}KB`);
+console.log(JSON.stringify(beats));
