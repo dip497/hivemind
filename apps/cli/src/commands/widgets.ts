@@ -34,7 +34,7 @@ const listCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const rows = (await listWidgets()).map((w) => ({ id: w.id, name: w.name, version: w.version ?? null, builtin: !!w.builtin, code: w.code !== "", permissions: w.permissions, dir: w.dir ?? null }));
-      return ok(ctx, rows, () => rows.map((w) => `${w.id.padEnd(24)} ${(w.version ?? "-").padEnd(8)} ${w.name}${w.builtin ? "  (comes with the app)" : ""}`).join("\n"));
+      return ok(ctx, { widgets: rows }, () => rows.map((w) => `${w.id.padEnd(24)} ${(w.version ?? "-").padEnd(8)} ${w.name}${w.builtin ? "  (comes with the app)" : ""}`).join("\n"));
     } catch (e) { return fail(ctx, e, "list_failed"); }
   },
 });

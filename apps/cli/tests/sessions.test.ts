@@ -16,7 +16,7 @@ const dir = unix ? fs.mkdtempSync("/tmp/hive-sess-") : "";
 const sock = path.join(dir, "d.sock");
 const env = { HIVEMIND_PTY_SOCK: sock, XDG_CONFIG_HOME: path.join(dir, "xdg") };
 const run = (...args: string[]): Run => hive(args, { env });
-const data = (r: Run) => (r.json as { data: Record<string, unknown> }).data;
+const data = (r: Run) => (r.json as Record<string, unknown>);
 
 beforeAll(() => { if (unix) expect(run("daemon", "start", "--json").code).toBe(0); });
 afterAll(() => { if (unix) { run("daemon", "stop"); fs.rmSync(dir, { recursive: true, force: true }); } });
@@ -38,7 +38,7 @@ describe.skipIf(!unix)("daemon + sessions", () => {
     const list = data(run("ps", "--json")).sessions as SessionInfo[];
     expect(list.find((s) => s.id === "t-one")).toMatchObject({ state: "live", cmd: "sh", cwd: "/tmp", viewers: 0 });
     expect(run("run", "--id", "t-one", "--", "true").json).toBeUndefined(); // human output, exit 1
-    expect(run("run", "--id", "t-one", "--json", "--", "true").json).toMatchObject({ ok: false, code: "session_exists" });
+    expect(run("run", "--id", "t-one", "--json", "--", "true").json).toMatchObject({ error: { code: "SESSION_EXISTS" } });
   });
 
   const python = spawnSync("python3", ["--version"]).status === 0;
@@ -75,7 +75,7 @@ describe.skipIf(!unix)("daemon + sessions", () => {
   test("a socket path too long for sun_path is refused up front", () => {
     const r = hive(["daemon", "start", "--json", "--socket", `/tmp/${"x".repeat(120)}.sock`], { env });
     expect(r.code).toBe(2);
-    expect(r.json).toMatchObject({ code: "socket_invalid" });
+    expect(r.json).toMatchObject({ error: { code: "SOCKET_INVALID" } });
   });
 });
 

@@ -58,7 +58,7 @@ const listCmd = defineCommand({
         })),
         ...added.filter((t) => t.problem).map((t) => ({ id: t.id, added: true, problem: t.problem, tiles: [], commands: [] })),
       ];
-      return ok(ctx, plugins, () =>
+      return ok(ctx, { tools: plugins }, () =>
         plugins.map((p) => [
           `${p.id}${p.added ? "  (you added this)" : ""}${p.problem ? `  does not load: ${p.problem}` : ""}`,
           ...p.tiles.map((t) => `  tile     ${t.label.padEnd(14)} ${t.available ? "" : "(off) "}${t.tileKind ?? ""}`),

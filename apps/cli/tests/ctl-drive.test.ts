@@ -2,7 +2,7 @@
  *  domain): who it is (the person, or the agent whose tile token it holds), the workspace it acts
  *  on, each verb as its API method, `--json` shapes, exit codes, read's short polls, sleep and wake
  *  refused when they did nothing, and `agents --watch` following the feed's events. */
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +18,8 @@ import { cmd, hiveAsync as hive, sealedEnv } from "./helpers.js";
 import { fixtureXDG } from "./agents-fixtures.js";
 
 const unix = process.platform !== "win32";
+// Each test runs the CLI as a process, several times: on a busy machine that is seconds.
+setDefaultTimeout(30_000);
 // sun_path is ~108 bytes; os.tmpdir() can be deep, /tmp is not.
 const dir = unix ? fs.realpathSync(fs.mkdtempSync("/tmp/hive-ctl-drive-")) : "";
 const sock = path.join(dir, "drive.sock");
@@ -95,7 +97,8 @@ beforeAll(async () => {
   drive = serveDrive(sock, {
     server, installToken: () => TOKEN, grants, repos: () => [repoA, repoB],
     // The agent, and the one it starts, are in workspace a.
-    workspaceOf: (tile) => (tile === "me-1" || tile === "w-2" ? repoA : null), nameOf: (tile) => `the ${tile} agent`,
+    // b-1 is a tile of workspace b; any other is open in no workspace (closed, or never opened).
+    workspaceOf: (tile) => (tile === "me-1" || tile === "w-2" ? repoA : tile === "b-1" ? repoB : null), nameOf: (tile) => `the ${tile} agent`,
   });
   while (!fs.existsSync(sock)) await new Promise((r) => setTimeout(r, 10));
 });
@@ -118,7 +121,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     await hive(["ctl", "agents", "--json"], { cwd: dir, env: { ...program, HIVE_DRIVE_TOKEN: both, HIVE_WORKSPACE: repoB } });
     expect(last("agent.list")).toMatchObject({ params: [repoB], by: { client: "ci-both" } });
     const unnamed = await hive(["ctl", "agents", "--json"], { cwd: dir, env: { ...program, HIVE_DRIVE_TOKEN: both } });
-    expect([unnamed.code, (unnamed.json as { code: string }).code]).toEqual([2, "BAD_REQUEST"]);
+    expect([unnamed.code, (unnamed.json as { error: { code: string } }).error.code]).toEqual([2, "BAD_REQUEST"]);
   });
 
   test("as the person, a verb acts on the open workspace this folder is in (the innermost), else the only one, else asks which; --repo names it", async () => {
@@ -131,7 +134,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     await hive(["ctl", "agents", "--json"], { cwd: nested, env: env() });
     expect(last("agent.list").params).toEqual([nested]);
     const which = await hive(["ctl", "agents", "--json"], { cwd: dir, env: env() });
-    expect([which.code, (which.json as { message: string }).message]).toEqual([2, `say which of the host's workspaces: a (not shared) at ${repoA}; sub (not shared) at ${nested}; b (not shared) at ${repoB}; api (not shared) at ${onBox}`]);
+    expect([which.code, (which.json as { error: { message: string } }).error.message]).toEqual([2, `say which of the host's workspaces: a (not shared) at ${repoA}; sub (not shared) at ${nested}; b (not shared) at ${repoB}; api (not shared) at ${onBox}`]);
   });
 
   test("--repo names a workspace on another machine by its address, or its name", async () => {
@@ -154,15 +157,13 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect(last("agent.start").params).toEqual([repoA, { program: "codex", frame: "f1" }]);
     calls.length = 0;
     const nowhere = await hive(["ctl", "spawn", "--agent", "codex", "--frame", "b", "--json"], { cwd: dir, env: asAgent() });
-    expect([nowhere.code, (nowhere.json as { code: string }).code, calls.some((c) => c.method === "agent.start")]).toEqual([5, "NOT_FOUND", false]);
+    expect([nowhere.code, (nowhere.json as { error: { code: string } }).error.code, calls.some((c) => c.method === "agent.start")]).toEqual([5, "NOT_FOUND", false]);
     const elsewhere = await hive(["ctl", "spawn", "--agent", "codex", "--repo", repoB, "--json"], { env: asAgent() });
-    expect([elsewhere.code, elsewhere.json]).toEqual([6, {
-      ok: false, code: "FORBIDDEN",
-      message: `this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`,
-    }]);
-    const notMine = await hive(["ctl", "send", "w-1", "hi", "--json"], { env: asAgent() });
-    expect([notMine.code, (notMine.json as { message: string }).message]).toEqual([6,
-      `w-1 is not a tile of the workspace at ${repoA}; this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`]);
+    expect([elsewhere.code, elsewhere.json]).toEqual([6, { error: { code: "FORBIDDEN",
+      message: `this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)` } }]);
+    const notMine = await hive(["ctl", "send", "b-1", "hi", "--json"], { env: asAgent() });
+    expect([notMine.code, (notMine.json as { error: { message: string } }).error.message]).toEqual([6,
+      `b-1 is not a tile of the workspace at ${repoA}; this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`]);
   });
 
   test("agents --session finds the agent in that session, as its hooks said it or as the app tracks its tile's; none is exit 5", async () => {
@@ -174,7 +175,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     const tracked = await hive(["ctl", "agents", "--session", "resumed-7", "--repo", repoA, "--json"], { env: env() });
     expect([tracked.code, tracked.json]).toEqual([0, { seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }] }]);
     const none = await hive(["ctl", "agents", "--session", "nope", "--json"], { env: asAgent() });
-    expect([none.code, none.json]).toEqual([5, { ok: false, code: "NOT_FOUND", message: `no agent of the workspace at ${repoA} is in session nope` }]);
+    expect([none.code, none.json]).toEqual([5, { error: { code: "NOT_FOUND", message: `no agent of the workspace at ${repoA} is in session nope` } }]);
   });
 
   test("whoami says which app it reaches, from the drive socket's folder, and as whom: an agent's workspace, tile and session", async () => {
@@ -233,10 +234,10 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     const twin = await hive(["ctl", "wake", "w-2", "--repo", repoA], { env: env() });
     expect([twin.code, twin.stdout]).toEqual([7, expect.stringContaining("tile w-1 runs this conversation now")]);
     const ghost = await hive(["ctl", "wake", "ghost", "--repo", repoA, "--json"], { env: env() });
-    expect([ghost.code, (ghost.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
+    expect([ghost.code, (ghost.json as { error: { code: string } }).error.code]).toEqual([5, "NOT_FOUND"]);
   }, 30_000);
 
-  test("approve answers the wait its request names, as agent.answer; always and never decide the tool from now on; one not waiting is exit 2", async () => {
+  test("approve answers the wait its request names, as agent.answer; always and never decide the tool from now on; one not waiting is not found, exit 5", async () => {
     for (const [decision, answer] of [["allow", { decision: "allow" }], ["never", { decision: "deny", always: true }], ["always", { decision: "allow", always: true }]] as const) {
       const r = await hive(["ctl", "approve", "req-1", decision, "--repo", repoA, "--json"], { env: env() });
       expect([r.code, r.json]).toEqual([0, { answered: true }]);
@@ -245,26 +246,48 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     await hive(["ctl", "approve", "req-1", "deny", "--reason", "not that dir", "--repo", repoA], { env: env() });
     expect(last("agent.answer").params[2]).toEqual({ decision: "deny", feedback: "not that dir" });
     const gone = await hive(["ctl", "approve", "req-2", "allow", "--repo", repoA, "--json"], { env: env() });
-    expect([gone.code, (gone.json as { code: string }).code]).toEqual([2, "BAD_REQUEST"]);
+    expect([gone.code, (gone.json as { error: { code: string } }).error.code]).toEqual([5, "NOT_FOUND"]);
   });
 
   test("approval shows what the request it names would do, its input whole, from agent.approval; one not waiting is exit 5", async () => {
     const r = await hive(["ctl", "approval", "req-1", "--repo", repoA, "--json"], { env: env() });
     expect([r.code, r.json, last("agent.approval").params]).toEqual([0, { request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 }, ["w-3"]]);
     const gone = await hive(["ctl", "approval", "req-2", "--repo", repoA, "--json"], { env: env() });
-    expect([gone.code, (gone.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
+    expect([gone.code, (gone.json as { error: { code: string } }).error.code]).toEqual([5, "NOT_FOUND"]);
   });
 
   test("a bad token → exit 6 FORBIDDEN; an agent nobody runs → exit 5; a bad request → exit 2", async () => {
     const bad = await hive(["ctl", "agents", "--json"], { env: env("wrong") });
-    expect([bad.code, (bad.json as { code: string }).code]).toEqual([6, "FORBIDDEN"]);
+    expect([bad.code, (bad.json as { error: { code: string } }).error.code]).toEqual([6, "FORBIDDEN"]);
     for (const verb of [["send", "ghost", "hi"], ["close", "ghost"]]) {
       const nf = await hive(["ctl", ...verb, "--json"], { env: env() });
-      expect([nf.code, (nf.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
+      expect([nf.code, (nf.json as { error: { code: string } }).error.code]).toEqual([5, "NOT_FOUND"]);
     }
     const br = await hive(["ctl", "send", "w-1", "", "--json"], { env: env() });
-    expect([br.code, (br.json as { code: string }).code]).toEqual([2, "BAD_REQUEST"]);
+    expect([br.code, (br.json as { error: { code: string } }).error.code]).toEqual([2, "BAD_REQUEST"]);
   });
+
+  test("one answer for not there, from every verb that names a tile: one open in no workspace is NOT_FOUND, exit 5; another workspace's is FORBIDDEN, exit 6; each as JSON on stderr, nothing on stdout", async () => {
+    const naming = (t: string) => [["send", t, "hi"], ["read", t, "--timeout", "1s"], ["stream", t, "--snapshot"], ["rename", t, "x"], ["focus", t], ["keys", t, "Enter"],
+      ["connect", "me-1", t], ["connect", t, "me-1"], ["disconnect", t], ["close", t]];
+    for (const [tile, exit, code] of [["gone-1", 5, "NOT_FOUND"], ["b-1", 6, "FORBIDDEN"]] as const) {
+      for (const args of naming(tile)) {
+        const r = await hive(["ctl", ...args, "--json"], { env: asAgent() });
+        expect([args.join(" "), r.code, r.stdout, (JSON.parse(r.stderr) as { error: { code: string } }).error.code]).toEqual([args.join(" "), exit, "", code]);
+      }
+    }
+  }, 60_000);
+
+  test("a command written wrong is a usage error: with --json, {error:{code:USAGE, fix}} on stderr naming its help, exit 2, and nothing is asked of the app", async () => {
+    for (const [args, fix] of [
+      [["send"], "hive ctl send --help"], [["read", "w-1", "--timout", "5s"], "hive ctl read --help"], [["whoamix"], "hive ctl --help"],
+      [["read", "w-1", "--timeout", "soon"], "hive ctl read --help"], [["approve", "req-1", "maybe"], "hive ctl approve --help"],
+    ] as const) {
+      calls.length = 0;
+      const r = await hive(["ctl", ...args, "--json"], { env: env() });
+      expect([args.join(" "), r.code, r.stdout, JSON.parse(r.stderr), calls.length]).toEqual([args.join(" "), 2, "", { error: { code: "USAGE", message: expect.any(String), fix } }, 0]);
+    }
+  }, 30_000);
 
   test("read --timeout is a loop of short reads, exit 4 when it runs out; it returns as soon as a turn lands; --poll at once", async () => {
     const slices = () => calls.filter((c) => c.method === "agent.read").map((c) => c.params[1]);
@@ -330,7 +353,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     const r = await live;
     expect([r.code, r.stdout.trim().split("\n").map((l) => JSON.parse(l))]).toEqual([0, [{ seq: 0, chunk: "new line\n" }, { end: true }]]);
     const none = await hive(["ctl", "stream", "ghost", "--json"], { env: env() });
-    expect([none.code, (none.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
+    expect([none.code, (none.json as { error: { code: string } }).error.code]).toEqual([5, "NOT_FOUND"]);
   });
 
   test("view emit: --json shapes for delivered and not listening", async () => {
@@ -341,7 +364,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([none.code, none.stdout.trim()]).toEqual([0, "buffered (active view canvas isn't listening)"]);
     const before = calls.length;
     const bad = await hive(["ctl", "view", "emit", "ci.build", "{nope", "--json"], { env: env() });
-    expect([bad.code, (bad.json as { code: string }).code, calls.length]).toEqual([2, "USAGE", before]);
+    expect([bad.code, (bad.json as { error: { code: string } }).error.code, calls.length]).toEqual([2, "USAGE", before]);
   });
 
   test("plugin: commands lists what runs; open says what it opened; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
@@ -354,7 +377,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([ok.code, ok.json]).toEqual([0, { result: { echoed: { text: "milk" }, tile: "w1" } }]);
     expect(last("plugin.call").params).toEqual(["@a/progress", "add", { text: "milk" }, "w1"]);
     const failed = await hive(["ctl", "plugin", "call", "@a/progress", "check", '{"index":7}', "--json"], { env: env() });
-    expect([failed.code === 0, (failed.json as { message: string }).message]).toEqual([false, "there is no step 7"]);
+    expect([failed.code === 0, (failed.json as { error: { message: string } }).error.message]).toEqual([false, "there is no step 7"]);
     const before = calls.length;
     const bad = await hive(["ctl", "plugin", "call", "@a/progress", "add", "{nope"], { env: env() });
     expect([bad.code === 0, bad.stderr.includes("must be JSON"), calls.length]).toEqual([false, true, before]);
@@ -370,6 +393,6 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     const closed = await hive(["ctl", "plugin", "close", "w1", "--plugin", "@a/progress", "--json"], { env: env() });
     expect([closed.code, closed.json, last("plugin.close").params]).toEqual([0, { closed: "w1", plugin: "@a/progress", kind: "widget" }, ["w1", "@a/progress"]]);
     const ghost = await hive(["ctl", "plugin", "close", "ghost", "--json"], { env: env() });
-    expect([ghost.code, (ghost.json as { code: string }).code]).toEqual([5, "NOT_FOUND"]);
+    expect([ghost.code, (ghost.json as { error: { code: string } }).error.code]).toEqual([5, "NOT_FOUND"]);
   });
 });

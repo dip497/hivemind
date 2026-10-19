@@ -70,7 +70,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
 
     const host = spawn(...cmd(["host", "run"]), { env: { ...sealedEnv(), ...env }, stdio: "ignore" });
     running.push(host);
-    await until(() => (hive(["host", "status", "--json"], { env }).json as { data?: { running?: boolean } })?.data?.running, "the host to answer");
+    await until(() => (hive(["host", "status", "--json"], { env }).json as { running?: boolean })?.running, "the host to answer");
     expect(hive(["host", "add", repo, "--json"], { env }).code).toBe(0);
     // Another device watching this machine's daemon, as one with a frame here does.
     const watcher = net.connect(path.join(data, "pty-daemon.sock"));
@@ -144,13 +144,13 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     expect(listed().map((t) => t.tile)).not.toContain(busy);
 
     // Nobody sits at it: a verb that needs a window is refused.
-    expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE" } });
+    expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { error: { code: "UNAVAILABLE" } } });
 
     watcher.destroy();
     // Stopped, the host gives the socket back: the daemon answers there again, as it does with no
     // control plane on the machine.
     expect(hive(["host", "stop", "--json"], { env }).code).toBe(0);
     await until(() => host.exitCode !== null || host.signalCode !== null, "the host to exit");
-    expect(ctl("agents")).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE" } });
+    expect(ctl("agents")).toMatchObject({ code: 3, json: { error: { code: "UNAVAILABLE" } } });
   });
 });

@@ -1,7 +1,7 @@
 /** `hive ps` — sessions on a PTY daemon; compact cards below phone width. */
 import { defineCommand } from "citty";
 import { err, ok } from "../format.js";
-import { EXIT } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { DaemonUnavailable, defaultSocket, listSessions, type SessionInfo } from "../pty-client.js";
 import { execOnMachine, loadMachine } from "../remote.js";
 

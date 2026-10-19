@@ -25,7 +25,8 @@ import type { PairedDevice } from "@hivemind/workspace-host/devices";
 import { appData } from "@hivemind/core/app-data";
 import { hiveNetBin } from "../app-data.js";
 import { err, ok } from "../format.js";
-import { EXIT, HcpCliError } from "../hcp.js";
+import { HcpCliError } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { driveCall } from "../drive.js";
 import { appRunning, askHost, controlSocket, HostNotRunning, serveControl } from "../host-control.js";
 import { defaultSocket } from "../pty-client.js";
@@ -192,11 +193,11 @@ const pairCmd = defineCommand({
     // With --json, one line each: the code offered, then the device that entered it.
     const done = (paired: PairedDevice) => {
       const result = { paired: { device: paired.device, name: paired.name, kind: paired.kind } };
-      if (ctx.json) console.log(JSON.stringify({ ok: true, data: result }));
+      if (ctx.json) console.log(JSON.stringify(result));
       else console.log(`Paired with ${named(paired)}. It can open this host's workspaces now.`);
     };
     const offer = (await ask("pair-offer")) as { code: string; link: string; expires: number };
-    if (ctx.json) console.log(JSON.stringify({ ok: true, data: { offer } }));
+    if (ctx.json) console.log(JSON.stringify({ offer }));
     else {
       process.stdout.write([
         "On your computer: Settings → Connect → Have a code? Join, and enter",

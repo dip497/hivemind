@@ -38,19 +38,19 @@ describe("hive widgets", () => {
     const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
     const run = (...args: string[]) => hive(["widgets", ...args, "--json"], { cwd: tmp, env });
     try {
-      expect(run("install", counter).json).toMatchObject({ ok: true, data: { id: "counter", name: "Counter", rescanned: false } });
-      expect(run("install", "@ada/pet").json).toMatchObject({ ok: true, data: { id: "@ada/pet", name: "Pet" } });
+      expect(run("install", counter).json).toMatchObject({ id: "counter", name: "Counter", rescanned: false });
+      expect(run("install", "@ada/pet").json).toMatchObject({ id: "@ada/pet", name: "Pet" });
       // Kept in a folder a scope and a name can never make otherwise.
       expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet", "widget.json"))).toBe(true);
       // A listing whose files say they are another widget is refused, not installed under the wrong name.
-      expect(run("install", "@ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining('says it is "@ada/pet", not @ada/liar') });
+      expect(run("install", "@ada/liar").json).toMatchObject({ error: { message: expect.stringContaining('says it is "@ada/pet", not @ada/liar') } });
 
-      const ids = (run("list").json as { data: { id: string; builtin: boolean }[] }).data.map((w) => w.id);
+      const ids = (run("list").json as { widgets: { id: string; builtin: boolean }[] }).widgets.map((w) => w.id);
       expect(ids).toEqual(expect.arrayContaining(["note", "checklist", "text", "counter", "@ada/pet"]));
 
-      expect(run("remove", "@ada/pet").json).toMatchObject({ ok: true });
+      expect(run("remove", "@ada/pet").code).toBe(0);
       expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet"))).toBe(false);
-      expect(run("remove", "note").json).toMatchObject({ ok: false, error: "it comes with the app" });
+      expect(run("remove", "note").json).toMatchObject({ error: { message: "it comes with the app" } });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -60,14 +60,14 @@ describe("hive widgets", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-widget-new-"));
     const env = { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
     try {
-      expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true, data: { id: "@ada/tally" } });
+      expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ id: "@ada/tally" });
       const dir = path.join(tmp, "tally");
       expect(fs.readdirSync(dir).sort()).toEqual(["PROMPT.md", "README.md", "hive.d.ts", "icon.svg", "jsconfig.json", "widget.js", "widget.json"]);
       // Its code is valid against the API it is given.
       execFileSync(path.join(import.meta.dir, "../../../node_modules/.bin/tsc"), ["-p", path.join(dir, "jsconfig.json")], { encoding: "utf8" });
-      expect(hive(["widgets", "install", dir, "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true, data: { id: "@ada/tally", name: "Tally" } });
-      expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: false, code: "exists" });
-      expect(hive(["widgets", "new", "Bad Name", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: false, code: "bad_name" });
+      expect(hive(["widgets", "install", dir, "--json"], { cwd: tmp, env }).json).toMatchObject({ id: "@ada/tally", name: "Tally" });
+      expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "EXISTS" } });
+      expect(hive(["widgets", "new", "Bad Name", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "BAD_NAME" } });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

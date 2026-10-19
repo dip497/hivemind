@@ -19,7 +19,7 @@ If a step needs anything only I can do, such as a login, ask me and wait.
 
 ## How `hive` works
 
-- `--json` prints one line of machine-readable output. Errors are `{"ok":false,"code":"…","message":"…"}`.
+- `--json` prints the result as one JSON object on one line on stdout. A failure is `{"error":{"code":"…","message":"…","fix":"…"}}` on stderr (`fix` when there is one), and exits non-zero: `hive <command> --help` ends with the exit codes. An unknown flag is a usage error (exit 2).
 - The issue commands edit files, and work without the app. `hive ctl` drives the running app or `hive host`.
 - In an agent's terminal, `hive ctl` acts as that agent in its workspace. Elsewhere it acts as you: in the workspace `--repo` names, else the open one your folder is in, else the only one open. With `HIVE_DRIVE_TOKEN` set, it acts as that program ([API](/api)).
 - You name a workspace by its folder, its folder's name, its id (four characters or more) or its issue prefix. A name two workspaces share is refused, and both are listed.

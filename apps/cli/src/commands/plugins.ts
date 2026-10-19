@@ -98,7 +98,7 @@ const listCmd = defineCommand({
         enabled: isPluginEnabled(states, p.kind, p.id, p.enabledByDefault),
         settings: resolveSettings(p.fields, pluginOptions(states, p.kind, p.id)), problem: p.problem,
       }));
-      return ok(ctx, rows, () => rows.map((r) => `${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.problem ? `  (${r.problem})` : ""}`).join("\n") || "no plugins");
+      return ok(ctx, { plugins: rows }, () => rows.map((r) => `${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.problem ? `  (${r.problem})` : ""}`).join("\n") || "no plugins");
     } catch (e) { return fail(ctx, e, "list_failed"); }
   },
 });

@@ -37,7 +37,7 @@ const getCmd = defineCommand({
     const s = await readSettings();
     const v = args.path ? getPath(s, String(args.path)) : s;
     if (v === undefined) return err(ctx, "not_found", `no setting at "${args.path}"`);
-    return ok(ctx, v, () => JSON.stringify(v, null, 2));
+    return ok(ctx, { path: args.path ? String(args.path) : null, value: v }, () => JSON.stringify(v, null, 2));
   },
 });
 
@@ -70,7 +70,7 @@ const listCmd = defineCommand({
   async run({ args }) {
     const cur = (await readSettings()).appearance.preset;
     const rows = Object.values(PRESETS).map((p) => ({ id: p.id, label: p.label, mode: p.mode, active: p.id === cur }));
-    return ok({ json: !!args.json }, rows, () => rows.map((r) => `${r.active ? "*" : " "} ${r.id.padEnd(16)} ${r.label}`).join("\n"));
+    return ok({ json: !!args.json }, { themes: rows }, () => rows.map((r) => `${r.active ? "*" : " "} ${r.id.padEnd(16)} ${r.label}`).join("\n"));
   },
 });
 

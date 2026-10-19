@@ -22,30 +22,30 @@ describe("hive plugins", () => {
     const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: xdg, env });
     const stored = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind", "settings.json"), "utf8")).plugins.state;
     try {
-      const list = (run("list").json as { data: { key: string; enabled: boolean }[] }).data;
+      const list = (run("list").json as { plugins: { key: string; enabled: boolean }[] }).plugins;
       const keys = list.map((p) => p.key);
       for (const k of ["agent:claude", "view:board", "widget:note", "tool:hivemind/web"]) expect(keys).toContain(k);
       // A tool that is not built in is off until switched on; everything else is on.
       expect(list.find((p) => p.key === "tool:hivemind/web")?.enabled).toBe(false);
       expect(list.find((p) => p.key === "agent:claude")?.enabled).toBe(true);
 
-      expect(run("disable", "agent:claude").json).toMatchObject({ ok: true, data: { enabled: false, reloaded: false } });
-      expect(run("enable", "tool:hivemind/web").json).toMatchObject({ ok: true });
+      expect(run("disable", "agent:claude").json).toMatchObject({ enabled: false, reloaded: false });
+      expect(run("enable", "tool:hivemind/web").json).toMatchObject({ enabled: true });
       expect(stored()).toEqual({ "agent:claude": { enabled: false }, "tool:hivemind/web": { enabled: true } });
 
-      expect(run("set", "view:board", "columns", "all").json).toMatchObject({ ok: true, data: { value: "all" } });
-      expect(run("set", "view:board", "max", "500").json).toMatchObject({ ok: true, data: { value: 50 } }); // clamped to its range
-      expect(run("set", "view:board", "columns", "some").json).toMatchObject({ ok: false, error: "columns is one of: todo, all" });
-      expect(run("set", "view:board", "colour", "red").json).toMatchObject({ ok: false, error: expect.stringContaining("has no setting \"colour\"; it has: columns, max") });
-      expect(run("show", "view:board").json).toMatchObject({ ok: true, data: { values: { columns: "all", max: 50 } } });
+      expect(run("set", "view:board", "columns", "all").json).toMatchObject({ value: "all" });
+      expect(run("set", "view:board", "max", "500").json).toMatchObject({ value: 50 }); // clamped to its range
+      expect(run("set", "view:board", "columns", "some").json).toMatchObject({ error: { message: "columns is one of: todo, all" } });
+      expect(run("set", "view:board", "colour", "red").json).toMatchObject({ error: { message: expect.stringContaining("has no setting \"colour\"; it has: columns, max") } });
+      expect(run("show", "view:board").json).toMatchObject({ values: { columns: "all", max: 50 } });
 
-      expect(run("reset", "view:board", "columns").json).toMatchObject({ ok: true });
+      expect(run("reset", "view:board", "columns").code).toBe(0);
       expect(stored()["view:board"]).toEqual({ options: { max: 50 } });
-      expect(run("reset", "view:board").json).toMatchObject({ ok: true });
+      expect(run("reset", "view:board").code).toBe(0);
       expect(stored()["view:board"]).toBeUndefined();
 
-      expect(run("enable", "board").json).toMatchObject({ ok: false, error: expect.stringContaining("write <kind>:<id>") });
-      expect(run("enable", "view:nope").json).toMatchObject({ ok: false, error: expect.stringContaining("there is no view \"nope\"") });
+      expect(run("enable", "board").json).toMatchObject({ error: { message: expect.stringContaining("write <kind>:<id>") } });
+      expect(run("enable", "view:nope").json).toMatchObject({ error: { message: expect.stringContaining("there is no view \"nope\"") } });
     } finally {
       fs.rmSync(xdg, { recursive: true, force: true });
     }

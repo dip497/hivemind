@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { READ_SLICE_MS, UsageError, boolFlag, durationFlag, emitArgs, intFlag, parseKeys, readSchedule, splitDouble, workflowPlan } from "../src/ctl-args.js";
-import { EXIT, exitCodeFor } from "../src/hcp.js";
+import { EXIT, exitCodeFor } from "../src/exit-codes.js";
 import { useFixtureAgents } from "./agents-fixtures.js";
 
 // A workflow's agent must be in the catalog and drivable as a worker, as claude is.

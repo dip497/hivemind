@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { err, ok } from "../format.js";
-import { EXIT } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { defaultSocket } from "../pty-client.js";
 
 const TOPICS = ["input.requested", "turn.ended"];

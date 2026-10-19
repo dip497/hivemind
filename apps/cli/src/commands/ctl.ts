@@ -11,10 +11,8 @@
  * Every subcommand:
  *   • `--json` prints the result as the workspace API answers it, as one line
  *     on stdout. Without it, a pretty-printed version.
- *   • errors print `{ ok:false, code, message }` (with --json) or a one-line
- *     `error [CODE] message` on stderr, and exit non-zero (see EXIT in hcp.ts:
- *     2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized ·
- *     7 refused · 1 anything else).
+ *   • a result is one JSON object; a failure is `{"error":{"code","message","fix"?}}` (with
+ *     --json) or `error [CODE] message` on stderr, with the exit code exit-codes.ts gives it.
  *   • blocking waits are made of short requests (≤ 10 s each) so they
  *     never trip a caller's tool timeout — `read --timeout` is honoured
  *     end-to-end and `--poll` returns immediately. A plugin's command is one
@@ -28,7 +26,8 @@ import {
   HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, requireRoot, rootForId, updateIssue,
   type IssueState,
 } from "@hivemind/core";
-import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile, sockPath } from "../hcp.js";
+import { HcpCliError, hcpCall, ownTile, sockPath } from "../hcp.js";
+import { EXIT, exitCodeFor, helpFor, printFailure, type Failure } from "../exit-codes.js";
 import { driveSocketPath } from "hivemind-api";
 import { appData } from "@hivemind/core/app-data";
 import { readTrackedSession, TILE_SESSIONS_DIR } from "@hivemind/agents/node";
@@ -55,19 +54,27 @@ function print(result: unknown, json: boolean): void {
   console.log(json ? JSON.stringify(result) : JSON.stringify(result, null, 2));
 }
 
+/** What failed, as every command prints it, and its exit code. */
+function failureOf(e: unknown): Failure & { exit: number } {
+  const message = String((e as Error)?.message ?? e);
+  if (e instanceof HcpCliError) {
+    const fix = e.fix ?? (e.exit === EXIT.usage ? helpFor() : e.code === "UNAVAILABLE" ? "start the hivemind app, or run `hive host`" : undefined);
+    return { code: e.code, message, ...(fix ? { fix } : {}), exit: e.exit };
+  }
+  if (e instanceof UsageError) return { code: "USAGE", message, fix: helpFor(), exit: EXIT.usage };
+  if (e instanceof UnsupportedError) return { code: "UNSUPPORTED", message, exit: EXIT.refused };
+  if (e instanceof HiveError) {
+    const code = e.code.toUpperCase();
+    return { code, message, exit: code.includes("INVALID") ? EXIT.usage : exitCodeFor(code) };
+  }
+  if (/not found|does not exist|ENOENT/i.test(message)) return { code: "NOT_FOUND", message, exit: EXIT.notFound };
+  if (/out of range|required|must be/i.test(message)) return { code: "BAD_REQUEST", message, fix: helpFor(), exit: EXIT.usage };
+  return { code: "FAILED", message, exit: EXIT.error };
+}
+
 function fail(e: unknown, json: boolean): never {
-  let code = "FAILED", message = String((e as Error)?.message ?? e), exit: number = EXIT.error;
-  if (e instanceof HcpCliError) { code = e.code; exit = e.exit; }
-  else if (e instanceof UsageError) { code = "USAGE"; exit = EXIT.usage; }
-  else if (e instanceof UnsupportedError) { code = "UNSUPPORTED"; exit = EXIT.refused; }
-  else if (e instanceof HiveError) {
-    code = e.code;
-    exit = e.code === "not_found" || e.code === "no_root" ? EXIT.notFound : e.code.includes("invalid") ? EXIT.usage : EXIT.error;
-  } else if (/not found|does not exist|ENOENT/i.test(message)) { code = "NOT_FOUND"; exit = EXIT.notFound; }
-  else if (/out of range|required|must be/i.test(message)) { code = "BAD_REQUEST"; exit = exitCodeFor(code); }
-  if (json) console.log(JSON.stringify({ ok: false, code, message }));
-  else process.stderr.write(`error [${code}] ${message}\n`);
-  process.exit(exit);
+  const { exit, ...failure } = failureOf(e);
+  return printFailure(json, failure, exit);
 }
 
 const JSON_ARG = { json: { type: "boolean", description: "print the result as JSON on one line" } } as const;
@@ -95,7 +102,7 @@ function sub<A extends ArgsDef>(
   });
 }
 
-const tileArg = { tileId: { type: "positional", required: true, description: "tile id (from spawn / list)" } } as const;
+const tileArg = { tileId: { type: "positional", required: true, description: "the tile, by its id (from `hive ctl spawn` or `hive ctl agents`)" } } as const;
 
 // ── canvas ───────────────────────────────────────────────────────────────────
 
@@ -250,7 +257,7 @@ const agents = defineCommand({
 });
 
 const frames = sub("frames", "The workspace's frames, where an agent may be started (id, name, machine)", repoArg,
-  (a) => onDrive(async (d) => ((await d.call("agent.startable", [await workspaceOf(d, a.repo)])) as { frames: unknown[] }).frames));
+  (a) => onDrive(async (d) => ({ frames: ((await d.call("agent.startable", [await workspaceOf(d, a.repo)])) as { frames: unknown[] }).frames })));
 
 const frameAdd = sub("add", "Open a frame on a folder: on another machine with --machine (a saved machine or another of your devices, by id or name); prints { frame, path, opened }. A folder that has a frame already gives that frame", {
   folder: { type: "string", required: true, description: "the folder, given in full (on that machine with --machine)" },
@@ -364,7 +371,10 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
   });
 });
 
-const focus = sub("focus", "Bring a tile forward in the window", tileArg, (a) => onDrive((d) => d.call("tile.focus", [a.tileId])));
+const focus = sub("focus", "Bring a tile forward in the window; prints { focused }", tileArg, (a) => onDrive(async (d) => {
+  await d.call("tile.focus", [a.tileId]);
+  return { focused: String(a.tileId) };
+}));
 const close = sub("close", "Close an agent: its session ends and its tile goes", tileArg, (a) => onDrive(async (d) => {
   const r = await d.call("agent.close", [a.tileId]) as { closed: boolean };
   if (!r.closed) throw notFound(a.tileId);
@@ -393,11 +403,17 @@ const rename = sub("rename", "Name an agent; with no name, take its name away",
 
 const connect = sub("connect", "Pipe src agent's replies into dst agent's input",
   { src: { type: "positional", required: true }, dst: { type: "positional", required: true } },
-  (a) => onDrive((d) => d.call("link.connect", [a.src, a.dst])));
+  (a) => onDrive(async (d) => {
+    await d.call("link.connect", [a.src, a.dst]);
+    return { connected: { src: String(a.src), dst: String(a.dst) } };
+  }));
 
 const disconnect = sub("disconnect", "Remove pipes from src (optionally only to one dst)",
   { src: { type: "positional", required: true }, dst: { type: "positional", required: false } },
-  (a) => onDrive((d) => d.call("link.disconnect", a.dst ? [a.src, a.dst] : [a.src])));
+  (a) => onDrive(async (d) => {
+    await d.call("link.disconnect", a.dst ? [a.src, a.dst] : [a.src]);
+    return { disconnected: { src: String(a.src), dst: a.dst ? String(a.dst) : null } };
+  }));
 
 const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline | mapreduce) of visible worker tiles; blocks until all replies are gathered", {
   shape: { type: "string", default: "fanout", description: "fanout | pipeline | mapreduce" },
@@ -441,7 +457,7 @@ const approve = sub("approve", "Answer a supervised worker's approval request; a
   return onDrive(async (d) => {
     const { agents } = await d.call("agent.list", [await workspaceOf(d, a.repo)]) as { agents: Waiting[] };
     const asking = agents.find((w) => w.waiting?.approval?.request === a.reqId);
-    const gone = () => new HcpCliError("BAD_REQUEST", `no approval ${String(a.reqId)} is waiting: it was answered, ran out of time, or its worker stopped waiting`, EXIT.usage);
+    const gone = () => new HcpCliError("NOT_FOUND", `no approval ${String(a.reqId)} is waiting: it was answered, ran out of time, or its worker stopped waiting`, EXIT.notFound, "`hive ctl inbox` lists the approvals asked of you");
     if (!asking) throw gone();
     const r = await d.call("agent.answer", [asking.tile, asking.waiting!.since, answer]) as { answered: boolean };
     if (!r.answered) throw gone();
@@ -584,7 +600,7 @@ const addComment = sub("add-comment", "Append an activity comment to an issue", 
   const r = await rootForId(await requireRoot(), String(a.id));
   await commentOnIssue(r, String(a.id), String(a.message), actor());
   const after = await readIssue(r, String(a.id));
-  return { ok: true, activity: after.sections.activity.slice(-3) };
+  return { activity: after.sections.activity.slice(-3) };
 });
 
 const markAcceptance = sub("mark-acceptance", "Tick (or untick) an acceptance criterion by 0-based index", {
@@ -601,7 +617,7 @@ const markAcceptance = sub("mark-acceptance", "Tick (or untick) an acceptance cr
   ac[index] = { ...ac[index]!, done };
   await updateIssue(r, String(a.id), { acceptanceCriteria: ac }, actor());
   await commentOnIssue(r, String(a.id), `acceptance[${index}] ${done ? "done" : "reopened"}: ${ac[index]!.text}`, actor());
-  return { ok: true, criterion: ac[index] };
+  return { criterion: ac[index] };
 });
 
 const deleteIssueCmd = sub("delete-issue", "Delete an issue file (irreversible)", {
@@ -609,7 +625,7 @@ const deleteIssueCmd = sub("delete-issue", "Delete an issue file (irreversible)"
 }, async (a) => {
   const r = await rootForId(await requireRoot(), String(a.id));
   await deleteIssue(r, String(a.id));
-  return { ok: true, deleted: String(a.id) };
+  return { deleted: String(a.id) };
 });
 
 const listWorkspacesCmd = defineCommand({
@@ -619,7 +635,7 @@ const listWorkspacesCmd = defineCommand({
     const json = !!args.json;
     try {
       const all = (await listWorkspaces({ persistPrune: true })).map((w) => ({ prefix: w.prefix, title: w.title, repo: w.repo }));
-      if (json) console.log(JSON.stringify(all));
+      if (json) console.log(JSON.stringify({ workspaces: all }));
       else console.log(all.map((w) => `${w.prefix}\t${w.title}\t${w.repo}`).join("\n") || "no workspaces registered");
     } catch (e) { fail(e, json); }
   },

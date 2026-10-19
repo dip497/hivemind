@@ -38,7 +38,7 @@ const listCmd = defineCommand({
     try {
       const root = await findRoot().catch(() => null);
       const views = await listInstalledViews(root);
-      return ok(ctx, views, () =>
+      return ok(ctx, { views }, () =>
         views.length === 0
           ? "no views installed — `hive views install <dir>`"
           : views.map((v) => `${v.id.padEnd(16)} ${(v.manifest?.version ?? "-").padEnd(8)} ${v.source.padEnd(5)} ${v.error ? `DISABLED: ${v.error}` : (v.manifest?.name ?? "")}`).join("\n"),

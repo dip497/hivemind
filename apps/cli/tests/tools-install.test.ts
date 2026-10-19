@@ -32,10 +32,10 @@ describe("hive tools install", () => {
     const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
     const run = (cwd: string, ...args: string[]) => hive(["tools", ...args, "--json"], { cwd, env });
     try {
-      expect(run(tmp, "install", "ada/prs").json).toMatchObject({ ok: true, data: { id: "ada/prs", name: "Pull requests" } });
+      expect(run(tmp, "install", "ada/prs").json).toMatchObject({ id: "ada/prs", name: "Pull requests" });
       expect(fs.readFileSync(path.join(xdg, "hivemind", "tools", "ada--prs", "index.js"), "utf8")).toBe(files["index.js"]);
       // A listing whose files say they are another tool is refused, not installed under the wrong name.
-      expect(run(tmp, "install", "ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining("says it is ada/prs, not ada/liar") });
+      expect(run(tmp, "install", "ada/liar").json).toMatchObject({ error: { message: expect.stringContaining("says it is ada/prs, not ada/liar") } });
       expect(fs.existsSync(path.join(xdg, "hivemind", "tools", "ada--liar"))).toBe(false);
 
       // Here ada/prs is a folder holding another tool: the folder is what gets installed.
@@ -43,7 +43,7 @@ describe("hive tools install", () => {
       fs.mkdirSync(path.join(local, "ada", "prs"), { recursive: true });
       fs.writeFileSync(path.join(local, "ada", "prs", "hivemind-tool.json"), manifest("ada/mine"));
       fs.writeFileSync(path.join(local, "ada", "prs", "index.js"), "export default { tiles: {} };\n");
-      expect(run(local, "install", "ada/prs").json).toMatchObject({ ok: true, data: { id: "ada/mine" } });
+      expect(run(local, "install", "ada/prs").json).toMatchObject({ id: "ada/mine" });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

@@ -87,7 +87,7 @@ function connect(access: Access, allows?: (method: string, params: unknown[]) =>
   const server = new WorkspaceServer([domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const [host, guest, close] = channel();
   const actor = { kind: "peer", person: "p".repeat(64), device: "d".repeat(64), access, ...(tile ? { tile } : {}) } as const;
-  servePeer(server, host, { actor, workspace: W, repo, holds: (t) => t.startsWith("in-"), ...(allows ? { allows } : {}) });
+  servePeer(server, host, { actor, workspace: W, repo, holds: (t) => t.startsWith("in-"), elsewhere: (t) => t.startsWith("out-"), ...(allows ? { allows } : {}) });
   const client = new WorkspaceClient(peerTransport(guest));
   return { server, client, close, actor, guest };
 }
@@ -371,6 +371,18 @@ test("naming an agent, typing keys to it and piping its replies to another drive
   }
   expect(ran.map((r) => r.what)).toEqual(["agent.rename", "agent.keys", "link.connect", "link.disconnect", "link.disconnect"]);
 });
+test("a tile in no workspace here, closed or never opened, is not found by every verb that names one, at either end of a pipe, and nothing runs; another workspace's tile is refused", async () => {
+  const driver = connect("agents", undefined, REPO, "in-9");
+  const naming = (tile: string) => [
+    ["agent.send", tile, "hi"], ["agent.read", tile], ["agent.keys", tile, ["Enter"]], ["agent.rename", tile, "x"], ["agent.close", tile],
+    ["agent.output", tile], ["agent.interrupt", tile], ["tile.focus", tile], ["link.connect", "in-1", tile], ["link.connect", tile, "in-1"],
+    ["link.disconnect", tile], ["terminal.open", { tileId: tile, attachOnly: true }],
+  ] as const;
+  for (const [m, ...args] of naming("gone-1")) expect([m, await code(driver.client.call(m as "agent.close", ...(args as [string])))]).toEqual([m, "NOT_FOUND"]);
+  for (const [m, ...args] of naming("out-1")) expect([m, await code(driver.client.call(m as "agent.close", ...(args as [string])))]).toEqual([m, "FORBIDDEN"]);
+  expect(ran).toEqual([]);
+});
+
 
 test("the machine's own methods are no peer's, the person's own devices included; an agent on this machine keeps them, but joining and serving a folder, for its workspace's tiles", async () => {
   const machine = [["plugin.call", "p", "c"], ["tools.rescan"], ["tile.focus", "in-1"], ["host.join", "hive://x"], ["host.add", "/"]] as const;

@@ -24,7 +24,7 @@ describe("hive network", () => {
   test.skipIf(!built)("the local network until another is chosen; one from its link from then on; an update from someone else refused", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-network-"));
     const env = { HIVEMIND_APP_DATA: tmp, HIVEMIND_HIVE_NET: HIVE_NET };
-    const data = <T>(r: ReturnType<typeof hive>) => (r.json as { data: T }).data;
+    const data = <T>(r: ReturnType<typeof hive>) => (r.json as T);
 
     let r = hive(["network", "show", "--json"], { env });
     expect(data<{ builtin: string }>(r).builtin).toBe("local");
@@ -38,8 +38,8 @@ describe("hive network", () => {
 
     r = hive(["network", "use", link("Example Corp", newSeed()), "--json"], { env });
     expect(r.code).toBe(1);
-    expect(r.json).toMatchObject({ ok: false, code: "refused" });
-    expect((r.json as { error: string }).error).toContain("not signed by its admin");
+    expect(r.json).toMatchObject({ error: { code: "REFUSED" } });
+    expect((r.json as { error: { message: string } }).error.message).toContain("not signed by its admin");
     r = hive(["network", "show", "--json"], { env });
     expect(data<{ admin: string }>(r).admin).toBe(idOf(admin));
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -48,7 +48,7 @@ describe("hive network", () => {
   test.skipIf(!built)("on the network's server, an enrolment link signed with the admin key kept in its data folder, for as many devices and as long as asked", () => {
     const data = fs.mkdtempSync(path.join(os.tmpdir(), "hive-net-data-"));
     const env = { HIVEMIND_APP_DATA: fs.mkdtempSync(path.join(os.tmpdir(), "hive-network-")), HIVEMIND_HIVE_NET: HIVE_NET };
-    expect(hive(["network", "enrol-link", "--data", data, "--json"], { env }).json).toMatchObject({ ok: false, code: "usage" });
+    expect(hive(["network", "enrol-link", "--data", data, "--json"], { env }).json).toMatchObject({ error: { code: "USAGE" } });
 
     const admin = newSeed();
     fs.writeFileSync(path.join(data, "admin.key"), `${Buffer.from(admin).toString("hex")}\n`);
@@ -58,11 +58,11 @@ describe("hive network", () => {
 
     const before = Date.now();
     const r = hive(["network", "enrol-link", "--data", data, "--uses", "3", "--expires", "2h", "--json"], { env });
-    const { link } = (r.json as { data: { link: string } }).data;
+    const { link } = (r.json as { link: string });
     const { enrol } = JSON.parse(Buffer.from(link.replace("hivemind://network/", ""), "base64url").toString()) as { enrol: { by: string; kind: string; uses: number; expires: number } };
     expect(enrol).toMatchObject({ by: idOf(admin), kind: "enrol", uses: 3 });
     expect(Math.abs(enrol.expires - (before + 2 * 3600_000))).toBeLessThan(60_000);
     // The network it names is the one a device then uses.
-    expect((hive(["network", "use", link, "--json"], { env }).json as { data: { profile: { name: string } } }).data.profile.name).toBe("Office");
+    expect((hive(["network", "use", link, "--json"], { env }).json as { profile: { name: string } }).profile.name).toBe("Office");
   });
 });

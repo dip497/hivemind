@@ -928,7 +928,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   // A tile no open workspace holds, running no session main holds, is gone.
   const requireOpen = (tile: string): void => {
-    if (deps.workspaces.workspaceOf(bareOf(tile)) === null && !deps.sessionHeld(ptyId(tile))) throw new ApiError("NOT_FOUND", `no tile ${bareOf(tile)} is open`);
+    if (deps.workspaces.workspaceOf(bareOf(tile)) === null && !deps.sessionHeld(ptyId(tile))) throw new ApiError("NOT_FOUND", `no tile ${bareOf(tile)} is open: it was closed, or never opened`);
   };
 
   const api: ControlWork = {
@@ -1036,9 +1036,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     openTool: (caller, repo, tool, at) => openTool({ caller, repo, ...at }, (tools) => tools.find((t) => t.id === tool), "Unknown tool id"),
 
     connect(src, dst) {
+      requireOpen(src);
+      requireOpen(dst);
       if (!deps.connect(src, dst)) throw new ApiError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
     },
-    disconnect: (src, dst) => deps.disconnect(src, dst),
+    disconnect(src, dst) {
+      requireOpen(src);
+      deps.disconnect(src, dst);
+    },
 
     // A named JSON event for the active view (protocol 1.3).
     async viewEmit(caller, name, data, view) {
@@ -1072,7 +1077,10 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       return await deps.callRenderer("plugin.call", { plugin, command, args: args ?? null, ...(tile ? { tile } : {}) }, PLUGIN_CALL_HOST_MS);
     },
     pluginClose: async (instance, plugin) => await deps.callRenderer("plugin.close", { instance, ...(plugin ? { plugin } : {}) }, RENDERER_TIMEOUT) as { closed: string; plugin: string; kind: string },
-    focus: (tile) => deps.callRenderer("tile.focus", { tileId: tile }, RENDERER_TIMEOUT),
+    focus(tile) {
+      requireOpen(tile);
+      return deps.callRenderer("tile.focus", { tileId: tile }, RENDERER_TIMEOUT);
+    },
     // A plugins folder changed (`hive … install|remove`): a running app picks it up without a
     // restart. Views and agents are scanned by the window, which owns the workspace root; widgets
     // and tools are listed again here, and every window told.
