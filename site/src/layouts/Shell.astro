@@ -11,6 +11,9 @@ const { title, description, nav } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const link = (p: string) => `${base}/${p}`;
 const repo = "https://github.com/dip497/hivemind";
+// One address per page, in full, so a copy reached another way (no slash, a query) is not a rival.
+const canonical = new URL(Astro.url.pathname.replace(/(?<!\/)$/, "/"), Astro.site).href;
+const ogImage = new URL(link("shots/og.jpg"), Astro.site).href;
 ---
 <!doctype html>
 <html lang="en">
@@ -23,9 +26,16 @@ const repo = "https://github.com/dip497/hivemind";
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
+  <link rel="canonical" href={canonical} />
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content={canonical} />
+  <meta property="og:site_name" content="Hivemind" />
+  <meta property="og:image" content={ogImage} />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href={link("favicon.svg")} />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

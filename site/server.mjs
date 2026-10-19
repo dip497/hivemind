@@ -40,7 +40,9 @@ function resolve(urlPath) {
   for (const c of candidates) {
     const file = join(ROOT, c);
     if (!file.startsWith(ROOT)) continue;            // no traversal out of dist/
-    if (existsSync(file) && statSync(file).isFile()) return { file, path: c };
+    // A directory's page asked for without its slash: the page's address ends in one.
+    const slashless = !clean.endsWith("/") && c.endsWith("index.html") && !clean.endsWith("index.html");
+    if (existsSync(file) && statSync(file).isFile()) return { file, path: c, clean, slashless };
   }
   return null;
 }
@@ -71,6 +73,13 @@ createServer((req, res) => {
     const has404 = existsSync(notFound);
     res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
     return has404 ? createReadStream(notFound).pipe(res) : res.end("Not found");
+  }
+  if (hit.slashless) {
+    // /guide/faq and /guide/faq/ are one page; search engines should only ever see the second.
+    // Built from the normalized path, never the raw one: "//host" must not become a redirect off-site.
+    const query = (req.url ?? "").split("?")[1];
+    res.writeHead(301, { location: `${encodeURI(hit.clean)}/${query !== undefined ? `?${query}` : ""}`, "cache-control": "public, max-age=86400" });
+    return res.end();
   }
   res.writeHead(200, {
     "content-type": TYPES[extname(hit.file)] ?? "application/octet-stream",

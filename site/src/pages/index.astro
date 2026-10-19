@@ -6,9 +6,11 @@ import tokens from '../generated/tokens.json';
 import { resolve } from '../lib/tokens';
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const link = (path: string) => `${base}/${path}`;
-const title = 'Hivemind: your agents build the workspace they work in';
+// The title and description are what a search result shows: they say what Hivemind is and name
+// the agents people search for, so "hivemind" plus an agent's name finds this page.
+const title = 'Hivemind: run Claude Code, Codex and every coding agent side by side';
 const description =
-  'Personal software for people who code with agents. Every coding agent in a real terminal, and the views, tools and widgets around them written by your agents. MIT licensed, on your own computer, with no account.';
+  'Free, open-source app that runs Claude Code, Codex, opencode and any coding agent side by side in real terminals. Your agents build its views and tools. MIT, no account.';
 const repo = 'https://github.com/dip497/hivemind';
 const changelog = `${repo}/blob/main/CHANGELOG.md#2026103--2026-10-18`;
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
@@ -18,6 +20,76 @@ const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
+const home = new URL(link(''), Astro.site).href;
+
+// The agents people search for by name, as the generated list spells them, while it still has them.
+const wellKnown = ['Claude', 'Codex', 'opencode', 'Cursor', 'Copilot', 'Amp', 'Aider']
+  .filter((name) => agents.some((a) => a.label === name))
+  .map((name) => (name === 'Claude' ? 'Claude Code' : name));
+
+// The questions, once: the page shows them and the structured data below hands them to search
+// and answer engines word for word. Answers are HTML; the structured data gets their text.
+const faq = [
+  { q: 'What is Hivemind?', a: 'A free, open-source app that runs your coding agents, such as Claude Code, Codex and opencode, side by side, each in a real terminal on one canvas. Your agents add the views, widgets and tools around them.' },
+  { q: 'Is Hivemind free?', a: 'Yes. It is open source under the MIT license and needs no account. The agents you run in it are separate programs, with their own accounts and prices.' },
+  { q: 'Which coding agents does it run?', a: `Any coding agent with a CLI. It finds ${agents.length} on its own, among them ${wellKnown.join(', ')}, and your agent can <a href="${link('guide/agent-providers/')}">teach it a new one</a>.` },
+  { q: 'Why not roll my own?', a: 'You can, here. Hivemind keeps the terminals and agents alive; you and your agents write the rest.' },
+  { q: 'Does my code go anywhere?', a: 'No. Agents run on your computer or your ssh machines.' },
+  { q: 'What can a plugin touch?', a: 'Views and widgets have no files and no network. A tool stays off until you switch it on.' },
+  { q: 'Which platforms does it run on?', a: 'Linux x86_64, macOS on Apple Silicon and Windows x64. An Intel Mac or Linux arm64 builds with <code>--dev</code>.' },
+  { q: 'Is there a phone app?', a: 'Not a published one. The phone page runs in your phone\'s browser.' },
+];
+const text = (html: string) => html.replace(/<[^>]+>/g, '');
+
+// Who and what this site is about, for search engines and answer engines: the app, the website
+// and the project behind them, tied to the same GitHub repository and HiveHub.
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${home}#organization`,
+      name: 'Hivemind',
+      url: home,
+      logo: new URL(link('icon.png'), Astro.site).href,
+      sameAs: [repo, HIVEHUB],
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${home}#website`,
+      name: 'Hivemind',
+      alternateName: 'Hivemind for coding agents',
+      url: home,
+      inLanguage: 'en',
+      publisher: { '@id': `${home}#organization` },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${home}#software`,
+      name: 'Hivemind',
+      description: text(faq[0].a),
+      url: home,
+      applicationCategory: 'DeveloperApplication',
+      applicationSubCategory: 'Workspace for AI coding agents',
+      operatingSystem: 'Linux, macOS, Windows',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+      isAccessibleForFree: true,
+      license: 'https://opensource.org/licenses/MIT',
+      downloadUrl: new URL(link('download'), Astro.site).href,
+      installUrl: new URL(link('guide/install/'), Astro.site).href,
+      softwareHelp: { '@type': 'CreativeWork', url: new URL(link('guide/'), Astro.site).href },
+      image: ogImage,
+      screenshot: ogImage,
+      publisher: { '@id': `${home}#organization` },
+      sameAs: [repo],
+    },
+    {
+      '@type': 'FAQPage',
+      '@id': `${home}#faq`,
+      mainEntity: faq.map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: text(a) } })),
+    },
+  ],
+};
 
 // The page paints in the app's own colours, read from the app's stylesheet at build time.
 const app = tokens.tokens as Record<string, { value: string }>;
@@ -68,16 +140,21 @@ const code: Record<string, [string, string][]> = {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{title}</title>
   <meta name="description" content={description} />
+  <link rel="canonical" href={home} />
   <meta name="theme-color" content="#111316" />
   <link rel="icon" href={link('favicon.svg')} />
-  <link rel="alternate" type="text/plain" href={link('guide/llms.txt')} />
+  <link rel="alternate" type="text/plain" href={link('llms.txt')} />
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content={home} />
+  <meta property="og:site_name" content="Hivemind" />
   <meta property="og:image" content={ogImage} />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Hivemind: coding agents side by side on one canvas" />
   <meta name="twitter:card" content="summary_large_image" />
+  <script type="application/ld+json" set:html={JSON.stringify(structuredData).replace(/</g, '\\u003c')}></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
@@ -114,11 +191,11 @@ const code: Record<string, [string, string][]> = {
     <div class="wrap">
       <div class="hero-copy">
         <div class="hero-say">
-          <h1>Your agents build the workspace they work in.</h1>
+          <h1>Your coding agents build the workspace they work in.</h1>
         </div>
         <div class="hero-do">
           <p class="eyebrow"><span class="dot"></span>Free and open source · MIT</p>
-          <p class="lede">Every coding agent in a real terminal. Ask one for a view, a tool or a widget, and it writes it, installs it and keeps it live.</p>
+          <p class="lede">Hivemind runs Claude Code, Codex, opencode and every other coding agent side by side, each in a real terminal. Ask one for a view, a tool or a widget, and it writes it, installs it and keeps it live.</p>
           <div class="hero-act">
             <div class="install">
               <code>{install}</code>
@@ -293,11 +370,7 @@ const code: Record<string, [string, string][]> = {
     <div class="wrap faq-wrap">
       <h2 id="faq-h" class="reveal">Questions</h2>
       <div class="faq">
-        <details><summary>Why not roll my own?</summary><p>You can, here. Hivemind keeps the terminals and agents alive; you and your agents write the rest.</p></details>
-        <details><summary>Does my code go anywhere?</summary><p>No. Agents run on your computer or your ssh machines.</p></details>
-        <details><summary>What can a plugin touch?</summary><p>Views and widgets have no files and no network. A tool stays off until you switch it on.</p></details>
-        <details><summary>Which platforms does it run on?</summary><p>Linux x86_64, macOS on Apple Silicon and Windows x64. An Intel Mac or Linux arm64 builds with <code>--dev</code>.</p></details>
-        <details><summary>Is there a phone app?</summary><p>Not a published one. The phone page runs in your phone's browser.</p></details>
+        {faq.map(({ q, a }) => <details><summary>{q}</summary><p set:html={a} /></details>)}
       </div>
     </div>
   </section>
@@ -339,6 +412,9 @@ const code: Record<string, [string, string][]> = {
       <span>Hivemind, MIT licensed.</span>
       <nav aria-label="Footer">
         <a href={link('guide/')}>Docs</a>
+        <a href={link('guide/install/')}>Install</a>
+        <a href={link('guide/run-many-agents/')}>Run many agents</a>
+        <a href={link('guide/faq/')}>FAQ</a>
         <a href={link('guide/cli/')}>CLI reference</a>
         <a href={HIVEHUB}>HiveHub</a>
         <a href={link('guide/docs-for-agents/')}>For agents</a>
