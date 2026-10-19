@@ -97,11 +97,11 @@ test("what may be started in its workspace, what an agent changed and a tool it 
   const viewer = connect("view");
   await viewer.client.call("agent.startable", workspaceUrl(W));
   await viewer.client.call("agent.diff", "in-1");
-  expect(await code(viewer.client.call("agent.diff", "out-1"))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("agent.diff", "out-1"))).toBe("NOT_FOUND");
   await viewer.client.call("agent.conversation", "in-1");
-  expect(await code(viewer.client.call("agent.conversation", "out-1"))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("agent.conversation", "out-1"))).toBe("NOT_FOUND");
   await viewer.client.call("agent.tool", "in-1", "u1");
-  expect(await code(viewer.client.call("agent.tool", "out-1", "u1"))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("agent.tool", "out-1", "u1"))).toBe("NOT_FOUND");
   for (const [method, at] of [["agent.start", workspaceUrl(W)], ["agent.interrupt", "in-1"], ["agent.close", "in-1"]] as const) {
     expect(await code(viewer.client.call(method as "agent.close", at))).toBe("FORBIDDEN");
   }
@@ -122,8 +122,8 @@ test("what may be started in its workspace, what an agent changed and a tool it 
   await driver.client.call("agent.folders", workspaceUrl(W), `${REPO}/src`);
   expect(await code(driver.client.call("agent.places", "/work/other"))).toBe("FORBIDDEN");
   expect(await code(driver.client.call("agent.folders", "/work/other", "/work/other/src"))).toBe("FORBIDDEN");
-  expect(await code(driver.client.call("agent.interrupt", "out-1"))).toBe("FORBIDDEN");
-  expect(await code(driver.client.call("agent.close", "out-1"))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.interrupt", "out-1"))).toBe("NOT_FOUND");
+  expect(await code(driver.client.call("agent.close", "out-1"))).toBe("NOT_FOUND");
   expect(ran).toEqual([
     { what: "agent.start", by: driver.actor, args: [REPO] },
     { what: "agent.interrupt", by: driver.actor, args: ["in-1"] },
@@ -136,7 +136,7 @@ test("what may be started in its workspace, what an agent changed and a tool it 
 test("putting agents to sleep and waking them is driving agents, in its own workspace alone; what a sleeping agent last showed is seen by anyone with access, for its workspace's tiles alone", async () => {
   const viewer = connect("view");
   await viewer.client.call("terminal.saved", "in-1", 1000);
-  expect(await code(viewer.client.call("terminal.saved", "out-1", 1000))).toBe("FORBIDDEN");
+  expect(await code(viewer.client.call("terminal.saved", "out-1", 1000))).toBe("NOT_FOUND");
   expect(await code(viewer.client.call("agent.sleep", workspaceUrl(W)))).toBe("FORBIDDEN");
   expect(await code(viewer.client.call("agent.wake", workspaceUrl(W)))).toBe("FORBIDDEN");
   expect(ran).toEqual([{ what: "terminal.saved", by: viewer.actor, args: ["in-1"] }]);
@@ -181,10 +181,10 @@ test("a peer's calls run as the peer, with the workspace it names read as its re
   // agents.
   ran.length = 0;
   expect(await code(editor.client.call("agent.answer", "in-1", 1, { text: "1" }))).toBe("FORBIDDEN");
-  expect(await code(driver.client.call("agent.answer", "out-1", 1, { text: "1" }))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.answer", "out-1", 1, { text: "1" }))).toBe("NOT_FOUND");
   await driver.client.call("agent.answer", "in-1", 1, { text: "1" });
   expect(await code(editor.client.call("agent.send", "in-1", "hi"))).toBe("FORBIDDEN");
-  expect(await code(driver.client.call("agent.send", "out-1", "hi"))).toBe("FORBIDDEN");
+  expect(await code(driver.client.call("agent.send", "out-1", "hi"))).toBe("NOT_FOUND");
   await driver.client.call("agent.send", "in-1", "hi");
   expect(ran).toEqual([{ what: "agent.answer", by: driver.actor, args: ["in-1"] }, { what: "agent.send", by: driver.actor, args: ["in-1"] }]);
 });
@@ -197,8 +197,8 @@ test("an agent-role peer cannot open a terminal outside its workspace or on anot
   const alias = path.join(repo, "outside-link");
   fs.symlinkSync(elsewhere, alias);
   const driver = connect("agents", undefined, repo);
-  for (const [tileId, cwd] of [["in-1", elsewhere], ["in-1", alias], ["out-1", repo]] as const) {
-    expect(await code(driver.client.call("terminal.open", { tileId, cwd, cmd: "sh", cols: 80, rows: 24 }))).toBe("FORBIDDEN");
+  for (const [tileId, cwd, refused] of [["in-1", elsewhere, "FORBIDDEN"], ["in-1", alias, "FORBIDDEN"], ["out-1", repo, "NOT_FOUND"]] as const) {
+    expect(await code(driver.client.call("terminal.open", { tileId, cwd, cmd: "sh", cols: 80, rows: 24 }))).toBe(refused);
   }
   expect(ran).toEqual([]);
 });
@@ -365,21 +365,31 @@ test("naming an agent, typing keys to it and piping its replies to another drive
   for (const [m, ...args] of [["agent.rename", "in-1", "x"], ["agent.keys", "in-1", ["Enter"]], ["link.connect", "in-1", "in-2"], ["link.disconnect", "in-1"], ["link.disconnect", "in-1", "in-2"]] as const) {
     expect(await code(driver.client.call(m, ...args))).toBe("ok");
   }
-  // Another workspace's tile, at either end, or a folder outside it.
-  for (const [m, ...args] of [["agent.keys", "out-1", ["Enter"]], ["agent.read", "out-1"], ["agent.output", "out-1"], ["link.connect", "in-1", "out-1"], ["link.connect", "out-1", "in-1"], ["link.disconnect", "in-1", "out-1"], ["agent.sessions", "/work/elsewhere", "claude"]] as const) {
-    expect(await code(driver.client.call(m, ...args))).toBe("FORBIDDEN");
+  // Another workspace's tile, at either end, is not found; a folder outside it is refused.
+  for (const [m, ...args] of [["agent.keys", "out-1", ["Enter"]], ["agent.read", "out-1"], ["agent.output", "out-1"], ["link.connect", "in-1", "out-1"], ["link.connect", "out-1", "in-1"], ["link.disconnect", "in-1", "out-1"]] as const) {
+    expect(await code(driver.client.call(m, ...args))).toBe("NOT_FOUND");
   }
+  expect(await code(driver.client.call("agent.sessions", "/work/elsewhere", "claude"))).toBe("FORBIDDEN");
   expect(ran.map((r) => r.what)).toEqual(["agent.rename", "agent.keys", "link.connect", "link.disconnect", "link.disconnect"]);
 });
-test("a tile in no workspace here, closed or never opened, is not found by every verb that names one, at either end of a pipe, and nothing runs; another workspace's tile is refused", async () => {
+test("a tile in no workspace here, closed or never opened, is not found by every verb that names one, at either end of a pipe, and nothing runs; to an agent another workspace's tile is the same answer, word for word, so it cannot tell which exist; the person's own device is told it is another's", async () => {
   const driver = connect("agents", undefined, REPO, "in-9");
+  const answer = async (m: string, args: readonly unknown[]) => { try { await driver.client.call(m as "agent.close", ...(args as [string])); return "ok"; } catch (e) { return `${(e as ApiError).code}: ${(e as Error).message}`; } };
   const naming = (tile: string) => [
     ["agent.send", tile, "hi"], ["agent.read", tile], ["agent.keys", tile, ["Enter"]], ["agent.rename", tile, "x"], ["agent.close", tile],
     ["agent.output", tile], ["agent.interrupt", tile], ["tile.focus", tile], ["link.connect", "in-1", tile], ["link.connect", tile, "in-1"],
     ["link.disconnect", tile], ["terminal.open", { tileId: tile, attachOnly: true }],
   ] as const;
-  for (const [m, ...args] of naming("gone-1")) expect([m, await code(driver.client.call(m as "agent.close", ...(args as [string])))]).toEqual([m, "NOT_FOUND"]);
-  for (const [m, ...args] of naming("out-1")) expect([m, await code(driver.client.call(m as "agent.close", ...(args as [string])))]).toEqual([m, "FORBIDDEN"]);
+  const gone = naming("gone-1");
+  const elsewhere = naming("out-1");
+  for (const [i, [m, ...args]] of gone.entries()) {
+    const said = await answer(m, args);
+    expect([m, said.split(":")[0]]).toEqual([m, "NOT_FOUND"]);
+    expect([m, (await answer(m, elsewhere[i]!.slice(1))).replaceAll("out-1", "gone-1")]).toEqual([m, said]);
+  }
+  const owner = connect("owner");
+  expect(await code(owner.client.call("agent.send", "out-1", "hi"))).toBe("FORBIDDEN");
+  expect(await code(owner.client.call("agent.send", "gone-1", "hi"))).toBe("NOT_FOUND");
   expect(ran).toEqual([]);
 });
 
@@ -392,7 +402,7 @@ test("the machine's own methods are no peer's, the person's own devices included
   }
   const agent = connect("agents", undefined, REPO, "in-9");
   expect(await Promise.all(machine.map(([m, ...args]) => code(agent.client.call(m, ...args))))).toEqual(["ok", "ok", "ok", "FORBIDDEN", "FORBIDDEN"]);
-  expect(await code(agent.client.call("tile.focus", "out-1"))).toBe("FORBIDDEN");
+  expect(await code(agent.client.call("tile.focus", "out-1"))).toBe("NOT_FOUND");
   expect(ran.map((r) => r.what)).toEqual(["plugin.call", "tools.rescan", "tile.focus"]);
 });
 
@@ -410,7 +420,7 @@ test("a peer let use only some calls is refused any other, whatever its role all
   // Watching a terminal of the workspace, as its role allows; never starting one, nor another's.
   await phone.client.call("terminal.open", { tileId: "in-1", cwd: "", cmd: "", cols: 80, rows: 24, attachOnly: true });
   expect(await code(phone.client.call("terminal.open", { tileId: "in-2", cwd: "", cmd: "", cols: 80, rows: 24 }))).toBe("FORBIDDEN");
-  expect(await code(phone.client.call("terminal.open", { tileId: "out-1", cwd: "", cmd: "", cols: 80, rows: 24, attachOnly: true }))).toBe("FORBIDDEN");
+  expect(await code(phone.client.call("terminal.open", { tileId: "out-1", cwd: "", cmd: "", cols: 80, rows: 24, attachOnly: true }))).toBe("NOT_FOUND");
   phone.client.notice("terminal.show", "in-1", true);
   await new Promise((r) => setTimeout(r, PEER_FRAME_MS * 2));
   expect(ran.map((r) => `${r.what} ${JSON.stringify(r.args[0])}`)).toEqual([

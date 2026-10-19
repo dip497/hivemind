@@ -162,8 +162,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([elsewhere.code, elsewhere.json]).toEqual([6, { error: { code: "FORBIDDEN",
       message: `this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)` } }]);
     const notMine = await hive(["ctl", "send", "b-1", "hi", "--json"], { env: asAgent() });
-    expect([notMine.code, (notMine.json as { error: { message: string } }).error.message]).toEqual([6,
-      `b-1 is not a tile of the workspace at ${repoA}; this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`]);
+    expect([notMine.code, (notMine.json as { error: { message: string } }).error.message]).toEqual([5, `no tile b-1 in this workspace (${repoA})`]);
   });
 
   test("agents --session finds the agent in that session, as its hooks said it or as the app tracks its tile's; none is exit 5", async () => {
@@ -267,14 +266,14 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([br.code, (br.json as { error: { code: string } }).error.code]).toEqual([2, "BAD_REQUEST"]);
   });
 
-  test("one answer for not there, from every verb that names a tile: one open in no workspace is NOT_FOUND, exit 5; another workspace's is FORBIDDEN, exit 6; each as JSON on stderr, nothing on stdout", async () => {
+  test("one answer for not there, from every verb that names a tile: one open in no workspace is NOT_FOUND, exit 5, as JSON on stderr and nothing on stdout; to an agent, another workspace's tile is the same answer, so its token cannot learn which tiles exist", async () => {
     const naming = (t: string) => [["send", t, "hi"], ["read", t, "--timeout", "1s"], ["stream", t, "--snapshot"], ["rename", t, "x"], ["focus", t], ["keys", t, "Enter"],
       ["connect", "me-1", t], ["connect", t, "me-1"], ["disconnect", t], ["close", t]];
-    for (const [tile, exit, code] of [["gone-1", 5, "NOT_FOUND"], ["b-1", 6, "FORBIDDEN"]] as const) {
-      for (const args of naming(tile)) {
-        const r = await hive(["ctl", ...args, "--json"], { env: asAgent() });
-        expect([args.join(" "), r.code, r.stdout, (JSON.parse(r.stderr) as { error: { code: string } }).error.code]).toEqual([args.join(" "), exit, "", code]);
-      }
+    for (const args of naming("gone-1")) {
+      const gone = await hive(["ctl", ...args, "--json"], { env: asAgent() });
+      expect([args.join(" "), gone.code, gone.stdout, (JSON.parse(gone.stderr) as { error: { code: string } }).error.code]).toEqual([args.join(" "), 5, "", "NOT_FOUND"]);
+      const other = await hive(["ctl", ...args.map((a) => (a === "gone-1" ? "b-1" : a)), "--json"], { env: asAgent() });
+      expect([args.join(" "), other.code, other.stdout, other.stderr.replaceAll("b-1", "gone-1")]).toEqual([args.join(" "), gone.code, gone.stdout, gone.stderr]);
     }
   }, 60_000);
 

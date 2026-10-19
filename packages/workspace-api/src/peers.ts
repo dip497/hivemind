@@ -42,8 +42,9 @@ export interface PeerOf {
   url?: string;
   /** Whether a tile is in the workspace. */
   holds(tile: string): boolean;
-  /** Whether a tile it does not hold is in another workspace here: refused as not its own, where
-   *  a tile in none (closed, or never opened) is not found. None: every such tile is not found. */
+  /** Whether a tile it does not hold is in another workspace here. Only the person's own devices
+   *  (an owner) are told so, refused as not its own: anyone else is told such a tile is not found,
+   *  as one in no workspace is, so a token cannot learn which tiles exist elsewhere. */
   elsewhere?(tile: string): boolean;
   /** The folders of the workspace besides its repo: its frames' worktrees, wherever git put them.
    *  None: the repo alone. */
@@ -269,9 +270,9 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   const roots = (): string[] => [peer.repo, ...(peer.places?.() ?? [])];
   /** A tile it names that the workspace does not hold: another workspace's is not its own; one in
    *  none is not there. */
-  const notHeld = (tile: string): Refusal => (peer.elsewhere?.(tile)
+  const notHeld = (tile: string): Refusal => (peer.actor.access === "owner" && peer.elsewhere?.(tile)
     ? forbidden(notOfThis(`${tile} is not a tile`))
-    : { code: "NOT_FOUND", message: `no tile ${tile} is open in this workspace: it was closed, or never opened` });
+    : { code: "NOT_FOUND", message: `no tile ${tile} in this workspace (${url})` });
   const check = (method: unknown, params: unknown[]): Refusal | null => {
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;

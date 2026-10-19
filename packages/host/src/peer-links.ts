@@ -454,9 +454,7 @@ export class PeerLinks {
         repo,
         // A terminal is named by its session (`hm:<tile>`), the document by the tile.
         holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
-        // A guest learns nothing of the person's other workspaces: a tile not of this one is not
-        // found. The person's own devices are told it is another's.
-        ...(access === "owner" ? { elsewhere: (tile: string) => store.workspaceOf(toBareId(tile)) !== null } : {}),
+        elsewhere: (tile) => store.workspaceOf(toBareId(tile)) !== null,
         places: () => frameWorktrees(store.getCore(repo)),
         ...(terminals === null ? {} : { hears: (event: string) => event.startsWith("terminal.") === terminals }),
       }));

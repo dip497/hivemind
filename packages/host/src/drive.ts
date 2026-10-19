@@ -177,7 +177,6 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
         repo,
         url: repo,
         holds: (tile) => o.workspaceOf(toBareId(tile)) === repo,
-        elsewhere: (tile) => o.workspaceOf(toBareId(tile)) !== null,
         places: () => o.places?.(repo) ?? [],
         allows,
       });
