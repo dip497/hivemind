@@ -1,0 +1,12 @@
+{
+  "title": "Extend",
+  "description": "Build widgets, views, tools and agent files, and share them on HiveHub.",
+  "root": true,
+  "pages": [
+    "widgets",
+    "extension-authoring",
+    "tool-plugins",
+    "agent-providers",
+    "publish-to-hivehub"
+  ]
+}

@@ -4,12 +4,15 @@
   "type": "module",
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
-    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && node scripts/export-agent-docs.mjs",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && npm run guide",
+    "guide": "npm --prefix docs run build && node scripts/add-guide.mjs",
+    "guide:dev": "npm --prefix docs run dev",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 0.0.0.0",
+    "test": "node --test",
     "tokens:sync": "node scripts/sync-tokens.mjs",
     "tokens:check": "node scripts/sync-tokens.mjs --check",
     "prebuild": "node scripts/sync-tokens.mjs && node scripts/sync-install.mjs && node scripts/sync-agent-icons.mjs",
-    "build:domain": "SITE_BASE= SITE_URL=https://hivemind.griiken.com npm run build",
+    "build:domain": "SITE_URL=https://hivemind.griiken.com npm run build",
     "deploy:firebase": "npm run build:domain && firebase deploy --only hosting",
     "install:sync": "node scripts/sync-install.mjs",
     "install:check": "node scripts/sync-install.mjs --check",
@@ -18,7 +21,6 @@
     "diagrams": "node scripts/diagrams/build.mjs"
   },
   "dependencies": {
-    "@astrojs/starlight": "0.42.0",
     "astro": "7.3.1",
     "sharp": "^0.35.5"
   },

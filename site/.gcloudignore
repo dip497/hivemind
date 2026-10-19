@@ -1,0 +1,10 @@
+# What `gcloud run deploy --source .` uploads: the built site and the server, not the sources.
+# Without this file gcloud reads .gitignore, which leaves out dist/.
+.gcloudignore
+node_modules/
+docs/
+src/
+.astro/
+.astro-cache/
+public/
+scripts/

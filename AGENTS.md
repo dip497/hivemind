@@ -82,6 +82,7 @@ No previous sessions found.
 </claude-mem-context>
 ## Website hosting
 
-The website and its guide live in `site/`. `.github/workflows/site.yml` deploys it to Cloud Run
-when a change under `site/` reaches main. `docs/` holds engineering notes (design, plans,
+The website lives in `site/`, and its guide's pages in `guide/`, built by the Fumadocs app in
+`site/docs/` and served at `/guide`. `.github/workflows/site.yml` deploys both to Cloud Run when a
+change under `site/` or `guide/` reaches main. `docs/` holds engineering notes (design, plans,
 reviews) and is not published. Do not create or deploy ChatGPT Sites for this project.

@@ -7,11 +7,10 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { downloadFor } from "./downloads.mjs";
-import { docsSiteFrom, guideRedirectFor } from "./guide-redirect.mjs";
+import { redirectFor } from "./redirects.mjs";
 
 const ROOT = new URL("./dist/", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8080);
-const DOCS_SITE = docsSiteFrom(process.env);
 
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
@@ -26,7 +25,7 @@ const TYPES = {
 
 /** Hashed filenames never change content; everything else is re-fetched or checked. */
 function cacheFor(path) {
-  if (path.startsWith("/_astro/")) return "public, max-age=31536000, immutable";
+  if (path.startsWith("/_astro/") || path.startsWith("/guide/_next/static/")) return "public, max-age=31536000, immutable";
   if (path.endsWith(".html")) return "public, max-age=0, must-revalidate";
   if (path.startsWith("/shots/")) return "public, max-age=604800";
   return "public, max-age=3600";
@@ -54,8 +53,7 @@ createServer((req, res) => {
     res.writeHead(302, { location: "/#download", "cache-control": "public, max-age=300" });
     return res.end();
   }
-  // Once DOCS_SITE_URL names the docs site, the old guide pages send people there for good.
-  const moved = guideRedirectFor(req.url ?? "/", DOCS_SITE);
+  const moved = redirectFor(req.url ?? "/");
   if (moved) {
     res.writeHead(301, { location: moved, "cache-control": "public, max-age=86400" });
     return res.end();
@@ -67,7 +65,9 @@ createServer((req, res) => {
   }
   const hit = resolve(req.url ?? "/");
   if (!hit) {
-    const notFound = join(ROOT, "404.html");
+    // The guide has its own page for a missing page, with its sidebar and search.
+    const inGuide = /^\/guide(\/|$)/.test(req.url ?? "");
+    const notFound = join(ROOT, inGuide ? "guide/404.html" : "404.html");
     const has404 = existsSync(notFound);
     res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
     return has404 ? createReadStream(notFound).pipe(res) : res.end("Not found");

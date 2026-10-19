@@ -1,0 +1,109 @@
+---
+title: "Know who is waiting"
+description: "See at a glance which agent needs you, jump to it, and get told on your desktop or phone when one does."
+---
+
+When an agent stops to ask you something, Hivemind turns its tile amber, counts it on the bell
+and can notify you. This page shows each signal and how to tune it.
+
+<AgentPrompt description="Paste this into your coding agent to have your phone notified whenever an agent needs you." page="know-who-is-waiting">{`
+Set up Hivemind on this computer so my phone gets a push notification whenever an agent needs me.
+
+1. Check Hivemind is installed: \`hive --version\` prints a version.
+2. Ask me whether I use ntfy (the free app at \`https://ntfy.sh\`) or another service that takes a plain-text POST. For ntfy, suggest a long random topic name and tell me to subscribe to it in the ntfy app on my phone. Wait until I say I have.
+3. Run \`hive push set https://ntfy.sh/<topic>\`. To also hear when an agent finishes replying, add \`--events input.requested,turn.ended\`.
+4. Run \`hive push test\`. Ask me whether the phone showed "test push from hivemind".
+5. Run \`hive push status\` and show me where pushes go.
+
+At the end, tell me the topic, which events push, and that \`hive push off\` stops it.
+`}</AgentPrompt>
+
+<Frame caption="Two agents need you: the bell shows 2, their rows say needs you, and a widget lists them">
+  <img src="/images/shots/showcase/waiting-on-you-board.webp" alt="The Layers panel with a bell showing 2 and amber needs you labels on the docs-utils and binding-test rows, beside a widget that lists the two agents waiting and for how long." />
+</Frame>
+
+## The signals
+
+| Signal | Where | What it tells you |
+|---|---|---|
+| Amber | an agent's tile, its row in the Layers panel, its frame | this agent <Tooltip tip="An agent waiting for a person: a permission question, a choice, or a plan to approve. Its tile turns amber." cta="Glossary" href="/glossary#needs-you">needs you</Tooltip> |
+| The bell | top of the <Tooltip tip="The list beside the canvas of your projects, frames and tiles. ⌘B / Ctrl+B shows or hides it." cta="Glossary" href="/glossary#layers-panel">Layers panel</Tooltip> | how many agents need you |
+| A toast | inside the app | an agent needs you, finished, or failed |
+| An OS popup | your desktop | the same, when the app window is not in front |
+| A push | your phone | an agent needs you, even when you are away |
+
+Amber always means a person is being waited on. The other colours are on [Agent states](/agent-states).
+
+## Jump to the next one
+
+1. Press the bell at the top of the Layers panel.
+2. Check: the next agent that needs you is selected and shown.
+3. Answer it in its tile: choose an option, type a reply, or press **Approve plan** for a plan.
+
+Press the bell again for the next one. Its tooltip says how many are left.
+
+## Choose what notifies you
+
+1. Open **Settings → Notifications**.
+2. Under **Notify me about**, switch on what you want: **Needs you**, **Finished** or **Failed**.
+3. Under **Delivery**, choose **In-app toasts**, **Native OS popups**, or both.
+4. Check: the next agent that needs you shows a toast.
+
+**Do Not Disturb** mutes **Finished** and **Failed** between two times you set.
+**Needs you** still reaches you.
+
+<Frame caption="Settings → Notifications">
+  <img src="/images/app/settings-notifications.dark.webp" alt="Settings → Notifications: the Notifications switch, and Notify me about Needs you, Finished and Failed, each with its own switch." />
+</Frame>
+
+## Snooze a row
+
+To hide an agent from the Layers panel for a while, open its row's ⋮ menu and choose **Snooze**:
+**30 minutes**, **1 hour**, **2 hours** or **Tomorrow at 9:00**.
+
+A snoozed row waits under **Snoozed**. It comes back early as soon as its agent needs you.
+**Wake now** in the same menu brings it back at once.
+
+## Get a push on your phone
+
+<Tabs>
+  <Tab title="A push app (ntfy)">
+    1. Install ntfy on your phone and subscribe to a topic only you know.
+    2. On the computer the agents run on, run `hive push set https://ntfy.sh/<topic>`.
+    3. Run `hive push test`.
+    4. Check: your phone shows **test push from hivemind**.
+
+    By default a push goes out when an agent needs you. To also hear when an agent finishes
+    replying, add `--events input.requested,turn.ended`. `hive push off` stops it.
+  </Tab>
+  <Tab title="The phone page">
+    The phone page lists what needs you first, and you answer there. It needs your own network
+    server. See [Answer agents from your phone](/phone).
+
+    <Frame caption="A permission question on the phone">
+      <img src="/images/shots/phone-permission.webp" style={{ maxWidth: "260px" }} alt="The phone page: the agent is waiting on you, and a Bash permission question for rm -rf build offers Allow and Deny." />
+    </Frame>
+  </Tab>
+</Tabs>
+
+## Check it worked
+
+- Start an agent and ask it to do something that needs permission.
+- Its tile turns amber and the bell shows **1**.
+- With notifications on, a toast or popup names the agent.
+
+## If it didn't
+
+| You see | Do |
+|---|---|
+| An agent asks something but its tile never turns amber | See [Troubleshooting](/troubleshooting). |
+| No toast or popup | Check **Settings → Notifications** is on, and **Needs you** with it. |
+| `hive push test` fails | The URL is wrong, or the computer cannot reach it. Run `hive push status`. |
+
+## Related
+
+- [Agent states](/agent-states)
+- [Answer agents from your phone](/phone)
+- [Keyboard shortcuts](/keyboard-shortcuts)
+
+<LastValidated />
