@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { constants, createBrotliCompress, createGzip } from "node:zlib";
+import { rangeFor } from "./byte-range.mjs";
 import { downloadFor } from "./downloads.mjs";
 import { redirectFor } from "./redirects.mjs";
 
@@ -93,13 +94,30 @@ createServer((req, res) => {
     return res.end();
   }
   const encoder = encoderFor(req, hit.file);
-  res.writeHead(200, {
+  const headers = {
     "content-type": TYPES[extname(hit.file)] ?? "application/octet-stream",
     "cache-control": cacheFor(`/${hit.path.replace(/^\/+/, "")}`),
     "x-content-type-options": "nosniff",
     vary: "accept-encoding",
-    ...(encoder ? { "content-encoding": encoder[0] } : {}),
+  };
+  if (encoder) {
+    res.writeHead(200, { ...headers, "content-encoding": encoder[0] });
+    if (req.method === "HEAD") return res.end();
+    return createReadStream(hit.file).pipe(encoder[1]()).pipe(res);
+  }
+  const size = statSync(hit.file).size;
+  const range = rangeFor(req.headers.range, size);
+  if (range === false) {
+    res.writeHead(416, { ...headers, "content-range": `bytes */${size}` });
+    return res.end();
+  }
+  const { start, end } = range ?? { start: 0, end: size - 1 };
+  res.writeHead(range ? 206 : 200, {
+    ...headers,
+    "accept-ranges": "bytes",
+    "content-length": end - start + 1,
+    ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}),
   });
-  const body = createReadStream(hit.file);
-  (encoder ? body.pipe(encoder[1]()) : body).pipe(res);
+  if (req.method === "HEAD" || size === 0) return res.end();
+  createReadStream(hit.file, { start, end }).pipe(res);
 }).listen(PORT, "0.0.0.0", () => console.log(`serving dist/ on ${PORT}`));
