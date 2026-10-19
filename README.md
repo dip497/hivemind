@@ -80,30 +80,7 @@ irm https://hivemind.griiken.com/install.ps1 | iex
 
 ## Tech stack
 
-**Please don't kill me for using Electron.** 🙏
-
-I'm a backend person. Frontend was never my home, and I wanted to ship this, not spend a year
-learning three native UI kits. Electron gives this app the things it can't live without:
-
-- **Real terminals.** xterm.js on node-pty, the same pair behind the terminal in most editors.
-- **Plugins your agents can write.** A view, widget or tool is plain web code, and web code is what
-  agents write best.
-- **One app on Linux, macOS and Windows** from one codebase.
-
-So, *maaf karo mujhe*. Here is everything inside:
-
-| Part | Built with |
-|---|---|
-| Desktop app | Electron, React, Tailwind, Radix UI, zustand, React Flow |
-| Terminals | xterm.js (WebGL) on node-pty |
-| `hive` CLI and remote host | TypeScript, compiled to one binary with Bun |
-| Network server (`hive-net`) | Rust |
-| SDKs | TypeScript and Python |
-| Views | Any web code; the Island view is Three.js |
-| Website and guide | Astro and Fumadocs |
-
-The heavy work stays out of the window: agents run in a background process, `hive-net` is Rust, and
-only the terminals on screen get bytes. If it still feels slow on your machine, open an issue and I
-owe you one.
+**Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and plugins your agents write
+are web code anyway. *Maaf karo mujhe.*
 
 [Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)
