@@ -38,12 +38,12 @@ test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: repo });
-  for (const [kind, dir, record] of [
-    ["widgets", "widgets/progress", "widget:@example/progress"],
-    ["views", "views/agent-board", "view:agent-board"],
-    ["tools", "tools/commits", "tool:@example/commits"],
+  for (const [dir, record] of [
+    ["widgets/progress", "widget:@example/progress"],
+    ["views/agent-board", "view:agent-board"],
+    ["tools/commits", "tool:@example/commits"],
   ] as const) {
-    const installed = await hive(kind, "install", path.join(fixtures, dir));
+    const installed = await hive("plugins", "install", path.join(fixtures, dir));
     expect(installed.status, installed.err).toBe(0);
     expect((await hive("plugins", "enable", record)).status).toBe(0);
   }
@@ -115,11 +115,11 @@ test("a view's commands: an agent pins notes to the Agent board while it is the 
 
 test("a tool's commands: an agent asks an open Commits tile what is there", async () => {
   // Named by its plugin alone: its first tool opens.
-  const opened = await hive("ctl", "plugin", "open", "tool:@example/commits", "--json");
+  const opened = await hive("ctl", "plugin", "open", "tool:example/commits", "--json");
   expect(opened.status, opened.err).toBe(0);
   const tool = JSON.parse(opened.out) as { tile: string; instance: string; state: string };
   expect([tool.instance, tool.state]).toEqual([tool.tile, "ready"]);
-  await expect.poll(async () => (await call("@example/commits", "list")).data.result).toEqual(["init"]);
+  await expect.poll(async () => (await call("example/commits", "list")).data.result).toEqual(["init"]);
   // Closed by its instance, as `plugin list` names it: its tile goes.
   expect((await hive("ctl", "plugin", "close", tool.tile, "--json")).status).toBe(0);
   expect((await running()).plugins.find((p) => p.instance === tool.tile)).toBeUndefined();
@@ -133,6 +133,6 @@ test("what is not here to open is refused, with how to get it", async () => {
   expect([view.status, JSON.parse(view.out).code]).toEqual([5, "NOT_FOUND"]);
   expect(JSON.parse(view.out).message).toContain("hive plugins enable view:nothing");
   expect(JSON.parse(view.out).message).toContain("these are: canvas");
-  expect(JSON.parse((await hive("ctl", "plugin", "open", "tool:@nobody/nothing", "--json")).out).message).toContain("has no tool to open");
+  expect(JSON.parse((await hive("ctl", "plugin", "open", "tool:nobody/nothing", "--json")).out).message).toContain("has no tool to open");
   expect(JSON.parse((await hive("ctl", "plugin", "open", "nothing", "--json")).out).code).toBe("BAD_REQUEST");
 });
