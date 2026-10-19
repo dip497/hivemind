@@ -1,6 +1,6 @@
 /**
  * hivemind-view.json — the manifest a community view ships next to its entry.
- * Validated by `hive views install`, by the desktop loader, and (through this
+ * Validated by `hive plugins install`, by the desktop loader, and (through this
  * module) by plugin authors' own builds. Pure: no filesystem here.
  */
 import { PROTOCOL_VERSION, VIEW_PERMISSIONS, type ViewPermission } from "./protocol.js";
@@ -15,7 +15,7 @@ export interface ViewManifest {
    *  was published on HiveHub — `owner` is the GitHub account that published it. */
   id: string;
   name: string;
-  /** semver-ish `x.y.z` (shown in `hive views list`; not compared by the host). */
+  /** semver-ish `x.y.z` (shown in `hive plugins list`; not compared by the host). */
   version: string;
   /** Relative path to ONE bundled `.html` (loaded as-is) or `.js` (wrapped in a
    *  host-generated page as a module script). Everything it references must sit

@@ -82,12 +82,12 @@ export async function pluginVerb(method: string, params: Record<string, unknown>
       const deadline = Date.now() + PLUGIN_OPEN_MS;
       if (kind === "view") {
         const view = getView(id);
-        if (!view) throw new PluginError("NOT_FOUND", `no view ${id} here (these are: ${listViews().map((v) => v.id).join(", ")}): install it (\`hive views install <folder>\`) and switch it on (\`hive plugins enable view:${id}\`)`);
+        if (!view) throw new PluginError("NOT_FOUND", `no view ${id} here (these are: ${listViews().map((v) => v.id).join(", ")}): install it (\`hive plugins install <folder>\`) and switch it on (\`hive plugins enable view:${id}\`)`);
         host.showView(id);
         return { view: id, ...(view.source === "community" ? opened(await pluginInstances.settle({ plugin: id, instance: id }, deadline)) : {}) };
       }
       const widget = host.addWidget(id);
-      if (!widget) throw new PluginError("NOT_FOUND", `no widget ${id} here: install it (\`hive widgets install <folder>\`) and switch it on (\`hive plugins enable widget:${id}\`)`);
+      if (!widget) throw new PluginError("NOT_FOUND", `no widget ${id} here: install it (\`hive plugins install <folder>\`) and switch it on (\`hive plugins enable widget:${id}\`)`);
       return { widget, ...(host.widgetRuns(id) ? opened(await pluginInstances.settle({ instance: widget }, deadline)) : {}) };
     }
     case "plugin.settle": {

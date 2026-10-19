@@ -1,7 +1,7 @@
 /**
  * The API a widget's code is given, as the global `hive`: the code that defines it (run before the
  * widget's own, in a worker, by the app's window or by `hive host`), and its type declarations,
- * for an author's editor (`hive widgets new` writes them beside the widget). One owner, so what
+ * for an author's editor (`hive plugins new widget` writes them beside the widget). One owner, so what
  * the declarations say is what runs.
  *
  * What it reads of the workspace and does there is `hive.hm`: the client a view and a tool's tile
@@ -70,7 +70,7 @@ export const WIDGET_PRELUDE = `const hive = (() => {
 `;
 
 /** `hive`'s declarations, as a file an editor reads (`hive.d.ts`). */
-export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Written by \`hive widgets new\`; not loaded at run time.
+export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Written by \`hive plugins new widget\`; not loaded at run time.
 
 /** Something to draw. The app draws it in the theme; a widget never draws pixels itself. */
 type Node =

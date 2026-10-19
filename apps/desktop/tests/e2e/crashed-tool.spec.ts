@@ -27,7 +27,7 @@ let page: Page;
 
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
-  expect(hive("tools", "install", fixture).status).toBe(0);
+  expect(hive("plugins", "install", fixture).status).toBe(0);
   expect(hive("plugins", "enable", "tool:example/broken").status).toBe(0);
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   page = await app.firstWindow();

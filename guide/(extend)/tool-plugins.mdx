@@ -9,15 +9,15 @@ A <Tooltip tip="A plugin that adds a kind of tile, such as a pull request panel.
 Build a Hivemind tool plugin, a new kind of tile drawn by React code inside the app, and, if I want, publish it on HiveHub.
 
 1. Ask me what the tile should show and do, and its name (lowercase letters, digits and dashes).
-2. Start it: \`hive tools new <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`hivemind-tool.json\`, \`index.js\`, \`README.md\` and \`PROMPT.md\`.
+2. Start it: \`hive plugins new tool <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`hivemind-tool.json\`, \`index.js\`, \`README.md\` and \`PROMPT.md\`.
 3. Read \`PROMPT.md\` in full: it is the whole contract (manifest, what a tile gets, the \`hm-plugin://host/\` modules, commands). Write what I asked for under its "What I want". Build only from it; never use \`window.hive\`.
-4. Install it, again after each change: \`hive tools install <folder>\`. A tool runs with my access, so new or changed code arrives switched off; the same code stays as it was. Ask me before you switch it on with \`hive plugins enable tool:owner/name\`.
+4. Install it, again after each change: \`hive plugins install <folder>\`. A tool runs with my access, so new or changed code arrives switched off; the same code stays as it was. Ask me before you switch it on with \`hive plugins enable tool:owner/name\`.
 5. Open it: \`hive ctl open-tool owner/name\`. Look at it with \`hive ctl tile look <tile>\`: check the picture shows what I asked for and its console has no error.
 6. Give it one command in the manifest's "commands", answered with \`hm.onCommand\`, that reports what the tile shows. Check it with \`hive ctl plugin call owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, the manifest has a one-line description, a "category" and only the permissions it uses, and \`README.md\` says what it does and what it runs.
 8. Publish only if I say so. Follow the "Publish to HiveHub" page: push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
 
-At the end, tell me the tool's id, the command that installs it (\`hive tools install owner/name\`), and anything you could not check.
+At the end, tell me the tool's id, the command that installs it (\`hive plugins install owner/name\`), and anything you could not check.
 `}</AgentPrompt>
 
 <Frame caption="A tool's tile on the canvas: Flaky tests runs the tests eight times and marks the ones that fail only sometimes">
@@ -38,7 +38,7 @@ loads.
 1. Install a tool from HiveHub:
 
    ```bash
-   hive tools install dip497/worktrees
+   hive plugins install dip497/worktrees
    ```
 
    Check: it prints `installed dip497/worktrees` and says it is off.
@@ -77,7 +77,7 @@ Every tool on HiveHub is listed on the **HiveHub** tab; pick **Tools** to see on
 <Steps>
   <Step title="Start the tool">
     ```bash
-    hive tools new branch
+    hive plugins new tool branch
     ```
 
     Check: it prints `started <your login>/branch`. If it asks whose it is, add
@@ -85,7 +85,7 @@ Every tool on HiveHub is listed on the **HiveHub** tab; pick **Tools** to see on
   </Step>
   <Step title="Install it and switch it on">
     ```bash
-    cd branch && hive tools install . && hive plugins enable tool:<your login>/branch
+    cd branch && hive plugins install . && hive plugins enable tool:<your login>/branch
     ```
 
     Check: `hive plugins list` shows `tool:<your login>/branch` as on.
@@ -127,7 +127,7 @@ Every tool on HiveHub is listed on the **HiveHub** tab; pick **Tools** to see on
     const refresh = () => host.run("git", ["log", "-1", "--format=%D: %s"]).then((r) => setBranch(r.stdout.trim()));
     ```
 
-    Install it again with `hive tools install .`. Changed code arrives switched off, so switch it
+    Install it again with `hive plugins install .`. Changed code arrives switched off, so switch it
     on again with `hive plugins enable tool:<your login>/branch`, then press **Refresh** in the tile.
 
     Check: the tile shows the branch and the last commit's subject.
@@ -208,7 +208,7 @@ Reach the app only through these, never `window.hive`.
 ### Ids, opening and reinstalling
 
 A tool package's id is `owner/name`. Each tool in it has a full id, `owner/name/<key>`:
-`hive tools list` and `hive tools install` print it.
+`hive plugins list --kind tool` prints it.
 
 ```bash
 hive ctl open-tool acme/prs                       # the package's tool, when it has one
@@ -325,9 +325,10 @@ computer of the person looking at it.
 ### Commands
 
 ```bash
-hive tools list                         # what each tool adds: tiles, by full id, and commands
-hive tools install <folder>|owner/name  # new or changed code off: hive plugins enable tool:<owner>/<name>
-hive tools remove <owner>/<name>
+hive plugins new tool <name> [--dir folder]   # a starter, with PROMPT.md
+hive plugins install <folder>|owner/name       # new or changed code off: hive plugins enable <owner>/<name>
+hive plugins list --kind tool                  # each tool, and the full id of each of its tiles
+hive plugins remove <owner>/<name>
 ```
 
 <LastValidated />

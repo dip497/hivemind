@@ -59,7 +59,7 @@ thing that has been wrong in a view someone shipped.
 - [ ] `validateViewManifest()` passes in your own build
 - [ ] `permissions` is `[]`, or every entry is used by a feature you can point at
 - [ ] Everything bundled; no bare imports, no CDN, no network at runtime
-- [ ] `hive views install ./dist` from a clean checkout, then ⌘E, and it is there
+- [ ] `hive plugins install ./dist` from a clean checkout, then ⌘E, and it is there
 - [ ] Installed from the built directory — not the source directory
 
 ## The sandbox

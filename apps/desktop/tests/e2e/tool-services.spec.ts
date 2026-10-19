@@ -61,7 +61,7 @@ let page: Page;
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first", { cwd: repo });
-  expect(hive("tools", "install", plugin).status).toBe(0);
+  expect(hive("plugins", "install", plugin).status).toBe(0);
   expect(hive("plugins", "enable", "tool:acme/watcher").status).toBe(0);
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   page = await app.firstWindow();

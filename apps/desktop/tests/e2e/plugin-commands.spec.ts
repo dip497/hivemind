@@ -128,7 +128,7 @@ test("a tool's commands: an agent asks an open Commits tile what is there", asyn
 test("what is not here to open is refused, with how to get it", async () => {
   const widget = await hive("ctl", "plugin", "open", "widget:@nobody/nothing", "--json");
   expect(widget.status).not.toBe(0);
-  expect(JSON.parse(widget.out).message).toContain("hive widgets install");
+  expect(JSON.parse(widget.out).message).toContain("hive plugins install");
   const view = await hive("ctl", "plugin", "open", "view:nothing", "--json");
   expect([view.status, JSON.parse(view.out).code]).toEqual([5, "NOT_FOUND"]);
   expect(JSON.parse(view.out).message).toContain("hive plugins enable view:nothing");

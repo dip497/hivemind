@@ -1,4 +1,4 @@
-/** The brief `hive widgets|tools|views new` writes as PROMPT.md: what a coding agent needs to build
+/** The brief `hive plugins new` writes as PROMPT.md: what a coding agent needs to build
  *  the plugin and check its own work, with the kind's guide itself, so the two never disagree. */
 import widgetGuide from "../../../guide/(extend)/widgets.mdx" with { type: "text" };
 import toolGuide from "../../../guide/(extend)/tool-plugins.mdx" with { type: "text" };
@@ -22,7 +22,7 @@ function loop(kind: PluginKind, id: string): string {
 hive plugins enable ${record}         # once
 hive ctl plugin open ${record}        # switch the app to it`;
   }
-  return `hive ${kind}s install .              # again after each change
+  return `hive plugins install .              # again after each change
 hive plugins enable ${record}         # once
 hive ctl plugin open ${record}        # ${kind === "widget" ? "put one on the board" : "open its tile"}`;
 }

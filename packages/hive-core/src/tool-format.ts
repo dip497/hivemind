@@ -69,7 +69,7 @@ export interface ToolPackage extends ToolPluginContribution {
   /** What it is for; the Add menu groups tools by it. */
   category: PluginCategory;
   /** What an agent may ask one of its open tiles to do (`hm.onCommand`): the manifest's
-   *  `commands`. (A built-in plugin's `commands` are the CLI's, described for `hive tools list`.) */
+   *  `commands`. (A built-in plugin's `commands` are the CLI's, described for `hive plugins list`.) */
   pluginCommands: PluginCommand[];
   /** What the person can set it to, read as `hm.settings`. */
   settings: SettingField[];

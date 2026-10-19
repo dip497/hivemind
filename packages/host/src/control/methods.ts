@@ -134,9 +134,9 @@ export interface MethodDeps {
   captureWindow?: (rect: TileRect) => Promise<{ png: string; width: number; height: number }>;
   /** Re-read settings.json (edited by the CLI) and broadcast it. */
   reloadSettings: () => Promise<unknown>;
-  /** Re-list the installed widgets (`hive widgets install|remove`) and tell every window. */
+  /** Re-list the installed widgets (`hive plugins install|remove`) and tell every window. */
   widgetsChanged?: () => void;
-  /** Re-list the installed tool plugins (`hive tools install|remove`) and tell every window. */
+  /** Re-list the installed tool plugins (`hive plugins install|remove`) and tell every window. */
   toolsChanged?: () => void;
   /** Write to a tile's pty RIGHT NOW. Returns false if the tile has no live pty.
    *  Raw bytes only (key sequences) — for anything the agent must READ, use
@@ -733,7 +733,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
     catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
     const tool = pick(registry.tools.filter((t) => t.tileKind));
-    if (!tool?.tileKind) throw new ApiError("UNSUPPORTED", `${badId}; \`hive tools list\` shows them`);
+    if (!tool?.tileKind) throw new ApiError("UNSUPPORTED", `${badId}; \`hive plugins list --kind tool\` shows them`);
     const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
     if (!availability.available) throw new ApiError("FORBIDDEN", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
     const kind = tool.tileKind;

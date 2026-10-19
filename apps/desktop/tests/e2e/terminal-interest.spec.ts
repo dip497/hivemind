@@ -27,7 +27,7 @@ test.beforeAll(async () => {
   execFileSync("git", ["init", "-q"], { cwd: repo });
   fs.writeFileSync(path.join(VIEW, "hivemind-view.json"), JSON.stringify({ id: "blank", name: "Blank", version: "0.1.0", entry: "main.js", protocol: 1, permissions: [] }));
   fs.writeFileSync(path.join(VIEW, "main.js"), `import { connect } from "@hivemind/view-sdk"; await connect(); document.body.textContent = "blank";`);
-  const r = spawnSync("bun", [CLI, "views", "install", VIEW, "--json"], { cwd: repo, encoding: "utf8", env: ENV });
+  const r = spawnSync("bun", [CLI, "plugins", "install", VIEW, "--json"], { cwd: repo, encoding: "utf8", env: ENV });
   expect(r.status, r.stdout + r.stderr).toBe(0);
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
   page = await app.firstWindow();

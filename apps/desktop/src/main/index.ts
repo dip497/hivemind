@@ -1874,7 +1874,7 @@ function startPlanReviewBridge(): void {
 // (twin of plan-review). Main verbs (agent.send/read) run here against the
 // recorder + turn tracker. The injected Stop hook reports finished turns.
 const pendingHcp = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: NodeJS.Timeout }>();
-/** Verbs every window carries out, each for its own workspace and lists (`hive views install`,
+/** Verbs every window carries out, each for its own workspace and lists (`hive plugins install`,
  *  `hive agents install`); the rest are for the window the user is at, which answers. */
 const EVERY_WINDOW = new Set(["views.rescan", "agents.rescan"]);
 function hcpCallRenderer(method: string, params: unknown, timeoutMs: number): Promise<unknown> {

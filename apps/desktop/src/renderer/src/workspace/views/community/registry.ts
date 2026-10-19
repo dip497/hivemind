@@ -4,7 +4,7 @@
  * whose component is the sandboxed host (CommunityView.tsx), and drop the ones
  * that went away. Re-run on every repo switch and on `hivemind:reload-views`.
  *
- * A package is refused here (never registered, reason kept for `hive views
+ * A package is refused here (never registered, reason kept for `hive plugins
  * list` parity + the test seam) when main already flagged it, when it speaks a
  * newer protocol, when its id is a built-in view's, or when it was disabled
  * earlier this session for misbehaving.

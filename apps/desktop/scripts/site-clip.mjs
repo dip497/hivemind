@@ -182,19 +182,19 @@ const run = (c, lines = 2) => `printf '\\n\\e[32m⏺\\e[0m \\e[1mBash\\e[0m(%s)\
 const spin = (task, s) => `end=$((SECONDS+${s})); i=0; while [ $SECONDS -lt $end ]; do for g in ✻ ✶ ✳ ✢; do i=$((i+1)); printf '\\r\\e[?25l\\e[38;5;208m%s\\e[0m ${task}… (%ss · esc to interrupt)  ' "$g" $((i*4/10)); sleep 0.4; done; done; printf '\\r\\e[K'`;
 const STEP = [
   [spin("Reading the views guide", 2), say("I'll add the Island view and switch to it."),
-    run("hive views install ~/plugins/island && hive plugins enable view:@dip497/island", 1),
+    run("hive plugins install ~/plugins/island && hive plugins enable view:@dip497/island", 1),
     // Software rendering on a recording display: the view's own settings for less drawing.
     "hive plugins set view:@dip497/island shadows false >/dev/null; hive plugins set view:@dip497/island frameRate 30 >/dev/null",
     spin("Checking the islands", 1),
     run("hive ctl plugin open view:@dip497/island", 1)],
   [spin("Reading the widgets guide", 2), say("I'll put a CI light on the board and run the build."),
-    run("hive widgets install ~/plugins/ci-light && hive plugins enable widget:@dip497/ci-light", 1),
+    run("hive plugins install ~/plugins/ci-light && hive plugins enable widget:@dip497/ci-light", 1),
     run("hive ctl plugin open widget:@dip497/ci-light", 1),
     run(`hive ctl plugin call @dip497/ci-light set '{"state":"running","name":"CI"}'`, 0),
     spin("Running the build", 2),
     run(`hive ctl plugin call @dip497/ci-light set '{"state":"passed","name":"CI","detail":"typecheck, build and unit tests"}'`, 0)],
   [spin("Reading the tools guide", 2), say("I'll add the Flaky tests tool and open it on the canvas."),
-    run("hive tools install ~/plugins/flaky-tests && hive plugins enable tool:dip497/flaky-tests", 1),
+    run("hive plugins install ~/plugins/flaky-tests && hive plugins enable tool:dip497/flaky-tests", 1),
     run(`hive plugins set tool:dip497/flaky-tests command "bun test screens" && hive plugins set tool:dip497/flaky-tests runs 3`, 0),
     run("hive ctl plugin open view:canvas && hive ctl open-tool dip497/flaky-tests/flaky", 0),
     `for i in $(seq 30); do hive ctl plugin call dip497/flaky-tests run >/dev/null 2>&1 && break; sleep 0.5; done`,
@@ -202,7 +202,7 @@ const STEP = [
 ];
 STEP.forEach((s, i) => fs.writeFileSync(path.join(steps, `${i + 1}.sh`), `${s.join("\n")}\n`));
 // It starts on the views this workspace has.
-fs.writeFileSync(path.join(HOME, "lead.sh"), `${run("hive views list", 4)}
+fs.writeFileSync(path.join(HOME, "lead.sh"), `${run("hive plugins list --kind view", 4)}
 n=0
 while :; do
   printf '\\n\\e[38;5;244m❯\\e[0m \\e[?25l'; until IFS= read -t 0.4 -r ask; do printf '\\e[?25l'; done; [ -z "$ask" ] && continue

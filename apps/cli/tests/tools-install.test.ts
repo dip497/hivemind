@@ -1,4 +1,4 @@
-// `hive tools install`: from HiveHub by owner/name, every file checked against the index and its
+// `hive plugins install` of a tool: from HiveHub by owner/name, every file checked against the index and its
 // hivemind-tool.json saying that same id; a folder that exists under that name is the folder.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -14,7 +14,7 @@ const manifest = (id: string) => JSON.stringify({
   tools: [{ key: "prs", label: "Pull requests", tileKind: "ada-prs" }],
 });
 
-describe("hive tools install", () => {
+describe("hive plugins install, a tool", () => {
   test("installs one from HiveHub by owner/name, refuses a listing that is another tool, and takes a folder of that name as the folder", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-tools-hub-"));
     const xdg = path.join(tmp, "config");
@@ -30,7 +30,7 @@ describe("hive tools install", () => {
     fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("ada/prs"), entry("ada/liar")] }));
 
     const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
-    const run = (cwd: string, ...args: string[]) => hive(["tools", ...args, "--json"], { cwd, env });
+    const run = (cwd: string, ...args: string[]) => hive(["plugins", ...args, "--json"], { cwd, env });
     try {
       expect(run(tmp, "install", "ada/prs").json).toMatchObject({ ok: true, data: { id: "ada/prs", name: "Pull requests" } });
       expect(fs.readFileSync(path.join(xdg, "hivemind", "tools", "ada--prs", "index.js"), "utf8")).toBe(files["index.js"]);
@@ -49,7 +49,7 @@ describe("hive tools install", () => {
     }
   }, 60_000);
 
-  test("text output names each tool's full id, and says whether it is on: off when new, on when the same code is installed again", () => {
+  test("text output says whether it is on, off when new and on when the same code is installed again, and the list names each tool's full id", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-tools-text-"));
     const xdg = path.join(tmp, "config");
     const src = path.join(tmp, "prs");
@@ -59,14 +59,14 @@ describe("hive tools install", () => {
     const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
     const run = (...args: string[]) => hive(args, { cwd: tmp, env }).stdout;
     try {
-      const first = run("tools", "install", src);
-      expect(first).toContain("tool ada/prs/prs");
+      const first = run("plugins", "install", src);
+      expect(first).toContain("hive plugins enable tool:ada/prs");
       expect(first).toContain("It is off");
-      expect(run("tools", "list")).toContain("ada/prs/prs");
+      expect(run("plugins", "list", "--kind", "tool")).toContain("open-tool ada/prs/prs");
       expect(hive(["plugins", "enable", "tool:ada/prs", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true });
-      const again = run("tools", "install", src);
+      const again = run("plugins", "install", src);
       expect(again).toContain("It is on");
-      expect(again).not.toContain("It is off");
+      expect(again).not.toContain("hive plugins enable");
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

@@ -105,6 +105,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - `hive ctl tile look` raises the tile above the others and refuses with `OCCLUDED` (exit 7), naming what is drawn over it (a pinned tile, a dialog, a notification), instead of picturing it with the tile.
 - `hive ctl open-tool <tool> --state <json>` opens a tool's tile with its first saved state (what the tool's `useTileState` reads). A tool's tile shows the normal pointer instead of the canvas's grab cursor where the tool sets none. The tool guide covers tool ids and `open-tool`, framing a local server, what `host.run` does (the login shell's `PATH`, no shell, 60 s, 10 MB), looking at a tile, reinstalling, and what the canvas does with the pointer and keys over a tile; `hive tools new` prints its address.
 - A tool whose code does not load is a failed tile `hive ctl plugin list` shows with why, `plugin open` exits 1 for, and `plugin close` closes; a one-of-a-kind tool (Issues, Code, or `"singleton": true`) opened again by `hive ctl open-tool` brings its tile forward instead of opening another.
+- **Breaking:** one command for every plugin you write or add: `hive plugins new tool|widget|view <name> [--dir]` (prints the steps to see it), `hive plugins install <folder|id>` (the kind read from the folder or HiveHub), `hive plugins remove`, `hive plugins list [--kind]`. `hive tools`, `hive widgets` and `hive views` are gone. A plugin is named by its id alone; `<kind>:<id>` only where two kinds share one.
 
 ## [2026.10.3] — 2026-10-18
 

@@ -32,7 +32,7 @@ test.beforeAll(async () => {
     port.start(); port.postMessage({type:'ready',v:1});
     document.querySelector('button').onclick = () => port.postMessage({type:'command',name:'spawnTile',args:['browser',null]});
   });`);
-  expect(hive("views", "install", fixture).status).toBe(0);
+  expect(hive("plugins", "install", fixture).status).toBe(0);
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: root, env });
   page = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.focus());

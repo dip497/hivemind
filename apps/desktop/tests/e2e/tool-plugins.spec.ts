@@ -49,7 +49,7 @@ test.beforeAll(async () => {
   // An agent to send to: what the app starts as `claude`, waiting on its input.
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "claude"), "#!/bin/sh\nexec cat\n", { mode: 0o755 });
-  expect(hive("tools", "install", fixture).status).toBe(0);
+  expect(hive("plugins", "install", fixture).status).toBe(0);
   await launch();
 });
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });

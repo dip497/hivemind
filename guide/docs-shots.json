@@ -285,7 +285,7 @@
       "name": "widgets-counter",
       "status": "todo",
       "alt": "The counter widget from the tutorial, pressed three times.",
-      "why": "Needs hive widgets new counter built in the run."
+      "why": "Needs hive plugins new widget counter built in the run."
     },
     {
       "page": "extension-authoring",
@@ -306,7 +306,7 @@
       "name": "tool-branch-tile",
       "status": "todo",
       "alt": "The starter tool's tile showing the git branch.",
-      "why": "Needs hive tools new built in the run."
+      "why": "Needs hive plugins new tool built in the run."
     },
     {
       "page": "appearance",

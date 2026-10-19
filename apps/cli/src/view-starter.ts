@@ -1,4 +1,4 @@
-/** What `hive views new` writes: a view that builds outside this repository. The SDK is not a
+/** What `hive plugins new view` writes: a view that builds outside this repository. The SDK is not a
  *  package to install — the app serves it to every view — so a view gets its types here and
  *  leaves `@hivemind/view-sdk` out of its bundle. */
 import { readFileSync } from "node:fs";
@@ -20,7 +20,7 @@ export function starterFiles(owner: string, name: string): Record<string, string
     "hivemind-view.json": JSON.stringify({ id, name: title(name), version: "0.1.0", entry: "index.html", protocol: 1, permissions: [] }, null, 2) + "\n",
     "package.json": JSON.stringify({
       name, version: "0.1.0", private: true, type: "module",
-      scripts: { build: "node build.mjs", dev: "node build.mjs && hive views install dist", typecheck: "tsc" },
+      scripts: { build: "node build.mjs", dev: "node build.mjs && hive plugins install dist", typecheck: "tsc" },
       devDependencies: { esbuild: "^0.28.0", typescript: "^5.9.0" },
     }, null, 2) + "\n",
     "tsconfig.json": JSON.stringify({
@@ -32,7 +32,7 @@ export function starterFiles(owner: string, name: string): Record<string, string
       include: ["src", "types"],
     }, null, 2) + "\n",
     ".gitignore": "node_modules/\n",
-    "build.mjs": `// dist/ is the view: publish it, or \`hive views install dist\`.
+    "build.mjs": `// dist/ is the view: publish it, or \`hive plugins install dist\`.
 import { build } from "esbuild";
 import { cpSync, rmSync } from "node:fs";
 

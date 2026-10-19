@@ -64,8 +64,8 @@ for (const [k, v] of [
 ]) cli("config", "set", k, JSON.stringify(v));
 // A widget and a tool from HiveHub, added as their guides say.
 const WIDGET = "@dip497/progress";
-cli("widgets", "install", WIDGET);
-cli("tools", "install", "dip497/git-history");
+cli("plugins", "install", WIDGET);
+cli("plugins", "install", "dip497/git-history");
 for (const id of ["tool:dip497/git-history", `widget:${WIDGET}`]) cli("plugins", "enable", id);
 
 const app = await electron.launch({

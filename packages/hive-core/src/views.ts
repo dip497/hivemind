@@ -3,12 +3,12 @@
  * `hivemind-view.json` (validated by @hivemind/view-sdk) plus its bundled
  * entry and assets. Three roots are scanned:
  *
- *   $XDG_CONFIG_HOME/hivemind/views/<id>/   installed by `hive views install`
+ *   $XDG_CONFIG_HOME/hivemind/views/<id>/   installed by `hive plugins install`
  *   <repo>/.hivemind/views/<id>/            shipped with a repo
  *   <app>/out/views/<id>/                   come with the app, which names the folder
  *
  * The desktop loader and the CLI both read through this module, so what
- * `hive views list` prints is exactly what the app will (or will not) load.
+ * `hive plugins list --kind view` prints is exactly what the app will (or will not) load.
  * Nothing here executes plugin code.
  */
 import { promises as fs } from "node:fs";

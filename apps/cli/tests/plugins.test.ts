@@ -44,7 +44,9 @@ describe("hive plugins", () => {
       expect(run("reset", "view:board").json).toMatchObject({ ok: true });
       expect(stored()["view:board"]).toBeUndefined();
 
-      expect(run("enable", "board").json).toMatchObject({ ok: false, error: expect.stringContaining("write <kind>:<id>") });
+      // A bare id is enough when one kind has it.
+      expect(run("enable", "board").json).toMatchObject({ ok: true, data: { key: "view:board", enabled: true } });
+      expect(run("enable", "nope").json).toMatchObject({ ok: false, error: expect.stringContaining("there is no plugin \"nope\"") });
       expect(run("enable", "view:nope").json).toMatchObject({ ok: false, error: expect.stringContaining("there is no view \"nope\"") });
     } finally {
       fs.rmSync(xdg, { recursive: true, force: true });

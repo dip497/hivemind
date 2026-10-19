@@ -59,7 +59,7 @@ describe.skipIf(!unix)("a tool plugin's service under hive host", () => {
       c.on("data", (d) => { for (const l of String(d).split("\\n")) if (l.includes('"hello"')) console.log("hello " + JSON.stringify(JSON.parse(l).hello.as ?? JSON.parse(l))); });
       c.on("error", (e) => console.log("drive " + e.message));
     `);
-    expect(run("tools", "install", plugin).code).toBe(0);
+    expect(run("plugins", "install", plugin).code).toBe(0);
     expect(run("plugins", "enable", "tool:acme/watcher").code).toBe(0);
     expect(run("plugins", "workspaces", "tool:acme/watcher").json).toMatchObject({ data: { workspaces: [] } });
 

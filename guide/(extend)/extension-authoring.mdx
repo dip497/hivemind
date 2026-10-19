@@ -9,7 +9,7 @@ Build a <Tooltip tip="A way of drawing the workspace: Canvas, Windows, or one yo
 Build a Hivemind view (a sandboxed web page that draws the whole workspace its own way) and, if I want, publish it on HiveHub.
 
 1. Ask me what the view should show and do, and its name (lowercase letters, digits and dashes).
-2. Start it: \`hive views new <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Then run \`npm install\` in the new folder (it needs Node).
+2. Start it: \`hive plugins new view <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Then run \`npm install\` in the new folder (it needs Node).
 3. Read \`PROMPT.md\` in full: it is the whole contract (the SDK, permissions, the sandbox). Write what I asked for under its "What I want", and build only from it. The view has no network, no files and no \`window.hive\`. It uses \`@hivemind/view-sdk\`, which the app serves, so do not bundle it.
 4. Build and install, again after each change: \`npm run dev\`. Check it prints "installed @owner/name".
 5. Show it: \`hive ctl plugin open view:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable view:@owner/name\` first.
@@ -17,7 +17,7 @@ Build a Hivemind view (a sandboxed web page that draws the whole workspace its o
 7. Done means: \`hive plugins list\` shows it on with no problem, it follows the light and the dark theme (\`applyThemeVars\`), the manifest has a one-line description, a "category" and only the permissions it uses, and \`README.md\` says what it does.
 8. Publish only if I say so. Commit \`dist/\` with the source, because HiveHub publishes the pushed commit. Follow the "Publish to HiveHub" page and run \`hivehub publish dist\`. If I must sign in, ask me to open the link and type the code myself.
 
-At the end, tell me the view's id, the command others use to install it (\`hive views install @owner/name\`), and anything you could not check.
+At the end, tell me the view's id, the command others use to install it (\`hive plugins install @owner/name\`), and anything you could not check.
 `}</AgentPrompt>
 
 ## Views others have built
@@ -46,7 +46,7 @@ Each is on HiveHub as `@dip497/<name>`.
 <Steps>
   <Step title="Start the view">
     ```bash
-    hive views new pulse
+    hive plugins new view pulse
     ```
 
     Check: it prints `created @<your login>/pulse`. If it asks for an owner, add
@@ -122,7 +122,7 @@ Each is on HiveHub as `@dip497/<name>`.
 
 ## What you did
 
-- You started a view with `hive views new` and installed it with `npm run dev`.
+- You started a view with `hive plugins new view` and installed it with `npm run dev`.
 - You switched the window to it from the toolbar's view menu.
 - You read the workspace with `hm.on("structure")` and each agent's status with `hm.subscribeStatus`.
 
@@ -208,9 +208,10 @@ the session and return you to the canvas.
 ### Commands
 
 ```bash
-hive views list                         # installed views, and why any fails to load
-hive views install <folder>|@owner/name
-hive views remove <id>
+hive plugins new view <name> [--dir folder]   # a starter, with PROMPT.md
+hive plugins install <folder>|@owner/name
+hive plugins list --kind view                 # installed views, and why any fails to load
+hive plugins remove <id>
 ```
 
 <LastValidated />

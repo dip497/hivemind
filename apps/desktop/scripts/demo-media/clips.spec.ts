@@ -64,7 +64,7 @@ test("widgets", async () => {
   await expect.poll(() => s.census().of(asker)?.waiting?.kind ?? "", { timeout: 300_000, intervals: [1000] }).toBe("permission");
   await busy(s, [routing]);
   for (const name of SHOWCASE_WIDGETS) {
-    const r = cli("widgets", "install", path.join(SHOWCASE, "widgets", name), "--json");
+    const r = cli("plugins", "install", path.join(SHOWCASE, "widgets", name), "--json");
     expect(r.status, r.stdout + r.stderr).toBe(0);
   }
   await desktop.evaluate(() => window.dispatchEvent(new Event("focus")));
@@ -105,7 +105,7 @@ test("tools", async () => {
   const s = await stage(root, apps, { cwd: path.join(DEMO, "ripgrep") });
   const { desktop, cli } = s;
   for (const name of ["flaky-tests", "changelog-writer"]) {
-    const r = cli("tools", "install", path.join(SHOWCASE, "tools", name), "--json");
+    const r = cli("plugins", "install", path.join(SHOWCASE, "tools", name), "--json");
     expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(cli("plugins", "enable", `tool:dip497/${name}`, "--json").status).toBe(0);
   }
@@ -154,7 +154,7 @@ test("views", async () => {
   const s = await stage(root, apps);
   const { desktop, cli } = s;
   for (const name of ["agents-by-state", "timeline", "constellation"]) {
-    const r = cli("views", "install", path.join(SHOWCASE, "views", name), "--json");
+    const r = cli("plugins", "install", path.join(SHOWCASE, "views", name), "--json");
     expect(r.status, r.stdout + r.stderr).toBe(0);
   }
   cli("plugins", "set", "view:@dip497/constellation", "frameRate", "30");

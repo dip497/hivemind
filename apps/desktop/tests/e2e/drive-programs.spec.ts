@@ -103,7 +103,7 @@ test("opened while `hive host` serves programs, Settings lets them in and takes 
   }));
   fs.writeFileSync(path.join(plugin, "index.js"), "export default { tiles: {} };\n");
   fs.writeFileSync(path.join(plugin, "service.js"), "process.stdin.on('end', () => process.exit(0)).resume(); console.log('up');\n");
-  expect(hive("tools", "install", plugin).status).toBe(0);
+  expect(hive("plugins", "install", plugin).status).toBe(0);
   expect(hive("plugins", "enable", "tool:acme/hello").status).toBe(0);
   let host: ChildProcess | undefined;
   try {

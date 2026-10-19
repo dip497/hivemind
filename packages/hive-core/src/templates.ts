@@ -351,7 +351,7 @@ A plugin is \`starting\` until its code connects, then \`ready\`; \`failed\` say
 starting waits for it (30 s in all). Exit 5: not running, or no such command; 4: still starting or no answer in time;
 2: it runs twice and you did not say which (\`--tile\`); 1: it failed or refused, in its own words.
 \`hive ctl tile look <tile> --json\` shows a tile as the person sees it: a PNG path, its plugin's state and console.
-Writing a tool: https://hivemind.griiken.com/guide/tool-plugins/
+Writing one: \`hive plugins new tool|widget|view <name>\` starts it, with a PROMPT.md that has the whole guide.
 
 ## Beyond the canvas
 Each has \`--help\` with its exact options; read it before you run one.
@@ -361,7 +361,7 @@ Each has \`--help\` with its exact options; read it before you run one.
 - \`hive machine\` · \`hive run -- <cmd>\` · \`hive ps\` · \`hive attach\` · \`hive kill\`: saved ssh machines and terminal sessions that outlive the app.
 - \`hive host\`: this machine as an always-on host of its workspaces, with no desktop.
 - \`hive push set|test\`: phone notifications when an agent here needs the person.
-- \`hive agents\` · \`hive widgets\` · \`hive tools\` · \`hive views\` · \`hive config\` · \`hive theme\` · \`hive upgrade\`.
+- \`hive agents\` · \`hive plugins\` · \`hive config\` · \`hive theme\` · \`hive upgrade\`.
 
 Ask the person before anything that lets someone in, gives a program a token, or changes this computer's network; never type a password for them.
 `;

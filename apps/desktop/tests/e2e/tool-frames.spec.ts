@@ -40,7 +40,7 @@ test.beforeAll(async () => {
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   local = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
-  expect(hive("tools", "install", fixture).status).toBe(0);
+  expect(hive("plugins", "install", fixture).status).toBe(0);
   expect(hive("plugins", "enable", "tool:example/frames").status).toBe(0);
   expect(hive("plugins", "set", "tool:example/frames", "url", local).status).toBe(0);
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: repo, env });

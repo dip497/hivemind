@@ -95,7 +95,7 @@ is not something a view chooses. `spawnAgent` takes a catalog id, never a comman
 {
   "id": "my-view",          // lowercase, digits, single dashes; "@your-login/my-view" to publish on HiveHub
   "name": "My view",        // ≤ 64 chars
-  "version": "0.1.0",       // x.y.z (shown in `hive views list`; the host does not compare it)
+  "version": "0.1.0",       // x.y.z (shown in `hive plugins list --kind view`; the host does not compare it)
   "entry": "index.html",    // one relative .html or .js inside the package
   "protocol": 1,            // a host refuses a protocol newer than its own
   "permissions": [],        // unknown names refused at install AND at load
@@ -122,7 +122,7 @@ is what the shipped examples use. Set `"wallpaper": false` only if you paint an 
 scene of your own: nothing would show through, and its animation still costs every frame.
 
 `validateViewManifest()` from the SDK reports **every** problem, not the first — run it
-in your own build and you will never be surprised by `hive views install`.
+in your own build and you will never be surprised by `hive plugins install`.
 
 ## Limits
 
