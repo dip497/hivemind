@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The website's hero opens on an agent's terminal at full size where you ask for a view, then a widget and a tool, in one take; its first frame paints at once as a small image, the recording follows when the page is idle, phones get their own crop, and the site's fonts are served from the site itself.
 - Widgets: `hive.reducedMotion` and `hive.on("motion")` tell a widget's code that the person asked for less motion, so a widget that moves its card can hold still.
 - The website and README say Hivemind runs every coding agent, not a count of them; the agent grid ends with "Any other", which your agent adds in one file.
 - The website's home page leads with what only Hivemind does: its hero is a recording of the real app, sharp on retina screens, where an agent switches the workspace to the Island view, then adds a CI light widget and the Flaky tests tool; the README lists your own views, tools and widgets and the agent-driven workspace first.

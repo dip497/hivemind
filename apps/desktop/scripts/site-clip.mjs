@@ -8,7 +8,7 @@
 // --plugins is a checkout of hivemind-plugins: the Island view, the CI light widget and the
 // Flaky tests tool are installed from it, the way an agent installs a plugin it just wrote.
 // Out: raw.mkv (lossless), beats.json (when each step starts, in seconds) and poster.png.
-// scripts/site-clip-encode.mjs cuts one or more recordings into what the site serves.
+// scripts/site-clip-encode.mjs turns one recording into what the site serves.
 import { _electron as electron } from "@playwright/test";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -39,12 +39,13 @@ fs.mkdirSync(XDG, { recursive: true });
 for (const cli of ["claude", "codex", "pi"]) {
   fs.writeFileSync(path.join(BIN, cli), `#!/usr/bin/env bash
 [ "$1" = "--version" ] && { echo "0.0.0 (clip stand-in)"; exit 0; }
+printf '\\e[?25l'
 cmd=""
 ${cli === "codex" ? "" : `for a in "$@"; do case "$a" in -*) ;; *) cmd="$a" ;; esac; done`}
-if [ -n "$cmd" ]; then clear; exec bash -c "$cmd"; fi
+if [ -n "$cmd" ]; then clear; printf '\\e[?25l'; exec bash -c "$cmd"; fi
 printf '\\n❯ '
 IFS= read -r line
-clear
+clear; printf '\\e[?25l'
 exec bash -c "$line"
 `, { mode: 0o755 });
 }
@@ -135,12 +136,11 @@ fs.writeFileSync(path.join(BIN, "hive"), `#!/usr/bin/env bash\nexport HIVEMIND_A
 
 const wait = (ms) => page.waitForTimeout(ms);
 const emit = (name, detail) => page.evaluate(([n, d]) => window.dispatchEvent(new CustomEvent(n, { detail: d })), [name, detail]);
-const island = (title) => page.locator(`button[title^="${title}"]`).first();
 
 const WORKING = {
-  claude: (task) => `(i=0; while :; do for g in ✻ ✶ ✳ ✢; do i=$((i+1)); printf '\\r%s ${task}… (%ss · esc to interrupt)  ' "$g" $((i*4/10)); sleep 0.4; done; done)`,
-  codex: (task) => `(i=0; while :; do i=$((i+1)); printf '\\r• Working (%ss) · ${task}  ' $((i*4/10)); sleep 0.4; done)`,
-  pi: (task) => `(i=0; while :; do i=$((i+1)); printf '\\rWorking... ${task} (%ss)  ' $((i*4/10)); sleep 0.4; done)`,
+  claude: (task) => `(i=0; while :; do for g in ✻ ✶ ✳ ✢; do i=$((i+1)); printf '\\r\\e[?25l%s ${task}… (%ss · esc to interrupt)  ' "$g" $((i*4/10)); sleep 0.4; done; done)`,
+  codex: (task) => `(i=0; while :; do i=$((i+1)); printf '\\r\\e[?25l• Working (%ss) · ${task}  ' $((i*4/10)); sleep 0.4; done)`,
+  pi: (task) => `(i=0; while :; do i=$((i+1)); printf '\\r\\e[?25lWorking... ${task} (%ss)  ' $((i*4/10)); sleep 0.4; done)`,
 };
 const agent = (name, frame, script, kind) => {
   const r = cli("ctl", "spawn", "--agent", kind, "--name", name, ...(frame ? ["--frame", frame] : []), "--prompt", script, "--json");
@@ -163,7 +163,7 @@ async function namedFrame(title) {
 // Three frames of this repository, an agent of each kind at real work in them. Each screen is the
 // real output of the command named in it, then the spinner its provider's detector reads.
 for (const f of ["views", "cli", "packages"]) await namedFrame(f);
-const work = (kind, cmd, task) => `clear; ${cmd} 2>&1 | head -n 16; printf '\\n'; ${WORKING[kind](task)}`;
+const work = (kind, cmd, task) => `clear; printf '\\e[?25l'; ${cmd} 2>&1 | head -n 16; printf '\\n'; ${WORKING[kind](task)}`;
 for (const [frame, kind, name, script] of [
   ["views", "codex", "trace-glass", work("codex", "grep -rn 'effectiveGlass' apps/desktop/src --include=*.ts | cut -c1-90", "Tracing effectiveGlass")],
   ["views", "pi", "renderer-diff", work("pi", "git diff --stat HEAD~3 -- apps/desktop | tail -n 8", "Summarising the renderer diff")],
@@ -179,7 +179,7 @@ fs.mkdirSync(steps, { recursive: true });
 const say = (t) => `printf '\\n\\e[37m⏺\\e[0m %s\\n' "${t}"`;
 /** One real command as the agent runs it, with the first lines of what it printed. */
 const run = (c, lines = 2) => `printf '\\n\\e[32m⏺\\e[0m \\e[1mBash\\e[0m(%s)\\n' "${c.replace(/"/g, '\\"')}"; (${c}) 2>&1 | sed -e "s#$HOME#~#g" -e 's/;.*//' -e 's/^/  \\x1b[38;5;244m⎿  /' -e 's/$/\\x1b[0m/' | head -n ${lines}`;
-const spin = (task, s) => `end=$((SECONDS+${s})); i=0; while [ $SECONDS -lt $end ]; do for g in ✻ ✶ ✳ ✢; do i=$((i+1)); printf '\\r\\e[38;5;208m%s\\e[0m ${task}… (%ss · esc to interrupt)  ' "$g" $((i*4/10)); sleep 0.4; done; done; printf '\\r\\e[K'`;
+const spin = (task, s) => `end=$((SECONDS+${s})); i=0; while [ $SECONDS -lt $end ]; do for g in ✻ ✶ ✳ ✢; do i=$((i+1)); printf '\\r\\e[?25l\\e[38;5;208m%s\\e[0m ${task}… (%ss · esc to interrupt)  ' "$g" $((i*4/10)); sleep 0.4; done; done; printf '\\r\\e[K'`;
 const STEP = [
   [spin("Reading the views guide", 2), say("I'll add the Island view and switch to it."),
     run("hive views install ~/plugins/island && hive plugins enable view:@dip497/island", 1),
@@ -201,21 +201,23 @@ const STEP = [
     run("hive ctl plugin call dip497/flaky-tests flaky", 3)],
 ];
 STEP.forEach((s, i) => fs.writeFileSync(path.join(steps, `${i + 1}.sh`), `${s.join("\n")}\n`));
-// It starts on what it last looked at: the repository's recent commits.
-fs.writeFileSync(path.join(HOME, "lead.sh"), `${run("git log --oneline -n 6", 6)}
+// It starts on the views this workspace has.
+fs.writeFileSync(path.join(HOME, "lead.sh"), `${run("hive views list", 4)}
 n=0
 while :; do
-  printf '\\n\\e[38;5;244m❯\\e[0m '; IFS= read -r ask; [ -z "$ask" ] && continue
+  printf '\\n\\e[38;5;244m❯\\e[0m \\e[?25l'; until IFS= read -t 0.4 -r ask; do printf '\\e[?25l'; done; [ -z "$ask" ] && continue
   n=$((n+1)); [ -f ~/steps/$n.sh ] && bash ~/steps/$n.sh
 done
 `);
-const lead = agent("my-workspace", "views", "clear; cd ~/hivemind; bash ~/lead.sh", "claude");
+const lead = agent("my-workspace", "views", "clear; printf '\\e[?25l'; cd ~/hivemind; bash ~/lead.sh", "claude");
 if (!lead) throw new Error("the lead agent did not start");
 
 await wait(6000);
-await island("Fit to view").click();
 /** The pointer leaves what it clicked, so no tooltip stays in the shot. */
 const rest = () => page.mouse.move(SIZE.width * 0.5, SIZE.height * 0.6);
+// The camera opens on the agent the person talks to, at 100%, so its text reads on the page.
+const focused = cli("ctl", "focus", lead);
+if (focused.status !== 0) throw new Error(`focus ${lead}: ${focused.stdout}${focused.stderr}`);
 await rest();
 await wait(4000);
 
@@ -264,20 +266,9 @@ if (!PROBE) {
 }
 
 try {
-  // 1. agents at work on the canvas
-  await mark("canvas");
-  await wait(2500);
-  await page.locator('button[title^="Focus views"]').first().click();
-  await rest();
-  await wait(3000);
-  await page.getByText("my-workspace", { exact: true }).first().click();
-  await rest();
-  await wait(1500);
-  await island("Zoom out").click();
-  await rest();
-  await wait(1500);
-  // 2. it writes a view, and the app switches to it
+  // 1. the person asks for a view, and the app switches to it
   await mark("view");
+  await wait(1000);
   await ask("Show my workspace as islands.");
   await pluginOpen("view @dip497/island");
   await mark("switched");
@@ -293,12 +284,12 @@ try {
     await wait(1500);
   }
   await wait(2500);
-  // 3. a widget
+  // 2. a widget
   await mark("widget");
   await ask("Put a CI light where I can see it.");
   await until(() => cli("ctl", "plugin", "call", "@dip497/ci-light", "status").stdout.includes("passed"), 90_000);
   await wait(3000);
-  // 4. a tool
+  // 3. a tool
   await mark("tool");
   await ask("Find the flaky tests.");
   await until(() => cli("ctl", "plugin", "call", "dip497/flaky-tests", "flaky").status === 0, 60_000);

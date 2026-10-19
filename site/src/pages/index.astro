@@ -1,6 +1,8 @@
 ---
 import { HIVEHUB } from "../hivehub";
 import HeroClip from '../components/HeroClip.astro';
+import Fonts from '../components/Fonts.astro';
+import { wideStill, phoneStill, WIDE_SIZES, PHONE_SIZES, PHONE_QUERY } from '../lib/hero-images';
 import icons from '../generated/agent-icons.json';
 import tokens from '../generated/tokens.json';
 import { resolve } from '../lib/tokens';
@@ -18,6 +20,8 @@ const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
+// The hero's first frame is the largest paint; the head asks for it before anything else.
+const [poster, posterPhone] = await Promise.all([wideStill('poster'), phoneStill('poster')]);
 
 // The page paints in the app's own colours, read from the app's stylesheet at build time.
 const app = tokens.tokens as Record<string, { value: string }>;
@@ -78,9 +82,9 @@ const code: Record<string, [string, string][]> = {
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="preload" as="image" type="image/avif" media={PHONE_QUERY} imagesrcset={posterPhone.avif} imagesizes={PHONE_SIZES} fetchpriority="high" />
+  <link rel="preload" as="image" type="image/avif" media="(min-width: 641px)" imagesrcset={poster.avif} imagesizes={WIDE_SIZES} fetchpriority="high" />
+  <Fonts />
   <style set:html={appColours}></style>
 </head>
 <body>
@@ -114,19 +118,19 @@ const code: Record<string, [string, string][]> = {
     <div class="wrap">
       <div class="hero-copy">
         <div class="hero-say">
-          <h1>Your agents build the workspace they work in.</h1>
+          <h1><span>Your agents build</span> the workspace they work in.</h1>
         </div>
         <div class="hero-do">
-          <p class="eyebrow"><span class="dot"></span>Free and open source · MIT</p>
-          <p class="lede">Every coding agent in a real terminal. Ask one for a view, a tool or a widget, and it writes it, installs it and keeps it live.</p>
-          <div class="hero-act">
-            <div class="install">
-              <code>{install}</code>
-              <button class="copy" type="button" data-copy={install} aria-label="Copy the install command">Copy</button>
-            </div>
-            <a class="btn primary" href="#download" data-dl-label>Download</a>
+          <p class="lede">Every coding agent, in a real terminal. Ask one for a view, a widget or a tool, and it builds it into your workspace.</p>
+          <div class="install hero-install">
+            <code>{install}</code>
+            <button class="copy" type="button" data-copy={install} aria-label="Copy the install command">Copy</button>
           </div>
-          <p class="fine">On your computer. No account. <button class="copy-prompt" type="button" data-copy={agentPrompt} data-label="Copied the prompt">Or copy a prompt for your agent</button></p>
+          <div class="hero-act">
+            <a class="btn primary" href="#download" data-dl-label>Download</a>
+            <button class="btn ghost copy-prompt" type="button" data-copy={agentPrompt} data-label="Copied the prompt">Copy a prompt for your agent</button>
+          </div>
+          <p class="fine">Free and open source, MIT. On your computer, no account.</p>
         </div>
       </div>
       <HeroClip />
@@ -136,7 +140,6 @@ const code: Record<string, [string, string][]> = {
   <section class="band" id="views" aria-labelledby="views-h">
     <div class="wrap split views">
       <div class="head reveal">
-        <p class="kicker">Views</p>
         <h2 id="views-h">The canvas is only where it starts.</h2>
         <p class="sub">A view draws the whole screen around the same live terminals. Ask for one and your agent writes it, in a sandbox, for you alone.</p>
         <div class="vtabs" role="tablist" aria-label="Views written as plugins">
@@ -163,7 +166,6 @@ const code: Record<string, [string, string][]> = {
   <section class="band" id="plugins" aria-labelledby="plugins-h">
     <div class="wrap">
       <div class="head reveal center">
-        <p class="kicker">Widgets and tools</p>
         <h2 id="plugins-h">Ask for a tool. It lands on the canvas, and stays up to date.</h2>
       </div>
       <div class="bento">
@@ -195,7 +197,6 @@ const code: Record<string, [string, string][]> = {
   <section class="band" id="api" aria-labelledby="api-h">
     <div class="wrap split rev">
       <div class="head reveal">
-        <p class="kicker">Agents and API</p>
         <h2 id="api-h">Everything you can click, an agent can call.</h2>
         <p class="sub"><code>hive ctl</code> is on every agent's PATH, so agents start agents, read their replies and open tools. Your own scripts get the same API, with a token you can take back.</p>
         <ul class="ticks">
@@ -223,7 +224,6 @@ const code: Record<string, [string, string][]> = {
   <section class="band" id="reach" aria-labelledby="reach-h">
     <div class="wrap">
       <div class="head reveal center">
-        <p class="kicker">Anywhere</p>
         <h2 id="reach-h">Your machines. Your phone. Your people.</h2>
         <p class="sub">Every hop is a machine you run. No server of ours sits in the path.</p>
       </div>
@@ -256,7 +256,6 @@ const code: Record<string, [string, string][]> = {
   <section class="band" id="agents" aria-labelledby="agents-h">
     <div class="wrap">
       <div class="head reveal center">
-        <p class="kicker">Agents</p>
         <h2 id="agents-h">Every coding agent, even the one that ships tomorrow.</h2>
         <p class="sub">Install its CLI and it is on the board. For one Hivemind has never seen, your agent reads its <code>--help</code> and writes the file that teaches Hivemind to run it.</p>
       </div>
@@ -277,7 +276,6 @@ const code: Record<string, [string, string][]> = {
   <section class="band" id="numbers" aria-labelledby="numbers-h">
     <div class="wrap">
       <div class="head reveal">
-        <p class="kicker">Measured</p>
         <h2 id="numbers-h">Fast with many agents, measured under load.</h2>
         <p class="sub">From the <a href={changelog}>2026.10.3 changelog</a>, on 16 CPUs, with the load each ran under.</p>
       </div>
@@ -353,10 +351,23 @@ const code: Record<string, [string, string][]> = {
   // This computer's card goes first and the hero button names it; a wrong guess costs nothing.
   (() => {
     const ua = navigator.userAgent;
-    const os = /Windows|Win32|Win64/.test(ua) ? 'windows' : /Mac OS X|Macintosh/.test(ua) ? 'macos' : /Linux|X11|CrOS/.test(ua) && !/Android/.test(ua) ? 'linux' : null;
+    const handheld = /iPhone|iPad|iPod|Android/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const os = handheld ? null : /Windows|Win32|Win64/.test(ua) ? 'windows' : /Mac OS X|Macintosh/.test(ua) ? 'macos' : /Linux|X11|CrOS/.test(ua) ? 'linux' : null;
     const name = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }[os];
     const btn = document.querySelector('[data-dl-label]');
     if (btn && name) btn.textContent = `Download for ${name}`;
+    // Hivemind runs on a computer: on a phone the button sends this page there.
+    if (btn && handheld) {
+      btn.textContent = 'Send to my computer';
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const url = location.origin + location.pathname;
+        try {
+          if (navigator.share) await navigator.share({ title: 'Hivemind', text: 'Install Hivemind on this computer.', url });
+          else { await navigator.clipboard.writeText(url); btn.textContent = 'Link copied'; }
+        } catch { /* share closed */ }
+      });
+    }
     const grid = document.querySelector('.dl-grid');
     const mine = os && grid && grid.querySelector(`.dl-card[data-os="${os}"]`);
     if (!mine) return;
@@ -409,7 +420,7 @@ const code: Record<string, [string, string][]> = {
 
 <style is:global>
   :root{
-    --f:"Geist",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --f:"Geist","Geist Fallback",ui-sans-serif,system-ui,-apple-system,sans-serif;
     --f-m:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
     --ease-move:cubic-bezier(0.77,0,0.175,1);
     --glow:oklch(0.62 0.05 250);
@@ -439,7 +450,6 @@ const code: Record<string, [string, string][]> = {
   @media (hover:hover) and (pointer:fine){
     .sub a:hover,.after a:hover,.dl-more a:hover,.links-row a:hover,.r-card a:hover,.b-steps a:hover{text-decoration-color:var(--fg2)}
   }
-  .kicker{font:500 12px/1 var(--f-m);letter-spacing:.12em;text-transform:uppercase;color:var(--fg3);margin-bottom:18px}
 
   .nav{position:sticky;top:0;z-index:50;background:color-mix(in oklab,var(--bg) 82%,transparent);
     backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid var(--line)}
@@ -470,26 +480,23 @@ const code: Record<string, [string, string][]> = {
   .copy[data-done]{color:var(--st-done);border-color:color-mix(in oklab,var(--st-done) 45%,transparent)}
   @media (hover:hover) and (pointer:fine){ .copy:hover{color:var(--fg);border-color:var(--fg3)} }
 
-  /* Hero: one sentence, the command, and the workspace changing shape under it. */
-  .hero{position:relative;padding:48px 0 96px;overflow:clip}
-  .hero-copy{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.85fr);gap:24px 56px;align-items:end;margin:0 0 44px}
-  .hero h1{font-size:clamp(42px,4.6vw,68px);max-width:14ch}
-  .eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 12.5px/1 var(--f-m);color:var(--fg2);
-    padding:7px 12px;border:1px solid var(--line2);border-radius:999px;background:var(--bg2);margin-bottom:20px}
-  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--st-done);box-shadow:0 0 10px var(--st-done)}
-  .lede{font-size:clamp(17px,1.35vw,19.5px);line-height:1.5;color:var(--fg2);max-width:40ch;text-wrap:pretty}
-  .hero-act{display:flex;gap:10px;margin-top:24px}
-  .hero-act .install{flex:1 1 auto}
-  .fine{margin-top:12px;font-size:14px;color:var(--fg3)}
-  .copy-prompt{font:inherit;color:var(--fg2);background:none;border:0;padding:0;margin-left:6px;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:3px}
-  .copy-prompt[data-done]{color:var(--st-done);text-decoration:none}
-  @media (hover:hover) and (pointer:fine){.copy-prompt:hover{color:var(--fg)}}
+  /* Hero: one sentence, the command, and the real app under it, already in the first screen. */
+  .hero{position:relative;padding:56px 0 96px;overflow:clip}
+  .hero-copy{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px 64px;align-items:start;margin:0 0 40px}
+  .hero h1{font-size:clamp(40px,4.5vw,66px);letter-spacing:-.04em;max-width:15ch}
+  .hero h1 span{color:var(--fg3)}
+  .lede{font-size:clamp(17px,1.3vw,19px);line-height:1.5;color:var(--fg2);max-width:44ch;text-wrap:pretty}
+  .hero-install{margin-top:24px}
+  .hero-act{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+  .btn.ghost{border-color:var(--line2);color:var(--fg);font-weight:500;background:transparent}
+  .btn.ghost[data-done]{color:var(--st-done);border-color:color-mix(in oklab,var(--st-done) 45%,transparent)}
+  @media (hover:hover) and (pointer:fine){.btn.ghost:hover{border-color:var(--fg3)}}
+  .fine{font-size:14px;color:var(--fg3);margin-top:14px}
   @media (prefers-reduced-motion:no-preference){
-    .hero-say>*,.hero-do>*{animation:rise .8s var(--ease) both}
-    .hero-do>:nth-child(1){animation-delay:.08s}
-    .hero-do>:nth-child(2){animation-delay:.14s}
-    .hero-do>:nth-child(n+3){animation-delay:.2s}
-    @keyframes rise{from{opacity:0;transform:translateY(14px);filter:blur(6px)}to{opacity:1;transform:none;filter:none}}
+    .hero-say>*,.hero-do>*{animation:rise .55s cubic-bezier(.16,1,.3,1) both}
+    .hero-do>:nth-child(1){animation-delay:.1s}
+    .hero-do>:nth-child(n+2){animation-delay:.15s}
+    @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   }
   @media (max-width:1000px){
     .hero-copy{grid-template-columns:minmax(0,1fr)}
@@ -530,9 +537,9 @@ const code: Record<string, [string, string][]> = {
     border:1px solid var(--line2);background:var(--term);box-shadow:var(--sh3);transform-origin:50% 100%;
     transition:transform .8s var(--ease),filter .6s var(--ease)}
   .fan-card img{display:block;width:100%;height:auto}
-  .fan-card figcaption{position:absolute;left:12px;bottom:12px;display:flex;gap:8px;align-items:center;font:500 12px/1 var(--f);
-    color:var(--fg);padding:7px 10px;border-radius:999px;background:oklch(0.17 0.004 250 / .85);border:1px solid var(--line2)}
-  .fan-card figcaption span{font-family:var(--f-m);color:var(--fg3);text-transform:uppercase;letter-spacing:.08em;font-size:10.5px}
+  .fan-card figcaption{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;align-items:baseline;font:500 13px/1.2 var(--f);
+    color:var(--fg);padding:28px 16px 14px;background:linear-gradient(to top,oklch(0.14 0.004 250 / .92),transparent)}
+  .fan-card figcaption span{color:var(--fg3);font-size:12.5px;font-weight:400}
   .fan-card[data-pos="0"]{z-index:4;transform:rotateX(6deg) rotateY(-12deg)}
   .fan-card[data-pos="1"]{z-index:3;transform:rotateX(6deg) rotateY(-12deg) translate3d(6%,-9%,-110px);filter:brightness(.6)}
   .fan-card[data-pos="2"]{z-index:2;transform:rotateX(6deg) rotateY(-12deg) translate3d(12%,-18%,-220px);filter:brightness(.42)}
@@ -556,7 +563,7 @@ const code: Record<string, [string, string][]> = {
   .b-widget{display:grid;place-items:center;padding:18px 18px 44px;aspect-ratio:1/1}
   .b-widget img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:10px}
   .b-name{position:absolute;left:16px;bottom:14px;font-size:13.5px;color:var(--fg);display:flex;gap:8px;align-items:baseline}
-  .b-name span{font:500 10.5px/1 var(--f-m);letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}
+  .b-name span{font:500 11px/1 var(--f-m);letter-spacing:.1em;text-transform:uppercase;color:var(--fg3)}
   @media (hover:hover) and (pointer:fine){
     .b-card{transition:border-color .2s,transform .3s var(--ease)}
     .b-card:hover{border-color:var(--line2);transform:translateY(-2px)}
@@ -589,12 +596,11 @@ const code: Record<string, [string, string][]> = {
 
   /* Agents: a dock of the marks the app draws. */
   .dock{list-style:none;margin:0 auto;padding:0;display:flex;flex-wrap:wrap;justify-content:center;gap:10px;max-width:980px}
-  .dock li,.dock .d-next a{display:inline-flex;align-items:center;gap:10px;padding:10px 16px 10px 12px;border:1px solid var(--line);
-    border-radius:999px;background:var(--bg2);color:var(--fg);font-size:14.5px;text-decoration:none}
-  .dock .d-next{padding:0;border:0;background:transparent}
-  .dock .d-next a{border-style:dashed;border-color:var(--line2)}
+  .dock li,.dock .d-next a{display:inline-flex;align-items:center;gap:10px;padding:8px 14px 8px 0;color:var(--fg);font-size:14.5px;text-decoration:none}
+  .dock .d-next{padding:0}
+  .dock .d-next a{color:var(--fg2);text-decoration:underline;text-decoration-color:var(--line2);text-underline-offset:4px}
   .mono-mark{width:22px;height:22px;display:grid;place-items:center;border:1px solid var(--line2);border-radius:5px;font:500 11px/1 var(--f-m);color:var(--fg)}
-  @media (hover:hover) and (pointer:fine){ .dock li{transition:border-color .2s} .dock li:hover,.dock .d-next a:hover{border-color:var(--fg3)} }
+  @media (hover:hover) and (pointer:fine){ .dock .d-next a:hover{color:var(--fg);text-decoration-color:var(--fg3)} }
 
   /* Numbers */
   .nums{margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line2)}
@@ -623,7 +629,8 @@ const code: Record<string, [string, string][]> = {
   .dl-me{color:var(--st-done)}
   .dl-file{display:inline-block;margin-top:12px;font-size:13px;color:var(--fg2)}
   .dl-note{margin-top:12px;font-size:13px;color:var(--fg3)}
-  .dl-more{font-size:14px;color:var(--fg3);text-align:center}
+  .dl-more,.dl .sub{color:var(--fg2)}
+  .dl-more{font-size:14px;text-align:center}
 
   .foot{border-top:1px solid var(--line);padding:28px 0 0;font-size:14px;color:var(--fg3);overflow:hidden}
   .foot-in{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
@@ -631,7 +638,7 @@ const code: Record<string, [string, string][]> = {
   .foot a{color:var(--fg2);text-decoration:none}
   @media (hover:hover) and (pointer:fine){ .foot a:hover{color:var(--fg)} }
   .wordmark{font-weight:800;font-size:clamp(72px,19vw,280px);line-height:.8;letter-spacing:-.06em;text-align:center;margin:56px 0 -.12em;
-    color:transparent;background:linear-gradient(180deg,oklch(0.93 0.004 250 / .16),oklch(0.93 0.004 250 / 0) 85%);-webkit-background-clip:text;background-clip:text;user-select:none}
+    color:oklch(0.93 0.004 250 / .07);user-select:none}
 
   @media (max-width:960px){
     .split,.split.rev,.split.views,.faq-wrap{grid-template-columns:minmax(0,1fr);gap:40px}
@@ -650,10 +657,12 @@ const code: Record<string, [string, string][]> = {
     .links::-webkit-scrollbar{display:none}
     .links a{white-space:nowrap}
     .nav-in > .btn{margin-left:auto}
-    .hero{padding:36px 0 64px}
-    .hero-copy{margin-bottom:32px}
-    .eyebrow{margin-bottom:18px}
-    .hero-act{flex-direction:column;align-items:stretch}
+    .hero{padding:28px 0 64px}
+    .hero-copy{margin-bottom:28px;gap:18px}
+    .hero-install,.hero-act .copy-prompt{display:none}
+    .hero-act{margin-top:20px}
+    .hero-act .btn{flex:1 1 auto}
+    .fine{font-size:13px;white-space:nowrap}
     .band{padding:88px 0}
     .head{margin-bottom:36px}
     .sub{font-size:16.5px}
@@ -669,7 +678,7 @@ const code: Record<string, [string, string][]> = {
     .r-copy{padding-bottom:0}
     .r-card{padding:24px}
     .code{font-size:12px;padding:18px}
-    .dock li,.dock .d-next a{font-size:13px;padding:8px 12px 8px 10px}
+    .dock li,.dock .d-next a{font-size:13px;padding:6px 10px 6px 0}
   }
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto}

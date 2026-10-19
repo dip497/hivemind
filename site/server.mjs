@@ -6,6 +6,7 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
+import { constants, createBrotliCompress, createGzip } from "node:zlib";
 import { downloadFor } from "./downloads.mjs";
 import { redirectFor } from "./redirects.mjs";
 
@@ -16,12 +17,22 @@ const TYPES = {
   ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8", ".svg": "image/svg+xml",
-  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+  ".png": "image/png", ".avif": "image/avif", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
   ".ico": "image/x-icon", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8",
   ".xml": "application/xml", ".md": "text/markdown; charset=utf-8",
   // The installers are served to be read as much as piped: a browser shows them as text.
   ".sh": "text/plain; charset=utf-8", ".ps1": "text/plain; charset=utf-8", ".webm": "video/webm", ".mp4": "video/mp4", ".map": "application/json",
 };
+
+/** Text goes out compressed when the browser can read it; images and video already are. */
+const TEXT = new Set([".html", ".css", ".js", ".mjs", ".json", ".svg", ".txt", ".xml", ".md", ".map"]);
+function encoderFor(req, file) {
+  if (!TEXT.has(extname(file))) return null;
+  const accept = String(req.headers["accept-encoding"] ?? "");
+  if (/\bbr\b/.test(accept)) return ["br", () => createBrotliCompress({ params: { [constants.BROTLI_PARAM_QUALITY]: 5 } })];
+  if (/\bgzip\b/.test(accept)) return ["gzip", () => createGzip()];
+  return null;
+}
 
 /** Hashed filenames never change content; everything else is re-fetched or checked. */
 function cacheFor(path) {
@@ -72,10 +83,14 @@ createServer((req, res) => {
     res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
     return has404 ? createReadStream(notFound).pipe(res) : res.end("Not found");
   }
+  const encoder = encoderFor(req, hit.file);
   res.writeHead(200, {
     "content-type": TYPES[extname(hit.file)] ?? "application/octet-stream",
     "cache-control": cacheFor(`/${hit.path.replace(/^\/+/, "")}`),
     "x-content-type-options": "nosniff",
+    vary: "accept-encoding",
+    ...(encoder ? { "content-encoding": encoder[0] } : {}),
   });
-  createReadStream(hit.file).pipe(res);
+  const body = createReadStream(hit.file);
+  (encoder ? body.pipe(encoder[1]()) : body).pipe(res);
 }).listen(PORT, "0.0.0.0", () => console.log(`serving dist/ on ${PORT}`));
