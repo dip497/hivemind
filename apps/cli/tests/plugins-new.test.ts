@@ -32,7 +32,11 @@ describe("hive plugins new", () => {
           `Guide: ${k.guide}`, "",
         ].join("\n"));
         expect(JSON.parse(fs.readFileSync(path.join(dir, k.manifest), "utf8")).id).toBe(k.id);
-        expect(fs.readFileSync(path.join(dir, "PROMPT.md"), "utf8")).toContain(k.id);
+        const prompt = fs.readFileSync(path.join(dir, "PROMPT.md"), "utf8");
+        expect(prompt).toContain(k.id);
+        // Plain Markdown for an agent: no page components, no links that only work on the site.
+        expect(prompt.match(/<\/?[A-Z][A-Za-z]*[\s>/]/g)).toBeNull();
+        expect(prompt).not.toContain("](/");
 
         const again = hive(["plugins", "new", k.kind, "tally", "--owner", "ada", "--dir", "work/tally", "--json"], { cwd: tmp, env });
         expect([again.code, (again.json as { code: string }).code]).toEqual([1, "exists"]);
@@ -54,6 +58,23 @@ describe("hive plugins new", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 120_000);
+
+  test("a tool's PROMPT.md loop checks its code, installs it, opens it and looks at it", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-new-prompt-"));
+    try {
+      hive(["plugins", "new", "tool", "tally", "--owner", "ada"], { cwd: tmp });
+      const prompt = fs.readFileSync(path.join(tmp, "tally", "PROMPT.md"), "utf8");
+      expect(prompt).toContain([
+        "npx -p typescript tsc -p jsconfig.json   # its code against what it is given (types in types/)",
+        "hive plugins install .            # again after each change",
+        "hive plugins enable tool:@ada/tally     # once",
+        "hive ctl plugin open tool:@ada/tally    # open its tile",
+        "hive ctl tile look <tile>         # the picture of it, its state and what its code logged",
+      ].join("\n"));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
 
   test("hive plugins api: a tool's is its tile's props, its host and the hm client, as declared", () => {
     const r = hive(["plugins", "api", "--kind", "tool"], { cwd: os.tmpdir() });

@@ -14,21 +14,45 @@ const WHAT: Record<PluginKind, string> = {
   view: "a sandboxed web page that draws the whole workspace its own way",
 };
 
-/** How it is installed and shown again after each change. */
+/** How its code is checked, installed and shown again after each change. */
 function loop(kind: PluginKind, id: string): string {
   const record = `${kind}:${id}`;
   if (kind === "view") {
-    return `npm install && npm run dev        # build, and install into the app (again after each change)
-hive plugins enable ${record}         # once
-hive ctl plugin open ${record}        # switch the app to it`;
+    return `npm install                       # once
+npm run typecheck                 # its code against the SDK it is given
+npm run dev                       # build, and install into the app (again after each change)
+hive plugins enable ${record}     # once
+hive ctl plugin open ${record}    # switch the app to it`;
   }
-  return `hive plugins install .              # again after each change
-hive plugins enable ${record}         # once
-hive ctl plugin open ${record}        # ${kind === "widget" ? "put one on the board" : "open its tile"}`;
+  const tsc = "npx -p typescript tsc -p jsconfig.json";
+  return `${tsc}   # its code against what it is given (types in ${kind === "widget" ? "hive.d.ts" : "types/"})
+hive plugins install .            # again after each change
+hive plugins enable ${record}     # once
+hive ctl plugin open ${record}    # ${kind === "widget" ? "put one on the board" : "open its tile"}${kind === "tool" ? `
+hive ctl tile look <tile>         # the picture of it, its state and what its code logged` : ""}`;
 }
 
-const stripFrontmatter = (md: string): string =>
-  md.replace(/^---\n[\s\S]*?\n---\n+/, "").replace(/\n<LastValidated \/>\n?$/, "\n");
+const SITE = "https://hivemind.griiken.com/guide";
+
+/** A guide page as plain Markdown for an agent: its components taken out, what is only for a
+ *  person to look at (the prompt to paste, showcase cards, pictures) left out, links made whole. */
+export function plainMarkdown(mdx: string): string {
+  return mdx
+    .replace(/^---\n[\s\S]*?\n---\n+/, "")
+    .replace(/<AgentPrompt[\s\S]*?<\/AgentPrompt>\n*/g, "")
+    .replace(/<CardGroup[\s\S]*?<\/CardGroup>\n*/g, "")
+    .replace(/<Frame[\s\S]*?<\/Frame>\n*/g, "")
+    .replace(/<Diagram[^>]*\/>\n*/g, "")
+    .replace(/<LastValidated \/>\n?/g, "")
+    .replace(/<Tooltip[^>]*>([\s\S]*?)<\/Tooltip>/g, "$1")
+    .replace(/^\s*<\/?(Steps|CodeGroup)>\n/gm, "")
+    .replace(/^\s*<Warning>\n/gm, "\n**Warning:** ").replace(/^\s*<\/Warning>\n/gm, "")
+    // A step's title becomes a heading, its body no longer indented under it.
+    .replace(/^ *<Step title="([^"]*)">\n([\s\S]*?)^ *<\/Step>\n/gm, (_, title: string, body: string) =>
+      `#### ${title}\n\n${body.replace(/^ {4}/gm, "")}\n`)
+    .replace(/\]\(\/([^)]*)\)/g, (_, to: string) => `](${SITE}/${to.replace(/^([^#]*?)\/?(#|$)/, "$1/$2")})`)
+    .replace(/\n{3,}/g, "\n\n");
+}
 
 export function pluginBrief(kind: PluginKind, id: string): string {
   return `# Build this ${NOUN[kind]}
@@ -69,13 +93,14 @@ Give it at least one command that reports what it shows, so you can see that it 
 
 ## Done means
 
-1. It installs and switches on cleanly: \`hive plugins list\` shows it on, with no problem.
-2. \`hive ctl plugin open\` shows it, in the light and the dark theme: colours come from the theme.
-3. Its commands answer as described, and what it shows follows them.
-4. The manifest has a one-line description, a \`category\` and only the permissions it uses;
+1. Its code checks against what it is given, with no error (the first line of the loop).
+2. It installs and switches on cleanly: \`hive plugins list\` shows it on, with no problem.
+3. \`hive ctl plugin open\` shows it, in the light and the dark theme: colours come from the theme.${kind === "tool" ? "\n   \`hive ctl tile look\` shows it drew what was asked, and its console has no error." : ""}
+4. Its commands answer as described, and what it shows follows them.
+5. The manifest has a one-line description, a \`category\` and only the permissions it uses;
    README.md says what it does and what it asks for, for its page on HiveHub.
 
 ---
 
-${stripFrontmatter(GUIDE[kind])}`;
+${plainMarkdown(GUIDE[kind])}`;
 }
