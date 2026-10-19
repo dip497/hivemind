@@ -1,0 +1,32 @@
+---
+title: "The view protocol"
+description: "How a view talks to the app: one message port, a hello that says what it may do, and nothing else."
+---
+
+A view is a web page that draws your workspace. It runs sandboxed and knows only what the app
+tells it over one message port. Your agents can open a view, and send it data, while they work.
+
+<Diagram name="view-open" caption="An agent opens a view" />
+
+1. **Agent** → **main process**: `hive ctl plugin open view:<id>` calls `plugin.open` on the drive socket.
+2. Main process → **window**: show that view. The agent gets its answer once the window has it.
+3. Window → **view**: load its page from `hm-view://<id>`, in a sandboxed frame. Then hand it a message port.
+4. View → window: `ready`, with the protocol version it speaks.
+5. Window → view: `hello`, with what its permissions let it do. Then the workspace: `structure`, `status` and more.
+6. View → window: a `command`, checked against its permissions before it runs.
+
+## Versions
+
+A view says `"protocol": 1` in `hivemind-view.json`. Newer additions to version 1 are features:
+`hello` lists the ones this app has, and a view checks with `hm.supports("<feature>")` before
+using one.
+
+## Widgets speak it too
+
+A widget's code runs in a worker, and reaches the workspace through the same client, limited to
+the permissions in its `widget.json`. Tools do not: they run inside the app. See
+[Trust, permissions and privacy](/security-and-privacy).
+
+Every call a view can make, and how a script sends it data: [View reference](/extension-authoring#view-reference).
+
+<LastValidated />

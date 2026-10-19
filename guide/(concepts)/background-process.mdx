@@ -1,0 +1,46 @@
+---
+title: "Terminals and the background process"
+sidebarTitle: "Background process"
+description: "How the background process runs every terminal and agent, keeps their screens, and keeps them running when the app closes."
+---
+
+Every terminal and agent runs in the
+<Tooltip tip="The hive process that keeps terminals and agents running while the app is closed or upgrading." cta="Glossary" href="/glossary#background-process">background process</Tooltip>,
+not in the window. The window only shows them. So closing the app, or updating it, stops nothing.
+
+<AgentPrompt description="Paste this into your coding agent to check the background process and what it runs." page="background-process">{`
+Check the Hivemind background process on this computer. Do not change anything.
+
+1. Run \`hive daemon status\` and tell me whether it runs.
+2. Run \`hive ps\` and list the sessions it keeps, with their folders.
+3. If the app is open, run \`hive ctl agents --json\` and match each agent to its session.
+Tell me anything that runs with no tile, and any tile whose program has stopped.
+`}</AgentPrompt>
+
+<Diagram name="terminal-bytes" caption="From an agent to its tile" />
+
+- **Agent program** → **background process**: what it prints. Your keys go the other way.
+- Background process → **desktop app**: the output, live. The app draws it in the tile.
+- Desktop app → background process: attach. The screen is replayed first, then output goes on live.
+- Background process → **saved screens**: a copy of each screen on disk, kept 30 days.
+
+## What is kept
+
+| When | What happens |
+|---|---|
+| You close the window | Terminals and agents keep running. |
+| The background process restarts, or the computer reboots | Agents that can resume continue their conversation; others start fresh. Screens replay from disk. |
+| You close a tile (×) | Its program ends. |
+| You put an agent to sleep | Its program ends. Its tile keeps its name and conversation, with **Resume**. |
+
+## It also works out agent states
+
+Each agent's hooks and screen reach the background process, which decides the agent's state.
+See [Agent states](/agent-states).
+
+## Without the app
+
+On a computer without the app, `hive daemon start` runs the same background process.
+[Machines and hosts](/remote-machines) use this.
+
+<LastValidated />

@@ -16,9 +16,11 @@ Close your laptop and your agents keep working. A <Tooltip tip="A server that ke
 
 At the end, show \`hive host status\`. It must say \`hive host running\` and list the workspaces. Tell me \`hive host stop\` stops serving and \`hive host uninstall\` removes the service.`}</AgentPrompt>
 
-<Frame caption="Move a workspace to a host and back">
-  <img src="/images/host-move.svg" alt="Move there hands a workspace from your computer to a host running hive host; Move here brings it back. While the host has it, guests and your phone reach it there." />
-</Frame>
+<Diagram name="host-move" caption="Move a workspace to a host and back" />
+
+- **Your computer** → **host**: **Move there** hands it the workspace. **Move here** brings it back.
+- While the host has it, **guests** and **your phone** reach it there.
+- The workspace, its agents and its people stay up while your computer is off.
 
 ## Before you start
 
@@ -106,6 +108,6 @@ More in [Troubleshooting](/troubleshooting).
 ## Related
 
 - [Run agents on another computer](/machines), when you only want terminals and agents there.
-- [How devices connect](/how-devices-connect)
+- [Devices and hive-net](/how-devices-connect)
 
 <LastValidated />

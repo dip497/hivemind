@@ -1,0 +1,62 @@
+---
+title: "Architecture overview"
+sidebarTitle: "Architecture"
+description: "What runs on your computer, on your server, on other machines and on your phone, how the parts talk, and what stays on your computer."
+---
+
+Your agents build the workspace they work in. They start other agents, open views, add widgets
+and run tools with the same `hive` command you use. This page shows the parts behind that, and
+where each one runs.
+
+<AgentPrompt description="Paste this into your coding agent to map your own setup onto this page." page="architecture">{`
+Map my Hivemind setup onto the parts on the "Architecture overview" page. Do not change anything.
+
+1. Run \`hive --version\` and \`hive daemon status\`: is the background process running?
+2. Run \`hive ctl agents --json\`. If it exits 3, the app is not open on this project; say so and go on.
+3. Run \`hive network show\`, \`hive machine list\` and \`hive host status\` (it may say no host runs here).
+4. For each part on the page (desktop app, background process, hive command, network server, phone page, machines, host, HiveHub), tell me whether it runs or is set up here, and what links to it.
+`}</AgentPrompt>
+
+<Diagram name="architecture" caption="What runs where" />
+
+- **Desktop app**, on your computer: the windows, the canvas and views. It starts the background process and hive-net.
+- **Background process**, on your computer: runs every terminal and agent, and works out each agent's state. It talks to the app over a local socket.
+- **Your agents** run in terminals of the background process. Their hooks tell it what they do.
+- **hive command**: you, your agents and your programs drive the app through `drive.sock`.
+- Desktop app → **HiveHub**: https, to install plugins.
+- Desktop app → **network server**: encrypted end to end. Your server relays it, and serves the **phone page** over https.
+- Desktop app → **machine**: ssh. Network server ↔ **host**: relay.
+- Stays on this computer: your keys, settings, API tokens and saved screens.
+
+## The parts
+
+<CardGroup cols={2}>
+  <Card title="The desktop app" icon="layer-group" href="/desktop-app">Windows, the main process, and the sockets it serves.</Card>
+  <Card title="Terminals and the background process" icon="terminal" href="/background-process">What keeps your agents running when the app closes.</Card>
+  <Card title="The hive command" icon="code" href="/hive-cli">How you and your agents drive the app.</Card>
+  <Card title="Plugins" icon="puzzle-piece" href="/plugins">Agents, views, widgets and tools, and HiveHub.</Card>
+  <Card title="Devices and hive-net" icon="plug" href="/how-devices-connect">Keys, the relay, and your own server.</Card>
+  <Card title="The phone page" icon="mobile" href="/phone-page">What your phone sees, and how.</Card>
+  <Card title="Machines and hosts" icon="server" href="/remote-machines">Agents on another computer.</Card>
+  <Card title="Data and where it is stored" icon="list" href="/data-and-storage">Every file Hivemind keeps.</Card>
+</CardGroup>
+
+## For agents
+
+Everything an agent does goes through `hive ctl` on the drive socket, or the same methods from
+your own program with a token ([API](/api)). Which part each one touches:
+
+| Part | `hive ctl` | API methods |
+|---|---|---|
+| Agents in the background process | `agents`, `spawn`, `send`, `keys`, `read`, `stream`, `sessions`, `sleep`, `wake`, `rename`, `close` | `agent.*`, `status.all`, `terminal.*` |
+| Agents working together | `workflow`, `approve`, `approval`, `report`, `inbox`, `connect`, `disconnect` | `link.connect`, `link.disconnect` |
+| Workspace and frames | `frames`, `frame add`, `list-workspaces` | `frame.open`, `frame.close`, `worktree.list`, `store.*` |
+| Desktop app windows | `focus`, `open-review` | `presence.set`, `appearance.get` |
+| Plugins | `plugin list`, `plugin open`, `plugin commands`, `plugin call`, `plugin close`, `open-tool`, `view emit` | `widget.*`, `tool.open`, `view.*` |
+| Issues | `set-state`, `add-comment`, `mark-acceptance`, `delete-issue` | `issue.list`, `issue.read` |
+| hive-net, phone, machines, hosts | none: use `hive network`, `hive machine`, `hive host` | none |
+
+`hive ctl` needs the app or `hive host` running for the workspace; it exits 3 when neither is.
+Every command is in the [CLI reference](/cli), every method in [Methods](/api-methods).
+
+<LastValidated />

@@ -1,12 +1,23 @@
 {
-  "title": "Concepts",
-  "description": "The ideas behind workspaces, agent states, plugins and connections.",
+  "title": "How it works",
+  "description": "What runs where, how the parts talk, and the ideas behind workspaces, agent states, plugins and trust.",
   "root": true,
   "pages": [
-    "workspaces",
-    "agent-states",
+    "---Overview---",
+    "architecture",
+    "---Components---",
+    "desktop-app",
+    "background-process",
+    "hive-cli",
     "plugins",
     "how-devices-connect",
-    "security-and-privacy"
+    "phone-page",
+    "remote-machines",
+    "---Core concepts---",
+    "workspaces",
+    "agent-states",
+    "security-and-privacy",
+    "view-protocol",
+    "data-and-storage"
   ]
 }

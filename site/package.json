@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && npm run guide",
-    "guide": "npm --prefix docs run build && node scripts/add-guide.mjs",
+    "guide": "npm --prefix docs run build && node scripts/add-guide.mjs && node scripts/seo-files.mjs",
     "guide:dev": "npm --prefix docs run dev",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 0.0.0.0",
     "test": "node --test",
@@ -28,9 +28,6 @@
     "node": ">=22.19.0"
   },
   "devDependencies": {
-    "@fontsource/geist-sans": "5.3.0",
-    "@fontsource/jetbrains-mono": "5.3.0",
-    "playwright": "1.63.0",
-    "subset-font": "2.9.0"
+    "playwright": "1.63.0"
   }
 }

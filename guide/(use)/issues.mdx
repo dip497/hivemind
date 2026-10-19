@@ -91,9 +91,11 @@ An agent started with `hive init`'s skills follows these steps:
 
 ## Move an issue through its states
 
-<Frame caption="The usual track; nothing enforces it">
-  <img src="/images/workspaces-issue-states.svg" alt="Issue states: an issue usually moves backlog, todo, in_progress, in_review, done, and can be set to cancelled from any state. Any state can be set from any other. hive close sets done, hive close --reason sets cancelled, and hive reopen sets todo." />
-</Frame>
+<Diagram name="workspaces-issue-states" caption="The usual track; nothing enforces it" />
+
+- Usual order: `backlog` → `todo` → `in_progress` → `in_review` → `done`.
+- `cancelled` can be set from any state, and any state can be set from any other: the order is not enforced.
+- `hive close` sets `done`, `hive close --reason` sets `cancelled`, and `hive reopen` sets `todo`.
 
 Every change is a line in the issue's activity, signed by the person or agent who made it.
 

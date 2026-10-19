@@ -1,20 +1,26 @@
-// The diagrams' colours, read from the site's own tokens so a brand change redraws them.
+// The diagrams' colours: roles drawn from the guide's own tokens (site/docs/app/global.css).
+// In a guide page the SVG sits inline and follows the page's light or dark theme; opened on its
+// own, it falls back to the same tokens resolved to plain colours.
 import { readFileSync } from 'node:fs';
 
-const site = new URL('../../', import.meta.url);
-const tokens = JSON.parse(readFileSync(new URL('src/generated/tokens.json', site), 'utf8')).tokens;
-// The diagram's own surfaces, beside the app's: a raised panel, a link and its tint.
-const OWN = {
-  'hm-surface': 'oklch(0.216 0.0025 230.82)',
-  'hm-accent': 'oklch(0.76 0.07 242)',
-  'hm-accent-soft': 'oklch(0.26 0.012 245)',
-};
-const fromTokens = (name) => tokens[name]?.value;
+const css = readFileSync(new URL('../../docs/app/global.css', import.meta.url), 'utf8');
 
-function oklchToHex(value, from) {
+function block(re, from) {
+  const m = css.match(re);
+  if (!m) throw new Error(`diagrams: no ${from} block in site/docs/app/global.css`);
+  return Object.fromEntries([...m[1].matchAll(/--color-fd-([\w-]+):\s*([^;]+);/g)].map(([, k, v]) => [k, v.trim()]));
+}
+const fixed = block(/@theme static\s*\{([^}]*)\}/, '@theme static');
+const light = { ...block(/@theme\s*\{([^}]*)\}/, '@theme'), ...fixed };
+const dark = { ...block(/\n\.dark\s*\{([^}]*)\}/, '.dark'), ...fixed };
+
+const parse = (value, from) => {
   const m = value?.match(/^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/);
   if (!m) throw new Error(`diagrams: ${from} is not a plain oklch() colour: ${value}`);
-  const [L, Cc, H] = m.slice(1).map(Number);
+  return m.slice(1).map(Number);
+};
+
+function oklchToHex([L, Cc, H]) {
   const h = (H * Math.PI) / 180, a = Cc * Math.cos(h), b = Cc * Math.sin(h);
   const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
   const mm = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
@@ -28,19 +34,52 @@ function oklchToHex(value, from) {
   return '#' + rgb.map((x) => Math.round(gamma(x) * 255).toString(16).padStart(2, '0')).join('');
 }
 
-const token = (name) => oklchToHex(fromTokens(name), `tokens.json ${name}`);
-const style = (name) => oklchToHex(OWN[name], name);
-
-export const C = {
-  paper: token('color-bg'),
-  ink: token('color-fg'),
-  muted: token('color-fg2'),
-  soft: token('color-fg3'),
-  rule: token('color-line'),
-  link: token('color-accent'),
-  paper2: style('hm-surface'),
-  accent: style('hm-accent'),
-  accentTint: style('hm-accent-soft'),
-  // Not a site token: a node border lightened from --color-line2 until it clears 3:1 on paper.
-  ruleSolid: '#616467',
+// Each role is one token, or `share` of one token mixed into another.
+const ROLES = {
+  paper: ['card'],
+  paper2: ['foreground', 0.04, 'card'],
+  ink: ['foreground'],
+  muted: ['foreground', 0.7, 'muted-foreground'],
+  soft: ['foreground', 0.25, 'muted-foreground'],
+  rule: ['border'],
+  ruleSolid: ['foreground', 0.42, 'card'],
+  accent: ['primary'],
+  accentTint: ['primary', 0.1, 'card'],
+  link: ['info'],
+  warn: ['warning'],
+  warnTint: ['warning', 0.12, 'card'],
 };
+
+const cssValue = ([a, share, b]) =>
+  share === undefined
+    ? `var(--color-fd-${a})`
+    : `color-mix(in oklch, var(--color-fd-${a}) ${Math.round(share * 100)}%, var(--color-fd-${b}))`;
+
+/** Every role as a CSS variable, so an attribute names `var(--d-ink)` and the theme decides. */
+export const C = Object.fromEntries(Object.keys(ROLES).map((role) => [role, `var(--d-${role})`]));
+
+/** Plain colours for one theme, for the preview pages and pictures. */
+export function resolved(theme) {
+  const tokens = theme === 'dark' ? dark : light;
+  const one = (name) => parse(tokens[name], `--color-fd-${name}`);
+  return Object.fromEntries(Object.entries(ROLES).map(([role, [a, share, b]]) => {
+    if (share === undefined) return [role, oklchToHex(one(a))];
+    const [x, y] = [one(a), one(b)];
+    return [role, oklchToHex(x.map((v, i) => v * share + y[i] * (1 - share)))];
+  }));
+}
+
+const tokenList = (tokens) =>
+  [...new Set(Object.values(ROLES).flatMap(([a, , b]) => [a, b]).filter(Boolean))]
+    .map((name) => `--color-fd-${name}:${oklchToHex(parse(tokens[name], name))}`).join(';');
+
+/**
+ * The style every diagram carries. Inline in a guide page, `--color-fd-*` come from the page.
+ * Opened on its own the SVG is the root element, so `svg:root` gives it the tokens, light or dark.
+ */
+export const STYLE =
+  `svg.hm-diagram{${Object.entries(ROLES).map(([role, def]) => `--d-${role}:${cssValue(def)}`).join(';')};` +
+  `font-family:var(--font-sans,'Geist',ui-sans-serif,system-ui,sans-serif);text-rendering:geometricPrecision}` +
+  `svg.hm-diagram .m{font-family:var(--font-mono,'JetBrains Mono',ui-monospace,monospace)}` +
+  `svg:root{${tokenList(light)}}` +
+  `@media (prefers-color-scheme:dark){svg:root{${tokenList(dark)}}}`;

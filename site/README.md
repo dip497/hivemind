@@ -7,7 +7,8 @@ files. The guide's pages live outside `site/`, in `guide/` at the top of the rep
 
 `npm run build` builds the site into `dist/`, then the guide into `docs/out/`, and copies that to
 `dist/guide`. The guide also serves `/guide/llms.txt`, `/guide/llms-full.txt` and every page as
-Markdown (`/guide/<page>.md`).
+Markdown (`/guide/<page>.md`). Last, `scripts/seo-files.mjs` writes `robots.txt` and a
+`sitemap.xml` of every built page into `dist/`, and copies both `llms` files to the root.
 
 ## Local development
 
@@ -20,6 +21,7 @@ npm run dev                         # the site, without the guide
 npm run guide:dev                   # the guide alone, at http://localhost:3000/guide/
 npm run build                       # both, into dist/
 node scripts/check-links.mjs        # every internal link in dist/ leads somewhere
+node scripts/check-seo.mjs          # every page has a title, description, one h1, its own canonical
 PORT=8080 node server.mjs           # serve dist/ as Cloud Run does
 ```
 

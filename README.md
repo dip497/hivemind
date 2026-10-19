@@ -1,10 +1,12 @@
+<sub>Everything below was written by AI. This line wasn't. — dip497</sub>
+
 <p align="center">
   <img src="assets/icon.png" alt="Hivemind" width="76" />
 </p>
 
 <h1 align="center">Hivemind</h1>
 
-<p align="center"><b>Run your coding agents side by side, and let them build the workspace they work in.</b></p>
+<p align="center"><b>Your agents build the workspace they work in.</b></p>
 
 <p align="center">
   <a href="https://hivemind.griiken.com/">Website</a> ·
@@ -13,54 +15,52 @@
   <a href="https://github.com/dip497/hivemind/releases">Releases</a>
 </p>
 
+> [!NOTE]
+> **Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and the plugins your agents
+> write are web code anyway. Hate mail goes to `/dev/null`.
+
 <p align="center">
-  <a href="https://hivemind.griiken.com/"><img alt="An agent's terminal asking to edit a file, and above it a widget an agent wrote and keeps up to date" src="site/public/shots/hero/poster.webp" /></a>
+  <a href="https://hivemind.griiken.com/"><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></a>
 </p>
 
-Hivemind is a desktop app for every coding agent that runs in a terminal: Claude Code, Codex, Pi,
-and the one that ships tomorrow. Each agent gets a real terminal on one board, and you see at a glance which one
-is working, which is done and which is waiting on you. MIT licensed, on your own computer, with no
-account.
+<p align="center"><sub>I typed <i>"show my workspace as islands."</i> Now my projects are islands.</sub></p>
 
-## What you can do
+Five agents in five terminal tabs? Cute.
 
-- **Make the workspace your own.** The canvas is only the view it starts with. Views, tools and
-  widgets are plugins, and your agents write them: `hive widgets new` makes a starter, the agent
-  fills it in, installs it and keeps it up to date while it works.
-- **Drive it from agents and code.** `hive ctl` is on every agent's PATH, so an agent can open
-  tiles, start other agents, read their answers and approve their prompts. The same workspace has an
-  API with TypeScript and Python SDKs.
-- **Work on other machines.** Open a folder on any machine you reach over ssh; its agents run there.
-- **Answer from your phone, or bring someone in.** A phone page through your own `hive-net`
-  server, and invite links that let another person join your workspace.
-- **Every coding agent, in a real terminal.** Each tile shows whether its agent is working or
-  needs you, and you answer its prompt in place.
+Hivemind puts every coding agent on one board, each in a real terminal: Claude Code, Codex, Pi, and
+whatever ships next week. Then it gets weird, in a good way. Ask an agent for a view, a widget or a
+tool, and it builds one and plugs it in while you watch.
+
+- **Bored of the canvas?** Ask for islands. Or stars. Or a dog. (There is a dog.)
+- **Agents boss agents around.** With `hive ctl` an agent starts, reads and steers other agents.
+  Your scripts can too, through the API.
+- **Leave your desk.** Agents run on other machines over ssh, and you check on them from your phone.
 
 <table>
   <tr>
-    <td><img alt="A Waiting on you widget listing two agents that need you, above the canvas" src="site/public/shots/showcase/waiting-on-you-board.webp" /></td>
+    <td><img alt="An agent asked for a CI light puts the widget on the board and sets it to running" src="site/public/shots/hero/step-widget.webp" /></td>
     <td><img alt="The Flaky tests tool: five tests run eight times, two of them flaky" src="site/public/shots/showcase/flaky-tests-board.webp" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>A widget: who is waiting on you</sub></td>
-    <td align="center"><sub>A tool: which tests are flaky</sub></td>
+    <td align="center"><sub>"Put a CI light where I can see it." Done.</sub></td>
+    <td align="center"><sub>Which tests are flaky? Now you know.</sub></td>
   </tr>
   <tr>
-    <td><img alt="The Constellation view: every agent as a star, the waiting ones in orange" src="site/public/shots/showcase/constellation-board.webp" /></td>
-    <td align="center"><img alt="The phone page asking to allow a command" src="site/public/shots/phone-permission.webp" width="220" /></td>
+    <td><img alt="The Constellation view: every agent as a star" src="site/public/shots/showcase/constellation-board.webp" /></td>
+    <td align="center"><img alt="The phone page listing projects and their agents" src="site/public/shots/phone-home.webp" width="220" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>A view: every agent as a star</sub></td>
-    <td align="center"><sub>Allow or deny from your phone</sub></td>
+    <td align="center"><sub>Every agent as a star. Because why not.</sub></td>
+    <td align="center"><sub>Your agents, in your pocket.</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <a href="https://hivehub.griiken.workers.dev/p/@dip497/dog"><img alt="Biscuit, a pixel-art dog at the bottom of the window, barks when an agent asks to run a command, then walks to the right edge" src="site/public/shots/showcase/dog.webp" width="720" /></a><br />
-  <sub>A widget that moves: Biscuit barks when an agent waits on you</sub>
+  <a href="https://hivehub.griiken.workers.dev/p/@dip497/dog"><img alt="Biscuit, a pixel-art dog, walking along the bottom of the window" src="site/public/shots/showcase/dog.webp" width="720" /></a><br />
+  <sub>This is Biscuit. He is a widget. He is a good boy.</sub>
 </p>
 
-More widgets, tools and views to try are on [HiveHub](https://hivehub.griiken.workers.dev/).
+More weird stuff on [HiveHub](https://hivehub.griiken.workers.dev/), or ask your agent to make some.
 
 ## Install
 

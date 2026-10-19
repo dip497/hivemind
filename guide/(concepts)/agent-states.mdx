@@ -38,16 +38,25 @@ menu clears it.
 Amber always means a person is being waited on. When a frame is collapsed, its dot shows the most
 urgent state inside it, so needs you wins.
 
+<Diagram name="agent-states" caption="How an agent moves between states" />
+
+- Start → **idle**.
+- idle → **working**: a turn starts. working → idle: the turn ends, and a dot shows until you look.
+- working → **needs you**: it asks you. needs you → working: you answer.
+- idle → **asleep**: **Sleep**. asleep → idle: **Resume**.
+- Any state → **exited**: its program stops.
+
 ## How it works
 
-Hivemind learns an agent's state two ways:
+<Diagram name="agent-state-sources" caption="How Hivemind knows" />
 
-- **The agent tells it.** Many agents send Hivemind a message when they start working, stop to
-  ask, or finish replying. This is exact and immediate.
-- **Hivemind reads the screen.** For agents that send nothing, Hivemind reads the agent's screen
-  for its prompt, its permission questions and its spinner.
+- **Hooks** → **background process**: the agent tells Hivemind when it starts working, stops to ask, or finishes replying. Exact and immediate.
+- **Screen rules** → background process: for an agent that sends nothing, rules in its agent file read its screen for its prompt, its questions and its spinner.
+- The screen decides until the agent's first hook arrives. From then on, the hooks do.
+- Background process → **everywhere it shows**: the tile, the Layers panel, notifications and your phone.
+- The computer that runs an agent works out its state. Other devices show what it says.
 
-An agent file says which of the two each agent uses. See [Add your own agent](/agent-providers).
+Which of the two an agent uses is in its agent file. See [Add your own agent](/agent-providers).
 
 ## Why it works this way
 

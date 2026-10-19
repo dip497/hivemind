@@ -59,6 +59,10 @@ Run the relevant e2e when you touch canvas/frame/tile/issue behavior.
 - **CHANGELOG hand-off rule:** anything that ships to users gets a one-line entry
   under `## [Unreleased]` in `CHANGELOG.md` before you hand back.
 
+## Writing docs
+
+Writing or editing docs in `guide/` — follow `.claude/skills/maintaining-docs/`.
+
 ## Releases
 
 Never build/release locally. `./scripts/release.sh` (calendar version, computed) from a

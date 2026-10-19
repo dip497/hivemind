@@ -17,9 +17,10 @@ Write me a small script that lists the agents in my Hivemind workspace that are 
 At the end, tell me the token's id from \`hive grant list\` and that \`hive grant revoke <id>\` takes it back.
 `}</AgentPrompt>
 
-<Frame caption="Every call is checked against the token's role">
-  <img src="/images/api-drive.svg" alt="Your program connects to a local connection on this computer and says hello with its token. Each call is checked against the token's role: an allowed call reaches the workspace, its agents, terminals and canvas; any other call is refused with FORBIDDEN." />
-</Frame>
+<Diagram name="api-drive" caption="Every call is checked against the token's role" />
+
+- **Your program** → **drive socket**: a hello with its token.
+- Each call → the token's **role**. Allowed: it reaches **the workspace**, its agents, terminals and board. Not allowed: refused with `FORBIDDEN`.
 
 ## How it works
 

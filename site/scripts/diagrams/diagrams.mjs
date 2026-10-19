@@ -1,39 +1,20 @@
 import { Diagram, C } from './draw.mjs';
+import howItWorks from './how-it-works.mjs';
 
-function homeYours() {
-  const d = new Diagram({
-    slug: 'home-yours', w: 940, h: 200,
-    title: 'Everything runs on machines you own',
-    desc: 'Your phone talks to your own hive-net server, which relays to your computer, which reaches your other machines over ssh.',
-  });
-  const y = 44, h = 76, mid = y + h / 2;
-  d.wire([[160, mid], [236, mid]], { link: true }); d.label(198, mid - 16, 'https');
-  d.wire([[420, mid], [496, mid]]); d.label(458, mid - 16, 'relay');
-  d.wire([[670, mid], [746, mid]]); d.label(708, mid - 16, 'ssh');
-  d.node(20, y, 140, h, 'Your phone', { sub: 'a browser page' });
-  d.node(240, y, 180, h, 'Your server', { sub: 'hive-net serve', mono: true });
-  d.node(500, y, 170, h, 'Your computer', { sub: 'the Hivemind app', focal: true });
-  // Several machines: two flat sheets behind the front one.
-  d.raw(`<rect x="766" y="${y - 16}" width="160" height="${h}" rx="6" fill="${C.paper2}" stroke="${C.ruleSolid}" stroke-width="1"/>`);
-  d.raw(`<rect x="758" y="${y - 8}" width="160" height="${h}" rx="6" fill="${C.paper}" stroke="${C.ruleSolid}" stroke-width="1"/>`);
-  d.node(750, y, 160, h, 'Your machines', { sub: 'servers, VMs, laptops' });
-  d.note(470, 168, 'Encrypted end to end: your server passes the traffic on but cannot read it.', { size: 12 });
-  return d;
-}
 
 
 function diamond(d, cx, cy, hw, hh, name, sub) {
   const pts = `${cx},${cy - hh} ${cx + hw},${cy} ${cx},${cy + hh} ${cx - hw},${cy}`;
   d.raw(`<polygon points="${pts}" fill="${C.paper}"/><polygon points="${pts}" fill="${C.paper2}" stroke="${C.ruleSolid}" stroke-width="1"/>`);
-  d.note(cx, cy - 2, name, { color: C.ink, size: 14, weight: 600 });
-  d.note(cx, cy + 15, sub, { size: 12 });
+  d.note(cx, cy - 2, name, { color: C.ink, size: 15, weight: 600 });
+  d.note(cx, cy + 16, sub);
 }
 
-function connectOffer() {
+function connectInvite() {
   const d = new Diagram({
-    slug: 'connect-offer', w: 640, h: 596,
-    title: 'One offer, three answers',
-    desc: 'An offer from Settings → Connect is used on the other device and both show three words; on your computer you deny it, let someone else into the workspace, or say it is you, and then the other device confirms the words match to pair as you.',
+    slug: 'connect-invite', w: 640, h: 596,
+    title: 'One invite, three answers',
+    desc: 'An invite from Settings → Connect is used on the other device and both show three words; on your computer you deny it, let someone else into the workspace, or say it is you, and then the other device confirms the words match to pair as you.',
   });
   d.wire([[320, 80], [320, 112]]);
   d.wire([[320, 172], [320, 196]]);
@@ -42,7 +23,7 @@ function connectOffer() {
   d.wire([[320, 284], [320, 356]]); d.label(332, 320, "It's me", { anchor: 'start' });
   d.wire([[220, 400], [170, 400]]); d.label(195, 384, 'No');
   d.wire([[320, 444], [320, 484]], { accent: true }); d.label(332, 464, 'Yes', { anchor: 'start' });
-  d.node(170, 20, 300, 60, 'An offer', { sub: 'Settings → Connect → Connect', rx: 30 });
+  d.node(170, 20, 300, 60, 'An invite', { sub: 'Settings → Connect → Connect', rx: 30 });
   d.node(170, 112, 300, 60, 'The other device uses it', { sub: 'both show three words' });
   diamond(d, 320, 240, 100, 44, 'You answer', 'on your computer');
   diamond(d, 320, 400, 100, 44, 'Words match?', 'on the other device');
@@ -53,23 +34,6 @@ function connectOffer() {
   return d;
 }
 
-function phoneReach() {
-  const d = new Diagram({
-    slug: 'phone-reach', w: 680, h: 316,
-    title: 'How the phone reaches your computer',
-    desc: "The phone page talks over https to your own hive-net server, which relays it to your computer and to your other computers and hosts; your computer introduces the phone to those other devices.",
-  });
-  d.wire([[180, 76], [246, 76]], { link: true }); d.label(213, 60, 'https');
-  d.wire([[450, 76], [516, 76]]); d.label(483, 60, 'relay');
-  d.wire([[400, 112], [400, 200]]); d.label(388, 156, 'relay', { anchor: 'end' });
-  d.wire([[600, 112], [600, 200]], { dashed: true }); d.label(588, 156, 'introduces the phone', { anchor: 'end' });
-  d.node(20, 40, 160, 72, 'Phone page', { sub: "your phone's browser" });
-  d.node(250, 40, 200, 72, 'Your server', { sub: 'hive-net serve', mono: true });
-  d.node(520, 40, 140, 72, 'Your computer', { focal: true });
-  d.node(360, 200, 300, 64, 'Your other computers and hosts');
-  d.note(340, 298, 'Encrypted end to end: the server relays the traffic but cannot read it.', { size: 12 });
-  return d;
-}
 
 function phoneTerminal() {
   const d = new Diagram({
@@ -128,7 +92,7 @@ function issueStates() {
   names.forEach((n, i) => d.node(xs[i], 40, 116, 56, n, { rx: 8, focal: n === 'done' }));
   d.node(280, 180, 140, 56, 'cancelled', { rx: 8 });
   d.note(350, 270, 'The order is not enforced: any state can be set from any other.', { size: 12 });
-  d.note(350, 292, 'hive close → done · hive close --reason → cancelled · hive reopen → todo', { size: 11.5, mono: true });
+  d.note(350, 292, 'hive close → done · hive close --reason → cancelled · hive reopen → todo', { mono: true });
   return d;
 }
 
@@ -141,12 +105,12 @@ function apiDrive() {
   const mid = 58;
   d.wire([[190, mid], [250, mid]]); d.label(220, mid - 16, 'token');
   d.wire([[420, mid], [440, mid]]);
-  d.wire([[560, mid], [620, mid]], { accent: true }); d.label(590, mid - 16, 'allowed');
+  d.wire([[560, mid], [630, mid]], { accent: true }); d.label(595, mid - 16, 'allowed');
   d.wire([[500, mid + 42], [500, 150]], { dashed: true }); d.label(512, 125, 'not allowed', { anchor: 'start' });
   d.node(20, 20, 170, 76, 'Your program', { sub: ['script, dashboard,', 'orchestrator'] });
   d.node(250, 20, 170, 76, 'Drive socket', { sub: 'drive.sock', mono: true });
-  diamond(d, 500, mid, 60, 42, 'Role', 'of the token');
-  d.node(620, 20, 160, 76, 'The workspace', { sub: ['agents, terminals,', 'board'], focal: true });
+  diamond(d, 500, mid, 60, 42, 'Its role', '');
+  d.node(630, 20, 150, 76, 'The workspace', { sub: ['agents, terminals,', 'board'], focal: true });
   d.node(420, 150, 160, 56, 'Refused', { sub: 'FORBIDDEN', mono: true });
   d.note(400, 244, 'Make the token in Settings → API access, or with hive grant create.', { size: 12 });
   return d;
@@ -191,23 +155,6 @@ function workflowsLoop() {
   return d;
 }
 
-function machinesSsh() {
-  const d = new Diagram({
-    slug: 'machines-ssh', w: 760, h: 260,
-    title: 'A frame on a machine',
-    desc: 'Your computer reaches the machine over ssh. On the machine, the hive daemon runs the terminals and agents of the frame, in its folder, and keeps them running when the connection drops or the app quits.',
-  });
-  d.raw(`<rect x="290" y="24" width="450" height="180" rx="10" fill="none" stroke="${C.ruleSolid}" stroke-width="1"/>`, false);
-  d.note(306, 48, 'The machine', { anchor: 'start', color: C.ink, size: 13, weight: 600 });
-  d.wire([[200, 108], [320, 108]], { link: true }); d.label(258, 92, 'ssh');
-  d.wire([[500, 108], [540, 108]]);
-  d.node(20, 70, 180, 76, 'Your computer', { sub: 'the Hivemind app', focal: true });
-  d.node(320, 70, 180, 76, 'hive daemon', { sub: 'on the machine' });
-  d.node(540, 70, 180, 76, 'Terminals, agents', { sub: "in the frame's folder" });
-  d.note(515, 180, 'They keep running when the link drops or the app quits.', { size: 12 });
-  d.note(380, 240, 'One ssh connection per machine, with your own keys and ~/.ssh/config.', { size: 12 });
-  return d;
-}
 
 function hostMove() {
   const d = new Diagram({
@@ -227,4 +174,4 @@ function hostMove() {
   return d;
 }
 
-export default [connectOffer, phoneReach, phoneTerminal, widgetsRunner, issueStates, homeYours, apiDrive, pluginKinds, workflowsLoop, machinesSsh, hostMove];
+export default [connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, ...howItWorks];

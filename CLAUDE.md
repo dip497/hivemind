@@ -33,6 +33,10 @@ cause, at the owner, not the symptom. Before adding work there, check:
 Measure the built app before and after, on a real GPU (xvfb renders in software and lies), and put
 both numbers in the commit.
 
+## Writing docs
+
+Writing or editing docs in `guide/` — follow `.claude/skills/maintaining-docs/`.
+
 ## Adding or completing an agent integration
 
 Wiring a new CLI agent (kiro, gemini, amp, …) — or finishing a half-wired one — follows

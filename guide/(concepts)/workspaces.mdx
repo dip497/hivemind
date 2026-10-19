@@ -4,8 +4,8 @@ description: "How Hivemind arranges a project: a workspace holds frames, each fr
 ---
 
 A <Tooltip tip="One project folder and everything open for it." cta="Glossary" href="/glossary#workspace">workspace</Tooltip>
-is one project folder and everything open for it. Inside it, frames group tiles by folder, and
-every tile in a frame runs in that folder.
+is one project folder and everything open for it: the place your agents work, and the place
+they arrange as they go.
 
 <AgentPrompt description="Paste this into your coding agent to have it explain your open workspace to you." page="workspaces">{`
 Explain my open Hivemind workspace to me. Do not change anything.
@@ -22,19 +22,13 @@ Explain my open Hivemind workspace to me. Do not change anything.
 
 ## How it works
 
-| Word | What it is |
-|---|---|
-| **Workspace** | one project folder and everything open for it |
-| **<Tooltip tip="A named area bound to one folder: the project, a git worktree, or a folder on another computer. Every tile in it starts in that folder." cta="Glossary" href="/glossary#frame">Frame</Tooltip>** | a named area bound to one folder |
-| **<Tooltip tip="One thing in a frame: an agent, a terminal, the Code tile, a browser or a tool." cta="Glossary" href="/glossary#tile">Tile</Tooltip>** | one thing in a frame: an agent, a terminal, the Code tile, a browser or a tool |
+<Diagram name="workspace-nesting" caption="A workspace, its frames and their tiles" />
 
-A frame can be bound to three kinds of folder:
-
-| A frame on | Tiles run | How to make one |
-|---|---|---|
-| the project folder | in that folder | the default |
-| a git worktree | in the worktree, on its branch, nested under the project | [Work in a git worktree](/git-worktree) |
-| a folder on another computer | on that computer, over ssh | [Run agents on another computer](/machines) |
+- **Workspace**: one project folder. It holds <Tooltip tip="A named area bound to one folder: the project, a git worktree, or a folder on another computer. Every tile in it starts in that folder." cta="Glossary" href="/glossary#frame">frames</Tooltip>, each bound to one folder.
+- **Frame on the project folder**: its tiles run in that folder. The default.
+- **Frame on a git worktree**: its tiles run on that branch, nested under the project. See [Work in a git worktree](/git-worktree).
+- **Frame on a machine**: its tiles run on another computer. See [Machines and hosts](/remote-machines).
+- **<Tooltip tip="One thing in a frame: an agent, a terminal, the Code tile, a browser or a tool." cta="Glossary" href="/glossary#tile">Tiles</Tooltip>**: an agent, a terminal, the Code tile, a browser or a tool. Each starts in its frame's folder.
 
 A frame's ⋯ menu also arranges its tiles (**Arrange**), starts an agent in it, and adds a tool or
 widget. Deleting a frame that holds tiles asks whether to **Keep them** or close them with it.
@@ -59,21 +53,14 @@ have read are yours alone, on this computer, even in a shared workspace.
 
 ### What is kept
 
-| When | What happens |
-|---|---|
-| You close the window | Terminals and agents keep running in a background process. |
-| That process restarts, or the computer reboots | Agents that can resume continue their conversation; others start fresh. Screens replay from disk. |
-| You close a tile (×) | Its program ends. |
-| You put an agent to sleep | Its program ends. Its tile keeps its name and conversation, with **Resume**. |
-
-Frames, tile positions, the viewport and open files are saved per project, on this computer. They
-are not written into the repository.
+Closing the window stops nothing: see [What is kept](/background-process#what-is-kept). Frames,
+tile positions, the viewport and open files are saved per project on this computer, not in the
+repository: see [Data and where it is stored](/data-and-storage).
 
 ## Why it works this way
 
-A frame binds a folder so that a tile never asks where to start. An agent started in a worktree's
-frame edits that branch only. One started in a machine's frame runs on that machine. You choose
-the place once, on the frame, and every tile follows it.
+A frame binds a folder so that a tile never asks where to start. You choose the place once, on
+the frame, and every tile follows it.
 
 ## What to do with it
 
