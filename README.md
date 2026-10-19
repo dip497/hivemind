@@ -13,6 +13,10 @@
   <a href="https://github.com/dip497/hivemind/releases">Releases</a>
 </p>
 
+> [!NOTE]
+> **Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and plugins your agents write
+> are web code anyway. Send hate mail to `/dev/null`.
+
 <p align="center">
   <a href="https://hivemind.griiken.com/"><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></a>
 </p>
@@ -77,10 +81,5 @@ Windows x64, in PowerShell:
 ```powershell
 irm https://hivemind.griiken.com/install.ps1 | iex
 ```
-
-## Tech stack
-
-**Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and plugins your agents write
-are web code anyway. Send hate mail to `/dev/null`.
 
 [Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)
