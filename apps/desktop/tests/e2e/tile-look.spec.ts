@@ -24,6 +24,7 @@ const hive = (...args: string[]) => {
 
 let app: ElectronApplication;
 let page: Page;
+let tile = "";
 
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
@@ -39,7 +40,6 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 test("look at a tool's tile: a picture of what it drew, its state, and the line its code logged", async () => {
-  let tile = "";
   await expect.poll(() => { const r = hive("ctl", "open-tool", "example/look"); tile = r.data.tile ?? ""; return r.status; }).toBe(0);
   const out = path.join(root, "look.png");
   const look = hive("ctl", "tile", "look", tile, "--out", out);
@@ -62,4 +62,23 @@ test("look at a tool's tile: a picture of what it drew, its state, and the line 
   }, fs.readFileSync(out).toString("base64"));
   expect(png.width).toBeGreaterThan(100);
   expect(png.red).toBeGreaterThan(1000);
+});
+
+test("look refuses, naming it, when something is drawn over the tile, and pictures nothing", async () => {
+  // Half the window: a dialog over the left half, where the tile is brought into view.
+  await page.evaluate(() => {
+    const cover = document.createElement("div");
+    cover.id = "cover";
+    cover.setAttribute("role", "dialog");
+    cover.setAttribute("aria-label", "Something private");
+    cover.style.cssText = "position:fixed;left:0;top:0;bottom:0;width:60%;z-index:99999;background:#123";
+    document.body.appendChild(cover);
+  });
+  const out = path.join(root, "covered.png");
+  const r = spawnSync("bun", [cli, "ctl", "tile", "look", tile, "--out", out, "--json"], { cwd: repo, env: { ...env, ...hcp }, encoding: "utf8" });
+  expect(r.status).toBe(7);
+  expect(JSON.parse(r.stdout)).toMatchObject({ ok: false, code: "OCCLUDED", message: expect.stringContaining("a dialog (Something private)") });
+  expect(fs.existsSync(out)).toBe(false);
+  await page.evaluate(() => document.getElementById("cover")?.remove());
+  expect(hive("ctl", "tile", "look", tile, "--out", out).status).toBe(0);
 });

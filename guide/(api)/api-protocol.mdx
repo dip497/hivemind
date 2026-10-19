@@ -86,6 +86,7 @@ A line without an `id` is an event, `{"event": "…", "params": [...]}`, about t
 | `UNAVAILABLE` | It needs one of your windows open. |
 | `RATE_LIMITED` | Too many started at once. Ask again later. |
 | `DEPTH_EXCEEDED` | Agents started by agents, too many levels deep. Start it from higher up. |
+| `OCCLUDED` | Something is drawn over the tile `tile.look` would picture; the message names it. Nothing was pictured. |
 | `FAILED` | It ran and failed. `message` says why. |
 
 ## A whole example

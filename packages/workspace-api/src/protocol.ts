@@ -24,13 +24,15 @@ export type ErrorCode =
   | "TIMEOUT"
   /** It needs a window, and none is open here. */
   | "UNAVAILABLE"
+  /** Something else is drawn over what it would show: the message names it. */
+  | "OCCLUDED"
   /** It ran and failed: git refused, a file could not be written. */
   | "FAILED";
 
 /** Every code, so that one added to the type must be added here. */
 const ERROR_CODES: Record<ErrorCode, true> = {
   BAD_REQUEST: true, UNKNOWN_METHOD: true, FORBIDDEN: true, NOT_FOUND: true, UNSUPPORTED: true,
-  RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, FAILED: true,
+  RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, OCCLUDED: true, FAILED: true,
 };
 /** Whether `code` is one of the codes a call fails with: what crossed a boundary untyped. */
 export const isErrorCode = (code: unknown): code is ErrorCode => typeof code === "string" && Object.hasOwn(ERROR_CODES, code);

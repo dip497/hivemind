@@ -36,7 +36,7 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing; `tile look` of a tile something is drawn over |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 1 | `FAILED` | other |
 

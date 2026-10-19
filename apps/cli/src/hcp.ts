@@ -33,7 +33,8 @@ export const EXIT = {
   unauthorized: 6,
   /** RATE_LIMITED / DEPTH_EXCEEDED — the control plane refused for now — or
    *  UNSUPPORTED: the provider lacks the capability (no turn signal, no
-   *  permission system) so the verb cannot succeed for it. */
+   *  permission system) so the verb cannot succeed for it; OCCLUDED: something
+   *  covers the tile `tile look` would picture. */
   refused: 7,
   /** The agent stopped to wait on an answer (a question, a permission): `read` says on what. */
   waiting: 8,
@@ -54,7 +55,7 @@ export function exitCodeFor(code: string): number {
     case "TIMEOUT": return EXIT.timeout;
     case "NOT_FOUND": return EXIT.notFound;
     case "FORBIDDEN": return EXIT.unauthorized;
-    case "RATE_LIMITED": case "DEPTH_EXCEEDED": case "UNSUPPORTED": return EXIT.refused;
+    case "RATE_LIMITED": case "DEPTH_EXCEEDED": case "UNSUPPORTED": case "OCCLUDED": return EXIT.refused;
     default: return EXIT.error;
   }
 }
