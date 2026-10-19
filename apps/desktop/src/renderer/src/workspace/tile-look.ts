@@ -49,13 +49,6 @@ function coveringOf(box: Element, r: { x: number; y: number; width: number; heig
   return [...names];
 }
 
-/** The app's notifications, hidden while a picture is taken. */
-function hideNotifications(): void {
-  const lists = [...document.querySelectorAll<HTMLElement>("[data-sonner-toaster]")];
-  for (const l of lists) l.style.visibility = "hidden";
-  setTimeout(() => { for (const l of lists) l.style.visibility = ""; }, 2_000);
-}
-
 export async function lookAt(tileId: string, bringIntoView: (id: string) => void, until = Date.now() + LOOK_MS): Promise<SeenTile> {
   if (!boxOf(tileId)) throw new ApiError("NOT_FOUND", `no tile ${tileId} is open in this window`);
   bringIntoView(tileId);
@@ -82,13 +75,12 @@ export async function lookAt(tileId: string, bringIntoView: (id: string) => void
   const x = Math.max(0, b.x), y = Math.max(0, b.y);
   const r = { x, y, width: Math.min(innerWidth, b.right) - x, height: Math.min(innerHeight, b.bottom) - y };
   if (r.width < 1 || r.height < 1) throw new ApiError("FAILED", `${tileId} is not on the screen`);
-  let covering = coveringOf(box, r);
-  if (covering.includes("a notification")) {
-    hideNotifications();
-    await frame(); await frame();
-    covering = coveringOf(box, r);
+  // Nothing the person sees is hidden for a picture: what covers the tile is named instead.
+  const covering = coveringOf(box, r);
+  if (covering.length) {
+    const wait = covering.includes("a notification") ? "; a notification goes in a few seconds, try again then" : "; move or close it, then look again";
+    throw new ApiError("OCCLUDED", `OCCLUDED: ${covering.join(", ")} is drawn over ${tileId}${wait}`);
   }
-  if (covering.length) throw new ApiError("OCCLUDED", `OCCLUDED: ${covering.join(", ")} is drawn over ${tileId}; move or close it, then look again`);
   const p = plugin();
   return {
     tile: tileId,

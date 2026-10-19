@@ -82,3 +82,18 @@ test("look refuses, naming it, when something is drawn over the tile, and pictur
   await page.evaluate(() => document.getElementById("cover")?.remove());
   expect(hive("ctl", "tile", "look", tile, "--out", out).status).toBe(0);
 });
+
+test("a notification over the tile is named, not hidden: the person keeps seeing it", async () => {
+  await page.evaluate(() => {
+    const list = document.createElement("ol");
+    list.id = "toast";
+    list.setAttribute("data-sonner-toaster", "");
+    list.style.cssText = "position:fixed;left:0;top:0;bottom:0;width:60%;z-index:99999;background:#321;margin:0";
+    list.appendChild(document.createElement("li")).textContent = "Approve: rm -rf dist";
+    document.body.appendChild(list);
+  });
+  const r = spawnSync("bun", [cli, "ctl", "tile", "look", tile, "--json"], { cwd: repo, env: { ...env, ...hcp }, encoding: "utf8" });
+  expect(JSON.parse(r.stdout)).toMatchObject({ ok: false, code: "OCCLUDED", message: expect.stringContaining("a notification") });
+  expect(await page.evaluate(() => getComputedStyle(document.getElementById("toast")!).visibility)).toBe("visible");
+  await page.evaluate(() => document.getElementById("toast")?.remove());
+});
