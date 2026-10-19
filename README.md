@@ -23,23 +23,12 @@
 
 <p align="center"><sub>One prompt: <i>"Show my workspace as islands."</i> The agent installed the Island view and switched the app to it.</sub></p>
 
-Every coding agent in a real terminal, on one board: Claude Code, Codex, Pi, and the one that ships
-tomorrow. Then the fun part. Ask one for a view, a widget or a tool, and it writes it, installs it and
-keeps it live. Nobody else has your workspace, because your agents made it for you.
+Every coding agent on one board. Ask one for a view, a widget or a tool, and it builds it for you.
+Open source, on your computer, no account.
 
-Open source (MIT). Runs on your computer. No account.
-
-## What you can do
-
-- **Make the workspace yours.** The canvas is just the view it starts with. Views, widgets and tools
-  are plugins, and your agents write them: `hive widgets new` makes a starter, the agent fills it in
-  and keeps it up to date while it works.
-- **Let agents drive it.** `hive ctl` is on every agent's PATH. An agent can open tiles, start other
-  agents, read their answers and run a whole fan-out review. The same workspace has an API with
-  TypeScript and Python SDKs, so a script can do it too.
-- **Work on other machines.** Open a folder on any machine you reach over ssh; its agents run there.
-- **Take it with you.** A phone page through your own `hive-net` server, and invite links that bring
-  someone into your workspace.
+- **Your own workspace.** Views, widgets and tools are plugins your agents write.
+- **Agents drive it.** `hive ctl` and an API let agents and scripts run the whole board.
+- **Anywhere.** Agents on other machines over ssh, and on your phone.
 
 <table>
   <tr>
@@ -65,8 +54,7 @@ Open source (MIT). Runs on your computer. No account.
   <sub>Yes, there is a dog. His name is Biscuit. He is a widget.</sub>
 </p>
 
-More views, widgets and tools on [HiveHub](https://hivehub.griiken.workers.dev/), or ask your agent to
-make one.
+More on [HiveHub](https://hivehub.griiken.workers.dev/).
 
 ## Install
 
