@@ -186,3 +186,23 @@ interface Hive {
 
 declare const hive: Hive;
 `;
+
+/** Every node type a widget may draw: the \`Node\` above, each drawn by the app. */
+export const WIDGET_NODE_TYPES = ["stack", "row", "text", "number", "meter", "button", "image", "sprite", "input", "textarea", "list"] as const;
+
+/** Why \`tree\` cannot be drawn whole: its first node of a type the app does not draw, or null. */
+export function drawingProblem(tree: unknown, at = "the tree", depth = 0): string | null {
+  if (tree === null || tree === undefined || depth > 8) return null;
+  if (typeof tree !== "object" || Array.isArray(tree)) return `${at} is not a node: write { type: "text", text: "…" }`;
+  const { type, children } = tree as { type?: unknown; children?: unknown };
+  if (!(WIDGET_NODE_TYPES as readonly unknown[]).includes(type)) {
+    return `${at} is ${typeof type === "string" ? `a "${type}"` : "a node with no type"}, which the app does not draw; it draws: ${WIDGET_NODE_TYPES.join(", ")}`;
+  }
+  if (!Array.isArray(children)) return null;
+  for (let i = 0; i < children.length && i < 50; i++) {
+    const why = drawingProblem(children[i], `${at === "the tree" ? "" : `${at}.`}children[${i}]`.replace(/^\./, ""), depth + 1);
+    if (why) return why;
+  }
+  return null;
+}
+

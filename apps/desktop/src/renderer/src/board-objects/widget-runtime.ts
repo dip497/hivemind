@@ -18,7 +18,7 @@ import type { WidgetPackage } from "../../../shared/ipc";
 import { BUILTIN_WIDGETS, viewWidget } from "@hivemind/core/widget-format";
 import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import { onStoreChange, readBoard } from "../workspace/workspace-store-client";
-import { WIDGET_PRELUDE } from "@hivemind/core/widget-api";
+import { WIDGET_PRELUDE, drawingProblem } from "@hivemind/core/widget-api";
 import { useSettings } from "../settings-store";
 import type { WidgetBridge } from "./widget-hm";
 
@@ -104,6 +104,21 @@ export function setWidgetBridge(id: string, bridge: WidgetBridge | null): void {
   early.delete(id);
 }
 export const postToWidget = (id: string, m: unknown): void => workers.get(id)?.postMessage(m);
+
+/** How each running widget is failed, once its link is up; why it failed before then waits. */
+const failers = new Map<string, (why: string) => void>();
+const failedEarly = new Map<string, string>();
+export function setWidgetFail(id: string, fail: ((why: string) => void) | null): void {
+  if (!fail) { failers.delete(id); return; }
+  failers.set(id, fail);
+  const why = failedEarly.get(id);
+  if (why) { failedEarly.delete(id); fail(why); }
+}
+/** Fail it: `hive ctl plugin list` shows it failed, with why. */
+function failWidget(id: string, why: string): void {
+  const fail = failers.get(id);
+  if (fail) fail(why); else if (!failedEarly.has(id)) failedEarly.set(id, why);
+}
 /** The options each running widget was last given, as JSON. */
 const sentOptions = new Map<string, string>();
 
@@ -296,12 +311,17 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
           if (bridge) bridge.handle(m); else early.set(id, [...(early.get(id) ?? []), m].slice(-200));
           return;
         }
-        if (m.type === "render") { shown.tree = m.tree ?? null; show(); }
+        if (m.type === "render") {
+          shown.tree = m.tree ?? null;
+          show();
+          const why = drawingProblem(m.tree);
+          if (why) failWidget(id, why);
+        }
         else if (m.type === "move") { shown.move = { x: m.x ?? 0, y: m.y ?? 0, over: m.over ?? 0, n: Date.now() * 1000 + (++moves % 1000) }; show(); }
         else if (m.type === "state") update(id, (o) => (o.kind === "widget" ? { ...o, state: m.state } : o));
         else if (m.type === "notify" && typeof Notification !== "undefined") new Notification(pkg.name, { body: m.text });
       };
-      worker.onerror = (err) => console.warn(`[widget ${pkg.id}] ${err.message}`);
+      worker.onerror = (err) => { console.warn(`[widget ${pkg.id}] ${err.message}`); failWidget(id, err.message); };
       worker.postMessage({ type: "init", state: w.state, options: optionsOf(pkg, w), reducedMotion: lessMotion?.matches === true });
       sentOptions.set(id, JSON.stringify(optionsOf(pkg, w)));
       workers.set(id, worker);
@@ -313,6 +333,7 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
       workers.delete(id);
       packageOf.delete(id);
       early.delete(id);
+      failedEarly.delete(id);
       // Taken off the board: what it drew goes too. Still there, another window runs it now.
       if (!onBoard.current.has(id)) window.hive.widgetDraw(repo, id, null);
     }

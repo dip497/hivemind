@@ -108,6 +108,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **Breaking:** one command for every plugin you write or add: `hive plugins new tool|widget|view <name> [--dir]` (prints the steps to see it), `hive plugins install <folder|id>` (the kind read from the folder or HiveHub; `owner/name` and `@owner/name` are always HiveHub's, so a folder is written as a path, `./x`), `hive plugins remove`, `hive plugins list [--kind]`. `hive tools`, `hive widgets` and `hive views` are gone. A plugin is named by its id alone; `<kind>:<id>` only where two kinds share one.
 - **Breaking:** a tool plugin is `@owner/name`, as widgets and views are (`@hivemind/web`, `@hivemind/issues/issues`); `owner/name` is no longer read. `hive ctl plugin open` takes a plugin by its id alone, with `tool:`, `widget:` or `view:` only where two kinds share one.
 - A new tool starter carries its types: the tile SDK, the `hm` client and the app's host modules, with a `jsconfig.json` that checks `index.js` (`tsc -p jsconfig.json`). `hive plugins api --kind tool|widget|view` prints what a plugin's code is given, as declared in this version.
+- A widget whose code draws a node the app has no drawing for (`{ type: "chart" }`), or throws, is failed in `hive ctl plugin list` with why (`children[1] is a "chart", which the app does not draw; it draws: …`), instead of an empty card that says ready.
 
 ## [2026.10.3] — 2026-10-18
 
