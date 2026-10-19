@@ -56,22 +56,21 @@ export async function listToolPackages(dir = userToolsDir(), appRoot?: string | 
   return [...(appRoot ? await scan(appRoot, "app") : []), ...await scan(dir, "you")];
 }
 
-/** One hash of every file in `dir`, by path and content; null when there is no such folder. */
+/** One hash of every entry in `dir`: each file's content hashed alone, then the sorted list of
+ *  (type, path, length, content hash), so no bytes can shift from one file into the next. Null
+ *  when there is no such folder. */
 async function folderHash(dir: string): Promise<string | null> {
   const entries = await readdir(dir, { recursive: true, withFileTypes: true }).catch(() => null);
   if (!entries) return null;
-  const hash = createHash("sha256");
-  const files = entries
-    .filter((e) => e.isFile() || e.isSymbolicLink())
-    .map((e) => ({ rel: path.relative(dir, path.join(e.parentPath, e.name)), link: e.isSymbolicLink() }))
-    .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
-  for (const f of files) {
-    const at = path.join(dir, f.rel);
-    hash.update(`${f.link ? "link" : "file"}\0${f.rel}\0`);
-    hash.update(f.link ? await readlink(at) : await readFile(at));
-    hash.update("\0");
-  }
-  return hash.digest("hex");
+  const sha = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
+  const rows = await Promise.all(entries.map(async (e) => {
+    const rel = path.relative(dir, path.join(e.parentPath, e.name));
+    const at = path.join(dir, rel);
+    const [type, data] = e.isDirectory() ? ["dir", ""] : e.isSymbolicLink() ? ["link", await readlink(at)] : e.isFile() ? ["file", await readFile(at)] : ["other", ""];
+    return [type, rel, data.length, sha(data)] as const;
+  }));
+  rows.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  return sha(JSON.stringify(rows));
 }
 
 /** Copy the tool plugin in `src` into the tools folder, replacing one with the same id. It is

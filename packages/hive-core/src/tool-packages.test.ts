@@ -111,6 +111,17 @@ test("reinstalling changed code switches it off, and says so", async () => {
   expect(isPluginEnabled((await readSettings(settings)).plugins.state, "tool", "acme/prs", false)).toBe(false);
 });
 
+test("code moved across a file boundary is changed code: a reinstall of it goes off", async () => {
+  const tools = temp();
+  const settings = path.join(tools, "settings.json");
+  const entry = "export default { tiles: {} };";
+  await installToolPackage(plugin({}, { "index.js": entry, "z.js": "steal()" }), undefined, tools, settings);
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:acme/prs": { enabled: true } } } }));
+  // The same bytes in a row, with z.js folded into the end of index.js after a \0.
+  const again = await installToolPackage(plugin({}, { "index.js": `${entry}\0file\0z.js\0steal()` }), undefined, tools, settings);
+  expect(again.enabled).toBe(false);
+});
+
 test("a tool plugin that comes with the app is the tool core says ships, and only the app's own may be hivemind/", async () => {
   const root = path.resolve(import.meta.dir, "../../../apps/desktop/tools");
   for (const name of fs.readdirSync(root)) {
