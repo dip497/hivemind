@@ -325,7 +325,8 @@ computer of the person looking at it.
 ### Commands
 
 ```bash
-hive plugins new tool <name> [--dir folder]   # a starter, with PROMPT.md
+hive plugins new tool <name> [--dir folder]   # a starter, with PROMPT.md and its types (tsc -p jsconfig.json)
+hive plugins api --kind tool                   # tile, host and hm, as declared
 hive plugins install <folder>|@owner/name       # new or changed code off: hive plugins enable @owner/name
 hive plugins list --kind tool                  # each tool, and the full id of each of its tiles
 hive plugins remove @owner/name

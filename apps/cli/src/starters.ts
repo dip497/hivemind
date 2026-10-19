@@ -3,6 +3,7 @@ import { TOOL_API_VERSION } from "@hivemind/core/tool-format";
 import { TOOL_MANIFEST } from "@hivemind/core/tool-packages";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
 import { pluginBrief } from "./plugin-brief.js";
+import { typeFiles } from "./type-files.js";
 
 /** The files of a starter tool plugin `name`, owned by `owner`. */
 export function toolStarter(owner: string, name: string): Record<string, string> {
@@ -18,8 +19,46 @@ export function toolStarter(owner: string, name: string): Record<string, string>
     "index.js": STARTER_JS.replace("__KIND__", JSON.stringify(tileKind)),
     "README.md": `# ${manifest.name}\n\n${manifest.description}\n\nAdd it to the app, switch it on and open it:\n\n\`\`\`bash\nhive plugins install .\nhive plugins enable tool:${id}\nhive ctl plugin open tool:${id}\n\`\`\`\n`,
     "PROMPT.md": pluginBrief("tool", id),
+    "jsconfig.json": JSON.stringify({
+      compilerOptions: {
+        allowJs: true, checkJs: true, noEmit: true, target: "ES2022", module: "ESNext", moduleResolution: "Bundler",
+        lib: ["ES2023", "DOM", "DOM.Iterable"], skipLibCheck: true, types: [],
+        paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"], "@hivemind/tile-sdk": ["./types/tile-sdk/index.ts"] },
+      },
+      include: ["*.js", "types"],
+    }, null, 2) + "\n",
+    "types/host.d.ts": HOST_TYPES,
+    ...typeFiles(["view-sdk", "tile-sdk"]),
   };
 }
+
+/** The app's modules a tool imports, typed as far as a starter needs: React's hooks, and the SDK. */
+const HOST_TYPES = `// The app's modules a tool imports, by the URL it imports them from. Here for their types.
+declare module "hm-plugin://host/react.js" {
+  type SetState<T> = (value: T | ((was: T) => T)) => void;
+  export function useState<T>(initial: T | (() => T)): [T, SetState<T>];
+  export function useEffect(effect: () => void | (() => void), deps?: readonly unknown[]): void;
+  export function useMemo<T>(make: () => T, deps: readonly unknown[]): T;
+  export function useCallback<T extends (...args: never[]) => unknown>(fn: T, deps: readonly unknown[]): T;
+  export function useRef<T>(initial: T): { current: T };
+  export function createElement(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
+  export const Fragment: unknown;
+  const React: { createElement: typeof createElement; Fragment: unknown };
+  export default React;
+}
+declare module "hm-plugin://host/sdk.js" {
+  import type { HostSdk } from "@hivemind/tile-sdk";
+  export const TILE_API_VERSION: HostSdk["TILE_API_VERSION"];
+  export const Button: HostSdk["Button"];
+  export const PatchView: HostSdk["PatchView"];
+  export const Markdown: HostSdk["Markdown"];
+  export const Loading: HostSdk["Loading"];
+  export const Frame: HostSdk["Frame"];
+  export const useTileState: HostSdk["useTileState"];
+}
+declare module "hm-plugin://host/react-jsx-runtime.js";
+declare module "hm-plugin://host/ui.js";
+`;
 
 const STARTER_JS = `// A tool plugin's tile, drawn by the app's own React, inside the app.
 //   tile: this tile (id, kind, name, frameId)
@@ -30,6 +69,7 @@ import { Button } from "hm-plugin://host/sdk.js";
 
 const h = React.createElement;
 
+/** @param {import("@hivemind/tile-sdk").TileProps} props */
 function Tile({ tile, host }) {
   const [branch, setBranch] = useState("…");
   const refresh = () => host.run("git", ["branch", "--show-current"]).then((r) => setBranch(r.stdout.trim() || "(no branch)"));
@@ -40,6 +80,7 @@ function Tile({ tile, host }) {
     h(Button, { size: "sm", variant: "outline", onClick: refresh }, "Refresh"));
 }
 
+/** @type {import("@hivemind/tile-sdk").ToolModule} */
 export default { tiles: { __KIND__: Tile } };
 `;
 

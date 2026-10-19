@@ -5,7 +5,11 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { hive } from "./helpers.js";
+
+const tsc = path.join(import.meta.dir, "../../../node_modules/.bin/tsc");
+const typeErrors = (config: string): string => { try { execFileSync(tsc, ["-p", config], { encoding: "utf8" }); return ""; } catch (e) { return String((e as { stdout?: string }).stdout); } };
 
 const KINDS = [
   { kind: "tool", id: "@ada/tally", manifest: "hivemind-tool.json", next: ["hive plugins install ./work/tally", "hive plugins enable tool:@ada/tally", "hive ctl plugin open tool:@ada/tally", "hive ctl tile look <tile>    # what it drew, and what its code logged"], guide: "https://hivemind.griiken.com/guide/tool-plugins/" },
@@ -37,6 +41,30 @@ describe("hive plugins new", () => {
       }
     }, 60_000);
   }
+
+  test("a new tool checks against what it is given: as written it passes, a misspelt host.run fails", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-new-types-"));
+    try {
+      expect(hive(["plugins", "new", "tool", "tally", "--owner", "ada", "--json"], { cwd: tmp }).code).toBe(0);
+      const dir = path.join(tmp, "tally");
+      expect(typeErrors(path.join(dir, "jsconfig.json"))).toBe("");
+      fs.writeFileSync(path.join(dir, "index.js"), fs.readFileSync(path.join(dir, "index.js"), "utf8").replace("host.run(", "host.runn("));
+      expect(typeErrors(path.join(dir, "jsconfig.json"))).toContain("Property 'runn' does not exist on type 'TileHost'");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  test("hive plugins api: a tool's is its tile's props, its host and the hm client, as declared", () => {
+    const r = hive(["plugins", "api", "--kind", "tool"], { cwd: os.tmpdir() });
+    expect(r.code).toBe(0);
+    expect(r.stdout.startsWith("export interface TileProps {\n  tile: TileInfo;\n  hm: ViewClient;\n  host: TileHost;")).toBe(true);
+    expect(r.stdout).toContain("  run(bin: string, args: string[], opts?: { maxAgeMs?: number; stdin?: string }): Promise<RunResult>;\n");
+    expect(r.stdout).toContain("  onCommand(name: string, handler: (args: unknown) => unknown): () => void;\n");
+    expect(r.stdout).not.toContain("not in ");
+    expect(hive(["plugins", "api", "--kind", "widget"], { cwd: os.tmpdir() }).stdout).toContain("render(");
+    expect(hive(["plugins", "api", "--kind", "agent"], { cwd: os.tmpdir() }).code).toBe(2);
+  });
 
   test("a kind that is not one you write is refused, naming those that are", () => {
     const r = hive(["plugins", "new", "agent", "tally", "--owner", "ada", "--json"], { cwd: os.tmpdir() });

@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { SDK_FILES } from "../src/view-starter.ts";
+import { TYPE_PACKAGES } from "../src/type-files.ts";
 import { buildViewSdk } from "../src/view-sdk.ts";
 
 const outfile = path.resolve(process.argv[2] ?? path.join(import.meta.dir, "..", "dist", "hive"));
@@ -40,8 +40,8 @@ const result = await Bun.build({
   plugins: [loroInline],
   define: {
     ...(addon ? { HIVE_PTY_NATIVE: JSON.stringify(addon) } : {}),
-    HIVE_VIEW_SDK: JSON.stringify(Object.fromEntries(SDK_FILES.map((f) =>
-      [f, fs.readFileSync(path.join(import.meta.dir, "..", "..", "..", "packages", "hive-view-sdk", "src", f), "utf8")]))),
+    HIVE_TYPE_FILES: JSON.stringify(Object.fromEntries(Object.entries(TYPE_PACKAGES).flatMap(([pkg, { dir, files }]) =>
+      files.map((f) => [`${pkg}/${f}`, fs.readFileSync(path.join(import.meta.dir, "..", "..", "..", dir, f), "utf8")])))),
     // What `hive host` serves views on the person's phone as `__sdk.js`.
     HIVE_VIEW_SDK_BUNDLE: JSON.stringify(await buildViewSdk()),
   },

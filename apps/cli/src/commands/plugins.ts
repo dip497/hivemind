@@ -8,6 +8,7 @@
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
  *                                                  (@owner/name is HiveHub's: write a folder as ./x)
  *   hive plugins remove <plugin>                   one you added; what shows it stays, saying it is missing
+ *   hive plugins api --kind <tool|widget|view>     what its code is given, as type declarations
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
  *
@@ -338,7 +339,17 @@ const removeCmd = defineCommand({
   },
 });
 
+const apiCmd = defineCommand({
+  meta: { name: "api", description: "What a plugin's code is given: the declarations its starter's types hold, for this version" },
+  args: { kind: { type: "string", required: true, description: KIND_NAMES } },
+  run({ args }) {
+    const k = kindNamed(String(args.kind));
+    if (!k) return err({ json: false }, "usage", `--kind is one of: ${KIND_NAMES}`, 2);
+    process.stdout.write(k.api());
+  },
+});
+
 export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
-  subCommands: { new: newCmd, install: installCmd, remove: removeCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
+  subCommands: { new: newCmd, install: installCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });

@@ -1,16 +1,8 @@
 /** What `hive plugins new view` writes: a view that builds outside this repository. The SDK is not a
  *  package to install — the app serves it to every view — so a view gets its types here and
  *  leaves `@hivemind/view-sdk` out of its bundle. */
-import { readFileSync } from "node:fs";
 import { pluginBrief } from "./plugin-brief.js";
-
-/** Embedded by scripts/build.ts; a source checkout reads the package itself. */
-declare const HIVE_VIEW_SDK: Record<string, string> | undefined;
-export const SDK_FILES = ["index.ts", "protocol.ts", "manifest.ts", "client.ts", "testing.ts"];
-const sdkSources = (): Record<string, string> => typeof HIVE_VIEW_SDK === "object" ? HIVE_VIEW_SDK
-  : Object.fromEntries(SDK_FILES.map((f) => [f, readFileSync(new URL(`../../../packages/hive-view-sdk/src/${f}`, import.meta.url), "utf8")]));
-
-const SDK_NOTE = "// The SDK Hivemind serves to your view, here for its types. Editing it changes nothing at run time.\n";
+import { typeFiles } from "./type-files.js";
 
 const title = (name: string) => name.split("-").map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ");
 
@@ -109,6 +101,5 @@ it holds the whole API and the rules of the sandbox.
 \`dist/\` is the view. Publish it on HiveHub: \`hivehub publish dist\` after pushing the commit.
 `,
   };
-  for (const [f, src] of Object.entries(sdkSources())) files[`types/view-sdk/${f}`] = SDK_NOTE + src;
-  return files;
+  return { ...files, ...typeFiles(["view-sdk"]) };
 }

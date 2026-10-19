@@ -7,6 +7,8 @@ import { installWidget, removeWidget } from "@hivemind/core/widgets";
 import { MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/view-sdk/manifest";
 import { toolStarter, widgetStarter } from "./starters.js";
 import { starterFiles as viewStarter } from "./view-starter.js";
+import { WIDGET_TYPES } from "@hivemind/core/widget-api";
+import { declaration, typeSources } from "./type-files.js";
 
 export interface Installed { id: string; name: string; dir: string }
 
@@ -31,7 +33,15 @@ export interface AuthoredKind {
   /** From on to seeing it in the app. */
   see(id: string): string[];
   guide: string;
+  /** What its code is given, as the declarations of the types its starter ships. */
+  api(): string;
 }
+
+/** The named declarations, each from its `<package>/<file>`, one after another. */
+const declarations = (wanted: Array<[string, string[]]>): string => {
+  const src = typeSources();
+  return wanted.flatMap(([file, names]) => names.map((n) => declaration(src[file] ?? "", n) ?? `// ${n}: not in ${file}`)).join("\n\n") + "\n";
+};
 
 const GUIDE = "https://hivemind.griiken.com/guide";
 
@@ -47,6 +57,7 @@ export const KINDS: readonly AuthoredKind[] = [
     build: (dir) => [`hive plugins install ${dir}`],
     see: (id) => [`hive ctl plugin open tool:${id}`, "hive ctl tile look <tile>    # what it drew, and what its code logged"],
     guide: `${GUIDE}/tool-plugins/`,
+    api: () => declarations([["tile-sdk/index.ts", ["TileProps", "TileInfo", "TileHost", "RunResult", "HostSdk", "ToolModule"]], ["view-sdk/client.ts", ["ViewClient"]]]),
   },
   {
     kind: "widget", noun: "widget", manifest: "widget.json",
@@ -59,6 +70,7 @@ export const KINDS: readonly AuthoredKind[] = [
     build: (dir) => [`hive plugins install ${dir}`],
     see: (id) => [`hive ctl plugin open widget:${id}`],
     guide: `${GUIDE}/widgets/`,
+    api: () => WIDGET_TYPES,
   },
   {
     kind: "view", noun: "view", manifest: VIEW_MANIFEST,
@@ -71,6 +83,7 @@ export const KINDS: readonly AuthoredKind[] = [
     build: (dir) => [`cd ${dir} && npm install && npm run dev    # builds dist/ and installs it`],
     see: (id) => [`hive ctl plugin open view:${id}`],
     guide: `${GUIDE}/extension-authoring/`,
+    api: () => declarations([["view-sdk/client.ts", ["ConnectOptions", "ViewClient"]]]),
   },
 ];
 
