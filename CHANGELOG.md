@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A Browser tile's page is sharp at any canvas zoom: once the canvas stops moving, the page is redrawn at the zoom instead of stretched from 100%. The page's own zoom (Ctrl + / −) multiplies it and no longer carries to other tiles showing the same site.
 - The website scrolls and plays smoothly on phones: the hero's step bar and its opening lines no longer keep the page busy every frame, the views stack is flat on small screens and dims its back cards without a filter, and links on phones are easier to tap.
 - The website's hero tabs (a view, a widget, a tool) jump to their part of the recording again, and the video streams in pieces instead of all at once; the hero says it in one line with two buttons, and the download section is one install box that switches between Linux, macOS and Windows.
 - The website's hero opens on an agent's terminal at full size where you ask for a view, then a widget and a tool, in one take; its first frame paints at once as a small image, the recording follows when the page is idle, phones get their own crop, and the site's fonts are served from the site itself.

@@ -386,6 +386,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     const pageId = guest.id;
     pages.add(pageId);
     guest.once("destroyed", () => { pages.delete(pageId); forgetBrowserPage(pageId); });
+    // The tile zooms its page to the canvas zoom: that must not carry to other pages of the same site.
+    guest.setZoomMode("isolated");
     guest.setWindowOpenHandler(({ url }) => {
       // A link/popup (target=_blank, window.open) inside a BrowserTile guest →
       // hand it back to the host renderer so the owning tile opens it as a NEW
