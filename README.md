@@ -21,7 +21,7 @@
   <a href="https://hivemind.griiken.com/"><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></a>
 </p>
 
-<p align="center"><sub>One prompt: <i>"Show my workspace as islands."</i> The agent installed the Island view and switched the app to it.</sub></p>
+<p align="center"><sub>One prompt: <i>"Show my workspace as islands."</i></sub></p>
 
 Every coding agent on one board. Ask one for a view, a widget or a tool, and it builds it for you.
 Open source, on your computer, no account.
