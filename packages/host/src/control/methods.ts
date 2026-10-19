@@ -749,9 +749,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       try { size = JSON.stringify(at.state).length; } catch { /* not JSON */ }
       if (typeof at.state !== "object" || Array.isArray(at.state) || size > TILE_STATE_MAX) throw new ApiError("BAD_REQUEST", `state must be a JSON object of at most ${TILE_STATE_MAX} bytes, its keys what the tool's useTileState reads`);
     }
+    const place = placeTile(at.caller, at.frame, at.repo);
+    // One of a kind per frame: the tile there is brought forward, crashed or not, instead of another piling up.
+    const open = tool.singleton ? place.ws.core.tiles.find((t) => t.kind === kind && place.ws.core.frameOf?.[t.id] === place.frame?.id) : undefined;
+    if (open) {
+      await deps.callRenderer("tile.focus", { tileId: open.id }, RENDERER_TIMEOUT).catch(() => {});
+      return open.id;
+    }
     if (!deps.spawnAllowed(rootOf(at.caller))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const url = typeof at.url === "string" ? at.url : undefined;
-    const place = placeTile(at.caller, at.frame, at.repo);
     const id = mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`);
     // Kept before the tile is there, so its first draw reads it (`hm.hello.layout`).
     if (at.state != null) deps.workspaces.setView(place.ws.repo, `tile:${id}`, { v: 1, data: at.state }, CONTROL);

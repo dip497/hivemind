@@ -102,7 +102,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   if (listed.length === 0) throw new Error("it lists no tools");
   const service = raw.service === undefined ? undefined : parseService(raw.service);
   if (listed.length > 16) throw new Error("it lists more than 16 tools");
-  const tools: { key: string; label: string; description?: string; tileKind: string }[] = [];
+  const tools: { key: string; label: string; description?: string; tileKind: string; singleton?: boolean }[] = [];
   const tiles: Record<string, ToolTile> = {};
   for (const t of listed) {
     if (!isObj(t)) throw new Error("a tool is not an object");
@@ -113,7 +113,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
     if (tiles[kind]) throw new Error(`tile kind "${kind}" is listed twice`);
     const label = text(t.label, 60) ?? key;
     const description = text(t.description, 200);
-    tools.push({ key, label, ...(description ? { description } : {}), tileKind: kind });
+    tools.push({ key, label, ...(description ? { description } : {}), tileKind: kind, ...(t.singleton === true ? { singleton: true } : {}) });
     const size = isObj(t.size) ? t.size : {};
     const n = (v: unknown, d: number) => (typeof v === "number" && v >= 160 && v <= 4000 ? Math.round(v) : d);
     const glyph = text(t.glyph, 2);

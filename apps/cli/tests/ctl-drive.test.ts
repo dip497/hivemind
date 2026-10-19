@@ -80,7 +80,8 @@ beforeAll(async () => {
     answer("view.emit", (name) => (name === "ci.build" ? { id: "ev_1", delivered: true, view: "@a/valley" } : { id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true })),
     answer("plugin.commands", () => ({ plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] })),
     // As the host answers (control/methods.ts pluginOpen): a tool's tile, else the window's answer.
-    answer("plugin.open", (plugin) => (String(plugin).startsWith("tool:") ? { tile: "t-9" } : { widget: "w-5" })),
+    answer("plugin.open", (plugin) => (plugin === "tool:a/broken" ? { tile: "t-8", instance: "t-8", state: "failed", reason: "Unexpected token", commands: [] }
+      : String(plugin).startsWith("tool:") ? { tile: "t-9" } : { widget: "w-5" })),
     answer("plugin.list", () => ({
       plugins: [
         { plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", state: "ready", since: 1, commands: [{ name: "add", description: "Add a step." }] },
@@ -326,6 +327,9 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
   test("plugin: commands lists what runs; open says what it opened; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
     expect((await hive(["ctl", "plugin", "open", "tool:a/b"], { env: env() })).stdout.trim()).toBe("opened tile t-9");
     expect((await hive(["ctl", "plugin", "open", "widget:@a/progress"], { env: env() })).stdout.trim()).toBe("added widget w-5");
+    const broken = await hive(["ctl", "plugin", "open", "tool:a/broken"], { env: env() });
+    expect([broken.code, broken.stdout.trim()]).toEqual([1, "opened tile t-8, and it failed: Unexpected token"]);
+    expect((await hive(["ctl", "plugin", "open", "tool:a/broken", "--json"], { env: env() })).code).toBe(1);
     const list = await hive(["ctl", "plugin", "commands"], { env: env() });
     expect(list.stdout).toContain("@a/progress  (widget Progress, w1)");
     expect(list.stdout).toContain('add                Add a step.  args: { "text": string }');

@@ -129,9 +129,16 @@ test("a tool plugin that comes with the app is the tool core says ships, and onl
     const p = parseToolManifest(raw, path.join(root, name), null, "app");
     const shipped = BUNDLED_TOOL_PLUGINS.find((b) => b.id === p.id);
     expect(shipped, p.id).toBeDefined();
-    for (const t of p.tools) expect(shipped!.tools.map((x) => [x.key, x.label, x.tileKind])).toContainEqual([t.key, t.label, t.tileKind]);
+    for (const t of p.tools) expect(shipped!.tools.map((x) => [x.key, x.label, x.tileKind, !!x.singleton])).toContainEqual([t.key, t.label, t.tileKind, !!t.singleton]);
     expect(() => parseToolManifest(raw, path.join(root, name), null, "you")).toThrow("kept for the plugins that come with the app");
   }
+});
+
+test("a tool that says it is one of a kind is opened as one, by the app and by `hive ctl open-tool` alike", () => {
+  const one = parseToolManifest({ ...MANIFEST, tools: [{ ...MANIFEST.tools[0], singleton: true }] }, "/x", null);
+  expect(one.tools[0]!.singleton).toBe(true);
+  expect(Object.values(one.tiles)[0]!.singleton).toBe(true);
+  expect(parseToolManifest(MANIFEST, "/x", null).tools[0]!.singleton).toBeUndefined();
 });
 
 test("its service is a program on PATH or a file in its folder, with a role; anything else is refused", () => {

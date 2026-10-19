@@ -6,6 +6,8 @@ export interface ToolContribution {
   readonly description?: string;
   /** Tile kind this tool spawns. Omitted by a tool that is only commands. */
   readonly tileKind?: string;
+  /** One tile of it per workspace: opening it again brings that one forward. */
+  readonly singleton?: boolean;
 }
 /** A verb a plugin exposes to agents (as an MCP tool) and to the CLI. */
 export interface CommandContribution {
@@ -89,7 +91,7 @@ export function createToolRegistry(plugins: readonly ToolPluginContribution[]): 
         if (kindOwners.has(tileKind)) throw new Error(`Tile kind already contributed: ${tileKind}`);
         kindOwners.set(tileKind, id);
       }
-      byId.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, label: contribution.label, description: contribution.description, tileKind }));
+      byId.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, label: contribution.label, description: contribution.description, tileKind, ...(contribution.singleton ? { singleton: true } : {}) }));
     }
     const commands = plugin.commands ?? [];
     if (commands.length > 32) throw new Error("Too many commands in a plugin");

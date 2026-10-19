@@ -41,7 +41,7 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     id: ISSUES_PLUGIN_ID,
     builtin: true,
     tools: Object.freeze([
-      Object.freeze({ key: "issues", label: "Issues", description: "The workspace's issue list.", tileKind: "issues" }),
+      Object.freeze({ key: "issues", label: "Issues", description: "The workspace's issue list.", tileKind: "issues", singleton: true }),
       Object.freeze({ key: "plan-review", label: "Plan review", description: "A plan waiting for your decision.", tileKind: "planReview" }),
     ]),
     commands: Object.freeze([
@@ -60,7 +60,7 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     id: CODE_PLUGIN_ID,
     builtin: true,
     tools: Object.freeze([
-      Object.freeze({ key: "editor", label: "Code", description: "The workspace's files and what changed in them: edit, review, and leave comments.", tileKind: "editor" }),
+      Object.freeze({ key: "editor", label: "Code", description: "The workspace's files and what changed in them: edit, review, and leave comments.", tileKind: "editor", singleton: true }),
     ]),
     // The review loop an agent cannot reach from a shell: comments live in the app.
     commands: Object.freeze([

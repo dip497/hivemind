@@ -45,13 +45,17 @@ function ToolBar({ data }: { data: ToolTileData }) {
   );
 }
 
-export function ToolTile({ data, selected, Draw }: { data: ToolTileData; selected: boolean; Draw: ComponentType<TileProps> }) {
+/** `Draw` is the tool's component; `failed`, why its code did not load. */
+type Drawn = { Draw: ComponentType<TileProps>; failed?: undefined } | { Draw?: undefined; failed: string };
+
+export function ToolTile({ data, selected, ...drawn }: { data: ToolTileData; selected: boolean } & Drawn) {
   const props = useContext(WorkspacePropsContext);
   if (!props) return <div className="p-4 text-label text-[var(--color-fg3)]">This tile is shown outside a workspace.</div>;
-  return <LinkedTile data={data} selected={selected} Draw={Draw} props={props} />;
+  return <LinkedTile data={data} selected={selected} drawn={drawn as Drawn} props={props} />;
 }
 
-function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selected: boolean; Draw: ComponentType<TileProps>; props: WorkspaceViewProps }) {
+function LinkedTile({ data, selected, drawn, props }: { data: ToolTileData; selected: boolean; drawn: Drawn; props: WorkspaceViewProps }) {
+  const { Draw } = drawn;
   const root = useRef<HTMLDivElement>(null);
   const [hm, setHm] = useState<ViewClient | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -74,6 +78,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
   const stop = useRef<(why: string) => void>(() => {});
   stop.current = (why) => { setFailed((was) => was ?? why); fail(why); };
   useEffect(() => watchTool({ folder: toolFolder(data.pkg.id), instance: data.tileId, element: () => root.current, fail: (why) => stop.current(why) }), [data.pkg.id, data.tileId]);
+  useEffect(() => { if (drawn.failed) stop.current(drawn.failed); }, [drawn.failed]);
   // "Drew": a frame painted after its code first put something in the tile.
   useEffect(() => {
     const el = root.current;
@@ -105,7 +110,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
       {/* cursor-auto: the canvas's grab cursor is for its bar, not what the tool draws. */}
       <div ref={root} className="nodrag nowheel relative min-h-0 flex-1 cursor-auto overflow-hidden">
         {failed ? <div className="p-4 text-label text-[var(--color-err)]">{data.pkg.name} stopped: {failed}</div>
-          : hm ? <DrawFailed onFail={(why) => stop.current(why)}><Draw tile={{ id: data.tileId, kind: data.kind, name: data.name, frameId: data.frameId }} hm={hm} host={host} selected={selected} /></DrawFailed>
+          : hm && Draw ? <DrawFailed onFail={(why) => stop.current(why)}><Draw tile={{ id: data.tileId, kind: data.kind, name: data.name, frameId: data.frameId }} hm={hm} host={host} selected={selected} /></DrawFailed>
           : <Loading label={`Starting ${data.pkg.name}`} />}
       </div>
       {dialogs}

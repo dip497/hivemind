@@ -460,6 +460,16 @@ test("tool.open: a package's id opens its one tool; a package with several is re
     e.code === "BAD_REQUEST" && /hivemind\/issues\/issues/.test(e.message ?? "") && /hivemind\/issues\/plan-review/.test(e.message ?? ""));
 });
 
+test("tool.open: a one-of-a-kind tool opened again brings its tile forward instead of opening another", async () => {
+  const focused: unknown[] = [];
+  const { deps } = fakeDeps({ callRenderer: async (m: string, p: unknown) => { if (m === "tile.focus") focused.push(p); } });
+  const { api } = makeDispatch(deps);
+  const first = await api.openTool(undefined, REPO, "hivemind/issues/issues", {});
+  assert.equal(await api.openTool(undefined, REPO, "hivemind/issues/issues", {}), first);
+  assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles.map((t) => t.id), [first]);
+  assert.deepEqual(focused, [{ tileId: first }]);
+});
+
 test("tile.look: the window's box for the tile is what is pictured, and its state and console come back with the picture", async () => {
   const shot: unknown[] = [];
   const seen = { tile: "t1", state: "ready", drew: true, console: [{ level: "warn", text: "slow", at: 1 }], rect: { x: 10, y: 20, width: 300, height: 200 } };

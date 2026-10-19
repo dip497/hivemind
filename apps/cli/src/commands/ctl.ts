@@ -617,6 +617,8 @@ const pluginOpen = defineCommand({
     const json = !!args.json;
     try {
       const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tile?: string; widget?: string; view?: string } & Partial<PluginInstance>;
+      // Open but failed is a failure to branch on; what it opened is still printed, to look at or close.
+      if (r.state === "failed") process.exitCode = EXIT.error;
       if (json) { console.log(JSON.stringify(r)); return; }
       const what = r.tile ? `opened tile ${r.tile}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`;
       // A plugin with code says whether it can be called yet.
