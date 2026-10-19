@@ -33,14 +33,16 @@ export class Diagram {
     this.back.push(`<path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.25"${dashed ? ' stroke-dasharray="5,4"' : ''}${end ? ` marker-end="url(#${this.slug}-${marker})"` : ''}${start ? ` marker-start="url(#${this.slug}-${marker}-start)"` : ''}/>`);
   }
   // Masked label; (x, y) is the centre of the mask. Sentence case, mono, per the site's rule.
-  label(x, y, s, { anchor = 'middle', color = C.muted, mono = true, size = 11 } = {}) {
+  label(x, y, s, { anchor = 'middle', color = C.muted, mono = true, size = 12 } = {}) {
+    size = Math.max(size, 12);
     const w = Math.ceil((textW(s, size, mono) + 10) / 2) * 2, h = size + 7;
     const rx = anchor === 'middle' ? x - w / 2 : anchor === 'start' ? x - 5 : x - w + 5;
     this.back.push(`<rect x="${rx}" y="${y - h / 2}" width="${w}" height="${h}" rx="2" fill="${C.paper}"/>`);
     this.back.push(`<text x="${x}" y="${y + size * 0.35}" fill="${color}" font-size="${size}" font-family="${mono ? MONO : SANS}" text-anchor="${anchor}">${esc(s)}</text>`);
     this.use(mono ? 'mono400' : 'sans400', s);
   }
-  note(x, y, s, { anchor = 'middle', color = C.soft, size = 11, mono = false, weight = 400 } = {}) {
+  note(x, y, s, { anchor = 'middle', color = C.soft, size = 12.5, mono = false, weight = 400 } = {}) {
+    size = Math.max(size, 12.5);
     this.front.push(`<text x="${x}" y="${y}" fill="${color}" font-size="${size}" font-weight="${weight}" font-family="${mono ? MONO : SANS}" text-anchor="${anchor}">${esc(s)}</text>`);
     this.use(mono ? 'mono400' : weight >= 600 ? 'sans600' : 'sans400', s);
   }
@@ -52,12 +54,12 @@ export class Diagram {
     this.front.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="1"${dashed ? ' stroke-dasharray="4,3"' : ''}/>`);
     const lines = [].concat(sub);
     const names = [].concat(name);
-    const lh = 18, sh = 16;
+    const lh = 20, sh = 17;
     const total = names.length * lh + lines.length * sh;
-    let cy = y + h / 2 - total / 2 + 13;
-    for (const n of names) { this.front.push(`<text x="${x + w / 2}" y="${cy}" fill="${C.ink}" font-size="14" font-weight="600" font-family="${SANS}" text-anchor="middle">${esc(n)}</text>`); this.use('sans600', n); cy += lh; }
+    let cy = y + h / 2 - total / 2 + 14;
+    for (const n of names) { this.front.push(`<text x="${x + w / 2}" y="${cy}" fill="${C.ink}" font-size="15" font-weight="600" font-family="${SANS}" text-anchor="middle">${esc(n)}</text>`); this.use('sans600', n); cy += lh; }
     for (const s of lines) {
-      this.front.push(`<text x="${x + w / 2}" y="${cy}" fill="${focal ? C.muted : C.soft}" font-size="${mono ? 11.5 : 12}" font-family="${mono ? MONO : SANS}" text-anchor="middle">${esc(s)}</text>`);
+      this.front.push(`<text x="${x + w / 2}" y="${cy}" fill="${C.soft}" font-size="${mono ? 12 : 12.5}" font-family="${mono ? MONO : SANS}" text-anchor="middle">${esc(s)}</text>`);
       this.use(mono ? 'mono400' : 'sans400', s); cy += sh;
     }
     if (tag) {
@@ -71,11 +73,11 @@ export class Diagram {
   zone(x, y, w, h, name, { dashed = true, sub = null, color = C.soft } = {}) {
     this.zones = this.zones ?? [];
     this.zones.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="none" stroke="${C.ruleSolid}" stroke-width="1"${dashed ? ' stroke-dasharray="5,4"' : ''}/>`);
-    const tw = Math.ceil(name.length * 11 * (0.62 + 0.08) + 14);
+    const tw = Math.ceil(name.length * 12 * (0.62 + 0.08) + 14);
     this.zones.push(`<rect x="${x + 14}" y="${y - 8}" width="${tw}" height="16" fill="${C.paper}"/>`);
-    this.zones.push(`<text x="${x + 20}" y="${y + 4}" fill="${color}" font-size="11" font-family="${MONO}" letter-spacing="0.08em">${esc(name.toUpperCase())}</text>`);
+    this.zones.push(`<text x="${x + 20}" y="${y + 4}" fill="${color}" font-size="12" font-family="${MONO}" letter-spacing="0.08em">${esc(name.toUpperCase())}</text>`);
     if (sub) {
-      this.zones.push(`<text x="${x + w - 14}" y="${y + h - 12}" fill="${C.soft}" font-size="11.5" font-family="${SANS}" text-anchor="end">${esc(sub)}</text>`);
+      this.zones.push(`<text x="${x + w - 14}" y="${y + h - 12}" fill="${C.soft}" font-size="12.5" font-family="${SANS}" text-anchor="end">${esc(sub)}</text>`);
     }
   }
   // A sequence actor's lifeline: a dashed line down from the box.
