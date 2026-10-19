@@ -4,7 +4,7 @@
  * has. Loaded with the first tile of a tool plugin, so the app starts without it.
  */
 import { Loading } from "../components/ui/loading";
-import { useContext, useEffect, useRef, useState, type ComponentType } from "react";
+import { Component, useContext, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { GripVertical } from "../components/icons";
 import { connect, type ViewClient } from "@hivemind/view-sdk";
 import { PORT_HANDSHAKE } from "@hivemind/view-sdk/protocol";
@@ -16,6 +16,8 @@ import type { WorkspaceViewProps } from "../workspace/workspace-view";
 import { HeaderPinButton } from "../canvas-nodes";
 import { Button } from "../components/ui/button";
 import type { PinRect } from "./api";
+import { toolFolder } from "@hivemind/core/tool-format";
+import { watchToolFailures } from "./tool-failures";
 
 export type ToolTileData = {
   pkg: ToolPackage; tileId: string; kind: string; name: string; frameId: string | null;
@@ -53,7 +55,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
   const root = useRef<HTMLDivElement>(null);
   const [hm, setHm] = useState<ViewClient | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const { link, dialogs } = usePluginLink({
+  const { link, dialogs, fail } = usePluginLink({
     pluginId: data.pkg.id, record: { kind: "tool", id: data.pkg.id }, name: data.pkg.name,
     capabilities: data.pkg.permissions, fields: data.pkg.settings, layoutId: `tile:${data.tileId}`, issueRoot: () => dataRef.current.root, issueFolder: () => dataRef.current.repoPath ?? dataRef.current.cwd,
     props, root, onDisable: (reason) => setFailed(reason),
@@ -68,6 +70,10 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
     target.dispatchEvent(new MessageEvent("message", { data: { type: PORT_HANDSHAKE }, ports: [ch.port2] }));
     return () => { live = false; };
   }, [link]);
+  // Its first failure is the one shown and kept.
+  const stop = useRef<(why: string) => void>(() => {});
+  stop.current = (why) => { setFailed((was) => was ?? why); fail(why); };
+  useEffect(() => watchToolFailures({ folder: toolFolder(data.pkg.id), element: () => root.current, fail: (why) => stop.current(why) }), [data.pkg.id]);
   const dataRef = useRef(data);
   dataRef.current = data;
   const host = useRef<TileHost>({
@@ -82,10 +88,18 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
       <ToolBar data={data} />
       <div ref={root} className="nodrag nowheel relative min-h-0 flex-1 overflow-hidden">
         {failed ? <div className="p-4 text-label text-[var(--color-err)]">{data.pkg.name} stopped: {failed}</div>
-          : hm ? <Draw tile={{ id: data.tileId, kind: data.kind, name: data.name, frameId: data.frameId }} hm={hm} host={host} selected={selected} />
+          : hm ? <DrawFailed onFail={(why) => stop.current(why)}><Draw tile={{ id: data.tileId, kind: data.kind, name: data.name, frameId: data.frameId }} hm={hm} host={host} selected={selected} /></DrawFailed>
           : <Loading label={`Starting ${data.pkg.name}`} />}
       </div>
       {dialogs}
     </div>
   );
+}
+
+/** What its code throws while drawing fails the tile, as an error it throws later does. */
+class DrawFailed extends Component<{ onFail: (why: string) => void; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(error: unknown) { this.props.onFail(error instanceof Error ? error.message : String(error)); }
+  render() { return this.state.failed ? null : this.props.children; }
 }

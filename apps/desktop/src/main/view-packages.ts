@@ -8,8 +8,8 @@ import path from "node:path";
  * production, so a file:// iframe would be same-origin with the privileged
  * renderer unless sandboxed — and a scheme of its own (a) gives every plugin
  * a distinct origin `hm-view://<id>` even before the sandbox makes it opaque,
- * (b) lets the renderer CSP allow exactly `frame-src hm-view:` and nothing
- * else, (c) confines reads to the package dirs listed by the LAST scan (never
+ * (b) lets the renderer CSP allow `frame-src hm-view:` and no other plugin
+ * origin (it allows loopback too, for a tool's own local server), (c) confines reads to the package dirs listed by the LAST scan (never
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
