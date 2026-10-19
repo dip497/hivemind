@@ -22,7 +22,7 @@ const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
 // The page paints in the app's own colours, read from the app's stylesheet at build time.
 const app = tokens.tokens as Record<string, { value: string }>;
 const tk = (name: string) => resolve(resolve(app[name].value));
-const appColours = `:root{--bg:${tk('color-bg')};--bg2:${tk('color-bg2')};--bg3:${tk('color-bg3')};--line:${tk('color-line')};--line2:${tk('color-line2')};--fg:${tk('color-fg')};--fg2:${tk('color-fg2')};--fg3:${tk('color-fg3')};--term:${tk('color-terminal-bg')};--grid-dot:${tk('color-grid-dot')};--st-working:${tk('color-status-working')};--st-attention:${tk('color-status-attention')};--st-done:${tk('color-status-done')};--st-idle:${tk('color-status-idle')};--st-failed:${tk('color-status-failed')};--ease:${tk('hm-ease-out')};--sh2:${tk('hm-shadow-2')};--sh3:${tk('hm-shadow-3')}}`;
+const appColours = `:root{--bg:${tk('color-bg')};--bg2:${tk('color-bg2')};--bg3:${tk('color-bg3')};--line:${tk('color-line')};--line2:${tk('color-line2')};--fg:${tk('color-fg')};--fg2:${tk('color-fg2')};--fg3:${tk('color-fg3')};--term:${tk('color-terminal-bg')};--grid-dot:${tk('color-grid-dot')};--st-working:${tk('color-status-working')};--st-attention:${tk('color-status-attention')};--st-done:${tk('color-status-done')};--st-idle:${tk('color-status-idle')};--st-failed:${tk('color-status-failed')};--ease:${tk('hm-ease-out')};--sh2:${tk('hm-shadow-2')};--sh3:${tk('hm-shadow-3')};--note-blue:${tk('color-note-blue')};--note-violet:${tk('color-note-violet')}}`;
 
 const views = [
   { id: 'agents-by-state', name: 'Agents by state', line: 'Columns of who is working, waiting and ready.' },
