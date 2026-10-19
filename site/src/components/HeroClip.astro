@@ -52,12 +52,12 @@ const sources = { wide: [shot('clip.webm'), shot('clip.mp4')], mid: [shot('clip-
     box-shadow:0 24px 64px -32px oklch(0 0 0 / .6),inset 0 1px 0 oklch(1 0 0 / .06)}
   .hc-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;border-bottom:1px solid var(--line2)}
   .hc-steps [role="tab"]{position:relative;display:grid;gap:3px;text-align:left;font:inherit;background:transparent;border:0;
-    border-right:1px solid var(--line);padding:14px 20px 15px;cursor:pointer;color:var(--fg3);transition:color .2s var(--ease),background-color .2s var(--ease)}
+    border-right:1px solid var(--line);padding:14px 20px 15px;cursor:pointer;color:var(--fg3);transition:color .2s var(--ease),background-color .2s var(--ease);contain:paint}
   .hc-steps [role="tab"] b{font:600 13.5px/1.2 var(--f);letter-spacing:-.005em;color:inherit}
   .hc-steps [role="tab"] span{font-size:15px;line-height:1.35;color:var(--fg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .2s var(--ease)}
   .hc-steps [role="tab"][aria-selected="true"]{color:var(--fg);background:color-mix(in oklab,var(--fg) 3%,transparent)}
   .hc-steps [role="tab"][aria-selected="true"] span{color:var(--fg)}
-  .hc-steps [role="tab"] i{position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--fg);transform:scaleX(var(--p,0));transform-origin:left}
+  .hc-steps [role="tab"] i{position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--fg);transform:scaleX(var(--p,0));transform-origin:left}
   .hc-pause{display:grid;place-items:center;width:56px;color:var(--fg3);background:transparent;border:0;cursor:pointer;transition:color .15s ease}
   .hc-pause svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
   .hc-pause .hc-i-play,.hc-pause[aria-pressed="true"] .hc-i-pause{display:none}
@@ -96,7 +96,7 @@ const sources = { wide: [shot('clip.webm'), shot('clip.mp4')], mid: [shot('clip-
     const pause = root.querySelector<HTMLButtonElement>('[data-pause]')!;
     const reduce = matchMedia('(prefers-reduced-motion: reduce)');
     const phone = matchMedia('(max-width: 640px)');
-    let current = 0, paused = false, loaded = false, inView = false, ready = false, frame = 0;
+    let current = 0, paused = false, loaded = false, inView = false, ready = false, wake = 0;
 
     const frameEl = root.querySelector<HTMLElement>('[role="tabpanel"]')!;
     const select = (i: number) => {
@@ -114,14 +114,24 @@ const sources = { wide: [shot('clip.webm'), shot('clip.mp4')], mid: [shot('clip-
       poster.alt = t.dataset.alt!;
     };
     const stepAt = (time: number) => steps.reduce((n, s, i) => (time >= s.at ? i : n), 0);
-    const tick = () => {
+    const bars = tabs.map((t) => t.querySelector('i')!);
+    let fill: Animation | null = null;
+    // The step's bar fills on the compositor; the page wakes only when the next step starts.
+    const sync = () => {
+      clearTimeout(wake);
+      fill?.cancel(); fill = null;
+      if (!video.duration) return;
       const time = video.currentTime;
       const i = stepAt(time);
       const end = steps[i + 1]?.at ?? video.duration;
       if (i !== current) select(i);
-      tabs.forEach((t, n) => t.style.setProperty('--p', n === i ? String(Math.min(1, (time - steps[i].at) / (end - steps[i].at))) : '0'));
-      frame = video.paused ? 0 : requestAnimationFrame(tick);
+      const left = Math.max(0, end - time) / (video.playbackRate || 1);
+      const from = Math.min(1, (time - steps[i].at) / (end - steps[i].at));
+      fill = bars[i].animate([{ transform: `scaleX(${from})` }, { transform: 'scaleX(1)' }], { duration: left * 1000, easing: 'linear', fill: 'forwards' });
+      if (video.paused) fill.pause();
+      else wake = window.setTimeout(sync, Math.max(30, left * 1000 + 20));
     };
+    const hold = () => { clearTimeout(wake); fill?.pause(); };
     const load = () => {
       if (loaded) return;
       loaded = true;
@@ -140,7 +150,12 @@ const sources = { wide: [shot('clip.webm'), shot('clip.mp4')], mid: [shot('clip-
       load();
       video.play().catch(() => {});
     };
-    video.addEventListener('playing', () => { root.setAttribute('data-playing', ''); cancelAnimationFrame(frame); tick(); });
+    video.addEventListener('playing', () => { root.setAttribute('data-playing', ''); sync(); });
+    video.addEventListener('pause', sync);
+    video.addEventListener('seeking', sync);
+    video.addEventListener('seeked', sync);
+    video.addEventListener('ratechange', sync);
+    video.addEventListener('waiting', hold);
     tabs.forEach((t, i) => t.addEventListener('click', () => {
       select(i);
       // Until the clip plays, the tab's still answers the click.
