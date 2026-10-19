@@ -38,19 +38,11 @@ tool, and it builds one and plugs it in while you watch.
 
 <table>
   <tr>
-    <td><img alt="An agent asked for a CI light puts the widget on the board and sets it to running" src="site/public/shots/hero/step-widget.webp" /></td>
     <td><img alt="The Flaky tests tool: five tests run eight times, two of them flaky" src="site/public/shots/showcase/flaky-tests-board.webp" /></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>"Put a CI light where I can see it." Done.</sub></td>
-    <td align="center"><sub>Which tests are flaky? Now you know.</sub></td>
-  </tr>
-  <tr>
-    <td><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></td>
     <td align="center"><img alt="The phone page listing projects and their agents" src="site/public/shots/phone-home.webp" width="220" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>"Show my workspace as islands." Now they're islands.</sub></td>
+    <td align="center"><sub>Which tests are flaky? Now you know.</sub></td>
     <td align="center"><sub>Your agents, in your pocket.</sub></td>
   </tr>
 </table>
