@@ -246,6 +246,8 @@ Ids are stable strings: a tile id (\`tile\`) lives as long as the tile; your own
 Frames are repo/worktree groups on the canvas: \`hive ctl frames --json\`. \`hive ctl agents --json\` shows every agent with its state and what it waits on.
 A frame on a folder of another machine (a saved one, or another of the person's devices), made when missing: \`hive ctl frame add --machine <name or id> --folder /srv/web --name web --json\`, then \`hive ctl spawn --frame web\`.
 
+**Talking to another tile:** use \`hive ctl send\`, \`hive ctl report\`, \`hive ctl inbox\` and \`hive ctl read\`. Claude Code's own SendMessage tool does not reach tiles and may hold your message for hours; never use it for them.
+
 ## Spawn a worker into a frame
 \`\`\`bash
 hive ctl spawn --agent claude --name "auth tests" --frame my-repo \\
