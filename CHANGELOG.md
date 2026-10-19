@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- The website can be found by search and answer engines: `robots.txt` and a `sitemap.xml` of every page (site and guide), a canonical address on each page (`/guide/x` and `/x/index.html` now send you on to `/guide/x/` and `/x/`), structured data (the app, the site, the FAQ, and each guide page with its breadcrumb), full share cards on guide pages, and `llms.txt` and `llms-full.txt` served at the root. The home page's title, lede and questions say what Hivemind is and name the agents it runs. The guide's Markdown and `llms.txt` links no longer point at `/guide/guide/…`.
 - The guide's **How it works** tab explains the system: an architecture overview of what runs where, a page for each part (the desktop app, the background process, the `hive` command, plugins, hive-net, the phone page, machines and hosts) and the core ideas, with diagrams drawn inline in the page's light or dark theme, each followed by its facts as text for the Markdown copy and `llms.txt`.
 - Widgets: `hive.reducedMotion` and `hive.on("motion")` tell a widget's code that the person asked for less motion, so a widget that moves its card can hold still.
 - The website and README say Hivemind runs every coding agent, not a count of them; the agent grid ends with "Any other", which your agent adds in one file.

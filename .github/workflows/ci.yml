@@ -63,6 +63,9 @@ jobs:
       - name: Every internal link leads somewhere
         run: node scripts/check-links.mjs
 
+      - name: Every page can be found and listed by search and answer engines
+        run: node scripts/check-seo.mjs
+
       - name: Server tests
         run: npm test
 

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 0.0.0.0",
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && npm run guide",
-    "guide": "npm --prefix docs run build && node scripts/add-guide.mjs",
+    "guide": "npm --prefix docs run build && node scripts/add-guide.mjs && node scripts/seo-files.mjs",
     "guide:dev": "npm --prefix docs run dev",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview --host 0.0.0.0",
     "test": "node --test",
