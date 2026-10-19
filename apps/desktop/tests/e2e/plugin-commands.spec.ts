@@ -133,6 +133,7 @@ test("what is not here to open is refused, with how to get it", async () => {
   expect([view.status, JSON.parse(view.out).code]).toEqual([5, "NOT_FOUND"]);
   expect(JSON.parse(view.out).message).toContain("hive plugins enable view:nothing");
   expect(JSON.parse(view.out).message).toContain("these are: canvas");
-  expect(JSON.parse((await hive("ctl", "plugin", "open", "tool:nobody/nothing", "--json")).out).message).toContain("has no tool to open");
-  expect(JSON.parse((await hive("ctl", "plugin", "open", "nothing", "--json")).out).code).toBe("BAD_REQUEST");
+  expect(JSON.parse((await hive("ctl", "plugin", "open", "tool:@nobody/nothing", "--json")).out).message).toContain("has no tool to open");
+  // An id alone that no kind has here.
+  expect(JSON.parse((await hive("ctl", "plugin", "open", "nothing", "--json")).out).code).toBe("NOT_FOUND");
 });
