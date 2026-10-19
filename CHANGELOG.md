@@ -98,6 +98,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - `hive ctl plugin close` takes the plugin as `plugin open` names it (`widget:@owner/name`, `tool:owner/name`, `view:id`) when one copy is open, as well as its instance.
 
 - `hive ctl plugin close` takes any widget off the board by its id, a built-in one drawn without code (Checklist, Sticky note, Text) too.
+- `hive ctl open-tool` takes a tool package's id when the package has one tool, and a package with several says their full ids; `hive tools list` and `hive tools install` print each tool's full id. Installing a tool again with the same code byte for byte keeps it on; changed code still goes off, and the install says which.
 
 ## [2026.10.3] — 2026-10-18
 

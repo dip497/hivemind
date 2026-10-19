@@ -61,7 +61,7 @@ const listCmd = defineCommand({
       return ok(ctx, plugins, () =>
         plugins.map((p) => [
           `${p.id}${p.added ? "  (you added this)" : ""}${p.problem ? `  does not load: ${p.problem}` : ""}`,
-          ...p.tiles.map((t) => `  tile     ${t.label.padEnd(14)} ${t.available ? "" : "(off) "}${t.tileKind ?? ""}`),
+          ...p.tiles.map((t) => `  tile     ${t.id.padEnd(28)} ${t.label.padEnd(14)} ${t.available ? "" : "(off) "}${t.tileKind ?? ""}`),
           ...p.commands.map((c) => `  command  ${(c.cli ?? c.id).padEnd(14)} ${c.available ? "" : "(off) "}${c.readOnly ? "" : "[writes]"}`),
         ].join("\n")).join("\n\n"));
     } catch (e) {
@@ -85,8 +85,13 @@ const installCmd = defineCommand({
       const t = await installToolPackage(staged ?? path.resolve(source), fromHub ? source : undefined);
       await discard();
       const rescanned = await rescanApp();
-      return ok(ctx, { id: t.id, name: t.name, dir: t.dir, rescanned },
-        () => `installed ${t.id} (${t.name}) → ${t.dir}; ${afterNote(rescanned)}\nIt is off: \`hive plugins enable tool:${t.id}\` if you trust who wrote it.`);
+      const toolIds = t.tools.map((x) => `${t.id}/${x.key}`);
+      return ok(ctx, { id: t.id, name: t.name, dir: t.dir, tools: toolIds, enabled: t.enabled, rescanned },
+        () => [
+          `installed ${t.id} (${t.name}) → ${t.dir}; ${afterNote(rescanned)}`,
+          ...toolIds.map((id) => `  tool ${id}    hive ctl open-tool ${id}`),
+          t.enabled ? "It is on: the same code as before." : `It is off: \`hive plugins enable tool:${t.id}\` if you trust who wrote it.`,
+        ].join("\n"));
     } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
   },
 });

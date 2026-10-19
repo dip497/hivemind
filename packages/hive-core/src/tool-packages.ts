@@ -4,12 +4,13 @@
  * remove them here. A folder that cannot be read is listed with what is wrong, so the person
  * sees why it does not load instead of it vanishing.
  */
-import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { isToolId, parseToolManifest, toolFolder, type ToolPackage } from "./tool-format.js";
-import { withPluginState } from "./plugin-settings.js";
-import { settingsPath, updateSettings } from "./settings.js";
+import { isPluginEnabled, withPluginState } from "./plugin-settings.js";
+import { readSettings, settingsPath, updateSettings } from "./settings.js";
 
 export const TOOL_MANIFEST = "hivemind-tool.json";
 
@@ -55,15 +56,35 @@ export async function listToolPackages(dir = userToolsDir(), appRoot?: string | 
   return [...(appRoot ? await scan(appRoot, "app") : []), ...await scan(dir, "you")];
 }
 
+/** One hash of every file in `dir`, by path and content; null when there is no such folder. */
+async function folderHash(dir: string): Promise<string | null> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true }).catch(() => null);
+  if (!entries) return null;
+  const hash = createHash("sha256");
+  const files = entries
+    .filter((e) => e.isFile() || e.isSymbolicLink())
+    .map((e) => ({ rel: path.relative(dir, path.join(e.parentPath, e.name)), link: e.isSymbolicLink() }))
+    .sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  for (const f of files) {
+    const at = path.join(dir, f.rel);
+    hash.update(`${f.link ? "link" : "file"}\0${f.rel}\0`);
+    hash.update(f.link ? await readlink(at) : await readFile(at));
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
 /** Copy the tool plugin in `src` into the tools folder, replacing one with the same id. It is
  *  checked before anything is replaced, and copied whole before it takes the old one's place.
- *  `id`, when given (a HiveHub listing), is the id its manifest must say. It is left off, an
- *  update included: switching one on trusts the code that was there, not what replaces it. */
-export async function installToolPackage(src: string, id?: string, dir = userToolsDir(), settings = settingsPath()): Promise<ToolPackage> {
+ *  `id`, when given (a HiveHub listing), is the id its manifest must say. Changed code is left
+ *  off: switching one on trusts the code that was there, not what replaces it. The same code
+ *  byte for byte keeps the state it had. `enabled` is that state after the install. */
+export async function installToolPackage(src: string, id?: string, dir = userToolsDir(), settings = settingsPath()): Promise<ToolPackage & { enabled: boolean }> {
   const read = await readToolPackage(src, id ?? null);
   await mkdir(dir, { recursive: true });
   const staging = await mkdtemp(path.join(dir, ".install-"));
   const dest = path.join(dir, toolFolder(read.id));
+  const sameCode = (await folderHash(dest)) === (await folderHash(src));
   try {
     await cp(src, path.join(staging, "next"), { recursive: true });
     await rm(dest, { recursive: true, force: true });
@@ -71,10 +92,10 @@ export async function installToolPackage(src: string, id?: string, dir = userToo
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
-  await updateSettings((cur) => ({
+  const next = sameCode ? await readSettings(settings) : await updateSettings((cur) => ({
     ...cur, plugins: { ...cur.plugins, state: withPluginState(cur.plugins.state, "tool", read.id, ({ enabled: _, ...rest }) => rest) },
   }), settings);
-  return { ...read, dir: dest };
+  return { ...read, dir: dest, enabled: isPluginEnabled(next.plugins.state, "tool", read.id, false) };
 }
 
 export async function removeToolPackage(id: string, dir = userToolsDir()): Promise<void> {

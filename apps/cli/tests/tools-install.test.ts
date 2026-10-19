@@ -48,4 +48,27 @@ describe("hive tools install", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 60_000);
+
+  test("text output names each tool's full id, and says whether it is on: off when new, on when the same code is installed again", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-tools-text-"));
+    const xdg = path.join(tmp, "config");
+    const src = path.join(tmp, "prs");
+    fs.mkdirSync(src);
+    fs.writeFileSync(path.join(src, "hivemind-tool.json"), manifest("ada/prs"));
+    fs.writeFileSync(path.join(src, "index.js"), "export default { tiles: {} };\n");
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
+    const run = (...args: string[]) => hive(args, { cwd: tmp, env }).stdout;
+    try {
+      const first = run("tools", "install", src);
+      expect(first).toContain("tool ada/prs/prs");
+      expect(first).toContain("It is off");
+      expect(run("tools", "list")).toContain("ada/prs/prs");
+      expect(hive(["plugins", "enable", "tool:ada/prs", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true });
+      const again = run("tools", "install", src);
+      expect(again).toContain("It is on");
+      expect(again).not.toContain("It is off");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

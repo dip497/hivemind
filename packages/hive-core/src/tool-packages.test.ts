@@ -88,6 +88,29 @@ test("an update is installed off: switching one on trusted the code that was the
   expect(state["tool:acme/prs"]).toEqual({ options: { prs: false } });
 });
 
+test("reinstalling the same code byte for byte keeps it on: no new code was trusted", async () => {
+  const tools = temp();
+  const settings = path.join(tools, "settings.json");
+  const src = plugin();
+  await installToolPackage(src, undefined, tools, settings);
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:acme/prs": { enabled: true } } } }));
+  const again = await installToolPackage(src, undefined, tools, settings);
+  expect(again.enabled).toBe(true);
+  expect(isPluginEnabled((await readSettings(settings)).plugins.state, "tool", "acme/prs", false)).toBe(true);
+});
+
+test("reinstalling changed code switches it off, and says so", async () => {
+  const tools = temp();
+  const settings = path.join(tools, "settings.json");
+  const src = plugin();
+  await installToolPackage(src, undefined, tools, settings);
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:acme/prs": { enabled: true } } } }));
+  fs.writeFileSync(path.join(src, "index.js"), "export default { tiles: { changed: true } };");
+  const again = await installToolPackage(src, undefined, tools, settings);
+  expect(again.enabled).toBe(false);
+  expect(isPluginEnabled((await readSettings(settings)).plugins.state, "tool", "acme/prs", false)).toBe(false);
+});
+
 test("a tool plugin that comes with the app is the tool core says ships, and only the app's own may be hivemind/", async () => {
   const root = path.resolve(import.meta.dir, "../../../apps/desktop/tools");
   for (const name of fs.readdirSync(root)) {

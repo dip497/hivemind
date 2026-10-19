@@ -1030,7 +1030,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       return { agent: def.id, resumable: !!def.session?.resume, sessions };
     },
 
-    openTool: (caller, repo, tool, at) => openTool({ caller, repo, ...at }, (tools) => tools.find((t) => t.id === tool), "Unknown tool id"),
+    // A tool's full id, or its package's id when that package has one tool.
+    openTool: (caller, repo, tool, at) => openTool({ caller, repo, ...at }, (tools) => {
+      const inPackage = tools.filter((t) => t.pluginId === tool);
+      if (inPackage.length > 1) throw new ApiError("BAD_REQUEST", `${tool} has ${inPackage.length} tools; name one: ${inPackage.map((t) => t.id).join(", ")}`);
+      return tools.find((t) => t.id === tool) ?? inPackage[0];
+    }, "Unknown tool id"),
 
     connect(src, dst) {
       if (!deps.connect(src, dst)) throw new ApiError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");

@@ -192,7 +192,7 @@ async function frameIn(d: Drive, repo: string, given: string): Promise<string> {
 }
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
-  tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
+  tool: { type: "positional", required: true, description: "tool id, as `hive tools list` prints it (hivemind/web/browser), or its package id when the package has one tool (hivemind/web)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
   ...repoArg,

@@ -451,6 +451,15 @@ test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn f
   assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [], "no refused request opened a tile");
 });
 
+test("tool.open: a package's id opens its one tool; a package with several is refused with their full ids", async () => {
+  const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools: [] }) });
+  const { api } = makeDispatch(deps);
+  const tileId = await api.openTool(undefined, REPO, "hivemind/web", {});
+  assert.equal(deps.workspaces.getCore(REPO)?.tiles.find((t) => t.id === tileId)?.kind, "browser");
+  await assert.rejects(api.openTool(undefined, REPO, "hivemind/issues", {}), (e: { code?: string; message?: string }) =>
+    e.code === "BAD_REQUEST" && /hivemind\/issues\/issues/.test(e.message ?? "") && /hivemind\/issues\/plan-review/.test(e.message ?? ""));
+});
+
 /** One JSON-RPC connection: `call` waits for its reply; notifications collect in `notes`. */
 async function session(sock: string) {
   const c = net.connect(sock);
