@@ -16,9 +16,7 @@ Run agents on a bigger or always-on computer while you watch them from your own.
 
 At the end, tell me the machine's name, what \`hive machine check\` printed, and the frame that opened. Tell me \`hive ps --machine <name>\` lists what runs there.`}</AgentPrompt>
 
-<Frame caption="A frame on a machine">
-  <img src="/images/machines-ssh.svg" alt="Your computer reaches the machine over ssh. On the machine, a background hive process runs the frame's terminals and agents in its folder, and keeps them running when the connection drops or the app quits." />
-</Frame>
+How a machine runs your agents, and how it differs from a host: [Machines and hosts](/remote-machines).
 
 ## Before you start
 
@@ -83,9 +81,8 @@ Run `pwd` in a terminal in the new frame. It prints the folder on the machine.
 
 ## Sessions outlive the connection
 
-A <Tooltip tip="The hive process that keeps terminals and agents running while the app is closed or upgrading." cta="Glossary" href="/glossary#background-process">background process</Tooltip> on the machine runs its terminals. They keep running when the network drops, your laptop sleeps or the app quits. They reattach when you are back.
-
-To reach them without the app:
+Terminals and agents on the machine keep running when the network drops, your laptop sleeps or
+the app quits, and reattach when you are back. To reach them without the app:
 
 ```bash
 hive ps --machine build
@@ -125,7 +122,6 @@ More in [Troubleshooting](/troubleshooting).
 ## Good to know
 
 - Issues are read from your own computer, not from the machine's folder.
-- A machine without `hive` runs plain ssh terminals. They end when the connection drops.
 
 ## Related
 

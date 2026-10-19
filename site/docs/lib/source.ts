@@ -27,9 +27,16 @@ export type GuidePage = InferPageType<typeof source>;
 
 const markdownAddress = (page: GuidePage) => `${siteUrl}${pageMarkdownPath(page.slugs)}`;
 
+/** A diagram as a picture link: the list under it in the page carries the same facts as text. */
+const diagramsAsLinks = (markdown: string) =>
+  markdown.replace(
+    /<Diagram\s+name="([a-z0-9-]+)"\s+caption="([^"]*)"\s*\/>/g,
+    (_all, name: string, caption: string) => `![Diagram: ${caption}](${docsUrl}/images/${name}.svg)`,
+  );
+
 /** One page as Markdown, with every link a full address so it reads the same anywhere. */
 export async function pageMarkdown(page: GuidePage) {
-  const body = absoluteLinks(await page.data.getText('processed'));
+  const body = absoluteLinks(diagramsAsLinks(await page.data.getText('processed')));
   return `# ${page.data.title}\n\n> ${page.data.description}\n\nSource: ${docsUrl}${page.url}\n\n${body.trim()}\n`;
 }
 
@@ -38,7 +45,7 @@ export function llmsIndex() {
   const lines = [
     `# ${appName}`,
     '',
-    '> A workspace for coding agents: run them side by side, see which one waits on you, and drive them from other computers, your phone or your own program.',
+    '> A workspace your coding agents build and work in: run them side by side, add your own views, widgets and tools, and drive it all from other computers, your phone or your own program.',
     '',
     `Every page is also Markdown: add .md to its address. All of them in one file: ${docsUrl}/llms-full.txt`,
   ];

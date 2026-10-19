@@ -216,13 +216,15 @@ hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
 
 ### Where it runs
 
-<Frame caption="One window runs a widget; everyone sees it">
-  <img src="/images/widgets-runner.svg" alt="One window runs widget.js: the first of your own windows with the workspace open. What it draws goes live to guests' windows, your other windows on any of your devices, and your phone through a widgets view; a press from any of them goes back to that window. Guests can press only if they can edit the board. Nothing it draws is saved." />
-</Frame>
+<Diagram name="widgets-runner" caption="One window runs a widget; everyone sees it" />
 
-The first of your own windows with the workspace open runs it. Nobody else's computer runs your
-code. A guest with **Can edit board** can press its buttons. On your phone, a view that shows
-widgets draws them (`hive views install @dip497/widgets`).
+- **The window that runs `widget.js`**: the first of your own windows with the workspace open.
+- It → **guests' windows**, **your other windows** on any device, and **your phone** through a widgets view: what it draws, live.
+- Any of them → that window: a press. Guests can press only if they can edit the board.
+- Nothing it draws is saved.
+
+Nobody else's computer runs your code. On your phone, a view that shows widgets draws them
+(`hive views install @dip497/widgets`).
 
 ### Commands
 

@@ -14,9 +14,12 @@ Use one <Tooltip tip="A link, QR code or code that lets one device or person in.
 
 At the end, ask me to check the other computer is listed under Connected → Your devices on Settings → Connect. Tell me Unpair there cuts it off.`}</AgentPrompt>
 
-<Frame caption="One invite, three answers">
-  <img src="/images/connect-invite.svg" alt="Flowchart: you make an invite on Settings → Connect; the other device uses it and both show three words. On your computer you answer Deny (nothing is kept), Someone else (they join the workspace at the role you pick) or It's me; then the other device asks whether the words match: Yes pairs it as you, No keeps nothing. A request left unanswered for about three minutes counts as Deny." />
-</Frame>
+<Diagram name="connect-invite" caption="One invite, three answers" />
+
+- **An invite** from **Settings → Connect** → **the other device uses it**: both show three words.
+- On your computer you answer: **Deny** (nothing is kept), **Someone else** (they join at the role you pick), or **It's me**.
+- After **It's me**, the other device asks whether the words match. **Yes**: paired as you. **No**: nothing is kept.
+- A request unanswered for about three minutes counts as **Deny**.
 
 ## Before you start
 
@@ -78,6 +81,6 @@ More in [Troubleshooting](/troubleshooting).
 - **Unpair**, next to a device under **Your devices**, cuts it off from this computer.
 - A host pairs from its own terminal with `hive host pair`: see [Keep agents running while your laptop sleeps](/host).
 - [Share a workspace](/multiplayer) for roles and invite links from a terminal.
-- [How devices connect](/how-devices-connect)
+- [Devices and hive-net](/how-devices-connect)
 
 <LastValidated />

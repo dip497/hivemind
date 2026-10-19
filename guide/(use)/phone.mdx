@@ -18,7 +18,7 @@ At the end, ask me to check the phone shows Home with my agents. Suggest adding 
   <video autoPlay src="/images/shots/phone/clip.mp4" poster="/images/shots/phone/poster.webp" />
 </Frame>
 
-The phone page is a web page your phone's browser opens. It comes from your own server. All its traffic goes through that server, encrypted end to end.
+How the phone page reaches your computer, and what a phone may do: [The phone page](/phone-page).
 
 ## Before you start
 
@@ -80,13 +80,12 @@ The first answer counts, from the phone or the computer.
 
 ### Who sizes a terminal
 
-<Frame caption="Whoever typed last sets the size">
-  <img src="/images/phone-terminal-size.svg" alt="State diagram: a terminal opened on the phone takes the phone's size. A key typed on the desktop, turning Fit off, or closing the terminal or hiding the page gives it the desktop size. A phone key while Fit is on, pressing Fit, or showing the page again gives it the phone's size again. Allow, Deny and choosing an option are not typing." />
-</Frame>
+<Diagram name="phone-terminal-size" caption="Whoever typed last sets the size" />
 
-## What a phone cannot do
-
-A paired phone cannot open a plain terminal, edit the canvas, or host a frame.
+- Opened on the phone → **phone size**.
+- Phone size → **desktop size**: a key typed on the desktop, **Fit** turned off, the terminal closed, or the page hidden.
+- Desktop size → phone size: a phone key while **Fit** is on, pressing **Fit**, or showing the page again.
+- Whoever typed last sets the size. **Allow**, **Deny** and choosing an option are not typing.
 
 ## If it didn't
 

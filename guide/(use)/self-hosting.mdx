@@ -29,12 +29,10 @@ Then tell me the phone link and how to stop the server.`}</AgentPrompt>
 
 There is no hosted server. The `hive-net` program comes with Hivemind, beside `hive`.
 
-<Frame caption="Everything runs on machines you own">
-  <img src="/images/home-yours.svg" alt="Your phone talks over https to your own hive-net server, which relays to your computer, which reaches your other machines over ssh. Traffic is encrypted end to end; the server passes it on but cannot read it." />
-</Frame>
+Where your server sits among your devices: [Architecture overview](/architecture). What it does: [Devices and hive-net](/how-devices-connect#across-networks).
 
 <Note>
-**Words on this page.** The **relay** passes traffic between devices that cannot reach each other directly. It cannot read that traffic. The **lookup** lets devices find each other by id. To **enrol** a device is to let it use your server. **Proof of work** is a small puzzle a device solves to get in, on a server open to anyone.
+**Words on this page.** The **relay** and the **lookup** are two of your server's [parts](/how-devices-connect#across-networks). To **enrol** a device is to let it use your server. **Proof of work** is a small puzzle a device solves to get in, on a server open to anyone.
 </Note>
 
 ## Before you start
@@ -131,7 +129,7 @@ More in [Troubleshooting](/troubleshooting).
 ## Related
 
 - [hive-net reference](/hive-net): every flag, port, certificate option, push key and backup.
-- [How devices connect](/how-devices-connect)
+- [Devices and hive-net](/how-devices-connect)
 - To leave a network: **Settings → Servers → Change… → Local network**.
 
 <LastValidated />
