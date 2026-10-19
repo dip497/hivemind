@@ -20,10 +20,10 @@
 > write are web code anyway. Hate mail goes to `/dev/null`.
 
 <p align="center">
-  <a href="https://hivemind.griiken.com/"><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></a>
+  <a href="https://hivemind.griiken.com/"><img alt="Claude Code, Codex, OpenCode and Pi in their own terminals on one board, over Raphael's School of Athens, with butterflies flying across and Biscuit the dog asleep on a tile" src="site/public/shots/hero/school-of-agents.webp" /></a>
 </p>
 
-<p align="center"><sub>I typed <i>"show my workspace as islands."</i> Now my projects are islands.</sub></p>
+<p align="center"><sub>The School of Agents. <i>Wallpaper: Raphael, The School of Athens (1509–1511), public domain, via artwallpapers.biz.</i></sub></p>
 
 Five agents in five terminal tabs? Cute.
 
@@ -31,7 +31,7 @@ Hivemind puts every coding agent on one board, each in a real terminal: Claude C
 whatever ships next week. Then it gets weird, in a good way. Ask an agent for a view, a widget or a
 tool, and it builds one and plugs it in while you watch.
 
-- **Bored of the canvas?** Ask for islands. Or stars. Or a dog. (There is a dog.)
+- **Bored of the canvas?** Ask for islands. Or butterflies. Or a dog. (There is a dog.)
 - **Agents boss agents around.** With `hive ctl` an agent starts, reads and steers other agents.
   Your scripts can too, through the API.
 - **Leave your desk.** Agents run on other machines over ssh, and you check on them from your phone.
@@ -46,11 +46,11 @@ tool, and it builds one and plugs it in while you watch.
     <td align="center"><sub>Which tests are flaky? Now you know.</sub></td>
   </tr>
   <tr>
-    <td><img alt="The Constellation view: every agent as a star" src="site/public/shots/showcase/constellation-board.webp" /></td>
+    <td><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></td>
     <td align="center"><img alt="The phone page listing projects and their agents" src="site/public/shots/phone-home.webp" width="220" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Every agent as a star. Because why not.</sub></td>
+    <td align="center"><sub>"Show my workspace as islands." Now they're islands.</sub></td>
     <td align="center"><sub>Your agents, in your pocket.</sub></td>
   </tr>
 </table>
