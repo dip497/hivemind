@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Widgets: `hive.reducedMotion` and `hive.on("motion")` tell a widget's code that the person asked for less motion, so a widget that moves its card can hold still.
 - The website and README say Hivemind runs every coding agent, not a count of them; the agent grid ends with "Any other", which your agent adds in one file.
 - The website's home page leads with what only Hivemind does: its hero is the workspace drawn live, where an agent writes a view and the same agents move into it, then a widget and a tool appear; the README lists your own views, tools and widgets and the agent-driven workspace first.
 - The guide at hivemind.griiken.com/guide has tabs, search, light and dark, a copy-ready prompt on each page, **Copy page** and a menu to open a page in ChatGPT, Claude or Cursor; every page is also Markdown at `/guide/<page>.md`, and all of them are in `/guide/llms.txt` and `/guide/llms-full.txt`.

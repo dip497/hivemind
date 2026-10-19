@@ -144,6 +144,7 @@ Each of these is a widget on HiveHub, as `@dip497/<name>`.
 | `hive.notify(text)` | shows a desktop notification |
 | `hive.moveTo({ x, y }, { over })` | moves its card: `x` and `y` from 0 to 1 across the screen (`y: "bottom"`), over `over` ms |
 | `hive.spot` | where it last moved to |
+| `hive.reducedMotion`, `hive.on("motion", fn)` | the person asked for less motion: hold still and do not move the card. A sprite already stops on its first frame |
 | `hive.on("click", fn)` | its card was clicked, not on a button |
 | `hive.on("start", fn)` | it was placed, or the app opened |
 | `hive.on("action", fn)` | one of its buttons was pressed; `fn` gets the button's `action` |
