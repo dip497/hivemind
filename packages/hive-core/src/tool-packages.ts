@@ -1,5 +1,5 @@
 /**
- * Tool plugins on this machine: `<config>/hivemind/tools/<owner>--<name>/`, beside the views and
+ * Tool plugins on this machine: `<config>/hivemind/tools/<owner>--<name>/` for `@owner/name`, beside the views and
  * the widgets, each a `hivemind-tool.json` and its module. The app and the CLI read, add and
  * remove them here. A folder that cannot be read is listed with what is wrong, so the person
  * sees why it does not load instead of it vanishing.
@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { isToolId, parseToolManifest, toolFolder, type ToolPackage } from "./tool-format.js";
+import { isToolId, parseToolManifest, toolFolder, toolOfFolder, type ToolPackage } from "./tool-format.js";
 import { isPluginEnabled, withPluginState } from "./plugin-settings.js";
 import { readSettings, settingsPath, updateSettings } from "./settings.js";
 
@@ -42,7 +42,7 @@ export async function listToolPackages(dir = userToolsDir(), appRoot?: string | 
   const scan = async (root: string, source: "app" | "you") => {
     const folders = (await readdir(root).catch(() => [] as string[])).filter((f) => !f.startsWith(".") && f.includes("--")).sort();
     return Promise.all(folders.map(async (f) => {
-      const id = f.replace("--", "/");
+      const id = toolOfFolder(f);
       try {
         return await readToolPackage(path.join(root, f), id, source);
       } catch (e) {
@@ -100,7 +100,7 @@ export async function installToolPackage(src: string, id?: string, dir = userToo
 export async function removeToolPackage(id: string, dir = userToolsDir()): Promise<void> {
   if (!isToolId(id)) throw new Error(`${id} is not a tool plugin id`);
   const at = path.join(dir, toolFolder(id));
-  if (!(await stat(at).catch(() => null))) throw new Error(id.startsWith("hivemind/") ? "it comes with the app" : `no tool plugin ${id} is installed`);
+  if (!(await stat(at).catch(() => null))) throw new Error(id.startsWith("@hivemind/") ? "it comes with the app" : `no tool plugin ${id} is installed`);
   await rm(at, { recursive: true, force: true });
 }
 

@@ -1,6 +1,6 @@
 // A tool can frame a server on this machine (127.0.0.1, localhost) and nothing else; when the
 // page's policy blocks a frame, or its code throws, its tile says why and the agent reads it as
-// failed in `hive ctl plugin list`. The tool is a fixture, `example/frames`, framing its setting.
+// failed in `hive ctl plugin list`. The tool is a fixture, `@example/frames`, framing its setting.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -41,8 +41,8 @@ test.beforeAll(async () => {
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   local = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   expect(hive("plugins", "install", fixture).status).toBe(0);
-  expect(hive("plugins", "enable", "tool:example/frames").status).toBe(0);
-  expect(hive("plugins", "set", "tool:example/frames", "url", local).status).toBe(0);
+  expect(hive("plugins", "enable", "tool:@example/frames").status).toBe(0);
+  expect(hive("plugins", "set", "tool:@example/frames", "url", local).status).toBe(0);
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
@@ -52,11 +52,11 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await app?.close(); server?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
-const tile = () => page.locator('[data-tool-plugin="example/frames"]');
-const stateOf = () => (hive("ctl", "plugin", "list").data.plugins as Array<{ plugin: string; state: string; reason?: string }>).find((p) => p.plugin === "example/frames");
+const tile = () => page.locator('[data-tool-plugin="@example/frames"]');
+const stateOf = () => (hive("ctl", "plugin", "list").data.plugins as Array<{ plugin: string; state: string; reason?: string }>).find((p) => p.plugin === "@example/frames");
 
 test("a tool frames a server on this machine", async () => {
-  await expect.poll(() => hive("ctl", "open-tool", "example/frames").status).toBe(0);
+  await expect.poll(() => hive("ctl", "open-tool", "@example/frames").status).toBe(0);
   await expect.poll(async () => {
     const frame = page.frames().find((f) => f.url() === local);
     return frame ? await frame.locator("p").textContent().catch(() => null) : null;
@@ -75,7 +75,7 @@ test("a framed page cannot send the app's window to another page", async () => {
 });
 
 test("a frame of another machine is blocked, and the tile fails saying why", async () => {
-  expect(hive("plugins", "set", "tool:example/frames", "url", "http://192.0.2.1/").status).toBe(0);
+  expect(hive("plugins", "set", "tool:@example/frames", "url", "http://192.0.2.1/").status).toBe(0);
   await expect(tile()).toContainText("security policy blocked", { timeout: 20_000 });
   await expect.poll(() => stateOf()?.state).toBe("failed");
   expect(stateOf()?.reason).toContain("frame-src");

@@ -44,7 +44,7 @@ for (const name of readdirSync(path.join(root, "views"))) {
 for (const name of readdirSync(path.join(root, "tools"))) {
   const dir = path.join(root, "tools", name);
   const manifest = JSON.parse(readFileSync(path.join(dir, "hivemind-tool.json"), "utf8"));
-  const folder = manifest.id.replace("/", "--");
+  const folder = manifest.id.replace(/^@/, "").replace("/", "--");
   const dist = path.join(root, "out/tools", folder);
   await bundle({ src: path.join(dir, "src"), dist, name: manifest.entry.replace(/\.m?js$/, ""), external: Object.keys(HOST), paths: HOST });
   cpSync(path.join(dir, "hivemind-tool.json"), path.join(dist, "hivemind-tool.json"));

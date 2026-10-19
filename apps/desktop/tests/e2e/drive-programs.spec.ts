@@ -98,22 +98,22 @@ test("opened while `hive host` serves programs, Settings lets them in and takes 
   const plugin = path.join(root, "hello");
   fs.mkdirSync(plugin);
   fs.writeFileSync(path.join(plugin, "hivemind-tool.json"), JSON.stringify({
-    id: "acme/hello", name: "Hello", version: "1.0.0", apiVersion: 1, entry: "index.js",
+    id: "@acme/hello", name: "Hello", version: "1.0.0", apiVersion: 1, entry: "index.js",
     tools: [{ key: "hello", label: "Hello", tileKind: "acme-hello" }], service: { command: ["node", "service.js"], role: "view" },
   }));
   fs.writeFileSync(path.join(plugin, "index.js"), "export default { tiles: {} };\n");
   fs.writeFileSync(path.join(plugin, "service.js"), "process.stdin.on('end', () => process.exit(0)).resume(); console.log('up');\n");
   expect(hive("plugins", "install", plugin).status).toBe(0);
-  expect(hive("plugins", "enable", "tool:acme/hello").status).toBe(0);
+  expect(hive("plugins", "enable", "tool:@acme/hello").status).toBe(0);
   let host: ChildProcess | undefined;
   try {
     host = spawn("bun", [cli, "host", "run"], { env, stdio: "ignore" });
     await expect.poll(() => hive("host", "add", repo).status, { timeout: 30_000 }).toBe(0);
-    expect(hive("plugins", "workspaces", "tool:acme/hello", repo).status).toBe(0);
+    expect(hive("plugins", "workspaces", "tool:@acme/hello", repo).status).toBe(0);
     const log = () => { try { return fs.readFileSync(path.join(data, "services", "acme--hello.log"), "utf8"); } catch { return ""; } };
     await expect.poll(() => /started, pid (\d+)/.exec(log())?.[1], { timeout: 20_000 }).toBeTruthy();
     const service = Number(/started, pid (\d+)/.exec(log())![1]);
-    const servicesGrants = () => (JSON.parse(hive("grant", "list").stdout).data as Array<{ plugin?: string }>).filter((g) => g.plugin === "acme/hello");
+    const servicesGrants = () => (JSON.parse(hive("grant", "list").stdout).data as Array<{ plugin?: string }>).filter((g) => g.plugin === "@acme/hello");
     expect(servicesGrants()).toHaveLength(1);
 
     app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd: repo, env });

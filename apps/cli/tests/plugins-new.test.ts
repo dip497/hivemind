@@ -8,7 +8,7 @@ import path from "node:path";
 import { hive } from "./helpers.js";
 
 const KINDS = [
-  { kind: "tool", id: "ada/tally", manifest: "hivemind-tool.json", next: ["hive plugins install ./work/tally", "hive plugins enable tool:ada/tally", "hive ctl plugin open tool:ada/tally", "hive ctl tile look <tile>    # what it drew, and what its code logged"], guide: "https://hivemind.griiken.com/guide/tool-plugins/" },
+  { kind: "tool", id: "@ada/tally", manifest: "hivemind-tool.json", next: ["hive plugins install ./work/tally", "hive plugins enable tool:@ada/tally", "hive ctl plugin open tool:@ada/tally", "hive ctl tile look <tile>    # what it drew, and what its code logged"], guide: "https://hivemind.griiken.com/guide/tool-plugins/" },
   { kind: "widget", id: "@ada/tally", manifest: "widget.json", next: ["hive plugins install ./work/tally", "hive ctl plugin open widget:@ada/tally"], guide: "https://hivemind.griiken.com/guide/widgets/" },
   { kind: "view", id: "@ada/tally", manifest: "hivemind-view.json", next: ["cd ./work/tally && npm install && npm run dev    # builds dist/ and installs it", "hive ctl plugin open view:@ada/tally"], guide: "https://hivemind.griiken.com/guide/extension-authoring/" },
 ] as const;

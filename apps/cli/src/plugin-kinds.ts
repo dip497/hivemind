@@ -38,7 +38,7 @@ const GUIDE = "https://hivemind.griiken.com/guide";
 export const KINDS: readonly AuthoredKind[] = [
   {
     kind: "tool", noun: "tool plugin", manifest: TOOL_MANIFEST,
-    idOf: (owner, name) => `${owner}/${name}`,
+    idOf: (owner, name) => `@${owner}/${name}`,
     starter: toolStarter,
     install: (dir, hubId) => installToolPackage(dir, hubId),
     remove: removeToolPackage,

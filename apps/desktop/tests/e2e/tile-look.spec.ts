@@ -29,7 +29,7 @@ let tile = "";
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
   expect(hive("plugins", "install", fixture).status).toBe(0);
-  expect(hive("plugins", "enable", "tool:example/look").status).toBe(0);
+  expect(hive("plugins", "enable", "tool:@example/look").status).toBe(0);
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
@@ -40,7 +40,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 test("look at a tool's tile: a picture of what it drew, its state, and the line its code logged", async () => {
-  await expect.poll(() => { const r = hive("ctl", "open-tool", "example/look"); tile = r.data.tile ?? ""; return r.status; }).toBe(0);
+  await expect.poll(() => { const r = hive("ctl", "open-tool", "@example/look"); tile = r.data.tile ?? ""; return r.status; }).toBe(0);
   const out = path.join(root, "look.png");
   const look = hive("ctl", "tile", "look", tile, "--out", out);
   expect(look.status).toBe(0);

@@ -65,8 +65,8 @@ for (const [k, v] of [
 // A widget and a tool from HiveHub, added as their guides say.
 const WIDGET = "@dip497/progress";
 cli("plugins", "install", WIDGET);
-cli("plugins", "install", "dip497/git-history");
-for (const id of ["tool:dip497/git-history", `widget:${WIDGET}`]) cli("plugins", "enable", id);
+cli("plugins", "install", "@dip497/git-history");
+for (const id of ["tool:@dip497/git-history", `widget:${WIDGET}`]) cli("plugins", "enable", id);
 
 const app = await electron.launch({
   args: [path.join(APP, "out/main/index.js"), "--no-sandbox", "--force-device-scale-factor=2"],
@@ -215,7 +215,7 @@ try {
     if (r.status !== 0) console.error(`ctl ${a.join(" ")}: ${r.stderr.trim() || r.stdout.trim()}`);
     return r;
   };
-  ctl("plugin", "open", "tool:dip497/git-history");
+  ctl("plugin", "open", "tool:@dip497/git-history");
   ctl("plugin", "open", `widget:${WIDGET}`);
   // Its code starts in the window; a command before it is ready finds nothing running.
   for (let i = 0; i < 40; i++) {

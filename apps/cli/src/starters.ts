@@ -6,7 +6,7 @@ import { pluginBrief } from "./plugin-brief.js";
 
 /** The files of a starter tool plugin `name`, owned by `owner`. */
 export function toolStarter(owner: string, name: string): Record<string, string> {
-  const id = `${owner}/${name}`;
+  const id = `@${owner}/${name}`;
   const tileKind = `${owner}-${name}`.slice(0, 41);
   const manifest = {
     id, name: name.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase()), version: "0.1.0", apiVersion: TOOL_API_VERSION,

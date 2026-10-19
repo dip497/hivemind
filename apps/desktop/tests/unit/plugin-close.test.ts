@@ -1,5 +1,5 @@
 // `hive ctl plugin close` closes what `plugin open` opened, named the way open names it
-// (`widget:@owner/name`, `tool:owner/name`) or by the instance `plugin list` shows; and it takes
+// (`widget:@owner/name`, `tool:@owner/name`) or by the instance `plugin list` shows; and it takes
 // off the board any widget an agent can add, a built-in one drawn without code too.
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +22,7 @@ function openWindow() {
     return r;
   };
   const host: PluginVerbHost = {
-    activeView: () => FALLBACK_VIEW_ID, showView: () => {}, addWidget: () => undefined, widgetRuns: () => false,
+    activeView: () => FALLBACK_VIEW_ID, showView: () => {}, addWidget: () => undefined, hasWidget: () => false, widgetRuns: () => false,
     closeTile: (id) => { tiles.get(id)?.stop(); tiles.delete(id); },
     widgetsOnBoard: () => [...board].map(([id, w]) => ({ id, widget: w.widget })),
     removeWidget: (id) => { board.get(id)?.running?.stop(); board.delete(id); },
@@ -47,8 +47,8 @@ test("a widget with code closes by the id plugin open takes, as by its instance"
 
 test("a tool closes by its plugin id, its tile closing", async () => {
   const w = openWindow();
-  w.tool("tile-9", "me/worktrees");
-  assert.deepEqual(await close(w.host, "tool:me/worktrees"), { closed: "tile-9", plugin: "me/worktrees", kind: "tool" });
+  w.tool("tile-9", "@me/worktrees");
+  assert.deepEqual(await close(w.host, "tool:@me/worktrees"), { closed: "tile-9", plugin: "@me/worktrees", kind: "tool" });
   assert.deepEqual([...w.tiles.keys()], []);
 });
 
@@ -68,4 +68,13 @@ test("a plugin id that names two copies is refused with their ids; one that name
   await assert.rejects(close(w.host, "widget:checklist"), (e: Error & { code?: string }) => e.code === "BAD_REQUEST" && /widget-a, widget-b/.test(e.message));
   await assert.rejects(close(w.host, "widget:@me/absent"), (e: Error & { code?: string }) => e.code === "NOT_FOUND");
   assert.deepEqual([...w.board.keys()], ["widget-a", "widget-b"]);
+});
+
+test("plugin open by the id alone: the widget that has it is added; where none does, it says so", async () => {
+  const w = openWindow();
+  const added: string[] = [];
+  const host: PluginVerbHost = { ...w.host, hasWidget: (id) => id === "@me/progress", addWidget: (id) => { added.push(id); return "widget-9"; } };
+  assert.deepEqual(await pluginVerb("plugin.open", { kind: "any", id: "@me/progress" }, host), { widget: "widget-9" });
+  assert.deepEqual(added, ["@me/progress"]);
+  await assert.rejects(pluginVerb("plugin.open", { kind: "any", id: "@me/nothing" }, host), { code: "NOT_FOUND" });
 });

@@ -1,5 +1,5 @@
 /** Settings navigation: fixed pages, grouped, plus one page per plugin of any kind
- *  (`plugin:agent:claude`, `plugin:view:canvas`, `plugin:widget:pet`, `plugin:tool:hivemind/web`).
+ *  (`plugin:agent:claude`, `plugin:view:canvas`, `plugin:widget:pet`, `plugin:tool:@hivemind/web`).
  *  `chunk` keeps cheap pages out of the lazy Settings bundle. */
 import { Bell, Blocks, Globe, Info, Key, Keyboard, Palette, UserRound, Network, MonitorSmartphone } from "./components/icons";
 import type { Icon } from "./components/icons";

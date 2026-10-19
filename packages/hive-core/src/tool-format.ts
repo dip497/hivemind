@@ -4,7 +4,7 @@
  * the app's access, so one installed is off until the person switches it on.
  *
  *   {
- *     "id": "acme/prs", "name": "Pull requests", "version": "1.0.0", "apiVersion": 1,
+ *     "id": "@acme/prs", "name": "Pull requests", "version": "1.0.0", "apiVersion": 1,
  *     "description": "…", "entry": "index.js", "permissions": ["workspace:spawn"], "settings": [],
  *     "tools": [{ "key": "prs", "label": "Pull requests", "description": "…",
  *                 "tileKind": "acme-prs", "size": { "width": 1100, "height": 760 },
@@ -28,12 +28,14 @@ import { isToolId, type ToolPluginContribution } from "./tool-registry.js";
 export const TOOL_API_VERSION = 1;
 
 /** Tool plugin ids that only the app's own plugins may have. */
-const RESERVED_OWNER = "hivemind";
+const RESERVED_OWNER = "@hivemind";
 const TILE_KIND = /^[a-z][a-z0-9-]{1,40}$/;
 
 export { isToolId };
-/** The folder a tool plugin lives in under the tools folder: `owner/name` as `owner--name`. */
-export const toolFolder = (id: string): string => id.replace("/", "--");
+/** The folder a tool plugin lives in under the tools folder: `@owner/name` as `owner--name`. */
+export const toolFolder = (id: string): string => id.slice(1).replace("/", "--");
+/** The id of the tool plugin in folder `owner--name`. */
+export const toolOfFolder = (folder: string): string => `@${folder.replace("--", "/")}`;
 
 /** What one tool of a package opens as. */
 export interface ToolTile {
@@ -93,7 +95,7 @@ const text = (v: unknown, max: number): string | undefined => (typeof v === "str
 export function parseToolManifest(raw: unknown, dir: string, folderId: string | null, source: "app" | "you" = "you"): ToolPackage {
   if (!isObj(raw)) throw new Error("hivemind-tool.json is not an object");
   const id = typeof raw.id === "string" ? raw.id : "";
-  if (!isToolId(id)) throw new Error(`"${id}" is not a tool plugin id: it is owner/name, like acme/prs`);
+  if (!isToolId(id)) throw new Error(`"${id}" is not a tool plugin id: it is @owner/name, like @acme/prs`);
   if (id.startsWith(`${RESERVED_OWNER}/`) !== (source === "app")) throw new Error(source === "app" ? `a plugin that comes with the app is ${RESERVED_OWNER}/<name>` : `${RESERVED_OWNER}/ is kept for the plugins that come with the app`);
   if (folderId !== null && folderId !== id) throw new Error(`its hivemind-tool.json says it is ${id}, not ${folderId}`);
   const entry = typeof raw.entry === "string" ? raw.entry : "index.js";

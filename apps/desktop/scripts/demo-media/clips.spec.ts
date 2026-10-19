@@ -39,7 +39,7 @@ const FLAKY = /^hive ctl plugin call dip497\/flaky-tests flaky( --json)?$/;
 // Jobs a person would give, each about its own folder.
 const JOB = {
   ci: "Run ruff check fastapi, then report the result on the CI light: hive ctl plugin call @dip497/ci-light set with state passed or failed, name ruff, branch main and a short detail line",
-  triage: "Ask the flaky-tests tool for the last runs with hive ctl plugin call dip497/flaky-tests flaky, then say in two lines which tests to look at first",
+  triage: "Ask the flaky-tests tool for the last runs with hive ctl plugin call @dip497/flaky-tests flaky, then say in two lines which tests to look at first",
   routing: "Read fastapi/routing.py and list three functions that have no docstring",
   docstrings: "Add a short docstring to generate_encoders_by_class_tuples in fastapi/encoders.py",
   review: "Review this branch: read git diff main, then packages/element/src/binding.ts and its tests, and list what could break",
@@ -109,7 +109,7 @@ test("tools", async () => {
     expect(r.status, r.stdout + r.stderr).toBe(0);
     expect(cli("plugins", "enable", `tool:dip497/${name}`, "--json").status).toBe(0);
   }
-  for (const [k, v] of [["command", tests], ["runs", "8"]]) cli("plugins", "set", "tool:dip497/flaky-tests", k!, v!);
+  for (const [k, v] of [["command", tests], ["runs", "8"]]) cli("plugins", "set", "tool:@dip497/flaky-tests", k!, v!);
   const frames = await s.openFrames(["ripgrep", "glob-order"]);
   const glob = await s.agent(frames["glob-order"], "glob-docs", "default", JOB.glob);
   const triage = await s.agent(frames.ripgrep, "test-triage", "default");
@@ -118,7 +118,7 @@ test("tools", async () => {
   await s.quiet();
 
   const rec = recorder(s.app, path.join(OUT, "tools"), OUT);
-  const opened = JSON.parse(cli("ctl", "plugin", "open", "tool:dip497/flaky-tests", "--frame", frames.ripgrep, "--json").stdout || "{}").tile as string;
+  const opened = JSON.parse(cli("ctl", "plugin", "open", "tool:@dip497/flaky-tests", "--frame", frames.ripgrep, "--json").stdout || "{}").tile as string;
   expect(opened, "flaky-tests opened in a tile").toBeTruthy();
   await s.emit("hivemind:focus-tile", opened);
   await desktop.waitForTimeout(2500);

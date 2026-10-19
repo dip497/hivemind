@@ -68,7 +68,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "tool.open": async (from, repo, tool) => {
         const t = (tool ?? {}) as { tool?: unknown; frame?: unknown; url?: unknown; state?: unknown };
         const r = text(repo, "repo");
-        if (typeof t.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: owner/name/tool");
+        if (typeof t.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: @owner/name/tool");
         return { tile: await (await o.control()).openTool(callerOf(from), r, t.tool, { frame: t.frame, url: t.url, state: t.state }) };
       },
       "link.connect": async (_from, src, dst) => { (await o.control()).connect(text(src, "src"), text(dst, "dst")); },

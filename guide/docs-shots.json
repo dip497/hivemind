@@ -82,7 +82,7 @@
           "ctl": [
             "plugin",
             "open",
-            "tool:hivemind/issues"
+            "tool:@hivemind/issues"
           ]
         },
         {
@@ -299,7 +299,7 @@
       "name": "tool-switch",
       "status": "todo",
       "alt": "A tool's page in Settings → Plugins with its switch off.",
-      "why": "Needs dip497/worktrees installed in the run's profile."
+      "why": "Needs @dip497/worktrees installed in the run's profile."
     },
     {
       "page": "tool-plugins",

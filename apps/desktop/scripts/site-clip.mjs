@@ -194,11 +194,11 @@ const STEP = [
     spin("Running the build", 2),
     run(`hive ctl plugin call @dip497/ci-light set '{"state":"passed","name":"CI","detail":"typecheck, build and unit tests"}'`, 0)],
   [spin("Reading the tools guide", 2), say("I'll add the Flaky tests tool and open it on the canvas."),
-    run("hive plugins install ~/plugins/flaky-tests && hive plugins enable tool:dip497/flaky-tests", 1),
-    run(`hive plugins set tool:dip497/flaky-tests command "bun test screens" && hive plugins set tool:dip497/flaky-tests runs 3`, 0),
-    run("hive ctl plugin open view:canvas && hive ctl open-tool dip497/flaky-tests/flaky", 0),
-    `for i in $(seq 30); do hive ctl plugin call dip497/flaky-tests run >/dev/null 2>&1 && break; sleep 0.5; done`,
-    run("hive ctl plugin call dip497/flaky-tests flaky", 3)],
+    run("hive plugins install ~/plugins/flaky-tests && hive plugins enable tool:@dip497/flaky-tests", 1),
+    run(`hive plugins set tool:@dip497/flaky-tests command "bun test screens" && hive plugins set tool:@dip497/flaky-tests runs 3`, 0),
+    run("hive ctl plugin open view:canvas && hive ctl open-tool @dip497/flaky-tests/flaky", 0),
+    `for i in $(seq 30); do hive ctl plugin call @dip497/flaky-tests run >/dev/null 2>&1 && break; sleep 0.5; done`,
+    run("hive ctl plugin call @dip497/flaky-tests flaky", 3)],
 ];
 STEP.forEach((s, i) => fs.writeFileSync(path.join(steps, `${i + 1}.sh`), `${s.join("\n")}\n`));
 // It starts on the views this workspace has.
@@ -292,7 +292,7 @@ try {
   // 3. a tool
   await mark("tool");
   await ask("Find the flaky tests.");
-  await until(() => cli("ctl", "plugin", "call", "dip497/flaky-tests", "flaky").status === 0, 60_000);
+  await until(() => cli("ctl", "plugin", "call", "@dip497/flaky-tests", "flaky").status === 0, 60_000);
   await wait(4000);
   await mark("end");
 } finally {

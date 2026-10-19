@@ -728,10 +728,13 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   /** Open a tool plugin's tile: the tool `pick` chooses among the registered ones. */
   type RegisteredTool = ReturnType<typeof createToolRegistry>["tools"][number];
+  /** The tools there are: the app's own and those added here; the app's own alone if those clash. */
+  async function toolRegistry() {
+    try { return createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
+    catch { return createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+  }
   async function openTool(at: { caller?: string; repo?: string; frame?: unknown; url?: unknown; state?: unknown }, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<string> {
-    let registry;
-    try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
-    catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+    const registry = await toolRegistry();
     const tool = pick(registry.tools.filter((t) => t.tileKind));
     if (!tool?.tileKind) throw new ApiError("UNSUPPORTED", `${badId}; \`hive plugins list --kind tool\` shows them`);
     const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
@@ -1075,17 +1078,20 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // Every plugin running in the window, with its state; and what the ready ones let an agent run.
     pluginList: async () => await deps.callRenderer("plugin.list", {}, RENDERER_TIMEOUT) as PluginList,
     pluginCommands: () => deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT),
-    // Get a plugin running, so its commands can be called: a tool's tile opened (`tool:owner/name`,
-    // its first tool, or `tool:owner/name/tool`), a widget added to the board, a view switched to.
+    // Get a plugin running, so its commands can be called: a tool's tile opened (`@owner/name`, its
+    // first tool, or `@owner/name/tool`), a widget added to the board, a view switched to. The id
+    // alone is enough; `<kind>:` names one where two kinds have it.
     async pluginOpen(caller, plugin, frame) {
-      const m = typeof plugin === "string" && plugin.length <= 200 ? /^(tool|widget|view):(.+)$/.exec(plugin) : null;
-      if (!m) throw new ApiError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
-      const [, kind, id] = m as unknown as [string, "tool" | "widget" | "view", string];
-      if (kind === "tool") {
-        const tile = await openTool({ caller, frame }, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`);
+      const m = typeof plugin === "string" && plugin && plugin.length <= 200 ? /^(?:(tool|widget|view):)?(.+)$/.exec(plugin) : null;
+      if (!m) throw new ApiError("BAD_REQUEST", "plugin must be its id, as `hive plugins list` shows it");
+      const [, named, id] = m as unknown as [string, "tool" | "widget" | "view" | undefined, string];
+      const pick = (tools: RegisteredTool[]) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id);
+      if (named === "tool" || (!named && pick((await toolRegistry()).tools.filter((t) => t.tileKind)))) {
+        const tile = await openTool({ caller, frame }, pick, `${id} has no tool to open`);
         // Answered once its tile's plugin can be called, as a widget's and a view's are.
         return { tile, ...(await deps.callRenderer("plugin.settle", { instance: tile }, RENDERER_TIMEOUT) as object) };
       }
+      const kind = named ?? "any";
       if (kind === "widget" && !deps.spawnAllowed(rootOf(caller))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
       return await deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT);
     },

@@ -193,7 +193,7 @@ async function frameIn(d: Drive, repo: string, given: string): Promise<string> {
 }
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
-  tool: { type: "positional", required: true, description: "tool id, as `hive plugins list` prints it (hivemind/web/browser), or its package id when the package has one tool (hivemind/web)" },
+  tool: { type: "positional", required: true, description: "tool id, as `hive plugins list` prints it (@hivemind/web/browser), or its package id when the package has one tool (@hivemind/web)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
   state: { type: "string", description: "the tile's first state, a JSON object: what the tool's useTileState(hm, key, …) reads under each key" },
@@ -609,7 +609,7 @@ const pluginCall = defineCommand({
 const pluginOpen = defineCommand({
   meta: { name: "open", description: "Get a plugin running so its commands can be called: open a tool's tile, add a widget to the board, switch to a view" },
   args: {
-    plugin: { type: "positional", required: true, description: "tool:owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
+    plugin: { type: "positional", required: true, description: "tool:@owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
     frame: { type: "string", description: "frame to open a tool's tile in (default: beside you)" },
     ...JSON_ARG,
   },
@@ -648,7 +648,7 @@ const pluginList = defineCommand({
 });
 
 const pluginClose = sub("close", "Close a plugin: close a tool's tile, take a widget off the board (one drawn without code too), leave a view for the canvas", {
-  instance: { type: "positional", required: true, description: "which one: its instance, as `hive ctl plugin list` names it, a widget's id on the board, or the plugin as `plugin open` takes it (widget:@owner/name, tool:owner/name, view:id) when one copy is open" },
+  instance: { type: "positional", required: true, description: "which one: its instance, as `hive ctl plugin list` names it, a widget's id on the board, or the plugin as `plugin open` takes it (widget:@owner/name, tool:@owner/name, view:id) when one copy is open" },
   plugin: { type: "string", description: "the plugin it must be (refused when another runs as that instance)" },
 }, (args) => onDrive((d) => d.call("plugin.close", [String(args.instance), ...(args.plugin ? [String(args.plugin)] : [])])));
 

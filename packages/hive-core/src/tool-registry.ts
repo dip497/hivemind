@@ -60,8 +60,8 @@ export interface ToolRegistry {
   };
 }
 
-/** A tool plugin's id: `owner/name`. */
-export const TOOL_ID_RE = /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/;
+/** A tool plugin's id: `@owner/name`, as every plugin's is. */
+export const TOOL_ID_RE = /^@[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/;
 export const isToolId = (id: string): boolean => TOOL_ID_RE.test(id);
 
 /** Call after package validation, when the installed catalog changes. Invalid

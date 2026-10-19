@@ -6,7 +6,7 @@
  *
  *   hive plugins new <tool|widget|view> <name> [--dir <folder>] [--owner <login>]   a starter that works, with PROMPT.md
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
- *                                                  (owner/name and @owner/name are HiveHub's: write a folder as ./x)
+ *                                                  (@owner/name is HiveHub's: write a folder as ./x)
  *   hive plugins remove <plugin>                   one you added; what shows it stays, saying it is missing
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
@@ -200,7 +200,7 @@ const realFolder = (f: string): string => {
 const workspacesCmd = defineCommand({
   meta: { name: "workspaces", description: "The workspaces a tool plugin's service may drive: set them, clear them with --none, or show them" },
   args: {
-    plugin: { type: "positional", required: true, description: "tool:<owner>/<name>" },
+    plugin: { type: "positional", required: true, description: "@owner/name of a tool" },
     none: { type: "boolean", description: "it may drive none: it stops" },
     json: { type: "boolean" },
   },
@@ -235,8 +235,8 @@ async function rescanApp(k: AuthoredKind): Promise<boolean> {
 const appNote = (rescanned: boolean) => (rescanned ? "app updated" : "app not running — it loads it when it starts");
 const steps = (lines: string[]) => lines.map((l) => `  ${l}`).join("\n");
 const KIND_NAMES = KINDS.map((k) => k.kind).join(", ");
-/** An id HiveHub lists: `owner/name` or `@owner/name`. */
-const HUB_ID = /^@?[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
+/** An id HiveHub lists: `@owner/name`. */
+const HUB_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 
 const newCmd = defineCommand({
   meta: { name: "new", description: "Start a plugin that works as written, with a PROMPT.md to hand your coding agent" },

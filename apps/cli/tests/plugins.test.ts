@@ -24,14 +24,14 @@ describe("hive plugins", () => {
     try {
       const list = (run("list").json as { data: { key: string; enabled: boolean }[] }).data;
       const keys = list.map((p) => p.key);
-      for (const k of ["agent:claude", "view:board", "widget:note", "tool:hivemind/web"]) expect(keys).toContain(k);
+      for (const k of ["agent:claude", "view:board", "widget:note", "tool:@hivemind/web"]) expect(keys).toContain(k);
       // A tool that is not built in is off until switched on; everything else is on.
-      expect(list.find((p) => p.key === "tool:hivemind/web")?.enabled).toBe(false);
+      expect(list.find((p) => p.key === "tool:@hivemind/web")?.enabled).toBe(false);
       expect(list.find((p) => p.key === "agent:claude")?.enabled).toBe(true);
 
       expect(run("disable", "agent:claude").json).toMatchObject({ ok: true, data: { enabled: false, reloaded: false } });
-      expect(run("enable", "tool:hivemind/web").json).toMatchObject({ ok: true });
-      expect(stored()).toEqual({ "agent:claude": { enabled: false }, "tool:hivemind/web": { enabled: true } });
+      expect(run("enable", "tool:@hivemind/web").json).toMatchObject({ ok: true });
+      expect(stored()).toEqual({ "agent:claude": { enabled: false }, "tool:@hivemind/web": { enabled: true } });
 
       expect(run("set", "view:board", "columns", "all").json).toMatchObject({ ok: true, data: { value: "all" } });
       expect(run("set", "view:board", "max", "500").json).toMatchObject({ ok: true, data: { value: 50 } }); // clamped to its range

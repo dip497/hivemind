@@ -100,8 +100,8 @@ test("each kind is one heading with its count, and every row has the same parts,
   // Installed, its program missing: not "Not installed" under Installed.
   expect(badge("agent:codex")).toEqual(["badge:Needs setup"]);
   expect(badge("view:canvas")).toEqual(["badge:In use"]);
-  expect(badge("tool:hivemind/web")).toEqual(["badge:Off"]);
-  expect(badge("tool:hivemind/code")).toEqual([]);
+  expect(badge("tool:@hivemind/web")).toEqual(["badge:Off"]);
+  expect(badge("tool:@hivemind/code")).toEqual([]);
   await expect(body().locator("[data-plugin-row]").filter({ hasText: "worker" })).toHaveCount(0);
 
   await show("HiveHub");
