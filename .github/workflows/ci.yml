@@ -25,7 +25,7 @@ jobs:
   # The check the main branch requires: desktop, packages and the Python SDK, which run side by
   # side, all passed.
   build-and-test:
-    needs: [desktop, packages, sdk-python]
+    needs: [desktop, packages, sdk-python, site]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -34,9 +34,37 @@ jobs:
           DESKTOP: ${{ needs.desktop.result }}
           PACKAGES: ${{ needs.packages.result }}
           SDK_PYTHON: ${{ needs.sdk-python.result }}
+          SITE: ${{ needs.site.result }}
         run: |
-          echo "desktop: $DESKTOP, packages: $PACKAGES, sdk-python: $SDK_PYTHON"
-          [ "$DESKTOP" = success ] && [ "$PACKAGES" = success ] && [ "$SDK_PYTHON" = success ]
+          echo "desktop: $DESKTOP, packages: $PACKAGES, sdk-python: $SDK_PYTHON, site: $SITE"
+          [ "$DESKTOP" = success ] && [ "$PACKAGES" = success ] && [ "$SDK_PYTHON" = success ] && [ "$SITE" = success ]
+
+  # The website and its guide, built as the deploy builds them: a guide page that does not compile,
+  # or a link or picture that leads nowhere, fails here.
+  site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install
+        run: npm ci --no-audit --no-fund && npm ci --no-audit --no-fund --prefix docs
+
+      - name: Build the site and its guide
+        run: npm run build
+
+      - name: Every internal link leads somewhere
+        run: node scripts/check-links.mjs
+
+      - name: Server tests
+        run: npm test
 
   # The Python SDK, on the oldest and newest Python it supports: conformance/drive.json, and a real
   # `hive host` started from source (hence bun and the repo's packages).
@@ -169,7 +197,7 @@ jobs:
         run: bash scripts/install-macos-test.sh
 
       - name: The site's vendored copies
-        # The site's container builds from site/ alone and serves the committed installers and
+        # The site serves the committed installers and
         # design tokens, so they have to match the repository's.
         run: node site/scripts/sync-install.mjs --check && node site/scripts/sync-tokens.mjs --check && node site/scripts/sync-agent-icons.mjs --check
 

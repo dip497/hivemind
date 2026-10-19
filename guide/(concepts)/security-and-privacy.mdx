@@ -1,0 +1,72 @@
+---
+title: "Security and privacy"
+description: "What each kind of plugin can touch, what leaves your computer, what HiveHub learns, and how tokens, roles and the relay keep things private."
+---
+
+Hivemind runs on your own computers. This page says what can touch your files, and what leaves your machine.
+
+<AgentPrompt description="Paste this into your coding agent to review what can reach your files and your network, without changing anything." page="security-and-privacy">{`Review my Hivemind setup for what can touch my files and what leaves this computer, using the "Security and privacy" page. Run only read-only commands: \`hive plugins list --json\`, \`hive grant list\`, \`hive network show\` and \`hive config get network\`.
+
+Tell me: which tool plugins are switched on (they run with my access), which API tokens exist with their roles and expiry, which network and servers this computer uses, and whether the update check is on. Suggest what to switch off or revoke, but do not change anything.`}</AgentPrompt>
+
+## What each plugin can touch
+
+A <Tooltip tip="Something you add to Hivemind: an agent, a view, a widget or a tool." cta="Glossary" href="/glossary#plugin">plugin</Tooltip> is one of four kinds. Each can reach different things.
+
+| Kind | Runs as | Files and network |
+|---|---|---|
+| Agent | The agent's own program, in a terminal, as you | Everything you can reach. It is the coding agent you chose to run. |
+| View | A web page in a sandbox | No files, no network, no Node. It sees the workspace only through the permissions it asks for. |
+| Widget | Code in a worker | No files, no network. It sees the workspace only through the permissions it asks for. |
+| Tool | Code inside the app, with your access | Your files, programs and logins. So a tool you add starts switched off. |
+
+A view that floods the app or runs away with the CPU is switched off for the session. If a tool breaks the app, start it with `HIVEMIND_SAFE_MODE=1 hivemind`: then no tool plugin loads.
+
+## What you install from HiveHub
+
+<Tooltip tip="The catalogue Hivemind installs agents and plugins from." cta="Glossary" href="/glossary#hivehub">HiveHub</Tooltip> lists every file of a plugin with its SHA-256 hash and the commit it came from. Every file is checked against that hash before it installs. A file that changed after listing fails the install.
+
+- `hive agents install`, from HiveHub or from a repository, prints what the agent runs first. It installs only when you run it again with `--yes`.
+- When you install from HiveHub, the app sends one request to count the install. It carries no id, no machine name and no headers of its own. HiveHub counts the same plugin from one address once a day.
+- A plugin installed from a folder is never counted.
+
+## What leaves your computer
+
+| What | Where to | Turn it off |
+|---|---|---|
+| The update check | GitHub, for new versions of the app | **Settings → About and updates → Check for new versions** |
+| The plugin list | HiveHub, for new versions of the agents it adds for you | The same switch. You still reach HiveHub when you browse plugins yourself. |
+| Traffic to your other devices and guests | Directly, or through the relay of your own [network server](/self-hosting) | Stay on *Local network* in **Settings → Servers** |
+
+With the update check off, the app reaches nothing your network does not name, until you browse plugins yourself. Your agents' own programs talk to their providers as they always do.
+
+## The relay cannot read your traffic
+
+Traffic between your devices is encrypted end to end with each device's own key. The relay passes it on but cannot read it. Push notices to your phone are encrypted to the phone. See [How devices connect](/how-devices-connect).
+
+## People and roles
+
+A guest gets a [role](/multiplayer#roles): `view`, `edit`, `terminals` or `agents`. `agents` means they can run commands on your computer. A person gets it only while they are in the workspace, after a warning. An invite link gives at most `terminals`.
+
+Before you let anyone in, both screens show three words. If they differ, someone sits between you: press **Deny**.
+
+## API tokens
+
+- A <Tooltip tip="A secret a program of yours uses to drive a workspace, with one role." cta="Glossary" href="/glossary#token">token</Tooltip> is shown once. Hivemind keeps only its SHA-256 hash.
+- Programs reach the app through a local connection only your user can open: a socket file with mode 0600, or a named pipe on Windows.
+- Each token has one role. A call its role does not allow is refused with `FORBIDDEN` and never runs.
+- `hive grant revoke <id>` ends a token at once.
+
+More in [Tokens and roles](/api-tokens).
+
+## The browser tab
+
+[Open the app in a browser tab](/browser-tab) listens on this computer only. Its link carries a key that changes each time the app starts. Anyone with the link can use your terminals.
+
+## Related
+
+- [How devices connect](/how-devices-connect)
+- [Plugins](/plugins)
+- [Share a workspace](/multiplayer)
+
+<LastValidated />

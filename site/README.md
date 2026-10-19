@@ -1,8 +1,13 @@
-# Website and documentation
+# Website and guide
 
-Astro + Starlight, built as static HTML. Guides live in `src/content/docs/guide/`.
-The build also exports `/llms.txt`, `/llms-full.txt`, and `/markdown/*.md` from the
-same content. Historical architecture notes remain in `design/`.
+The website (hivemind.griiken.com) is Astro, built as static HTML. Its guide, at `/guide`, is a
+separate app in `docs/`: [Fumadocs](https://www.fumadocs.dev) on Next.js, exported as static
+files. The guide's pages live outside `site/`, in `guide/` at the top of the repository; see
+`guide/AGENTS.md` for how to write them.
+
+`npm run build` builds the site into `dist/`, then the guide into `docs/out/`, and copies that to
+`dist/guide`. The guide also serves `/guide/llms.txt`, `/guide/llms-full.txt` and every page as
+Markdown (`/guide/<page>.md`).
 
 ## Local development
 
@@ -10,32 +15,14 @@ Requires Node 22.19 or newer.
 
 ```sh
 cd site
-npm ci
-npm run dev
-npm run build
+npm ci && npm ci --prefix docs
+npm run dev                         # the site, without the guide
+npm run guide:dev                   # the guide alone, at http://localhost:3000/guide/
+npm run build                       # both, into dist/
+node scripts/check-links.mjs        # every internal link in dist/ leads somewhere
+PORT=8080 node server.mjs           # serve dist/ as Cloud Run does
 ```
 
-The default base path is `/hivemind`, for GitHub Pages. For hosting at a domain root:
-
-```sh
-SITE_BASE=/ SITE_URL=https://example.com npm run build
-```
-
-GitHub Actions builds `site/dist` on changes merged to `main`.
-Do not deploy this project through ChatGPT Sites.
-
-## Writing
-
-Keep titles short. Start with the action or behavior. Include commands people can
-run, prerequisites, and actual limitations. Avoid taglines and repeated introductions.
-Mark unreleased features as development previews. Verify command examples against
-`apps/cli/src/commands/` and SDK examples against `packages/hive-view-sdk/src/`.
-
-Draw a flow, a connection or a layout as a diagram instead of describing it: a ```` ```mermaid ````
-block (optionally ```` ```mermaid title="Caption" ````) is drawn as an inline SVG at build time by
-`src/lib/mermaid.mjs`, in the site's colours, with no script on the page. Flowcharts, sequence,
-state, class and ER diagrams are supported.
-
-Use relative links to sibling guides (`../agents/`). The build resolves these to
-absolute URLs in the Markdown exports. Do not copy documentation into a second
-agent-only version.
+`.github/workflows/site.yml` builds `dist/` and deploys it to Cloud Run when a change under
+`site/` or `guide/` reaches `main`; the container only carries `dist/` and `server.mjs`.
+`redirects.mjs` keeps old addresses working. Do not deploy this project through ChatGPT Sites.

@@ -1,0 +1,70 @@
+---
+title: "Environment variables"
+description: "Every environment variable you can set to change how Hivemind, the hive command and the installer behave, and the ones Hivemind sets for you."
+---
+
+This page lists the environment variables Hivemind reads, and the ones it sets in your tiles and
+programs.
+
+<AgentPrompt description="Paste this into your coding agent to find out which Hivemind variables are set and what they change." page="environment-variables">{`
+Using the Hivemind environment variables reference, tell me which of them are set here and what each changes. Do not change anything.
+
+1. Run \`env | grep -E '^(HIVE|HIVEMIND)_'\`. Never print the value of \`HIVE_DRIVE_TOKEN\`: say only whether it is set.
+2. For each variable, say what it does from the reference, and whether it was set by me or by Hivemind (inside a tile, Hivemind sets \`HIVEMIND_TILE\`).
+3. If I asked to start the app a certain way (for example with no added tools), give me the exact command, such as \`HIVEMIND_SAFE_MODE=1 hivemind\`.
+
+At the end, list what you found in a table.
+`}</AgentPrompt>
+
+## The app and the hive command
+
+| Variable | What it does |
+|---|---|
+| `HIVE_SETTINGS` | use this settings file instead of `~/.config/hivemind/settings.json` |
+| `HIVEMIND_APP_DATA` | use this folder for the app's data: its token and the sockets it serves |
+| `HIVEMIND_SAFE_MODE=1` | start with no added tool plugins loaded, after one broke the app |
+| `HIVEMIND_SHELL_ENV=0` | tiles get the app's environment as it is, without reading your login shell's |
+| `HIVEMIND_HIVE_NET` | the `hive-net` program to use, when it is not where the installer put it |
+| `HIVE_BIN` | the `hive` program to copy to a [machine](/machines), when it is not the one beside the app |
+| `HIVEMIND_PLUGIN_INDEX` | read the plugin catalogue from this address instead of HiveHub |
+| `HIVE_WHO` | the name the activity log gives your `hive` commands; else your git name or user name |
+
+## The installer
+
+Set these before you run `install.sh` or `install.ps1`.
+
+| Variable | What it does |
+|---|---|
+| `HIVEMIND_VERSION` | install this exact release, such as `v2026.10.3` |
+| `HIVEMIND_CHANNEL` | `stable` or `nightly` |
+| `HIVEMIND_APP_DIR` | where the app goes; default `~/.hivemind-app`, or `%LOCALAPPDATA%\hivemind` on Windows |
+| `HIVEMIND_BIN_DIR` | where the `hive` and `hivemind` links go; default `~/.local/bin` (Linux and macOS) |
+| `HIVEMIND_REPO` | the GitHub repository to download from; default `dip497/hivemind` |
+
+## Programs that drive a workspace
+
+A program of yours reads these to reach a workspace. See [Connect and call](/api-connect).
+
+| Variable | What it holds |
+|---|---|
+| `HIVE_DRIVE_TOKEN` | the program's token. Keep it out of files git tracks. |
+| `HIVE_DRIVE_SOCK` | where to connect; else the app's own |
+| `HIVE_WORKSPACE` | which workspace to drive, when the token reaches several |
+
+A tool's service gets `HIVE_DRIVE_SOCK`, `HIVE_DRIVE_TOKEN` and `HIVE_WORKSPACES` (the folders it
+may drive, separated as in `PATH`). See [Write a tool](/tool-plugins#a-service-that-keeps-running).
+
+## Set by Hivemind in an agent's tile
+
+Hivemind sets these for an agent it can drive. Read them; do not set them yourself.
+
+| Variable | What it holds |
+|---|---|
+| `HIVEMIND_TILE` | the id of the tile an agent runs in. If it is set, the agent can drive the canvas with `hive ctl`. |
+| `HIVE_AGENT_ID` | the agent's id, which signs what it writes in the activity log |
+| `HIVE_DRIVE_SOCK` | where `hive ctl` connects |
+
+The variables for your own network server's Docker setup are on
+[Set up your own network server](/self-hosting).
+
+<LastValidated />

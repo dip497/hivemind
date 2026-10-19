@@ -12,7 +12,7 @@ const description =
 const repo = 'https://github.com/dip497/hivemind';
 const changelog = `${repo}/blob/main/CHANGELOG.md#2026103--2026-10-18`;
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
-const agentPrompt = 'Install Hivemind on this computer with `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`, then open this folder in it with `hivemind .`. Its docs for agents are at https://hivemind.griiken.com/llms.txt.';
+const agentPrompt = 'Install Hivemind on this computer with `bash <(curl -fsSL https://hivemind.griiken.com/install.sh)`, then open this folder in it with `hivemind .`. Its docs for agents are at https://hivemind.griiken.com/guide/llms.txt.';
 const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 // Every file link goes through /download/<key>, which the server sends on to the current release.
 const dl = (key: string) => `${base}/download/${key}`;
@@ -70,7 +70,7 @@ const code: Record<string, [string, string][]> = {
   <meta name="description" content={description} />
   <meta name="theme-color" content="#111316" />
   <link rel="icon" href={link('favicon.svg')} />
-  <link rel="alternate" type="text/markdown" href={link('llms.txt')} />
+  <link rel="alternate" type="text/plain" href={link('guide/llms.txt')} />
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
   <meta property="og:type" content="website" />
@@ -341,7 +341,7 @@ const code: Record<string, [string, string][]> = {
         <a href={link('guide/')}>Docs</a>
         <a href={link('guide/cli/')}>CLI reference</a>
         <a href={HIVEHUB}>HiveHub</a>
-        <a href={link('llms.txt')}>For agents</a>
+        <a href={link('guide/docs-for-agents/')}>For agents</a>
         <a href={repo}>GitHub</a>
       </nav>
     </div>

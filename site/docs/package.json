@@ -1,0 +1,40 @@
+{
+  "name": "hivemind-guide",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/copy-assets.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/copy-assets.mjs",
+    "build": "next build && node scripts/markdown-files.mjs",
+    "types:check": "fumadocs-mdx && next typegen && tsc --noEmit",
+    "postinstall": "fumadocs-mdx"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "fumadocs-core": "^16.17.5",
+    "fumadocs-mdx": "^15.4.7",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@^16.17.5",
+    "lucide-react": "^1.59.0",
+    "mermaid": "^12.2.0",
+    "next": "^16.3.8",
+    "next-themes": "^0.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "unist-util-visit": "^5.1.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/mdast": "^4.0.4",
+    "@types/mdx": "^2.0.14",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "postcss": "^8.5.31",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
+  }
+}
