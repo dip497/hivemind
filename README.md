@@ -81,6 +81,6 @@ irm https://hivemind.griiken.com/install.ps1 | iex
 ## Tech stack
 
 **Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and plugins your agents write
-are web code anyway. *Maaf karo mujhe.*
+are web code anyway. Send hate mail to `/dev/null`.
 
 [Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)
