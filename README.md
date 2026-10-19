@@ -4,7 +4,7 @@
 
 <h1 align="center">Hivemind</h1>
 
-<p align="center"><b>Run your coding agents side by side, and let them build the workspace they work in.</b></p>
+<p align="center"><b>Your agents build the workspace they work in.</b></p>
 
 <p align="center">
   <a href="https://hivemind.griiken.com/">Website</a> ·
@@ -14,53 +14,55 @@
 </p>
 
 <p align="center">
-  <a href="https://hivemind.griiken.com/"><img alt="An agent's terminal asking to edit a file, and above it a widget an agent wrote and keeps up to date" src="site/public/shots/hero/poster.webp" /></a>
+  <a href="https://hivemind.griiken.com/"><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></a>
 </p>
 
-Hivemind is a desktop app for every coding agent that runs in a terminal: Claude Code, Codex, Pi,
-and the one that ships tomorrow. Each agent gets a real terminal on one board, and you see at a glance which one
-is working, which is done and which is waiting on you. MIT licensed, on your own computer, with no
-account.
+<p align="center"><sub>One prompt: <i>"Show my workspace as islands."</i> The agent installed the Island view and switched the app to it.</sub></p>
+
+Every coding agent in a real terminal, on one board: Claude Code, Codex, Pi, and the one that ships
+tomorrow. Then the fun part. Ask one for a view, a widget or a tool, and it writes it, installs it and
+keeps it live. Nobody else has your workspace, because your agents made it for you.
+
+Open source (MIT). Runs on your computer. No account.
 
 ## What you can do
 
-- **Make the workspace your own.** The canvas is only the view it starts with. Views, tools and
-  widgets are plugins, and your agents write them: `hive widgets new` makes a starter, the agent
-  fills it in, installs it and keeps it up to date while it works.
-- **Drive it from agents and code.** `hive ctl` is on every agent's PATH, so an agent can open
-  tiles, start other agents, read their answers and approve their prompts. The same workspace has an
-  API with TypeScript and Python SDKs.
+- **Make the workspace yours.** The canvas is just the view it starts with. Views, widgets and tools
+  are plugins, and your agents write them: `hive widgets new` makes a starter, the agent fills it in
+  and keeps it up to date while it works.
+- **Let agents drive it.** `hive ctl` is on every agent's PATH. An agent can open tiles, start other
+  agents, read their answers and run a whole fan-out review. The same workspace has an API with
+  TypeScript and Python SDKs, so a script can do it too.
 - **Work on other machines.** Open a folder on any machine you reach over ssh; its agents run there.
-- **Answer from your phone, or bring someone in.** A phone page through your own `hive-net`
-  server, and invite links that let another person join your workspace.
-- **Every coding agent, in a real terminal.** Each tile shows whether its agent is working or
-  needs you, and you answer its prompt in place.
+- **Take it with you.** A phone page through your own `hive-net` server, and invite links that bring
+  someone into your workspace.
 
 <table>
   <tr>
-    <td><img alt="A Waiting on you widget listing two agents that need you, above the canvas" src="site/public/shots/showcase/waiting-on-you-board.webp" /></td>
+    <td><img alt="An agent asked for a CI light puts the widget on the board and sets it to running" src="site/public/shots/hero/step-widget.webp" /></td>
     <td><img alt="The Flaky tests tool: five tests run eight times, two of them flaky" src="site/public/shots/showcase/flaky-tests-board.webp" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>A widget: who is waiting on you</sub></td>
+    <td align="center"><sub>"Put a CI light where I can see it."</sub></td>
     <td align="center"><sub>A tool: which tests are flaky</sub></td>
   </tr>
   <tr>
-    <td><img alt="The Constellation view: every agent as a star, the waiting ones in orange" src="site/public/shots/showcase/constellation-board.webp" /></td>
-    <td align="center"><img alt="The phone page asking to allow a command" src="site/public/shots/phone-permission.webp" width="220" /></td>
+    <td><img alt="The Constellation view: every agent as a star" src="site/public/shots/showcase/constellation-board.webp" /></td>
+    <td align="center"><img alt="The phone page listing projects and their agents" src="site/public/shots/phone-home.webp" width="220" /></td>
   </tr>
   <tr>
     <td align="center"><sub>A view: every agent as a star</sub></td>
-    <td align="center"><sub>Allow or deny from your phone</sub></td>
+    <td align="center"><sub>Your agents, on your phone</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <a href="https://hivehub.griiken.workers.dev/p/@dip497/dog"><img alt="Biscuit, a pixel-art dog at the bottom of the window, barks when an agent asks to run a command, then walks to the right edge" src="site/public/shots/showcase/dog.webp" width="720" /></a><br />
-  <sub>A widget that moves: Biscuit barks when an agent waits on you</sub>
+  <a href="https://hivehub.griiken.workers.dev/p/@dip497/dog"><img alt="Biscuit, a pixel-art dog, walking along the bottom of the window" src="site/public/shots/showcase/dog.webp" width="720" /></a><br />
+  <sub>Yes, there is a dog. His name is Biscuit. He is a widget.</sub>
 </p>
 
-More widgets, tools and views to try are on [HiveHub](https://hivehub.griiken.workers.dev/).
+More views, widgets and tools on [HiveHub](https://hivehub.griiken.workers.dev/), or ask your agent to
+make one.
 
 ## Install
 
@@ -75,5 +77,33 @@ Windows x64, in PowerShell:
 ```powershell
 irm https://hivemind.griiken.com/install.ps1 | iex
 ```
+
+## Tech stack
+
+**Please don't kill me for using Electron.** 🙏
+
+I'm a backend person. Frontend was never my home, and I wanted to ship this, not spend a year
+learning three native UI kits. Electron gives this app the things it can't live without:
+
+- **Real terminals.** xterm.js on node-pty, the same pair behind the terminal in most editors.
+- **Plugins your agents can write.** A view, widget or tool is plain web code, and web code is what
+  agents write best.
+- **One app on Linux, macOS and Windows** from one codebase.
+
+So, *maaf karo mujhe*. Here is everything inside:
+
+| Part | Built with |
+|---|---|
+| Desktop app | Electron, React, Tailwind, Radix UI, zustand, React Flow |
+| Terminals | xterm.js (WebGL) on node-pty |
+| `hive` CLI and remote host | TypeScript, compiled to one binary with Bun |
+| Network server (`hive-net`) | Rust |
+| SDKs | TypeScript and Python |
+| Views | Any web code; the Island view is Three.js |
+| Website and guide | Astro and Fumadocs |
+
+The heavy work stays out of the window: agents run in a background process, `hive-net` is Rust, and
+only the terminals on screen get bytes. If it still feels slow on your machine, open an issue and I
+owe you one.
 
 [Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)
