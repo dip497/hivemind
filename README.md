@@ -14,20 +14,25 @@
 </p>
 
 > [!NOTE]
-> **Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and plugins your agents write
-> are web code anyway. Send hate mail to `/dev/null`.
+> **Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and the plugins your agents
+> write are web code anyway. Hate mail goes to `/dev/null`.
 
 <p align="center">
   <a href="https://hivemind.griiken.com/"><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></a>
 </p>
 
-<p align="center"><sub>One prompt: <i>"Show my workspace as islands."</i></sub></p>
+<p align="center"><sub>I typed <i>"show my workspace as islands."</i> Now my projects are islands.</sub></p>
 
-Every coding agent on one board. Ask one for a view, a widget or a tool, and it builds it for you.
+Five agents in five terminal tabs? Cute.
 
-- **Your own workspace.** Views, widgets and tools are plugins your agents write.
-- **Agents drive it.** `hive ctl` and an API let agents and scripts run the whole board.
-- **Anywhere.** Agents on other machines over ssh, and on your phone.
+Hivemind puts every coding agent on one board, each in a real terminal: Claude Code, Codex, Pi, and
+whatever ships next week. Then it gets weird, in a good way. Ask an agent for a view, a widget or a
+tool, and it builds one and plugs it in while you watch.
+
+- **Bored of the canvas?** Ask for islands. Or stars. Or a dog. (There is a dog.)
+- **Agents boss agents around.** With `hive ctl` an agent starts, reads and steers other agents.
+  Your scripts can too, through the API.
+- **Leave your desk.** Agents run on other machines over ssh, and you check on them from your phone.
 
 <table>
   <tr>
@@ -35,25 +40,25 @@ Every coding agent on one board. Ask one for a view, a widget or a tool, and it 
     <td><img alt="The Flaky tests tool: five tests run eight times, two of them flaky" src="site/public/shots/showcase/flaky-tests-board.webp" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>"Put a CI light where I can see it."</sub></td>
-    <td align="center"><sub>A tool: which tests are flaky</sub></td>
+    <td align="center"><sub>"Put a CI light where I can see it." Done.</sub></td>
+    <td align="center"><sub>Which tests are flaky? Now you know.</sub></td>
   </tr>
   <tr>
     <td><img alt="The Constellation view: every agent as a star" src="site/public/shots/showcase/constellation-board.webp" /></td>
     <td align="center"><img alt="The phone page listing projects and their agents" src="site/public/shots/phone-home.webp" width="220" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>A view: every agent as a star</sub></td>
-    <td align="center"><sub>Your agents, on your phone</sub></td>
+    <td align="center"><sub>Every agent as a star. Because why not.</sub></td>
+    <td align="center"><sub>Your agents, in your pocket.</sub></td>
   </tr>
 </table>
 
 <p align="center">
   <a href="https://hivehub.griiken.workers.dev/p/@dip497/dog"><img alt="Biscuit, a pixel-art dog, walking along the bottom of the window" src="site/public/shots/showcase/dog.webp" width="720" /></a><br />
-  <sub>Yes, there is a dog. His name is Biscuit. He is a widget.</sub>
+  <sub>This is Biscuit. He is a widget. He is a good boy.</sub>
 </p>
 
-More on [HiveHub](https://hivehub.griiken.workers.dev/).
+More weird stuff on [HiveHub](https://hivehub.griiken.workers.dev/), or ask your agent to make some.
 
 ## Install
 
@@ -70,3 +75,7 @@ irm https://hivemind.griiken.com/install.ps1 | iex
 ```
 
 [Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)
+
+---
+
+<sub>Everything above was written by AI. This line wasn't. — dip497</sub>
