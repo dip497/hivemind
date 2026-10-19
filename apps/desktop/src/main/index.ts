@@ -1367,6 +1367,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     links: () => control.links(),
     start: (repo, start) => control.start(repo, start),
     close: (bare) => control.close(bare),
+    sleep: async (repo, tile) => (await control.api()).sleep(repo, tile, false),
+    wake: async (repo, tile) => (await control.api()).wake(repo, tile),
     machines: knownMachines,
     linkState,
     intents: hostIntents(),

@@ -47,6 +47,10 @@ export interface LinkCommands {
   /** Rename a tile; "" goes back to its own name. */
   renameTile: (id: string, name: string) => void;
   openFolder?: (frameId: string) => void;
+  /** Wake the agent asleep in a tile, and put one to sleep (asking the person first when it is busy).
+   *  A host that wires both says the feature `sleep`, and marks the tiles asleep in `structure`. */
+  wakeAgent?: (tileId: string) => void;
+  sleepAgent?: (tileId: string) => void;
   /** A tile's status: the last known one now, then each change, until the returned function is called. */
   subscribeTileStatus: (tileId: string, cb: (status: TileStatusKind) => void) => () => void;
 }
@@ -181,6 +185,8 @@ export class CommunityLink {
   private promptDeclines = 0;
   /** Every tile a `structure` named to the view, lately: a rect for one closed since is a race. */
   private announced = new Set<string>();
+  /** The tiles the last `structure` said are asleep. */
+  private asleep = new Set<string>();
   private readonly scope: HostScope;
   private participantsUnsub: (() => void) | null = null;
   private widgetsUnsub: (() => void) | null = null;
@@ -195,6 +201,7 @@ export class CommunityLink {
     this.services = deps.services ?? {};
     this.schedule = deps.schedule ?? ((fn, ms) => setTimeout(fn, ms));
     this.features = linkFeatures(this.services, deps.onSurfaceRects !== undefined);
+    if (deps.commands.wakeAgent && deps.commands.sleepAgent) this.features.push("sleep");
     this.scope = {
       capabilities: deps.capabilities, features: this.features,
       hasTile: (id) => deps.hasTile(id), hasFrame: (id) => deps.hasFrame(id), announced: (id) => this.announced.has(id),
@@ -234,6 +241,7 @@ export class CommunityLink {
     if (this.stats.disabled || !this.port) return;
     try { this.port.postMessage(msg); } catch { /* port gone */ }
     if (msg.type !== "structure") return;
+    this.asleep = new Set(msg.tiles.flatMap((t) => (t.asleep ? [t.id] : [])));
     for (const t of msg.tiles) { this.announced.delete(t.id); this.announced.add(t.id); }
     for (const id of this.announced) { if (this.announced.size <= ANNOUNCED_KEPT) break; this.announced.delete(id); }
     // What others select is kept to the tiles the view knows, which just changed.
@@ -521,6 +529,8 @@ export class CommunityLink {
       if (!granted("workspace:prompt")) return;
       const { tileId, text } = m.args[0];
       if (!this.deps.hasTile(tileId)) { this.fail(m.requestId, "BAD_REQUEST", `unknown tile ${tileId}`); return; }
+      // As `hive ctl send` refuses it: nothing runs there to read it until it is woken.
+      if (this.asleep.has(tileId)) { this.fail(m.requestId, "ASLEEP", `tile ${tileId} is asleep: wake it first`); return; }
       const why = this.promptBlocked();
       if (why) { this.fail(m.requestId, why.code, why.message); return; }
       this.promptPending = true;
@@ -611,6 +621,14 @@ export class CommunityLink {
       case "openFolder":
         if (!c.openFolder) { this.unsupported("openFolder"); return; }
         c.openFolder(args[0] as string);
+        return;
+      case "wakeAgent":
+        if (!c.wakeAgent) { this.unsupported("wakeAgent"); return; }
+        c.wakeAgent(args[0] as string);
+        return;
+      case "sleepAgent":
+        if (!c.sleepAgent) { this.unsupported("sleepAgent"); return; }
+        c.sleepAgent(args[0] as string);
         return;
     }
   }
