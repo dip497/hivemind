@@ -5,12 +5,25 @@
 // scrolls up. A long conversation is drawn newest first, a slice a task, so the screen shows at once
 // and a tap waits on no more than a slice.
 
-import { h, icon, say } from "./dom.js";
+import { h, icon, pill, say } from "./dom.js";
 import { markdown } from "./markdown.js";
 import type { Entry, Piece, Unfolded } from "./types.js";
 import { message } from "./words.js";
 
 type Result = NonNullable<Entry["result"]>;
+
+/** How far before it was sent a session file's record of a message may say it was said, the
+ *  computer's clock and the phone's apart. */
+const SKEW_MS = 5 * 60_000;
+
+/** A message of the person's, shown at the foot of the chat from when it is sent until the session
+ *  file has it: going, then sent, or held until the agent's turn ends, with a way to send it now. */
+export interface Sending {
+  sent(): void;
+  held(now: () => void): void;
+  /** It did not go: it is taken away. */
+  failed(): void;
+}
 
 /** How long one task draws for. */
 const SLICE_MS = 12;
@@ -34,6 +47,8 @@ export class Chat {
   /** Tools whose rows are still to be drawn. */
   private drawing = new Set<string>();
   private session = "";
+  /** The person's messages not yet in the session file, oldest first, with when each was sent. */
+  private pending: Array<{ el: HTMLElement; text: string; at: number }> = [];
 
   /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. */
   constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
@@ -55,6 +70,7 @@ export class Chat {
     for (const e of piece.entries) {
       if (this.ids.has(e.id)) continue;
       this.ids.add(e.id);
+      if (e.who === "person") this.arrived(e);
       if (e.result) {
         const use = this.tools.get(e.result.of);
         if (use) {
@@ -69,7 +85,7 @@ export class Chat {
       if (e.tool) this.drawing.add(e.tool.id);
       fresh.push(e);
     }
-    this.nothing.hidden = this.ids.size > 0;
+    this.nothing.hidden = this.ids.size > 0 || this.pending.length > 0;
     if (!fresh.length) return;
     let next = fresh.length;
     let older: HTMLElement | null = null;
@@ -78,7 +94,10 @@ export class Chat {
       const rows: HTMLElement[] = [];
       while (next > 0 && (!rows.length || performance.now() - t < SLICE_MS)) rows.unshift(this.row(fresh[--next]!));
       if (!older) {
-        this.el.append(...rows);
+        // Above what is still being sent, which stays at the foot.
+        const foot = this.pending[0]?.el;
+        if (foot) foot.before(...rows);
+        else this.el.append(...rows);
         this.fold();
         if (following) this.el.scrollTop = this.el.scrollHeight;
         else this.unseen += rows.length;
@@ -95,6 +114,50 @@ export class Chat {
       if (next > 0) setTimeout(slice);
     };
     slice();
+  }
+
+  /** `text`, sent now: shown at the foot as going, until the session file has it. */
+  sending(text: string): Sending {
+    const state = h("span", {}, "Sending…");
+    const line = h("p", { class: "pending-state", "data-pending-state": "" }, state);
+    const el = h("div", { class: "pending", "data-pending": "going" }, h("div", { class: "said-person", "data-who": "person" }, text), line);
+    const mine = { el, text: text.trim(), at: Date.now() };
+    this.pending.push(mine);
+    this.el.append(el);
+    this.nothing.hidden = true;
+    this.el.scrollTop = this.el.scrollHeight;
+    this.placed();
+    return {
+      sent: () => {
+        if (!el.isConnected) return;
+        el.dataset.pending = "sent";
+        say(state, "Sent");
+      },
+      held: (now) => {
+        if (!el.isConnected) return;
+        el.dataset.pending = "held";
+        say(state, "Queued · sends when it finishes");
+        line.append(pill("Send now", () => {
+          el.querySelector("[data-send-now]")?.remove();
+          say(state, "Stopping its turn…");
+          now();
+        }, "", { "data-send-now": "" }));
+      },
+      failed: () => this.drop(mine),
+    };
+  }
+
+  /** A message of the person's in the session file: the same one shown as being sent goes. */
+  private arrived(e: Entry): void {
+    const text = (e.text ?? "").trim();
+    const mine = this.pending.find((p) => p.text === text && e.at >= p.at - SKEW_MS);
+    if (mine) this.drop(mine);
+  }
+
+  private drop(mine: { el: HTMLElement }): void {
+    mine.el.remove();
+    this.pending = this.pending.filter((p) => p !== mine);
+    this.nothing.hidden = this.ids.size > 0 || this.pending.length > 0;
   }
 
   /** The newest's button: shown while scrolled away, its count what came since. */
@@ -148,7 +211,8 @@ export class Chat {
   }
 
   private clear(): void {
-    this.el.replaceChildren(this.nothing);
+    // What is still being sent is not of the session that ended: it stays.
+    this.el.replaceChildren(this.nothing, ...this.pending.map((p) => p.el));
     this.ids = new Set();
     this.tools = new Map();
     this.given = new Map();

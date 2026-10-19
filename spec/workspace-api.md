@@ -1,4 +1,4 @@
-# Workspace API (0.32)
+# Workspace API (0.33)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -61,7 +61,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.32", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.33", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -251,7 +251,7 @@ log.
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?, always?}` | `{answered, by?}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), and with `always` every later use of that tool by that agent too, until it closes (0.23), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering"); a plan or supervised tool use answered already says who answered first (`by`: `{person, name}`, 0.21) | target the agent's tile |
 | `agent.approval` | `tile` | `{request, since, tool, summary, input, expiresAt, truncated?}` (0.31): the supervised tool use the agent waits on, `summary` as its supervisor is told it (a command cut to 300 characters, an edit's file alone) and `input` whole, as the agent's hook gave it (text as it is, else JSON, two spaces a level), cut to 262,144 characters, `truncated` then. `NOT_FOUND` when it waits on none. `hive ctl approval <request>` | read |
 | `agent.transcript` | `tile` | `{session, path}` (0.32): the session the agent is in and its file, for a program reading the agent's own records, as its hooks are handed `transcript_path`. Answered only to a caller on this machine (the person, a program or agent on the drive socket) about an agent running on it: else `UNSUPPORTED` (a phone or guest reads it with `agent.conversation`). `NOT_FOUND` when it keeps no session file yet | read |
-| `agent.send` | `tile`, `text` | `{sent}`: a message for the agent, whatever it is doing, a prompt of up to 32768 characters (0.23) typed in as its next prompt once it is at its prompt, Enter after it; the `agent.read` after it waits for the turn it starts; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
+| `agent.send` | `tile`, `text` | `{sent, held?}`: a message for the agent, whatever it is doing, a prompt of up to 32768 characters (0.23) typed in as its next prompt once it is at its prompt, Enter after it, or at once into the turn it is in when its manifest says it reads one there (`steer`); `held` true while it waits for that turn to end (0.33); the `agent.read` after it waits for the turn it starts; `sent` false: no agent runs there (`needs.md`, "Sending", 0.10) | target the agent's tile |
 | `agent.startable` | `repo` | `{programs, frames}`: the agents this device starts, with their model and mode choices, and the workspace's frames, each on the machine its folder is on (`agents.md`, "Starting", 0.11) | — |
 | `agent.start` | `repo`, `{program, frame?, prompt?, model?, mode?, name?, resume?, supervise?, report?}` | `{tile}`: an agent started as the person launches one at their desktop, their saved options with these on top, never in its unattended mode unless `mode` says so (`agents.md`, 0.11); `supervise` makes its caller its supervisor, and a program or an agent its parent (0.20; an agent, 0.23) | target the new tile |
 | `agent.interrupt` | `tile` | `{interrupted}`: the keys its manifest says interrupt its turn, typed a moment apart, while it works or waits (`agents.md`, "Stopping", 0.11) | target the agent's tile |

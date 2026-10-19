@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A message you send from your phone or browser while Claude Code works now shows in its chat at once and stays there: Claude Code takes it into the running turn and records it differently from a prompt, and the chat skipped that record. A message held until the agent's turn ends (an agent that reads none mid-turn) shows as queued, with **Send now**, which stops the turn; held ones go in order. codex, pi, droid and kiro-cli now take a message mid-turn too, as Claude Code does. `agent.send` answers `held: true` for a held message (workspace API 0.33).
 - The website scrolls and plays smoothly on phones: the hero's step bar and its opening lines no longer keep the page busy every frame, the views stack is flat on small screens and dims its back cards without a filter, and links on phones are easier to tap.
 - The website's hero tabs (a view, a widget, a tool) jump to their part of the recording again, and the video streams in pieces instead of all at once; the hero says it in one line with two buttons, and the download section is one install box that switches between Linux, macOS and Windows.
 - The website's hero opens on an agent's terminal at full size where you ask for a view, then a widget and a tool, in one take; its first frame paints at once as a small image, the recording follows when the page is idle, phones get their own crop, and the site's fonts are served from the site itself.

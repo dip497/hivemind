@@ -3,7 +3,7 @@
 
 import type { ViewSession } from "../pkg/hive_web.js";
 import type { TermSource } from "./terminal.js";
-import type { Agent, Folders, Held, Offered, Piece, Places, Reply, Screen, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, Folders, Held, Offered, Piece, Places, Reply, Screen, Sent, Start, Unfolded, ViewFile } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. `started`: it was just started from here. */
@@ -11,7 +11,8 @@ export interface App {
   back(): void;
   /** Whether it landed; null when the computer did not say. */
   answer(agent: Agent, reply: Reply): Promise<boolean | null>;
-  send(agent: Agent, text: string): Promise<boolean>;
+  /** Whether it went, and whether it is held until the agent's turn ends. */
+  send(agent: Agent, text: string): Promise<Sent | false>;
   stop(agent: Agent): Promise<boolean>;
   close(agent: Agent): Promise<boolean>;
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void;

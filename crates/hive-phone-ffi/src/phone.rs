@@ -200,7 +200,11 @@ impl Phone {
         let connections = self.connections.clone();
         on_runtime(async move {
             let connection = connections.holding(&agent.device, &agent.workspace).await?;
-            Ok(workspace::send(&connection, &agent.workspace, &agent.tile, &text).await?)
+            Ok(
+                workspace::send(&connection, &agent.workspace, &agent.tile, &text)
+                    .await?
+                    .is_some(),
+            )
         })
         .await
     }

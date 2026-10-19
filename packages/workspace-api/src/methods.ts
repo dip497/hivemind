@@ -116,7 +116,8 @@ export interface WorkspaceMethods {
   "agent.answer": (tile: string, since: number, answer: AgentAnswer) => { answered: boolean; by?: Answerer };
   /** A message for the agent in `tile`, one line: typed in as its next prompt once it is at its
    *  prompt, Enter after it (M5). `sent` false: no agent runs there. */
-  "agent.send": (tile: string, text: string) => { sent: boolean };
+  /** `held` (0.33): it waits for the agent's turn to end. */
+  "agent.send": (tile: string, text: string) => { sent: boolean; held?: true };
   /** What may be started in the workspace at `repo` (M5, spec/agents.md "Starting"): the agents
    *  this device starts, with their model and mode choices, and the workspace's frames. */
   "agent.startable": (repo: string) => Startable;

@@ -31,7 +31,7 @@ let opened = false;
 /** A pairing link the page was opened with, waiting on a tap. */
 let offered = false;
 
-const act = async <T extends boolean | null>(done: () => Promise<T>, notLanded: string): Promise<T | false> => {
+const act = async <T extends boolean | null | object>(done: () => Promise<T>, notLanded: string): Promise<T | false> => {
   try {
     if (!phone) throw new Error("Still starting");
     const landed = await done();

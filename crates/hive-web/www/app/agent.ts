@@ -60,7 +60,7 @@ export class AgentScreen {
       this.gone,
       this.body,
       this.dock);
-    const message = composer("Message", (text) => (this.typed ? this.typed.send(text) : this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" },
+    const message = composer("Message", (text) => (this.typed ? this.typed.send(text) : this.sendIt(text)), { "data-message": "" },
       () => void this.stopIt());
     this.message = message.querySelector("textarea")!;
     this.composing = message;
@@ -202,6 +202,19 @@ export class AgentScreen {
     const given = answers(a.tile, w, (reply) => this.app.answer(a, reply), true);
     this.typed = given.typed;
     this.waits.replaceChildren(h("div", { class: "card waiting", "data-waiting-card": w.kind }, label, given.el));
+  }
+
+  /** A message, shown in the chat at once as it goes: sent, or held until the turn ends with a way
+   *  to send it now, which stops the turn; taken away again when it did not go. */
+  private async sendIt(text: string): Promise<boolean> {
+    const [a, chat] = [this.agent, this.chat];
+    if (!a || !chat) return false;
+    const shown = chat.sending(text);
+    const sent = await this.app.send(a, text);
+    if (!sent) shown.failed();
+    else if (sent.held) shown.held(() => void this.stopIt());
+    else shown.sent();
+    return !!sent;
   }
 
   private async stopIt(): Promise<void> {

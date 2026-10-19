@@ -34,7 +34,7 @@ function plane(answers: Partial<Record<keyof ControlWork, unknown>> = {}) {
 }
 
 test("each method is the control plane's work, its answer in the API's shape", async () => {
-  const c = plane({ send: true, rename: "reviewer", keys: 2, openTool: "t9", read: { text: "done", finalStatus: "turn", truncated: false }, rescan: { ok: true }, hostStatus: { workspaces: [] } });
+  const c = plane({ send: { sent: true, held: false }, rename: "reviewer", keys: 2, openTool: "t9", read: { text: "done", finalStatus: "turn", truncated: false }, rescan: { ok: true }, hostStatus: { workspaces: [] } });
   assert.deepEqual(await c.call(person, "agent.send", "t1", "fix the tests\nthen push"), { result: { sent: true } }, "a message may run over lines");
   assert.deepEqual(await c.call(person, "agent.rename", "t1", "reviewer"), { result: { name: "reviewer" } });
   assert.deepEqual(await c.call(person, "agent.keys", "t1", ["y", "Enter"]), { result: { keys: 2 } });
@@ -69,7 +69,7 @@ test("an agent on the drive socket asks from its own tile; the person asks from 
 });
 
 test("what changes something is recorded under the API's name, as the caller's, against what it acts on; reads are not", async () => {
-  const c = plane({ send: true, rename: "x", keys: 1, openTool: "t9", read: { text: null, finalStatus: "timeout", truncated: false }, output: { text: "" } });
+  const c = plane({ send: { sent: true, held: false }, rename: "x", keys: 1, openTool: "t9", read: { text: null, finalStatus: "timeout", truncated: false }, output: { text: "" } });
   await c.call(agent, "agent.send", "hm:t1", "go");
   await c.call(person, "agent.rename", "t1", "x");
   await c.call(person, "agent.keys", "t1", ["Enter"]);

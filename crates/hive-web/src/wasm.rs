@@ -517,17 +517,22 @@ impl Host {
             .map_err(err)
     }
 
-    /// Send the agent of `tile` the message `text`, typed in once it is at its prompt. Whether it
-    /// went: not when no agent runs there.
+    /// Send the agent of `tile` the message `text`, typed in once it is at its prompt, or into its
+    /// turn when it reads one there: `{held}`, whether it waits for the turn to end; null when no
+    /// agent runs there.
     pub async fn send(
         &self,
         workspace: String,
         tile: String,
         text: String,
-    ) -> Result<bool, JsError> {
-        workspace::send(&self.connection, &workspace, &tile, &text)
+    ) -> Result<JsValue, JsError> {
+        match workspace::send(&self.connection, &workspace, &tile, &text)
             .await
-            .map_err(err)
+            .map_err(err)?
+        {
+            Some(sent) => to_js(&serde_json::to_value(sent).map_err(err)?),
+            None => Ok(JsValue::NULL),
+        }
     }
 
     /// Stop the agent of `tile` in its turn. Whether it was in one.

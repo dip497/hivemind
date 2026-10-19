@@ -118,7 +118,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
 test("send: writes text + carriage return", async () => {
   const { deps, writes } = fakeDeps();
   const { api } = makeDispatch(deps);
-  assert.equal(api.send("t1", "hello"), true);
+  assert.deepEqual(api.send("t1", "hello"), { sent: true, held: false });
   // Text is typed immediately; Enter follows as a SEPARATE keystroke a tick later
   // (claude's TUI drops a newline bundled with the text). Writes target the pty
   // id (`hm:<tileId>`), not the bare control-surface id.

@@ -158,9 +158,13 @@ phone says "Not confirmed: check the chat." and does not offer to answer that wa
 message, whatever it is doing: `text` is a prompt, at most 32768 characters, its lines broken by
 newlines, with no other control characters and no bidirectional or zero-width marks (else
 `BAD_REQUEST`; 0.23, before it one line of 1000), typed into its terminal as its next prompt once
-it is at its prompt (held while it is in a turn), Enter after it. The `agent.read` after it waits
-for the turn it starts (0.23). It answers `{ "sent": true }`, or `{ "sent": false }` when no agent
-runs there. One may send who may drive
+it is at its prompt (held while it is in a turn), Enter after it. An agent whose manifest says it
+reads a message typed while it works (`steer`) is given it at once, into the turn it is in, as the
+person types one at its terminal (0.33). The `agent.read` after it waits for the turn it starts
+(0.23). It answers `{ "sent": true }`, with `"held": true` while it waits for the turn to end
+(0.33), or `{ "sent": false }` when no agent runs there. A device shows the message as the
+person's at once, held or not, and shows it from the agent's session file once that has it; one
+held offers to stop the turn (`agent.interrupt`), after which it goes. One may send who may drive
 the workspace's agents, and the person's own devices, a phone among them. A phone may also type
 into a terminal it watches, as the person, asking for its keyboard while someone else holds it
 (`workspace-api.md`, "Peers").

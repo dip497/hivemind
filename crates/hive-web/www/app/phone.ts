@@ -5,7 +5,7 @@
 import init, { Device, type Host, HomeView, Term, type ViewSession, connectWith, deviceId, pair, readConnectLink, readLink, readQr } from "../pkg/hive_web.js";
 import type { Filter } from "./home.js";
 import { deviceKey, get, put, remove } from "./store.js";
-import type { Agent, Folders, Held, Offered, Others, Overview, Paired, Piece, Places, Reply, Screen, Shown, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, Folders, Held, Offered, Others, Overview, Paired, Piece, Places, Reply, Screen, Sent, Shown, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 /** What connecting shows, step by step (pair.ts). */
@@ -220,9 +220,10 @@ export class Phone {
     return within(sent, REACH, "no answer").catch(() => null);
   }
 
-  /** Send `agent` a message, typed in at its prompt. Whether it went. */
-  async send(agent: Agent, text: string): Promise<boolean> {
-    return this.reached().send(agent.workspace, agent.tile, text);
+  /** Send `agent` a message, typed in at its prompt, or into its turn when it reads one there.
+   *  Whether it went, and whether it waits for the turn to end. */
+  async send(agent: Agent, text: string): Promise<Sent | false> {
+    return ((await this.reached().send(agent.workspace, agent.tile, text)) as Sent | null) ?? false;
   }
 
   /** Stop `agent`'s turn. Whether it was in one. */

@@ -45,7 +45,8 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "agent.send": async (_from, tile, message) => {
         const problem = promptProblem(message);
         if (problem) throw new ApiError("BAD_REQUEST", problem);
-        return { sent: (await o.control()).send(text(tile, "tile"), message as string) };
+        const { sent, held } = (await o.control()).send(text(tile, "tile"), message as string);
+        return held ? { sent, held } : { sent };
       },
       "agent.rename": async (_from, tile, name) => ({ name: (await o.control()).rename(text(tile, "tile"), typeof name === "string" ? name : "") }),
       "agent.keys": async (_from, tile, keys) => {

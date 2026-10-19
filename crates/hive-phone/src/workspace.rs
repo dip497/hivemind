@@ -423,18 +423,29 @@ pub async fn let_in(
     Ok(result.get("answered").and_then(Value::as_bool) == Some(true))
 }
 
-/// Send the agent of `tile` in `workspace` the message `text`, one line: it is typed in as its next
-/// prompt once it is at its prompt (spec/needs.md, "Sending"). Whether it went: not when no agent
-/// runs there.
+/// A message the computer took for an agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Taken {
+    /// It waits for the agent's turn to end; else it was typed in.
+    pub held: bool,
+}
+
+/// Send the agent of `tile` in `workspace` the message `text`: it is typed in as its next prompt
+/// once it is at its prompt, or into its turn when it reads one there (spec/needs.md, "Sending").
+/// None when no agent runs there.
 pub async fn send(
     connection: &Connection,
     workspace: &str,
     tile: &str,
     text: &str,
-) -> Result<bool> {
+) -> Result<Option<Taken>> {
     let mut w = Workspace::open(connection, workspace).await?;
     let result = w.call("agent.send", json!([tile, text])).await?;
-    Ok(result.get("sent").and_then(Value::as_bool) == Some(true))
+    Ok(
+        (result.get("sent").and_then(Value::as_bool) == Some(true)).then(|| Taken {
+            held: result.get("held").and_then(Value::as_bool) == Some(true),
+        }),
+    )
 }
 
 #[cfg(test)]

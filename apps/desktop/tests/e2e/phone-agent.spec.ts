@@ -42,7 +42,7 @@ const app = {
   terminal: () => null,
   tool: async () => ({}),
   answer: async (a, reply) => (window.calls.push(["answer", a.tile, reply]), true),
-  send: async (a, text) => (window.calls.push(["send", a.tile, text]), true),
+  send: async (a, text) => (window.calls.push(["send", a.tile, text]), window.sent === undefined ? { held: false } : window.sent),
   stop: async (a) => (window.calls.push(["stop", a.tile]), true),
   close: async (a) => (window.calls.push(["close", a.tile]), true),
 };
@@ -92,6 +92,37 @@ test("an agent just started shows as starting until the computer lists it, never
   await open(page, "t5");
   await expect(notice).toHaveText("No agent runs there now.");
   await expect(notice).toBeVisible();
+});
+
+test("a message held until the agent's turn ends shows as queued, with Send now, which stops the turn; one that did not go leaves the chat and stays in the box", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await show(page, overview(agent("t1", "Phone test", { state: "working" })));
+  await open(page, "t1");
+  const box = page.locator("[data-message] textarea");
+  const did = () => page.evaluate(() => (window as unknown as { calls: string[][] }).calls.filter((c) => c[0] !== "conversation"));
+  await page.evaluate(() => ((window as unknown as { sent: unknown }).sent = { held: true }));
+  await box.fill("and the docs");
+  await page.locator("[data-message] button[type=submit]").click();
+  const held = page.locator('[data-chat] [data-pending="held"]');
+  await expect(held.locator('[data-who="person"]')).toHaveText("and the docs");
+  await expect(held.locator("[data-pending-state]")).toContainText("Queued · sends when it finishes");
+  await expect(box).toHaveValue("");
+  await held.locator("[data-send-now]").click();
+  await expect.poll(did).toEqual([["send", "t1", "and the docs"], ["stop", "t1"]]);
+  await expect(held.locator("[data-send-now]")).toHaveCount(0);
+  // The session file has it: shown once, as said.
+  await page.evaluate(() => (window as unknown as { said: (p: object) => void }).said({ session: "s1", cursor: 1, entries: [{ id: "u1", at: Date.now(), who: "person", text: "and the docs" }] }));
+  await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText(["and the docs"]);
+  await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0);
+
+  await page.evaluate(() => ((window as unknown as { sent: unknown }).sent = false));
+  await box.fill("and the changelog");
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect.poll(did).toHaveLength(3);
+  await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0);
+  await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText(["and the docs"]);
+  await expect(box).toHaveValue("and the changelog");
 });
 
 test("an agent that keeps no conversation the phone can read opens in its terminal; one that does opens in its chat", async () => {
