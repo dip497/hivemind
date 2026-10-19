@@ -15,3 +15,8 @@ export function parseCategory(raw: unknown): { category: PluginCategory } | { er
     ? { category: raw as PluginCategory }
     : { error: `"category" must be one of ${PLUGIN_CATEGORIES.join(", ")}` };
 }
+
+/** Items under their category, in the order of PLUGIN_CATEGORIES; a category with none is left out. */
+export function groupByCategory<T>(items: readonly T[], categoryOf: (item: T) => PluginCategory): [PluginCategory, T[]][] {
+  return PLUGIN_CATEGORIES.map((c): [PluginCategory, T[]] => [c, items.filter((i) => categoryOf(i) === c)]).filter(([, list]) => list.length > 0);
+}
