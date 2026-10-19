@@ -39,7 +39,8 @@ function hasId(file, id) {
   return ids.get(file).has(id);
 }
 
-const decode = (s) => s.replace(/&amp;/g, "&").replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"');
+const entities = { "&amp;": "&", "&#x27;": "'", "&#39;": "'", "&quot;": '"' };
+const decode = (s) => s.replace(/&(?:amp|#x27|#39|quot);/g, (e) => entities[e]);
 
 const broken = [];
 let checked = 0;
