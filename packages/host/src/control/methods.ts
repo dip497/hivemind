@@ -189,7 +189,7 @@ export interface MethodDeps {
   waits: Waits;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
    *  their windows follow. */
-  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "setCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership" | "setSleeping">;
+  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "setCore" | "addTile" | "setView" | "renameTile" | "removeTile" | "repos" | "ownership" | "setSleeping">;
   /** The workspace the window the user is at shows, and the frame the user is in there, if
    *  any: what a caller in no tile (a terminal, a script) acts on. */
   shownWorkspace: () => { repo: string; frame: string | null } | null;
@@ -229,6 +229,8 @@ const isClient = (parent: string): boolean => parent.startsWith("client:");
 /** How the control plane writes a workspace: its windows hear of it, and it hears of none. */
 const CONTROL = { writer: "control" };
 
+/** The most a tile's state opened with it may hold, as JSON. */
+const TILE_STATE_MAX = 64 * 1024;
 const RENDERER_TIMEOUT = 15_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
 /** The longest a timer waits (about 24.8 days): a longer one fires at once. */
@@ -255,7 +257,7 @@ export interface ControlWork {
   rename(tile: string, name: string): string;
   sessions(program: string, cwd: string, limit?: number): Promise<AgentSessions>;
   /** Open the tool `tool` in the workspace at `repo`: its tile. */
-  openTool(caller: string | undefined, repo: string, tool: string, at: { frame?: unknown; url?: unknown }): Promise<string>;
+  openTool(caller: string | undefined, repo: string, tool: string, at: { frame?: unknown; url?: unknown; state?: unknown }): Promise<string>;
   connect(src: string, dst: string): void;
   disconnect(src: string, dst?: string): void;
   viewEmit(caller: string | undefined, name: unknown, data: unknown, view: unknown): Promise<unknown>;
@@ -726,7 +728,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   /** Open a tool plugin's tile: the tool `pick` chooses among the registered ones. */
   type RegisteredTool = ReturnType<typeof createToolRegistry>["tools"][number];
-  async function openTool(at: { caller?: string; repo?: string; frame?: unknown; url?: unknown }, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<string> {
+  async function openTool(at: { caller?: string; repo?: string; frame?: unknown; url?: unknown; state?: unknown }, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<string> {
     let registry;
     try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
     catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
@@ -742,10 +744,19 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       try { url = new URL(at.url); } catch { throw new ApiError("BAD_REQUEST", "Invalid URL"); }
       if (!["http:", "https:"].includes(url.protocol) && at.url !== "about:blank") throw new ApiError("BAD_REQUEST", "URL must use http or https, or be about:blank");
     }
+    if (at.state != null) {
+      let size = Infinity;
+      try { size = JSON.stringify(at.state).length; } catch { /* not JSON */ }
+      if (typeof at.state !== "object" || Array.isArray(at.state) || size > TILE_STATE_MAX) throw new ApiError("BAD_REQUEST", `state must be a JSON object of at most ${TILE_STATE_MAX} bytes, its keys what the tool's useTileState reads`);
+    }
     if (!deps.spawnAllowed(rootOf(at.caller))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const url = typeof at.url === "string" ? at.url : undefined;
-    return openTile(placeTile(at.caller, at.frame, at.repo), (ws) => ({
-      id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
+    const place = placeTile(at.caller, at.frame, at.repo);
+    const id = mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`);
+    // Kept before the tile is there, so its first draw reads it (`hm.hello.layout`).
+    if (at.state != null) deps.workspaces.setView(place.ws.repo, `tile:${id}`, { v: 1, data: at.state }, CONTROL);
+    return openTile(place, (ws) => ({
+      id, kind,
       label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
       ...(url ? { url } : {}),
     }), { background: false });

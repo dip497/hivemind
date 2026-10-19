@@ -103,6 +103,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A page shown in a tool's frame cannot move the app's window to another page, and any page other than the app's own gets no access to the app. Tools get `Frame` from `hm-plugin://host/sdk.js`, a sandboxed frame for a server on this machine.
 - `hive ctl tile look <tile> [--out f.png]` (Workspace API `tile.look`) brings a tile into view, waits until its tool has drawn, and saves a picture of it, with the tool's state and the last 100 lines its code wrote to the console. `hive ctl plugin list` says whether each plugin has drawn yet (`drew`).
 - `hive ctl tile look` raises the tile above the others and refuses with `OCCLUDED` (exit 7), naming what is drawn over it (a pinned tile, a dialog, a notification), instead of picturing it with the tile.
+- `hive ctl open-tool <tool> --state <json>` opens a tool's tile with its first saved state (what the tool's `useTileState` reads). A tool's tile shows the normal pointer instead of the canvas's grab cursor where the tool sets none. The tool guide covers tool ids and `open-tool`, framing a local server, what `host.run` does (the login shell's `PATH`, no shell, 60 s, 10 MB), looking at a tile, reinstalling, and what the canvas does with the pointer and keys over a tile; `hive tools new` prints its address.
 
 ## [2026.10.3] — 2026-10-18
 

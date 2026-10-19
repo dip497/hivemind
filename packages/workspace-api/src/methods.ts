@@ -167,8 +167,9 @@ export interface WorkspaceMethods {
    *  worktrees), newest first, `limit` of them at most. */
   "agent.sessions": (place: string, program: string, limit?: number) => AgentSessions;
   /** (0.23) Open a tool's tile in the workspace at `repo`: the tool by its id
-   *  (`owner/name/tool`), in `frame` if given, at `url` for one that shows a page. */
-  "tool.open": (repo: string, tool: { tool: string; frame?: string; url?: string }) => { tile: string };
+   *  (`owner/name/tool`, or `owner/name` when the package has one tool), in `frame` if given, at
+   *  `url` for one that shows a page, with `state` (0.32) as the tile's first saved state. */
+  "tool.open": (repo: string, tool: { tool: string; frame?: string; url?: string; state?: Record<string, unknown> }) => { tile: string };
   /** (0.23) Pipe the replies of the agent in `src` to the one in `dst`, as its next prompts. */
   "link.connect": (src: string, dst: string) => void;
   /** (0.23) Stop piping `src`'s replies to `dst`, or to every agent when none is named. */

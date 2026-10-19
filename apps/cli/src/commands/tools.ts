@@ -26,6 +26,8 @@ import { pluginBrief } from "../plugin-brief.js";
 import { stageFromRegistry } from "../registry.js";
 
 const NO_PLUGINS: ToolsSettings = { enabledPlugins: [], disabledTools: [] };
+/** The guide's page on writing a tool. */
+const TOOL_GUIDE = "https://hivemind.griiken.com/guide/tool-plugins/";
 
 async function rescanApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); await driveCall("tools.rescan", [], 5000); return true; } catch { return false; }
@@ -164,7 +166,7 @@ const newCmd = defineCommand({
       try {
         for (const [file, text] of Object.entries(toolStarter(owner, name))) await writeFile(path.join(dir, file), text);
       } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
-      return ok(ctx, { id: `${owner}/${name}`, dir }, () => `started ${owner}/${name} in ${dir}\n  cd ${name} && hive tools install . && hive plugins enable tool:${owner}/${name}`);
+      return ok(ctx, { id: `${owner}/${name}`, dir, guide: TOOL_GUIDE }, () => `started ${owner}/${name} in ${dir}\n  cd ${name} && hive tools install . && hive plugins enable tool:${owner}/${name}\nGuide: ${TOOL_GUIDE}`);
     } catch (e) { return fail(ctx, e, "new_failed"); }
   },
 });

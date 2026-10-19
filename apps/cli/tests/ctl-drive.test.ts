@@ -176,6 +176,16 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     ]);
   });
 
+  test("open-tool --state hands the tile its first state as JSON; what is not JSON is a usage error, sent nowhere", async () => {
+    const r = await hive(["ctl", "open-tool", "a/b/c", "--state", '{"tab":"logs","line":42}', "--repo", repoA, "--json"], { env: env() });
+    expect(r.code).toBe(0);
+    expect(last("tool.open").params).toEqual([repoA, { tool: "a/b/c", state: { tab: "logs", line: 42 } }]);
+    const before = calls.length;
+    const bad = await hive(["ctl", "open-tool", "a/b/c", "--state", "{tab: logs}", "--repo", repoA, "--json"], { env: env() });
+    expect([bad.code, (bad.json as { code: string }).code]).toEqual([2, "USAGE"]);
+    expect(calls.slice(before).some((c) => c.method === "tool.open")).toBe(false);
+  });
+
   test("tile look saves the picture where --out says, else in the temp folder, and prints its path with the tile's state and console", async () => {
     const out = path.join(dir, "look.png");
     const r = await hive(["ctl", "tile", "look", "w-1", "--out", out, "--json"], { env: env() });

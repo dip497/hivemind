@@ -196,8 +196,15 @@ const openTool = sub("open-tool", "Open an enabled tool plugin", {
   tool: { type: "positional", required: true, description: "tool id, as `hive tools list` prints it (hivemind/web/browser), or its package id when the package has one tool (hivemind/web)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
+  state: { type: "string", description: "the tile's first state, a JSON object: what the tool's useTileState(hm, key, …) reads under each key" },
   ...repoArg,
-}, (a) => onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}) }])));
+}, (a) => {
+  let state: unknown;
+  if (a.state) {
+    try { state = JSON.parse(String(a.state)); } catch { throw new UsageError(`--state must be JSON: ${String(a.state).slice(0, 80)}`); }
+  }
+  return onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}), ...(state !== undefined ? { state } : {}) }]));
+});
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tile }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a

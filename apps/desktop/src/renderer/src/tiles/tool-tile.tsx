@@ -102,7 +102,8 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[var(--color-bg2)]" data-tool-plugin={data.pkg.id}>
       <ToolBar data={data} />
-      <div ref={root} className="nodrag nowheel relative min-h-0 flex-1 overflow-hidden">
+      {/* cursor-auto: the canvas's grab cursor is for its bar, not what the tool draws. */}
+      <div ref={root} className="nodrag nowheel relative min-h-0 flex-1 cursor-auto overflow-hidden">
         {failed ? <div className="p-4 text-label text-[var(--color-err)]">{data.pkg.name} stopped: {failed}</div>
           : hm ? <DrawFailed onFail={(why) => stop.current(why)}><Draw tile={{ id: data.tileId, kind: data.kind, name: data.name, frameId: data.frameId }} hm={hm} host={host} selected={selected} /></DrawFailed>
           : <Loading label={`Starting ${data.pkg.name}`} />}

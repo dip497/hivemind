@@ -482,6 +482,17 @@ test("tile.look: refused where no window shows tiles, and for a tile with no box
   await assert.rejects(hidden.look("t1"), { code: "FAILED" });
 });
 
+test("tool.open: --state is the new tile's saved state before it first draws; what is not a small JSON object is refused", async () => {
+  const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools: [] }) });
+  const { api } = makeDispatch(deps);
+  const tile = await api.openTool(undefined, REPO, "hivemind/web/browser", { state: { tab: "logs", line: 42 } });
+  assert.deepEqual(deps.workspaces.getView(REPO, `tile:${tile}`), { v: 1, data: { tab: "logs", line: 42 } });
+  for (const state of [["a"], "text", { big: "x".repeat(70 * 1024) }]) {
+    await assert.rejects(api.openTool(undefined, REPO, "hivemind/web/browser", { state }), { code: "BAD_REQUEST" });
+  }
+  assert.equal(deps.workspaces.getCore(REPO)?.tiles.length, 1, "no refused request opened a tile");
+});
+
 /** One JSON-RPC connection: `call` waits for its reply; notifications collect in `notes`. */
 async function session(sock: string) {
   const c = net.connect(sock);

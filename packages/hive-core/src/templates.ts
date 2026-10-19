@@ -350,6 +350,8 @@ hive ctl view emit ci.build '{"status":"green"}' --json    # a named event to th
 A plugin is \`starting\` until its code connects, then \`ready\`; \`failed\` says why in \`reason\`. A call to one still
 starting waits for it (30 s in all). Exit 5: not running, or no such command; 4: still starting or no answer in time;
 2: it runs twice and you did not say which (\`--tile\`); 1: it failed or refused, in its own words.
+\`hive ctl tile look <tile> --json\` shows a tile as the person sees it: a PNG path, its plugin's state and console.
+Writing a tool: https://hivemind.griiken.com/guide/tool-plugins/
 
 ## Beyond the canvas
 Each has \`--help\` with its exact options; read it before you run one.

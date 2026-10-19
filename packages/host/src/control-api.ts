@@ -66,10 +66,10 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
         return (await o.control()).sessions(text(program, "program"), text(place, "place"), (limit as number | null) ?? undefined);
       },
       "tool.open": async (from, repo, tool) => {
-        const t = (tool ?? {}) as { tool?: unknown; frame?: unknown; url?: unknown };
+        const t = (tool ?? {}) as { tool?: unknown; frame?: unknown; url?: unknown; state?: unknown };
         const r = text(repo, "repo");
         if (typeof t.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: owner/name/tool");
-        return { tile: await (await o.control()).openTool(callerOf(from), r, t.tool, { frame: t.frame, url: t.url }) };
+        return { tile: await (await o.control()).openTool(callerOf(from), r, t.tool, { frame: t.frame, url: t.url, state: t.state }) };
       },
       "link.connect": async (_from, src, dst) => { (await o.control()).connect(text(src, "src"), text(dst, "dst")); },
       "link.disconnect": async (_from, src, dst) => { (await o.control()).disconnect(text(src, "src"), dst != null ? text(dst, "dst") : undefined); },
