@@ -1,0 +1,123 @@
+---
+title: "Publish to HiveHub"
+description: "List your widget, view, tool or agent on HiveHub so anyone can install it from Hivemind."
+---
+
+Publish a plugin when it works for you and you want others to install it from **Settings →
+Plugins**. <Tooltip tip="The catalogue Hivemind installs agents and plugins from." cta="Glossary" href="/glossary#hivehub">HiveHub</Tooltip> lists it; your GitHub repository keeps the files.
+
+<AgentPrompt description="Paste this into your coding agent to publish a plugin you built on HiveHub." page="publish-to-hivehub">{`
+Publish the Hivemind plugin in the folder I name on HiveHub.
+
+1. Read its manifest (\`widget.json\`, \`hivemind-view.json\` or \`hivemind-tool.json\`). Check it has an id in my GitHub scope (\`@login/name\` for a widget or view, \`login/name\` for a tool), a \`version\`, a one-line \`description\` and a \`category\`. Check \`README.md\` says what it does and what it asks for. For a view, publish its \`dist\` folder.
+2. If it is an agent (\`agent.yaml\`), stop: agents are listed by pull request to the GitHub repository dip497/hivemind-plugins, in \`agents/<id>/\`. Ask me before opening one with \`gh\`.
+3. The folder must be in a git repository whose \`origin\` is on GitHub, and I must be able to push to it. Ask me which repository if there is none. Commit, then push. HiveHub publishes the pushed commit, never the disk.
+4. Get the \`hivehub\` command if \`command -v hivehub\` finds nothing: \`curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub\`. It needs Node.
+5. Run \`hivehub whoami\`. If I am not signed in, run \`hivehub login\`, show me the link and the code it prints, and wait while I open the link and type the code myself.
+6. Run \`hivehub publish <folder>\` without \`--yes\`. Show me the preview: id, version, files and what it does. Add \`--yes\` only after I agree.
+7. Check: \`hivehub info <id>\` shows the new version.
+
+At the end, tell me the plugin's page on HiveHub and the command others use to install it.
+`}</AgentPrompt>
+
+## Before you start
+
+- Your plugin works: `hive plugins list` shows it on, with no problem.
+- Its id is in your own GitHub scope: `@you/name` for a widget or view, `you/name` for a tool.
+  Nobody can publish into someone else's scope.
+- Its folder is in a GitHub repository you can push to.
+- Node is installed, for the `hivehub` command.
+
+## Publish a widget, view or tool
+
+<Steps>
+  <Step title="Fill in the manifest">
+    Give it a `version`, a one-line `description` and a `category`: `code`, `git`, `agents`,
+    `productivity`, `monitoring`, `team`, `web`, `fun` or `other`. The category groups it in the
+    **Add** menu and on HiveHub.
+
+    Put a `README.md` beside the manifest. HiveHub and **Settings → Plugins** show it before
+    anyone installs.
+  </Step>
+  <Step title="Push it">
+    Commit the folder and push it to GitHub. For a view, commit `dist/` too.
+
+    Check: `git status` says the tree is clean and up to date with its remote.
+  </Step>
+  <Step title="Get the hivehub command">
+    ```bash
+    curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub
+    ```
+
+    Check: `hivehub` prints its list of commands.
+  </Step>
+  <Step title="Sign in once">
+    ```bash
+    hivehub login
+    ```
+
+    Open the link it prints and type the code on GitHub.
+
+    Check: it says `Signed in as <your login>.`
+  </Step>
+  <Step title="Publish">
+    ```bash
+    hivehub publish ./counter      # a widget or tool folder
+    hivehub publish dist           # a view: its built folder
+    ```
+
+    It shows a preview: the id, version, files and what the plugin does. Answer `y` to publish.
+
+    Check: it prints `Published <id>` and the plugin's page on HiveHub.
+  </Step>
+</Steps>
+
+## Publish an agent
+
+Agents are listed by pull request to
+[dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins), one folder per agent under
+`agents/`, with a `README.md`. Once it is merged, `hive agents install <id>` works for everyone.
+See [Add your own agent](/agent-providers).
+
+## Check it worked
+
+- `hivehub info <id>` shows the version you published.
+- On another computer, `hive widgets install @you/name` (or `hive views install`,
+  `hive tools install`) installs it.
+
+## Publish an update
+
+Raise `version`, commit, push, and run `hivehub publish` again. Everyone who has it is offered the
+update.
+
+## If it didn't
+
+| You see | Do this |
+|---|---|
+| `commit … is not on GitHub yet — push it first` | Push the commit, then publish again. |
+| `note: … has uncommitted changes` | HiveHub publishes the commit, not your disk. Commit and push the changes first. |
+| `not a terminal — re-run with --yes to publish` | It cannot ask you. Read the preview, then add `--yes`. |
+| `… is not inside a git repository` | Put the folder in a GitHub repository, or pass `--repo owner/name`. |
+| Something else | [Troubleshooting](/troubleshooting) |
+
+## Reference
+
+```text
+hivehub login                  sign in with GitHub
+hivehub publish [folder]       publish a plugin folder at its current commit
+    --repo owner/name          publish from GitHub directly, without a local copy
+    --ref <commit|branch>      default: HEAD
+    --description "…"          the one line on its card
+    --yes                      skip the question (for agents and CI)
+hivehub search [words] [--type agent|view|widget|tool]
+hivehub info @owner/view | agent
+hivehub whoami
+hivehub logout
+```
+
+`--json` on any command prints one object a line. In CI, `HIVEHUB_TOKEN` signs in when you are not.
+
+Installing from HiveHub downloads from your repository and checks every file against the hash
+HiveHub recorded. A file that changed after it was listed fails the install.
+
+<LastValidated />

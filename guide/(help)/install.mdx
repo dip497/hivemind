@@ -1,0 +1,92 @@
+---
+title: "Install"
+description: "Install Hivemind with one command on Linux, macOS or Windows, pick a release channel or an exact version, or build it from source."
+---
+
+One command installs the app, the `hive` command and `hive-net`. Run it again at any time to upgrade.
+
+<AgentPrompt description="Paste this into your coding agent to install Hivemind on this computer and check it works." page="install">{`
+Install Hivemind on this computer and check it works.
+
+1. Find the operating system and CPU type. Linux x86_64, macOS on Apple Silicon and Windows x64 get the app. Linux arm64 gets only the \`hive\` command. An Intel Mac has no prebuilt app: tell me, and offer \`bash install.sh --dev\`, which builds from source and needs git, node 22 or newer, pnpm and bun.
+2. On Linux or macOS run \`bash <(curl -fsSL https://hivemind.griiken.com/install.sh)\`. On Windows, in PowerShell, run \`irm https://hivemind.griiken.com/install.ps1 | iex\`.
+3. Check: \`hive --version\` prints a version. If \`hive\` is not found, \`~/.local/bin\` is missing from PATH: tell me the line to add to my shell profile.
+4. Ask me which project folder to open, then run \`hivemind <folder>\`.
+
+Never type a password; if a step needs sudo, ask me to run it. At the end, tell me the version installed and where its files are.
+`}</AgentPrompt>
+
+## Before you start
+
+- A supported system: see [System requirements](/system-requirements).
+- `curl` and `bash` on Linux and macOS, or PowerShell 5.1 or newer on Windows. Nothing else.
+- The coding agent you use, such as `claude` or `codex`, installed on its own. Hivemind finds it on your `PATH`.
+
+## Install
+
+<Tabs>
+  <Tab title="Linux and macOS">
+    ```bash
+    bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
+    ```
+  </Tab>
+  <Tab title="Windows">
+    In PowerShell:
+
+    ```powershell
+    irm https://hivemind.griiken.com/install.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+## Check it worked
+
+```bash
+hive --version
+```
+
+It prints the version you installed. If your shell says `hive: command not found`, add `~/.local/bin` to your `PATH`.
+
+## Where the files go
+
+| System | Files | Commands |
+|---|---|---|
+| Linux and macOS | `~/.hivemind-app/` | `hivemind`, `hive` and `hive-net`, linked into `~/.local/bin/` |
+| macOS | also `~/Applications/hivemind.app`, so Spotlight and Launchpad find it | |
+| Windows | `%LOCALAPPDATA%\hivemind` | `hivemind`, `hive` and `hive-net` in its `bin` folder, and a Start menu shortcut |
+
+## What happens on first start
+
+Hivemind looks for coding agents' own programs on your `PATH`. For each one it finds, it downloads that agent from [HiveHub](https://hivehub.griiken.workers.dev/), checks every file against the hash HiveHub recorded, and checks the program answers `--version`. Then it adds the agent and shows a notice saying what each one can do.
+
+HiveHub receives a request for its list, one for each file, and one that counts the install. That last request carries no id and no machine name. If you remove an agent, Hivemind does not add it again on its own.
+
+## Choose a version
+
+| To | Run |
+|---|---|
+| Install one exact release, older ones too | `bash install.sh --version v2026.10.3` |
+| Follow the nightly builds | `bash install.sh --channel nightly` |
+| Go back to stable releases | `bash install.sh --channel stable` |
+| Build from source (git, node 22+, pnpm, bun) | `bash install.sh --dev` |
+
+On Windows the same options are `-Version`, `-Channel` and `-Dev`. Upgrades stay on the channel you installed. More in [Update and roll back](/update-and-roll-back).
+
+<Tip>
+`bash install.sh` means the downloaded script. To pass an option straight from the web, run `bash <(curl -fsSL https://hivemind.griiken.com/install.sh) --channel nightly`.
+</Tip>
+
+## If it didn't work
+
+| What you see | Fix |
+|---|---|
+| `no Intel-mac prebuilt yet` | Use `bash install.sh --dev`, or a Mac with Apple Silicon. |
+| `on Windows, install with PowerShell instead` | Run the PowerShell command above. |
+| `hivemind is damaged and can't be opened` on a Mac | See [The app does not open on macOS](/troubleshooting#the-app-does-not-open-on-macos). |
+
+## Next
+
+- [Install and run your first agent](/getting-started).
+- [Uninstall](/uninstall), when you need to.
+
+<LastValidated />

@@ -1,8 +1,8 @@
 /** The brief `hive widgets|tools|views new` writes as PROMPT.md: what a coding agent needs to build
  *  the plugin and check its own work, with the kind's guide itself, so the two never disagree. */
-import widgetGuide from "../../../site/src/content/docs/guide/widgets.md" with { type: "text" };
-import toolGuide from "../../../site/src/content/docs/guide/tool-plugins.md" with { type: "text" };
-import viewGuide from "../../../site/src/content/docs/guide/extension-authoring.md" with { type: "text" };
+import widgetGuide from "../../../guide/(extend)/widgets.mdx" with { type: "text" };
+import toolGuide from "../../../guide/(extend)/tool-plugins.mdx" with { type: "text" };
+import viewGuide from "../../../guide/(extend)/extension-authoring.mdx" with { type: "text" };
 
 export type PluginKind = "widget" | "tool" | "view";
 
@@ -27,7 +27,8 @@ hive plugins enable ${record}         # once
 hive ctl plugin open ${record}        # ${kind === "widget" ? "put one on the board" : "open its tile"}`;
 }
 
-const stripFrontmatter = (md: string): string => md.replace(/^---\n[\s\S]*?\n---\n+/, "");
+const stripFrontmatter = (md: string): string =>
+  md.replace(/^---\n[\s\S]*?\n---\n+/, "").replace(/\n<LastValidated \/>\n?$/, "\n");
 
 export function pluginBrief(kind: PluginKind, id: string): string {
   return `# Build this ${NOUN[kind]}

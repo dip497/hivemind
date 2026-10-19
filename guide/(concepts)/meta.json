@@ -1,0 +1,12 @@
+{
+  "title": "Concepts",
+  "description": "The ideas behind workspaces, agent states, plugins and connections.",
+  "root": true,
+  "pages": [
+    "workspaces",
+    "agent-states",
+    "plugins",
+    "how-devices-connect",
+    "security-and-privacy"
+  ]
+}

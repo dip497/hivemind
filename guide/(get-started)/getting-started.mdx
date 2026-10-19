@@ -1,0 +1,96 @@
+---
+title: "Install and run your first agent"
+sidebarTitle: "Install and first agent"
+description: "In about five minutes: install Hivemind, start a coding agent in your project, and answer its first question."
+---
+
+In about five minutes you install Hivemind, start a coding agent in a project, and answer the first question it asks you.
+
+<AgentPrompt description="Paste this into your coding agent to do this tutorial's setup for you." page="getting-started">{`
+Install Hivemind on this computer, add my coding agent to it, and open a project.
+
+1. Install. On Linux or macOS: \`bash <(curl -fsSL https://hivemind.griiken.com/install.sh)\`. On Windows, in PowerShell: \`irm https://hivemind.griiken.com/install.ps1 | iex\`. On an Intel Mac, stop and tell me: there is no prebuilt app.
+2. Check: \`hive --version\` prints a version. If \`hive\` is not found, tell me the line that adds \`~/.local/bin\` to PATH in my shell profile.
+3. Check which agent programs are on PATH: \`command -v claude codex opencode\`. Ask me which one to use. If I have none, ask before installing one.
+4. Add it: \`hive agents install <name> --yes\`. Check: \`hive agents list --found\` lists it.
+5. Ask me which project folder to open, then run \`hivemind <folder>\`.
+
+Never type a password; if a step needs sudo, ask me to run it. At the end, tell me the version installed and the agent added. Then tell me to press 2 in the app to start the agent, and to ask it to create a file, so I see its tile turn amber when it asks me.
+`}</AgentPrompt>
+
+## What you'll learn
+
+- How to install Hivemind and add the coding agent you already use.
+- How to start that agent in a project.
+- How Hivemind shows you that an agent is waiting, and how you answer it.
+
+## Before you start
+
+- A computer Hivemind runs on: Linux x86_64, macOS on Apple Silicon, or Windows x64. Others are in [System requirements](/system-requirements).
+- A coding agent's own program, installed and signed in, such as `claude`, `codex` or `opencode`.
+- A project folder, ideally a git repository.
+
+<Steps>
+  <Step title="Install Hivemind">
+    Run the installer for your system.
+
+    <CodeGroup>
+    ```bash Linux and macOS
+    bash <(curl -fsSL https://hivemind.griiken.com/install.sh)
+    ```
+
+    ```powershell Windows (PowerShell)
+    irm https://hivemind.griiken.com/install.ps1 | iex
+    ```
+    </CodeGroup>
+
+    **Check:** `hive --version` prints a version. Other ways to install, such as one exact release or nightly builds, are on [Install](/install).
+  </Step>
+  <Step title="Open your project">
+    Start Hivemind in your project's folder.
+
+    ```bash
+    cd ~/my-project && hivemind .
+    ```
+
+    **Check:** the app opens, and the Layers panel on the left lists your project. On its first start, Hivemind finds the agent programs on your `PATH` and adds the matching agents from [HiveHub](https://hivehub.griiken.workers.dev/).
+  </Step>
+  <Step title="Add your agent, if it is missing">
+    Skip this step if the app already added your agent. Otherwise add it by name.
+
+    ```bash
+    hive agents install claude --yes
+    ```
+
+    **Check:** `hive agents list --found` lists it. In the app, the agent is under **Settings → Plugins**. More in [Run agents](/agents).
+  </Step>
+  <Step title="Start the agent">
+    Click the project's frame on the canvas, then press <kbd>2</kbd>.
+
+    **Check:** a new tile opens in the frame, and your agent's prompt appears in it. <kbd>2</kbd> starts your default agent, which you choose in **Settings → Plugins**.
+  </Step>
+  <Step title="Give it a task that needs your permission">
+    Type a small task into the agent's tile, such as `Create a file called hello.txt that says hi`, and press <kbd>Enter</kbd>.
+
+    **Check:** when the agent asks whether it may create the file, its tile turns amber, and the bell at the top of the Layers panel shows **1**. If your agent writes the file without asking, ask it to run a shell command instead.
+  </Step>
+  <Step title="Answer it">
+    Press the bell. It takes you to the tile that needs you. Answer the agent's question in its tile, for example by choosing **Yes**.
+
+    **Check:** the tile stops being amber, the bell shows nothing, and `hello.txt` is in your project.
+  </Step>
+</Steps>
+
+## What you did
+
+- You installed Hivemind and added your coding agent.
+- You started the agent in a frame bound to your project folder.
+- You saw it wait on you, in amber with a count on the bell, and you answered it.
+
+## Next
+
+- [Run many agents at once](/run-many-agents), each in its own git worktree.
+- [Know who is waiting](/know-who-is-waiting): notifications, sounds and your phone.
+- Every key is on [Keyboard shortcuts](/keyboard-shortcuts).
+
+<LastValidated />

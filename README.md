@@ -74,4 +74,4 @@ Windows x64, in PowerShell:
 irm https://hivemind.griiken.com/install.ps1 | iex
 ```
 
-[Contributing](https://hivemind.griiken.com/guide/contributing/) · [MIT licence](./LICENSE)
+[Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)

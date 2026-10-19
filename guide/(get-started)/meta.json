@@ -1,0 +1,11 @@
+{
+  "title": "Get started",
+  "description": "Install, run your first agent, and read these docs from your agent.",
+  "root": true,
+  "pages": [
+    "index",
+    "getting-started",
+    "run-many-agents",
+    "docs-for-agents"
+  ]
+}

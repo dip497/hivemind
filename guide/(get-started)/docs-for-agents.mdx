@@ -1,0 +1,57 @@
+---
+title: "Use these docs from your agent"
+description: "Let your coding agent read these docs through llms.txt or any page as Markdown, and teach it Hivemind with the hive skills."
+---
+
+Your coding agent can read these docs and drive Hivemind for you. Point it at them once, and it
+looks things up instead of guessing.
+
+<AgentPrompt description="Paste this into your coding agent so it reads the Hivemind docs whenever it needs them." page="docs-for-agents">{`
+Remember where the Hivemind documentation is, so you read it instead of guessing.
+
+1. Fetch https://hivemind.griiken.com/guide/llms.txt. It lists every page with a one-line description, and each page's address as Markdown.
+2. Add a short note to this project's agent instructions (CLAUDE.md, AGENTS.md, or what this agent reads): "Hivemind docs: https://hivemind.griiken.com/guide/llms.txt. Read the page you need as Markdown before using a hive command."
+3. Check: find the page about installing Hivemind in that list, read it as Markdown, and tell me the install command for this computer.
+
+If writing the instructions file needs a choice only I can make, ask me and wait.
+`}</AgentPrompt>
+
+## Give it the docs as text
+
+| File | Holds |
+|---|---|
+| [`/guide/llms.txt`](/llms.txt) | every page, each with its one-line description and its address as Markdown |
+| [`/guide/llms-full.txt`](/llms-full.txt) | every page in one Markdown file |
+
+To get one page as Markdown, add `.md` to its address, as in `https://hivemind.griiken.com/guide/install.md`, or press
+**Copy page** at the top of the page. The menu beside it opens the page in ChatGPT, Claude or Cursor.
+
+**Check:** ask your agent "How do I install Hivemind?" It answers with the install command from these docs.
+
+## Teach it Hivemind with the hive skills
+
+To let an agent work in Hivemind on its own, add the hive skills to your project.
+
+```bash
+cd ~/my-project && hive add skill
+```
+
+**Check:** `.claude/skills/` now holds `hive-work`, `hive-workflow`, `hivemind` and
+`hive-browser`. An agent that reads skills learns to pick up issues and to start and coordinate
+other agents with `hive ctl`.
+
+## Use the prompt on each page
+
+A page that describes something you set up or do starts with a prompt. Paste it into Claude Code,
+Codex or any coding agent, and it does the job on your computer. Each prompt says what to check at
+the end. It asks you for anything only you can do, such as a password, a sudo or a DNS record.
+Each one ends with a `REFERENCE` line: the page as Markdown, for the agent to read.
+
+## Rules for agents that read these docs
+
+- Prefer `hive ctl … --json`, and check `hive <command> --help` before using a flag.
+- Never ask a person for a token's value. Tell them to make one in **Settings → API access**.
+- Use the smallest role that does the job.
+- Ask the person before installing anything, and never type a password.
+
+<LastValidated />

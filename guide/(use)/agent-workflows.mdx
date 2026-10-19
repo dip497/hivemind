@@ -1,0 +1,129 @@
+---
+title: "Coordinate agents"
+description: "Have one agent send work to several others, collect their replies and answer their questions, with hive ctl."
+---
+
+One agent can lead others. For example, a lead agent sends three reviewers to three parts of your
+code, then merges what they found into one list.
+
+<AgentPrompt description="Paste this into an agent running inside Hivemind to have it lead a team of other agents." page="agent-workflows">{`
+You are running inside a Hivemind tile. Lead a small team of other agents with \`hive ctl\` to review this project.
+
+1. Check you can reach the app: \`hive ctl agents --json\` answers. If it fails, tell me Hivemind must be open on this project, and stop.
+2. Ask me which parts of the project to review (for example three folders) and which agent the team should use. Only these agents can be workers: claude, codex, droid, hermes, kiro, opencode, pi.
+3. Start one worker per part: \`hive ctl workflow --shape fanout --agent <agent> --items "<part one> || <part two> || <part three>" --prompt "Review the {item} code and list concrete bugs with file and line." --timeout 10m --close --json\`. Keep --timeout below your own tool's time limit.
+4. If a worker stops to ask something, it shows up in \`hive ctl inbox --wait 90s\`. Bring me anything only I can answer, such as a product choice. Never type a password.
+5. Merge the replies into one list, remove duplicates, and sort by how serious each bug is.
+
+Check: the workflow's JSON has one reply per part. At the end, show me the merged list, how many workers ran, and whether any failed or timed out.
+`}</AgentPrompt>
+
+<Frame caption="Start, send, collect, answer">
+  <img src="/images/workflows-loop.svg" alt="You or a lead agent start workers and send them work with hive ctl spawn and send. Each worker's reply comes back through hive ctl read or the inbox. A worker that asks something lands in the inbox, and you answer or approve it." />
+</Frame>
+
+## Words on this page
+
+| Word | Means |
+|---|---|
+| **Lead** | the agent, or you in a terminal, that runs `hive ctl` |
+| **Worker** | an agent the lead started and sent work to |
+| **Finishes replying** | the agent tells Hivemind it has finished its reply, so the lead can read it |
+| **Supervise** | a worker's permission questions go to the lead's inbox instead of its own screen |
+
+`hive ctl` run inside an agent's tile acts as that agent. Anywhere else, it acts as you.
+
+## Before you start
+
+- Hivemind is open on the project.
+- The workers use an agent that tells Hivemind when it finishes replying:
+
+| Agent | Gets its task | Resumes | Permission questions with `--supervise` |
+|---|---|---|---|
+| claude | as an argument | its own session | go to the lead |
+| codex | typed in | newest in the folder | stay with you |
+| droid | typed in | newest in the folder | stay with you |
+| hermes | typed in | no | stay with you |
+| kiro | typed in | its own session | go to the lead |
+| opencode | typed in | no | stay with you |
+| pi | as an argument | newest in the folder | refused (it asks none) |
+
+You can still start any other agent, but you drive it by hand. A workflow refuses it before
+starting anything.
+
+## Send one worker a task
+
+1. To start a worker with a task, run:
+   `hive ctl spawn --agent pi --prompt "Review the current diff and list concrete bugs."`
+2. Check: it prints the new tile's id, and the tile appears on the canvas.
+3. To wait for its reply, run `hive ctl read <tile> --timeout 90s`.
+4. Check: it prints the reply and exits 0. Exit 4 means it is still working: run `read` again.
+5. To send a follow-up, run `hive ctl send <tile> "Now fix the first one"`.
+
+Durations take units: `90s`, `10m`. Keep `--timeout` below your own tool's time limit.
+Every exit code is on the [CLI reference](/cli).
+
+To follow every agent and what it waits on, run `hive ctl agents --watch`.
+
+## Run many workers at once
+
+To send the same task over several items, run a workflow:
+
+```bash
+hive ctl workflow --shape fanout --items "auth || billing || search" \
+  --prompt "Review the {item} module and list concrete bugs." --close --json
+```
+
+`||` separates the items. `{item}` is replaced by each one.
+
+| Shape | Does |
+|---|---|
+| `fanout` | one worker per item, the same prompt |
+| `pipeline` | each stage's reply is the next stage's input (`--stages`) |
+| `mapreduce` | a fanout, then one worker merges the replies (`--reduce-prompt`) |
+
+The command waits until every worker has replied. `--close` closes their tiles afterwards.
+
+## Answer what workers ask
+
+1. To have a worker's permission questions come to you, start it with `--supervise all`:
+   `hive ctl spawn --agent claude --supervise all --prompt "…"`.
+2. To see questions and replies sent to you, run `hive ctl inbox --wait 90s`.
+3. To answer one, run `hive ctl approve <request id> allow`. The other answers are `deny`,
+   `always` and `never`.
+4. Check: the worker carries on, and its tile leaves **needs you**.
+
+`always` and `never` are remembered for that worker and that tool.
+
+## Let agents use a browser and plugins
+
+- **Browser**: switch on the Browser tool, then **Agent browser control** on its page in
+  **Settings → Plugins**, and restart the app. Agents then drive the Browser tile you see.
+- **Plugins**: an agent opens a plugin and runs its commands:
+
+```bash
+hive ctl plugin open widget:@dip497/progress
+hive ctl plugin commands
+hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
+```
+
+## Check it worked
+
+- `hive ctl agents` lists each worker you started.
+- `hive ctl read` or the workflow's JSON prints each worker's reply.
+
+## If it didn't
+
+| You see | Do |
+|---|---|
+| `hive ctl` exits 3 | The app is not running. Open Hivemind on the project. |
+| A workflow refuses the agent | Pick one from the table under **Before you start**. |
+| `read` keeps exiting 4 | The worker is still working, or waits on you. Check its tile. |
+
+## Related
+
+- [Track work as issues](/issues): give workers issues to close.
+- [CLI reference](/cli): every `hive ctl` command and exit code.
+- [API](/api): drive agents from your own program, with a token.
+
+<LastValidated />

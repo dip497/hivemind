@@ -1,0 +1,14 @@
+{
+  "title": "Reference",
+  "description": "Every command, shortcut, setting and file.",
+  "root": true,
+  "pages": [
+    "cli",
+    "keyboard-shortcuts",
+    "settings",
+    "environment-variables",
+    "agent-yaml",
+    "hive-net",
+    "glossary"
+  ]
+}
