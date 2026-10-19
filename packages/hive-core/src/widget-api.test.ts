@@ -34,3 +34,15 @@ test("hive.hm.capabilities is an array from the first draw, and hive.on(\"hm\") 
   worker.postMessage({ type: "hm-values", values: { capabilities: ["workspace:spawn"], features: [], settings: {} } });
   expect(await next()).toEqual({ type: "render", tree: { type: "text", text: "can spawn" } });
 });
+
+test("a widget is told at its start that the person asked for less motion, and hears when that changes", async () => {
+  const { worker, next } = run(`
+    const draw = () => hive.render({ type: "text", text: hive.reducedMotion ? "still" : "moving" });
+    hive.on("start", draw);
+    hive.on("motion", draw);
+  `);
+  worker.postMessage({ type: "init", state: null, options: {}, reducedMotion: true });
+  expect(await next()).toEqual({ type: "render", tree: { type: "text", text: "still" } });
+  worker.postMessage({ type: "motion", payload: false });
+  expect(await next()).toEqual({ type: "render", tree: { type: "text", text: "moving" } });
+});

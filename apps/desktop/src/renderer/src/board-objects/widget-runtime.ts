@@ -78,6 +78,10 @@ export function useDrawn(id: string): Drawing | undefined {
 
 const workers = new Map<string, Worker>();
 
+/** Whether the person asked for less motion, which each widget is told at its start and on a change. */
+const lessMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+lessMotion?.addEventListener("change", (e) => { for (const w of workers.values()) w.postMessage({ type: "motion", payload: e.matches }); });
+
 /** The widgets whose code runs in this window, with their packages: what WidgetLinks links. */
 let runningWidgets: { id: string; pkg: WidgetPackage }[] = [];
 const runningListeners = new Set<() => void>();
@@ -298,7 +302,7 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
         else if (m.type === "notify" && typeof Notification !== "undefined") new Notification(pkg.name, { body: m.text });
       };
       worker.onerror = (err) => console.warn(`[widget ${pkg.id}] ${err.message}`);
-      worker.postMessage({ type: "init", state: w.state, options: optionsOf(pkg, w) });
+      worker.postMessage({ type: "init", state: w.state, options: optionsOf(pkg, w), reducedMotion: lessMotion?.matches === true });
       sentOptions.set(id, JSON.stringify(optionsOf(pkg, w)));
       workers.set(id, worker);
       packageOf.set(id, pkg);

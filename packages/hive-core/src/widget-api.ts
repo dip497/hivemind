@@ -13,7 +13,7 @@ import { CLIENT_VALUES_UNTIL_KNOWN } from "@hivemind/view-sdk/protocol";
 
 /** Run first in a widget's worker: defines `hive` over the messages its runner sends and takes. */
 export const WIDGET_PRELUDE = `const hive = (() => {
-  const on = {}; let state; let options = {}; let spot = { x: 1, y: 0 };
+  const on = {}; let state; let options = {}; let spot = { x: 1, y: 0 }; let still = false;
   // hive.hm: each call goes to the client the window holds for this widget, by name.
   const waiting = new Map(); const fns = new Map(); let n = 0; let values = ${JSON.stringify(CLIENT_VALUES_UNTIL_KNOWN)};
   const call = (path, args) => {
@@ -30,7 +30,8 @@ export const WIDGET_PRELUDE = `const hive = (() => {
   const fire = (t, p) => (on[t] || []).forEach((f) => { try { f(p); } catch (e) { console.error(e); } });
   self.onmessage = (e) => {
     const m = e.data;
-    if (m.type === "init") { state = m.state; options = m.options; }
+    if (m.type === "init") { state = m.state; options = m.options; still = m.reducedMotion === true; }
+    if (m.type === "motion") still = m.payload === true;
     if (m.type === "options") options = m.payload;
     if (m.type === "hm-values") { values = m.values; fire("hm"); return; }
     if (m.type === "hm-reply") { const w = waiting.get(m.req); waiting.delete(m.req); if (w) m.ok ? w.resolve(m.value) : w.reject(new Error(m.error)); return; }
@@ -56,6 +57,8 @@ export const WIDGET_PRELUDE = `const hive = (() => {
       postMessage({ type: "move", x, y, over: Math.min(60000, Math.max(0, Number(how && how.over) || 0)) });
     },
     get spot() { return spot; },
+    /** The person asked for less motion: draw it still and do not move its card. */
+    get reducedMotion() { return still; },
     hm,
     get state() { return state; },
     get options() { return options; },
@@ -158,6 +161,8 @@ interface Hive {
   /** Move the card to (x, y), each 0 to 1 across the screen, over \`over\` ms. Every viewer animates it. */
   moveTo(to: { x: number; y: number | "top" | "bottom" }, how?: { over?: number }): void;
   readonly spot: { x: number; y: number };
+  /** The person asked their system for less motion: hold still, and do not move the card. */
+  readonly reducedMotion: boolean;
   /** What it keeps: saved with the workspace, shared with everyone in it. */
   readonly state: any;
   setState(state: unknown): void;
@@ -173,6 +178,8 @@ interface Hive {
   /** The card was clicked, not on a button. */
   on(event: "click", f: () => void): void;
   on(event: "options", f: (options: Record<string, string | number | boolean>) => void): void;
+  /** Reduced motion was turned on or off: \`hive.reducedMotion\` is now \`reduced\`. */
+  on(event: "motion", f: (reduced: boolean) => void): void;
   /** \`hive.hm\`'s values arrived from the window, or changed (its settings). */
   on(event: "hm", f: () => void): void;
 }
