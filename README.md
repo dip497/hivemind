@@ -20,7 +20,7 @@
 > write are web code anyway. Hate mail goes to `/dev/null`.
 
 <p align="center">
-  <a href="https://hivemind.griiken.com/"><img alt="Claude Code, Codex, OpenCode and Pi in their own terminals on one board, over Raphael's School of Athens, with butterflies flying across and Biscuit the dog asleep on a tile" src="site/public/shots/hero/school-of-agents.webp" /></a>
+  <a href="https://hivemind.griiken.com/"><img alt="Claude Code, Codex, OpenCode and Pi in their own terminals on one board, over Raphael's School of Athens, with butterflies flying across and Biscuit the dog asleep on a tile" src="assets/readme/school-of-agents.webp" /></a>
 </p>
 
 <p align="center"><sub>The School of Agents. <i>Wallpaper: Raphael, The School of Athens (1509–1511), public domain, via artwallpapers.biz.</i></sub></p>
@@ -38,7 +38,7 @@ tool, and it builds one and plugs it in while you watch.
 
 <table>
   <tr>
-    <td><img alt="An agent asked for a CI light puts the widget on the board and sets it to running" src="site/public/shots/hero/step-widget.webp" /></td>
+    <td><img alt="An agent asked for a CI light puts the widget on the board and sets it to running" src="assets/readme/step-widget.webp" /></td>
     <td><img alt="The Flaky tests tool: five tests run eight times, two of them flaky" src="site/public/shots/showcase/flaky-tests-board.webp" /></td>
   </tr>
   <tr>
@@ -46,7 +46,7 @@ tool, and it builds one and plugs it in while you watch.
     <td align="center"><sub>Which tests are flaky? Now you know.</sub></td>
   </tr>
   <tr>
-    <td><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="site/public/shots/hero/step-view.webp" /></td>
+    <td><img alt="An agent was asked to show the workspace as islands. It installed the Island view and switched to it; its live terminal sits beside the islands" src="assets/readme/step-view.webp" /></td>
     <td align="center"><img alt="The phone page listing projects and their agents" src="site/public/shots/phone-home.webp" width="220" /></td>
   </tr>
   <tr>
