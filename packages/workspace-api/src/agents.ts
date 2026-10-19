@@ -192,12 +192,13 @@ export interface AgentChanges {
 }
 
 /** An agent's reply to the turn after the last message it was sent (0.23): `text` null when the
- *  turn carried none (`note` says why), it is still working (`timeout`), it stopped to wait on an
- *  answer (`waiting`, what on, 0.26), its tile closed or its agent exited (`closed`), or it is
- *  asleep (`asleep`, 0.29). */
+ *  turn carried none (`note` says why), it is still working when the wait ran out (`timeout`) or,
+ *  read without waiting, now (`working`, 0.33), it was sent nothing since its last reply was read
+ *  and is not working (`idle`, 0.33), it stopped to wait on an answer (`waiting`, what on, 0.26),
+ *  its tile closed or its agent exited (`closed`), or it is asleep (`asleep`, 0.29). */
 export interface AgentRead {
   text: string | null;
-  finalStatus: "turn" | "timeout" | "closed" | "waiting" | "asleep";
+  finalStatus: "turn" | "timeout" | "working" | "idle" | "closed" | "waiting" | "asleep";
   truncated: boolean;
   note?: string;
   waiting?: NonNullable<AgentItem["waiting"]>;

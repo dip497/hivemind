@@ -81,6 +81,7 @@ A line without an `id` is an event, `{"event": "…", "params": [...]}`, about t
 | `BAD_REQUEST` | Wrong params, or a path outside the workspace. Nothing ran. |
 | `UNKNOWN_METHOD` | No method by that name. |
 | `NOT_FOUND` | No such tile, frame or workspace. |
+| `NO_AGENT` | The tile runs no agent (a tool, a browser, a shell), and the method asks an agent's reply. |
 | `UNSUPPORTED` | The agent cannot do that: it does not tell Hivemind when it finishes replying, or keeps no sessions. |
 | `TIMEOUT` | What it waited on did not come in time. |
 | `UNAVAILABLE` | It needs one of your windows open. |
@@ -160,7 +161,7 @@ With an `agents` token:
 {"id": 4, "result": {"text": "…", "finalStatus": "turn", "truncated": false}}
 ```
 
-`agent.read` waits up to the milliseconds you give for the agent to finish replying. `finalStatus` is `turn`, `timeout`, `closed`, `waiting` or `asleep`.
+`agent.read` waits up to the milliseconds you give for the agent to finish replying. `finalStatus` is `turn`, `timeout`, `working`, `idle`, `closed`, `waiting` or `asleep`. A tile that runs no agent is refused `NO_AGENT`.
 
 The full protocol is [`spec/workspace-api.md`](https://github.com/dip497/hivemind/blob/main/spec/workspace-api.md) in the repository.
 

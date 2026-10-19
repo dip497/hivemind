@@ -66,6 +66,8 @@ beforeAll(async () => {
     }),
     answer("agent.read", async (tile) => {
       if (tile === "z-1") return { text: null, finalStatus: "asleep", truncated: false, note: "it is asleep: no turn will come until hive ctl wake z-1" };
+      if (tile === "i-1") return { text: null, finalStatus: "idle", truncated: false, note: "nothing new since you last read it: send it a task with hive ctl send i-1" };
+      if (tile === "web-1") throw new ApiError("NO_AGENT", "no agent runs in tile web-1, so no reply will come from it");
       if (++reads > turnAfterReads) return { text: `reply ${reads}`, finalStatus: "turn", truncated: false };
       await new Promise((r) => setTimeout(r, 50));
       return { text: null, finalStatus: "timeout", truncated: false };
@@ -302,11 +304,18 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([poll.code, slices()]).toEqual([0, [0]]);
   });
 
-  test("read of an agent asleep stops at once, exit 7, saying so", async () => {
-    calls.length = 0;
-    const out = await hive(["ctl", "read", "z-1", "--timeout", "25000", "--json"], { env: env() });
-    expect([out.code, out.json, calls.filter((c) => c.method === "agent.read").length]).toEqual([7, { text: null, finalStatus: "asleep", truncated: false, note: "it is asleep: no turn will come until hive ctl wake z-1" }, 1]);
-  }, 30_000);
+  test("read stops at once when no turn will come, saying why: asleep or idle exit 7, a tile running no agent NO_AGENT exit 5", async () => {
+    const cases: Array<[string, number, unknown]> = [
+      ["z-1", 7, { text: null, finalStatus: "asleep", truncated: false, note: "it is asleep: no turn will come until hive ctl wake z-1" }],
+      ["i-1", 7, { text: null, finalStatus: "idle", truncated: false, note: "nothing new since you last read it: send it a task with hive ctl send i-1" }],
+      ["web-1", 5, { error: { code: "NO_AGENT", message: "no agent runs in tile web-1, so no reply will come from it" } }],
+    ];
+    for (const [tile, code, json] of cases) {
+      calls.length = 0;
+      const out = await hive(["ctl", "read", tile, "--timeout", "25000", "--json"], { env: env() });
+      expect([tile, out.code, out.json, calls.filter((c) => c.method === "agent.read").length]).toEqual([tile, code, json, 1]);
+    }
+  }, 60_000);
 
   test("agents --watch prints what happens to the workspace's agents after the list, one JSON a line, and nothing of another's: as the person, and as an agent", async () => {
     const event = (seq: number, tile: string) => ({ seq, at: 0, kind: "turnEnded", tile, detail: "done" });

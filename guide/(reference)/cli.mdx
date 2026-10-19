@@ -121,7 +121,7 @@ hive ctl sessions [agent] [--cwd dir] [--limit 100]
                                         # past sessions in a folder, to --resume
 hive ctl send <tileId> "text" [--interrupt]   # after its turn; --interrupt: stop the turn first
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
-hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait
+hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait; idle with nothing new: exit 7
                                         # exit 4 timeout, 5 closed, 7 asleep, 8 waits on an answer
 hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once (--wait at most 10m)
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]

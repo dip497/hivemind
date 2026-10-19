@@ -355,18 +355,18 @@ const keys = sub("keys", "Send key tokens to a tile's TUI (comma-separated, e.g.
 
 const READ_DEFAULT_MS = 100_000; // under Claude Code's 120 s Bash default
 
-const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes, 7 if it is asleep, 8 if it stops to wait on an answer)", {
+const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes or the tile runs no agent, 7 if it is asleep or idle with nothing new, 8 if it stops to wait on an answer)", {
   ...tileArg,
   timeout: { type: "string", description: `total wait, e.g. 90s or 5m (default ${READ_DEFAULT_MS / 1000}s); made of short HCP polls, never one long request` },
-  poll: { type: "boolean", description: "don't wait: return the current turn state immediately (always exit 0)" },
+  poll: { type: "boolean", description: "don't wait: say now whether it has a new reply, is working, idle, waiting, asleep or closed (exit 0)" },
 }, async (a) => {
   const total = a.poll ? 0 : durationFlag(a.timeout, "timeout", READ_DEFAULT_MS);
   return onDrive(async (d) => {
     const r = await readTurn(d, String(a.tileId), total);
     if (r.finalStatus === "turn" || a.poll) return r;
     // Closed while we waited: no turn is coming. Waiting: none comes until it is answered; asleep,
-    // until it is woken.
-    const exit = { closed: EXIT.notFound, waiting: EXIT.waiting, asleep: EXIT.refused, timeout: EXIT.timeout } as const;
+    // until it is woken; idle, until it is sent a task.
+    const exit = { closed: EXIT.notFound, waiting: EXIT.waiting, asleep: EXIT.refused, idle: EXIT.refused, timeout: EXIT.timeout, working: EXIT.ok } as const;
     return { __exit: exit[r.finalStatus], result: r };
   });
 });

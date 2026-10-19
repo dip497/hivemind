@@ -1,4 +1,4 @@
-# Workspace API (0.32)
+# Workspace API (0.33)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -20,6 +20,7 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `UNKNOWN_METHOD` | No such method on this host. |
 | `FORBIDDEN` | The caller may not do this: a peer's role on the workspace does not allow it (below), or no token says who it is. It never ran. |
 | `NOT_FOUND` | What it names is not there: a tile, a frame, a workspace (0.23). |
+| `NO_AGENT` | The tile is there but runs no agent (a tool, a browser, a shell), and the method asks an agent's reply (0.33). |
 | `UNSUPPORTED` | The agent cannot do what it asks: it says no turn end to read a reply by, has no permission system to supervise, or keeps no sessions to resume (0.23). |
 | `RATE_LIMITED`, `DEPTH_EXCEEDED` | Too many started at once, or one started too far below the person: ask again later, or from higher up (0.23). It never ran. The limit is 16 agents, tools or widgets a minute for each tree of callers (a grant, an agent the person started, or the person, with every agent started under it), and 64 for the machine; a start refused for anything else uses none of it. |
 | `TIMEOUT` | What it waited on did not come in time (0.23). |
@@ -61,7 +62,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.32", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.33", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -261,7 +262,7 @@ log.
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `agent.rename` | `tile`, `name` | `{name}`: what it is called now, on its tile and to the agents it talks to; an empty `name` takes it away, so it is called what its agent says again (0.23) | target the agent's tile |
 | `agent.keys` | `tile`, `keys` | `{keys}`: each key name (`Enter`, `Escape`, `Up`, `C-c`, …) or text typed into its terminal a moment after the last, how many there were (0.23) | target the agent's tile |
-| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23; a `timeoutMs` past 2³¹−1 ms, about 24.8 days, waits that long); `waiting` at once when it stops to wait on an answer, with what on (0.26); `asleep` at once when it is asleep or is put to sleep (0.29) | — |
+| `agent.read` | `tile`, `timeoutMs`? (0: without waiting) | `{text, finalStatus, truncated, note?, waiting?}`: its reply at the end of its next turn (`finalStatus` `turn`), or what it shows when it closes (`closed`) or `timeoutMs` passes (`timeout`), as `hive ctl read` (0.23; a `timeoutMs` past 2³¹−1 ms, about 24.8 days, waits that long); `waiting` at once when it stops to wait on an answer, with what on (0.26); `asleep` at once when it is asleep or is put to sleep (0.29); `idle` at once when it was sent nothing since its last reply was read, ended no turn since and is not working, and `working` for one still working read with `timeoutMs` 0 (0.33). `NO_AGENT` for a tile that runs no agent (0.33) | — |
 | `agent.output` | `tile`, `lines`? | `{text}`: the last `lines` lines (40) of what it printed, its terminal's escapes taken out, as much as the host keeps; following its output as it comes is `terminal.open` with `attachOnly` (0.23) | — |
 | `agent.sessions` | `place`, `program`, `limit`? | `{agent, resumable, sessions}`: the sessions `program` keeps for that folder, newest first, each one `agent.start`'s `resume` takes; `resumable` false when it says none (0.23) | read |
 | `tool.open` | `repo`, `{tool, frame?, url?}` | `{tile}`: an installed tool's tile (`tool` its id) placed on the board, in `frame` or the one in view (0.23) | target the new tile |

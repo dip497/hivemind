@@ -319,6 +319,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const emitBucket = tokenBucket(EMIT_RATE);
   const callBucket = tokenBucket(EMIT_RATE);
   const sendMark = new Map<string, number>();
+  // The tiles sent something since their last reply was read: a read of any other waits only
+  // while it works, since nothing new will come.
+  const sentSinceRead = new Set<string>();
 
   // Bare↔pty id mapping lives in @hivemind/workspace-api/tile-id (imported as ptyId/bareOf). The
   // pty, recorder, turn-tracker and HIVEMIND_TILE are keyed by the pty id; the
@@ -345,6 +348,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const pid = ptyId(tileId);
     sendSeq.set(pid, deps.turns.currentSeq(pid));
     sendMark.set(pid, deps.recorder.mark(pid));
+    sentSinceRead.add(pid);
   };
 
   // A message the mailbox is still HOLDING (the agent is mid-turn). Its read epoch
@@ -487,6 +491,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     deps.recorder.forget(pid);
     sendSeq.delete(pid);
     sendMark.delete(pid);
+    sentSinceRead.delete(pid);
     pendingSend.delete(pid);
     deps.waits.forget(bare);
     waitTold.delete(bare);
@@ -964,7 +969,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // come. A tile still starting is in its workspace already.
       requireOpen(tile);
       const bare = bareOf(tile);
-      if (recordOf(bare)?.sleeping) return asleepRead(bare);
+      const record = recordOf(bare);
+      if (record && !providerOf(tile) && !(record.kind === AGENT_TILE_KIND && agentForCmd(record.cmd ?? ""))) {
+        throw new ApiError("NO_AGENT", `no agent runs in tile ${bare}, so no reply will come from it`);
+      }
+      if (record?.sleeping) return asleepRead(bare);
       // A send may still be queued behind the turn in flight; its epoch is armed when
       // it is typed, so wait for that before deciding which turn this read wants.
       // One budget for the whole read: waiting for a held send to be typed must not
@@ -973,6 +982,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       const pending = pendingSend.get(pid);
       if (pending) await Promise.race([pending, new Promise<void>((r) => { const t = setTimeout(r, timeoutMs); t.unref?.(); })]);
       const afterSeq = sendSeq.get(pid) ?? deps.turns.currentSeq(pid);
+      // Sent nothing since its last reply was read, ended no turn since, and not working: nothing
+      // will come until it is sent a task.
+      const state = deps.status.get(bare)?.state;
+      if (!sentSinceRead.has(pid) && deps.turns.currentSeq(pid) <= afterSeq && state !== undefined && !(["working", "waiting", "exited"] as string[]).includes(state)) {
+        return { text: null, finalStatus: "idle", truncated: false, note: `nothing new since you last read it: send it a task with hive ctl send ${bare}` };
+      }
       // It cannot end its turn while it waits on an answer, or once its agent has exited: say so
       // instead of running out of time. A turn it already ended comes first.
       const stopped = new AbortController();
@@ -1003,12 +1018,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // turn instantly, so a poll loop can never tell a new answer from the old one.
       if (rec) {
         sendSeq.set(pid, rec.seq);
+        sentSinceRead.delete(pid);
         deps.inbox.given(bare, "reply", rec.seq);
       }
       if (rec && typeof rec.text === "string" && rec.text.length > 0) return { text: rec.text, finalStatus: "turn", truncated: false };
       if (rec) return { text: null, finalStatus: "turn", truncated: false, note: "turn completed but carried no readable reply" };
       // No completed turn within the timeout: the agent is still working. Spawned with
       // report:true, its reply goes to its starter's inbox when done.
+      if (timeoutMs === 0) return { text: null, finalStatus: "working", truncated: false, note: `still working: wait for its reply with hive ctl read ${bare}` };
       return { text: null, finalStatus: "timeout", truncated: false, note: "agent still working — no completed turn within timeout" };
     },
 

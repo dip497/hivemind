@@ -285,7 +285,9 @@ hive ctl read <tileId> --timeout 90s --json
 # stopped to wait on an answer → exit 8 and {"finalStatus":"waiting","waiting":{"kind","asks",…}}; answer it, then read again.
 # closed, or its agent exited → exit 5 and {"text":null,"finalStatus":"closed",…}; do not read it again.
 # asleep → exit 7 and {"text":null,"finalStatus":"asleep",…}; hive ctl wake <tileId> first.
-hive ctl read <tileId> --poll --json              # never blocks: current state, exit 0
+# idle, sent nothing since you last read it → exit 7 and {"text":null,"finalStatus":"idle",…}; send it a task.
+# a tile that runs no agent (a tool, a browser) → exit 5 and {"error":{"code":"NO_AGENT",…}}.
+hive ctl read <tileId> --poll --json              # never blocks, exit 0: a new reply, or "working", "idle", "waiting", "asleep", "closed"
 hive ctl stream <tileId> --snapshot               # the last 40 lines it printed (ANSI-stripped)
 \`\`\`
 Durations take units (\`90s\`, \`10m\`); a bare number is milliseconds, and one under 1000 is refused. Keep \`--timeout\` below your tool's own limit (Claude Code's Bash default is 120 s) or pass a matching tool timeout. It is always safe to interrupt and retry. A reply you read is not also put in your inbox.
@@ -455,7 +457,7 @@ Always check each result's \`status\` before trusting \`text\`. Give the Bash to
 hive ctl spawn --prompt "…" [--agent pi] [--name reviewer] [--frame repo] [--model opus] [--mode plan] [--supervise all] --json   # → {"tile":"…"}
 hive ctl send <tileId> "next instruction"                     # a follow-up turn (typed + submitted once its turn ends)
 hive ctl send <tileId> --interrupt "instead…"                 # stop its turn first, then send
-hive ctl read <tileId> --timeout 90s --json                 # block for its reply: {"text","finalStatus":"turn"}; exit 4 + "timeout" if still busy, exit 8 + "waiting" if it waits on an answer, exit 5 + "closed" if it closed
+hive ctl read <tileId> --timeout 90s --json                 # block for its reply: {"text","finalStatus":"turn"}; exit 4 + "timeout" if still busy, exit 8 + "waiting" if it waits on an answer, exit 5 + "closed" if it closed, exit 7 + "idle" if it was sent nothing new
 hive ctl inbox --json                                         # what your agents sent you, read once
 hive ctl read <tileId> --poll --json                          # never blocks
 hive ctl keys <tileId> Down,Enter                             # drive its TUI picker (AskUserQuestion etc.)

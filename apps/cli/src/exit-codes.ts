@@ -13,9 +13,9 @@ const EXIT_CODES = [
   { name: "usage", exit: 2, codes: ["USAGE", "BAD_REQUEST", "UNKNOWN_METHOD"], meaning: "the command was written wrong: see its --help" },
   { name: "unavailable", exit: 3, codes: ["UNAVAILABLE"], meaning: "no hivemind app or `hive host` answers" },
   { name: "timeout", exit: 4, codes: ["TIMEOUT"], meaning: "the wait ran out" },
-  { name: "notFound", exit: 5, codes: ["NOT_FOUND", "NO_ROOT"], meaning: "what it names is not there, or was closed: a tile, agent, frame, issue or workspace" },
+  { name: "notFound", exit: 5, codes: ["NOT_FOUND", "NO_AGENT", "NO_ROOT"], meaning: "what it names is not there, or was closed: a tile, agent, frame, issue or workspace; or the tile runs no agent" },
   { name: "unauthorized", exit: 6, codes: ["FORBIDDEN", "PERSON_ONLY"], meaning: "not yours to do: a bad token, or only the person may: ask them" },
-  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED"], meaning: "refused for now, or the agent cannot do it" },
+  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED"], meaning: "refused for now, or the agent cannot do it: asleep, or idle with nothing to read" },
   { name: "waiting", exit: 8, codes: ["WAITING"], meaning: "the agent stopped to wait on an answer" },
 ] as const;
 
