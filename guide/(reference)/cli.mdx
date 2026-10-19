@@ -187,6 +187,7 @@ To install, list and remove agents, views, widgets and tools, and change their s
 hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
                                         # a starter that works, with PROMPT.md; prints the next steps
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id
+                                        # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable tool:<owner>/<name>
 hive plugins remove <plugin>            # one you added
 hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off, and why any fails to load

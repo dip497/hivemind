@@ -1,5 +1,5 @@
 // `hive plugins install` of a tool: from HiveHub by owner/name, every file checked against the index and its
-// hivemind-tool.json saying that same id; a folder that exists under that name is the folder.
+// hivemind-tool.json saying that same id, even where a folder has that name.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -15,7 +15,7 @@ const manifest = (id: string) => JSON.stringify({
 });
 
 describe("hive plugins install, a tool", () => {
-  test("installs one from HiveHub by owner/name, refuses a listing that is another tool, and takes a folder of that name as the folder", () => {
+  test("installs one from HiveHub by owner/name, refuses a listing that is another tool, and takes a folder of that name only as ./owner/name", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-tools-hub-"));
     const xdg = path.join(tmp, "config");
     const hub = path.join(tmp, "hub", "tools", "prs");
@@ -38,12 +38,14 @@ describe("hive plugins install, a tool", () => {
       expect(run(tmp, "install", "ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining("says it is ada/prs, not ada/liar") });
       expect(fs.existsSync(path.join(xdg, "hivemind", "tools", "ada--liar"))).toBe(false);
 
-      // Here ada/prs is a folder holding another tool: the folder is what gets installed.
+      // Here ada/prs is also a folder holding another tool: the id is still HiveHub's, and the
+      // folder is installed only when written as a path.
       const local = path.join(tmp, "work");
       fs.mkdirSync(path.join(local, "ada", "prs"), { recursive: true });
       fs.writeFileSync(path.join(local, "ada", "prs", "hivemind-tool.json"), manifest("ada/mine"));
       fs.writeFileSync(path.join(local, "ada", "prs", "index.js"), "export default { tiles: {} };\n");
-      expect(run(local, "install", "ada/prs").json).toMatchObject({ ok: true, data: { id: "ada/mine" } });
+      expect(run(local, "install", "ada/prs").json).toMatchObject({ ok: true, data: { id: "ada/prs" } });
+      expect(run(local, "install", "./ada/prs").json).toMatchObject({ ok: true, data: { id: "ada/mine" } });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

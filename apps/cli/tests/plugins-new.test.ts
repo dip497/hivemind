@@ -8,9 +8,9 @@ import path from "node:path";
 import { hive } from "./helpers.js";
 
 const KINDS = [
-  { kind: "tool", id: "ada/tally", manifest: "hivemind-tool.json", next: ["hive plugins install work/tally", "hive plugins enable tool:ada/tally", "hive ctl plugin open tool:ada/tally", "hive ctl tile look <tile>    # what it drew, and what its code logged"], guide: "https://hivemind.griiken.com/guide/tool-plugins/" },
-  { kind: "widget", id: "@ada/tally", manifest: "widget.json", next: ["hive plugins install work/tally", "hive ctl plugin open widget:@ada/tally"], guide: "https://hivemind.griiken.com/guide/widgets/" },
-  { kind: "view", id: "@ada/tally", manifest: "hivemind-view.json", next: ["cd work/tally && npm install && npm run dev    # builds dist/ and installs it", "hive ctl plugin open view:@ada/tally"], guide: "https://hivemind.griiken.com/guide/extension-authoring/" },
+  { kind: "tool", id: "ada/tally", manifest: "hivemind-tool.json", next: ["hive plugins install ./work/tally", "hive plugins enable tool:ada/tally", "hive ctl plugin open tool:ada/tally", "hive ctl tile look <tile>    # what it drew, and what its code logged"], guide: "https://hivemind.griiken.com/guide/tool-plugins/" },
+  { kind: "widget", id: "@ada/tally", manifest: "widget.json", next: ["hive plugins install ./work/tally", "hive ctl plugin open widget:@ada/tally"], guide: "https://hivemind.griiken.com/guide/widgets/" },
+  { kind: "view", id: "@ada/tally", manifest: "hivemind-view.json", next: ["cd ./work/tally && npm install && npm run dev    # builds dist/ and installs it", "hive ctl plugin open view:@ada/tally"], guide: "https://hivemind.griiken.com/guide/extension-authoring/" },
 ] as const;
 
 describe("hive plugins new", () => {
@@ -24,7 +24,7 @@ describe("hive plugins new", () => {
         expect(r.code).toBe(0);
         expect(r.stdout).toBe([
           `started ${k.kind === "tool" ? "tool plugin" : k.kind} ${k.id} in ${dir}`, "Next:", ...k.next.map((l) => `  ${l}`),
-          "Want an agent to build it? Write your idea into work/tally/PROMPT.md and hand it that file.",
+          "Want an agent to build it? Write your idea into ./work/tally/PROMPT.md and hand it that file.",
           `Guide: ${k.guide}`, "",
         ].join("\n"));
         expect(JSON.parse(fs.readFileSync(path.join(dir, k.manifest), "utf8")).id).toBe(k.id);

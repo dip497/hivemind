@@ -39,7 +39,13 @@ describe("hive plugins, widgets", () => {
     const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: tmp, env });
     try {
       expect(run("install", counter).json).toMatchObject({ ok: true, data: { id: "counter", name: "Counter", rescanned: false } });
+      // A folder named like the id, in the repository an agent works in, is not what installs.
+      fs.mkdirSync(path.join(tmp, "@ada", "pet"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, "@ada", "pet", "widget.json"), JSON.stringify({ id: "@ada/pet", name: "Impostor" }));
       expect(run("install", "@ada/pet").json).toMatchObject({ ok: true, data: { id: "@ada/pet", name: "Pet" } });
+      fs.mkdirSync(path.join(tmp, "@ada", "gone"));
+      fs.writeFileSync(path.join(tmp, "@ada", "gone", "widget.json"), JSON.stringify({ name: "Gone" }));
+      expect(run("install", "@ada/gone").json).toMatchObject({ ok: false, error: expect.stringContaining("to install the folder, write ./@ada/gone") });
       // Kept in a folder a scope and a name can never make otherwise.
       expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet", "widget.json"))).toBe(true);
       // A listing whose files say they are another widget is refused, not installed under the wrong name.

@@ -6,6 +6,7 @@
  *
  *   hive plugins new <tool|widget|view> <name> [--dir <folder>] [--owner <login>]   a starter that works, with PROMPT.md
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
+ *                                                  (owner/name and @owner/name are HiveHub's: write a folder as ./x)
  *   hive plugins remove <plugin>                   one you added; what shows it stays, saying it is missing
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
@@ -257,6 +258,8 @@ const newCmd = defineCommand({
     const id = k.idOf(owner, name);
     const given = args.dir ? String(args.dir) : name;
     const dir = path.resolve(given);
+    // Printed as a path, so `install` never reads it as an id on HiveHub.
+    const shown = /^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`;
     const there = fs.existsSync(dir);
     if (there && (!fs.statSync(dir).isDirectory() || (await readdir(dir)).length)) return err(ctx, "exists", `${dir} is already there and not an empty folder`);
     try {
@@ -270,10 +273,10 @@ const newCmd = defineCommand({
       else await rm(dir, { recursive: true, force: true });
       return fail(ctx, e, "new_failed");
     }
-    const next = [...k.build(given), ...(k.onByDefault ? [] : [`hive plugins enable ${k.kind}:${id}`]), ...k.see(id)];
+    const next = [...k.build(shown), ...(k.onByDefault ? [] : [`hive plugins enable ${k.kind}:${id}`]), ...k.see(id)];
     return ok(ctx, { kind: k.kind, id, dir, next, prompt: path.join(dir, "PROMPT.md"), guide: k.guide }, () => [
       `started ${k.noun} ${id} in ${dir}`, "Next:", steps(next),
-      `Want an agent to build it? Write your idea into ${path.join(given, "PROMPT.md")} and hand it that file.`,
+      `Want an agent to build it? Write your idea into ${shown}/PROMPT.md and hand it that file.`,
       `Guide: ${k.guide}`,
     ].join("\n"));
   },
@@ -281,7 +284,7 @@ const newCmd = defineCommand({
 
 const installCmd = defineCommand({
   meta: { name: "install", description: "Add a plugin from a folder, or from HiveHub by its id" },
-  args: { source: { type: "positional", required: true, description: `a folder holding ${KINDS.map((k) => k.manifest).join(", ")}; or an id on HiveHub` }, json: { type: "boolean" } },
+  args: { source: { type: "positional", required: true, description: `a folder holding ${KINDS.map((k) => k.manifest).join(", ")} (./x, ../x, /x or ~/x); or an id on HiveHub (@owner/name)` }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
     const source = String(args.source);
@@ -291,16 +294,17 @@ const installCmd = defineCommand({
     try {
       let k: AuthoredKind | undefined;
       let hubId: string | undefined;
-      // A folder of that name wins over an id on HiveHub.
-      if (fs.existsSync(source)) {
-        k = KINDS.find((x) => fs.existsSync(path.join(source, x.manifest)));
-        if (!k) throw new Error(`${path.resolve(source)} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
-      } else if (HUB_ID.test(source)) {
-        const got = await stageFromRegistry(source);
+      // An id is always HiveHub's: a folder in someone else's repository cannot pass for it.
+      if (HUB_ID.test(source)) {
+        const folder = fs.existsSync(source) ? `; to install the folder, write ./${source}` : "";
+        const got = await stageFromRegistry(source).catch((e: unknown) => { throw new Error(`${e instanceof Error ? e.message : String(e)}${folder}`); });
         staged = got.dir;
         k = kindNamed(got.entry.type);
         if (!k) throw new Error(`${source} is an agent: \`hive agents install ${source}\``);
         hubId = source;
+      } else if (fs.existsSync(source)) {
+        k = KINDS.find((x) => fs.existsSync(path.join(source, x.manifest)));
+        if (!k) throw new Error(`${path.resolve(source)} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
       } else {
         throw new Error(`there is no folder ${path.resolve(source)}, and "${source}" is not an id on HiveHub`);
       }
