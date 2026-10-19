@@ -38,12 +38,12 @@ test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
   execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
   execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"], { cwd: repo });
-  for (const [kind, dir, record] of [
-    ["widgets", "widgets/progress", "widget:@example/progress"],
-    ["views", "views/agent-board", "view:agent-board"],
-    ["tools", "tools/commits", "tool:example/commits"],
+  for (const [dir, record] of [
+    ["widgets/progress", "widget:@example/progress"],
+    ["views/agent-board", "view:agent-board"],
+    ["tools/commits", "tool:example/commits"],
   ] as const) {
-    const installed = await hive(kind, "install", path.join(fixtures, dir));
+    const installed = await hive("plugins", "install", path.join(fixtures, dir));
     expect(installed.status, installed.err).toBe(0);
     expect((await hive("plugins", "enable", record)).status).toBe(0);
   }
