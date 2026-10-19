@@ -122,6 +122,8 @@ hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once 
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
+hive ctl tile look <tileId> [--out f.png] [--json]  # brought into view, waited for until it drew:
+                                        # {tile, state, drew, console, png} (png: the picture's path)
 hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is not open
 hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
 hive ctl wake [tile|frame]              # back in its conversation; exit 7 if nothing woke

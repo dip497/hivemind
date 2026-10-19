@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { Intents, type Actor } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
@@ -73,6 +74,7 @@ beforeAll(async () => {
     answer("link.connect", () => null),
     answer("link.disconnect", () => null),
     answer("tile.focus", () => null),
+    answer("tile.look", (tile) => ({ tile, state: "ready", drew: true, console: [{ level: "warn", text: "slow", at: 1 }], png: Buffer.from("not really a png").toString("base64"), width: 2, height: 1 })),
     answer("agent.output", (_t, lines) => ({ text: `last ${String(lines)} lines\n` })),
     answer("terminal.open", (opts) => ({ pid: (opts as { tileId: string }).tileId === "hm:ghost" ? -1 : 7, joined: true })),
     answer("view.emit", (name) => (name === "ci.build" ? { id: "ev_1", delivered: true, view: "@a/valley" } : { id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true })),
@@ -172,6 +174,18 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       ["agent.close", "w-1"], ["tile.focus", "w-1"], ["link.connect", "w-1", "w-2"], ["link.disconnect", "w-1"], ["link.disconnect", "w-1", "w-2"],
       ["tool.open", repoA, { tool: "a/b/c", url: "https://x" }], ["agent.sessions", repoA, "codex", 5],
     ]);
+  });
+
+  test("tile look saves the picture where --out says, else in the temp folder, and prints its path with the tile's state and console", async () => {
+    const out = path.join(dir, "look.png");
+    const r = await hive(["ctl", "tile", "look", "w-1", "--out", out, "--json"], { env: env() });
+    expect([r.code, r.json]).toEqual([0, { tile: "w-1", state: "ready", drew: true, console: [{ level: "warn", text: "slow", at: 1 }], png: out, width: 2, height: 1 }]);
+    expect(fs.readFileSync(out, "utf8")).toBe("not really a png");
+    expect(last("tile.look").params).toEqual(["w-1"]);
+    const elsewhere = (await hive(["ctl", "tile", "look", "w-1", "--json"], { env: env() })).json as { png: string };
+    expect(path.dirname(elsewhere.png)).toBe(os.tmpdir());
+    expect(fs.readFileSync(elsewhere.png, "utf8")).toBe("not really a png");
+    fs.rmSync(elsewhere.png);
   });
 
   test("sleep and wake a tile, a frame or every agent of the workspace, as agent.sleep and agent.wake; nothing done with something left is exit 7, saying why", async () => {

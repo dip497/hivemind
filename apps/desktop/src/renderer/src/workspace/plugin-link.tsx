@@ -74,6 +74,8 @@ export interface PluginLink {
   dialogs: ReactNode;
   /** Its code broke: it is failed, with why. */
   fail: (reason: string) => void;
+  /** Its code painted its first content. */
+  drew: () => void;
 }
 
 export function usePluginLink(o: PluginLinkOptions): PluginLink {
@@ -336,5 +338,6 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     </>
   );
   const fail = useCallback((reason: string) => running.current?.disabled(reason), []);
-  return { link, ready, send, dialogs, fail };
+  const drew = useCallback(() => running.current?.drew(), []);
+  return { link, ready, send, dialogs, fail, drew };
 }

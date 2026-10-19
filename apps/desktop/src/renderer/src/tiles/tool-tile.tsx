@@ -17,7 +17,7 @@ import { HeaderPinButton } from "../canvas-nodes";
 import { Button } from "../components/ui/button";
 import type { PinRect } from "./api";
 import { toolFolder } from "@hivemind/core/tool-format";
-import { watchToolFailures } from "./tool-failures";
+import { watchTool } from "./tool-watch";
 
 export type ToolTileData = {
   pkg: ToolPackage; tileId: string; kind: string; name: string; frameId: string | null;
@@ -55,7 +55,7 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
   const root = useRef<HTMLDivElement>(null);
   const [hm, setHm] = useState<ViewClient | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const { link, dialogs, fail } = usePluginLink({
+  const { link, dialogs, fail, drew } = usePluginLink({
     pluginId: data.pkg.id, record: { kind: "tool", id: data.pkg.id }, name: data.pkg.name,
     capabilities: data.pkg.permissions, fields: data.pkg.settings, layoutId: `tile:${data.tileId}`, issueRoot: () => dataRef.current.root, issueFolder: () => dataRef.current.repoPath ?? dataRef.current.cwd,
     props, root, onDisable: (reason) => setFailed(reason),
@@ -73,7 +73,23 @@ function LinkedTile({ data, selected, Draw, props }: { data: ToolTileData; selec
   // Its first failure is the one shown and kept.
   const stop = useRef<(why: string) => void>(() => {});
   stop.current = (why) => { setFailed((was) => was ?? why); fail(why); };
-  useEffect(() => watchToolFailures({ folder: toolFolder(data.pkg.id), element: () => root.current, fail: (why) => stop.current(why) }), [data.pkg.id]);
+  useEffect(() => watchTool({ folder: toolFolder(data.pkg.id), instance: data.tileId, element: () => root.current, fail: (why) => stop.current(why) }), [data.pkg.id, data.tileId]);
+  // "Drew": a frame painted after its code first put something in the tile.
+  useEffect(() => {
+    const el = root.current;
+    if (!hm || !el) return;
+    let raf = 0;
+    const painted = () => !!el.textContent?.trim() || !!el.querySelector("img,canvas,svg,iframe,video") || [...el.querySelectorAll("*")].some((n) => n.shadowRoot);
+    const check = () => {
+      if (raf || !painted()) return;
+      mo.disconnect();
+      raf = requestAnimationFrame(() => { raf = requestAnimationFrame(() => drew()); });
+    };
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    check();
+    return () => { mo.disconnect(); cancelAnimationFrame(raf); };
+  }, [hm, drew]);
   const dataRef = useRef(data);
   dataRef.current = data;
   const host = useRef<TileHost>({

@@ -1,10 +1,13 @@
 /**
- * What a tool plugin's code breaks in the app's page, told to its tiles: an error it throws and
- * nothing catches, a promise of its that rejects unheard, and anything of its the page's security
- * policy blocks (a frame of a site that is not this machine). A tool runs in the app's own page,
- * so these land on the window; each is put on the tile it happened in, else on every tile of the
- * plugin whose `hm-plugin://owner--name/` code it came from.
+ * What a tool plugin's code does in the app's page, told to its tiles. What it breaks fails them:
+ * an error it throws and nothing catches, a promise of its that rejects unheard, and anything of
+ * its the page's security policy blocks (a frame of a site that is not this machine). What it
+ * writes to the console is kept in each tile's ring, read only when an agent asks (`tile look`).
+ * A tool runs in the app's own page, so these land on the window; each is put on the tile it
+ * happened in, else on every tile of the plugin whose `hm-plugin://owner--name/` code it came from.
  */
+import type { ConsoleLine } from "@hivemind/workspace-api/plugins";
+import { consoleRings } from "../workspace/plugin-instances";
 
 const PLUGIN_CODE = /hm-plugin:\/\/([a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*)\//;
 
@@ -37,7 +40,7 @@ export function policyFailure(e: { blockedURI?: string; effectiveDirective?: str
   return { why: `the app's security policy blocked ${what} (${e.effectiveDirective ?? "unknown"})${loopback}`, sources: [e.sourceFile], ...(e.blockedURI ? { blocked: e.blockedURI } : {}) };
 }
 
-interface Watch { folder: string; element: () => Element | null; fail: (why: string) => void }
+interface Watch { folder: string; instance: string; element: () => Element | null; fail: (why: string) => void }
 const watching = new Set<Watch>();
 
 function report(target: EventTarget | null, f: PageFailure): void {
@@ -49,22 +52,42 @@ function report(target: EventTarget | null, f: PageFailure): void {
     const folder = pluginFolderIn(f.sources);
     hit = folder ? [...watching].filter((w) => w.folder === folder) : [];
   }
-  for (const w of hit) w.fail(f.why);
+  for (const w of hit) { consoleRings.push(w.instance, "error", f.why); w.fail(f.why); }
+}
+
+const LEVELS = ["log", "info", "warn", "error", "debug"] as const satisfies ReadonlyArray<ConsoleLine["level"]>;
+const lineOf = (args: unknown[]): string => args.map((a) => (typeof a === "string" ? a : a instanceof Error ? a.stack ?? a.message : messageOf(a))).join(" ");
+
+/** Each console call made by a watched plugin's code, into its tiles' rings. */
+function keepConsole(): void {
+  for (const level of LEVELS) {
+    const write = console[level].bind(console);
+    console[level] = (...args: unknown[]) => {
+      write(...args);
+      if (!watching.size) return;
+      const folder = pluginFolderIn([new Error().stack]);
+      if (!folder) return;
+      const text = lineOf(args);
+      for (const w of watching) if (w.folder === folder) consoleRings.push(w.instance, level, text);
+    };
+  }
 }
 
 let listening = false;
 function listen(): void {
   if (listening) return;
   listening = true;
+  keepConsole();
   window.addEventListener("error", (e) => report(null, errorFailure(e)));
   window.addEventListener("unhandledrejection", (e) => report(null, rejectionFailure(e)));
   // Fired at the element whose load was blocked, else at the document.
   document.addEventListener("securitypolicyviolation", (e) => report(e.target, policyFailure(e)), true);
 }
 
-/** Tell `fail` what plugin `folder`'s code breaks, or what breaks inside `element`; until undone. */
-export function watchToolFailures(w: Watch): () => void {
+/** Tell `fail` what plugin `folder`'s code breaks, or what breaks inside `element`, and keep what
+ *  it writes to the console under `instance`; until undone, when its lines go too. */
+export function watchTool(w: Watch): () => void {
   listen();
   watching.add(w);
-  return () => { watching.delete(w); };
+  return () => { watching.delete(w); consoleRings.forget(w.instance); };
 }

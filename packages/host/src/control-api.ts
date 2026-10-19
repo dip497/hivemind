@@ -16,7 +16,7 @@ import type { ControlWork } from "./control/methods.js";
 
 type Method =
   | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
-  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus"
+  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus" | "tile.look"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join" | "host.add";
 
 export interface ControlApiOptions {
@@ -80,6 +80,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "plugin.call": async (_from, plugin, command, args, tile) => (await o.control()).pluginCall(plugin, command, args, tile),
       "plugin.close": async (_from, instance, plugin) => (await o.control()).pluginClose(text(instance, "instance"), plugin != null ? text(plugin, "plugin") : undefined),
       "tile.focus": done((w, tile) => w.focus(text(tile, "tile"))),
+      "tile.look": async (_from, tile) => (await o.control()).look(text(tile, "tile")),
       "views.rescan": done((w) => w.rescan("views")),
       "agents.rescan": done((w) => w.rescan("agents")),
       "widgets.rescan": done((w) => w.rescan("widgets")),

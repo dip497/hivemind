@@ -12,7 +12,7 @@ import path from "node:path";
 import { speaksFor } from "@hivemind/agent-host/hooks/token";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import { PLUGIN_CALL_HOST_MS, type PluginList } from "@hivemind/workspace-api/plugins";
+import { LOOK_MS, PLUGIN_CALL_HOST_MS, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
 import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
@@ -114,6 +114,9 @@ function summarizeTool(tool: string, inp: Record<string, unknown>): string {
   try { return JSON.stringify(inp).slice(0, 200); } catch { return "(unprintable input)"; }
 }
 
+/** A box in a window's page, in CSS pixels. */
+export interface TileRect { x: number; y: number; width: number; height: number }
+
 export interface MethodDeps {
   /** Settled main-process tool preferences; absent means no optional tools enabled. */
   toolsSettings?: () => ToolsSettings;
@@ -126,6 +129,9 @@ export interface MethodDeps {
   /** Run a renderer verb (returns its result); rejects/throws ApiError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
+  /** A picture of the window `callRenderer` reaches, of `rect` in its page's CSS pixels; absent
+   *  where no window shows tiles (a headless host). */
+  captureWindow?: (rect: TileRect) => Promise<{ png: string; width: number; height: number }>;
   /** Re-read settings.json (edited by the CLI) and broadcast it. */
   reloadSettings: () => Promise<unknown>;
   /** Re-list the installed widgets (`hive widgets install|remove`) and tell every window. */
@@ -259,6 +265,7 @@ export interface ControlWork {
   pluginCall(plugin: unknown, command: unknown, args: unknown, tile: unknown): Promise<unknown>;
   pluginClose(instance: string, plugin: string | undefined): Promise<{ closed: string; plugin: string; kind: string }>;
   focus(tile: string): Promise<unknown>;
+  look(tile: string): Promise<TileLook>;
   rescan(what: "views" | "agents" | "widgets" | "tools"): Promise<unknown>;
   reloadSettings(): Promise<unknown>;
   hostStatus(): { workspaces: Array<{ repo: string; workspace: string | null }> };
@@ -1075,6 +1082,16 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     },
     pluginClose: async (instance, plugin) => await deps.callRenderer("plugin.close", { instance, ...(plugin ? { plugin } : {}) }, RENDERER_TIMEOUT) as { closed: string; plugin: string; kind: string },
     focus: (tile) => deps.callRenderer("tile.focus", { tileId: tile }, RENDERER_TIMEOUT),
+    // The window brings it into view and waits for it to draw; the picture is cropped to its box.
+    async look(tile) {
+      if (!deps.captureWindow) throw new ApiError("UNSUPPORTED", "no window shows tiles here: look at a tile in the app");
+      const seen = await deps.callRenderer("tile.look", { tileId: bareOf(tile) }, LOOK_MS + 2_000) as Omit<TileLook, "png" | "width" | "height"> & { rect: TileRect };
+      const { rect, ...rest } = seen;
+      if (![rect?.x, rect?.y, rect?.width, rect?.height].every((n) => typeof n === "number" && Number.isFinite(n)) || rect.width < 1 || rect.height < 1) {
+        throw new ApiError("FAILED", `${bareOf(tile)} is not on the screen`);
+      }
+      return { ...rest, ...(await deps.captureWindow(rect)) };
+    },
     // A plugins folder changed (`hive … install|remove`): a running app picks it up without a
     // restart. Views and agents are scanned by the window, which owns the workspace root; widgets
     // and tools are listed again here, and every window told.

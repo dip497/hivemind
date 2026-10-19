@@ -1047,6 +1047,17 @@ const control: ControlPlane = new ControlPlane({
   methods: () => ({
     reported: (tile, message) => agentFeed()?.report(toBareId(tile), message),
     callRenderer: hcpCallRenderer,
+    captureWindow: async (rect) => {
+      const win = userWindow();
+      if (!win) throw new ApiError("UNAVAILABLE", "hivemind window not open");
+      const zoom = win.webContents.getZoomFactor();
+      const { width: w, height: h } = win.getContentBounds();
+      const x = Math.max(0, Math.round(rect.x * zoom)), y = Math.max(0, Math.round(rect.y * zoom));
+      const box = { x, y, width: Math.max(1, Math.min(w - x, Math.round(rect.width * zoom))), height: Math.max(1, Math.min(h - y, Math.round(rect.height * zoom))) };
+      const image = await win.webContents.capturePage(box);
+      const size = image.getSize();
+      return { png: image.toPNG().toString("base64"), width: size.width, height: size.height };
+    },
     toolsSettings: () => toolPreferences(getAppSettings()),
     reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
     widgetsChanged,

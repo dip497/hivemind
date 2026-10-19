@@ -15,7 +15,7 @@ import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
 import type { ClientGrant, NewGrant } from "./grants.js";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
-import type { PluginList } from "./plugins.js";
+import type { PluginList, TileLook } from "./plugins.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -192,6 +192,9 @@ export interface WorkspaceMethods {
   "plugin.close": (instance: string, plugin?: string) => { closed: string; plugin: string; kind: string };
   /** Bring a tile into view and give it the keyboard. */
   "tile.focus": (tile: string) => null;
+  /** (0.32) Bring a tile into view, wait for its plugin to draw, and answer a picture of it with its
+   *  plugin's state and the last lines its code wrote (`plugins.ts`). */
+  "tile.look": (tile: string) => TileLook;
   /** The installed views, agents, widgets or tools changed on disk: read them again. */
   "views.rescan": () => null;
   "agents.rescan": () => null;

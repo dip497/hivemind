@@ -460,6 +460,28 @@ test("tool.open: a package's id opens its one tool; a package with several is re
     e.code === "BAD_REQUEST" && /hivemind\/issues\/issues/.test(e.message ?? "") && /hivemind\/issues\/plan-review/.test(e.message ?? ""));
 });
 
+test("tile.look: the window's box for the tile is what is pictured, and its state and console come back with the picture", async () => {
+  const shot: unknown[] = [];
+  const seen = { tile: "t1", state: "ready", drew: true, console: [{ level: "warn", text: "slow", at: 1 }], rect: { x: 10, y: 20, width: 300, height: 200 } };
+  const { deps } = fakeDeps({
+    callRenderer: async (m: string, p: unknown) => { assert.deepEqual([m, p], ["tile.look", { tileId: "t1" }]); return seen; },
+    captureWindow: async (rect: unknown) => { shot.push(rect); return { png: "iVBOR", width: 300, height: 200 }; },
+  });
+  const { api } = makeDispatch(deps);
+  assert.deepEqual(await api.look("hm:t1"), { tile: "t1", state: "ready", drew: true, console: seen.console, png: "iVBOR", width: 300, height: 200 });
+  assert.deepEqual(shot, [{ x: 10, y: 20, width: 300, height: 200 }]);
+});
+
+test("tile.look: refused where no window shows tiles, and for a tile with no box on the screen", async () => {
+  const headless = makeDispatch(fakeDeps({ callRenderer: async () => ({}) }).deps).api;
+  await assert.rejects(headless.look("t1"), { code: "UNSUPPORTED" });
+  const hidden = makeDispatch(fakeDeps({
+    callRenderer: async () => ({ tile: "t1", state: null, drew: true, console: [], rect: { x: 0, y: 0, width: 0, height: 0 } }),
+    captureWindow: async () => { throw new Error("no picture of nothing"); },
+  }).deps).api;
+  await assert.rejects(hidden.look("t1"), { code: "FAILED" });
+});
+
 /** One JSON-RPC connection: `call` waits for its reply; notifications collect in `notes`. */
 async function session(sock: string) {
   const c = net.connect(sock);

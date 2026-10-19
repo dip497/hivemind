@@ -101,6 +101,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - `hive ctl open-tool` takes a tool package's id when the package has one tool, and a package with several says their full ids; `hive tools list` and `hive tools install` print each tool's full id. Installing a tool again with the same code byte for byte keeps it on; changed code still goes off, and the install says which.
 - A tool plugin can show a server on this machine in a frame (`http://127.0.0.1:*`, `http://localhost:*`); other addresses stay blocked. When the app blocks something a tool loads, or its code throws an error nothing catches, its tile stops and shows why, and `hive ctl plugin list` reads it as failed with that reason.
 - A page shown in a tool's frame cannot move the app's window to another page, and any page other than the app's own gets no access to the app. Tools get `Frame` from `hm-plugin://host/sdk.js`, a sandboxed frame for a server on this machine.
+- `hive ctl tile look <tile> [--out f.png]` (Workspace API `tile.look`) brings a tile into view, waits until its tool has drawn, and saves a picture of it, with the tool's state and the last 100 lines its code wrote to the console. `hive ctl plugin list` says whether each plugin has drawn yet (`drew`).
 
 ## [2026.10.3] — 2026-10-18
 

@@ -25,6 +25,7 @@
  * The work lives in extracted modules/hooks that destructure a `ctx` object —
  * keep it that way (this file was decomposed out of a 3147-LOC god component).
  */
+import { lookAt } from "./workspace/tile-look";
 import { clearWork } from "./work-queue";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -1015,6 +1016,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             setSelectedTileId(id);
             focusTile(id);
             await reply(cmd.id, true, { ok: true });
+            break;
+          }
+          case "tile.look": {
+            const seen = await lookAt(String(p.tileId ?? ""), (id) => { setSelectedTileId(id); focusTile(id); });
+            await reply(cmd.id, true, seen);
             break;
           }
           default:

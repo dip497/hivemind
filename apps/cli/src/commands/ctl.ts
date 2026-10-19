@@ -38,7 +38,8 @@ import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 import type { InboxMessage } from "@hivemind/workspace-api/agents";
-import { PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList } from "@hivemind/workspace-api/plugins";
+import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
+import os from "node:os";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -642,6 +643,22 @@ const pluginClose = sub("close", "Close a plugin: close a tool's tile, take a wi
   plugin: { type: "string", description: "the plugin it must be (refused when another runs as that instance)" },
 }, (args) => onDrive((d) => d.call("plugin.close", [String(args.instance), ...(args.plugin ? [String(args.plugin)] : [])])));
 
+const tileLook = sub("look", "Bring a tile into view, wait for it to draw, and save a picture of it with its plugin's state and console", {
+  ...tileArg,
+  out: { type: "string", description: "where the PNG goes (default: a new file in the temp folder)" },
+}, async (a) => {
+  const seen = await onDrive((d) => d.call("tile.look", [a.tileId], LOOK_MS + 10_000)) as TileLook;
+  const file = path.resolve(a.out ? String(a.out) : path.join(os.tmpdir(), `hive-look-${seen.tile.replace(/[^\w-]/g, "_")}-${Date.now()}.png`));
+  fs.writeFileSync(file, Buffer.from(seen.png, "base64"));
+  const { png: _, ...rest } = seen;
+  return { ...rest, png: file };
+});
+
+const tile = defineCommand({
+  meta: { name: "tile", description: "Look at a tile as the person sees it" },
+  subCommands: { look: tileLook },
+});
+
 const plugin = defineCommand({
   meta: { name: "plugin", description: "Drive the plugins in the app: list what runs, open one, list and call their commands, close one" },
   subCommands: { list: pluginList, open: pluginOpen, commands: pluginCommands, call: pluginCall, close: pluginClose },
@@ -651,7 +668,7 @@ export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
     agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
-    focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
+    focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
   },

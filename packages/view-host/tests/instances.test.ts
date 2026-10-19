@@ -31,6 +31,16 @@ test("a plugin is starting until its code connects, then ready; one disabled is 
   expect(p.list()).toEqual([]);
 });
 
+test("a plugin has not drawn until its host says it painted; drawing again changes nothing", () => {
+  const p = new PluginInstances();
+  const w = p.start(plugin());
+  w.connected();
+  expect(p.list()[0]!.drew).toBe(false);
+  w.drew();
+  w.drew();
+  expect(p.list()[0]!.drew).toBe(true);
+});
+
 test("a plugin whose code does not connect in time is failed, saying so; one that connects in time is not", () => {
   const p = new PluginInstances();
   p.start(plugin());

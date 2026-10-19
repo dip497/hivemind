@@ -3,7 +3,8 @@
 // reason an agent can act on: a blocked frame says only this machine can be framed.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { watchToolFailures } from "../../src/renderer/src/tiles/tool-failures";
+import { watchTool } from "../../src/renderer/src/tiles/tool-watch";
+import { consoleRings } from "../../src/renderer/src/workspace/plugin-instances";
 
 // The page's window and document, as far as the listeners use them.
 const g = globalThis as unknown as { window: EventTarget; document: EventTarget };
@@ -14,8 +15,8 @@ const fire = (target: EventTarget, type: string, fields: object) => target.dispa
 function watched() {
   const got: Record<string, string[]> = { prs: [], other: [] };
   const undo = [
-    watchToolFailures({ folder: "acme--prs", element: () => null, fail: (why) => got.prs!.push(why) }),
-    watchToolFailures({ folder: "acme--other", element: () => null, fail: (why) => got.other!.push(why) }),
+    watchTool({ folder: "acme--prs", instance: "tile-prs", element: () => null, fail: (why) => got.prs!.push(why) }),
+    watchTool({ folder: "acme--other", instance: "tile-other", element: () => null, fail: (why) => got.other!.push(why) }),
   ];
   return { got, done: () => undo.forEach((u) => u()) };
 }
@@ -53,7 +54,7 @@ test("a frame the page's policy blocks fails the tile and says a tool may frame 
 test("a blocked frame reported on the document, with no source, fails the tile whose frame asked for it", () => {
   const got: string[] = [];
   const box = { contains: () => false, querySelectorAll: () => [{ src: "http://192.0.2.1/" }] } as unknown as Element;
-  const undo = watchToolFailures({ folder: "acme--frames", element: () => box, fail: (why) => got.push(why) });
+  const undo = watchTool({ folder: "acme--frames", instance: "tile-frames", element: () => box, fail: (why) => got.push(why) });
   const { got: others, done } = watched();
   fire(g.document, "securitypolicyviolation", { blockedURI: "http://192.0.2.1/", effectiveDirective: "frame-src", sourceFile: "" });
   undo(); done();
@@ -68,4 +69,20 @@ test("a tile no longer watched hears nothing", () => {
   error.stack = "Error: late\n    at x (hm-plugin://acme--prs/index.js:1:1)";
   fire(g.window, "error", { error });
   assert.deepEqual(got, { prs: [], other: [] });
+});
+
+test("what a plugin's code writes to the console is kept for its tiles only, with its errors; a tile let go keeps none", () => {
+  const got: string[] = [];
+  const undo = watchTool({ folder: "acme--prs", instance: "tile-prs", element: () => null, fail: (why) => got.push(why) });
+  const other = watchTool({ folder: "acme--other", instance: "tile-other", element: () => null, fail: () => {} });
+  // Code that runs from the plugin's module, as the page loads it.
+  new Function("console.warn('rate limited', { retry: 3 })\n//# sourceURL=hm-plugin://acme--prs/index.js")();
+  console.log("the app's own line");
+  const error = new Error("boom");
+  error.stack = "Error: boom\n    at x (hm-plugin://acme--prs/index.js:1:1)";
+  fire(g.window, "error", { error });
+  assert.deepEqual(consoleRings.read("tile-prs").map((l) => [l.level, l.text]), [["warn", 'rate limited {"retry":3}'], ["error", "boom"]]);
+  assert.deepEqual(consoleRings.read("tile-other"), []);
+  undo(); other();
+  assert.deepEqual(consoleRings.read("tile-prs"), []);
 });
