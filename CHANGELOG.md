@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- `hive ctl whoami [--json]` says which app it reaches (`hivemind` or `hivemind-dev`, from its data folder), the drive and control sockets, and who you are there: the person, an agent (its workspace folder, tile and session) or a program. `hive ctl list-workspaces` prints each workspace's prefix, title and folder, one a line. An agent or a program refused another workspace or tile is told the folder its token drives and that another needs the person or a grant (`hive grant create`); `--repo` help says so too.
 - Agents: a worker whose session exits or restarts (a crash, a reboot, a restart in its tile) still reports to the agent that started it, and its parent's restart no longer cuts it off; only closing a tile forgets who started it. The `hivemind` skill tells agents to reach other tiles with `hive ctl send`, `report`, `inbox` and `read`, not Claude Code's SendMessage.
 - The website scrolls and plays smoothly on phones: the hero's step bar and its opening lines no longer keep the page busy every frame, the views stack is flat on small screens and dims its back cards without a filter, and links on phones are easier to tap.
 - The website's hero tabs (a view, a widget, a tool) jump to their part of the recording again, and the video streams in pieces instead of all at once; the hero says it in one line with two buttons, and the download section is one install box that switches between Linux, macOS and Windows.
