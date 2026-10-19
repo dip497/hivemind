@@ -347,6 +347,10 @@ export function detachRemotePty(tileId: string): void {
   if (ep) { daemonTiles.delete(tileId); ep.detach(tileId); return; }
   killRemotePty(tileId);
 }
+/** Sessions on other machines that go on running there when this app quits. */
+export function sessionsKeptElsewhere(): string[] {
+  return [...daemonTiles.keys()];
+}
 export function hasRemotePty(tileId: string): boolean {
   return daemonTiles.has(tileId) || remotePtys.has(tileId);
 }
