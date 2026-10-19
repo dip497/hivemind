@@ -24,7 +24,6 @@
 <p align="center"><sub>One prompt: <i>"Show my workspace as islands."</i></sub></p>
 
 Every coding agent on one board. Ask one for a view, a widget or a tool, and it builds it for you.
-Open source, on your computer, no account.
 
 - **Your own workspace.** Views, widgets and tools are plugins your agents write.
 - **Agents drive it.** `hive ctl` and an API let agents and scripts run the whole board.
