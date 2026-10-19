@@ -7,6 +7,6 @@ ENV NODE_ENV=production
 COPY dist ./dist
 # Everything the server imports, or the container exits before it listens and Cloud Run can
 # only say "the container failed to listen on PORT".
-COPY server.mjs downloads.mjs redirects.mjs ./
+COPY server.mjs byte-range.mjs downloads.mjs redirects.mjs ./
 EXPOSE 8080
 CMD ["node", "server.mjs"]
