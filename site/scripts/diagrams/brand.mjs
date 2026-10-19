@@ -40,7 +40,7 @@ const ROLES = {
   paper2: ['foreground', 0.04, 'card'],
   ink: ['foreground'],
   muted: ['foreground', 0.7, 'muted-foreground'],
-  soft: ['muted-foreground'],
+  soft: ['foreground', 0.25, 'muted-foreground'],
   rule: ['border'],
   ruleSolid: ['foreground', 0.42, 'card'],
   accent: ['primary'],

@@ -6,8 +6,8 @@ import howItWorks from './how-it-works.mjs';
 function diamond(d, cx, cy, hw, hh, name, sub) {
   const pts = `${cx},${cy - hh} ${cx + hw},${cy} ${cx},${cy + hh} ${cx - hw},${cy}`;
   d.raw(`<polygon points="${pts}" fill="${C.paper}"/><polygon points="${pts}" fill="${C.paper2}" stroke="${C.ruleSolid}" stroke-width="1"/>`);
-  d.note(cx, cy - 2, name, { color: C.ink, size: 14, weight: 600 });
-  d.note(cx, cy + 15, sub, { size: 12 });
+  d.note(cx, cy - 2, name, { color: C.ink, size: 15, weight: 600 });
+  d.note(cx, cy + 16, sub);
 }
 
 function connectInvite() {
@@ -92,7 +92,7 @@ function issueStates() {
   names.forEach((n, i) => d.node(xs[i], 40, 116, 56, n, { rx: 8, focal: n === 'done' }));
   d.node(280, 180, 140, 56, 'cancelled', { rx: 8 });
   d.note(350, 270, 'The order is not enforced: any state can be set from any other.', { size: 12 });
-  d.note(350, 292, 'hive close → done · hive close --reason → cancelled · hive reopen → todo', { size: 11.5, mono: true });
+  d.note(350, 292, 'hive close → done · hive close --reason → cancelled · hive reopen → todo', { mono: true });
   return d;
 }
 
@@ -105,12 +105,12 @@ function apiDrive() {
   const mid = 58;
   d.wire([[190, mid], [250, mid]]); d.label(220, mid - 16, 'token');
   d.wire([[420, mid], [440, mid]]);
-  d.wire([[560, mid], [620, mid]], { accent: true }); d.label(590, mid - 16, 'allowed');
+  d.wire([[560, mid], [630, mid]], { accent: true }); d.label(595, mid - 16, 'allowed');
   d.wire([[500, mid + 42], [500, 150]], { dashed: true }); d.label(512, 125, 'not allowed', { anchor: 'start' });
   d.node(20, 20, 170, 76, 'Your program', { sub: ['script, dashboard,', 'orchestrator'] });
   d.node(250, 20, 170, 76, 'Drive socket', { sub: 'drive.sock', mono: true });
-  diamond(d, 500, mid, 60, 42, 'Role', 'of the token');
-  d.node(620, 20, 160, 76, 'The workspace', { sub: ['agents, terminals,', 'board'], focal: true });
+  diamond(d, 500, mid, 60, 42, 'Its role', '');
+  d.node(630, 20, 150, 76, 'The workspace', { sub: ['agents, terminals,', 'board'], focal: true });
   d.node(420, 150, 160, 56, 'Refused', { sub: 'FORBIDDEN', mono: true });
   d.note(400, 244, 'Make the token in Settings → API access, or with hive grant create.', { size: 12 });
   return d;
