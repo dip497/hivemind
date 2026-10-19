@@ -29,10 +29,15 @@ let app: ElectronApplication;
 let page: Page;
 let server: http.Server;
 let local = "";
+let evilAsked = 0;
 
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
-  server = http.createServer((_req, res) => { res.setHeader("content-type", "text/html"); res.end("<p>served from this machine</p>"); });
+  server = http.createServer((req, res) => {
+    res.setHeader("content-type", "text/html");
+    if (req.url === "/evil") { evilAsked++; res.end("<p>not the app</p>"); return; }
+    res.end('<p>served from this machine</p><button onclick="top.location = \'/evil\'">leave</button>');
+  });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   local = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
   expect(hive("tools", "install", fixture).status).toBe(0);
@@ -59,9 +64,26 @@ test("a tool frames a server on this machine", async () => {
   await expect.poll(() => stateOf()?.state).toBe("ready");
 });
 
+test("a framed page cannot send the app's window to another page", async () => {
+  const before = page.url();
+  const framed = page.frameLocator('iframe[title="framed"]');
+  await framed.getByRole("button", { name: "leave" }).click();
+  await page.waitForTimeout(1500);
+  expect(page.url()).toBe(before);
+  expect(evilAsked).toBe(0);
+  expect(await page.evaluate(() => typeof window.hive)).toBe("object");
+});
+
 test("a frame of another machine is blocked, and the tile fails saying why", async () => {
   expect(hive("plugins", "set", "tool:example/frames", "url", "http://192.0.2.1/").status).toBe(0);
   await expect(tile()).toContainText("security policy blocked", { timeout: 20_000 });
   await expect.poll(() => stateOf()?.state).toBe("failed");
   expect(stateOf()?.reason).toContain("frame-src");
+});
+
+test("a page that is not the app's, in the app's window, is given no bridge", async () => {
+  const evil = `${local}evil`;
+  await app.evaluate(({ BrowserWindow }, url) => BrowserWindow.getAllWindows()[0]!.loadURL(url), evil);
+  await expect.poll(() => page.url()).toBe(evil);
+  expect(await page.evaluate(() => typeof (window as { hive?: unknown }).hive)).toBe("undefined");
 });

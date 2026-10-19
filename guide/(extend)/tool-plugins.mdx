@@ -196,12 +196,28 @@ Next: [Publish to HiveHub](/publish-to-hivehub).
 A tile imports the app's own React and parts from `hm-plugin://host/`: `react.js`,
 `react-jsx-runtime.js`, `sdk.js` and `ui.js`. It bundles none of them.
 
-`sdk.js` has `Button`, `PatchView` (a diff), `Markdown`, `Loading` and
-`useTileState(hm, key, initial)`, which keeps a value with the tile across restarts. `ui.js` is the
+`sdk.js` has `Button`, `PatchView` (a diff), `Markdown`, `Loading`, `Frame` (a page from a server
+on this machine) and `useTileState(hm, key, initial)`, which keeps a value with the tile across
+restarts. `ui.js` is the
 app's whole UI kit (`Button`, `Input`, `Dialog…`, `DropdownMenu…`, `Switch`, `toast`, …). The
 built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the fullest example.
 
 Reach the app only through these, never `window.hive`.
+
+### Show a server on this machine
+
+A tool can show a page its own local server serves, such as a dev server or a dashboard. Use
+`Frame` from `sdk.js`:
+
+```js
+import { Frame } from "hm-plugin://host/sdk.js";
+
+h(Frame, { src: "http://127.0.0.1:5173/", title: "Dev server" });
+```
+
+Only `http://127.0.0.1:<port>` and `http://localhost:<port>` can be shown; any other address is
+blocked, and the tile stops and says so. `Frame` runs the page's scripts, forms and popups, and
+never lets it move the app's window.
 
 ### Commands agents can run
 

@@ -21,6 +21,8 @@ import { ViewShare } from "./view-share.js";
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { keepOnAppPage } from "./app-navigation.js";
+import { APP_PAGE_ARG } from "../shared/app-page.js";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
@@ -252,6 +254,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // when the CDP enabler is off; the file just lists tiles with no endpoint.
   process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
+  const devUrl = process.env["ELECTRON_RENDERER_URL"];
+  const appPage = devUrl ?? pathToFileURL(path.join(__dirname, "../renderer/index.html")).href;
   const win = new BrowserWindow({
     width: state.width,
     height: state.height,
@@ -275,6 +279,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
       // here silently breaks production because the file doesn't exist →
       // window.hive is undefined → app loads as if in browser mode.
       preload: path.join(__dirname, "../preload/index.mjs"),
+      additionalArguments: [`${APP_PAGE_ARG}${appPage}`],
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -294,6 +299,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // Capture webContents up front — after `closed`, accessing
   // win.webContents throws "Object has been destroyed".
   const wc = win.webContents;
+  keepOnAppPage(wc, appPage);
   registerWindow(win);
   workspaceIpc.connect(win.webContents);
   launchTargets.set(wc, target);
@@ -395,7 +401,6 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     });
   });
 
-  const devUrl = process.env["ELECTRON_RENDERER_URL"];
   if (devUrl) {
     win.loadURL(devUrl);
     win.webContents.openDevTools({ mode: "right" });

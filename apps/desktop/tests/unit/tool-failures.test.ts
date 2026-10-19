@@ -50,6 +50,17 @@ test("a frame the page's policy blocks fails the tile and says a tool may frame 
   assert.deepEqual(got.other, []);
 });
 
+test("a blocked frame reported on the document, with no source, fails the tile whose frame asked for it", () => {
+  const got: string[] = [];
+  const box = { contains: () => false, querySelectorAll: () => [{ src: "http://192.0.2.1/" }] } as unknown as Element;
+  const undo = watchToolFailures({ folder: "acme--frames", element: () => box, fail: (why) => got.push(why) });
+  const { got: others, done } = watched();
+  fire(g.document, "securitypolicyviolation", { blockedURI: "http://192.0.2.1/", effectiveDirective: "frame-src", sourceFile: "" });
+  undo(); done();
+  assert.equal(got.length, 1);
+  assert.deepEqual(others, { prs: [], other: [] });
+});
+
 test("a tile no longer watched hears nothing", () => {
   const { got, done } = watched();
   done();
