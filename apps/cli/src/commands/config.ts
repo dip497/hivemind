@@ -16,6 +16,7 @@ import {
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
+import { personOnly } from "../person-only.js";
 
 async function reloadApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
@@ -46,6 +47,8 @@ const setCmd = defineCommand({
   args: { path: { type: "positional", required: true }, value: { type: "positional", required: true }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    // Which plugins run is the person's to say, here as in `hive plugins`.
+    if (String(args.path).split(".")[0] === "plugins") personOnly(ctx, "change which plugins run and their settings", `hive config set ${String(args.path)} ${String(args.value)}`);
     let value: unknown;
     try { value = JSON.parse(String(args.value)); } catch { return err(ctx, "usage", `value must be JSON (a string needs quotes: '"nord"'); got ${JSON.stringify(args.value)}`); }
     try {

@@ -50,4 +50,31 @@ describe("hive plugins", () => {
       fs.rmSync(xdg, { recursive: true, force: true });
     }
   }, 60_000);
+
+  test("only the person switches plugins and changes their settings: an agent in a tile or a program with a grant is refused, told what to ask the person to run, and nothing is stored", () => {
+    const xdg = fixtureXDG(["claude"]);
+    const base = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock") };
+    const settings = path.join(xdg, "hivemind", "settings.json");
+    const stored = () => (fs.existsSync(settings) ? fs.readFileSync(settings, "utf8") : null);
+    try {
+      for (const who of [{ HCP_TOKEN: "tile-token", HIVEMIND_TILE: "hm:t1" }, { HIVE_DRIVE_TOKEN: "grant-token" }]) {
+        for (const [args, ask] of [
+          [["plugins", "enable", "tool:hivemind/web"], "hive plugins enable tool:hivemind/web"],
+          [["plugins", "disable", "agent:claude"], "hive plugins disable agent:claude"],
+          [["plugins", "set", "agent:claude", "model", "x"], "hive plugins set agent:claude model x"],
+          [["plugins", "reset", "agent:claude"], "hive plugins reset agent:claude"],
+          [["config", "set", "plugins.state", '{"tool:hivemind/web":{"enabled":true}}'], "hive config set plugins.state"],
+        ] as const) {
+          const before = stored();
+          const r = hive([...args, "--json"], { cwd: xdg, env: { ...base, ...who } });
+          const error = (JSON.parse(r.stderr) as { error: { code: string; message: string } }).error;
+          expect([args.join(" "), r.code, error.code, error.message.includes(ask), stored()]).toEqual([args.join(" "), 6, "PERSON_ONLY", true, before]);
+        }
+      }
+      // The person, at the same machine, may.
+      expect(hive(["plugins", "enable", "tool:hivemind/web", "--json"], { cwd: xdg, env: base }).code).toBe(0);
+    } finally {
+      fs.rmSync(xdg, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

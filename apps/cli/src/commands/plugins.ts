@@ -24,6 +24,7 @@ import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
+import { personOnly } from "../person-only.js";
 
 interface Plugin {
   key: string;
@@ -125,6 +126,7 @@ const switchCmd = (on: boolean) => defineCommand({
   args: { plugin: { type: "positional", required: true, description: "<kind>:<id>" }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    personOnly(ctx, on ? "switch plugins on" : "switch plugins off", `hive plugins ${on ? "enable" : "disable"} ${String(args.plugin)}`);
     try {
       const p = await find(String(args.plugin));
       const { reloaded } = await change(p, (s) => ({ ...s, enabled: on }));
@@ -143,6 +145,7 @@ const setCmd = defineCommand({
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    personOnly(ctx, "change a plugin's settings", `hive plugins set ${String(args.plugin)} ${String(args.setting)} ${String(args.value)}`);
     try {
       const p = await find(String(args.plugin));
       const field = p.fields.find((f) => f.id === args.setting);
@@ -159,6 +162,7 @@ const resetCmd = defineCommand({
   args: { plugin: { type: "positional", required: true, description: "<kind>:<id>" }, setting: { type: "positional", required: false }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    personOnly(ctx, "change a plugin's settings", `hive plugins reset ${String(args.plugin)}${args.setting ? ` ${String(args.setting)}` : ""}`);
     try {
       const p = await find(String(args.plugin));
       const one = args.setting ? String(args.setting) : null;
@@ -195,6 +199,7 @@ const workspacesCmd = defineCommand({
         const workspaces = serviceWorkspaces((await readSettings()).plugins.state, p.id);
         return ok(ctx, { key: p.key, workspaces }, () => (workspaces.length ? workspaces.join("\n") : `none: ${p.key}'s service waits for one`));
       }
+      personOnly(ctx, "choose the workspaces a plugin's service drives", `hive plugins workspaces ${p.key} ${args.none ? "--none" : folders.join(" ")}`);
       const { state, reloaded } = await change(p, ({ workspaces: _, ...s }) => (folders.length ? { ...s, workspaces: [...new Set(folders)] } : s));
       const workspaces = state.workspaces ?? [];
       return ok(ctx, { key: p.key, workspaces, reloaded }, () => `${p.key}'s service drives ${workspaces.length ? workspaces.join(", ") : "nothing"}; ${note(reloaded)}`);
