@@ -115,11 +115,11 @@ test("a view's commands: an agent pins notes to the Agent board while it is the 
 
 test("a tool's commands: an agent asks an open Commits tile what is there", async () => {
   // Named by its plugin alone: its first tool opens.
-  const opened = await hive("ctl", "plugin", "open", "tool:example/commits", "--json");
+  const opened = await hive("ctl", "plugin", "open", "tool:@example/commits", "--json");
   expect(opened.status, opened.err).toBe(0);
   const tool = JSON.parse(opened.out) as { tile: string; instance: string; state: string };
   expect([tool.instance, tool.state]).toEqual([tool.tile, "ready"]);
-  await expect.poll(async () => (await call("example/commits", "list")).data.result).toEqual(["init"]);
+  await expect.poll(async () => (await call("@example/commits", "list")).data.result).toEqual(["init"]);
   // Closed by its instance, as `plugin list` names it: its tile goes.
   expect((await hive("ctl", "plugin", "close", tool.tile, "--json")).status).toBe(0);
   expect((await running()).plugins.find((p) => p.instance === tool.tile)).toBeUndefined();
