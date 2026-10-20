@@ -3,9 +3,10 @@ name: phone-android
 # The Android app (apps/android) over the phone's Rust core (docs/design/phone-app-2026-10-02.md):
 # the core built for arm64-v8a and x86_64, the app assembled and unit-tested, then launched on an
 # emulator for a Maestro smoke flow, and on another paired with the desktop app, driving an agent
-# there. On every push touching the phone, on any branch.
+# there. On a pull request touching the phone, and on main.
 on:
   push:
+    branches: [main]
     paths:
       - apps/android/**
       - crates/hive-phone/**
@@ -16,6 +17,7 @@ on:
       - apps/desktop/tests/e2e/helpers/phone.ts
       - apps/desktop/tests/e2e/fixtures/views/phone-probe/**
       - .github/workflows/phone-android.yml
+      - "!**/*.md"
   pull_request:
     paths:
       - apps/android/**
@@ -27,12 +29,13 @@ on:
       - apps/desktop/tests/e2e/helpers/phone.ts
       - apps/desktop/tests/e2e/fixtures/views/phone-probe/**
       - .github/workflows/phone-android.yml
+      - "!**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# The phone's paths, as `paths:` above lists them: what the `changes` job looks for in a push.
+# The phone's paths, as `paths:` above lists them: what the `changes` job looks for in a push to a pull request.
 env:
   PHONE_PATHS: '^(apps/android/|crates/hive-phone/|crates/hive-phone-ffi/|crates/hive-net/|scripts/phone/|apps/desktop/tests/e2e/phone-app\.spec\.ts$|apps/desktop/tests/e2e/helpers/phone\.ts$|apps/desktop/tests/e2e/fixtures/views/phone-probe/|\.github/workflows/phone-android\.yml$)'
 
@@ -45,15 +48,12 @@ jobs:
   # request, so once one touched the phone, every push to it ran all of this (14 min), a push of
   # desktop code alone too. A push to a pull request that changed none of the phone's paths, made
   # on a head this workflow passed on, is not run again: what it would test is what passed.
-  # A push to a branch with an open pull request is that pull request's run to check: both ran
-  # all of this on the same commit, and each kept its own 4 GB of caches.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
       actions: read
-      pull-requests: read
     outputs:
       phone: ${{ steps.diff.outputs.phone }}
     steps:
@@ -72,14 +72,7 @@ jobs:
             if [ "$passed" != 0 ] && git fetch -q --depth=1 origin "$BEFORE" "$HEAD"; then
               changed=$(git diff --name-only "$BEFORE" "$HEAD")
               echo "changed since $BEFORE, which passed:"; echo "$changed"
-              grep -Eq "$PHONE_PATHS" <<< "$changed" || phone=false
-            fi
-          fi
-          if [ "$EVENT" = push/ ]; then
-            # Should the question fail, this runs.
-            open=$(gh api "repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:$GITHUB_REF_NAME&state=open" --jq length || echo 0)
-            if [ "${open:-0}" -gt 0 ]; then
-              echo "an open pull request from $GITHUB_REF_NAME checks this commit"; phone=false
+              grep -v "\.md$" <<< "$changed" | grep -Eq "$PHONE_PATHS" || phone=false
             fi
           fi
           echo "phone=$phone" | tee -a "$GITHUB_OUTPUT"
