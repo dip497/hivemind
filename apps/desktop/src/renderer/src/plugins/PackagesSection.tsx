@@ -91,13 +91,13 @@ function PackageItem({ p, open, toggle, reload }: { p: PackageRow; open: boolean
       })}
       {p.previous && (asking
         ? <div className="settings-remove-confirm package-rollback" data-rollback-confirm={p.id}>
-          <p>Go back to {p.previous}? It is switched as it was then. {p.version} is kept, so you can return to it.</p>
+          <p>Go back to {p.previous.version}? It comes back {p.previous.on ? "on" : "off"}, as it was. {p.version} is kept.</p>
           <div className="settings-actions">
             <Button variant="outline" disabled={busy} onClick={() => setAsking(false)}>Keep {p.version}</Button>
-            <Button disabled={busy} data-rollback-do={p.id} onClick={() => void act(() => window.hive.rollbackPackage(p.id))}>{busy ? "Rolling back…" : `Roll back to ${p.previous}`}</Button>
+            <Button disabled={busy} data-rollback-do={p.id} onClick={() => void act(() => window.hive.rollbackPackage(p.id))}>{busy ? "Rolling back…" : `Roll back to ${p.previous.version}`}</Button>
           </div>
         </div>
-        : <Button variant="ghost" size="sm" className="package-rollback-open" data-rollback={p.id} onClick={() => setAsking(true)}><History />Roll back to {p.previous}</Button>)}
+        : <Button variant="ghost" size="sm" className="package-rollback-open" data-rollback={p.id} onClick={() => setAsking(true)}><History />Roll back to {p.previous.version}</Button>)}
     </div>}
   </div>;
 }

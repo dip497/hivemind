@@ -94,8 +94,11 @@ each tool, widget and view, each with its own manifest, and the agent presets it
 Every member's id has the package's owner (`@you/…`). Installing checks each member as its kind
 is checked, and refuses one whose id another installed package holds.
 
-In **Settings → Plugins**, a package that holds several plugins is one row with one switch.
-Open it to see its members, each with its own switch and its own page for its settings.
+In **Settings → Plugins**, the **Packages** tab lists each package that holds several plugins as
+one row with one switch. Open it to see its members: what kind each is, whether it is sandboxed or
+runs in the app, its own switch, and its own page for its settings. Each member is also listed in
+its kind's tab, marked **Part of** its package. To add one from your computer, choose
+**Add → Add from a folder**; the review shows what it holds before anything is installed.
 
 A plugin that is part of a package changes only with it. Installing it, removing it or switching
 it on apart from its package is refused, naming the package. You can switch one off on its own,
@@ -122,6 +125,9 @@ hive plugins install ./kit --dry-run   # what would change, member by member; in
 hive plugins install ./kit             # the update, with the same list of changes
 hive plugins rollback @you/kit          # back to the version before, on or off as it was
 ```
+
+In the app, the same review lists what changed in each member and why the package will switch
+off, and an opened package has **Roll back to** the version before.
 
 The version before the one in use is kept, so a rollback needs no download. Rolling back again
 returns to the newer one.

@@ -24,8 +24,8 @@ export interface PackageRowMember {
 
 export interface PackageRow {
   id: string; name: string; version: string; on: boolean; members: PackageRowMember[];
-  /** The version a rollback puts back. */
-  previous: string | null;
+  /** The version a rollback puts back, and whether it was on. */
+  previous: { version: string; on: boolean } | null;
 }
 
 /** The package of several a plugin is part of, or null for one installed on its own. */
@@ -43,7 +43,7 @@ export function packageRows(packages: readonly InstalledPackageInfo[], states: R
   return packages
     .filter((p) => p.members.length > 1)
     .map((p) => ({
-      id: p.id, name: p.name, version: p.version, on: p.on, previous: p.previous?.version ?? null,
+      id: p.id, name: p.name, version: p.version, on: p.on, previous: p.previous,
       members: p.members.map((m) => {
         const own = (OWN_SWITCH as readonly string[]).includes(m.kind) ? { kind: m.kind as SwitchableKind, canTurnOn: p.on } : null;
         return { kind: m.kind, id: m.id, runs: m.runs, name: nameOf(m.kind, m.id) ?? m.id, on: p.on && (!own || states[`${m.kind}:${m.id}`]?.enabled !== false), own };

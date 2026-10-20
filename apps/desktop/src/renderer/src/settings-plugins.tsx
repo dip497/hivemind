@@ -197,7 +197,7 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
 function CatalogPackageRow({ entry: e, installed, action, open, toggle }: { entry: Entry; installed: boolean; action: ReactNode; open: boolean; toggle: () => void }) {
   const Chevron = open ? ChevronDown : ChevronRight;
   return <>
-    <div className="plugin-row" data-plugin-row={`package:${e.id}`}>
+    <div className="plugin-row catalog-package-row" data-plugin-row={`package:${e.id}`}>
       <span className="plugin-row-mark" aria-hidden="true"><Blocks size={16} /></span>
       <span className="plugin-row-text">
         <span className="plugin-row-name">{e.name}</span>

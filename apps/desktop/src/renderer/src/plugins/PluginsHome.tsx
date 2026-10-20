@@ -6,6 +6,7 @@
  * menu at the top; a folder is reviewed first, as `hive plugins install --dry-run` reviews it.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { ChevronDown, FolderPlus, Plus, Sparkles } from "../components/icons";
 import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
@@ -112,10 +113,9 @@ function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean 
   const [review, setReview] = useState<Review | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const ref = useRef<HTMLElement | null>(null);
   const act = async (fn: () => Promise<void>) => {
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true); setError(null);
     try { await fn(); } catch (e) { setError(cleanError(e)); } finally { setBusy(false); }
   };
   // From a folder this computer's picker chooses: not from a browser tab.
@@ -128,12 +128,11 @@ function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean 
   })}><FolderPlus />Add from a folder</DropdownMenuItem>;
   const panel = <>
     {error && <div role="alert" className="settings-message error">{error}</div>}
-    {notice && <div role="status" className="settings-message">{notice}</div>}
     {review && installPackageFolder && <section ref={ref} tabIndex={-1} className="settings-install-review" aria-label={`Review ${review.name}`}>
       <PackageReview review={review} heading />
       <div className="settings-actions"><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>Cancel</Button><Button disabled={busy} data-folder-install-do onClick={() => void act(async () => {
         await installPackageFolder(review.token);
-        setNotice(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`); setReview(null); rescan();
+        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`); setReview(null); rescan();
       })}>{busy ? "Installing…" : review.replaces ? "Update" : "Install"}</Button></div>
     </section>}
   </>;

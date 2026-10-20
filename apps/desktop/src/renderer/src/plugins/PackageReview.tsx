@@ -4,7 +4,8 @@
  * package off. The facts are the install's own dry run (`hive plugins install --dry-run`); this
  * only says them.
  */
-import { Blocks, Bot, LayoutGrid, PanelsTopLeft, Wrench } from "../components/icons";
+import { useState } from "react";
+import { Blocks, Bot, ChevronDown, ChevronRight, LayoutGrid, PanelsTopLeft, Wrench } from "../components/icons";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import type { ReactNode } from "react";
 import type { PackageReview as Review } from "../../../shared/ipc";
@@ -47,16 +48,15 @@ function outcome(r: Review): string {
   }
   if (!r.replaces.on) return "It stays off.";
   if (r.on) return "It stays on.";
-  const why = r.changes.filter((c) => c.switchesOff).map((c) => `${c.name}: ${offBecause(c)}`);
-  return `It switches off (${why.join("; ")}). Switch it on once you trust the change.`;
+  return `${r.name} switches off until you switch it on again.`;
 }
 
-function MemberLine({ kind, name, detail, runs, children }: { kind: string; name: string; detail?: string; runs: Runs; children?: ReactNode }) {
+function MemberLine({ kind, name, runs, children }: { kind: string; name: string; runs: Runs; children?: ReactNode }) {
   return <li className="package-review-member">
     <span className="plugin-row-mark" aria-hidden="true"><MemberIcon kind={kind} /></span>
     <span className="plugin-row-text">
       <span className="plugin-row-name">{name}</span>
-      <span className="plugin-row-detail">{MEMBER_KIND[kind] ?? kind} · {RUNS_LABEL[runs] ?? runs}{detail ? ` · ${detail}` : ""}</span>
+      <span className="plugin-row-detail">{MEMBER_KIND[kind] ?? kind} · {RUNS_LABEL[runs] ?? runs}</span>
       {children}
     </span>
   </li>;
@@ -65,6 +65,7 @@ function MemberLine({ kind, name, detail, runs, children }: { kind: string; name
 export function PackageReview({ review: r, heading }: { review: Review; heading?: boolean }) {
   const update = !!r.replaces;
   const switching = update && r.replaces!.on && !r.on;
+  const [all, setAll] = useState(false);
   const members = <ul className="package-review-list" data-package-members>
     {r.members.map((m) => <MemberLine key={`${m.kind}:${m.id}`} kind={m.kind} name={m.name} runs={m.runs}>
       <span className="package-review-asks" data-package-member={`${m.kind}:${m.id}`}>{m.permissions.length ? `May ${askedFor(m.permissions).join("; ")}` : "Asks for nothing more"}</span>
@@ -84,7 +85,9 @@ export function PackageReview({ review: r, heading }: { review: Review; heading?
           </MemberLine>;
         })}
       </ul> : <p>Nothing in it changed.</p>}
-      <details className="package-review-all"><summary>Everything it holds ({r.members.length})</summary>{members}</details>
+      <button type="button" className="catalog-holds-toggle package-review-all" aria-expanded={all} onClick={() => setAll(!all)} data-package-all>
+        {all ? <ChevronDown size={13} /> : <ChevronRight size={13} />}Everything it holds ({r.members.length})</button>
+      {all && members}
     </> : members}
     <p className={switching ? "package-review-outcome warn" : "package-review-outcome"} data-package-outcome={r.on ? "on" : "off"}>{outcome(r)}</p>
     {update && <p className="settings-note">{r.replaces!.version} is kept: Roll back puts it back.</p>}

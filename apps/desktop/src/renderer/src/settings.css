@@ -387,9 +387,9 @@
 .package-review-versions { margin-top: 0; font-variant-numeric: tabular-nums; }
 .settings-install-review .package-review-outcome { margin-top: 14px; color: var(--color-fg); }
 .settings-install-review .package-review-outcome.warn { color: var(--color-warn); }
-.package-review-all { margin-top: 14px; }
-.package-review-all > summary { cursor: pointer; font-size: var(--text-label); color: var(--color-fg2); }
-.package-review-all > summary:hover { color: var(--color-fg); }
 .catalog-holds-toggle { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 6px 36px; font-size: var(--text-label); color: var(--color-fg2); }
 .catalog-holds-toggle:hover { color: var(--color-fg); }
 .catalog-holds { margin: 0 12px 12px 36px; }
+.catalog-holds-toggle.package-review-all { margin: 14px 0 0; }
+.catalog-package-row { padding: 8px 10px 8px 8px; }
+.catalog-package-row > .plugin-row-text { flex: 1; }
