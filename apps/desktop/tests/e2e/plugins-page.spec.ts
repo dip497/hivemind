@@ -95,7 +95,8 @@ test("one row of controls: yours or HiveHub's and a search, then a tab per kind;
     await expect(controls.getByRole("tab", { name: scope, exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(controls.getByRole("searchbox", { name: "Search plugins" })).toBeVisible();
     await expect(body().getByRole("tablist", { name: "Kind" }).getByRole("tab")).toHaveText([/^Agents \d+$/, /^Views \d+$/, /^Widgets \d+$/, /^Tools \d+$/, /^Packages \d+$/]);
-    await expect(body().getByRole("combobox")).toHaveCount(0);
+    // The one select is the agents' own setting, not a filter.
+    await expect(body().getByRole("combobox").and(page.locator(":not(#when-agent-starts-agent)"))).toHaveCount(0);
     await expect(body().getByRole("tablist")).toHaveCount(2);
     await expect(body().getByRole("group")).toHaveCount(0);
     await expect(body().getByRole("button", { name: /refresh/i })).toHaveCount(0);

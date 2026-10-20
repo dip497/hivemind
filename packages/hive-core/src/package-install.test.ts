@@ -50,6 +50,14 @@ test("installing a widget folder gives a package of one, and removing the widget
   expect(fs.existsSync(path.join(packagesDir(), "store", "counter"))).toBe(false);
 });
 
+test("a folder holding no plugin is refused for that, however deep it goes, and nothing is installed", async () => {
+  const deep = path.join(tmp, "home", ...Array.from({ length: 40 }, (_, i) => `d${i}`));
+  fs.mkdirSync(deep, { recursive: true });
+  fs.writeFileSync(path.join(deep, "notes.txt"), "not a plugin");
+  await expect(installPackage(path.join(tmp, "home"), { dryRun: true })).rejects.toThrow(/it holds no hivemind-package\.json, .*hivemind-view\.json/);
+  expect(await readInstalledPackages()).toEqual([]);
+});
+
 test("a package holding code that runs in the app is installed off; the same files again keep its switch", async () => {
   const src = tool();
   expect((await installPackage(src)).record.on).toBe(false);

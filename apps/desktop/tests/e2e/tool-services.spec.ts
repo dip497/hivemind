@@ -22,8 +22,9 @@ env.HIVEMIND_TILE = "hm:parent";
 const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 const hive = (...args: string[]) => {
   const r = spawnSync("bun", [cli, ...args, "--json"], { cwd: repo, env: { ...env, HCP_TOKEN: "", HIVEMIND_TILE: "", HIVEMIND_APP_DATA: userData }, encoding: "utf8" });
-  if (!r.stdout.trim()) throw new Error(r.stderr);
-  return { status: r.status, data: JSON.parse(r.stdout) };
+  // What it answers on stdout; a failure, `{ error: { code, message } }`, on stderr.
+  if (r.stdout.trim()) return { status: r.status, data: JSON.parse(r.stdout) };
+  try { return { status: r.status, data: JSON.parse(r.stderr).error }; } catch { throw new Error(r.stderr); }
 };
 
 // The plugin: a tool, and a service that says who it drives as, what of the app's environment it
@@ -71,7 +72,7 @@ test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: tru
 
 const section = () => page.locator('[data-service="@acme/watcher"]');
 const state = () => section().locator("[data-service-state]");
-const ours = () => (hive("grant", "list").data.data as Array<{ name: string; plugin?: string; repos: string[]; role: string }>).filter((g) => g.plugin === "@acme/watcher");
+const ours = () => (hive("grant", "list").data.grants as Array<{ name: string; plugin?: string; repos: string[]; role: string }>).filter((g) => g.plugin === "@acme/watcher");
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
 test("switched on, it waits for a workspace; picked, it drives that one as its own grant and no more", async () => {

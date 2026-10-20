@@ -28,8 +28,10 @@ const hive = (...args: string[]) => new Promise<{ status: number | null; out: st
 });
 const call = async (...args: string[]) => {
   const r = await hive("ctl", "plugin", "call", ...args, "--json");
-  return { status: r.status, data: JSON.parse(r.out || "null") as { result?: unknown; ok?: false; code?: string; message?: string } };
+  return { status: r.status, data: (r.out ? JSON.parse(r.out) : failure(r)) as { result?: unknown; code?: string; message?: string } };
 };
+/** What a command that failed printed: `{ error: { code, message } }` on stderr. */
+const failure = (r: { err: string }) => (JSON.parse(r.err) as { error: { code: string; message: string } }).error;
 
 let app: ElectronApplication;
 let page: Page;
@@ -128,12 +130,12 @@ test("a tool's commands: an agent asks an open Commits tile what is there", asyn
 test("what is not here to open is refused, with how to get it", async () => {
   const widget = await hive("ctl", "plugin", "open", "widget:@nobody/nothing", "--json");
   expect(widget.status).not.toBe(0);
-  expect(JSON.parse(widget.out).message).toContain("hive plugins install");
+  expect(failure(widget).message).toContain("hive plugins install");
   const view = await hive("ctl", "plugin", "open", "view:nothing", "--json");
-  expect([view.status, JSON.parse(view.out).code]).toEqual([5, "NOT_FOUND"]);
-  expect(JSON.parse(view.out).message).toContain("hive plugins enable view:nothing");
-  expect(JSON.parse(view.out).message).toContain("these are: canvas");
-  expect(JSON.parse((await hive("ctl", "plugin", "open", "tool:@nobody/nothing", "--json")).out).message).toContain("has no tool to open");
+  expect([view.status, failure(view).code]).toEqual([5, "NOT_FOUND"]);
+  expect(failure(view).message).toContain("hive plugins enable view:nothing");
+  expect(failure(view).message).toContain("these are: canvas");
+  expect(failure(await hive("ctl", "plugin", "open", "tool:@nobody/nothing", "--json")).message).toContain("has no tool to open");
   // An id alone that no kind has here.
-  expect(JSON.parse((await hive("ctl", "plugin", "open", "nothing", "--json")).out).code).toBe("NOT_FOUND");
+  expect(failure(await hive("ctl", "plugin", "open", "nothing", "--json")).code).toBe("NOT_FOUND");
 });

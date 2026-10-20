@@ -64,9 +64,17 @@ export async function readPackage(dir: string, given: { id?: string; folder: str
     return { id: m.id, name: m.name, version: m.version, members, replaces: m.replaces, manifest: m };
   }
   const k = MEMBER_KINDS.find((x) => x.manifest && existsSync(path.join(dir, x.manifest)));
-  if (!k) return fail(`it holds no ${[PACKAGE_MANIFEST, ...MEMBER_KINDS.flatMap((x) => x.manifest ?? [])].join(", ")}`);
+  if (!k) return notAPlugin();
   const c = await k.check(dir, { path: "." }, given);
   return { id: c.id, name: c.name, version: c.version && PACKAGE_VERSION.test(c.version) ? c.version : "0.0.0", members: [{ ...c, kind: k.kind }], replaces: [], manifest: null };
+}
+
+const notAPlugin = (): never => fail(`it holds no ${[PACKAGE_MANIFEST, ...MEMBER_KINDS.flatMap((x) => x.manifest ?? [])].join(", ")}`);
+
+/** Refuse a folder holding neither a package's manifest nor one plugin's, before reading it all. */
+export function checkHoldsPlugin(dir: string): void {
+  if (existsSync(path.join(dir, PACKAGE_MANIFEST)) || MEMBER_KINDS.some((x) => x.manifest && existsSync(path.join(dir, x.manifest)))) return;
+  notAPlugin();
 }
 
 /** Folders a package never carries: what a build or a checkout leaves beside the plugin. */

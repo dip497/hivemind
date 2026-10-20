@@ -18,8 +18,9 @@ const fixture = path.resolve(process.cwd(), "tests/e2e/fixtures/tools/look");
 let hcp: Record<string, string> = {};
 const hive = (...args: string[]) => {
   const result = spawnSync("bun", [cli, ...args, "--json"], { cwd: repo, env: { ...env, ...hcp }, encoding: "utf8" });
-  if (!result.stdout.trim()) throw new Error(result.stderr);
-  return { status: result.status, data: JSON.parse(result.stdout) };
+  // What it answers on stdout; a failure, `{ error: { code, message } }`, on stderr.
+  if (result.stdout.trim()) return { status: result.status, data: JSON.parse(result.stdout) };
+  try { return { status: result.status, data: JSON.parse(result.stderr).error }; } catch { throw new Error(result.stderr); }
 };
 
 let app: ElectronApplication;
@@ -77,7 +78,7 @@ test("look refuses, naming it, when something is drawn over the tile, and pictur
   const out = path.join(root, "covered.png");
   const r = spawnSync("bun", [cli, "ctl", "tile", "look", tile, "--out", out, "--json"], { cwd: repo, env: { ...env, ...hcp }, encoding: "utf8" });
   expect(r.status).toBe(7);
-  expect(JSON.parse(r.stdout)).toMatchObject({ ok: false, code: "OCCLUDED", message: expect.stringContaining("a dialog (Something private)") });
+  expect(JSON.parse(r.stderr).error).toMatchObject({ code: "OCCLUDED", message: expect.stringContaining("a dialog (Something private)") });
   expect(fs.existsSync(out)).toBe(false);
   await page.evaluate(() => document.getElementById("cover")?.remove());
   expect(hive("ctl", "tile", "look", tile, "--out", out).status).toBe(0);
@@ -93,7 +94,7 @@ test("a notification over the tile is named, not hidden: the person keeps seeing
     document.body.appendChild(list);
   });
   const r = spawnSync("bun", [cli, "ctl", "tile", "look", tile, "--json"], { cwd: repo, env: { ...env, ...hcp }, encoding: "utf8" });
-  expect(JSON.parse(r.stdout)).toMatchObject({ ok: false, code: "OCCLUDED", message: expect.stringContaining("a notification") });
+  expect(JSON.parse(r.stderr).error).toMatchObject({ code: "OCCLUDED", message: expect.stringContaining("a notification") });
   expect(await page.evaluate(() => getComputedStyle(document.getElementById("toast")!).visibility)).toBe("visible");
   await page.evaluate(() => document.getElementById("toast")?.remove());
 });

@@ -59,11 +59,8 @@ async function asStranger(script: string): Promise<unknown> {
 }
 
 test("a window that is not one of the app's is answered by none of its channels; the app's own window is", async () => {
-  const stranger = await asStranger(`(async () => ({
-    version: await window.hive.getAppVersion().then(() => "answered", () => "refused"),
-    settings: window.hive.settingsSync() === null ? "refused" : "answered",
-  }))()`);
-  expect(stranger).toEqual({ version: "refused", settings: "refused" });
+  // It is not given the app's bridge at all, so it has no channel to ask on.
+  expect(await asStranger("typeof window.hive")).toBe("undefined");
   expect(await page.evaluate(() => window.hive.getAppVersion())).toBe(await app.evaluate(({ app }) => app.getVersion()));
   expect(await page.evaluate(() => window.hive.settingsSync())).not.toBeNull();
 });
@@ -96,7 +93,7 @@ test("a window that is not one of the app's cannot type into a terminal; the app
   const type = (command: string) => page.evaluate(({ pty, command }) => window.hive.ptyWrite(pty, `${command}\r`), { pty, command });
   // The shell is up once a command typed from the window runs.
   await expect.poll(async () => { await type(`touch ${marker("ready")}`); return fs.existsSync(marker("ready")); }, { timeout: 20_000 }).toBe(true);
-  await asStranger(`window.hive.ptyWrite(${JSON.stringify(pty)}, ${JSON.stringify(`touch ${marker("stranger")}\r`)})`);
+  await asStranger(`window.hive?.ptyWrite(${JSON.stringify(pty)}, ${JSON.stringify(`touch ${marker("stranger")}\r`)})`);
   // Typed after it: once this has run, a command the stranger typed would have run first.
   await type(`touch ${marker("after")}`);
   await expect.poll(() => fs.existsSync(marker("after")), { timeout: 10_000 }).toBe(true);

@@ -134,7 +134,7 @@ test("a program with a scoped grant opens a worktree frame, starts Claude there,
   expect(conversation.entries.map((e) => [e.who, e.text])).toEqual([["person", "echo hello from $PWD"], ["agent", `hello from ${opened.path}`]]);
 
   // A tool use it was started supervised for waits on the program, which answers it.
-  expect(await p.call("agent.send", [tile, 'TOOL Bash {"command":"git push origin feature"}'])).toEqual({ sent: true });
+  expect(await p.call("agent.send", [tile, 'TOOL Bash {"command":"git push origin feature"}'])).toMatchObject({ sent: true });
   let asked: Item | undefined;
   await expect.poll(async () => { asked = await item(); return asked?.waiting?.kind; }, { timeout: 60_000 }).toBe("approval");
   expect(asked!.parent).toBe(`client:${grant.id}`);

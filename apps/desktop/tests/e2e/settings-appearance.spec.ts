@@ -30,8 +30,8 @@ const onDisk = () => JSON.parse(fs.readFileSync(settingsFile(), "utf8"));
 let hcpEnv: Record<string, string> = {};
 const hive = (...args: string[]) => {
   const r = spawnSync("bun", [CLI, ...args, "--json"], { cwd: repo, encoding: "utf8", env: { ...ENV, ...hcpEnv } });
-  try { return JSON.parse(r.stdout.trim()) as { ok: boolean; data?: Record<string, unknown> }; }
-  catch { throw new Error(`hive ${args.join(" ")} → exit ${r.status}\n${r.stdout}\n${r.stderr}`); }
+  if (r.status !== 0) throw new Error(`hive ${args.join(" ")} → exit ${r.status}\n${r.stdout}\n${r.stderr}`);
+  return JSON.parse(r.stdout.trim()) as Record<string, unknown>;
 };
 
 const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
@@ -84,8 +84,7 @@ test("a preset picked in Settings repaints the shell and every terminal, and lan
 
 test("`hive theme use` repaints the running app — no restart, no reopened window", async () => {
   const r = hive("theme", "use", "nord");
-  expect(r.ok).toBe(true);
-  expect(r.data?.rescanned).toBe(true); // the CLI reached the app over HCP
+  expect(r.rescanned).toBe(true); // the CLI reached the app over HCP
   await expect.poll(preset, { timeout: 5_000 }).toBe("nord");
   await expect.poll(() => page.getAttribute(".react-flow__node-terminal [data-term-bg]", "data-term-bg")).toBe("#2e3440");
 });
@@ -124,7 +123,7 @@ test("a preserved terminal follows the view's opacity without another theme chan
     ["appearance.glass.enabled", "true"],
     ["appearance.glass.contentGlass", "true"],
     ["appearance.pluginSurfaces", JSON.stringify("opaque")],
-  ]) expect(hive("config", "set", key, value).ok).toBe(true);
+  ]) expect(hive("config", "set", key, value).value).toEqual(JSON.parse(value));
   const terminal = page.locator("[data-term-bg]").first();
   await expect(terminal).toHaveAttribute("data-term-bg", "rgba(0,0,0,0)");
   const original = await terminal.elementHandle();

@@ -109,11 +109,12 @@ test("opened while `hive host` serves programs, Settings lets them in and takes 
   try {
     host = spawn("bun", [cli, "host", "run"], { env, stdio: "ignore" });
     await expect.poll(() => hive("host", "add", repo).status, { timeout: 30_000 }).toBe(0);
-    expect(hive("plugins", "workspaces", "tool:@acme/hello", repo).status).toBe(0);
+    const picked = hive("plugins", "workspaces", "tool:@acme/hello", repo);
+    expect(picked.status, picked.stderr).toBe(0);
     const log = () => { try { return fs.readFileSync(path.join(data, "services", "acme--hello.log"), "utf8"); } catch { return ""; } };
     await expect.poll(() => /started, pid (\d+)/.exec(log())?.[1], { timeout: 20_000 }).toBeTruthy();
     const service = Number(/started, pid (\d+)/.exec(log())![1]);
-    const servicesGrants = () => (JSON.parse(hive("grant", "list").stdout).data as Array<{ plugin?: string }>).filter((g) => g.plugin === "@acme/hello");
+    const servicesGrants = () => (JSON.parse(hive("grant", "list").stdout).grants as Array<{ plugin?: string }>).filter((g) => g.plugin === "@acme/hello");
     expect(servicesGrants()).toHaveLength(1);
 
     app = await electron.launch({ args: [path.resolve("out/main/index.js"), "--no-sandbox"], cwd: repo, env });

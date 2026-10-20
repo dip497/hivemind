@@ -23,7 +23,7 @@ const choose = async (dir: string) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selected] });
   }, dir);
   await page.locator("[data-add-plugin]").click();
-  await page.getByRole("menuitem", { name: "Add a view from a folder" }).click();
+  await page.getByRole("menuitem", { name: "Add from a folder" }).click();
 };
 
 test.beforeAll(async () => {
@@ -99,11 +99,11 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   await choose(root);
   await expect(page.getByRole("alert")).toContainText("hivemind-view.json");
   await choose(source);
-  await expect(page.getByRole("region", { name: "Review extension" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Review Settings demo" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   expect(installedFile(xdg, "settings-demo")).toBeNull();
   await choose(source);
-  await page.getByRole("button", { name: "Install extension", exact: true }).click();
+  await page.locator("[data-folder-install-do]").click();
   const row = page.locator('[data-plugin-row="view:settings-demo"]');
   await page.locator('[data-plugins-kind="view"]').click();
   await expect(row).toBeVisible();
@@ -125,8 +125,8 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   const manifest = JSON.parse(fs.readFileSync(manifestFile, "utf8"));
   fs.writeFileSync(manifestFile, JSON.stringify({ ...manifest, version: "1.1.0" }));
   await choose(source);
-  await expect(page.getByRole("region", { name: "Review extension" })).toContainText("Replaces installed version 1.0.0");
-  await page.getByRole("button", { name: "Replace extension" }).click();
+  await expect(page.getByRole("region", { name: "Review Settings demo" })).toContainText("1.0.0 → 1.1.0");
+  await page.locator("[data-folder-install-do]").click();
   await page.screenshot({ path: "/tmp/hivemind-settings-extensions.png" });
 
   await row.locator("[data-plugin-open]").click();

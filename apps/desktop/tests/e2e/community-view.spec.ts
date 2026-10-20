@@ -34,10 +34,10 @@ const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
 /** The app's control-plane socket + token (isolated userData under this run's XDG);
  *  set once the app is up so `hive plugins install|remove` can ask it to rescan. */
 let hcpEnv: Record<string, string> = {};
-/** `hive … --json` as a subprocess; non-zero exits are part of the contract (parsed, not thrown). */
+/** `hive … --json` as a subprocess: what it answers, or the `{ error }` it failed with (parsed, not thrown). */
 const hive = (...args: string[]) => {
   const r = spawnSync("bun", [CLI, ...args, "--json"], { cwd: repo, encoding: "utf8", env: { ...ENV, ...hcpEnv } });
-  try { return JSON.parse(r.stdout.trim()); } catch { throw new Error(`hive ${args.join(" ")} → exit ${r.status}\n${r.stdout}\n${r.stderr}`); }
+  try { return JSON.parse(r.stdout.trim() || r.stderr.trim()); } catch { throw new Error(`hive ${args.join(" ")} → exit ${r.status}\n${r.stdout}\n${r.stderr}`); }
 };
 const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
 const toggleView = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
@@ -52,8 +52,7 @@ test.beforeAll(async () => {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
   const installed = hive("plugins", "install", TILE_LIST_DIR);
-  expect(installed.ok).toBe(true);
-  expect(installed.data.members[0].dir).toBe(installedFile(XDG, "tile-list"));
+  expect(installed.members[0].dir).toBe(installedFile(XDG, "tile-list"));
   app = await electron.launch({
     // No --user-data-dir: the profile is isolated by this run's XDG_CONFIG_HOME
     // (playwright.config.ts), and that is where the app's HCP socket lands
@@ -95,7 +94,7 @@ test("an installed view is registered after the app's own: ⌘E cycles canvas �
   // leaves the next test on the wrong view.
   for (let i = 0; i < 3; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
   expect(seen).toEqual(["windows", "tile-list", "canvas"]);
-  expect(hive("plugins", "list", "--kind", "view").data.map((v: { id: string; problem: string | null }) => [v.id, v.problem])).toEqual([["tile-list", null]]);
+  expect(hive("plugins", "list", "--kind", "view").plugins.map((v: { id: string; problem: string | null }) => [v.id, v.problem])).toEqual([["tile-list", null]]);
 });
 
 test("a view's frame is see-through where no pane covers it: the dark app shows, not white", async () => {
@@ -174,8 +173,7 @@ test("`hive plugins install` while the app runs: the CLI asks the app to rescan 
   // CLI reaches it exactly as a user's shell would.
   for (const id of ["hostile-flood", "hostile-loop"]) {
     const r = hive("plugins", "install", path.join(FIXTURES, id));
-    expect(r.ok).toBe(true);
-    expect(r.data.rescanned).toBe(true);
+    expect(r.rescanned).toBe(true);
   }
   // No reloadViews() here: the rescan came from the CLI's HCP call.
   await expect.poll(async () => (await report()).registered).toEqual(["windows", "tile-list", "hostile-flood", "hostile-loop"]);
@@ -218,30 +216,28 @@ test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes 
 
 test("a package asking for an unknown permission is refused by install AND by the loader", async () => {
   const r = hive("plugins", "install", path.join(FIXTURES, "greedy"));
-  expect(r).toMatchObject({ ok: false, code: "invalid_view" });
-  expect(r.error).toMatch(/unknown permission "fs:read"/);
+  expect(r.error).toMatchObject({ code: "INVALID_VIEW", message: expect.stringMatching(/unknown permission "fs:read"/) });
   // Written into an installed copy by hand (bypassing the CLI) it is still refused at load.
   const tame = fs.mkdtempSync(path.join(os.tmpdir(), "hm-greedy-"));
   fs.cpSync(path.join(FIXTURES, "greedy"), tame, { recursive: true });
   const manifest = JSON.parse(fs.readFileSync(path.join(tame, "hivemind-view.json"), "utf8"));
   fs.writeFileSync(path.join(tame, "hivemind-view.json"), JSON.stringify({ ...manifest, permissions: [] }));
-  expect(hive("plugins", "install", tame)).toMatchObject({ ok: true });
+  expect(hive("plugins", "install", tame)).toMatchObject({ id: "greedy" });
   fs.copyFileSync(path.join(FIXTURES, "greedy", "hivemind-view.json"), installedFile(XDG, "greedy", "hivemind-view.json")!);
   await reloadViews();
   await expect.poll(async () => (await report()).refused["greedy"]).toMatch(/unknown permission "fs:read"/);
   expect((await report()).registered).toEqual(["windows", "tile-list"]);
-  expect(hive("plugins", "list", "--kind", "view").data.find((v: { id: string }) => v.id === "greedy").problem).toMatch(/unknown permission/);
+  expect(hive("plugins", "list", "--kind", "view").plugins.find((v: { id: string }) => v.id === "greedy").problem).toMatch(/unknown permission/);
 });
 
 test("`hive plugins remove` of the ACTIVE view: the app rescans, the switcher drops it, the canvas is shown", async () => {
   await toView("tile-list");
   await page.waitForSelector(tileListReady, { timeout: 15_000 });
   const r = hive("plugins", "remove", "tile-list");
-  expect(r.ok).toBe(true);
-  expect(r.data.rescanned).toBe(true);
+  expect(r.rescanned).toBe(true);
   // No reloadViews(): the CLI's rescan did it.
   await expect.poll(async () => (await report()).registered).toEqual(["windows"]);
   await expect.poll(activeView).toBe("canvas");
   await expect(page.locator(".xterm")).toHaveCount(1);
-  expect(hive("plugins", "list", "--kind", "view").data.map((v: { id: string }) => v.id)).toEqual(["greedy", "hostile-flood", "hostile-loop"]);
+  expect(hive("plugins", "list", "--kind", "view").plugins.map((v: { id: string }) => v.id).sort()).toEqual(["greedy", "hostile-flood", "hostile-loop"]);
 });

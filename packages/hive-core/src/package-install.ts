@@ -11,7 +11,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { copyPackage, folderDigest, readPackage, type PackageRead } from "./packages.js";
+import { checkHoldsPlugin, copyPackage, folderDigest, readPackage, type PackageRead } from "./packages.js";
 import { memberKind, type CheckedMember } from "./package-kinds.js";
 import {
   changeInstalledPackages, packageFolderName, packageHolding, packagesDir, readInstalledPackages, versionFolder,
@@ -132,6 +132,7 @@ export const reviewedOf = (r: InstalledPackage): Reviewed => ({ digest: r.record
 export async function installPackage(src: string, given: { id?: string; dryRun?: boolean; reviewed?: Reviewed } = {}): Promise<InstalledPackage> {
   const from = path.resolve(src);
   if (!(await stat(from).catch(() => null))?.isDirectory()) throw new Error(`there is no folder ${from}`);
+  checkHoldsPlugin(from);
   await mkdir(packagesDir(), { recursive: true });
   const staging = await mkdtemp(path.join(packagesDir(), ".staging-"));
   try {
