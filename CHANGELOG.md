@@ -16,6 +16,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Quitting while the background process is busy now asks what to do instead of quitting as if nothing ran, and "Stop everything" now always stops it.
 - Model and option lists that took too long to read from an agent's CLI are read again next time instead of staying empty until the app restarts.
 - Terminals and agents slow to start, as when the app comes back after an update with many open, now open instead of saying they are not running on their machine.
+- A terminal on a machine whose hive is older than the app now says to press Update hive in Machines, instead of starting its agent again over plain ssh while the original runs on there unseen.
 
 ## [2026.10.4] — 2026-10-20
 
