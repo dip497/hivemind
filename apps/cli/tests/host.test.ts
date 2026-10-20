@@ -619,7 +619,7 @@ describe.skipIf(!built)("hive host", () => {
       expect(asking).toMatchObject({ workspace: "shared6", role: "terminals" });
       expect(hive(["people", "allow", String(asking.req), "--role", "view", "-w", "shared6", "--json"], { env: own }).code).toBe(0);
       expect((await joining).json).toMatchObject({ ok: true, role: "view" });
-      expect(data<PersonHere[]>(hive(["people", "list", "-w", "shared6", "--json"], { env: own })).map((p) => [p.person, p.role])).toEqual([[guest.person, "view"]]);
+      expect(data<{ people: PersonHere[] }>(hive(["people", "list", "-w", "shared6", "--json"], { env: own })).people.map((p) => [p.person, p.role])).toEqual([[guest.person, "view"]]);
       // Kept in the guest's joined list, as the app keeps a workspace it joined.
       expect(JSON.parse(fs.readFileSync(path.join(other.HIVEMIND_APP_DATA, "joined.json"), "utf8"))).toMatchObject([{ host: owner.device, role: "view", names: { workspace: "shared6" } }]);
 
