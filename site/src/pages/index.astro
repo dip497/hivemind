@@ -578,6 +578,7 @@ const code: Record<string, [string, string][]> = {
   }
   @media (max-width:1000px){
     .hero-copy{grid-template-columns:minmax(0,1fr)}
+    .hero-bg i{display:none}
   }
 
   .band{padding:136px 0;border-top:1px solid var(--line);position:relative}
@@ -741,6 +742,8 @@ const code: Record<string, [string, string][]> = {
     .nav-in{height:auto;min-height:52px;padding:8px var(--gut);flex-wrap:wrap;gap:6px 14px}
     .links{order:3;width:100%;margin:0 calc(var(--gut) * -1);padding:0 var(--gut);overflow-x:auto;gap:18px;scrollbar-width:none}
     .links::-webkit-scrollbar{display:none}
+    /* The row scrolls sideways; its right edge fades so the cut-off link reads as more to come. */
+    .links{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent)}
     .links a{white-space:nowrap;padding:6px 0}
     .nav-in > .btn{margin-left:auto}
     .hero{padding:28px 0 64px}
