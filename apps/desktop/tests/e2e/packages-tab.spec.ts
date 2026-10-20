@@ -3,13 +3,14 @@
 // tool runs in the app. Switched on from its row in the Packages tab, it is updated from a folder
 // whose widget asks for more: the review names that change and says the package switches off,
 // and after the update it is off. Roll back puts the version before back, on as it was.
-import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { test, expect, chromium, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { freePort } from "./helpers/window";
 
 let app: ElectronApplication;
 let page: Page;
@@ -90,13 +91,16 @@ test("install from a folder, switch on, review an update that asks for more, rol
   await expect(review().locator("[data-package-outcome]")).toContainText("Pull requests runs outside the sandbox");
   await shot("1-install-review");
   await body().locator("[data-folder-install-do]").click();
-  await expect(page.getByText("Kit 1.0.0 is installed, switched off.")).toBeVisible();
 
   await body().locator('[data-plugins-kind="package"]').click();
   await expect(packageSwitch()).toHaveAttribute("aria-checked", "false");
   await shot("2-packages-tab");
+  // What the install said is no longer so once it is switched on, so it goes then, not later.
+  const said = page.getByText("Kit 1.0.0 is installed, switched off.");
+  await expect(said).toBeVisible();
   await packageSwitch().click();
   await expect(packageSwitch()).toHaveAttribute("aria-checked", "true");
+  await expect(said).toHaveCount(0, { timeout: 1500 });
   await row().locator("[data-package-open]").click();
   await expect(row().locator("[data-member-switch]")).toHaveCount(3);
   await shot("3-expanded");
@@ -146,4 +150,36 @@ test("HiveHub lists a package under Packages, with what it holds before anything
     /Runner.*Tool · Runs in the app.*May start agents in your workspace/,
   ]);
   await shot("10-hivehub-packages");
+});
+
+test("in a browser tab the Packages tab lists the package, and its switch reaches the app", async () => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "browser" } })));
+  const section = page.locator("[data-browser-app]");
+  await section.locator("[data-browser-app-more] > summary").click();
+  await section.locator("#browser-app-port").fill(String(await freePort()));
+  await section.locator("#browser-app-port").press("Enter");
+  await section.getByRole("switch", { name: "Serve the app to a browser" }).click();
+  const link = (await section.locator("[data-browser-app-open]").first().getAttribute("href"))!;
+  const browser = await chromium.launch(process.env.HIVE_HARNESS_CHROMIUM ? { executablePath: process.env.HIVE_HARNESS_CHROMIUM } : {});
+  try {
+    const tab = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await tab.goto(link);
+    await tab.waitForSelector(".react-flow", { timeout: 30_000 });
+    await tab.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } })));
+    const there = tab.locator("[data-settings-body]");
+    await there.locator('[data-plugins-kind="package"]').click();
+    const kit = there.locator("[data-package='@e2e/kit']");
+    await expect(kit.locator("[data-package-switch]")).toHaveAttribute("aria-checked", "true");
+    await kit.locator("[data-package-open]").click();
+    await expect(kit.locator("[data-member-switch]")).toHaveCount(3);
+    if (shots) await tab.screenshot({ path: path.join(shots, "11-browser-tab-packages.png") });
+    await kit.locator("[data-package-switch]").click();
+    await expect(kit.locator("[data-package-switch]")).toHaveAttribute("aria-checked", "false");
+    await expect.poll(() => page.evaluate(async () => (await window.hive.installedPackages()).find((p) => p.id === "@e2e/kit")?.on)).toBe(false);
+    if (shots) await tab.screenshot({ path: path.join(shots, "12-browser-tab-off.png") });
+    // A folder is chosen on the computer the app runs on, so the tab does not offer one.
+    await there.locator("[data-add-plugin]").click();
+    await expect(tab.locator("[data-folder-install]")).toHaveCount(0);
+    if (shots) await tab.screenshot({ path: path.join(shots, "13-browser-tab-add.png") });
+  } finally { await browser.close(); }
 });

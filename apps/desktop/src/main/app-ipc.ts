@@ -18,6 +18,9 @@ import { hostIntents } from "./audit.js";
 /** Who calls from the app's windows. */
 export const PERSON: Actor = { kind: "person" };
 
+/** The person, and whether from a browser tab: a tab is not a window's WebContents. */
+const actorOf = (e: Caller): Actor => ("mainFrame" in e.sender ? PERSON : { kind: "person", via: "browser tab" });
+
 /** The call comes from the main frame of one of the app's windows. */
 function fromAppWindow(e: IpcMainEvent | IpcMainInvokeEvent): boolean {
   const win = appWindowOf(e.sender);
@@ -69,7 +72,7 @@ export function on<A extends unknown[]>(channel: string, fn: (e: IpcMainEvent, .
 export function handleEffect<A extends unknown[]>(channel: string, asks: (...args: any[]) => Asks, fn: (e: Caller, ...args: A) => unknown): void;
 export function handleEffect<A extends unknown[]>(channel: string, asks: (...args: any[]) => Asks, fn: (e: IpcMainInvokeEvent, ...args: A) => unknown, only: Local): void;
 export function handleEffect<A extends unknown[]>(channel: string, asks: (...args: any[]) => Asks, fn: (e: IpcMainInvokeEvent, ...args: A) => unknown, only?: Local): void {
-  const run = (e: IpcMainInvokeEvent, ...args: A) => hostIntents().perform(PERSON, { verb: channel, ...asks(...args) }, () => fn(e, ...args));
+  const run = (e: IpcMainInvokeEvent, ...args: A) => hostIntents().perform(actorOf(e), { verb: channel, ...asks(...args) }, () => fn(e, ...args));
   if (only) handle<A>(channel, run, only);
   else handle<A>(channel, run as (e: Caller, ...args: A) => unknown);
 }

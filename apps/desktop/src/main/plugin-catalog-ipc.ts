@@ -1,10 +1,10 @@
 /** Browse and install from the plugin catalog. Every download is hash-verified into a
  *  staging folder, then goes through the same review as a folder the user picked. */
-import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { app } from "electron";
-import { handle, handleEffect } from "./app-ipc.js";
+import { handle, handleEffect, type Caller } from "./app-ipc.js";
 import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
@@ -14,7 +14,7 @@ import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
 import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
 import { listWidgets, readWidget } from "@hivemind/core/widgets";
-import { installPackage } from "@hivemind/core/package-install";
+import { installPackage, reviewedOf, type Reviewed } from "@hivemind/core/package-install";
 import { packageReview } from "./packages-ipc.js";
 import { widgetsChanged } from "./widgets.js";
 import { listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
@@ -58,6 +58,18 @@ function catalogNow(): Promise<CatalogEntry[]> {
   return fetching;
 }
 
+/** Whether `dir` holds exactly `files`, each with its listed SHA-256, and nothing else. */
+async function holdsExactly(dir: string, files: CatalogEntry["files"]): Promise<boolean> {
+  const there = (await readdir(dir, { recursive: true, withFileTypes: true })).filter((d) => !d.isDirectory())
+    .map((d) => path.relative(dir, path.join(d.parentPath, d.name)).split(path.sep).join("/"));
+  if (there.length !== files.length || there.some((f) => !files.some((l) => l.path === f))) return false;
+  for (const f of files) {
+    const body = await readFile(path.join(dir, f.path)).catch(() => null);
+    if (!body || createHash("sha256").update(body).digest("hex") !== f.sha256) return false;
+  }
+  return true;
+}
+
 export function installPluginCatalogIpc(): void {
   // A plugin's README, to read before or after installing it: from its folder here, or from the
   // catalog for one not installed. Shown as text, never run.
@@ -83,10 +95,17 @@ export function installPluginCatalogIpc(): void {
     }
     return null;
   });
-  let pendingAgent: { token: string; dir: string; id: string } | null = null;
-  let pendingWidget: { token: string; dir: string; id: string } | null = null;
-  let pendingTool: { token: string; dir: string; id: string } | null = null;
-  let pendingPackage: { token: string; dir: string; id: string } | null = null;
+  // Each review waits for its install here: by the window or tab that asked for it, with what the
+  // review saw, so the install is held to it.
+  type Pending = { token: string; dir: string; id: string; sender: Caller["sender"] };
+  let pendingAgent: (Pending & { files: CatalogEntry["files"] }) | null = null;
+  let pendingWidget: (Pending & { reviewed: Reviewed }) | null = null;
+  let pendingTool: (Pending & { reviewed: Reviewed }) | null = null;
+  let pendingPackage: (Pending & { reviewed: Reviewed }) | null = null;
+  // A review never installed leaves its download: gone when the app quits.
+  app.on("will-quit", () => {
+    for (const p of [pendingAgent, pendingWidget, pendingTool, pendingPackage]) if (p) void rm(p.dir, { recursive: true, force: true }).catch(() => {});
+  });
   handle("plugins:catalog", () => catalogNow());
 
   // Which installed agents are no longer what the catalog lists. Agents carry no version of
@@ -107,7 +126,8 @@ export function installPluginCatalogIpc(): void {
     return out;
   });
 
-  handle("plugins:review", async (_event, type: string, id: string) => {
+  handle("plugins:review", async (event, type: string, id: string) => {
+    const sender = event.sender;
     const entry = catalog.find((e) => e.type === type && e.id === id);
     if (!entry) throw new Error("That plugin is not in the catalog. Refresh and try again.");
     // Refuse before downloading: a plugin that needs a newer Hivemind fails at use, and by
@@ -123,7 +143,7 @@ export function installPluginCatalogIpc(): void {
         if (meta.id !== entry.id) throw new Error(`its widget.json says it is ${JSON.stringify(meta.id ?? null)}, not ${entry.id}`);
         const pkg = await readWidget(dir, entry.id);
         if (pendingWidget) await rm(pendingWidget.dir, { recursive: true, force: true }).catch(() => {});
-        pendingWidget = { token: newNonce(), dir, id: entry.id };
+        pendingWidget = { token: newNonce(), dir, id: entry.id, sender, reviewed: reviewedOf(await installPackage(dir, { id: entry.id, dryRun: true })) };
         const replaces = (await listWidgets()).some((w) => w.id === entry.id && !w.builtin);
         return { type: "widget", token: pendingWidget.token, id: entry.id, name: pkg.name, permissions: pkg.permissions, code: pkg.code !== "", replaces };
       } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
@@ -134,7 +154,7 @@ export function installPluginCatalogIpc(): void {
         const pkg = await readToolPackage(dir, entry.id);
         if (pkg.problem) throw new Error(pkg.problem);
         if (pendingTool) await rm(pendingTool.dir, { recursive: true, force: true }).catch(() => {});
-        pendingTool = { token: newNonce(), dir, id: entry.id };
+        pendingTool = { token: newNonce(), dir, id: entry.id, sender, reviewed: reviewedOf(await installPackage(dir, { id: entry.id, dryRun: true })) };
         const had = (await listToolPackages()).find((t) => t.id === entry.id && t.source === "you");
         return {
           type: "tool", token: pendingTool.token, id: entry.id, name: pkg.name, permissions: pkg.permissions,
@@ -148,7 +168,7 @@ export function installPluginCatalogIpc(): void {
         // Every member checked as an install checks it, and what would change, with nothing installed.
         const r = await installPackage(dir, { id: entry.id, dryRun: true });
         if (pendingPackage) await rm(pendingPackage.dir, { recursive: true, force: true }).catch(() => {});
-        pendingPackage = { token: newNonce(), dir, id: entry.id };
+        pendingPackage = { token: newNonce(), dir, id: entry.id, sender, reviewed: reviewedOf(r) };
         return { type: "package", ...(await packageReview(r, pendingPackage.token)) };
       } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
     }
@@ -167,7 +187,7 @@ export function installPluginCatalogIpc(): void {
       ...Object.values(o.values ?? {}).map((argv) => argv.join(" ")),
     ]))];
     if (pendingAgent) await rm(pendingAgent.dir, { recursive: true, force: true }).catch(() => {});
-    pendingAgent = { token: newNonce(), dir, id: def.id };
+    pendingAgent = { token: newNonce(), dir, id: def.id, sender, files: entry.files };
     const review: AgentReview = {
       token: pendingAgent.token, id: def.id, label: def.label, bin: def.bin,
       command: [def.bin, ...(def.defaultArgs ?? [])].join(" "), flags,
@@ -213,33 +233,42 @@ export function installPluginCatalogIpc(): void {
     await removeInstalledAgent(String(id));
   });
 
-  handleEffect("plugins:install-widget", (token) => ({ target: pendingWidget && pendingWidget.token === token ? pendingWidget.id : undefined }), async (_event, token: string) => {
-    if (!pendingWidget || pendingWidget.token !== token) throw new Error("Review the widget again before installing it.");
-    const { dir, id } = pendingWidget;
+  handleEffect("plugins:install-widget", (token) => ({ target: pendingWidget && pendingWidget.token === token ? pendingWidget.id : undefined }), async (event, token: string) => {
+    if (!pendingWidget || pendingWidget.token !== token || pendingWidget.sender !== event.sender) throw new Error("Review the widget again before installing it.");
+    const { dir, id, reviewed } = pendingWidget;
     pendingWidget = null;
-    try { await installPackage(dir, { id }); widgetsChanged(); }
+    try { await installPackage(dir, { id, reviewed }); widgetsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
-  handleEffect("plugins:install-tool", (token) => ({ target: pendingTool && pendingTool.token === token ? pendingTool.id : undefined }), async (_event, token: string) => {
-    if (!pendingTool || pendingTool.token !== token) throw new Error("Review the tool again before installing it.");
-    const { dir, id } = pendingTool;
+  handleEffect("plugins:install-tool", (token) => ({ target: pendingTool && pendingTool.token === token ? pendingTool.id : undefined }), async (event, token: string) => {
+    if (!pendingTool || pendingTool.token !== token || pendingTool.sender !== event.sender) throw new Error("Review the tool again before installing it.");
+    const { dir, id, reviewed } = pendingTool;
     pendingTool = null;
     // It arrives off, and an update with changed code goes off: switching it on trusts that code.
-    try { await installPackage(dir, { id }); await reloadSettings(); toolsChanged(); }
+    try { await installPackage(dir, { id, reviewed }); await reloadSettings(); toolsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
-  handleEffect("plugins:install-package", (token) => ({ target: pendingPackage && pendingPackage.token === token ? pendingPackage.id : undefined }), async (_event, token: string) => {
-    if (!pendingPackage || pendingPackage.token !== token) throw new Error("Review the package again before installing it.");
-    const { dir, id } = pendingPackage;
+  handleEffect("plugins:install-package", (token) => ({ target: pendingPackage && pendingPackage.token === token ? pendingPackage.id : undefined }), async (event, token: string) => {
+    if (!pendingPackage || pendingPackage.token !== token || pendingPackage.sender !== event.sender) throw new Error("Review the package again before installing it.");
+    const { dir, id, reviewed } = pendingPackage;
     pendingPackage = null;
-    try { await installPackage(dir, { id }); await reloadSettings(); widgetsChanged(); toolsChanged(); }
+    try { await installPackage(dir, { id, reviewed }); await reloadSettings(); widgetsChanged(); toolsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
-  handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (_event, token: string) => {
-    if (!pendingAgent || pendingAgent.token !== token) throw new Error("Review the agent again before installing it.");
-    const { dir } = pendingAgent;
+  handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (event, token: string) => {
+    if (!pendingAgent || pendingAgent.token !== token || pendingAgent.sender !== event.sender) throw new Error("Review the agent again before installing it.");
+    const { dir, id, files } = pendingAgent;
     pendingAgent = null;
-    try { await noteCatalogAgent((await installAgent(dir)).id); }
+    try {
+      const installed = await installAgent(dir);
+      // What was copied in must be exactly the files HiveHub lists, as the review read them.
+      const as = installed.id ?? id;
+      if (as !== id || !(await holdsExactly(path.join(userAgentsDir(), as), files))) {
+        await removeAgent(as).catch(() => {});
+        throw new Error("Its files changed after the review. Review the agent again.");
+      }
+      await noteCatalogAgent(id);
+    }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
 }

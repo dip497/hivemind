@@ -122,7 +122,14 @@ function refuseHeld(records: readonly PackageRecord[], id: string, members: read
  * `rollbackPackage`. With `dryRun` everything is checked and the changes are given, and nothing
  * is installed.
  */
-export async function installPackage(src: string, given: { id?: string; dryRun?: boolean } = {}): Promise<InstalledPackage> {
+/** What a review saw, for an install to hold it to: the files' digest, the version it replaced
+ *  (null for none) and whether it would be on. */
+export interface Reviewed { digest: string; replacing: string | null; on: boolean }
+
+/** What a dry run's result commits an install to. */
+export const reviewedOf = (r: InstalledPackage): Reviewed => ({ digest: r.record.digest, replacing: r.replaced?.digest ?? null, on: r.record.on });
+
+export async function installPackage(src: string, given: { id?: string; dryRun?: boolean; reviewed?: Reviewed } = {}): Promise<InstalledPackage> {
   const from = path.resolve(src);
   if (!(await stat(from).catch(() => null))?.isDirectory()) throw new Error(`there is no folder ${from}`);
   await mkdir(packagesDir(), { recursive: true });
@@ -130,6 +137,8 @@ export async function installPackage(src: string, given: { id?: string; dryRun?:
   try {
     const files = path.join(staging, "files");
     const copied = await copyPackage(from, files);
+    // The copy is what gets installed, so it is the copy that must be what was reviewed.
+    if (given.reviewed && copied.digest !== given.reviewed.digest) throw new Error("its files changed after the review: review it again");
     const read = await readPackage(files, { ...(given.id ? { id: given.id } : {}), folder: path.basename(from) });
     const version: PackageVersion = {
       version: read.version, digest: copied.digest, name: read.name,
@@ -143,6 +152,9 @@ export async function installPackage(src: string, given: { id?: string; dryRun?:
     if (given.dryRun) return result(plan(await readInstalledPackages(), read, version), files);
     const installed = await changeInstalledPackages(async (records) => {
       const p = plan(records, read, version);
+      if (given.reviewed && ((p.old?.digest ?? null) !== given.reviewed.replacing || p.record.on !== given.reviewed.on)) {
+        throw new Error(`${read.id} changed after the review: review it again`);
+      }
       if (!existsSync(dest)) {
         await mkdir(path.dirname(dest), { recursive: true });
         await rename(files, dest);
@@ -164,7 +176,7 @@ export async function rollbackPackage(id: string): Promise<{ record: PackageReco
     if (!r) throw new Error(`no package ${id} is installed`);
     if (!r.previous) throw new Error(`${id} ${r.version} is the only version installed: there is none before it to go back to`);
     const { on, ...back } = r.previous;
-    if (!existsSync(versionFolder(id, back))) throw new Error(`the files of ${id} ${back.version} are gone from ${versionFolder(id, back)}; nothing was changed`);
+    if (!existsSync(versionFolder(id, back))) throw new Error(`the files of ${id} ${back.version} are gone; nothing was changed`);
     refuseHeld(records, id, back.members);
     const record: PackageRecord = { id, ...back, on, previous: { ...versionOf(r), on: r.on } };
     return { records: records.map((x) => (x === r ? record : x)), result: { record, from: versionOf(r) } };

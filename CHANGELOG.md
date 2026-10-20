@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Switches read on or off at a glance: on is a light track, off a dark one.
+- An install from a review installs exactly what was reviewed, from the window or tab that asked for it: it is refused if the files, the version it replaces or its switch changed since. The audit log says when a person acted from a browser tab.
 - **Settings → Plugins** has a Packages tab after Tools: a package of several plugins is one row with one switch, opened to its members, each with its kind, whether it is sandboxed or runs in the app, and its own switch. Its members stay in their kinds' tabs marked "Part of <package>". **Add → Add from a folder** reviews any folder first, as `hive plugins install --dry-run` does: every member, where it runs and what it asks for; an update lists what changed in each member and why it switches the package off. A package with a version before this one has **Roll back**. HiveHub's Packages tab shows what each package holds before it is downloaded.
 - **Settings → Plugins** shows a package that holds several plugins as one row with one switch; open it to see its members. A member can be switched off on its own, and on only while its package is on; each keeps its own settings page.
 - Packages can come from HiveHub: `hive plugins install @owner/name` of a listed package installs every member at once, each file checked against the index, and **Settings → Plugins → HiveHub** lists packages with what each holds, where its code runs and what it asks for before you install. `hive plugins install --json` of a package is unchanged.

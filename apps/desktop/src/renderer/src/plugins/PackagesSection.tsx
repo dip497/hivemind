@@ -5,6 +5,7 @@
  * one can be rolled back to it.
  */
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { ChevronDown, ChevronRight, History } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { Switch } from "../components/ui/switch";
@@ -72,7 +73,7 @@ function PackageItem({ p, open, toggle, reload }: { p: PackageRow; open: boolean
         </span>
       </button>
       <Switch aria-label={`Switch ${p.name} ${p.on ? "off" : "on"}`} checked={p.on} data-package-switch={p.id}
-        onCheckedChange={(on) => void act(() => window.hive.switchPackage(p.id, on))} />
+        onCheckedChange={(on) => { toast.dismiss(`package:${p.id}`); void act(() => window.hive.switchPackage(p.id, on)); }} />
     </div>
     {error && <p role="alert" className="settings-note error">{error}</p>}
     {open && <div id={`package-${p.id}`} className="package-members" data-package-members={p.id}>

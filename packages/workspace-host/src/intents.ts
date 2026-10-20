@@ -20,7 +20,8 @@ import type { AuditLog } from "./audit-log.js";
  *  is a peer of its own workspace: `tile` is its tile, as are its person and device. */
 export type Actor =
   | { kind: "tile"; tile: string }
-  | { kind: "person" }
+  /** The person; `via` says when they asked from a browser tab rather than the app's window. */
+  | { kind: "person"; via?: "browser tab" }
   | { kind: "peer"; person: string; device: string; access: Access; client?: string; tile?: string };
 
 /** What is asked. `R` is what carrying it out returns. */

@@ -3,8 +3,8 @@
  * and adding one from a folder after the same review `hive plugins install --dry-run` prints. Every
  * change goes through `@hivemind/core/package-install`, as the CLI's do, and every window is told.
  */
-import { app, dialog } from "electron";
-import { installPackage, rollbackPackage, switchPackage, type InstalledPackage } from "@hivemind/core/package-install";
+import { app, dialog, type WebContents } from "electron";
+import { installPackage, reviewedOf, rollbackPackage, switchPackage, type InstalledPackage, type Reviewed } from "@hivemind/core/package-install";
 import { readInstalledPackages } from "@hivemind/core/installed-packages";
 import { memberKind } from "@hivemind/core/package-kinds";
 import { newNonce } from "@hivemind/core/view-files";
@@ -53,8 +53,9 @@ export function installPackagesIpc(): void {
     await changed();
   });
 
-  // The folder last reviewed, and what its files were then: installed only if they still are.
-  let pending: { token: string; dir: string; id: string; digest: string } | null = null;
+  // The folder last reviewed, by which window, and what the review saw: installed only by that
+  // window, and only if its files, the version it replaces and its switch are still as reviewed.
+  let pending: { token: string; dir: string; id: string; reviewed: Reviewed; sender: WebContents } | null = null;
   handle("plugins:review-folder", async (e) => {
     pending = null;
     const win = appWindowOf(e.sender);
@@ -64,15 +65,16 @@ export function installPackagesIpc(): void {
     if (picked.canceled || !dir) return null;
     rememberPick("package", dir);
     const r = await installPackage(dir, { dryRun: true });
-    pending = { token: newNonce(), dir, id: r.record.id, digest: r.record.digest };
+    pending = { token: newNonce(), dir, id: r.record.id, reviewed: reviewedOf(r), sender: e.sender };
     return await packageReview(r, pending.token);
   }, { local: true });
-  handleEffect("plugins:install-folder", (token) => ({ target: pending && pending.token === token ? pending.id : undefined }), async (_e, token: unknown) => {
-    if (!pending || pending.token !== token) throw new Error("Choose the folder again to review it.");
-    const { dir, id, digest } = pending;
+  handleEffect("plugins:install-folder", (token) => ({ target: pending && pending.token === token ? pending.id : undefined }), async (e, token: unknown) => {
+    if (!pending || pending.token !== token || pending.sender !== e.sender) throw new Error("Choose the folder again to review it.");
+    const { dir, id, reviewed } = pending;
     pending = null;
-    if ((await installPackage(dir, { id, dryRun: true })).record.digest !== digest) throw new Error("Its files changed after the review. Choose the folder again.");
-    await installPackage(dir, { id });
+    await installPackage(dir, { id, reviewed }).catch((err: Error) => {
+      throw /after the review/.test(err.message) ? new Error("It changed after the review. Choose the folder again.") : err;
+    });
     await changed();
   }, { local: true });
 }

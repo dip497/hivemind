@@ -73,6 +73,17 @@ export async function readPackage(dir: string, given: { id?: string; folder: str
 /** Folders a package never carries: what a build or a checkout leaves beside the plugin. */
 const LEFT_OUT = new Set(["node_modules", ".git"]);
 
+/** Whether the file `handle` opened is inside `realRoot`: by the descriptor where the system
+ *  names it (Linux), else by resolving `target` again and matching it to the descriptor. */
+async function openedInside(handle: fs.FileHandle, target: string, realRoot: string): Promise<boolean> {
+  const inside = (p: string) => p.startsWith(`${realRoot}${path.sep}`);
+  const named = await fs.readlink(`/proc/self/fd/${handle.fd}`).catch(() => null);
+  if (named !== null) return inside(named);
+  const [again, opened] = await Promise.all([fs.realpath(target), handle.stat()]);
+  const at = await fs.lstat(again);
+  return inside(again) && at.ino === opened.ino && at.dev === opened.dev;
+}
+
 /** Hash a bounded directory without importing package code or following file symlinks, and
  * copy each file into `copyTo` as it is read when one is given. The digest is of what was read,
  * so a copy is exactly what its digest names. Without `copyTo` this is an inspection snapshot,
@@ -104,6 +115,9 @@ async function snapshot(directory: string, copyTo?: string) {
       const capture = name === PACKAGE_MANIFEST || name.endsWith("/hivemind-view.json");
       // O_NONBLOCK prevents a substituted FIFO from blocking before fstat can reject it.
       const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      // O_NOFOLLOW guards only the last part of the path: a folder above it swapped for a link
+      // after the checks above would be followed, so what was opened is checked to be inside.
+      if (!(await openedInside(handle, target, realRoot))) { await handle.close(); fail(`entry leaves the package: ${name}`); }
       // A service the package runs keeps its executable bit; nothing else of the mode is kept.
       const out = copyTo ? await fs.open(path.join(copyTo, name), "wx", (info.mode & 0o755) | 0o600) : null;
       try {

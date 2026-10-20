@@ -94,7 +94,7 @@ test("one row of controls: yours or HiveHub's and a search, then a tab per kind;
     await expect(controls.getByRole("tablist", { name: "Show" }).getByRole("tab")).toHaveText(["Installed", "HiveHub"]);
     await expect(controls.getByRole("tab", { name: scope, exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(controls.getByRole("searchbox", { name: "Search plugins" })).toBeVisible();
-    await expect(body().getByRole("tablist", { name: "Kind" }).getByRole("tab")).toHaveText([/^Agents \d+$/, /^Views \d+$/, /^Widgets \d+$/, /^Tools \d+$/]);
+    await expect(body().getByRole("tablist", { name: "Kind" }).getByRole("tab")).toHaveText([/^Agents \d+$/, /^Views \d+$/, /^Widgets \d+$/, /^Tools \d+$/, /^Packages \d+$/]);
     await expect(body().getByRole("combobox")).toHaveCount(0);
     await expect(body().getByRole("tablist")).toHaveCount(2);
     await expect(body().getByRole("group")).toHaveCount(0);
@@ -117,7 +117,7 @@ test("each category is one heading with its count, in the Add menu's order, and 
   // Every agent is under Agents; a tool is under its tile's category, as in the Add menu; a widget
   // under its own; a view that comes with the app says none.
   expect(under(mine, "agent:claude")).toEqual(["Agents"]);
-  expect(under(mine, "tool:hivemind/code")).toEqual(["Code"]);
+  expect(under(mine, "tool:@hivemind/code")).toEqual(["Code"]);
   expect(under(mine, "widget:note")).toEqual(["Productivity"]);
   expect(under(mine, "view:canvas")).toEqual(["Other"]);
 

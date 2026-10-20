@@ -132,7 +132,7 @@ function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean 
       <PackageReview review={review} heading />
       <div className="settings-actions"><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>Cancel</Button><Button disabled={busy} data-folder-install-do onClick={() => void act(async () => {
         await installPackageFolder(review.token);
-        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`); setReview(null); rescan();
+        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`, { id: `package:${review.id}` }); setReview(null); rescan();
       })}>{busy ? "Installing…" : review.replaces ? "Update" : "Install"}</Button></div>
     </section>}
   </>;

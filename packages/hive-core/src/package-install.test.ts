@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { installPackage, removePlugin, rollbackPackage, switchPackage, switchPlugin } from "./package-install.js";
+import { installPackage, removePlugin, reviewedOf, rollbackPackage, switchPackage, switchPlugin } from "./package-install.js";
 import { packagesDir, readInstalledPackages } from "./installed-packages.js";
 import { listWidgets } from "./widgets.js";
 import { listToolPackages } from "./tool-packages.js";
@@ -221,6 +221,35 @@ test("a dry run gives the changes and installs nothing", async () => {
   expect(dry.changes).toEqual([{ kind: "tool", id: "@acme/prs", change: "changed", newPermissions: [], switchesOff: true }]);
   expect((await readInstalledPackages())[0]!.version).toBe("1.0.0");
   expect(fs.readdirSync(path.join(packagesDir(), "store", "acme--kit"))).toHaveLength(1);
+});
+
+// An install held to its review: refused, with nothing changed, when what the review saw no longer
+// holds, whether the folder's files, the version it would replace, or whether it would be on.
+for (const [what, between] of [
+  ["its files changed", async () => edit("widgets/dog/widget.json", JSON.stringify({ id: "@acme/dog", name: "Dog", permissions: ["workspace:spawn"], draw: { type: "text", text: "woof" } }))],
+  ["the version it replaces changed", async () => { await rollbackPackage("@acme/kit"); }],
+  ["the package was switched", async () => { await switchPackage("@acme/kit", true); }],
+] as const) {
+  test(`an install held to its review is refused when ${what} after it`, async () => {
+    await installPackage(bundle());
+    bump("2.0.0");
+    await installPackage(path.join(tmp, "kit"));
+    bump("3.0.0");
+    edit("widgets/dog/widget.json", JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "arf" } }));
+    const reviewed = reviewedOf(await installPackage(path.join(tmp, "kit"), { dryRun: true }));
+    await between();
+    const before = await readInstalledPackages();
+    await expect(installPackage(path.join(tmp, "kit"), { reviewed })).rejects.toThrow("after the review");
+    expect(await readInstalledPackages()).toEqual(before);
+  });
+}
+
+test("an install held to its review goes ahead when nothing changed after it", async () => {
+  await installPackage(bundle());
+  bump("2.0.0");
+  const reviewed = reviewedOf(await installPackage(path.join(tmp, "kit"), { dryRun: true }));
+  await installPackage(path.join(tmp, "kit"), { reviewed });
+  expect((await readInstalledPackages())[0]!.version).toBe("2.0.0");
 });
 
 test("rollback puts back the version before, switched as it was, and a second rollback undoes the first", async () => {
