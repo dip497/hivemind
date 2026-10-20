@@ -31,11 +31,13 @@ export interface CheckReport {
   dir: string;
   /** What each step did: "ok", "failed", or why it did not run. */
   steps: { types: string; manifest: string; draw: string };
+  /** What the person should know of how it was checked. */
+  notes: string[];
   problems: Problem[];
 }
 
 export async function checkPlugin(k: AuthoredKind, dir: string): Promise<CheckReport> {
-  const types = checkTypes(dir);
+  const types = checkTypes(dir, k.types, k.noun);
   const manifest: Problem[] = (await k.validate(dir)).map((message) => ({ step: "manifest", file: k.manifest, message }));
   // A manifest the app would not load says nothing of what its code draws.
   const draw = manifest.length ? null : drawApart(dir);
@@ -47,6 +49,7 @@ export async function checkPlugin(k: AuthoredKind, dir: string): Promise<CheckRe
       manifest: state(true, manifest),
       draw: state(draw !== null, draw ?? [], "not run: its manifest has problems"),
     },
+    notes: types.note ? [types.note] : [],
     problems: [...types.problems, ...manifest, ...(draw ?? [])],
   };
 }

@@ -114,22 +114,73 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
     }
   }, 120_000);
 
-  test("a plugin's config cannot make the type check write outside it, nor reach a config outside it", () => {
+
+  test("no tsconfig of the plugin's is read: hostile ones write nothing outside its folder and change nothing in it", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-config-"));
     const dir = path.join(tmp, "tally");
-    const outside = path.join(tmp, "written.tsbuildinfo");
+    const outside = path.join(tmp, "outside");
+    const writes = { generateTrace: path.join(outside, "trace"), outDir: path.join(outside, "out"), declarationDir: path.join(outside, "decl"), tsBuildInfoFile: path.join(outside, "info"), noEmit: false, declaration: true, incremental: true };
+    const snapshot = (d: string): Record<string, string> => Object.fromEntries((fs.readdirSync(d, { recursive: true }) as string[]).sort().map((f) => {
+      const at = path.join(d, f);
+      return [f, fs.lstatSync(at).isSymbolicLink() ? `-> ${fs.readlinkSync(at)}` : fs.statSync(at).isFile() ? fs.readFileSync(at, "utf8") : "dir"];
+    }));
+    const hostile: Array<[string, () => void]> = [
+      ["extends a package", () => {
+        fs.mkdirSync(path.join(dir, "node_modules", "evil"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "node_modules", "evil", "tsconfig.json"), JSON.stringify({ compilerOptions: writes }));
+        fs.writeFileSync(path.join(dir, "jsconfig.json"), JSON.stringify({ extends: "evil/tsconfig.json", include: ["*.js"] }));
+      }],
+      ["generateTrace, outDir and declarationDir outside", () => {
+        fs.writeFileSync(path.join(dir, "jsconfig.json"), JSON.stringify({ compilerOptions: { allowJs: true, checkJs: true, ...writes }, include: ["*.js"] }));
+      }],
+      ["its root config a link to one outside", () => {
+        fs.writeFileSync(path.join(tmp, "evil.json"), JSON.stringify({ compilerOptions: { allowJs: true, checkJs: true, ...writes }, include: [path.join(dir, "*.js")] }));
+        fs.symlinkSync(path.join(tmp, "evil.json"), path.join(dir, "jsconfig.json"));
+      }],
+    ];
     try {
       expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
-      const config = path.join(dir, "jsconfig.json");
-      const own = JSON.parse(fs.readFileSync(config, "utf8"));
-      fs.writeFileSync(config, JSON.stringify({ ...own, compilerOptions: { ...own.compilerOptions, incremental: true, composite: true, tsBuildInfoFile: outside } }));
-      hive(["plugins", "check", dir, "--json"], { cwd: tmp });
-      expect(fs.existsSync(outside)).toBe(false);
+      for (const [how, make] of hostile) {
+        fs.rmSync(path.join(dir, "jsconfig.json"), { force: true });
+        make();
+        const before = snapshot(dir);
+        const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+        expect([how, fs.existsSync(outside) ? fs.readdirSync(outside) : []]).toEqual([how, []]);
+        expect([how, snapshot(dir)]).toEqual([how, before]);
+        expect([how, (r.json as Report).data.steps.types]).toEqual([how, "ok"]);
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 180_000);
 
-      fs.writeFileSync(path.join(tmp, "elsewhere.json"), JSON.stringify(own));
-      fs.writeFileSync(config, JSON.stringify({ extends: "../elsewhere.json" }));
+  test("a code file that is a link to outside the plugin's folder is refused", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-link-"));
+    const dir = path.join(tmp, "tally");
+    try {
+      expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      fs.writeFileSync(path.join(tmp, "elsewhere.js"), "const x = 1;\n");
+      fs.symlinkSync(path.join(tmp, "elsewhere.js"), path.join(dir, "extra.js"));
       const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
-      expect((r.json as Report).data.problems).toContainEqual(expect.objectContaining({ step: "types", file: "jsconfig.json", message: expect.stringContaining("outside its folder") }));
+      expect(r.code).toBe(1);
+      expect((r.json as Report).data.problems).toContainEqual(expect.objectContaining({ step: "types", file: "extra.js", message: expect.stringContaining("outside the plugin's folder") }));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  test("a misspelt host.runn in a tool is a types problem at its line", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-runn-"));
+    const dir = path.join(tmp, "tally");
+    try {
+      expect(hive(["plugins", "new", "tool", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      const entry = path.join(dir, "index.js");
+      const text = fs.readFileSync(entry, "utf8").replace("host.run(", "host.runn(");
+      fs.writeFileSync(entry, text);
+      const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect((r.json as Report).data.problems).toEqual(expect.arrayContaining([
+        expect.objectContaining({ file: "index.js", line: text.split("\n").findIndex((l) => l.includes("host.runn(")) + 1, message: expect.stringContaining("Property 'runn' does not exist on type 'TileHost'") }),
+      ]));
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

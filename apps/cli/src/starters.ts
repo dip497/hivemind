@@ -4,6 +4,7 @@ import { TOOL_MANIFEST } from "@hivemind/core/tool-packages";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
 import { pluginBrief } from "./plugin-brief.js";
 import { typeFiles } from "./type-files.js";
+import type { TypeSetup } from "./check/types.js";
 
 /** The files of a starter tool plugin `name`, owned by `owner`. */
 export function toolStarter(owner: string, name: string): Record<string, string> {
@@ -19,18 +20,31 @@ export function toolStarter(owner: string, name: string): Record<string, string>
     "index.js": STARTER_JS.replace("__KIND__", JSON.stringify(tileKind)),
     "README.md": `# ${manifest.name}\n\n${manifest.description}\n\nAdd it to the app, switch it on and open it:\n\n\`\`\`bash\nhive plugins install .\nhive plugins enable tool:${id}\nhive ctl plugin open tool:${id}\n\`\`\`\n`,
     "PROMPT.md": pluginBrief("tool", id),
-    "jsconfig.json": JSON.stringify({
-      compilerOptions: {
-        allowJs: true, checkJs: true, noEmit: true, target: "ES2022", module: "ESNext", moduleResolution: "Bundler",
-        lib: ["ES2023", "DOM", "DOM.Iterable"], skipLibCheck: true, types: [],
-        paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"], "@hivemind/tile-sdk": ["./types/tile-sdk/index.ts"] },
-      },
-      include: ["*.js", "types"],
-    }, null, 2) + "\n",
-    "types/host.d.ts": HOST_TYPES,
-    ...typeFiles(["view-sdk", "tile-sdk"]),
+    "jsconfig.json": JSON.stringify({ compilerOptions: TOOL_TYPE_SETUP.compilerOptions, include: ["*.js", "types"] }, null, 2) + "\n",
+    ...TOOL_TYPE_SETUP.files(),
   };
 }
+
+/** What a tool's code is checked against: by its editor (the starter's jsconfig.json) and by
+ *  `hive plugins check`, which reads nothing of the plugin's but its code. */
+export const TOOL_TYPE_SETUP: TypeSetup = {
+  compilerOptions: {
+    allowJs: true, checkJs: true, noEmit: true, target: "ES2022", module: "ESNext", moduleResolution: "Bundler",
+    lib: ["ES2023", "DOM", "DOM.Iterable"], skipLibCheck: true, types: [],
+    paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"], "@hivemind/tile-sdk": ["./types/tile-sdk/index.ts"] },
+  },
+  files: () => ({ "types/host.d.ts": HOST_TYPES, ...typeFiles(["view-sdk", "tile-sdk"]) }),
+  isSource: (rel) => /^[^/]+\.m?js$/.test(rel),
+};
+
+/** What a widget's code is checked against. Its code is a script, not a module: it reads no
+ *  other file (`noResolve`), so its own `/// <reference>` to hive.d.ts is the CLI's copy too. */
+export const WIDGET_TYPE_SETUP: TypeSetup = {
+  compilerOptions: { allowJs: true, checkJs: true, noEmit: true, target: "es2022", lib: ["es2022", "webworker"] },
+  checkOptions: { noResolve: true },
+  files: () => ({ "hive.d.ts": WIDGET_TYPES }),
+  isSource: (rel) => /^[^/]+\.(m?js|d\.ts)$/.test(rel),
+};
 
 /** The app's modules a tool imports, typed as far as a starter needs: React's hooks, and the SDK. */
 const HOST_TYPES = `// The app's modules a tool imports, by the URL it imports them from. Here for their types.
@@ -104,8 +118,8 @@ hive.on("action", (a) => {
   if (a === "inc") { hive.setState({ n: (hive.state?.n ?? 0) + Number(hive.options.step ?? 1) }); draw(); }
 });
 `,
-    "hive.d.ts": WIDGET_TYPES,
-    "jsconfig.json": JSON.stringify({ compilerOptions: { allowJs: true, checkJs: true, noEmit: true, target: "es2022", lib: ["es2022", "webworker"] }, include: ["*.js", "*.d.ts"] }, null, 2) + "\n",
+    ...WIDGET_TYPE_SETUP.files(),
+    "jsconfig.json": JSON.stringify({ compilerOptions: WIDGET_TYPE_SETUP.compilerOptions, include: ["*.js", "*.d.ts"] }, null, 2) + "\n",
     "icon.svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="3"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>\n',
     "README.md": `# ${title}\n\nCounts presses. Shown on its HiveHub page and in the app before anyone installs it: say what it does and what it asks for.\n`,
     "PROMPT.md": pluginBrief("widget", `@${owner}/${name}`),

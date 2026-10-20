@@ -8,8 +8,9 @@ import { installToolPackage, readToolPackage, removeToolPackage, TOOL_MANIFEST }
 import { installWidget, readWidget, removeWidget } from "@hivemind/core/widgets";
 import { MANIFEST_FILE as VIEW_MANIFEST, validateViewManifest } from "@hivemind/view-sdk/manifest";
 import type { Problem } from "./check/problem.js";
-import { toolStarter, widgetStarter } from "./starters.js";
-import { starterFiles as viewStarter } from "./view-starter.js";
+import { TOOL_TYPE_SETUP, toolStarter, WIDGET_TYPE_SETUP, widgetStarter } from "./starters.js";
+import { starterFiles as viewStarter, VIEW_TYPE_SETUP } from "./view-starter.js";
+import type { TypeSetup } from "./check/types.js";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
 import { declaration, typeSources } from "./type-files.js";
 
@@ -40,6 +41,8 @@ export interface AuthoredKind {
   guide: string;
   /** What its code is given, as the declarations of the types its starter ships. */
   api(): string;
+  /** What its code is checked against, by its editor and by `hive plugins check`. */
+  types: TypeSetup;
   /** Why the manifest in `dir` is not one this kind loads; empty when it is. */
   validate(dir: string): Promise<string[]>;
   /** Its code loaded and drawn once, as the app would: what went wrong. */
@@ -70,6 +73,7 @@ export const KINDS: readonly AuthoredKind[] = [
     see: (id) => [`hive ctl plugin open tool:${id}`, "hive ctl tile look <tile>    # what it drew, and what its code logged"],
     guide: `${GUIDE}/tool-plugins/`,
     api: () => declarations([["tile-sdk/index.ts", ["TileProps", "TileInfo", "TileHost", "RunResult", "HostSdk", "ToolModule"]], ["view-sdk/client.ts", ["ViewClient"]]]),
+    types: TOOL_TYPE_SETUP,
     validate: (dir) => readToolPackage(dir, null).then((p) => (p.problem ? [p.problem] : []), why),
     draw: async (dir) => (await import("./check/tool-draw.js")).drawTool(await readToolPackage(dir, null)),
   },
@@ -86,6 +90,7 @@ export const KINDS: readonly AuthoredKind[] = [
     see: (id) => [`hive ctl plugin open widget:${id}`],
     guide: `${GUIDE}/widgets/`,
     api: () => WIDGET_TYPES,
+    types: WIDGET_TYPE_SETUP,
     validate: (dir) => readWidget(dir).then(() => [], why),
     draw: async (dir) => (await import("./check/widget-draw.js")).drawWidget(await readWidget(dir), dir),
   },
@@ -102,6 +107,7 @@ export const KINDS: readonly AuthoredKind[] = [
     see: (id) => [`hive ctl plugin open view:${id}`],
     guide: `${GUIDE}/extension-authoring/`,
     api: () => declarations([["view-sdk/client.ts", ["ConnectOptions", "ViewClient"]]]),
+    types: VIEW_TYPE_SETUP,
     validate: async (dir) => {
       try {
         const m = validateViewManifest(JSON.parse(await readFile(path.join(dir, VIEW_MANIFEST), "utf8")));

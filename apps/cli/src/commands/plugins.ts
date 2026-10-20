@@ -361,6 +361,7 @@ const checkCmd = defineCommand({
       ...report.problems.map((p) => `${p.step.padEnd(8)} ${where(p) ? `${where(p)}  ` : ""}${p.message}`),
       `${report.problems.length ? `${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}` : "ok"}: ${k.noun} in ${dir}`,
       ...Object.entries(report.steps).map(([step, s]) => `  ${step.padEnd(9)} ${s}`),
+      ...report.notes,
       "It ran the plugin's own code, in its folder, with only PATH and HOME of your environment.",
     ].join("\n");
     // The plugin's code may have left timers or sockets open: what it did is known, so stop here.
