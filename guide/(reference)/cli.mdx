@@ -229,7 +229,7 @@ hive grant revoke <id>
 
 ## Settings and upgrade
 
-To read and change settings, themes, and the installed version. Guide: [Settings](/settings), [Update and roll back](/update-and-roll-back).
+To read and change settings, themes, the installed version and what it changed in your data. Guide: [Settings](/settings), [Update and roll back](/update-and-roll-back).
 
 ```text
 hive config path
@@ -240,7 +240,11 @@ hive theme use nord
 hive theme export f.json
 hive theme import f.json
 hive upgrade [--dev]
+hive migrations [--json]
+hive migrations restore <id> [--json]
 ```
+
+`hive migrations` lists what updates changed in this computer's data; `restore` puts it back as it was before a change. Guide: [When an update changes your data](/data-updates).
 
 ## Host
 

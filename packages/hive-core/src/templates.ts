@@ -361,7 +361,7 @@ Each has \`--help\` with its exact options; read it before you run one.
 - \`hive machine\` · \`hive run -- <cmd>\` · \`hive ps\` · \`hive attach\` · \`hive kill\`: saved ssh machines and terminal sessions that outlive the app.
 - \`hive host\`: this machine as an always-on host of its workspaces, with no desktop.
 - \`hive push set|test\`: phone notifications when an agent here needs the person.
-- \`hive agents\` · \`hive plugins\` · \`hive config\` · \`hive theme\` · \`hive upgrade\`.
+- \`hive agents\` · \`hive plugins\` · \`hive config\` · \`hive theme\` · \`hive upgrade\` · \`hive migrations\` (what an update changed in this computer's data; \`restore <id>\` puts it back).
 
 Ask the person before anything that lets someone in, gives a program a token, or changes this computer's network; never type a password for them.
 `;
