@@ -127,8 +127,6 @@ export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null
     const ep: DaemonEndpoint = new DaemonEndpoint({
       connect: bridge,
       retryInitialMs: 500,
-      // The bridge itself may take up to its own 20 s start budget.
-      attachTimeoutMs: 30_000,
       isFatal: needsAttention,
       isPaused: () => paused.has(target.hostId),
       onEvent: (topic, data) => remoteEvent(ep, topic, data),

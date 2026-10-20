@@ -88,7 +88,7 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
   };
   /** The connection to the daemon `key` names (a device, or a participant's machine for one
    *  workspace), made by `connect`, the first time it is wanted. */
-  const endpointFor = (key: string, device: string, connect: (made: DaemonEndpoint) => Promise<Duplex>, attachTimeoutMs?: number): DaemonEndpoint => {
+  const endpointFor = (key: string, device: string, connect: (made: DaemonEndpoint) => Promise<Duplex>): DaemonEndpoint => {
     let ep = endpoints.get(key);
     if (!ep) {
       const made: DaemonEndpoint = new DaemonEndpoint({
@@ -99,7 +99,6 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
           if (typeof tile === "string" && tiles.get(tile) === made) o.onEvent?.(topic, data);
         },
         onStatus: (state, detail) => o.onStatus?.(device, state, detail),
-        ...(attachTimeoutMs ? { attachTimeoutMs } : {}),
       });
       endpoints.set(key, (ep = made));
     }
@@ -139,7 +138,7 @@ export function deviceSessions(o: DeviceSessionsOptions): DeviceSessions {
       const d = shown.open();
       if (!d) throw new Error("its machine is not connected");
       return d;
-    }, SHOWN_WAIT_MS + 5_000);
+    });
     tiles.set(opts.tileId, ep);
     const env = opts.initialPrompt ? { ...(opts.env ?? {}), [INITIAL_PROMPT_ENV]: opts.initialPrompt } : opts.env;
     try {
