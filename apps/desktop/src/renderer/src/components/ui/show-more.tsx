@@ -14,7 +14,7 @@ export function useShowMore(first: number, step = first, reset?: unknown): [numb
 export function ShowMore({ left, step, onClick, className }: { left: number; step: number; onClick: () => void; className?: string }) {
   if (left <= 0) return null;
   return <button type="button" data-show-more onClick={onClick}
-    className={cn("flex h-7 items-center rounded-md px-2 text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-line2)]", className)}>
+    className={cn("flex h-7 items-center rounded-md px-2 text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]", className)}>
     Show {Math.min(step, left)} more<span className="ml-1.5 tabular-nums text-count">· {left} left</span>
   </button>;
 }
