@@ -7,8 +7,20 @@ started.
 cd site && npm ci && npm ci --prefix docs     # once
 npm run diagrams                               # only if a diagram changed
 npm run build                                  # the site and the guide; a page that does not compile fails it
-node scripts/check-links.mjs                   # every link and picture leads somewhere
+node scripts/check-links.mjs                   # every link, anchor, .md copy and redirect leads somewhere
 ```
+
+`check-links` prints one line per problem, `page: link: why`, and exits 1 when there is any. It
+reads every page, `.md` copy, `llms.txt`, `robots.txt` and the sitemap, and the links in each,
+including the addresses inside an **Open in ChatGPT/Claude/…** link. A redirect must land on a
+real page in one hop. After a deploy, check the real site, its external links included:
+
+```bash
+node scripts/check-links.mjs --live https://hivemind.griiken.com
+```
+
+It prints each redirect with its hops and final status, then the problems. A few sites answer
+every bot with an error (ChatGPT, Claude, Cursor); a failure there is not reported.
 
 `npm run guide` rebuilds only the guide, and is faster when only `guide/` changed. CI runs the
 build and the link check too, but run them first: a red PR wastes a review.

@@ -4,15 +4,27 @@ import {
   DocsPage,
   DocsTitle,
   EditOnGitHub,
-  MarkdownCopyButton,
-  ViewOptionsPopover,
 } from 'fumadocs-ui/layouts/notebook/page';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { buttonVariants } from 'fumadocs-ui/components/ui/button';
+import { TextIcon } from 'lucide-react';
+import { CopyPageButton } from '@/components/guide/copy-page';
+import { OpenMenu } from '@/components/guide/open-menu';
 import { getMDXComponents } from '@/components/mdx';
+import { openInAgents, openInGitHub } from '@/lib/open-in';
 import { source } from '@/lib/source';
-import { appName, docsUrl, ogImage, pageAddress, pageMarkdownPath, siteUrl, sourceUrl } from '@/lib/shared';
+import {
+  appName,
+  docsUrl,
+  ogImage,
+  pageAddress,
+  pageMarkdownAddress,
+  pageMarkdownPath,
+  siteUrl,
+  sourceUrl,
+} from '@/lib/shared';
 
 type Props = { params: Promise<{ slug?: string[] }> };
 
@@ -57,7 +69,13 @@ export default async function Page(props: Props) {
   if (!page) notFound();
 
   const MDX = page.data.body;
-  const markdownUrl = pageMarkdownPath(page.slugs);
+  const markdownPath = pageMarkdownPath(page.slugs);
+  // An agent reads the Markdown copy best, and it has to be a full address it can fetch.
+  const openLinks = [
+    openInGitHub(sourceUrl(page.path)),
+    { name: 'View as Markdown', href: markdownPath, icon: <TextIcon /> },
+    ...openInAgents(`Read ${pageMarkdownAddress(page.slugs)}, I want to ask questions about it.`),
+  ];
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.mode === 'wide'} tableOfContent={{ style: 'clerk' }}>
@@ -69,11 +87,11 @@ export default async function Page(props: Props) {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
       <div className="flex flex-row flex-wrap gap-2 items-center border-b pb-6">
-        <MarkdownCopyButton markdownUrl={markdownUrl}>Copy page</MarkdownCopyButton>
-        <ViewOptionsPopover
-          markdownUrl={markdownUrl}
-          pageUrl={`${docsUrl}${page.url}`}
-          githubUrl={sourceUrl(page.path)}
+        <CopyPageButton href={markdownPath} />
+        <OpenMenu
+          label="Open"
+          links={openLinks}
+          className={buttonVariants({ variant: 'secondary', size: 'sm', className: 'gap-2' })}
         />
       </div>
       <DocsBody>
@@ -100,7 +118,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
     // Full addresses only: a path here would be joined onto metadataBase's /guide.
     alternates: {
       canonical: url,
-      types: { 'text/markdown': `${siteUrl}${pageMarkdownPath(page.slugs)}` },
+      types: { 'text/markdown': pageMarkdownAddress(page.slugs) },
     },
     // Set whole: a page's openGraph replaces the layout's rather than adding to it.
     openGraph: {

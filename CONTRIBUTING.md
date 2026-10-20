@@ -37,6 +37,10 @@ pnpm test:unit        # add tests here first
 From the repository root, `pnpm test` runs every package's tests and the CLI's, as CI does. In
 `crates/hive-net`, `cargo test` runs the network service's tests.
 
+When you change the website or the guide (`site/`, `guide/`), build it and check its links from
+`site/`: `npm run build`, then `node scripts/check-links.mjs`. Every link, `#heading`, Markdown
+copy and redirect has to lead somewhere; CI runs the same check.
+
 When you change canvas, frame, tile or issue behaviour, also run the end-to-end suite from
 `apps/desktop`: `pnpm test:e2e --retries=0`. On Linux it needs `unset ELECTRON_RUN_AS_NODE` and
 xvfb, and takes several minutes.

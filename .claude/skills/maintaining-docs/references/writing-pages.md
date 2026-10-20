@@ -53,7 +53,7 @@ backticks: `` `hive agents install <name>` ``.
 
 A page that describes something a person sets up or does gets an `<AgentPrompt>` near the top.
 It holds the exact instructions a person pastes into Claude Code, Codex or any coding agent so
-it does the job on their computer. It shows **Copy prompt** and **Open in Cursor**. It ends the
+it does the job on their computer. It shows **Copy prompt** and an **Open in…** menu of agents (the list in `site/docs/lib/open-in.tsx`). It ends the
 prompt with a link to the page's Markdown, for the agent to read.
 
 ```mdx
