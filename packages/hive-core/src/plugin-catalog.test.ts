@@ -69,13 +69,13 @@ describe("reading the index", () => {
     const listed = parseCatalog({ version: 1, plugins: [
       { ...base, id: "@a/git-graph", type: "view", path: "views/g", category: "git" },
       { ...base, id: "@a/pet", type: "widget", path: "widgets/p", category: "fun" },
-      { ...base, id: "dip497/ports", type: "tool", path: "tools/p", category: "monitoring" },
+      { ...base, id: "@dip497/ports", type: "tool", path: "tools/p", category: "monitoring" },
       { ...base, id: "@a/none", type: "widget", path: "widgets/n" },
       { ...base, id: "@a/odd", type: "widget", path: "widgets/o", category: "games" },
       { ...base, id: "gemini", type: "agent", path: "agents/gemini" },
     ] });
     expect(listed.map((e) => [e.id, e.category])).toEqual([
-      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
+      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["@dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
     ]);
   });
 });
