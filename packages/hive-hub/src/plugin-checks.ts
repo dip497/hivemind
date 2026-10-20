@@ -63,8 +63,9 @@ const refuse = (problem: string): never => { throw new Refused(problem); };
 
 /** A value from the folder, as a reason quotes it: cut short, with anything that could rewrite a
  *  terminal written as an escape. */
-const shown = (v: unknown): string =>
-  JSON.stringify(String(v).slice(0, 100)).replace(new RegExp(UNSAFE_TEXT_RE.source, "g"), (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+const shown = (v: unknown): string => escaped(JSON.stringify(String(v).slice(0, 100)));
+/** Text with anything that could rewrite a terminal written as an escape. */
+const escaped = (v: string): string => v.replace(new RegExp(UNSAFE_TEXT_RE.source, "g"), (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 
 /** Text the app shows, from a manifest: refused when it holds a character that could rewrite a
  *  terminal or reorder what is read. */
@@ -92,7 +93,7 @@ export async function checkPluginFolder(folder: readonly PluginFile[]): Promise<
     return { plugin: await check(folder) };
   } catch (e) {
     // A folder is someone else's bytes: whatever it holds is a reason to refuse it, never a crash.
-    return { problem: e instanceof Refused ? e.message : `the folder could not be read: ${shown((e as Error)?.message ?? e)}` };
+    return { problem: e instanceof Refused ? e.message : `the folder could not be read: ${escaped(String((e as Error)?.message ?? e))}` };
   }
 }
 
@@ -133,20 +134,22 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       raw = YAML.parse(yaml) ?? {};
       def = defFromManifest(raw, {});
     } catch (e) {
-      return refuse(`the manifest is not one Hivemind would accept — ${(e as Error).message}`);
+      return refuse(`the manifest is not one Hivemind would accept — ${escaped(String((e as Error).message))}`);
     }
     if (!AGENT_ID_RE.test(def.id)) refuse(`agent.yaml's id is ${shown(def.id)} — an agent's id is one name, like "gemini"`);
     if (raw.icon !== undefined && (typeof raw.icon !== "object" || raw.icon === null || !smallJson(raw.icon, 4096))) refuse("agent.yaml: its icon must be a small block");
     if (RESERVED_AGENTS[def.id] && RESERVED_AGENTS[def.id] !== def.bin) {
       refuse(`the id "${def.id}" is reserved for the agent that runs ${RESERVED_AGENTS[def.id]}`);
     }
+    // The whole note, as the listing keeps it, not only the part on the card.
+    const note = def.note ? plain("agent.yaml", "note", def.note) : null;
     return {
       ...common, id: def.id, type: "agent", name: plain("agent.yaml", "label", (def.label ?? def.id).slice(0, 80)), category: "agents",
-      description: plain("agent.yaml", "note", (def.note || `Runs ${def.bin}.`).slice(0, 400)),
+      description: (note || `Runs ${def.bin}.`).slice(0, 400),
       version: "1.0.0", bin: def.bin, homepage: def.install?.url ?? null,
       // The manifest's own shapes, not rendered markup: clients draw it from a closed vocabulary.
       icon: raw.icon ?? null, manifest: yaml,
-      does: agentDisclosures(def), note: def.note ?? null, minAppVersion: def.minAppVersion ?? null,
+      does: agentDisclosures(def).map((d) => plain("agent.yaml", "launch settings", d)), note, minAppVersion: def.minAppVersion ?? null,
       traits: { worker: def.caps.turnSignal, resumes: def.caps.resume !== "none", supervises: def.caps.supervise !== "human" },
     };
   }
@@ -197,7 +200,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     let raw: unknown;
     try { raw = JSON.parse(toolJson); } catch { return refuse("hivemind-tool.json is not valid JSON"); }
     let t: ToolPackage;
-    try { t = parseToolManifest(raw, ".", null); } catch (e) { return refuse(`the manifest is not one Hivemind would accept — ${(e as Error).message}`); }
+    try { t = parseToolManifest(raw, ".", null); } catch (e) { return refuse(`the manifest is not one Hivemind would accept — ${escaped(String((e as Error).message))}`); }
     if (t.problem) refuse(t.problem);
     const badId = idProblem("tool", t.id);
     if (badId) refuse(`hivemind-tool.json: ${badId}`);
@@ -250,13 +253,6 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   const owner = m.id.slice(0, m.id.indexOf("/"));
   const members: CheckedMember[] = [];
   let minAppVersion: string | null = null;
-  // Each member's files are its own: a folder inside another member's would be shown as one kind
-  // and installed as part of the other.
-  const folders = MEMBER_FORMATS.filter((f) => f.manifest).flatMap((f) => entriesOf(m, f).map((e) => (e as FolderEntry).path.replace(/\/$/, "")));
-  for (const a of folders) for (const b of folders) {
-    if (a !== b && (a === "." || b.startsWith(`${a}/`))) refuse(`${b} is inside ${a}, another member's folder`);
-  }
-  if (new Set(folders).size !== folders.length) refuse("two members share a folder");
   for (const format of MEMBER_FORMATS) {
     for (const entry of entriesOf(m, format)) {
       if (!format.manifest) {
@@ -271,14 +267,20 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
       const inside = files.filter((f) => f.path.startsWith(prefix)).map((f) => ({ ...f, path: f.path.slice(prefix.length) }));
       const sub = new Map([...text].filter(([f]) => f.startsWith(prefix)).map(([f, t]) => [f.slice(prefix.length), t]));
       let d: CheckedPlugin | null;
-      try { d = readPlugin(inside, sub); } catch (e) { return refuse(`${at}: ${(e as Error).message}`); }
-      if (!d || d.type !== format.kind) return refuse(`${at}: ${format.list} names a folder holding no ${format.manifest}`);
+      try { d = readPlugin(inside, sub); } catch (e) { return refuse(`${shown(at)}: ${(e as Error).message}`); }
+      if (!d || d.type !== format.kind) return refuse(`${shown(at)}: ${format.list} names a folder holding no ${format.manifest}`);
       const permissions = (() => { try { return (JSON.parse(d.manifest) as { permissions?: unknown }).permissions; } catch { return []; } })();
       members.push({ kind: format.kind, id: d.id, name: d.name, runs: format.runs,
         permissions: Array.isArray(permissions) ? permissions.filter((x): x is string => typeof x === "string") : [],
         does: format.runs === "sandboxed" ? [RUNS[format.runs], ...d.does] : d.does });
       if (d.minAppVersion && (!minAppVersion || later(d.minAppVersion, minAppVersion))) minAppVersion = d.minAppVersion;
     }
+  }
+  // Each member's files are its own: a folder inside another member's would be shown as one kind
+  // and installed as part of the other.
+  const folders = MEMBER_FORMATS.filter((f) => f.manifest).flatMap((f) => entriesOf(m, f).map((e) => (e as FolderEntry).path.replace(/\/$/, "")));
+  for (const a of folders) for (const b of folders) {
+    if (a !== b && (a === "." || b.startsWith(`${a}/`))) refuse(`${shown(b)} is inside ${shown(a)}, another member's folder`);
   }
   for (const x of members) if (!ownedBy(m.id, x.id)) refuse(`${x.kind} ${x.id} is not ${owner}'s: every member of ${m.id} is ${owner}/<name>`);
   const ids = members.map((x) => `${x.kind}:${x.id}`);

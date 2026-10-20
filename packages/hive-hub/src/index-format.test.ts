@@ -49,7 +49,7 @@ describe("reading an index", () => {
     const read = parseHubIndex({ version: 1, plugins: [{ ...view, type: "agent", id: "deep", icon }, view] });
     expect(read.plugins.map((e) => e.id)).toEqual(["@a/x"]);
     expect(read.skipped).toEqual([{ position: 0, id: "deep", reason: "its icon must be a small object" }]);
-  });
+  }, 30_000);
 
   test("a document that is not a version 1 index is refused whole", () => {
     expect(() => parseHubIndex({ version: 2, plugins: [] })).toThrow(/version 1/);

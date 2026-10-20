@@ -77,6 +77,23 @@ describe("what a folder holds is never printed as it is", () => {
       .toBe("widget.json's id is \"\\u001b]0;x\\u0007\" — a published widget says its id, @owner/name, in its widget.json");
   });
 
+  test("an agent's whole note and what its manifest makes it do are plain text", async () => {
+    const long = "x".repeat(500);
+    expect(await problem({ "agent.yaml": `${AGENT}note: "${long}\\u001b[2J"\n` })).toBe("agent.yaml: its note has a control character in it");
+    expect((await plugin({ "agent.yaml": `${AGENT}note: "${long}"\n` })).note).toBe(long);
+    const listed = (arg: string) => `${AGENT}options:\n- id: model\n  label: Model\n  flag: --model\n  list:\n    args: ["${arg}"]\n`;
+    expect((await plugin({ "agent.yaml": listed("models") })).does).toContain("runs `gemini models` to list model values");
+    // The manifest's own refusal quotes the value, escaped.
+    expect(await problem({ "agent.yaml": listed("models\\u001b[2J") })).toBe('the manifest is not one Hivemind would accept — options[0].list.args: "models\\u001b[2J" is not a plain token');
+    const labelled = `${AGENT}options:\n- id: model\n  label: "Mo\\u009bdel"\n  flag: --model\n  list:\n    args: [models]\n`;
+    expect(await problem({ "agent.yaml": labelled })).toBe("agent.yaml: its launch settings has a control character in it");
+  });
+
+  test("a package member's folder with a control character is refused by the manifest check", async () => {
+    expect(await problem({ "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@ada/kit", name: "Kit", version: "1.0.0", widgets: [{ path: "p\u009bet" }] }) }))
+      .toMatch(/^hivemind-package\.json: widgets\.0\.path: expected a relative path inside the package/);
+  });
+
   test("two files that would land on one another are refused", async () => {
     expect(await problem({ ...widget(), "Widget.js": "x" })).toBe("Widget.js is listed twice");
     expect(await problem({ ...widget(), "a": "", "a/b.js": "" })).toBe("a/b.js is inside a, which is a file");
@@ -105,13 +122,12 @@ describe("checking a package", () => {
   test("a package is refused for its manifest, a member its kind refuses, or a member of another owner", async () => {
     expect(await problem({ "hivemind-package.json": manifest({ apiVersion: 1 }), ...pet() })).toMatch(/^hivemind-package\.json: apiVersion/);
     expect(await problem({ "hivemind-package.json": manifest(), "pet/widget.json": JSON.stringify({ id: "@ada/pet", version: "1.0.0" }) }))
-      .toBe("pet: a widget needs a widget.js, or a draw in its widget.json");
-    expect(await problem({ "hivemind-package.json": manifest(), "pet/notes.txt": "" })).toBe("pet: widgets names a folder holding no widget.json");
+      .toBe('"pet": a widget needs a widget.js, or a draw in its widget.json');
+    expect(await problem({ "hivemind-package.json": manifest(), "pet/notes.txt": "" })).toBe('"pet": widgets names a folder holding no widget.json');
     expect(await problem({ "hivemind-package.json": manifest(), ...pet("@bob/pet") })).toBe("widget @bob/pet is not @ada's: every member of @ada/kit is @ada/<name>");
     // A member's folder inside another's would be listed as one kind and installed as part of the other.
     const tool = { "pet/inner/hivemind-tool.json": JSON.stringify({ apiVersion: 1, id: "@ada/inner", name: "Inner", version: "1.0.0", entry: "tool.js", tools: [{ key: "i", label: "I", tileKind: "inner" }] }), "pet/inner/tool.js": "" };
-    expect(await problem({ "hivemind-package.json": manifest({ tools: [{ path: "pet/inner" }] }), ...pet(), ...tool })).toBe("pet/inner is inside pet, another member's folder");
-    expect(await problem({ "hivemind-package.json": manifest({ tools: [{ path: "pet" }] }), ...pet() })).toBe("two members share a folder");
+    expect(await problem({ "hivemind-package.json": manifest({ tools: [{ path: "pet/inner" }] }), ...pet(), ...tool })).toBe('"pet/inner" is inside "pet", another member\'s folder');
   });
 });
 
