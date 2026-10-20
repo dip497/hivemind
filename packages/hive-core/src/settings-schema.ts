@@ -337,6 +337,14 @@ export interface BrowserAppSettings {
    *  uses when it is not 443: the machine's tailnet name as `tailscale serve` gives it. */
   names: string[];
 }
+/** What quitting the app does while terminals or agents run on this computer. */
+export const QUIT_CHOICES = ["ask", "keep-running", "stop-everything"] as const;
+export type QuitChoice = (typeof QUIT_CHOICES)[number];
+export interface QuitSettings {
+  /** `keep-running`: they go on in the background process. `stop-everything`: it stops, each
+   *  session saved to come back when it next starts. `ask`: the app asks each time. */
+  whenRunning: QuitChoice;
+}
 export interface Settings {
   v: 1;
   appearance: Appearance;
@@ -346,6 +354,7 @@ export interface Settings {
   profile: ProfileSettings;
   network: NetworkSettings;
   browserApp: BrowserAppSettings;
+  quit: QuitSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -360,6 +369,7 @@ export const DEFAULT_SETTINGS: Settings = {
   profile: { name: "", color: "" },
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
+  quit: { whenRunning: "ask" },
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -541,8 +551,11 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     profile: profileOf(p.profile, base.profile),
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
     browserApp: browserAppOf(p.browserApp, base.browserApp),
+    quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
   };
 }
+
+const quitChoiceOf = (v: unknown, def: QuitChoice): QuitChoice => (QUIT_CHOICES.includes(v as QuitChoice) ? (v as QuitChoice) : def);
 
 const HOST_NAME_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
 

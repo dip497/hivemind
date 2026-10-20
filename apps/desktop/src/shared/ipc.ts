@@ -777,6 +777,14 @@ export interface HiveIpc {
   setBrowserCdpEnabled?(enabled: boolean): Promise<{ ok: true }>;
   /** Restart the app so a settings change that needs a fresh launch takes hold. */
   relaunchApp?(): Promise<void>;
+  /** Quit as a person does: asks first when agents or terminals run here (`onQuitAsk`). */
+  quit?(): Promise<void>;
+  /** Quit and stop every agent and terminal here, without asking. */
+  quitAndStopEverything?(): Promise<void>;
+  /** The answer to `onQuitAsk`. */
+  answerQuit?(answer: QuitAnswer): Promise<void>;
+  /** Main asks whether what runs here keeps running after the app quits. */
+  onQuitAsk?(cb: (q: QuitQuestion) => void): () => void;
 
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
@@ -784,6 +792,12 @@ export interface HiveIpc {
   /** `code`: why it failed, as the workspace API says it (`NOT_FOUND`, `TIMEOUT` …); another is FAILED. */
   hcpResult?(id: string, ok: boolean, result?: unknown, errorMessage?: string, code?: string): Promise<void>;
 }
+
+/** What runs as the person quits: agents and terminals on this computer, and agents on other
+ *  machines, which keep running there whatever the answer. */
+export interface QuitQuestion { agents: number; terminals: number; elsewhere: number }
+/** `remember`: keep the choice in settings and stop asking. */
+export interface QuitAnswer { choice: "keep-running" | "stop-everything" | "cancel"; remember: boolean }
 
 /** A control-plane verb main asks the renderer to execute (request-id correlated
  *  with `hcpResult`). */
