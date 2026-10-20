@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Agents: a worker whose session exits or restarts (a crash, a reboot, a restart in its tile) still reports to the agent that started it, and its parent's restart no longer cuts it off; only closing a tile forgets who started it. The `hivemind` skill tells agents to reach other tiles with `hive ctl send`, `report`, `inbox` and `read`.
 - Views can tell an agent is asleep (view protocol 1.14, feature `sleep`): its tile in `structure` carries `asleep: { since }`, `hm.commands.wakeAgent(tileId)` and `sleepAgent(tileId)` wake it and put it to sleep (permission `workspace:spawn`), and `hm.prompt` to a sleeping agent is refused `ASLEEP`, as `hive ctl send` is.
 - Settings ▸ Plugins lists what you have and what HiveHub has under categories, in the same order and with the same names as the Add menu; each HiveHub entry carries its manifest's category, and every agent is under Agents.
 - A Browser tile's page is sharp at any canvas zoom: once the canvas stops moving, the page is redrawn at the zoom instead of stretched from 100%. The page's own zoom (Ctrl + / −) multiplies it and no longer carries to other tiles showing the same site.
