@@ -188,6 +188,9 @@ export async function checkSite({ get, seeds, site, live = false, log = () => {}
     if (end.tooMany) return say(page, label, `more than ${MAX_HOPS} redirects: ${trail()}`);
     const internalHops = end.hops.filter((h) => isInternal(h.from.href) && isInternal(h.to.href));
     if (internalHops.length > 1) say(page, label, `redirect chain of ${internalHops.length} hops: ${trail()}`);
+    else if (internalHops.length === 1 && internalHops[0].to.pathname === `${target.pathname}/`) {
+      say(page, label, `leads through a redirect to ${display(internalHops[0].to)}; link there`);
+    }
     if (end.unchecked) return;
     if (end.error) {
       if (!blocksBots(end.url)) say(page, label, `${end.hops.length ? `${trail()}: ` : ""}no answer (${end.error})`);

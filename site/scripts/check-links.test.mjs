@@ -41,6 +41,7 @@ test("every kind of broken link is named, and the good ones are not", (t) => {
       <a href="https://chatgpt.com/?prompt=Read+https://site.test/good.md">good Open in ChatGPT</a>
       <a href="https://claude.ai/new?q=Read%20https%3A%2F%2Fsite.test%2Fgone.md">bad Open in Claude</a>
       <a href="/old/">redirect, one hop</a>
+      <a href="/good">page without its slash</a>
       <a href="/chain/">redirect, two hops</a>
       <a href="/loop-a/">redirect loop</a>`),
     "good/index.html": page(`<h2 id="here">Here</h2>`),
@@ -59,6 +60,7 @@ test("every kind of broken link is named, and the good ones are not", (t) => {
   assert.deepEqual(problems, [
     "/: /chain/: redirect chain of 2 hops: /chain/ → refresh /old/ → refresh /good/",
     "/: /good/#nowhere: no #nowhere on /good/",
+    "/: /good: leads through a redirect to /good/; link there",
     "/: /guide/guide/good.md: no such page or file (404)",
     "/: /loop-a/: redirect loop: /loop-a/ → refresh /loop-b/ → refresh /loop-a/",
     "/: /missing.jpg: no such page or file (404)",
@@ -72,8 +74,9 @@ test("every kind of broken link is named, and the good ones are not", (t) => {
 
 test("a site whose links all lead somewhere passes", (t) => {
   const root = site({
-    "index.html": page(`<a href="/good/#here">good</a> <a href="/good">no slash, one hop</a>`),
+    "index.html": page(`<a href="/good/#here">good</a> <a href="/old/">redirect, one hop</a>`),
     "good/index.html": page(`<h2 id="here">Here</h2>`),
+    "old/index.html": refresh("/good/"),
     "llms.txt": "- [Home](https://site.test/)\n",
   });
   t.after(() => rmSync(root, { recursive: true, force: true }));
