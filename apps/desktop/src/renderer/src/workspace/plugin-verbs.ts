@@ -14,6 +14,8 @@ export interface PluginVerbHost {
   showView(id: string): void;
   /** Add the widget of package `id` to the board: its id, or undefined when there is no such widget. */
   addWidget(id: string): string | undefined;
+  /** Whether there is a widget package `id`. */
+  hasWidget(id: string): boolean;
   /** Whether the widget package `id` has code: one drawn from its `draw` alone never runs. */
   widgetRuns(id: string): boolean;
   closeTile(id: string): void;
@@ -35,7 +37,7 @@ function closables(host: PluginVerbHost): Closable[] {
 }
 
 /** What `plugin close <which>` names: an instance (`plugin list`), or a plugin as `plugin open` takes
- *  it (`tool:owner/name[/tool]`, `widget:id`, `view:id`), which must name one copy. */
+ *  it (`tool:@owner/name[/tool]`, `widget:id`, `view:id`), which must name one copy. */
 function closing(which: string, plugin: string | undefined, host: PluginVerbHost): Closable {
   const all = closables(host).filter((c) => plugin === undefined || c.plugin === plugin);
   const byInstance = all.filter((c) => c.instance === which);
@@ -78,16 +80,23 @@ export async function pluginVerb(method: string, params: Record<string, unknown>
           .map(({ plugin, kind, instance, label, commands }) => ({ plugin, kind, instance, label, commands })),
       };
     case "plugin.open": {
-      const { kind, id } = params as { kind: "widget" | "view"; id: string };
+      const { kind: named, id } = params as { kind: "widget" | "view" | "any"; id: string };
       const deadline = Date.now() + PLUGIN_OPEN_MS;
+      // The id alone: whichever kind has it, or both named when two do.
+      const kind = named !== "any" ? named : (() => {
+        const kinds = [...(getView(id) ? ["view" as const] : []), ...(host.hasWidget(id) ? ["widget" as const] : [])];
+        if (kinds.length > 1) throw new PluginError("BAD_REQUEST", `${id} is ${kinds.map((k) => `${k}:${id}`).join(" and ")}: name one of those`);
+        if (!kinds.length) throw new PluginError("NOT_FOUND", `no plugin ${id} here: install it (\`hive plugins install <folder|id>\`) and switch it on (\`hive plugins enable ${id}\`)`);
+        return kinds[0]!;
+      })();
       if (kind === "view") {
         const view = getView(id);
-        if (!view) throw new PluginError("NOT_FOUND", `no view ${id} here (these are: ${listViews().map((v) => v.id).join(", ")}): install it (\`hive views install <folder>\`) and switch it on (\`hive plugins enable view:${id}\`)`);
+        if (!view) throw new PluginError("NOT_FOUND", `no view ${id} here (these are: ${listViews().map((v) => v.id).join(", ")}): install it (\`hive plugins install <folder>\`) and switch it on (\`hive plugins enable view:${id}\`)`);
         host.showView(id);
         return { view: id, ...(view.source === "community" ? opened(await pluginInstances.settle({ plugin: id, instance: id }, deadline)) : {}) };
       }
       const widget = host.addWidget(id);
-      if (!widget) throw new PluginError("NOT_FOUND", `no widget ${id} here: install it (\`hive widgets install <folder>\`) and switch it on (\`hive plugins enable widget:${id}\`)`);
+      if (!widget) throw new PluginError("NOT_FOUND", `no widget ${id} here: install it (\`hive plugins install <folder>\`) and switch it on (\`hive plugins enable widget:${id}\`)`);
       return { widget, ...(host.widgetRuns(id) ? opened(await pluginInstances.settle({ instance: widget }, deadline)) : {}) };
     }
     case "plugin.settle": {

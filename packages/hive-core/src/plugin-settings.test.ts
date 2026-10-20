@@ -6,7 +6,7 @@ describe("what is stored for each plugin", () => {
     const states = parsePluginStates({
       "agent:claude": { enabled: false },
       "view:@someone/notes": { options: { island: "top" } },
-      "tool:hivemind/web": { enabled: true },
+      "tool:@hivemind/web": { enabled: true },
       "widget:pet": { options: { speed: 2 } },
       "agent:../x": { enabled: false },
       "agent:@dip497/aider": { enabled: false },
@@ -15,15 +15,15 @@ describe("what is stored for each plugin", () => {
       "theme:dark": { enabled: true },
       "agent:codex": { enabled: "no", options: { "bad key": 1, n: Infinity } }, // nothing left in it
     });
-    expect(Object.keys(states)).toEqual(["agent:claude", "view:@someone/notes", "tool:hivemind/web", "widget:pet"]);
+    expect(Object.keys(states)).toEqual(["agent:claude", "view:@someone/notes", "tool:@hivemind/web", "widget:pet"]);
   });
 
   test("a plugin is on unless its record says off; a kind can default to off", () => {
-    const states = parsePluginStates({ "agent:codex": { enabled: false }, "tool:acme/maps": { enabled: true } });
+    const states = parsePluginStates({ "agent:codex": { enabled: false }, "tool:@acme/maps": { enabled: true } });
     expect(isPluginEnabled(states, "agent", "codex")).toBe(false);
     expect(isPluginEnabled(states, "agent", "claude")).toBe(true);
     expect(isPluginEnabled(states, "tool", "acme/other", false)).toBe(false);
-    expect(isPluginEnabled(states, "tool", "acme/maps", false)).toBe(true);
+    expect(isPluginEnabled(states, "tool", "@acme/maps", false)).toBe(true);
     expect(disabledPlugins(states, "agent")).toEqual(["codex"]);
     expect(disabledPlugins(states, "tool")).toEqual([]);
   });
@@ -39,27 +39,27 @@ describe("what is stored for each plugin", () => {
 
   test("the workspaces picked for a plugin's service are folders given in full, each once; a record of only them is kept", () => {
     const states = parsePluginStates({
-      "tool:acme/ci": { workspaces: ["/work/api", "relative/x", "/work/api", 7, "C:\\work\\web", "D:/w"] },
-      "tool:acme/none": { workspaces: ["nope"] },
+      "tool:@acme/ci": { workspaces: ["/work/api", "relative/x", "/work/api", 7, "C:\\work\\web", "D:/w"] },
+      "tool:@acme/none": { workspaces: ["nope"] },
     });
-    expect(serviceWorkspaces(states, "acme/ci")).toEqual(["/work/api", "C:\\work\\web", "D:/w"]);
-    expect(states["tool:acme/none"]).toBeUndefined();
+    expect(serviceWorkspaces(states, "@acme/ci")).toEqual(["/work/api", "C:\\work\\web", "D:/w"]);
+    expect(states["tool:@acme/none"]).toBeUndefined();
     expect(serviceWorkspaces(states, "acme/other")).toEqual([]);
-    const picked = withPluginState({}, "tool", "acme/ci", (s) => ({ ...s, workspaces: ["/work/api"] }));
-    expect(picked).toEqual({ "tool:acme/ci": { workspaces: ["/work/api"] } });
-    expect(withPluginState(picked, "tool", "acme/ci", ({ workspaces: _, ...s }) => s)).toEqual({});
+    const picked = withPluginState({}, "tool", "@acme/ci", (s) => ({ ...s, workspaces: ["/work/api"] }));
+    expect(picked).toEqual({ "tool:@acme/ci": { workspaces: ["/work/api"] } });
+    expect(withPluginState(picked, "tool", "@acme/ci", ({ workspaces: _, ...s }) => s)).toEqual({});
   });
 
   test("the keys of a version before plugin state are read into records", () => {
     expect(pluginStatesFromLegacy({
       agents: { disabled: ["codex", 3], options: { claude: { model: "opus", effort: 2 } } },
       plugins: { disabled: ["@someone/notes"] },
-      tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser", "noslash"] },
+      tools: { enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser", "noslash"] },
     })).toEqual({
       "agent:codex": { enabled: false },
       "agent:claude": { options: { model: "opus" } },
       "view:@someone/notes": { enabled: false },
-      "tool:hivemind/web": { enabled: true, options: { browser: false } },
+      "tool:@hivemind/web": { enabled: true, options: { browser: false } },
     });
   });
 });

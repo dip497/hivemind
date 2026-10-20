@@ -7,7 +7,7 @@ import { inspectPackage, parsePackageManifest, PACKAGE_LIMITS } from "./packages
 let dir: string;
 const providers = [{ id: "test-agent", enabled: true, modelFlag: false, supervision: "none" }];
 const manifest = () => ({
-  apiVersion: 1, id: "example/review-room", name: "Review room", version: "1.0.0",
+  apiVersion: 1, id: "@example/review-room", name: "Review room", version: "1.0.0",
   views: [{ path: "views/room" }],
   agents: [{ id: "reviewer", name: "Reviewer", provider: "test-agent", prompt: "Review the diff." }],
   startup: { view: "room", agents: ["reviewer"], maxConcurrent: 1 },

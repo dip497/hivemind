@@ -433,7 +433,7 @@ test("a community view that says it works on a phone is offered there with its f
   const env = probeAgent(root);
   scribeAgent();
   const d = await desktopWith(env);
-  // Two views installed on the computer, as `hive views install` installs one: one says it works on
+  // Two views installed on the computer, as `hive plugins install` installs one: one says it works on
   // a phone, the other says nothing of it.
   const install = (id: string, manifest: object) => {
     const dir = path.join(root, "views", id);
@@ -441,7 +441,7 @@ test("a community view that says it works on a phone is offered there with its f
     fs.writeFileSync(path.join(dir, "hivemind-view.json"), JSON.stringify({ id, version: "1.0.0", entry: "index.html", protocol: 1, ...manifest }));
     fs.writeFileSync(path.join(dir, "index.html"), `<!doctype html><title>${id}</title><script type="module" src="./main.js"></script>`);
     fs.writeFileSync(path.join(dir, "main.js"), `import { connect } from "@hivemind/view-sdk";\nawait connect();\n`);
-    const installed = spawnSync("bun", [CLI, "views", "install", dir, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
+    const installed = spawnSync("bun", [CLI, "plugins", "install", dir, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
     expect(installed.status, installed.stdout + installed.stderr).toBe(0);
     return dir;
   };

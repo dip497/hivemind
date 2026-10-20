@@ -36,7 +36,7 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing; `tile look` of a tile something is drawn over |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 1 | `FAILED` | other |
 
@@ -127,6 +127,8 @@ hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once 
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
+hive ctl tile look <tileId> [--out f.png] [--json]  # brought into view, waited for until it drew:
+                                        # {tile, state, drew, console, png} (png: the picture's path)
 hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is not open
 hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
 hive ctl wake [tile|frame]              # back in its conversation; exit 7 if nothing woke
@@ -191,10 +193,20 @@ hive ctl plugin call windows unsplit
 To install, list and remove agents, views, widgets and tools, and change their settings.
 
 ```text
-hive views list                         # installed view plugins + load errors
-hive views install <dir>|@owner/name    # a folder with hivemind-view.json, or from HiveHub
-hive views new <name> [--owner login]   # a starter view in ./<name>, with PROMPT.md
-hive views remove <id>
+hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
+                                        # a starter that works, with PROMPT.md; prints the next steps
+hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id
+                                        # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
+                                        # a tool arrives off: hive plugins enable @owner/name
+hive plugins remove <plugin>            # one you added
+hive plugins api --kind tool|widget|view   # what its code is given, as the type declarations of this version
+hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off, and why any fails to load
+hive plugins show claude                # its settings: each one's value and what it takes
+hive plugins enable @hivemind/web        # or disable
+hive plugins set @you/board columns all # checked against what the setting takes
+hive plugins reset @you/board [columns] # back to its default
+hive plugins workspaces <tool> <folder>…   # the workspaces a tool's service drives (hive host)
+hive plugins workspaces <tool> --none   # it drives none: its service stops
 
 hive agents list                        # every agent, its source, on/off, and why any failed
 hive agents list --found                # only agents whose CLI is on this machine
@@ -204,26 +216,10 @@ hive agents install owner/repo[/dir] [--ref tag]   # from a GitHub repository
                                         # downloaded ones print what they run first: re-run with --yes
 hive agents validate <dir>              # check a manifest the way an install would
 hive agents remove <id>                 # removes the agent from this machine; it stays removed
-
-hive widgets list                       # the app's own widgets and the ones you added
-hive widgets install <dir>|@owner/name  # from a folder, or from HiveHub
-hive widgets new <name> [--owner login] # a starter widget in ./<name>, with PROMPT.md
-hive widgets remove <id>
-
-hive tools list                         # what each tool contributes: tiles and commands, yours included
-hive tools new <name> [--owner login]   # a starter tool plugin in ./<name>, with PROMPT.md
-hive tools install <dir>|owner/name     # a folder, or from HiveHub (dip497/worktrees)
-                                        # added off: hive plugins enable tool:<owner>/<name>
-hive tools remove <owner>/<name>
-
-hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off
-hive plugins show agent:claude          # its settings: each one's value and what it takes
-hive plugins enable tool:hivemind/web   # or disable
-hive plugins set view:@you/board columns all   # checked against what the setting takes
-hive plugins reset view:@you/board [columns]   # back to its default
-hive plugins workspaces tool:<id> <folder>…    # the workspaces a tool's service drives (hive host)
-hive plugins workspaces tool:<id> --none       # it drives none: its service stops
 ```
+
+A plugin is named by its id. Where two kinds have the same id, name it as `<kind>:<id>`, as
+`hive plugins list` prints it (`view:board`).
 
 ## API tokens
 

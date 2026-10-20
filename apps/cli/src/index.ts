@@ -25,12 +25,9 @@ import { resolveCmd } from "./commands/mention.js";
 import { ctlCmd } from "./commands/ctl.js";
 import { packagesCmd } from "./commands/packages.js";
 import { agentsCmd } from "./commands/agents.js";
-import { viewsCmd } from "./commands/views.js";
 import { reviewCmd } from "./commands/review.js";
-import { toolsCmd } from "./commands/tools.js";
 import { configCmd, themeCmd } from "./commands/config.js";
 import { pluginsCmd } from "./commands/plugins.js";
-import { widgetsCmd } from "./commands/widgets.js";
 import { networkCmd } from "./commands/network.js";
 import { daemonCmd } from "./commands/daemon.js";
 import { hostCmd } from "./commands/host.js";
@@ -80,13 +77,10 @@ const main = defineCommand({
     upgrade: upgradeCmd,
     resolve: resolveCmd,
     ctl: ctlCmd,
-    views: viewsCmd,
     review: reviewCmd,
-    tools: toolsCmd,
     agents: agentsCmd,
     packages: packagesCmd,
     plugins: pluginsCmd,
-    widgets: widgetsCmd,
     config: configCmd,
     theme: themeCmd,
     daemon: daemonCmd,

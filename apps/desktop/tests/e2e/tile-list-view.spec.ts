@@ -20,7 +20,7 @@ const dockedTerminals = () => page.locator("[data-community-slot] .xterm");
 const terminalIds = () => page.locator(".react-flow__node-terminal").evaluateAll((els) => els.map((e) => e.getAttribute("data-id")!));
 
 test.beforeAll(async () => {
-  execFileSync("bun", [path.resolve(appDir, "../cli/src/index.ts"), "views", "install", TILE_LIST_DIR, "--json"], { env });
+  execFileSync("bun", [path.resolve(appDir, "../cli/src/index.ts"), "plugins", "install", TILE_LIST_DIR, "--json"], { env });
   app = await electron.launch({ args: [path.join(appDir, "out/main/index.js"), "--no-sandbox"], cwd: root, env });
   page = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.focus(); });

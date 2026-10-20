@@ -42,7 +42,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(proj, `${SESSION}.jsonl`), JSON.stringify({ type: "user", cwd: repo, message: { content: "earlier work" } }) + "\n");
   fs.writeFileSync(path.join(fakeBin, "claude"), `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE)} claude "$@"\n`);
   fs.chmodSync(path.join(fakeBin, "claude"), 0o755);
-  const installed = spawnSync(onPath("bun"), [CLI, "views", "install", VIEW, "--json"], { cwd: repo, encoding: "utf8", env: process.env });
+  const installed = spawnSync(onPath("bun"), [CLI, "plugins", "install", VIEW, "--json"], { cwd: repo, encoding: "utf8", env: process.env });
   expect(installed.status, installed.stdout + installed.stderr).toBe(0);
   app = await electron.launch({
     args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"],

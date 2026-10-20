@@ -18,7 +18,7 @@ afterEach(() => { for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true
 const temp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), "hm-tool-")); dirs.push(d); return d; };
 
 const MANIFEST = {
-  id: "acme/prs", name: "PRs", version: "1.0.0", apiVersion: 1, entry: "index.js",
+  id: "@acme/prs", name: "PRs", version: "1.0.0", apiVersion: 1, entry: "index.js",
   tools: [{ key: "prs", label: "PRs", tileKind: "acme-prs" }],
 };
 function plugin(meta: object = {}, files: Record<string, string> = { "index.js": "export default { tiles: {} };" }): string {
@@ -30,11 +30,11 @@ function plugin(meta: object = {}, files: Record<string, string> = { "index.js":
 
 test("a folder whose manifest names another plugin is refused, so it cannot pass for that one", async () => {
   await expect(readToolPackage(plugin(), "acme/other")).rejects.toThrow("not acme/other");
-  expect((await readToolPackage(plugin(), "acme/prs")).id).toBe("acme/prs");
+  expect((await readToolPackage(plugin(), "@acme/prs")).id).toBe("@acme/prs");
 });
 
 test("the app's own owner is not one an added plugin can take", async () => {
-  await expect(readToolPackage(plugin({ id: "hivemind/web" }), null)).rejects.toThrow("kept for the plugins that come with the app");
+  await expect(readToolPackage(plugin({ id: "@hivemind/web" }), null)).rejects.toThrow("kept for the plugins that come with the app");
 });
 
 test("its module is a .js file inside its folder, and is there", async () => {
@@ -61,8 +61,8 @@ test("installed under its id's folder, listed, and removed again", async () => {
   expect(p.dir).toBe(path.join(tools, "acme--prs"));
   // Only permissions the protocol knows are kept.
   expect(p.permissions).toEqual(["workspace:spawn"]);
-  expect((await listToolPackages(tools)).map((x) => [x.id, x.problem])).toEqual([["acme/prs", null]]);
-  await removeToolPackage("acme/prs", tools);
+  expect((await listToolPackages(tools)).map((x) => [x.id, x.problem])).toEqual([["@acme/prs", null]]);
+  await removeToolPackage("@acme/prs", tools);
   expect(await listToolPackages(tools)).toEqual([]);
 });
 
@@ -73,19 +73,53 @@ test("a tile kind an app tool already draws cannot be taken by an added one", as
 
 test("the tool the e2e suite loads is one this app reads, with its command and icon, beside the app's own tools", async () => {
   const p = await readToolPackage(path.resolve(import.meta.dir, "../../../apps/desktop/tests/e2e/fixtures/tools/commits"), null);
-  expect([p.id, p.problem, p.pluginCommands.map((c) => c.name), p.tiles.commits?.icon?.startsWith("data:image/svg+xml")]).toEqual(["example/commits", null, ["list"], true]);
+  expect([p.id, p.problem, p.pluginCommands.map((c) => c.name), p.tiles.commits?.icon?.startsWith("data:image/svg+xml")]).toEqual(["@example/commits", null, ["list"], true]);
   expect(() => createToolRegistry([...BUNDLED_TOOL_PLUGINS, p])).not.toThrow();
 });
 
 test("an update is installed off: switching one on trusted the code that was there, not what replaces it", async () => {
   const tools = temp();
   const settings = path.join(tools, "settings.json");
-  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:acme/prs": { enabled: true, options: { prs: false } } } } }));
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:@acme/prs": { enabled: true, options: { prs: false } } } } }));
   await installToolPackage(plugin({ version: "2.0.0" }), undefined, tools, settings);
   const state = (await readSettings(settings)).plugins.state;
-  expect(isPluginEnabled(state, "tool", "acme/prs", false)).toBe(false);
+  expect(isPluginEnabled(state, "tool", "@acme/prs", false)).toBe(false);
   // What the person set it to stays.
-  expect(state["tool:acme/prs"]).toEqual({ options: { prs: false } });
+  expect(state["tool:@acme/prs"]).toEqual({ options: { prs: false } });
+});
+
+test("reinstalling the same code byte for byte keeps it on: no new code was trusted", async () => {
+  const tools = temp();
+  const settings = path.join(tools, "settings.json");
+  const src = plugin();
+  await installToolPackage(src, undefined, tools, settings);
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:@acme/prs": { enabled: true } } } }));
+  const again = await installToolPackage(src, undefined, tools, settings);
+  expect(again.enabled).toBe(true);
+  expect(isPluginEnabled((await readSettings(settings)).plugins.state, "tool", "@acme/prs", false)).toBe(true);
+});
+
+test("reinstalling changed code switches it off, and says so", async () => {
+  const tools = temp();
+  const settings = path.join(tools, "settings.json");
+  const src = plugin();
+  await installToolPackage(src, undefined, tools, settings);
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:@acme/prs": { enabled: true } } } }));
+  fs.writeFileSync(path.join(src, "index.js"), "export default { tiles: { changed: true } };");
+  const again = await installToolPackage(src, undefined, tools, settings);
+  expect(again.enabled).toBe(false);
+  expect(isPluginEnabled((await readSettings(settings)).plugins.state, "tool", "@acme/prs", false)).toBe(false);
+});
+
+test("code moved across a file boundary is changed code: a reinstall of it goes off", async () => {
+  const tools = temp();
+  const settings = path.join(tools, "settings.json");
+  const entry = "export default { tiles: {} };";
+  await installToolPackage(plugin({}, { "index.js": entry, "z.js": "steal()" }), undefined, tools, settings);
+  fs.writeFileSync(settings, JSON.stringify({ plugins: { state: { "tool:@acme/prs": { enabled: true } } } }));
+  // The same bytes in a row, with z.js folded into the end of index.js after a \0.
+  const again = await installToolPackage(plugin({}, { "index.js": `${entry}\0file\0z.js\0steal()` }), undefined, tools, settings);
+  expect(again.enabled).toBe(false);
 });
 
 test("a tool plugin that comes with the app is the tool core says ships, and only the app's own may be hivemind/", async () => {
@@ -95,9 +129,16 @@ test("a tool plugin that comes with the app is the tool core says ships, and onl
     const p = parseToolManifest(raw, path.join(root, name), null, "app");
     const shipped = BUNDLED_TOOL_PLUGINS.find((b) => b.id === p.id);
     expect(shipped, p.id).toBeDefined();
-    for (const t of p.tools) expect(shipped!.tools.map((x) => [x.key, x.label, x.tileKind])).toContainEqual([t.key, t.label, t.tileKind]);
+    for (const t of p.tools) expect(shipped!.tools.map((x) => [x.key, x.label, x.tileKind, !!x.singleton])).toContainEqual([t.key, t.label, t.tileKind, !!t.singleton]);
     expect(() => parseToolManifest(raw, path.join(root, name), null, "you")).toThrow("kept for the plugins that come with the app");
   }
+});
+
+test("a tool that says it is one of a kind is opened as one, by the app and by `hive ctl open-tool` alike", () => {
+  const one = parseToolManifest({ ...MANIFEST, tools: [{ ...MANIFEST.tools[0], singleton: true }] }, "/x", null);
+  expect(one.tools[0]!.singleton).toBe(true);
+  expect(Object.values(one.tiles)[0]!.singleton).toBe(true);
+  expect(parseToolManifest(MANIFEST, "/x", null).tools[0]!.singleton).toBeUndefined();
 });
 
 test("its service is a program on PATH or a file in its folder, with a role; anything else is refused", () => {

@@ -1,15 +1,16 @@
 /**
- * Tool plugins on this machine: `<config>/hivemind/tools/<owner>--<name>/`, beside the views and
+ * Tool plugins on this machine: `<config>/hivemind/tools/<owner>--<name>/` for `@owner/name`, beside the views and
  * the widgets, each a `hivemind-tool.json` and its module. The app and the CLI read, add and
  * remove them here. A folder that cannot be read is listed with what is wrong, so the person
  * sees why it does not load instead of it vanishing.
  */
-import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { cp, mkdir, mkdtemp, readdir, readFile, readlink, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { isToolId, parseToolManifest, toolFolder, type ToolPackage } from "./tool-format.js";
-import { withPluginState } from "./plugin-settings.js";
-import { settingsPath, updateSettings } from "./settings.js";
+import { isToolId, parseToolManifest, toolFolder, toolOfFolder, type ToolPackage } from "./tool-format.js";
+import { isPluginEnabled, withPluginState } from "./plugin-settings.js";
+import { readSettings, settingsPath, updateSettings } from "./settings.js";
 
 export const TOOL_MANIFEST = "hivemind-tool.json";
 
@@ -41,7 +42,7 @@ export async function listToolPackages(dir = userToolsDir(), appRoot?: string | 
   const scan = async (root: string, source: "app" | "you") => {
     const folders = (await readdir(root).catch(() => [] as string[])).filter((f) => !f.startsWith(".") && f.includes("--")).sort();
     return Promise.all(folders.map(async (f) => {
-      const id = f.replace("--", "/");
+      const id = toolOfFolder(f);
       try {
         return await readToolPackage(path.join(root, f), id, source);
       } catch (e) {
@@ -55,15 +56,34 @@ export async function listToolPackages(dir = userToolsDir(), appRoot?: string | 
   return [...(appRoot ? await scan(appRoot, "app") : []), ...await scan(dir, "you")];
 }
 
+/** One hash of every entry in `dir`: each file's content hashed alone, then the sorted list of
+ *  (type, path, length, content hash), so no bytes can shift from one file into the next. Null
+ *  when there is no such folder. */
+async function folderHash(dir: string): Promise<string | null> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true }).catch(() => null);
+  if (!entries) return null;
+  const sha = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
+  const rows = await Promise.all(entries.map(async (e) => {
+    const rel = path.relative(dir, path.join(e.parentPath, e.name));
+    const at = path.join(dir, rel);
+    const [type, data] = e.isDirectory() ? ["dir", ""] : e.isSymbolicLink() ? ["link", await readlink(at)] : e.isFile() ? ["file", await readFile(at)] : ["other", ""];
+    return [type, rel, data.length, sha(data)] as const;
+  }));
+  rows.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+  return sha(JSON.stringify(rows));
+}
+
 /** Copy the tool plugin in `src` into the tools folder, replacing one with the same id. It is
  *  checked before anything is replaced, and copied whole before it takes the old one's place.
- *  `id`, when given (a HiveHub listing), is the id its manifest must say. It is left off, an
- *  update included: switching one on trusts the code that was there, not what replaces it. */
-export async function installToolPackage(src: string, id?: string, dir = userToolsDir(), settings = settingsPath()): Promise<ToolPackage> {
+ *  `id`, when given (a HiveHub listing), is the id its manifest must say. Changed code is left
+ *  off: switching one on trusts the code that was there, not what replaces it. The same code
+ *  byte for byte keeps the state it had. `enabled` is that state after the install. */
+export async function installToolPackage(src: string, id?: string, dir = userToolsDir(), settings = settingsPath()): Promise<ToolPackage & { enabled: boolean }> {
   const read = await readToolPackage(src, id ?? null);
   await mkdir(dir, { recursive: true });
   const staging = await mkdtemp(path.join(dir, ".install-"));
   const dest = path.join(dir, toolFolder(read.id));
+  const sameCode = (await folderHash(dest)) === (await folderHash(src));
   try {
     await cp(src, path.join(staging, "next"), { recursive: true });
     await rm(dest, { recursive: true, force: true });
@@ -71,16 +91,16 @@ export async function installToolPackage(src: string, id?: string, dir = userToo
   } finally {
     await rm(staging, { recursive: true, force: true });
   }
-  await updateSettings((cur) => ({
+  const next = sameCode ? await readSettings(settings) : await updateSettings((cur) => ({
     ...cur, plugins: { ...cur.plugins, state: withPluginState(cur.plugins.state, "tool", read.id, ({ enabled: _, ...rest }) => rest) },
   }), settings);
-  return { ...read, dir: dest };
+  return { ...read, dir: dest, enabled: isPluginEnabled(next.plugins.state, "tool", read.id, false) };
 }
 
 export async function removeToolPackage(id: string, dir = userToolsDir()): Promise<void> {
   if (!isToolId(id)) throw new Error(`${id} is not a tool plugin id`);
   const at = path.join(dir, toolFolder(id));
-  if (!(await stat(at).catch(() => null))) throw new Error(id.startsWith("hivemind/") ? "it comes with the app" : `no tool plugin ${id} is installed`);
+  if (!(await stat(at).catch(() => null))) throw new Error(id.startsWith("@hivemind/") ? "it comes with the app" : `no tool plugin ${id} is installed`);
   await rm(at, { recursive: true, force: true });
 }
 

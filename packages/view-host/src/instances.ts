@@ -59,6 +59,8 @@ export interface Starting {
 export interface Running {
   connected(): void;
   disabled(reason: string): void;
+  /** Its code painted its first content. */
+  drew(): void;
   /** Its name or declared commands changed. */
   update(change: { label?: string; commands?: readonly PluginCommand[] }): void;
   stop(): void;
@@ -66,6 +68,7 @@ export interface Running {
 
 interface Entry extends Starting {
   state: PluginState;
+  drew: boolean;
   reason?: string;
   since: number;
   timer: ReturnType<typeof setTimeout> | null;
@@ -81,13 +84,18 @@ export class PluginInstances {
 
   /** A plugin's host mounted it: it is `starting` until its code connects. */
   start(s: Starting): Running {
-    const e: Entry = { ...s, commands: [...s.commands], state: "starting", since: Date.now(), timer: null };
+    const e: Entry = { ...s, commands: [...s.commands], state: "starting", drew: false, since: Date.now(), timer: null };
     e.timer = setTimeout(() => this.fire(e, { type: "timedOut" }), START_MS);
     this.entries.add(e);
     this.changed();
     return {
       connected: () => this.fire(e, { type: "connected" }),
       disabled: (reason) => this.fire(e, { type: "disabled", reason }),
+      drew: () => {
+        if (!this.entries.has(e) || e.drew) return;
+        e.drew = true;
+        this.changed();
+      },
       update: (c) => {
         if (!this.entries.has(e)) return;
         if (c.label !== undefined) e.label = c.label;
@@ -218,7 +226,7 @@ export class PluginInstances {
 function snapshot(e: Entry): PluginInstance {
   return {
     plugin: e.plugin, kind: e.kind, instance: e.instance, label: e.label, state: e.state,
-    ...(e.reason !== undefined ? { reason: e.reason } : {}), since: e.since,
+    ...(e.reason !== undefined ? { reason: e.reason } : {}), since: e.since, drew: e.drew,
     commands: e.commands.map((c) => ({ name: c.name, description: c.description, ...(c.args ? { args: c.args } : {}) })),
   };
 }

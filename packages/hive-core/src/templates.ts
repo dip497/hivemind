@@ -342,7 +342,7 @@ Ids from other registered repos resolve automatically.
 ## Tools, widgets and views (plugins)
 \`\`\`bash
 hive plugins list --json                                   # every plugin, on or off, by id
-hive ctl open-tool hivemind/web/browser --url https://example.com --json   # a tool's tile beside you (the hive-browser skill drives it)
+hive ctl open-tool @hivemind/web/browser --url https://example.com --json   # a tool's tile beside you (the hive-browser skill drives it)
 hive ctl plugin open widget:@dip497/progress --json        # get one running: tool:…, widget:… or view:…, as plugins list keys it
                                                            # → answers once it can be called: {"widget","instance","state":"ready","commands":[…]}
 hive ctl plugin list --json                                # what runs: each {plugin,instance,state,reason?,commands}, and the views there are
@@ -353,6 +353,8 @@ hive ctl view emit ci.build '{"status":"green"}' --json    # a named event to th
 A plugin is \`starting\` until its code connects, then \`ready\`; \`failed\` says why in \`reason\`. A call to one still
 starting waits for it (30 s in all). Exit 5: not running, or no such command; 4: still starting or no answer in time;
 2: it runs twice and you did not say which (\`--tile\`); 1: it failed or refused, in its own words.
+\`hive ctl tile look <tile> --json\` shows a tile as the person sees it: a PNG path, its plugin's state and console.
+Writing one: \`hive plugins new tool|widget|view <name>\` starts it, with a PROMPT.md that has the whole guide.
 
 ## Beyond the canvas
 Each has \`--help\` with its exact options; read it before you run one.
@@ -362,7 +364,7 @@ Each has \`--help\` with its exact options; read it before you run one.
 - \`hive machine\` · \`hive run -- <cmd>\` · \`hive ps\` · \`hive attach\` · \`hive kill\`: saved ssh machines and terminal sessions that outlive the app.
 - \`hive host\`: this machine as an always-on host of its workspaces, with no desktop.
 - \`hive push set|test\`: phone notifications when an agent here needs the person.
-- \`hive agents\` · \`hive widgets\` · \`hive tools\` · \`hive views\` · \`hive config\` · \`hive theme\` · \`hive upgrade\`.
+- \`hive agents\` · \`hive plugins\` · \`hive config\` · \`hive theme\` · \`hive upgrade\`.
 
 Ask the person before anything that lets someone in, gives a program a token, or changes this computer's network; never type a password for them.
 `;

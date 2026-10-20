@@ -7,7 +7,7 @@ hivemind-view.json   { "id": "@you/my-view", "name": "My view", "version": "0.1.
 index.html           your bundled page (or point `entry` at a .js module)
 ```
 
-Start one with `hive views new <name>`; install it with `hive views install <dir>` and it
+Start one with `hive plugins new view <name>`; install it with `hive plugins install <dir>` and it
 appears in the app's view switcher.
 The page runs in a sandboxed iframe on its own origin — no filesystem, network,
 or app API — and talks to hivemind through this client:
@@ -103,5 +103,5 @@ widgets, drawn and pressed) in [the published plugins](https://github.com/dip497
 
 This is not an npm package. The app builds it into itself and serves it to every view at
 `/__sdk.js`, with an import map that resolves `@hivemind/view-sdk` there — so a view leaves it
-out of its bundle and always gets the SDK of the app it runs in. `hive views new` gives a view
+out of its bundle and always gets the SDK of the app it runs in. `hive plugins new view` gives a view
 this source as its types.

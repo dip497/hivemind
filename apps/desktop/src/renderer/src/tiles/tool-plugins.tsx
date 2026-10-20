@@ -95,9 +95,11 @@ function register(pkg: ToolPackage, off: Set<string>): void {
   const tools = pkg.tools.filter((t) => t.tileKind && !off.has(t.key));
   if (!tools.length) return;
   const body = async () => {
-    const [{ ToolTile }, module] = await Promise.all([import("./tool-tile"), loadToolModule(pkg)]);
-    const tiles = module.tiles as Record<string, ComponentType<TileProps>>;
-    return { default: ({ data, selected }: TileBodyArgs<ToolTileData>) => <ToolTile data={data} selected={selected} Draw={tiles[data.kind]!} /> };
+    const { ToolTile } = await import("./tool-tile");
+    // Code that does not load is a tile that failed, listed with why, not a crash nothing can see.
+    const loaded = await loadToolModule(pkg).then((m) => ({ tiles: m.tiles as Record<string, ComponentType<TileProps>> }), (e: unknown) => ({ failed: e instanceof Error ? e.message : String(e) }));
+    if ("failed" in loaded) return { default: ({ data, selected }: TileBodyArgs<ToolTileData>) => <ToolTile data={data} selected={selected} failed={loaded.failed} /> };
+    return { default: ({ data, selected }: TileBodyArgs<ToolTileData>) => <ToolTile data={data} selected={selected} Draw={loaded.tiles[data.kind]!} /> };
   };
   registerTile<ToolTileData>({
     surface: surfaceOf(pkg.id),

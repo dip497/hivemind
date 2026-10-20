@@ -11,7 +11,7 @@ import { usePluginLink } from "../workspace/plugin-link";
 import { WorkspacePropsContext } from "../workspace/workspace-props";
 import type { WorkspaceViewProps } from "../workspace/workspace-view";
 import { bridgeClient } from "./widget-hm";
-import { postToWidget, setWidgetBridge, useRunningWidgets } from "./widget-runtime";
+import { postToWidget, setWidgetBridge, setWidgetFail, useRunningWidgets } from "./widget-runtime";
 
 export function WidgetLinks() {
   const props = useContext(WorkspacePropsContext);
@@ -22,7 +22,7 @@ export function WidgetLinks() {
 
 function WidgetLink({ id, pkg, props }: { id: string; pkg: WidgetPackage; props: WorkspaceViewProps }) {
   const root = useRef<HTMLElement | null>(null);
-  const { link, dialogs } = usePluginLink({
+  const { link, dialogs, fail } = usePluginLink({
     pluginId: pkg.id, record: { kind: "widget", id: pkg.id }, name: pkg.name,
     capabilities: pkg.permissions as ViewPermission[], fields: [], layoutId: `widget:${id}`,
     props, root, onDisable: (reason) => console.warn(`[widget ${pkg.id}] its hive.hm stopped: ${reason}`),
@@ -44,5 +44,6 @@ function WidgetLink({ id, pkg, props }: { id: string; pkg: WidgetPackage; props:
     target.dispatchEvent(new MessageEvent("message", { data: { type: PORT_HANDSHAKE }, ports: [ch.port2] }));
     return () => { live = false; off(); };
   }, [link, id, pkg.id]);
+  useEffect(() => { setWidgetFail(id, fail); return () => setWidgetFail(id, null); }, [id, fail]);
   return <>{dialogs}</>;
 }

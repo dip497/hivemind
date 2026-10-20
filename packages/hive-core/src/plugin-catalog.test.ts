@@ -55,13 +55,13 @@ describe("reading the index", () => {
     expect(() => parseCatalog({ version: 1, plugins: [{ ...widget, id: "pet" }] })).toThrow(/a widget id — it must be @owner\/name/);
   });
 
-  test("a tool is listed under the id the app gives it, owner/name with no @", () => {
-    const tool = { id: "dip497/worktrees", type: "tool", name: "Worktrees", description: "d", author: "dip497", version: "1.0.0", path: "tools/worktrees", files: [{ path: "index.js", sha256: "0".repeat(64) }] };
-    expect(parseCatalog({ version: 1, plugins: [tool] }).map((e) => `${e.type}:${e.id}`)).toEqual(["tool:dip497/worktrees"]);
+  test("a tool is listed under its @owner/name, as every plugin is", () => {
+    const tool = { id: "@dip497/worktrees", type: "tool", name: "Worktrees", description: "d", author: "dip497", version: "1.0.0", path: "tools/worktrees", files: [{ path: "index.js", sha256: "0".repeat(64) }] };
+    expect(parseCatalog({ version: 1, plugins: [tool] }).map((e) => `${e.type}:${e.id}`)).toEqual(["tool:@dip497/worktrees"]);
     const bad = (id: string) => () => parseCatalog({ version: 1, plugins: [{ ...tool, id }] });
-    expect(bad("@dip497/worktrees")).toThrow(/a tool id — it must be owner\/name/);
+    expect(bad("dip497/worktrees")).toThrow(/a tool id — it must be @owner\/name/);
     // Its folder on disk is owner--name, so a `--` in the id could stand for two tools.
-    expect(bad("dip497/work--trees")).toThrow(/a tool id/);
+    expect(bad("@dip497/work--trees")).toThrow(/a tool id/);
   });
 
   test("each entry has the category its manifest gave it: other when it gave none the app knows, agents for an agent", () => {
@@ -69,13 +69,13 @@ describe("reading the index", () => {
     const listed = parseCatalog({ version: 1, plugins: [
       { ...base, id: "@a/git-graph", type: "view", path: "views/g", category: "git" },
       { ...base, id: "@a/pet", type: "widget", path: "widgets/p", category: "fun" },
-      { ...base, id: "dip497/ports", type: "tool", path: "tools/p", category: "monitoring" },
+      { ...base, id: "@dip497/ports", type: "tool", path: "tools/p", category: "monitoring" },
       { ...base, id: "@a/none", type: "widget", path: "widgets/n" },
       { ...base, id: "@a/odd", type: "widget", path: "widgets/o", category: "games" },
       { ...base, id: "gemini", type: "agent", path: "agents/gemini" },
     ] });
     expect(listed.map((e) => [e.id, e.category])).toEqual([
-      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
+      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["@dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
     ]);
   });
 });

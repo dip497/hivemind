@@ -73,8 +73,8 @@ if (palette) {
 // A view from a local folder (its dist/) or as published on HiveHub.
 const manifest = path.join(path.resolve(VIEW), "hivemind-view.json");
 const VIEW_ID = fs.existsSync(manifest) ? JSON.parse(fs.readFileSync(manifest, "utf8")).id : VIEW;
-const installed = cli("views", "install", fs.existsSync(manifest) ? path.resolve(VIEW) : VIEW, "--json");
-if (installed.status !== 0) throw new Error(`views install ${VIEW} failed: ${installed.stdout}${installed.stderr}`);
+const installed = cli("plugins", "install", fs.existsSync(manifest) ? path.resolve(VIEW) : VIEW, "--json");
+if (installed.status !== 0) throw new Error(`plugins install ${VIEW} failed: ${installed.stdout}${installed.stderr}`);
 
 // A build elsewhere (HIVEMIND_APP_OUT) keeps a running dev app's out/ untouched.
 const app = await electron.launch({ args: [path.join(APP, process.env.HIVEMIND_APP_OUT ?? "out", "main/index.js"), "--no-sandbox", "--force-device-scale-factor=2"], cwd: repo, env });

@@ -1,7 +1,7 @@
 /**
  * The API a widget's code is given, as the global `hive`: the code that defines it (run before the
  * widget's own, in a worker, by the app's window or by `hive host`), and its type declarations,
- * for an author's editor (`hive widgets new` writes them beside the widget). One owner, so what
+ * for an author's editor (`hive plugins new widget` writes them beside the widget). One owner, so what
  * the declarations say is what runs.
  *
  * What it reads of the workspace and does there is `hive.hm`: the client a view and a tool's tile
@@ -70,7 +70,7 @@ export const WIDGET_PRELUDE = `const hive = (() => {
 `;
 
 /** `hive`'s declarations, as a file an editor reads (`hive.d.ts`). */
-export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Written by \`hive widgets new\`; not loaded at run time.
+export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Written by \`hive plugins new widget\`; not loaded at run time.
 
 /** Something to draw. The app draws it in the theme; a widget never draws pixels itself. */
 type Node =
@@ -186,3 +186,23 @@ interface Hive {
 
 declare const hive: Hive;
 `;
+
+/** Every node type a widget may draw: the \`Node\` above, each drawn by the app. */
+export const WIDGET_NODE_TYPES = ["stack", "row", "text", "number", "meter", "button", "image", "sprite", "input", "textarea", "list"] as const;
+
+/** Why \`tree\` cannot be drawn whole: its first node of a type the app does not draw, or null. */
+export function drawingProblem(tree: unknown, at = "the tree", depth = 0): string | null {
+  if (tree === null || tree === undefined || depth > 8) return null;
+  if (typeof tree !== "object" || Array.isArray(tree)) return `${at} is not a node: write { type: "text", text: "…" }`;
+  const { type, children } = tree as { type?: unknown; children?: unknown };
+  if (!(WIDGET_NODE_TYPES as readonly unknown[]).includes(type)) {
+    return `${at} is ${typeof type === "string" ? `a "${type}"` : "a node with no type"}, which the app does not draw; it draws: ${WIDGET_NODE_TYPES.join(", ")}`;
+  }
+  if (!Array.isArray(children)) return null;
+  for (let i = 0; i < children.length && i < 50; i++) {
+    const why = drawingProblem(children[i], `${at === "the tree" ? "" : `${at}.`}children[${i}]`.replace(/^\./, ""), depth + 1);
+    if (why) return why;
+  }
+  return null;
+}
+

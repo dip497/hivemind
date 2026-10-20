@@ -420,9 +420,9 @@ test("rescan views: asks the renderer to re-read the view packages and returns i
 
 test("tool.open: optional tools default off and recheck activation for every request", async () => {
   let enabled = false;
-  const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: enabled ? ["hivemind/web"] : [], disabledTools: [] }) });
+  const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: enabled ? ["@hivemind/web"] : [], disabledTools: [] }) });
   const { api } = makeDispatch(deps);
-  const open = () => api.openTool(undefined, REPO, "hivemind/web/browser", { url: "about:blank" });
+  const open = () => api.openTool(undefined, REPO, "@hivemind/web/browser", { url: "about:blank" });
   await assert.rejects(open(), { code: "FORBIDDEN" });
   enabled = true;
   const tileId = await open();
@@ -435,20 +435,85 @@ test("tool.open: unknown tools, disabled contributions, invalid URLs and spawn f
   let disabledTools: string[] = [];
   let spawn = true;
   const { deps } = fakeDeps({
-    toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools }),
+    toolsSettings: () => ({ enabledPlugins: ["@hivemind/web"], disabledTools }),
     spawnAllowed: () => spawn,
   });
   const { api } = makeDispatch(deps);
   const open = (tool: string, url?: unknown) => api.openTool(undefined, REPO, tool, { url });
   await assert.rejects(open("unknown/browser"), { code: "UNSUPPORTED" });
   for (const url of ["javascript:alert(1)", "file:///etc/passwd", "broken", 123]) {
-    await assert.rejects(open("hivemind/web/browser", url), { code: "BAD_REQUEST" });
+    await assert.rejects(open("@hivemind/web/browser", url), { code: "BAD_REQUEST" });
   }
-  disabledTools = ["hivemind/web/browser"];
-  await assert.rejects(open("hivemind/web/browser"), { code: "FORBIDDEN" });
+  disabledTools = ["@hivemind/web/browser"];
+  await assert.rejects(open("@hivemind/web/browser"), { code: "FORBIDDEN" });
   disabledTools = []; spawn = false;
-  await assert.rejects(open("hivemind/web/browser"), { code: "RATE_LIMITED" });
+  await assert.rejects(open("@hivemind/web/browser"), { code: "RATE_LIMITED" });
   assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles, [], "no refused request opened a tile");
+});
+
+test("tool.open: a package's id opens its one tool; a package with several is refused with their full ids", async () => {
+  const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: ["@hivemind/web"], disabledTools: [] }) });
+  const { api } = makeDispatch(deps);
+  const tileId = await api.openTool(undefined, REPO, "@hivemind/web", {});
+  assert.equal(deps.workspaces.getCore(REPO)?.tiles.find((t) => t.id === tileId)?.kind, "browser");
+  await assert.rejects(api.openTool(undefined, REPO, "@hivemind/issues", {}), (e: { code?: string; message?: string }) =>
+    e.code === "BAD_REQUEST" && /hivemind\/issues\/issues/.test(e.message ?? "") && /hivemind\/issues\/plan-review/.test(e.message ?? ""));
+});
+
+test("tool.open: a one-of-a-kind tool opened again brings its tile forward instead of opening another", async () => {
+  const focused: unknown[] = [];
+  const { deps } = fakeDeps({ callRenderer: async (m: string, p: unknown) => { if (m === "tile.focus") focused.push(p); } });
+  const { api } = makeDispatch(deps);
+  const first = await api.openTool(undefined, REPO, "@hivemind/issues/issues", {});
+  assert.equal(await api.openTool(undefined, REPO, "@hivemind/issues/issues", {}), first);
+  assert.deepEqual(deps.workspaces.getCore(REPO)?.tiles.map((t) => t.id), [first]);
+  assert.deepEqual(focused, [{ tileId: first }]);
+});
+
+test("plugin open by the id alone: a tool's id opens its tile; any other id is the window's to find", async () => {
+  const asked: unknown[] = [];
+  const { deps } = fakeDeps({
+    toolsSettings: () => ({ enabledPlugins: ["@hivemind/web"], disabledTools: [] }),
+    callRenderer: async (m: string, p: unknown) => { asked.push([m, p]); return {}; },
+  });
+  const { api } = makeDispatch(deps);
+  const opened = await api.pluginOpen(undefined, "@hivemind/web", undefined) as { tile: string };
+  assert.equal(deps.workspaces.getCore(REPO)?.tiles.find((t) => t.id === opened.tile)?.kind, "browser");
+  await api.pluginOpen(undefined, "@me/progress", undefined);
+  assert.deepEqual(asked.at(-1), ["plugin.open", { kind: "any", id: "@me/progress" }]);
+});
+
+test("tile.look: the window's box for the tile is what is pictured, and its state and console come back with the picture", async () => {
+  const shot: unknown[] = [];
+  const seen = { tile: "t1", state: "ready", drew: true, console: [{ level: "warn", text: "slow", at: 1 }], rect: { x: 10, y: 20, width: 300, height: 200 } };
+  const { deps } = fakeDeps({
+    callRenderer: async (m: string, p: unknown) => { assert.deepEqual([m, p], ["tile.look", { tileId: "t1" }]); return seen; },
+    captureWindow: async (rect: unknown) => { shot.push(rect); return { png: "iVBOR", width: 300, height: 200 }; },
+  });
+  const { api } = makeDispatch(deps);
+  assert.deepEqual(await api.look("hm:t1"), { tile: "t1", state: "ready", drew: true, console: seen.console, png: "iVBOR", width: 300, height: 200 });
+  assert.deepEqual(shot, [{ x: 10, y: 20, width: 300, height: 200 }]);
+});
+
+test("tile.look: refused where no window shows tiles, and for a tile with no box on the screen", async () => {
+  const headless = makeDispatch(fakeDeps({ callRenderer: async () => ({}) }).deps).api;
+  await assert.rejects(headless.look("t1"), { code: "UNSUPPORTED" });
+  const hidden = makeDispatch(fakeDeps({
+    callRenderer: async () => ({ tile: "t1", state: null, drew: true, console: [], rect: { x: 0, y: 0, width: 0, height: 0 } }),
+    captureWindow: async () => { throw new Error("no picture of nothing"); },
+  }).deps).api;
+  await assert.rejects(hidden.look("t1"), { code: "FAILED" });
+});
+
+test("tool.open: --state is the new tile's saved state before it first draws; what is not a small JSON object is refused", async () => {
+  const { deps } = fakeDeps({ toolsSettings: () => ({ enabledPlugins: ["@hivemind/web"], disabledTools: [] }) });
+  const { api } = makeDispatch(deps);
+  const tile = await api.openTool(undefined, REPO, "@hivemind/web/browser", { state: { tab: "logs", line: 42 } });
+  assert.deepEqual(deps.workspaces.getView(REPO, `tile:${tile}`), { v: 1, data: { tab: "logs", line: 42 } });
+  for (const state of [["a"], "text", { big: "x".repeat(70 * 1024) }]) {
+    await assert.rejects(api.openTool(undefined, REPO, "@hivemind/web/browser", { state }), { code: "BAD_REQUEST" });
+  }
+  assert.equal(deps.workspaces.getCore(REPO)?.tiles.length, 1, "no refused request opened a tile");
 });
 
 /** One JSON-RPC connection: `call` waits for its reply; notifications collect in `notes`. */

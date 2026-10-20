@@ -9,15 +9,15 @@ A <Tooltip tip="A plugin that adds a kind of tile, such as a pull request panel.
 Build a Hivemind tool plugin, a new kind of tile drawn by React code inside the app, and, if I want, publish it on HiveHub.
 
 1. Ask me what the tile should show and do, and its name (lowercase letters, digits and dashes).
-2. Start it: \`hive tools new <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`hivemind-tool.json\`, \`index.js\`, \`README.md\` and \`PROMPT.md\`.
+2. Start it: \`hive plugins new tool <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`hivemind-tool.json\`, \`index.js\`, \`README.md\` and \`PROMPT.md\`.
 3. Read \`PROMPT.md\` in full: it is the whole contract (manifest, what a tile gets, the \`hm-plugin://host/\` modules, commands). Write what I asked for under its "What I want". Build only from it; never use \`window.hive\`.
-4. Install it, again after each change: \`hive tools install <folder>\`. A tool runs with my access, so it arrives switched off. Ask me before you switch it on with \`hive plugins enable tool:owner/name\`.
-5. Open it: \`hive ctl plugin open tool:owner/name\`. Check the tile opens with no error.
-6. Give it one command in the manifest's "commands", answered with \`hm.onCommand\`, that reports what the tile shows. Check it with \`hive ctl plugin call owner/name <command>\`.
+4. Check it, then install it, again after each change: \`hive plugins check <folder>\` must say ok (it names the file and line of each problem), then \`hive plugins install <folder>\`. A tool runs with my access, so new or changed code arrives switched off; the same code stays as it was. Ask me before you switch it on with \`hive plugins enable tool:@owner/name\`.
+5. Open it: \`hive ctl open-tool @owner/name\`. Look at it with \`hive ctl tile look <tile>\`: check the picture shows what I asked for and its console has no error.
+6. Give it one command in the manifest's "commands", answered with \`hm.onCommand\`, that reports what the tile shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, the manifest has a one-line description, a "category" and only the permissions it uses, and \`README.md\` says what it does and what it runs.
 8. Publish only if I say so. Follow the "Publish to HiveHub" page: push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
 
-At the end, tell me the tool's id, the command that installs it (\`hive tools install owner/name\`), and anything you could not check.
+At the end, tell me the tool's id, the command that installs it (\`hive plugins install @owner/name\`), and anything you could not check.
 `}</AgentPrompt>
 
 <Frame caption="A tool's tile on the canvas: Flaky tests runs the tests eight times and marks the ones that fail only sometimes">
@@ -38,19 +38,19 @@ loads.
 1. Install a tool from HiveHub:
 
    ```bash
-   hive tools install dip497/worktrees
+   hive plugins install @dip497/worktrees
    ```
 
-   Check: it prints `installed dip497/worktrees` and says it is off.
+   Check: it prints `installed @dip497/worktrees` and says it is off.
 2. Switch it on:
 
    ```bash
-   hive plugins enable tool:dip497/worktrees
+   hive plugins enable tool:@dip497/worktrees
    ```
 3. Open its tile:
 
    ```bash
-   hive ctl plugin open tool:dip497/worktrees
+   hive ctl plugin open tool:@dip497/worktrees
    ```
 
    Check: a tile opens that lists every git worktree of the project.
@@ -77,21 +77,21 @@ Every tool on HiveHub is listed on the **HiveHub** tab; pick **Tools** to see on
 <Steps>
   <Step title="Start the tool">
     ```bash
-    hive tools new branch
+    hive plugins new tool branch
     ```
 
-    Check: it prints `started <your login>/branch`. If it asks whose it is, add
+    Check: it prints `started tool plugin @<your login>/branch`. If it asks whose it is, add
     `--owner <your GitHub login>`.
   </Step>
   <Step title="Install it and switch it on">
     ```bash
-    cd branch && hive tools install . && hive plugins enable tool:<your login>/branch
+    cd branch && hive plugins install . && hive plugins enable tool:@<your login>/branch
     ```
 
-    Check: `hive plugins list` shows `tool:<your login>/branch` as on.
+    Check: `hive plugins list` shows `tool:@<your login>/branch` as on.
   </Step>
   <Step title="Open its tile">
-    Open it from the frame's **Open** menu, or run `hive ctl plugin open tool:<your login>/branch`.
+    Open it from the frame's **Open** menu, or run `hive ctl open-tool @<your login>/branch`.
 
     Check: a tile shows **Branch:** and the project's current git branch, with a **Refresh** button.
   </Step>
@@ -127,7 +127,8 @@ Every tool on HiveHub is listed on the **HiveHub** tab; pick **Tools** to see on
     const refresh = () => host.run("git", ["log", "-1", "--format=%D: %s"]).then((r) => setBranch(r.stdout.trim()));
     ```
 
-    Install it again with `hive tools install .`, then press **Refresh** in the tile.
+    Install it again with `hive plugins install .`. Changed code arrives switched off, so switch it
+    on again with `hive plugins enable tool:@<your login>/branch`, then press **Refresh** in the tile.
 
     Check: the tile shows the branch and the last commit's subject.
   </Step>
@@ -154,7 +155,7 @@ Next: [Publish to HiveHub](/publish-to-hivehub).
 
 ```json hivemind-tool.json
 {
-  "id": "acme/prs",
+  "id": "@acme/prs",
   "name": "Pull requests",
   "version": "1.0.0",
   "apiVersion": 1,
@@ -177,7 +178,7 @@ Next: [Publish to HiveHub](/publish-to-hivehub).
 
 | Field | Means |
 |---|---|
-| `id` | `owner/name`; `hivemind/` is kept for the app's own |
+| `id` | `@owner/name`; `@hivemind/` is kept for the app's own |
 | `tools[]` | one entry per kind of tile. `needsRepo` hides it in a frame with no repository. `singleton` focuses the open one instead of opening another. |
 | `icon` | an `.svg` in the folder (32 KB at most); without one, `glyph` is shown |
 | `permissions`, `settings` | the same as a view's ([Write a view](/extension-authoring#permissions)) |
@@ -190,18 +191,93 @@ Next: [Publish to HiveHub](/publish-to-hivehub).
 |---|---|
 | `tile` | `{ id, kind, name, frameId }` |
 | `hm` | the client a view has (`@hivemind/view-sdk`): frames, tiles, agents' status and events, commands, its settings, and its saved state, kept per tile (`hm.hello.layout`, `hm.setLayout`). Each is held to the permissions the manifest declares. |
-| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (a program on PATH, in the tile's folder, without a shell), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser |
+| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (see [Running programs](#running-programs)), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser |
 | `selected` | it has the person's focus |
 
 A tile imports the app's own React and parts from `hm-plugin://host/`: `react.js`,
 `react-jsx-runtime.js`, `sdk.js` and `ui.js`. It bundles none of them.
 
-`sdk.js` has `Button`, `PatchView` (a diff), `Markdown`, `Loading` and
-`useTileState(hm, key, initial)`, which keeps a value with the tile across restarts. `ui.js` is the
+`sdk.js` has `Button`, `PatchView` (a diff), `Markdown`, `Loading`, `Frame` (a page from a server
+on this machine) and `useTileState(hm, key, initial)`, which keeps a value with the tile across
+restarts. `ui.js` is the
 app's whole UI kit (`Button`, `Input`, `Dialog…`, `DropdownMenu…`, `Switch`, `toast`, …). The
 built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the fullest example.
 
 Reach the app only through these, never `window.hive`.
+
+### Ids, opening and reinstalling
+
+A tool package's id is `@owner/name`. Each tool in it has a full id, `@owner/name/<key>`:
+`hive plugins list --kind tool` prints it.
+
+```bash
+hive ctl open-tool @acme/prs                       # the package's tool, when it has one
+hive ctl open-tool @acme/prs/prs                   # by its full id; needed when it has several
+hive ctl open-tool @acme/prs --state '{"tab":"open"}'   # the tile's first state
+```
+
+`--state` is a JSON object: each key is what `useTileState(hm, key, initial)` reads when the tile
+first draws.
+
+Installing a tool again with the same code, byte for byte, keeps it on or off as it was. Changed
+code is switched off, since turning it on trusted the code that was there: switch it on again
+with `hive plugins enable tool:<id>`. The install says which.
+
+### Running programs
+
+`host.run(bin, args, { maxAgeMs, stdin })` runs a program and answers `{ code, stdout, stderr }`.
+
+- `bin` is a program's name, found on the app's `PATH`, which comes from your login shell. A
+  folder on `PATH` inside the tile's own folder is skipped.
+- It runs in the tile's folder, without a shell: `args` reach it as they are, with no globs or
+  pipes. On Windows a `.cmd` or `.bat` shim is refused, since only a shell can run one.
+- It is stopped after 60 seconds, and when it writes more than 10 MB.
+- `maxAgeMs` (up to 5 minutes) answers the same call from a cache while it is that fresh.
+- `stdin` is text written to its input.
+
+### Show a server on this machine
+
+A tool can show a page its own local server serves, such as a dev server or a dashboard. Use
+`Frame` from `sdk.js`:
+
+```js
+import { Frame } from "hm-plugin://host/sdk.js";
+
+h(Frame, { src: "http://127.0.0.1:5173/", title: "Dev server" });
+```
+
+Only `http://127.0.0.1:<port>` and `http://localhost:<port>` can be shown; any other address is
+blocked, and the tile stops and says so. `Frame` runs the page's scripts, forms and popups, and
+never lets it move the app's window.
+
+### Look at it, and see what broke
+
+```bash
+hive ctl tile look <tile> --json   # a picture of the tile, its state and its console
+hive ctl plugin list --json        # each plugin's state: starting, ready or failed, with why
+```
+
+`tile look` brings the tile into view, waits until its code has drawn, and saves a PNG of it. It
+answers the tool's state, whether it drew, and the last 100 lines its code wrote to the console.
+When something is drawn over the tile, such as a pinned tile, a dialog or a notification, it
+refuses with `OCCLUDED` and names it; move it, or wait for the notification, and look again.
+
+When the tool's code throws an error nothing catches, a promise of its fails unheard, or the app
+blocks something it loads, its tile stops and shows why, and `plugin list` reads it as `failed`
+with that reason.
+
+### Pointer and keys in a tile
+
+What the canvas does with input over a tool's tile, so your tile can count on it:
+
+| Input | What happens |
+|---|---|
+| Left click and drag | Yours. The tile moves only by the bar the app draws on it. |
+| Right click | Yours: `contextmenu` reaches your tile, and the app shows no menu of its own. On a tile that is not selected, dragging with the right button pans the canvas instead. |
+| Middle button | Pans the canvas, always. Your tile does not see it. |
+| Wheel | Yours first. When the tile is not selected and nothing under the pointer scrolls, it also pans the canvas. Ctrl or ⌘ with the wheel zooms the canvas and never reaches your tile. |
+| Keys | Yours while focus is in your tile, but for the app's own shortcuts (such as Ctrl+Tab, Ctrl+1 to 9 and Ctrl+,), which the app takes first. |
+| Cursor | Yours: set `cursor` on any element you draw, inside a shadow root too. Where you set none, it is the normal pointer. |
 
 ### Commands agents can run
 
@@ -215,7 +291,7 @@ Declare them in `hivemind-tool.json`, and answer them in the tile:
 useEffect(() => hm.onCommand("list", () => trees), [hm, trees]);
 ```
 
-`hive ctl plugin call dip497/worktrees list` prints what the handler returns. It works while a tile
+`hive ctl plugin call @dip497/worktrees list` prints what the handler returns. It works while a tile
 of the tool is open. With two open, name one with `--tile`.
 
 ### A service that keeps running
@@ -249,9 +325,12 @@ computer of the person looking at it.
 ### Commands
 
 ```bash
-hive tools list                         # what each tool adds: tiles and commands
-hive tools install <folder>|owner/name  # added off: hive plugins enable tool:<owner>/<name>
-hive tools remove <owner>/<name>
+hive plugins new tool <name> [--dir folder]   # a starter, with PROMPT.md and its types
+hive plugins check <folder>                    # its types, its manifest, and each tile drawn once, with file:line
+hive plugins api --kind tool                   # tile, host and hm, as declared
+hive plugins install <folder>|@owner/name       # new or changed code off: hive plugins enable @owner/name
+hive plugins list --kind tool                  # each tool, and the full id of each of its tiles
+hive plugins remove @owner/name
 ```
 
 <LastValidated />

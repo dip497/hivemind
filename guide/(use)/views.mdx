@@ -12,11 +12,11 @@ Install a Hivemind view from HiveHub and make sure it loads.
 
 1. Check Hivemind is installed: \`hive --version\` prints a version.
 2. Ask me which view I want. Offer these, all on HiveHub: @dip497/constellation (agents in 3D), @dip497/timeline (today's work per agent), @dip497/agents-by-state, @dip497/workspace-map, @dip497/agent-board (notes agents pin).
-3. Install it: \`hive views install <id>\`.
-4. Check: \`hive views list\` shows it with no load error. If it shows an error, tell me the error word for word.
+3. Install it: \`hive plugins install <id>\`.
+4. Check: \`hive plugins list --kind view\` shows it with no load error. If it shows an error, tell me the error word for word.
 5. Tell me to switch to it in the app with ⌘E / Ctrl+E.
 
-At the end, say which view was installed and that \`hive views remove <id>\` removes it.
+At the end, say which view was installed and that \`hive plugins remove <id>\` removes it.
 `}</AgentPrompt>
 
 ## Switch views
@@ -54,8 +54,8 @@ A Browser tile reloads its page once each time you switch views. Its tabs and hi
     3. Check: press ⌘E / Ctrl+E and the view is in the list.
   </Tab>
   <Tab title="In a terminal">
-    1. Run `hive views install @dip497/timeline`.
-    2. Check: `hive views list` shows it with no load error.
+    1. Run `hive plugins install @dip497/timeline`.
+    2. Check: `hive plugins list --kind view` shows it with no load error.
   </Tab>
 </Tabs>
 
@@ -69,7 +69,7 @@ These views are on [HiveHub](https://hivehub.griiken.workers.dev/), as `@dip497/
 
 A view cannot read your files or use the network. It sees only what its permissions allow. The
 app switches it off for the session if it misbehaves. To remove one, run
-`hive views remove <id>`. To write your own, see [Write a view](/extension-authoring).
+`hive plugins remove <id>`. To write your own, see [Write a view](/extension-authoring).
 
 ## Set the toolbar
 
@@ -82,7 +82,7 @@ panel.
 
 | You see | Do |
 |---|---|
-| The view is missing from the switch | Run `hive views list` and read its load error. |
+| The view is missing from the switch | Run `hive plugins list --kind view` and read its load error. |
 | The view shows nothing | It may need a permission. Open its page in **Settings → Plugins**. |
 
 ## Related

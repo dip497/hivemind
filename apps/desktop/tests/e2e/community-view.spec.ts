@@ -1,10 +1,10 @@
-// Community views end to end (design doc phase 4): `hive views install` of the
+// Community views end to end (design doc phase 4): `hive plugins install` of the
 // tile-list fixture view → it appears in the switcher and the ⌘E cycle → its
 // sandboxed iframe sees no privileged API → clicking a tile's row docks the LIVE
 // terminal through the hole-punch and typed keys arrive → a flooding plugin
 // and a CPU-burning plugin are disabled and the canvas comes back with every
 // session intact → a package asking for an unknown permission is refused at
-// load → `hive views remove` takes the view out of the switcher.
+// load → `hive plugins remove` takes the view out of the switcher.
 //
 // The XDG profile is per run (playwright.config.ts), so the views dir starts
 // empty; the CLI runs as a real subprocess exactly as a user would call it.
@@ -32,7 +32,7 @@ const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
 const viewsDir = () => path.join(XDG, "hivemind", "views");
 
 /** The app's control-plane socket + token (isolated userData under this run's XDG);
- *  set once the app is up so `hive views install|remove` can ask it to rescan. */
+ *  set once the app is up so `hive plugins install|remove` can ask it to rescan. */
 let hcpEnv: Record<string, string> = {};
 /** `hive … --json` as a subprocess; non-zero exits are part of the contract (parsed, not thrown). */
 const hive = (...args: string[]) => {
@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  const installed = hive("views", "install", TILE_LIST_DIR);
+  const installed = hive("plugins", "install", TILE_LIST_DIR);
   expect(installed.ok).toBe(true);
   expect(installed.data.dir).toBe(path.join(viewsDir(), "tile-list"));
   app = await electron.launch({
@@ -95,7 +95,7 @@ test("an installed view is registered after the app's own: ⌘E cycles canvas �
   // leaves the next test on the wrong view.
   for (let i = 0; i < 3; i++) { await toggleView(); await page.waitForTimeout(150); seen.push((await activeView())!); }
   expect(seen).toEqual(["windows", "tile-list", "canvas"]);
-  expect(hive("views", "list").data.map((v: { id: string; error: string | null }) => [v.id, v.error])).toEqual([["tile-list", null]]);
+  expect(hive("plugins", "list", "--kind", "view").data.map((v: { id: string; problem: string | null }) => [v.id, v.problem])).toEqual([["tile-list", null]]);
 });
 
 test("a view's frame is see-through where no pane covers it: the dark app shows, not white", async () => {
@@ -169,11 +169,11 @@ test("click a tile's row: the LIVE terminal docks through the hole-punch, typed 
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
 });
 
-test("`hive views install` while the app runs: the CLI asks the app to rescan and the view appears without a restart", async () => {
+test("`hive plugins install` while the app runs: the CLI asks the app to rescan and the view appears without a restart", async () => {
   // The spec's own XDG profile holds the HCP socket the app opened, so the
   // CLI reaches it exactly as a user's shell would.
   for (const id of ["hostile-flood", "hostile-loop"]) {
-    const r = hive("views", "install", path.join(FIXTURES, id));
+    const r = hive("plugins", "install", path.join(FIXTURES, id));
     expect(r.ok).toBe(true);
     expect(r.data.rescanned).toBe(true);
   }
@@ -217,7 +217,7 @@ test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes 
 });
 
 test("a package asking for an unknown permission is refused by install AND by the loader", async () => {
-  const r = hive("views", "install", path.join(FIXTURES, "greedy"));
+  const r = hive("plugins", "install", path.join(FIXTURES, "greedy"));
   expect(r).toMatchObject({ ok: false, code: "invalid_view" });
   expect(r.error).toMatch(/unknown permission "fs:read"/);
   // Dropped into the views dir by hand (bypassing the CLI) it is still refused at load.
@@ -225,18 +225,18 @@ test("a package asking for an unknown permission is refused by install AND by th
   await reloadViews();
   await expect.poll(async () => (await report()).refused["greedy"]).toMatch(/unknown permission "fs:read"/);
   expect((await report()).registered).toEqual(["windows", "tile-list"]);
-  expect(hive("views", "list").data.find((v: { id: string }) => v.id === "greedy").error).toMatch(/unknown permission/);
+  expect(hive("plugins", "list", "--kind", "view").data.find((v: { id: string }) => v.id === "greedy").problem).toMatch(/unknown permission/);
 });
 
-test("`hive views remove` of the ACTIVE view: the app rescans, the switcher drops it, the canvas is shown", async () => {
+test("`hive plugins remove` of the ACTIVE view: the app rescans, the switcher drops it, the canvas is shown", async () => {
   await toView("tile-list");
   await page.waitForSelector(tileListReady, { timeout: 15_000 });
-  const r = hive("views", "remove", "tile-list");
+  const r = hive("plugins", "remove", "tile-list");
   expect(r.ok).toBe(true);
   expect(r.data.rescanned).toBe(true);
   // No reloadViews(): the CLI's rescan did it.
   await expect.poll(async () => (await report()).registered).toEqual(["windows"]);
   await expect.poll(activeView).toBe("canvas");
   await expect(page.locator(".xterm")).toHaveCount(1);
-  expect(hive("views", "list").data.map((v: { id: string }) => v.id)).toEqual(["greedy", "hostile-flood", "hostile-loop"]);
+  expect(hive("plugins", "list", "--kind", "view").data.map((v: { id: string }) => v.id)).toEqual(["greedy", "hostile-flood", "hostile-loop"]);
 });

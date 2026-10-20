@@ -75,8 +75,7 @@ Agents, views, widgets and tools are not in this repository. They live in
 - **A new agent:** `agents/<id>/agent.yaml` in
   [dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins). The format is
   `packages/hive-agents/src/manifest.ts`.
-- **A new view:** `hive views new <name>`. **A new widget:** `hive widgets new <name>`. **A new
-  tool:** `hive tools new <name>`.
+- **A new view, widget or tool:** `hive plugins new view|widget|tool <name>`.
 - **CLI changes:** `apps/cli/src/commands/`. Keep argument shaping in helpers you can test.
 - **File formats:** zod schemas in `packages/hive-core`.
 
