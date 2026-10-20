@@ -20,17 +20,23 @@ export { WorkspacePropsContext } from "../workspace/workspace-props";
 
 // ── what is installed ─────────────────────────────────────────────────────────
 
-type Installed = { packages: ToolPackage[]; safeMode: boolean; loaded: boolean };
-let installed: Installed = { packages: [], safeMode: false, loaded: false };
+/** `error` is why the last read of what is installed failed; `packages` is then the list before it. */
+type Installed = { packages: ToolPackage[]; safeMode: boolean; loaded: boolean; error: string | null };
+let installed: Installed = { packages: [], safeMode: false, loaded: false, error: null };
 /** Bumped on every reinstall, so a plugin's module is imported afresh. */
 let generation = 0;
 const listeners = new Set<() => void>();
 const set = (next: Installed) => { installed = next; for (const l of listeners) l(); };
 
 async function reload(): Promise<void> {
-  const r = await window.hive.toolPackages().catch(() => ({ packages: [] as ToolPackage[], safeMode: false }));
-  generation++;
-  set({ ...r, loaded: true });
+  try {
+    const r = await window.hive.toolPackages();
+    generation++;
+    set({ ...r, loaded: true, error: null });
+  } catch (e) {
+    // An empty list would take every tool's tiles off the board.
+    set({ ...installed, error: `The tool plugins installed here could not be read: ${e instanceof Error ? e.message : String(e)}` });
+  }
 }
 let started = false;
 function start() {
@@ -43,7 +49,7 @@ function start() {
 /** The tool plugins installed here, now, outside React. */
 export const getToolPackages = (): readonly ToolPackage[] => installed.packages;
 
-/** The tool plugins installed here, and whether the app started in safe mode. */
+/** The tool plugins installed here, whether the app started in safe mode, and why the last read failed. */
 export function useToolPackages(): Installed {
   start();
   return useSyncExternalStore((l) => { listeners.add(l); return () => { listeners.delete(l); }; }, () => installed);

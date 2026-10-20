@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- `hive plugins install`, `remove` and `rollback` say "app not running" only when it is not; when the app fails to load the plugin they show its error, and the new `hive plugins reload` asks it again.
+- When the app cannot read the tool plugins installed here, their tiles stay as they were instead of all showing "not installed", and Settings → Plugins → Tools says why.
 - Terminals and agents slow to start, as when the app comes back after an update with many open, now open instead of saying they are not running on their machine.
 
 ## [2026.10.4] — 2026-10-20
