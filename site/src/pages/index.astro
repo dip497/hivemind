@@ -652,10 +652,10 @@ const code: Record<string, [string, string][]> = {
   .b-k{font:500 11px/1 var(--f-m);letter-spacing:.1em;text-transform:uppercase;color:var(--fg3);flex:none}
   .b-steps{grid-row:span 2;padding:24px;display:grid;align-content:start;gap:18px}
   .b-steps ol{list-style:none;margin:0;padding:0;display:grid;gap:16px;counter-reset:s}
-  .b-steps li{display:grid;gap:4px;color:var(--fg);font-size:15px;line-height:1.45;padding-left:28px;position:relative;counter-increment:s}
+  .b-steps li{color:var(--fg);font-size:15px;line-height:1.45;padding-left:28px;position:relative;counter-increment:s}
   .b-steps li::before{content:counter(s);position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;
     border:1px solid var(--line2);font:500 11px/17px var(--f-m);text-align:center;color:var(--fg3)}
-  .b-steps li span{font:500 11px/1 var(--f-m);letter-spacing:.08em;text-transform:uppercase;color:var(--fg3)}
+  .b-steps li span{display:block;margin-bottom:4px;font:500 11px/1 var(--f-m);letter-spacing:.08em;text-transform:uppercase;color:var(--fg3)}
   .b-steps li code{white-space:normal}
   .b-steps a{font-size:14px;margin-top:auto}
   .b-widget{display:grid;place-items:center;padding:18px 18px 44px;aspect-ratio:1/1}
@@ -743,7 +743,9 @@ const code: Record<string, [string, string][]> = {
   @media (max-width:960px){
     .split,.split.rev,.split.views,.faq-wrap{grid-template-columns:minmax(0,1fr);gap:40px}
     .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .b-tool{grid-column:1 / -1;grid-row:auto}
+    .b-tool{grid-column:1 / -1;grid-row:auto;grid-template-rows:auto auto}
+    /* Stacked, the card has no height for a 100% image to fill: Safari then sizes it to the card and it covers the caption. */
+    .b-tool img{height:auto;aspect-ratio:950/340}
     .b-steps{grid-column:1 / -1;grid-row:auto}
     .reach{grid-template-columns:minmax(0,1fr)}
     .r-phone{grid-row:auto}
@@ -779,6 +781,9 @@ const code: Record<string, [string, string][]> = {
     .fan-card[data-pos="3"]{transform:translate(9%,-24%) scale(.865)}
     .vtabs span{display:none}
     .b-copy{flex-direction:column;gap:8px}
+    /* Half-width widget cards: the name sits under its label, clear of the picture. */
+    .b-widget{aspect-ratio:auto;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:14px;padding:18px 16px 16px}
+    .b-name{position:static;align-self:stretch;flex-direction:column;gap:6px}
     .r-phone{grid-template-columns:minmax(0,1fr);padding:24px 24px 0}
     .r-phone .phone{order:2;max-width:240px;justify-self:center;max-height:300px}
     .r-copy{padding-bottom:0}

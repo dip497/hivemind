@@ -212,5 +212,12 @@ const structuredData = {
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
   .qa{margin-top:16px}
   .cmp .sub{margin-top:40px}
-  @media (max-width:640px){ .cmp{padding:36px 16px 0} }
+  @media (max-width:640px){
+    .cmp{padding:36px 16px 0}
+    /* Phones: a narrow sticky label column, so each app's column is wide enough to read. */
+    table{font-size:13px;min-width:0}
+    th,td{padding:10px 12px}
+    tbody th{width:92px;min-width:92px}
+    td,thead th:not(:first-child){min-width:190px}
+  }
 </style>
