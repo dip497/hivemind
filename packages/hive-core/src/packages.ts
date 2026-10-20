@@ -7,59 +7,19 @@
 import { promises as fs, constants, existsSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { z } from "zod";
 import { isSafeRelativePath } from "@hivemind/view-sdk/manifest";
 import { HiveError } from "./storage.js";
-import { label, MEMBER_ID, MEMBER_KINDS, PACKAGE_MANIFEST, type AgentPreset, type CheckedMember } from "./package-kinds.js";
+import { MEMBER_KINDS, type CheckedMember } from "./package-kinds.js";
+import { checkPackageManifest, entriesOf, memberFormat, ownedBy, PACKAGE_MANIFEST, PACKAGE_VERSION, type AgentPreset, type PackageManifest } from "./package-format.js";
 
-export { PACKAGE_MANIFEST } from "./package-kinds.js";
+export { PACKAGE_MANIFEST, type PackageManifest } from "./package-format.js";
 export const PACKAGE_LIMITS = { files: 4096, bytes: 128 * 1024 * 1024, fileBytes: 16 * 1024 * 1024, jsonBytes: 64 * 1024, depth: 16 } as const;
-const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
-const schema = z.strictObject({
-  apiVersion: z.literal(2),
-  id: z.string().regex(MEMBER_ID, "is @owner/name"),
-  name: label,
-  version: z.string().regex(VERSION),
-  /** Plugins of its owner installed on their own, which it takes over with their settings. */
-  replaces: z.array(z.string().regex(MEMBER_ID, "is @owner/name")).max(16).default([]),
-  ...Object.fromEntries(MEMBER_KINDS.map((k) => [k.list, z.array(k.entry).max(k.most).default([])])),
-  startup: z.strictObject({
-    view: z.string().optional(),
-    agents: z.array(z.string()).max(8).default([]),
-    maxConcurrent: z.number().int().min(1).max(4).default(1),
-  }).optional(),
-});
-
-export interface PackageManifest {
-  apiVersion: 2;
-  id: string;
-  name: string;
-  version: string;
-  replaces: string[];
-  startup?: { view?: string; agents: string[]; maxConcurrent: number };
-  /** The members, by the list each kind is named in (`tools`, `widgets`, `views`, `agents`). */
-  [list: string]: unknown;
-}
 export interface PackageProvider { id: string; enabled: boolean; modelFlag: boolean; supervision: string }
 const fail = (message: string): never => { throw new HiveError("invalid_package", message); };
-const listOf = (m: PackageManifest, list: string): unknown[] => (m[list] as unknown[] | undefined) ?? [];
 
 export function parsePackageManifest(raw: unknown): PackageManifest {
-  const result = schema.safeParse(raw);
-  if (!result.success) return fail(result.error.issues.map((e) => `${e.path.join(".") || "manifest"}: ${e.message}`).join("; "));
-  const m = result.data as unknown as PackageManifest;
-  const owner = m.id.slice(0, m.id.indexOf("/"));
-  for (const r of m.replaces) if (!r.startsWith(`${owner}/`)) fail(`replaces: ${r} is not ${owner}'s; a package takes over only its own owner's plugins`);
-  unique(m.replaces, "replaces");
-  if (MEMBER_KINDS.every((k) => !listOf(m, k.list).length)) fail(`package must hold a ${MEMBER_KINDS.map((k) => k.noun).join(", ")}`);
-  for (const k of MEMBER_KINDS) unique(listOf(m, k.list).map((e) => { const x = e as { path?: string; id?: string }; return x.path ?? x.id ?? ""; }), `${k.noun} in ${k.list}`);
-  if (m.startup) {
-    unique(m.startup.agents, "startup agent");
-    const presets = listOf(m, "agents") as AgentPreset[];
-    for (const a of m.startup.agents) if (!presets.some((p) => p.id === a)) fail(`unknown startup agent: ${a}`);
-    if (!m.startup.view && !m.startup.agents.length) fail("startup must select a view or start an agent");
-  }
-  return m;
+  const r = checkPackageManifest(raw);
+  return "problem" in r ? fail(r.problem) : r.manifest;
 }
 function unique(values: string[], what: string) {
   if (new Set(values).size !== values.length) fail(`duplicate ${what}`);
@@ -95,9 +55,9 @@ export async function readPackage(dir: string, given: { id?: string; folder: str
     const owner = m.id.slice(0, m.id.indexOf("/"));
     const members: PackageMemberRead[] = [];
     for (const k of MEMBER_KINDS) {
-      for (const entry of listOf(m, k.list)) {
+      for (const entry of entriesOf(m, k)) {
         const c = await k.check(dir, entry, { folder: path.basename(dir) });
-        if (!c.id.startsWith(`${owner}/`)) fail(`${k.noun} ${c.id} is not ${owner}'s: every member of ${m.id} is ${owner}/<name>`);
+        if (!ownedBy(m.id, c.id)) fail(`${k.noun} ${c.id} is not ${owner}'s: every member of ${m.id} is ${owner}/<name>`);
         members.push({ ...c, kind: k.kind });
       }
     }
@@ -107,7 +67,7 @@ export async function readPackage(dir: string, given: { id?: string; folder: str
   const k = MEMBER_KINDS.find((x) => x.manifest && existsSync(path.join(dir, x.manifest)));
   if (!k) return fail(`it holds no ${[PACKAGE_MANIFEST, ...MEMBER_KINDS.flatMap((x) => x.manifest ?? [])].join(", ")}`);
   const c = await k.check(dir, { path: "." }, given);
-  return { id: c.id, name: c.name, version: c.version && VERSION.test(c.version) ? c.version : "0.0.0", members: [{ ...c, kind: k.kind }], replaces: [], manifest: null };
+  return { id: c.id, name: c.name, version: c.version && PACKAGE_VERSION.test(c.version) ? c.version : "0.0.0", members: [{ ...c, kind: k.kind }], replaces: [], manifest: null };
 }
 
 /** Folders a package never carries: what a build or a checkout leaves beside the plugin. */
@@ -201,7 +161,7 @@ export async function inspectPackage(directory: string, providers: readonly Pack
   if (!data.json.get(PACKAGE_MANIFEST)) fail(`missing ${PACKAGE_MANIFEST}`);
   const read = await readPackage(directory, { folder: path.basename(path.resolve(directory)) });
   const manifest = read.manifest!;
-  const presets = listOf(manifest, "agents") as AgentPreset[];
+  const presets = entriesOf(manifest, memberFormat("agent-preset")!) as AgentPreset[];
   if (manifest.startup?.view && !read.members.some((v) => v.kind === "view" && v.id === manifest.startup!.view)) fail(`unknown startup view: ${manifest.startup.view}`);
   const agents = presets.map((a) => {
     const provider = providers.find((p) => p.id === a.provider && p.enabled);

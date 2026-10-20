@@ -15,6 +15,7 @@ import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
 import { listWidgets, readWidget } from "@hivemind/core/widgets";
 import { installPackage } from "@hivemind/core/package-install";
+import { memberKind } from "@hivemind/core/package-kinds";
 import { widgetsChanged } from "./widgets.js";
 import { listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
 import { toolsChanged } from "./tool-packages.js";
@@ -85,6 +86,7 @@ export function installPluginCatalogIpc(): void {
   let pendingAgent: { token: string; dir: string; id: string } | null = null;
   let pendingWidget: { token: string; dir: string; id: string } | null = null;
   let pendingTool: { token: string; dir: string; id: string } | null = null;
+  let pendingPackage: { token: string; dir: string; id: string } | null = null;
   handle("plugins:catalog", () => catalogNow());
 
   // Which installed agents are no longer what the catalog lists. Agents carry no version of
@@ -138,6 +140,19 @@ export function installPluginCatalogIpc(): void {
           type: "tool", token: pendingTool.token, id: entry.id, name: pkg.name, permissions: pkg.permissions,
           tools: pkg.tools.map((t) => t.label), ...(pkg.service ? { service: pkg.service.command.join(" ") } : {}),
           replacesVersion: had ? had.version ?? "0.0.0" : null,
+        };
+      } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
+    }
+    if (entry.type === "package") {
+      try {
+        // Every member checked as an install checks it, and what would change, with nothing installed.
+        const r = await installPackage(dir, { id: entry.id, dryRun: true });
+        if (pendingPackage) await rm(pendingPackage.dir, { recursive: true, force: true }).catch(() => {});
+        pendingPackage = { token: newNonce(), dir, id: entry.id };
+        return {
+          type: "package", token: pendingPackage.token, id: entry.id, name: r.record.name, version: r.record.version, on: r.record.on,
+          members: r.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, permissions: m.permissions, runs: memberKind(m.kind)?.runs ?? "in the app" })),
+          replacesVersion: r.replaced?.version ?? null, changes: r.changes,
         };
       } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
     }
@@ -213,8 +228,15 @@ export function installPluginCatalogIpc(): void {
     if (!pendingTool || pendingTool.token !== token) throw new Error("Review the tool again before installing it.");
     const { dir, id } = pendingTool;
     pendingTool = null;
-    // It arrives off, an update too: switching it on trusts the code that was there.
+    // It arrives off, and an update with changed code goes off: switching it on trusts that code.
     try { await installPackage(dir, { id }); await reloadSettings(); toolsChanged(); }
+    finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
+  });
+  handleEffect("plugins:install-package", (token) => ({ target: pendingPackage && pendingPackage.token === token ? pendingPackage.id : undefined }), async (_event, token: string) => {
+    if (!pendingPackage || pendingPackage.token !== token) throw new Error("Review the package again before installing it.");
+    const { dir, id } = pendingPackage;
+    pendingPackage = null;
+    try { await installPackage(dir, { id }); await reloadSettings(); widgetsChanged(); toolsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (_event, token: string) => {

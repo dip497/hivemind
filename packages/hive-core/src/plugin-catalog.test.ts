@@ -63,6 +63,18 @@ describe("reading the index", () => {
     // Its folder on disk is owner--name, so a `--` in the id could stand for two tools.
     expect(bad("@dip497/work--trees")).toThrow(/a tool id/);
   });
+
+  test("a package is listed under its @owner/name with what it holds; members belong only to a package", () => {
+    const pkg = {
+      id: "@ada/kit", type: "package", name: "Kit", description: "d", author: "ada", version: "1.0.0", path: "kit", files: [{ path: "hivemind-package.json", sha256: "0".repeat(64) }],
+      members: [{ kind: "view", id: "@ada/island", name: "Island", permissions: ["workspace:issues"] }, { kind: "tool", id: "@ada/prs", name: "PRs", permissions: [] }],
+    };
+    expect(parseCatalog({ version: 1, plugins: [pkg] })[0]).toMatchObject({ type: "package", id: "@ada/kit", members: pkg.members });
+    const bad = (patch: object) => () => parseCatalog({ version: 1, plugins: [{ ...pkg, ...patch }] });
+    expect(bad({ members: [] })).toThrow(/members must list 1-64 members of a package/);
+    expect(bad({ members: [{ kind: "view", id: "island", name: "Island", permissions: [] }] })).toThrow(/members\[0\] needs a kind, an @owner\/name id/);
+    expect(bad({ type: "view", id: "@ada/island" })).toThrow(/members must list 1-64 members of a package/);
+  });
 });
 
 describe("staging a download", () => {

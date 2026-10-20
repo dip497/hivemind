@@ -9,7 +9,8 @@ import path from "node:path";
 import { parseToolManifest, toolOfFolder, type ToolPackage } from "./tool-format.js";
 import { installedMembers } from "./installed-packages.js";
 
-export const TOOL_MANIFEST = "hivemind-tool.json";
+export { TOOL_MANIFEST } from "./tool-format.js";
+import { TOOL_MANIFEST } from "./tool-format.js";
 
 const ICON_MAX = 32 * 1024;
 

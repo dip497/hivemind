@@ -164,6 +164,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     installCatalogAgent: (token) => port.invoke("plugins:install-agent", token),
     installCatalogWidget: (token) => port.invoke("plugins:install-widget", token),
     installCatalogTool: (token) => port.invoke("plugins:install-tool", token),
+    installCatalogPackage: (token) => port.invoke("plugins:install-package", token),
     removeAgent: (id) => port.invoke("agents:remove", id),
     autoInstallAgents: () => port.invoke("agents:auto-install"),
     installViewPackage: (token) => port.invoke("views:install", token),

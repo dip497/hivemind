@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { hive } from "./helpers.js";
 
 let tmp: string;
@@ -91,5 +93,23 @@ describe("hive plugins, packages", () => {
     expect(run("rollback", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { id: "@acme/kit", version: "1.0.0", on: true, from: "2.0.0" } } });
     expect(run("list").stdout).toMatch(/^on \s+view:@acme\/island\s+Island\s+\[@acme\/kit 1\.0\.0\]$/m);
   }, 60_000);
-});
 
+  test("a package listed on HiveHub installs whole by its id, every file checked; a listing whose manifest names another package is refused", () => {
+    const root = kit();
+    const files = (dir: string, rel = ""): string[] => fs.readdirSync(path.join(dir, rel), { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory() ? files(dir, path.join(rel, e.name)) : [path.join(rel, e.name)]));
+    const entry = (id: string) => ({
+      id, type: "package", name: "Kit", description: "A kit.", author: "acme", version: "1.0.0", path: "kit",
+      files: files(root).map((f) => ({ path: f, sha256: createHash("sha256").update(fs.readFileSync(path.join(root, f))).digest("hex") })),
+      members: [{ kind: "widget", id: "@acme/dog", name: "Dog", permissions: [] }],
+    });
+    const index = path.join(tmp, "index.json");
+    fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("@acme/kit"), entry("@acme/other")] }));
+    const hub = (...args: string[]) => hive(["plugins", ...args], { cwd: tmp, env: { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href } });
+
+    expect(hub("install", "@acme/other", "--json")).toMatchObject({ code: 1, json: { ok: false, error: expect.stringContaining("says it is @acme/kit, not @acme/other") } });
+    const got = hub("install", "@acme/kit", "--json");
+    expect(got.json).toMatchObject({ ok: true, data: { id: "@acme/kit", version: "1.0.0" } });
+    expect((got.json as { data: { members: Array<{ kind: string }> } }).data.members.map((m) => m.kind).sort()).toEqual(["agent-preset", "tool", "view", "widget"]);
+  }, 60_000);
+});

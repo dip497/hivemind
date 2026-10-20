@@ -12,8 +12,8 @@ import { TOOL_ID_RE } from "./tool-registry.js";
 
 export const DEFAULT_PLUGIN_INDEX = "https://hivehub.griiken.workers.dev/api/v1/index.json";
 
-export type CatalogType = "agent" | "view" | "widget" | "tool";
-const TYPES: readonly string[] = ["agent", "view", "widget", "tool"];
+export type CatalogType = "agent" | "view" | "widget" | "tool" | "package";
+const TYPES: readonly string[] = ["agent", "view", "widget", "tool", "package"];
 export interface CatalogFile { path: string; sha256: string }
 export interface CatalogEntry {
   id: string;
@@ -37,13 +37,17 @@ export interface CatalogEntry {
    *  mark before anything is downloaded. Bounded here and sanitised where it is drawn —
    *  this module does not know what an icon is, and must not start guessing. */
   icon?: unknown;
+  /** Packages only: what it holds, as HiveHub read it, so it can be shown before anything is
+   *  downloaded. The install checks every member again from the files. */
+  members?: CatalogMember[];
 }
+export interface CatalogMember { kind: string; id: string; name: string; permissions: string[] }
 
 // A view, a widget or a tool carries its publisher's scope; an agent is one name for one CLI,
 // settled in the plugins repository. A tool's folder is owner--name, so neither part holds "--".
 const SCOPED = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 const TOOL = new RegExp(`^(?!.*--)${TOOL_ID_RE.source.slice(1)}`);
-const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, tool: TOOL, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
+const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, package: SCOPED, tool: TOOL, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
 const SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
 export const MAX_FILE = 20 << 20;
@@ -99,14 +103,27 @@ export function parseCatalog(raw: unknown): CatalogEntry[] {
     if (p.icon !== undefined && (typeof p.icon !== "object" || p.icon === null || JSON.stringify(p.icon).length > 4096)) {
       throw new Error(`${at}.icon must be a small object`);
     }
-        if (p.bin !== undefined && (p.type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {
+    if (p.bin !== undefined && (p.type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {
       throw new Error(`${at}.bin must be the bare name of an agent's CLI`);
     }
+    const members = p.members === undefined ? undefined : parseMembers(p.members, at, type);
     return { id: p.id, type, name: p.name, description: p.description, author: p.author, version: p.version, path: p.path, files,
       ...(homepage ? { homepage } : {}), ...(typeof p.source === "string" ? { source: p.source } : {}),
       ...(typeof p.bin === "string" ? { bin: p.bin } : {}),
       ...(typeof p.minAppVersion === "string" ? { minAppVersion: p.minAppVersion } : {}),
-      ...(p.icon !== undefined ? { icon: p.icon } : {}) };
+      ...(p.icon !== undefined ? { icon: p.icon } : {}),
+      ...(members ? { members } : {}) };
+  });
+}
+
+function parseMembers(raw: unknown, at: string, type: CatalogType): CatalogMember[] {
+  if (type !== "package" || !Array.isArray(raw) || !raw.length || raw.length > 64) throw new Error(`${at}.members must list 1-64 members of a package`);
+  return raw.map((m: Record<string, unknown>, j) => {
+    if (!m || !text(m.kind, 40) || typeof m.id !== "string" || !SCOPED.test(m.id) || !text(m.name, 120)
+      || !Array.isArray(m.permissions) || m.permissions.length > 32 || !m.permissions.every((x) => text(x, 80))) {
+      throw new Error(`${at}.members[${j}] needs a kind, an @owner/name id, a name and its permissions`);
+    }
+    return { kind: m.kind, id: m.id, name: m.name, permissions: m.permissions as string[] };
   });
 }
 

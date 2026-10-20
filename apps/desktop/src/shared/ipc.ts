@@ -105,6 +105,9 @@ import type { WidgetPackage } from "@hivemind/core/widget-format";
 
 export type { ToolPackage } from "@hivemind/core/tool-format";
 import type { ToolPackage } from "@hivemind/core/tool-format";
+import type { MemberChange } from "@hivemind/core/package-install";
+import type { MemberRuns } from "@hivemind/core/package-format";
+import type { PackageOf } from "@hivemind/core/plugin-settings";
 /** A tool plugin's tile running a program in its folder: found on PATH, no shell. `maxAgeMs`
  *  shares one answer that young between tiles asking the same thing. */
 export type ToolRun = { bin: string; args: string[]; cwd: string; maxAgeMs?: number; stdin?: string };
@@ -255,6 +258,8 @@ export interface ViewPackageInfo {
   manifest: ViewManifest | null;
   error: string | null;
   url: string | null;
+  /** The package it was installed with, for one installed. */
+  package?: PackageOf;
 }
 
 // ── full IPC surface ──────────────────────────────────────────────────────
@@ -402,17 +407,22 @@ export interface HiveIpc {
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
    *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`, a widget with
-   *  `installCatalogWidget(token)`, a tool with `installCatalogTool(token)`. */
+   *  `installCatalogWidget(token)`, a tool with `installCatalogTool(token)`, a package with
+   *  `installCatalogPackage(token)`. */
   reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
     | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
     | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
     | { type: "widget"; token: string; id: string; name: string; permissions: string[]; code: boolean; replaces: boolean }
     | { type: "tool"; token: string; id: string; name: string; permissions: string[]; tools: string[]; service?: string; replacesVersion: string | null }
+    | { type: "package"; token: string; id: string; name: string; version: string; on: boolean; replacesVersion: string | null;
+        members: Array<{ kind: string; id: string; name: string; permissions: string[]; runs: MemberRuns }>; changes: MemberChange[] }
   >;
   installCatalogAgent(token: string): Promise<void>;
   installCatalogWidget(token: string): Promise<void>;
   /** Installed off, as every tool plugin is until switched on. */
   installCatalogTool(token: string): Promise<void>;
+  /** Every member at once; on or off as the review said. */
+  installCatalogPackage(token: string): Promise<void>;
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
   /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
