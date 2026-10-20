@@ -3,8 +3,13 @@
 import widgetGuide from "../../../guide/(extend)/widgets.mdx" with { type: "text" };
 import toolGuide from "../../../guide/(extend)/tool-plugins.mdx" with { type: "text" };
 import viewGuide from "../../../guide/(extend)/extension-authoring.mdx" with { type: "text" };
+import packagesGuide from "../../../guide/(extend)/packages.mdx" with { type: "text" };
 
 export type PluginKind = "widget" | "tool" | "view";
+
+/** A member's place in the package it is written in: the way from its folder to the package's,
+ *  and the package's id. */
+export interface InPackage { root: string; id: string }
 
 const GUIDE: Record<PluginKind, string> = { widget: widgetGuide, tool: toolGuide, view: viewGuide };
 const NOUN: Record<PluginKind, string> = { widget: "widget", tool: "tool plugin", view: "view" };
@@ -14,8 +19,29 @@ const WHAT: Record<PluginKind, string> = {
   view: "a sandboxed web page that draws the whole workspace its own way",
 };
 
+/** Commands with their comments lined up. */
+const commented = (lines: Array<[string, string]>): string => {
+  const width = Math.max(...lines.map(([c]) => c.length)) + 2;
+  return lines.map(([c, why]) => `${c.padEnd(width)}# ${why}`).join("\n");
+};
+
+/** How a member's code is checked, installed and shown again after each change: always through
+ *  its package, which is what installs. */
+function loopInPackage(kind: PluginKind, id: string, p: InPackage): string {
+  const record = `${kind}:${id}`;
+  return commented([
+    ...(kind === "view" ? [["npm install", "once"] as [string, string]] : []),
+    [`hive plugins check ${p.root}`, "the package: this member and every other one; file:line for each problem"],
+    [`hive plugins install ${p.root}`, "the package, again after each change"],
+    [`hive plugins enable ${p.id}`, "once, if it says it is off"],
+    [`hive ctl plugin open ${record}`, kind === "view" ? "switch the app to it" : kind === "widget" ? "put one on the board" : "open its tile"],
+    ...(kind === "tool" ? [["hive ctl tile look <tile>", "the picture of it, its state and what its code logged"] as [string, string]] : []),
+  ]);
+}
+
 /** How its code is checked, installed and shown again after each change. */
-function loop(kind: PluginKind, id: string): string {
+function loop(kind: PluginKind, id: string, inPackage?: InPackage): string {
+  if (inPackage) return loopInPackage(kind, id, inPackage);
   const record = `${kind}:${id}`;
   const check = "hive plugins check .               # its types, its manifest, and its code drawn once; file:line for each problem";
   if (kind === "view") {
@@ -54,7 +80,8 @@ export function plainMarkdown(mdx: string): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-export function pluginBrief(kind: PluginKind, id: string): string {
+export function pluginBrief(kind: PluginKind, id: string, inPackage?: InPackage): string {
+  const at = inPackage?.root ?? ".";
   return `# Build this ${NOUN[kind]}
 
 Hand this file to your coding agent, after writing what you want under **What I want**. Everything
@@ -71,12 +98,14 @@ it needs is here: it does not need the Hivemind source.
 ## What you are building
 
 A **Hivemind ${NOUN[kind]}**: ${WHAT[kind]}. This is \`${id}\`, started in this folder, and it already
-runs. The guide below is the whole contract.
+runs. The guide below is the whole contract.${inPackage ? `
+
+It is a member of the package \`${inPackage.id}\` in \`${inPackage.root}\`, and installs only with it.` : ""}
 
 ## The loop
 
 \`\`\`bash
-${loop(kind, id)}
+${loop(kind, id, inPackage)}
 \`\`\`
 
 ## Check your own work
@@ -93,7 +122,7 @@ Give it at least one command that reports what it shows, so you can see that it 
 
 ## Done means
 
-1. \`hive plugins check .\` says ok: its types, its manifest, and its code drawn once.
+1. \`hive plugins check ${at}\` says ok: its types, its manifest, and its code drawn once.
 2. It installs and switches on cleanly: \`hive plugins list\` shows it on, with no problem.
 3. \`hive ctl plugin open\` shows it, in the light and the dark theme: colours come from the theme.${kind === "tool" ? "\n   \`hive ctl tile look\` shows it drew what was asked, and its console has no error." : ""}
 4. Its commands answer as described, and what it shows follows them.
@@ -103,4 +132,66 @@ Give it at least one command that reports what it shows, so you can see that it 
 ---
 
 ${plainMarkdown(GUIDE[kind])}`;
+}
+
+/** The brief `hive plugins new package` writes as PROMPT.md: how to fill the package with members
+ *  and check, install and look at them, with the packages guide itself. */
+export function packageBrief(id: string): string {
+  const owner = id.slice(0, id.indexOf("/"));
+  return `# Build this package
+
+Hand this file to your coding agent, after writing what you want under **What I want**. Everything
+it needs is here: it does not need the Hivemind source.
+
+## What I want
+
+<!-- Say what the package is for, and which tools, widgets and views it should hold. -->
+
+...
+
+---
+
+## What you are building
+
+A **Hivemind package**: one folder holding tools, widgets and views, each in a folder of its own,
+that installs, switches on, updates and is removed as one. This is \`${id}\`, started in this
+folder. \`hivemind-package.json\` names its members; it holds none yet.
+
+## Add the members
+
+\`\`\`bash
+${commented([
+  ...(Object.keys(NOUN) as PluginKind[]).map((k): [string, string] => [`hive plugins new ${k} <name> --in .`, `a ${NOUN[k]}: ${WHAT[k]}`]),
+  ["hive plugins add <folder> --to .", `one already written; its id must be ${owner}/<name>`],
+])}
+\`\`\`
+
+Each member starts in its own folder, with a \`PROMPT.md\` that holds that kind's whole guide: read
+it before you write the member's code. Every member's id is \`${owner}/<name>\`.
+
+## The loop
+
+\`\`\`bash
+${commented([
+  ["hive plugins check .", "the package and every member: types, manifest, code drawn once; file:line for each problem"],
+  ["hive plugins install .", "again after each change; it prints what the package holds"],
+  [`hive plugins enable ${id}`, "once, if it says it is off (a tool or an agent preset arrives off)"],
+  ["hive ctl plugin open <kind>:<member id>", "open a tool's tile, put a widget on the board, switch to a view"],
+  ["hive ctl tile look <tile>", "the picture of a tile, its state and what its code logged"],
+])}
+\`\`\`
+
+## Done means
+
+1. \`hive plugins check .\` says ok, for the package and for every member.
+2. \`hive plugins install .\` installs it, and \`hive plugins list\` shows every member on, in
+   \`[${id} …]\`, with no problem.
+3. Each member opens, and \`hive ctl tile look\` shows a tool drew what was asked, with no error in
+   its console.
+4. \`README.md\` says what the package holds and what each member asks for, for its page on
+   HiveHub.
+
+---
+
+${plainMarkdown(packagesGuide)}`;
 }

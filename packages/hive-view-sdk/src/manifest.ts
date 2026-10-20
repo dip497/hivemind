@@ -15,6 +15,8 @@ export interface ViewManifest {
    *  was published on HiveHub — `owner` is the GitHub account that published it. */
   id: string;
   name: string;
+  /** What it shows, in one line: the line on its card on the Plugins page and HiveHub. */
+  description?: string;
   /** semver-ish `x.y.z` (shown in `hive plugins list`; not compared by the host). */
   version: string;
   /** Relative path to ONE bundled `.html` (loaded as-is) or `.js` (wrapped in a
@@ -123,6 +125,11 @@ export function validateViewManifest(raw: unknown): ManifestResult {
   if ("error" in cat) errors.push(cat.error);
   const cmds = parsePluginCommands(m.commands);
   if ("error" in cmds) errors.push(cmds.error);
+  let description: string | undefined;
+  if (m.description !== undefined) {
+    if (typeof m.description !== "string" || m.description.length > 300) errors.push(`"description" must be a string of at most 300 characters`);
+    else if (m.description.trim()) description = m.description.trim();
+  }
   let author: string | undefined;
   if (m.author !== undefined) {
     if (typeof m.author !== "string" || m.author.trim().length === 0 || m.author.length > 80) errors.push(`"author" must be a non-empty string of at most 80 characters`);
@@ -179,8 +186,8 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "description", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}),
+  return { ok: true, manifest: { id: id!, name: name!, ...(description ? { description } : {}), version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}),
     ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
 }

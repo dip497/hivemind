@@ -8,6 +8,7 @@ import { readToolPackage, TOOL_MANIFEST } from "@hivemind/core/tool-packages";
 import { readWidget } from "@hivemind/core/widgets";
 import { MANIFEST_FILE as VIEW_MANIFEST, validateViewManifest } from "@hivemind/view-sdk/manifest";
 import type { Problem } from "./check/problem.js";
+import type { InPackage } from "./plugin-brief.js";
 import { TOOL_TYPE_SETUP, toolStarter, WIDGET_TYPE_SETUP, widgetStarter } from "./starters.js";
 import { starterFiles as viewStarter, VIEW_TYPE_SETUP } from "./view-starter.js";
 import type { TypeSetup } from "./check/types.js";
@@ -22,7 +23,11 @@ export interface AuthoredKind {
   /** The file that makes a folder one of these. */
   manifest: string;
   idOf(owner: string, name: string): string;
-  starter(owner: string, name: string): Record<string, string>;
+  /** The files it starts with; written as a member of a package, when `inPackage` is given. */
+  starter(owner: string, name: string, inPackage?: InPackage): Record<string, string>;
+  /** The folder inside its own that a package names, when its code is built (it has a
+   *  package.json); none when its folder is what installs. */
+  builtIn?: string;
   /** What a running app is asked, in order, to load them again. */
   rescan: string[];
   /** On once installed, or off until you switch it on. */
@@ -89,6 +94,7 @@ export const KINDS: readonly AuthoredKind[] = [
     kind: "view", noun: "view", manifest: VIEW_MANIFEST,
     idOf: (owner, name) => `@${owner}/${name}`,
     starter: viewStarter,
+    builtIn: "dist",
     rescan: ["views.rescan"],
     onByDefault: true,
     prepare: (dir) => [`cd ${dir} && npm install`],

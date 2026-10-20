@@ -181,11 +181,19 @@ hive ctl plugin call windows unsplit
 
 ## Plugins
 
-To install, list and remove agents, views, widgets and tools, and change their settings.
+To write, check, install, list and remove agents, views, widgets, tools and packages, and change their settings. Guide: [Packages](/packages).
 
 ```text
 hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
                                         # a starter that works, with PROMPT.md; prints the next steps
+hive plugins new package <name> [--dir folder] [--owner login]
+                                        # a package that holds nothing yet, with PROMPT.md
+hive plugins new tool|widget|view <name> --in <package folder>
+                                        # a starter inside the package, named in its hivemind-package.json
+hive plugins add <folder> --to <package folder>
+                                        # one already written, copied in when outside; another owner's id is refused
+hive plugins check <folder> [--json]    # its types, its manifest and its code drawn once; file:line for each problem
+                                        # of a package: hivemind-package.json and every member with its own check
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id: installed as a package
                                         # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable @owner/name

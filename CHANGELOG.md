@@ -8,6 +8,8 @@ semantic versioning.
 Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
+- Write a package from `hive` alone: `hive plugins new package <name>` starts one with a PROMPT.md, `hive plugins new <kind> <name> --in <package>` and `hive plugins add <folder> --to <package>` add members (another owner's id is refused), and `hive plugins check <package>` checks every member with its own check, each problem at its file and line. The guide has a new Packages page.
+- A view's `hivemind-view.json` may hold a one-line `"description"`, as a tool's and a widget's do; it was refused as an unknown field, though HiveHub reads it for the view's card.
 
 - Switches read on or off at a glance: on is a light track, off a dark one.
 - An install from a review installs exactly what was reviewed, from the window or tab that asked for it: it is refused if the files, the version it replaces or its switch changed since. The audit log says when a person acted from a browser tab.

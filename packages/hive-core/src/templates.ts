@@ -354,6 +354,7 @@ starting waits for it (30 s in all). Exit 5: not running, or no such command; 4:
 2: it runs twice and you did not say which (\`--tile\`); 1: it failed or refused, in its own words.
 \`hive ctl tile look <tile> --json\` shows a tile as the person sees it: a PNG path, its plugin's state and console.
 Writing one: \`hive plugins new tool|widget|view <name>\` starts it, with a PROMPT.md that has the whole guide.
+Several as one: \`hive plugins new package <name>\`, then \`hive plugins new <kind> <name> --in <package>\`; \`hive plugins check <package>\` checks every member, \`hive plugins install <package>\` installs them as one.
 
 ## Beyond the canvas
 Each has \`--help\` with its exact options; read it before you run one.

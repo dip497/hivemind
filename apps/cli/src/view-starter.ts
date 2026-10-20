@@ -1,19 +1,19 @@
 /** What `hive plugins new view` writes: a view that builds outside this repository. The SDK is not a
  *  package to install — the app serves it to every view — so a view gets its types here and
  *  leaves `@hivemind/view-sdk` out of its bundle. */
-import { pluginBrief } from "./plugin-brief.js";
+import { pluginBrief, type InPackage } from "./plugin-brief.js";
 import { typeFiles } from "./type-files.js";
 import type { TypeSetup } from "./check/types.js";
 
 const title = (name: string) => name.split("-").map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ");
 
-export function starterFiles(owner: string, name: string): Record<string, string> {
+export function starterFiles(owner: string, name: string, inPackage?: InPackage): Record<string, string> {
   const id = `@${owner}/${name}`;
   const files: Record<string, string> = {
-    "hivemind-view.json": JSON.stringify({ id, name: title(name), version: "0.1.0", entry: "index.html", protocol: 1, permissions: [] }, null, 2) + "\n",
+    "hivemind-view.json": JSON.stringify({ id, name: title(name), description: "What it shows, in one line.", version: "0.1.0", entry: "index.html", protocol: 1, permissions: [] }, null, 2) + "\n",
     "package.json": JSON.stringify({
       name, version: "0.1.0", private: true, type: "module",
-      scripts: { build: "node build.mjs", dev: "node build.mjs && hive plugins install dist", typecheck: "tsc" },
+      scripts: { build: "node build.mjs", dev: `node build.mjs && hive plugins install ${inPackage?.root ?? "dist"}`, typecheck: "tsc" },
       devDependencies: { esbuild: "^0.28.0", typescript: "^5.9.0" },
     }, null, 2) + "\n",
     "tsconfig.json": JSON.stringify({ compilerOptions: VIEW_TYPE_SETUP.compilerOptions, include: ["src", "types"] }, null, 2) + "\n",
@@ -80,20 +80,20 @@ hm.on("structure", ({ tiles }) => {
   });
 });
 `,
-    "PROMPT.md": pluginBrief("view", id),
+    "PROMPT.md": pluginBrief("view", id, inPackage),
     "README.md": `# ${title(name)}
 
 A [Hivemind](https://hivemind.griiken.com) view.
 
 \`\`\`bash
 npm install
-npm run dev        # build, then install into the app
+npm run dev        # build, then install ${inPackage ? `the package ${inPackage.id}` : "into the app"}
 \`\`\`
 
 Want an agent to build it? Write your idea into \`PROMPT.md\` and hand that file to it —
 it holds the whole API and the rules of the sandbox.
 
-\`dist/\` is the view. Publish it on HiveHub: \`hivehub publish dist\` after pushing the commit.
+\`dist/\` is the view. ${inPackage ? `It is published with its package: \`hivehub publish ${inPackage.root}\`` : "Publish it on HiveHub: \`hivehub publish dist\`"} after pushing the commit.
 `,
   };
   return { ...files, ...VIEW_TYPE_SETUP.files() };
