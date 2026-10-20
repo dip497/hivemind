@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createIssue, registerWorkspace, writeConfig } from "@hivemind/core";
+import { createIssue, writeConfig } from "@hivemind/core";
 import { hive } from "./helpers.js";
 
 let ws: string;
@@ -89,14 +89,6 @@ describe("hive ctl issue verbs", () => {
     expect(r.code).toBe(0);
     expect(Array.isArray(r.json)).toBe(true);
     for (const w of r.json as Array<Record<string, unknown>>) expect(Object.keys(w).sort()).toEqual(["prefix", "repo", "title"]);
-  });
-
-  test("list-workspaces prints each workspace's prefix, title and folder, one a line", async () => {
-    const was = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = xdg;
-    try { await registerWorkspace(path.join(ws, ".hivemind")); } finally { if (was === undefined) delete process.env.XDG_CONFIG_HOME; else process.env.XDG_CONFIG_HOME = was; }
-    const r = hive(["ctl", "list-workspaces"], { cwd: ws, env: env() });
-    expect([r.code, r.stdout]).toEqual([0, `TT\t${path.basename(ws)}\t${ws}\n`]);
   });
 
   test("report outside a tile is a usage error, not a crash", () => {

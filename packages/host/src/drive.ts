@@ -165,7 +165,7 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
     function asAgent(tile: string, hello: Hello): void {
       const repo = o.workspaceOf(tile);
       if (repo === null) return refuse("FORBIDDEN", "that agent's tile is in no workspace here");
-      if (hello.workspace != null && real(String(hello.workspace)) !== real(repo)) return refuse("FORBIDDEN", `an agent drives the workspace its tile is in, ${repo}; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`);
+      if (hello.workspace != null && real(String(hello.workspace)) !== real(repo)) return refuse("FORBIDDEN", `an agent drives the workspace its tile is in, ${repo}`);
       write(JSON.stringify({ hello: { api: DRIVE_API, as: { agent: tile, role: "agents", workspace: repo } } }));
       serve(repo, { kind: "peer", person: tile, device: tile, access: "agents", client: o.nameOf(tile), tile }, () => o.workspaceOf(tile) === repo);
     }

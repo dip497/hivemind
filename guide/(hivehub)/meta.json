@@ -4,6 +4,10 @@
   "root": true,
   "pages": [
     "hivehub",
-    "publish-to-hivehub"
+    "publish-to-hivehub",
+    "---Reference---",
+    "hivehub-sign-in",
+    "hivehub-command",
+    "hivehub-api"
   ]
 }
