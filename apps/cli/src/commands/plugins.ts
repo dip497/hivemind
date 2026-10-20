@@ -12,6 +12,7 @@
  *                                                  (@owner/name is HiveHub's: write a folder as ./x);
  *                                                  every install is a package, a folder of one plugin a package of one
  *   hive plugins remove <plugin>                   one you added, with its package; what shows it stays, saying it is missing
+ *   hive plugins reload [--json]                   the running app loads every plugin again
  *   hive plugins check <folder> [--json]           its types, its manifest, and its code drawn once;
  *                                                  of a package, its manifest and every member
  *   hive plugins api --kind <tool|widget|view>     what its code is given, as type declarations
@@ -46,6 +47,8 @@ import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
+import { HcpCliError } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { personOnly } from "../person-only.js";
 import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
 import { stageFromRegistry } from "../registry.js";
@@ -313,12 +316,23 @@ function githubLogin(): string | null {
   try { return execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null; } catch { return null; }
 }
 
-/** Ask a running app to load plugins of these kinds again. False when no app is reachable. */
-async function rescanApp(kinds: readonly string[]): Promise<boolean> {
+/** What the app said when asked to load plugins again: `appError` is null when no app is running. */
+type AppAnswer = { rescanned: true; appError: null } | { rescanned: false; appError: string | null };
+
+/** Ask a running app to load plugins of these kinds again. */
+async function rescanApp(kinds: readonly string[]): Promise<AppAnswer> {
   const methods = [...new Set(kinds.flatMap((k) => kindNamed(k)?.rescan ?? []))];
-  try { for (const m of methods) await driveCall(m, [], 5000); return true; } catch { return false; }
+  try {
+    for (const m of methods) await driveCall(m, [], 5000);
+    return { rescanned: true, appError: null };
+  } catch (e) {
+    if (e instanceof HcpCliError && e.code === "UNAVAILABLE") return { rescanned: false, appError: null };
+    return { rescanned: false, appError: e instanceof Error ? e.message : String(e) };
+  }
 }
-const appNote = (rescanned: boolean) => (rescanned ? "app updated" : "app not running — it loads it when it starts");
+const appNote = (a: AppAnswer) => (a.rescanned ? "app updated"
+  : a.appError === null ? "app not running — it loads it when it starts"
+  : `the app did not load it: ${a.appError}. \`hive plugins reload\` asks it again`);
 const steps = (lines: string[]) => lines.map((l) => `  ${l}`).join("\n");
 const KIND_NAMES = KINDS.map((k) => k.kind).join(", ");
 /** An id HiveHub lists: `@owner/name`. */
@@ -472,13 +486,13 @@ const installCmd = defineCommand({
       }
       const installed = await installPackage(staged ?? path.resolve(source), { ...(hubId ? { id: hubId } : {}), dryRun });
       await discard();
-      const rescanned = dryRun ? false : await rescanApp(installed.members.map((m) => m.kind));
-      const report = { ...installReport(installed, rescanned), installed: !dryRun };
+      const app: AppAnswer = dryRun ? { rescanned: false, appError: null } : await rescanApp(installed.members.map((m) => m.kind));
+      const report = { ...installReport(installed, app), installed: !dryRun };
       const { record } = installed;
       return ok(ctx, report, () => [
         dryRun
           ? `would install ${record.id} (${record.name}), version ${record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; nothing was installed`
-          : `installed ${record.id} (${record.name}), version ${record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; ${appNote(rescanned)}`,
+          : `installed ${record.id} (${record.name}), version ${record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; ${appNote(app)}`,
         ...installed.members.map((m) => `  ${memberKind(m.kind)?.noun ?? m.kind} ${m.id}${m.permissions.length ? ` (asks for ${m.permissions.join(", ")})` : ""}`),
         ...(installed.replaced ? installed.changes.length ? ["Changes:", ...installed.changes.map((c) => `  ${changeLine(c)}`)] : ["Nothing changed."] : []),
         ...installed.tookOver.map((t) => `It took over ${t}, installed on its own before; what you set it to is kept.`),
@@ -491,13 +505,13 @@ const installCmd = defineCommand({
 });
 
 /** What `install` says it did, for a person and as --json. */
-function installReport(installed: InstalledPackage, rescanned: boolean) {
+function installReport(installed: InstalledPackage, app: AppAnswer) {
   const { record } = installed;
   const next = [...(record.on ? [] : [`hive plugins enable ${record.members.length === 1 ? `${record.members[0]!.kind}:${record.members[0]!.id}` : record.id}`]), ...installed.members.flatMap((m) => kindNamed(m.kind)?.see(m.id) ?? [])];
   return {
     id: record.id, name: record.name, version: record.version, digest: record.digest, on: record.on,
     members: installed.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, dir: m.dir, permissions: m.permissions })),
-    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, changes: installed.changes, rescanned, next,
+    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, changes: installed.changes, ...app, next,
   };
 }
 
@@ -516,10 +530,22 @@ const rollbackCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const { record, from } = await rollbackPackage(String(args.package));
-      const rescanned = await rescanApp(record.members.map((m) => m.kind));
-      return ok(ctx, { id: record.id, version: record.version, on: record.on, from: from.version, rescanned },
-        () => `${record.id} is back at version ${record.version}, ${record.on ? "on" : "off"} as it was; ${from.version} is kept, and rolling back again returns to it. ${appNote(rescanned)}`);
+      const app = await rescanApp(record.members.map((m) => m.kind));
+      return ok(ctx, { id: record.id, version: record.version, on: record.on, from: from.version, ...app },
+        () => `${record.id} is back at version ${record.version}, ${record.on ? "on" : "off"} as it was; ${from.version} is kept, and rolling back again returns to it. ${appNote(app)}`);
     } catch (e) { return fail(ctx, e, "rollback_failed"); }
+  },
+});
+
+const reloadCmd = defineCommand({
+  meta: { name: "reload", description: "Ask the running app to load every plugin again" },
+  args: { json: { type: "boolean" } },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    const app = await rescanApp(KINDS.map((k) => k.kind));
+    if (app.rescanned) return ok(ctx, app, () => "app reloaded every plugin");
+    if (app.appError === null) return err(ctx, "app_not_running", "the app is not running: it loads every plugin when it starts", EXIT.unavailable);
+    return err(ctx, "reload_failed", app.appError);
   },
 });
 
@@ -530,8 +556,8 @@ const removeCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const target = await findTarget(String(args.plugin));
-      const said = (gone: PackageRecord, rescanned: boolean) => ok(ctx, { package: gone.id, removed: gone.members.map((m) => `${m.kind}:${m.id}`), rescanned },
-        () => `removed ${gone.id} (${gone.members.map((m) => `${m.kind}:${m.id}`).join(", ")}); ${appNote(rescanned)}`);
+      const said = (gone: PackageRecord, app: AppAnswer) => ok(ctx, { package: gone.id, removed: gone.members.map((m) => `${m.kind}:${m.id}`), ...app },
+        () => `removed ${gone.id} (${gone.members.map((m) => `${m.kind}:${m.id}`).join(", ")}); ${appNote(app)}`);
       if ("package" in target) {
         const gone = await removePackage(target.package.id);
         return said(gone, await rescanApp(gone.members.map((m) => m.kind)));
@@ -590,5 +616,5 @@ const apiCmd = defineCommand({
 
 export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
-  subCommands: { new: newCmd, add: addCmd, check: checkCmd, install: installCmd, search: searchCmd, rollback: rollbackCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
+  subCommands: { new: newCmd, add: addCmd, check: checkCmd, install: installCmd, search: searchCmd, rollback: rollbackCmd, reload: reloadCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });

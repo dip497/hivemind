@@ -216,6 +216,7 @@ hive plugins install <folder>|<id> --dry-run   # what an update would change, me
 hive plugins rollback <package>         # back to the version in use before its last update, switched as it was
 hive plugins remove <plugin>|<package>  # one you added on its own, or a whole package
                                         # one plugin of a bigger package is refused (exit 7): remove the package
+hive plugins reload                     # the running app loads every plugin again
 hive plugins api --kind tool|widget|view   # what its code is given, as the type declarations of this version
 hive plugins search [words…] [--kind <kind>] [--limit N]   # HiveHub's plugins: every word starts a word of it, best match first (20 by default, at most 100)
 hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off, and why any fails to load

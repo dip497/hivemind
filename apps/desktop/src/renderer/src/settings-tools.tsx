@@ -84,11 +84,11 @@ function RemoveTool({ pkg }: { pkg: ToolPackage }) {
 
 /** The tools on the Plugins page: the ones included, the optional ones, then the ones you added. */
 /** The tools you have, as rows of the Plugins page: one that comes with the app under its tile's
- *  category, as the Add menu lists it, and one you added under its manifest's. The warning is for
- *  safe mode, where none you added runs. */
+ *  category, as the Add menu lists it, and one you added under its manifest's. The warning is why
+ *  the list could not be read, or safe mode, where none you added runs. */
 export function useToolRows(matches: (text: string) => boolean): { rows: ListedRow[]; warning: string | null } {
   const shown = BUNDLED_TOOL_PLUGINS.filter((p) => matches(`${toolLabel(p.id)} ${p.id} ${p.tools.map((t) => t.description ?? "").join(" ")}`));
-  const { packages, safeMode } = useToolPackages();
+  const { packages, safeMode, error } = useToolPackages();
   useTilesVersion();
   const added = packages.filter((p) => p.source === "you" && matches(`${p.name} ${p.id} ${p.description}`));
   const bundled = [...shown.filter((p) => p.builtin), ...shown.filter((p) => !p.builtin)];
@@ -98,7 +98,7 @@ export function useToolRows(matches: (text: string) => boolean): { rows: ListedR
       ...bundled.map((p) => row(p.id, p.tools.map((t) => t.tileKind ? tileKind(t.tileKind).category : undefined).find((c) => c !== undefined) ?? "other")),
       ...added.map((p) => row(p.id, p.category)),
     ],
-    warning: added.length > 0 && safeMode ? "Hivemind started in safe mode: no tool you added runs until you start it normally." : null,
+    warning: error ?? (added.length > 0 && safeMode ? "Hivemind started in safe mode: no tool you added runs until you start it normally." : null),
   };
 }
 

@@ -15,6 +15,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - After an update, a background process too busy to answer quickly is now still replaced when it speaks an older protocol, and the app says so when it will not stop, instead of carrying on with it.
 - Quitting while the background process is busy now asks what to do instead of quitting as if nothing ran, and "Stop everything" now always stops it.
 - Model and option lists that took too long to read from an agent's CLI are read again next time instead of staying empty until the app restarts.
+- `hive plugins install`, `remove` and `rollback` say "app not running" only when it is not; when the app fails to load the plugin they show its error, and the new `hive plugins reload` asks it again.
+- When the app cannot read the tool plugins installed here, their tiles stay as they were instead of all showing "not installed", and Settings → Plugins → Tools says why.
 - Terminals and agents slow to start, as when the app comes back after an update with many open, now open instead of saying they are not running on their machine.
 - A terminal on a machine whose hive is older than the app now says to press Update hive in Machines, instead of starting its agent again over plain ssh while the original runs on there unseen.
 
