@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Settings ▸ Plugins lists what you have and what HiveHub has under categories, in the same order and with the same names as the Add menu; each HiveHub entry carries its manifest's category, and every agent is under Agents.
 - A Browser tile's page is sharp at any canvas zoom: once the canvas stops moving, the page is redrawn at the zoom instead of stretched from 100%. The page's own zoom (Ctrl + / −) multiplies it and no longer carries to other tiles showing the same site.
 - Quitting asks first while agents or terminals run here (⌘Q on a Mac, Ctrl+Q elsewhere, or closing the last window): **Keep them running**, **Stop everything** (as `hive daemon stop` does; each comes back when the app starts again) or **Cancel**, with **Don't ask again** and a matching choice in Settings → About and updates. **Quit and stop agents** in the Open Recent menu stops everything without asking.
 - The website scrolls and plays smoothly on phones: the hero's step bar and its opening lines no longer keep the page busy every frame, the views stack is flat on small screens and dims its back cards without a filter, and links on phones are easier to tap.

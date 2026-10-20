@@ -352,7 +352,7 @@
 .plugins-group-setting { display: flex; align-items: center; gap: 6px; }
 .plugins-group-setting label { color: var(--color-fg2); }
 .plugins-group-setting > [role=switch] { margin-left: auto; }
-[data-plugins-home]:has([data-plugins-kind]) .plugins-none { display: none; }
+[data-plugins-home]:has([data-plugins-category]) .plugins-none { display: none; }
 .catalog-item > .settings-install-review, .catalog-item > [role=alert] { margin: 0 12px 12px 40px; }
 .plugin-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-line); }
 .plugin-tabs > button { padding: 6px 10px; font-size: var(--text-body); color: var(--color-fg2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
