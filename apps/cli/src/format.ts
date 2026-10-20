@@ -1,5 +1,6 @@
 /** Output formatters — both plain-text (for humans) and JSON (for scripts). */
-import type { CliResult, Issue, IssueSummary } from "@hivemind/core";
+import type { Issue, IssueSummary } from "@hivemind/core";
+import { printFailure } from "./exit-codes.js";
 
 export interface OutCtx {
   json: boolean;
@@ -30,26 +31,18 @@ export const stateColor = {
   cancelled: C.dim,
 } as const;
 
-export function ok<T>(ctx: OutCtx, data: T, render?: () => string): void {
-  if (ctx.json) {
-    const result: CliResult<T> = { ok: true, data };
-    console.log(JSON.stringify(result, null, 2));
-  } else if (render) {
-    console.log(render());
-  } else {
-    console.log(typeof data === "string" ? data : JSON.stringify(data, null, 2));
-  }
+/** A success: with --json, the result as one JSON object on one line (a list goes under a name,
+ *  so every result is an object); else `render`'s text. */
+export function ok<T extends object | string>(ctx: OutCtx, data: T extends readonly unknown[] ? never : T, render?: () => string): void {
+  if (ctx.json) console.log(JSON.stringify(data));
+  else if (render) console.log(render());
+  else console.log(typeof data === "string" ? data : JSON.stringify(data, null, 2));
 }
 
-/** `exit` follows hcp.ts EXIT (1 error · 2 usage · 3 unavailable · 4 timeout). */
-export function err(ctx: OutCtx, code: string, message: string, exit = 1): never {
-  if (ctx.json) {
-    const result: CliResult<never> = { ok: false, error: message, code };
-    console.log(JSON.stringify(result, null, 2));
-  } else {
-    process.stderr.write(`${c(C.red, "error")} ${c(C.dim, `[${code}]`)} ${message}\n`);
-  }
-  process.exit(exit);
+/** A failure, printed and exited with as exit-codes.ts says: its code in capitals, its exit code
+ *  from the table unless `exit` is given. */
+export function err(ctx: OutCtx, code: string, message: string, exit?: number, fix?: string): never {
+  return printFailure(ctx.json, { code: code.toUpperCase(), message, ...(fix ? { fix } : {}) }, exit);
 }
 
 export function renderIssueList(items: IssueSummary[]): string {

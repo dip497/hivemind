@@ -44,7 +44,7 @@ describe("agents golden", () => {
     }
     const r = hive(["agent", "detect", "--json"], { cwd: ws, env: { PATH: `${bin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
     expect(r.code).toBe(0);
-    const found = Object.keys((r.json as { data: Record<string, unknown> }).data);
+    const found = Object.keys((r.json as Record<string, unknown>));
     // Every stand-in binary that an installed agent names is probed and found …
     expect(found).toEqual(expect.arrayContaining(["agy", "amp", "claude", "codex", "cursor-agent", "droid", "hermes", "kiro-cli", "opencode", "pi"]));
     // … and nothing that is not an installed agent's binary (`kiro` and `cursor` are

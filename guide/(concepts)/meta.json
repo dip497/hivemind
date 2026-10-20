@@ -10,6 +10,7 @@
     "background-process",
     "hive-cli",
     "plugins",
+    "hub-index",
     "how-devices-connect",
     "phone-page",
     "remote-machines",
@@ -18,6 +19,7 @@
     "agent-states",
     "security-and-privacy",
     "view-protocol",
-    "data-and-storage"
+    "data-and-storage",
+    "data-updates"
   ]
 }

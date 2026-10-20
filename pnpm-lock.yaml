@@ -328,6 +328,9 @@ importers:
       '@hivemind/host':
         specifier: workspace:*
         version: link:../../packages/host
+      '@hivemind/hub':
+        specifier: workspace:*
+        version: link:../../packages/hive-hub
       '@hivemind/tile-sdk':
         specifier: workspace:*
         version: link:../../packages/tile-sdk
@@ -425,6 +428,9 @@ importers:
       '@hivemind/host':
         specifier: workspace:*
         version: link:../../packages/host
+      '@hivemind/hub':
+        specifier: workspace:*
+        version: link:../../packages/hive-hub
       '@hivemind/tile-sdk':
         specifier: workspace:*
         version: link:../../packages/tile-sdk
@@ -713,6 +719,9 @@ importers:
       '@hivemind/agents':
         specifier: workspace:*
         version: link:../hive-agents
+      '@hivemind/hub':
+        specifier: workspace:*
+        version: link:../hive-hub
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../hive-view-sdk
@@ -735,6 +744,34 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+
+  packages/hive-hub:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@hivemind/agents':
+        specifier: workspace:*
+        version: link:../hive-agents
+      '@hivemind/core':
+        specifier: workspace:*
+        version: link:../hive-core
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@hivemind/view-sdk':
+        specifier: workspace:*
+        version: link:../hive-view-sdk
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
 
   packages/hive-view-sdk:
     devDependencies:

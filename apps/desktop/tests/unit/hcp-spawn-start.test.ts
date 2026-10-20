@@ -27,5 +27,5 @@ test("a spawned tile's task goes to the host that starts it, and to no window", 
 
   assert.deepEqual(started.map((s) => [s.tileId, s.prompt]), [[tile, "Review the auth module"]]);
   const opened = told.filter((t) => t.event === "tile.opened").map((t) => t.params[0]);
-  assert.deepEqual(opened, [{ tileId: tile, repo: REPO, background: false }]);
+  assert.deepEqual(opened, [{ tileId: tile, repo: REPO, background: false, by: "person" }]);
 });

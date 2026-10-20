@@ -12,7 +12,7 @@
  */
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
-import { parsePluginStates, pluginStatesFromLegacy, type PluginState } from "./plugin-settings.js";
+import { parsePluginStates, type PluginState } from "./plugin-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -311,7 +311,12 @@ export interface AgentsSettings {
   declined: string[];
   /** Agents that came from the plugin catalog, so their page can say where they are from. */
   fromCatalog: string[];
+  /** When an agent or a program starts an agent: `stay` where the person is, the new tile marked
+   *  unread in Layers, or `go` to it. One the person starts is always gone to. */
+  whenAgentStartsAgent: WhenAgentStartsAgent;
 }
+export const WHEN_AGENT_STARTS_AGENT = ["stay", "go"] as const;
+export type WhenAgentStartsAgent = (typeof WHEN_AGENT_STARTS_AGENT)[number];
 /** Who you are to the people you work with (R3): the name and colour they see beside your cursor
  *  and your edits. Each is empty until chosen. */
 export interface ProfileSettings {
@@ -365,7 +370,7 @@ export const DEFAULT_SETTINGS: Settings = {
   plugins: { state: {} },
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents; preferredAgent() turns an empty or unknown id into the first installed agent.
-  agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [] },
+  agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [], whenAgentStartsAgent: "stay" },
   profile: { name: "", color: "" },
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
@@ -466,17 +471,6 @@ const VIEW_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,
 /** No toolbar can name more actions than the catalog holds. */
 const TOOLBAR_MAX_ACTIONS = 32;
 
-/** Validate + fill a parsed settings.json (any junk) into a Settings.
- *
- *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
- *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
- *  hand, base given). */
-/** Whether a settings.json holds plugin state in the keys a version before `plugins.state` used. */
-export function hasLegacyPluginKeys(p: Record<string, unknown>): boolean {
-  const has = (o: unknown, k: string) => isObj(o) && o[k] !== undefined;
-  return has(p.agents, "disabled") || has(p.agents, "options") || has(p.plugins, "disabled") || isObj(p.tools);
-}
-
 /** What the tool registry takes, from the tool plugins' stored state: the plugins switched on,
  *  and the tools switched off inside them (each a plugin option set to false). */
 export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
@@ -491,6 +485,11 @@ export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
   return { enabledPlugins, disabledTools };
 }
 
+/** Validate + fill a parsed settings.json (any junk) into a Settings.
+ *
+ *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
+ *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
+ *  hand, base given). */
 export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
   const p = isObj(raw) ? raw : {};
   const views = isObj(p.views) ? p.views : {};
@@ -530,11 +529,8 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   }
   const plugins = isObj(p.plugins) ? p.plugins : {};
   const agents = isObj(p.agents) ? p.agents : {};
-  // Plugin state as stored; else, from a settings.json written before it, made from the keys
-  // that held it then; else (a partial merge) as `base` has it.
-  const state = isObj(plugins.state) ? parsePluginStates(plugins.state)
-    : hasLegacyPluginKeys(p) ? pluginStatesFromLegacy(p)
-    : base.plugins.state;
+  // Plugin state as stored; else (a partial merge) as `base` has it.
+  const state = isObj(plugins.state) ? parsePluginStates(plugins.state) : base.plugins.state;
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
@@ -547,6 +543,8 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
       fromCatalog: (Array.isArray(agents.fromCatalog) ? agents.fromCatalog : base.agents.fromCatalog)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
+      whenAgentStartsAgent: WHEN_AGENT_STARTS_AGENT.includes(agents.whenAgentStartsAgent as WhenAgentStartsAgent)
+        ? (agents.whenAgentStartsAgent as WhenAgentStartsAgent) : base.agents.whenAgentStartsAgent,
     },
     profile: profileOf(p.profile, base.profile),
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },

@@ -52,7 +52,7 @@ const built = unix && fs.existsSync(HIVE_NET);
 const dir = unix ? fs.mkdtempSync("/tmp/hive-host-") : "";
 const appData = path.join(dir, "data");
 const env = { HIVEMIND_APP_DATA: appData, HIVEMIND_HIVE_NET: HIVE_NET, HIVEMIND_PTY_SOCK: path.join(dir, "d.sock"), HIVEMIND_SHELL_ENV: "0" };
-const data = <T>(r: ReturnType<typeof hive>) => (r.json as { data: T }).data;
+const data = <T>(r: ReturnType<typeof hive>) => (r.json as T);
 const running: ChildProcess[] = [];
 
 function runHost(on: Record<string, string> = env): ChildProcess {
@@ -147,7 +147,7 @@ describe.skipIf(!built)("hive host", () => {
     // A second host is refused, and the first keeps serving.
     const second = hive(["host", "run", "--json"], { env });
     expect(second.code).toBe(3);
-    expect(second.json).toMatchObject({ ok: false, code: "already_running" });
+    expect(second.json).toMatchObject({ error: { code: "ALREADY_RUNNING" } });
     expect(data<Status>(hive(["host", "status", "--json"], { env })).pid).toBe(first.pid!);
 
     expect(data<{ stopped: boolean }>(hive(["host", "stop", "--json"], { env })).stopped).toBe(true);
@@ -176,7 +176,7 @@ describe.skipIf(!built)("hive host", () => {
       const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...env } });
       running.push(pairing);
       const printed = lines(pairing.stdout!);
-      const offer = (JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer;
+      const offer = (JSON.parse(await printed()) as { offer: { link: string } }).offer;
       const link = parsePairLink(offer.link)!;
       const where = { addrs: link.addrs, relay: link.relay };
       const paired = await enterPairing({
@@ -184,7 +184,7 @@ describe.skipIf(!built)("hive host", () => {
         code: link.code, offering: link.device, ask: (hello) => laptop.pair(link.device, where, hello),
       });
       expect(paired.with).toMatchObject({ device: link.device, kind: "host" });
-      expect(JSON.parse(await printed())).toMatchObject({ ok: true, data: { paired: { device: keys.deviceId, name: "laptop", kind: "app" } } });
+      expect(JSON.parse(await printed())).toMatchObject({ paired: { device: keys.deviceId, name: "laptop", kind: "app" } });
 
       // The host is the laptop's person now, and knows the laptop.
       const now = await until(() => { const s = status(); return s?.running && s.person === keys.personId ? s : null; }, "the host to be the laptop's person");
@@ -244,7 +244,7 @@ describe.skipIf(!built)("hive host", () => {
       const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...own } });
       running.push(pairing);
       const printed = lines(pairing.stdout!);
-      const link = parsePairLink((JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer.link)!;
+      const link = parsePairLink((JSON.parse(await printed()) as { offer: { link: string } }).offer.link)!;
       const where = { addrs: link.addrs, relay: link.relay };
       await enterPairing({
         me: { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
@@ -324,7 +324,7 @@ describe.skipIf(!built)("hive host", () => {
       // Paired with the host by its link: the host is the laptop's person.
       const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...own } });
       running.push(pairing);
-      const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer.link)!;
+      const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { offer: { link: string } }).offer.link)!;
       where = { addrs: offered.addrs, relay: offered.relay };
       const paired = await enterPairing({
         me: { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
@@ -529,7 +529,7 @@ describe.skipIf(!built)("hive host", () => {
       // Paired with the host by its link, as above, and the workspace moved there.
       const pairing = spawn(...cmd(["host", "pair", "--json"]), { env: { ...sealedEnv(), ...own } });
       running.push(pairing);
-      const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer.link)!;
+      const offered = parsePairLink((JSON.parse(await lines(pairing.stdout!)()) as { offer: { link: string } }).offer.link)!;
       where = { addrs: offered.addrs, relay: offered.relay };
       hostCert = (await enterPairing({
         me: { device: keys.deviceId, name: "laptop", kind: "app", certificate: keys.certificate, person: keys.person, addrs: laptop.ready.addrs, relay: laptop.ready.relay },
@@ -622,18 +622,18 @@ describe.skipIf(!built)("hive host", () => {
       const joining = hiveAsync(["join", shared.link, "--json"], { env: other });
       const asking = await until(() => data<JoinRequests>(hive(["people", "requests", "-w", "shared6", "--json"], { env: own })).asking[0], "the request at the owner's host");
       expect(asking).toMatchObject({ workspace: "shared6", role: "terminals" });
-      expect(hive(["people", "allow", String(asking.req), "--role", "view", "-w", "shared6", "--json"], { env: own }).json).toMatchObject({ ok: true });
-      expect((await joining).json).toMatchObject({ ok: true, data: { ok: true, role: "view" } });
-      expect(data<PersonHere[]>(hive(["people", "list", "-w", "shared6", "--json"], { env: own })).map((p) => [p.person, p.role])).toEqual([[guest.person, "view"]]);
+      expect(hive(["people", "allow", String(asking.req), "--role", "view", "-w", "shared6", "--json"], { env: own }).code).toBe(0);
+      expect((await joining).json).toMatchObject({ ok: true, role: "view" });
+      expect(data<{ people: PersonHere[] }>(hive(["people", "list", "-w", "shared6", "--json"], { env: own })).people.map((p) => [p.person, p.role])).toEqual([[guest.person, "view"]]);
       // Kept in the guest's joined list, as the app keeps a workspace it joined.
       expect(JSON.parse(fs.readFileSync(path.join(other.HIVEMIND_APP_DATA, "joined.json"), "utf8"))).toMatchObject([{ host: owner.device, role: "view", names: { workspace: "shared6" } }]);
 
       // Anyone with a valid link let in at once: nobody is asked.
       expect(hive(["people", "rule", "invite", "-w", "shared6"], { env: own }).code).toBe(0);
       const again = data<{ link: string }>(hive(["share", "shared6", "--json"], { env: own }));
-      expect(hive(["join", again.link, "--json"], { env: other }).json).toMatchObject({ ok: true, data: { role: "edit" } });
+      expect(hive(["join", again.link, "--json"], { env: other }).json).toMatchObject({ role: "edit" });
       // Unknown answers say so, and a link never lets in to drive agents.
-      expect(hive(["people", "allow", "99", "-w", "shared6", "--json"], { env: own }).json).toMatchObject({ ok: false, code: "not_waiting" });
+      expect(hive(["people", "allow", "99", "-w", "shared6", "--json"], { env: own }).json).toMatchObject({ error: { code: "NOT_WAITING" } });
       expect(hive(["share", "shared6", "--role", "agents"], { env: own }).code).toBe(2);
 
       const audited = fs.readFileSync(path.join(own.HIVEMIND_APP_DATA, "audit.jsonl"), "utf8").split("\n").filter(Boolean)
@@ -656,7 +656,7 @@ describe.skipIf(!built)("hive host", () => {
     try {
       const r = hive(["host", "run", "--json"], { env });
       expect(r.code).toBe(3);
-      expect(r.json).toMatchObject({ ok: false, code: "app_running" });
+      expect(r.json).toMatchObject({ error: { code: "APP_RUNNING" } });
     } finally {
       fs.rmSync(lock);
     }

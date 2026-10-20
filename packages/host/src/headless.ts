@@ -34,7 +34,8 @@ import { agentForCmd, preferredAgent, setCatalog, spawnableAgents } from "@hivem
 import { findBin } from "@hivemind/agents/discover";
 import { loadAgents, userAgentsDir } from "@hivemind/agents/load";
 import { readSettings, settingsPath } from "@hivemind/core/settings";
-import { listToolPackages, userToolsDir } from "@hivemind/core/tool-packages";
+import { listToolPackages } from "@hivemind/core/tool-packages";
+import { recordsFile } from "@hivemind/core/installed-packages";
 import { appearance } from "./appearance.js";
 import { DEFAULT_APPEARANCE, type Appearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
@@ -334,7 +335,15 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       folderOf: (bare) => runsIn(heldBoards(store), bare),
     }),
     // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
-    controlApi({ control: () => control.api() }),
+    controlApi({
+      control: () => control.api(),
+      // A message's photos, on the machine its agent runs on, in a folder of its tile's.
+      keep: (bare, images) => {
+        const folder = runsIn(heldBoards(store), bare);
+        if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
+        return places.keep(folder, images, bare);
+      },
+    }),
     // What an agent here and the person say to each other, from its session file, as it is
     // written (M5, spec/agents.md "Conversation").
     conversations({
@@ -387,6 +396,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
     steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,
+    pastesPhotos: (bare) => !!manifestOf(heldBoards(store), bare)?.pastedImages,
     signalsTurns: (bare) => !!manifestOf(heldBoards(store), bare)?.caps.turnSignal,
     // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
     spawned: (spawn) => {
@@ -448,7 +458,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     syncing = syncing.then(async () => s.sync(wantedServices(await listToolPackages(), (await readSettings(settingsFile)).plugins.state, process.env.HIVEMIND_SAFE_MODE === "1")))
       .catch((e: unknown) => o.onWarn(`tool plugins' services: ${e instanceof Error ? e.message : String(e)}`));
   };
-  const servicesWatched = [settingsFile, userToolsDir()];
+  const servicesWatched = [settingsFile, recordsFile()];
   void drive.serving.then((mine) => {
     if (!mine) return;
     services = new Services({ driveSock, grants, logDir: path.join(o.dir, "services") });

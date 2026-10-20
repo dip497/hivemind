@@ -5,7 +5,7 @@
  * Storage layout: see packages/hive-core/src/storage.ts.
  * Doc split:      AGENTS.md (pointer) → CLAUDE.md (source of truth).
  */
-import { defineCommand, runMain } from "citty";
+import { defineCommand } from "citty";
 import pkg from "../package.json" with { type: "json" };
 import { initCmd } from "./commands/init.js";
 import { addCmd } from "./commands/add.js";
@@ -39,6 +39,10 @@ import { killCmd } from "./commands/kill.js";
 import { pushCmd } from "./commands/push.js";
 import { joinCmd, peopleCmd, shareCmd } from "./commands/share.js";
 import { grantCmd } from "./commands/grant.js";
+import { migrateOnStart } from "./migrate-on-start.js";
+import { migrationsCmd } from "./commands/migrations.js";
+import { guideCmd } from "./commands/guide.js";
+import { runCli } from "./cli-runner.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -96,8 +100,11 @@ const main = defineCommand({
     network: networkCmd,
     kill: killCmd,
     push: pushCmd,
+    migrations: migrationsCmd,
+    guide: guideCmd,
   },
 });
 
 preprocessArgv();
-await runMain(main);
+await migrateOnStart(process.argv.slice(2), pkg.version);
+await runCli(main, process.argv.slice(2));

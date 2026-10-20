@@ -8,13 +8,13 @@ import { fixtureXDG } from "./agents-fixtures.js";
 test("packages inspect returns a JSON plan without an app and refuses executable fields", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hive-package-cli-"));
   try {
-    const manifest = { apiVersion: 1, id: "@example/review", name: "Review", version: "1.0.0", agents: [{ id: "reviewer", name: "Reviewer", provider: "pi", prompt: "Review the diff." }], startup: { agents: ["reviewer"] } };
+    const manifest = { apiVersion: 2, id: "@example/review", name: "Review", version: "1.0.0", agents: [{ id: "@example/reviewer", name: "Reviewer", provider: "pi", prompt: "Review the diff." }], startup: { agents: ["@example/reviewer"] } };
     fs.writeFileSync(path.join(dir, "hivemind-package.json"), JSON.stringify(manifest));
     // provider "pi" must be an installed agent: give the CLI a machine that has it.
     const xdg = fixtureXDG(["pi"]);
     const result = hive(["packages", "inspect", dir, "--json"], { cwd: dir, env: { XDG_CONFIG_HOME: xdg } });
     expect(result.code).toBe(0);
-    expect(result.json).toMatchObject({ ok: true, data: { mode: "inspect-only", startup: { requiresExplicitStart: true } } });
+    expect(result.json).toMatchObject({ mode: "inspect-only", startup: { requiresExplicitStart: true } });
     fs.writeFileSync(path.join(dir, "hivemind-package.json"), JSON.stringify({ ...manifest, "\x1b[2J": "untrusted key", scripts: { install: "exit 1" } }));
     const bad = hive(["packages", "inspect", dir], { cwd: dir, env: { XDG_CONFIG_HOME: xdg } });
     expect(bad.code).toBe(1);

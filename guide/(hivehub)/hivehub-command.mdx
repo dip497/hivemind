@@ -1,0 +1,191 @@
+---
+title: "The hivehub command"
+sidebarTitle: "hivehub command"
+description: "Every hivehub command and flag with an example, its --json output, the environment variables it reads, its exit codes and the messages it prints."
+---
+
+`hivehub` publishes and finds Hivemind plugins from a terminal or an agent. It is one file with
+no dependencies and needs Node 20 or newer. HiveHub serves it at
+[`/hivehub.mjs`](/hivehub-api#the-command-itself).
+
+```bash
+curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub
+```
+
+`hivehub` with no command, or `hivehub help`, prints the list of commands.
+
+## Commands
+
+| Command | What it does | Needs sign-in |
+|---|---|---|
+| [`hivehub login`](#hivehub-login) | Signs in with GitHub. | No |
+| [`hivehub publish [folder]`](#hivehub-publish) | Publishes a plugin folder at a commit on GitHub. | Yes |
+| [`hivehub search [words]`](#hivehub-search) | Finds plugins. | No |
+| [`hivehub info <id>`](#hivehub-info) | Shows one plugin in full. | No |
+| [`hivehub whoami`](#hivehub-whoami) | Says which account the command publishes as. | Yes |
+| [`hivehub logout`](#hivehub-logout) | Deletes the saved login. | No |
+
+A flag is written `--name value` or `--name=value`. `--json` and `--yes` never take a value, so
+`hivehub publish --yes ./counter` still publishes `./counter`.
+
+## `hivehub login`
+
+```bash
+hivehub login
+```
+
+It prints a link and a code, waits while you type the code on GitHub, then saves the login. How
+the sign-in works and where the token is kept: [`hivehub login`](/hivehub-sign-in#hivehub-login).
+
+| It prints | Meaning |
+|---|---|
+| `Open <link> and enter <code>`, then `Waiting for GitHub…` | Open the link and type the code. |
+| `Signed in as <login>.` | Done. |
+| `sign-in was cancelled on GitHub` | You pressed **Cancel** on GitHub. |
+| `the code expired before it was entered — run hivehub login again` | The code ran out. |
+| `device sign-in is turned off for this registry's GitHub app — …` | The registry's owner has to switch on device sign-in. |
+| `GitHub refused the sign-in: …` or `GitHub would not start a sign-in: …` | GitHub's own reason follows. |
+
+## `hivehub publish`
+
+```bash
+# a widget or tool folder in a git checkout
+hivehub publish ./counter
+# a view's built folder, with the line for its card
+hivehub publish dist --description "A board of every agent, by state"
+# straight from GitHub, with no local copy
+hivehub publish --repo you/plugins --path widgets/counter --ref v1.2.0
+```
+
+Without `--repo`, it reads the folder's git repository: its `origin` on GitHub, the commit
+checked out, and the folder's place in the repository. HiveHub then reads that commit on GitHub,
+never your disk. With `--repo`, it needs no local copy.
+
+| Flag | What it does | Default |
+|---|---|---|
+| `[folder]` | The plugin's folder. With `--repo`, the folder in the repository when `--path` is not given. | `.` |
+| `--repo owner/name` | Publish from this GitHub repository directly. | the folder's `origin` |
+| `--path <folder>` | With `--repo`: the plugin's folder in the repository. Ignored without `--repo`. | `[folder]` |
+| `--ref <commit, branch or tag>` | The commit to publish. | `HEAD` |
+| `--description "…"` | The one line on its card. Empty keeps the line it has, or uses the manifest's `description` the first time. | |
+| `--yes` | Publish without asking. Needed when there is no terminal to ask in, such as an agent or CI. | |
+
+It first shows what would be listed:
+
+```text
+@you/counter  widget 1.2.0
+  Counts things.
+  from   you/plugins @ 3f2a9c1  (widgets/counter)
+  files  3: README.md, widget.js, widget.json
+  does   Start agents in your workspace
+Publish @you/counter? [y/N]
+```
+
+| It prints | Meaning | Exit |
+|---|---|---|
+| `Published <id> → <page on HiveHub>` | Done. | 0 |
+| `Not published.` | You answered anything but `y`. | 0 |
+| `note: <folder> has uncommitted changes — …` | A warning. It still publishes the commit. | |
+| `commit <sha> is not on GitHub yet — push it first` | Push, then publish again. | 1 |
+| `not a terminal — re-run with --yes to publish` | It cannot ask. | 2 |
+| `<folder> is not inside a git repository — or pass --repo owner/name` | | 2 |
+| `this repository has no origin remote` | | 2 |
+| `origin is not a GitHub repository (<remote>)` | | 2 |
+| `not signed in — run hivehub login, or set HIVEHUB_TOKEN` | | 3 |
+| Anything HiveHub refuses with | Printed as HiveHub sent it: [its errors](/hivehub-api#publish). | 3 for a sign-in error, else 1 |
+
+What to do about each: [If it didn't](/publish-to-hivehub#if-it-didnt).
+
+## `hivehub search`
+
+```bash
+hivehub search board
+hivehub search --type tool git
+```
+
+| Flag | What it does |
+|---|---|
+| `[words]` | Matched against each plugin's id, name and one line. |
+| `--type agent`, `view`, `widget` or `tool` | Only that kind. |
+
+It prints one plugin a line, its id, kind and one line, most installed first, at most 100. With
+no match: `Nothing matches.` The same search with more options:
+[`GET /api/v1/plugins`](/hivehub-api#search).
+
+## `hivehub info`
+
+```bash
+hivehub info @dip497/agent-board    # a view or widget: @owner/name
+hivehub info dip497/worktrees       # a tool: owner/name
+hivehub info gemini                 # an agent: its name
+```
+
+It prints the plugin's id, kind, version, who published it, its one line, the repository and
+commit, its files, the program an agent runs, every line of what it asks for, how many installs,
+and its page on HiveHub.
+
+| It prints | Meaning | Exit |
+|---|---|---|
+| `give a view or widget as @owner/name, a tool as owner/name, or an agent by its name` | That is not an id HiveHub lists. | 2 |
+| `<id> is not on the registry` | No plugin has that id. | 1 |
+
+## `hivehub whoami`
+
+```bash
+hivehub whoami
+```
+
+It prints the GitHub login and where the token came from, such as `you  (login)`. The sources, in
+the order it tries them: [A token for CI](/hivehub-sign-in#a-token-for-ci).
+
+| It prints | Exit |
+|---|---|
+| `not signed in — run hivehub login, or set HIVEHUB_TOKEN` | 3 |
+| `GitHub does not accept the token from <source> — run hivehub login` | 3 |
+
+## `hivehub logout`
+
+```bash
+hivehub logout
+```
+
+It deletes the saved login and prints `Signed out.`, or `Not signed in.` when there was none. It
+does not revoke the token on GitHub: [Signing out and revoking](/hivehub-sign-in#signing-out-and-revoking).
+
+## `--json`
+
+Every command takes `--json`. It then prints one JSON object a line on standard output, and the
+lines a person reads go to standard error. A failure prints `{"error": "<message>"}` and exits
+with the same code.
+
+| Command | What it prints |
+|---|---|
+| `login` | Two lines: `verification_uri`, `user_code` and `expires_in` (seconds) first; `login` once you are signed in. |
+| `publish` | `published` (the id), `url`, `ref` (the commit) and `files`. If you answer no: `published: null` and `preview`. |
+| `search` | `plugins`: a list in the shape [`GET /api/v1/plugins/<id>`](/hivehub-api#one-plugin) returns. |
+| `info` | The plugin, in that shape. |
+| `whoami` | `login` and `source`. |
+| `logout` | `signedOut`: `true`, or `false` when there was no login. |
+
+With `--json`, `publish` shows no preview before asking, so an agent passes `--yes` once the
+person has agreed.
+
+## Environment variables
+
+| Variable | What it does |
+|---|---|
+| `HIVEHUB_TOKEN` | A GitHub token, used in place of your login: [A token for CI](/hivehub-sign-in#a-token-for-ci). |
+| `GITHUB_TOKEN`, `GH_TOKEN` | Used last, when nothing else signs you in. In GitHub Actions, `GITHUB_TOKEN` also goes with the job's id token: [GitHub Actions](/hivehub-sign-in#github-actions). |
+| `HIVEHUB_URL` | The registry to use. Default `https://hivehub.griiken.workers.dev`. |
+| `XDG_CONFIG_HOME` | Where the login is saved: `$XDG_CONFIG_HOME/hivehub/auth.json`. Default `~/.config`. |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Done, or you answered no. |
+| `1` | It failed: HiveHub refused, or the plugin or commit was not found. |
+| `2` | The command was wrong: an unknown command, a bad id, a folder that is not a GitHub checkout, or no terminal to ask in. |
+| `3` | Not signed in, or the sign-in was refused. |
+
+<LastValidated />

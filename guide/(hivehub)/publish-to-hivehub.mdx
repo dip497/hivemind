@@ -1,0 +1,194 @@
+---
+title: "Publish a plugin"
+description: "List your widget, view, tool or agent on HiveHub so anyone can install it from Hivemind: from the web form, the hivehub command or GitHub Actions."
+---
+
+Publish a plugin when it works for you and you want others to install it from **Settings →
+Plugins**. HiveHub lists it; your GitHub repository keeps the files. How a listing works:
+[What HiveHub is](/hivehub).
+
+<AgentPrompt description="Paste this into your coding agent to publish a plugin you built on HiveHub." page="publish-to-hivehub">{`
+Publish the Hivemind plugin in the folder I name on HiveHub.
+
+1. Read its manifest (\`widget.json\`, \`hivemind-view.json\` or \`hivemind-tool.json\`). Check it has an id in my GitHub account (\`@login/name\` for a widget or view, \`login/name\` for a tool), a \`version\`, a one-line \`description\` and a \`category\`. Check \`README.md\` says what it does and what it asks for. For a view, publish its built \`dist\` folder.
+2. If it is an agent (\`agent.yaml\`), stop: agents are listed by pull request to the GitHub repository dip497/hivemind-plugins, in \`agents/<id>/\`. Ask me before opening one with \`gh\`.
+3. The folder must be in a git repository whose \`origin\` is on GitHub, and I must be able to push to it. Ask me which repository if there is none. Commit, then push. HiveHub publishes the pushed commit, never the disk.
+4. Get the \`hivehub\` command if \`command -v hivehub\` finds nothing: \`curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub\`. It needs Node 20 or newer.
+5. Run \`hivehub whoami\`. If I am not signed in, run \`hivehub login\`, show me the link and the code it prints, and wait while I open the link and type the code myself.
+6. Run \`hivehub publish <folder>\` without \`--yes\`. Show me the preview: id, version, files and what it asks for. Add \`--yes\` only after I agree.
+7. Check: it prints \`Published <id>\` and the plugin's page on HiveHub.
+
+At the end, give me the plugin's page on HiveHub, and tell me others install it from Settings → Plugins, on the HiveHub tab.
+`}</AgentPrompt>
+
+## Before you start
+
+- Your plugin works: `hive plugins list` shows it on, with no problem.
+- Its id is in your own GitHub account: `@you/name` for a widget or view, `you/name` for a tool.
+  Nobody can publish into someone else's account, and an id stays with the account that first
+  published it.
+- Its folder is in a public GitHub repository you can push to, and within HiveHub's
+  [limits](/hivehub-api#limits).
+- You sign in with GitHub to publish: [Signing in to HiveHub](/hivehub-sign-in).
+
+## Get it ready
+
+<Steps>
+  <Step title="Fill in the manifest">
+    Give it a `version`, a one-line `description` and a `category`
+    ([the list](/hivehub#categories)).
+
+    Put a `README.md` beside the manifest. HiveHub and **Settings → Plugins** show it before
+    anyone installs.
+  </Step>
+  <Step title="Push it">
+    Commit the folder and push it to GitHub. For a view, commit its built `dist/` too.
+
+    Check: `git status` says the tree is clean and up to date with its remote.
+  </Step>
+</Steps>
+
+Then publish it in one of three ways: the web form, the `hivehub` command, or GitHub Actions.
+
+## From the web form
+
+<Steps>
+  <Step title="Sign in">
+    Open [hivehub.griiken.workers.dev/publish](https://hivehub.griiken.workers.dev/publish) and
+    press **Sign in with GitHub**.
+  </Step>
+  <Step title="Say where it is">
+    | Field | What to put |
+    |---|---|
+    | **Repository** | `owner/name`. You need push access; HiveHub checks with GitHub. |
+    | **Branch, tag or commit** | Leave it empty for the latest commit of the default branch. |
+    | **Folder** | Where the manifest is. Leave it empty for the top of the repository. |
+    | **One line about it** | The sentence on its card. Leave it empty to use the manifest's `description`. |
+
+    Press **Read the repository**.
+  </Step>
+  <Step title="Check the preview, then confirm">
+    HiveHub reads the repository and shows **This is what will be listed**: the id, kind, name,
+    commit, how many files, and what Hivemind will tell people it asks for. Press **Publish it**.
+
+    Check: it says **Published.** with a link to the listing.
+  </Step>
+</Steps>
+
+## From a terminal
+
+<Steps>
+  <Step title="Get the hivehub command">
+    It needs Node 20 or newer.
+
+    ```bash
+    curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub
+    ```
+
+    Check: `hivehub` prints its list of commands.
+  </Step>
+  <Step title="Sign in once">
+    ```bash
+    hivehub login
+    ```
+
+    It prints a link and a code. Open the link and type the code on GitHub. Where the login is
+    kept, and how long it lasts: [`hivehub login`](/hivehub-sign-in#hivehub-login).
+
+    Check: it says `Signed in as <your login>.`
+  </Step>
+  <Step title="Publish">
+    ```bash
+    hivehub publish ./counter      # a widget or tool folder
+    hivehub publish dist           # a view: its built folder
+    ```
+
+    It publishes the folder at the commit you pushed. First it shows a preview: the id, version,
+    repository and commit, files, and what the plugin asks for. Answer `y` to publish. Every
+    flag: [`hivehub publish`](/hivehub-command#hivehub-publish).
+
+    Check: it prints `Published <id>` and the plugin's page on HiveHub.
+  </Step>
+</Steps>
+
+## From GitHub Actions
+
+Store a GitHub token as the repository secret `HIVEHUB_TOKEN`. Its account publishes the
+plugin. Which token to make: [A token for CI](/hivehub-sign-in#a-token-for-ci). Then add a
+workflow:
+
+```yaml .github/workflows/hivehub.yml
+name: Publish to HiveHub
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: |
+          curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o hivehub
+          node hivehub publish ./counter --yes
+        env:
+          HIVEHUB_TOKEN: ${{ secrets.HIVEHUB_TOKEN }}
+```
+
+The job publishes the commit it runs on. `--yes` answers the question, because a job has no one
+to ask. Any other CI works the same way with `HIVEHUB_TOKEN` set.
+
+Signing in as the job's own repository, with no token stored, works today only for
+`dip497/hivemind-plugins` on `main`: see [GitHub Actions](/hivehub-sign-in#github-actions).
+
+## Publish an agent
+
+Agents are listed by pull request to
+[dip497/hivemind-plugins](https://github.com/dip497/hivemind-plugins): one folder per agent,
+`agents/<id>/`, with its `agent.yaml` and a `README.md`. An agent's id is one name, such as
+`gemini`, so each name means one program. Once the pull request is merged, that repository's
+workflow publishes it. Hivemind then adds it on any computer where its program is on the `PATH`.
+How to write one: [Add your own agent](/agent-providers).
+
+## Publish a package
+
+A package publishes as one listing with every member: commit it with each view's `dist/`, push,
+and run `hivehub publish <package folder>`. See [Packages](/packages).
+
+## What people see when they install it
+
+The card shows your plugin's name and your one line. Before anything is added, people see what
+it adds and what it asks for. That list comes from your manifest, not from the form. Its page in
+**Settings → Plugins** shows your README under **Read me**, and your account and version. A tool
+arrives switched off, and so does every update to one. The whole install:
+[Install from HiveHub](/hivehub#install-from-hivehub).
+
+## Publish an update
+
+Raise `version`, commit, push, and publish again. If you leave the one line empty, the card keeps
+the line it has. Everyone who has the plugin sees **Update** on the **HiveHub** tab.
+
+## If it didn't
+
+| You see | Do this |
+|---|---|
+| `commit … is not on GitHub yet — push it first` | Push the commit, then publish again. |
+| `note: … has uncommitted changes` | HiveHub publishes the commit, not your disk. Commit and push the changes first. |
+| `not a terminal — re-run with --yes to publish` | It cannot ask you. Read the preview, then add `--yes`. |
+| `… is not inside a git repository` | Put the folder in a GitHub repository, or pass `--repo owner/name`. |
+| `not signed in — run …` | Run `hivehub login`, or set `HIVEHUB_TOKEN` in CI. |
+| `you do not have write access to …` | Publish from an account that can push to the repository. |
+| `… but you are publishing as …` | Change the id in the manifest to your own account. |
+| `"…" is published by someone else` | That id is taken. Pick another name. |
+| `only the agents repository's main branch publishes from CI` | Set `HIVEHUB_TOKEN` in the job. |
+| Something else | [Troubleshooting](/troubleshooting) |
+
+## Reference
+
+- [The `hivehub` command](/hivehub-command): every command, flag, message and exit code.
+- [Signing in to HiveHub](/hivehub-sign-in): every way to sign in, and how to revoke it.
+- [HiveHub API](/hivehub-api): the publish route, its errors and its limits.
+
+<LastValidated />

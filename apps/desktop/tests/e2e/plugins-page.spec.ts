@@ -1,5 +1,5 @@
-// Settings → Plugins: one row of controls (yours or HiveHub's, a search, a kind), then a group per
-// category, as the Add menu has them, with one heading and its count, rows that all have the same parts with their state in one
+// Settings → Plugins: one row of controls (yours or HiveHub's, a search), a tab per kind, then a
+// group per category, as the Add menu has them, with one heading and its count, rows that all have the same parts with their state in one
 // badge and what HiveHub says the plugin does (or nothing), and what a kind does by itself (adding
 // agents found on this machine) under its list.
 import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from "@playwright/test";
@@ -46,6 +46,17 @@ test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: tru
 
 const body = () => page.locator("[data-settings-body]");
 const show = (scope: "Installed" | "HiveHub") => body().getByRole("tab", { name: scope, exact: true }).click();
+const KINDS = ["agent", "view", "widget", "tool"];
+const tab = async (kind: string) => {
+  await body().locator(`[data-plugins-kind="${kind}"]`).click();
+  await expect(body().locator(`[data-plugins-kind="${kind}"]`)).toHaveAttribute("aria-selected", "true");
+};
+/** What each kind's tab lists, one tab after another. */
+async function everyTab<T>(read: () => Promise<T[]>): Promise<T[][]> {
+  const out: T[][] = [];
+  for (const kind of KINDS) { await tab(kind); out.push(await read()); }
+  return out;
+}
 
 /** Each group's heading, how many rows it has, and which. */
 async function groups(): Promise<{ heading: string[]; rows: number; ids: string[] }[]> {
@@ -76,15 +87,16 @@ async function rows(where: Locator): Promise<{ id: string; name: number; line: n
   })));
 }
 
-test("one row of controls: yours or HiveHub's, a search and a kind; no second bar of filters, no refresh", async () => {
+test("one row of controls: yours or HiveHub's and a search, then a tab per kind; no other filters, no refresh", async () => {
   for (const scope of ["Installed", "HiveHub"] as const) {
     await show(scope);
     const controls = body().locator("[data-plugins-controls]");
     await expect(controls.getByRole("tablist", { name: "Show" }).getByRole("tab")).toHaveText(["Installed", "HiveHub"]);
     await expect(controls.getByRole("tab", { name: scope, exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(controls.getByRole("searchbox", { name: "Search plugins" })).toBeVisible();
-    await expect(controls.getByRole("combobox", { name: "Kind" })).toBeVisible();
-    await expect(body().getByRole("tablist")).toHaveCount(1);
+    await expect(body().getByRole("tablist", { name: "Kind" }).getByRole("tab")).toHaveText([/^Agents \d+$/, /^Views \d+$/, /^Widgets \d+$/, /^Tools \d+$/, /^Packages \d+$/]);
+    await expect(body().getByRole("combobox")).toHaveCount(0);
+    await expect(body().getByRole("tablist")).toHaveCount(2);
     await expect(body().getByRole("group")).toHaveCount(0);
     await expect(body().getByRole("button", { name: /refresh/i })).toHaveCount(0);
   }
@@ -92,20 +104,24 @@ test("one row of controls: yours or HiveHub's, a search and a kind; no second ba
 });
 
 test("each category is one heading with its count, in the Add menu's order, and every row has the same parts, its state in one badge", async () => {
+  await tab("agent");
   await expect(body().locator('[data-plugin-open="agent:claude"]')).toBeVisible();
   // The catalog arrives after the list: Claude's line is HiveHub's words once it has.
   await expect(body().locator('[data-plugin-row="agent:claude"] .plugin-row-detail')).toHaveText("A test agent from the catalog.");
-  const mine = await groups();
-  expect(mine.map((g) => g.heading)).toEqual(mine.map(headed));
-  expect(titles(mine)).toEqual(inOrder(titles(mine)));
+  const mineByTab = await everyTab(groups);
+  for (const listed of mineByTab) {
+    expect(listed.map((g) => g.heading)).toEqual(listed.map(headed));
+    expect(titles(listed)).toEqual(inOrder(titles(listed)));
+  }
+  const mine = mineByTab.flat();
   // Every agent is under Agents; a tool is under its tile's category, as in the Add menu; a widget
   // under its own; a view that comes with the app says none.
   expect(under(mine, "agent:claude")).toEqual(["Agents"]);
-  expect(under(mine, "tool:hivemind/code")).toEqual(["Code"]);
+  expect(under(mine, "tool:@hivemind/code")).toEqual(["Code"]);
   expect(under(mine, "widget:note")).toEqual(["Productivity"]);
   expect(under(mine, "view:canvas")).toEqual(["Other"]);
 
-  const installed = await rows(body());
+  const installed = (await everyTab(() => rows(body()))).flat();
   for (const r of installed) {
     expect(r.name, r.id).toBe(1);
     expect(r.line, r.id).toBeLessThanOrEqual(1);
@@ -123,8 +139,9 @@ test("each category is one heading with its count, in the Add menu's order, and 
   await expect(body().locator("[data-plugin-row]").filter({ hasText: "worker" })).toHaveCount(0);
 
   await show("HiveHub");
+  await tab("agent");
   await expect(body().locator("[data-plugin-row]").first()).toBeVisible();
-  const hub = await rows(body());
+  const hub = (await everyTab(() => rows(body()))).flat();
   for (const r of hub) {
     expect(r.extra, r.id).toEqual([expect.stringMatching(/^badge:Installed$|^button::(Install|Update)$/)]);
     // A description that only repeats the name (the catalog's agents and views here) is not shown.
@@ -132,9 +149,12 @@ test("each category is one heading with its count, in the Add menu's order, and 
     expect(new Set(r.said).size, r.id).toBe(r.said.length);
   }
   expect(hub.filter((r) => r.line === 0).length).toBeGreaterThan(0);
-  const listed = await groups();
-  for (const g of listed) expect(g.heading).toEqual(headed(g));
-  expect(titles(listed)).toEqual(inOrder(titles(listed)));
+  const listedByTab = await everyTab(groups);
+  for (const one of listedByTab) {
+    for (const g of one) expect(g.heading).toEqual(headed(g));
+    expect(titles(one)).toEqual(inOrder(titles(one)));
+  }
+  const listed = listedByTab.flat();
   expect(under(listed, "agent:claude")).toEqual(["Agents"]);
   expect(under(listed, "view:@e2e/ports")).toEqual(["Monitoring"]);
   expect(under(listed, "view:@e2e/later")).toEqual(["Other"]);
@@ -142,6 +162,7 @@ test("each category is one heading with its count, in the Add menu's order, and 
 });
 
 test("adding agents found on this machine is under the Agents list, not among its rows, and saves", async () => {
+  await tab("agent");
   const agents = body().getByRole("region", { name: "Agents", exact: true });
   const auto = agents.locator(".plugins-group-foot").getByRole("switch", { name: "Add agents found on this machine" });
   await expect(auto).toBeVisible();

@@ -174,4 +174,71 @@ function hostMove() {
   return d;
 }
 
-export default [connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, ...howItWorks];
+// HiveHub's registry.ts draft() lists one commit and a SHA-256 per file; plugin-catalog.ts stageEntry() checks each.
+const HIVEHUB_DESC = 'Publishing makes HiveHub read your repository at one commit and list every file with its SHA-256 hash. Hivemind reads that listing, downloads each file from your repository at that commit, and checks it against its hash; a file that differs stops the install.';
+
+function hivehubInstall() {
+  const d = new Diagram({ slug: 'hivehub-install', w: 790, h: 214, title: 'Where a plugin’s files come from', desc: HIVEHUB_DESC });
+  d.wire([[210, 62], [300, 62]]); d.label(255, 46, 'publish');
+  d.wire([[490, 62], [580, 62]]); d.label(535, 46, 'listing');
+  d.wire([[115, 100], [115, 144], [675, 144], [675, 100]], { accent: true }); d.label(395, 160, 'files');
+  d.node(20, 24, 190, 76, 'Your repository', { sub: 'on GitHub, holds the files' });
+  d.node(300, 24, 190, 76, 'HiveHub', { sub: ['one commit, each file’s', 'path and SHA-256'], dashed: true, plain: true });
+  d.node(580, 24, 190, 76, 'Hivemind', { sub: 'checks every hash', focal: true });
+  d.note(395, 198, 'A file that does not match its hash stops the install.', { size: 12 });
+  return d;
+}
+
+// The same parts stacked for a phone screen.
+function hivehubInstallPhone() {
+  const d = new Diagram({ slug: 'hivehub-install-phone', w: 320, h: 400, title: 'Where a plugin’s files come from', desc: HIVEHUB_DESC });
+  d.wire([[120, 84], [120, 140]]); d.label(132, 112, 'publish', { anchor: 'start' });
+  d.wire([[120, 216], [120, 272]]); d.label(132, 244, 'listing', { anchor: 'start' });
+  d.wire([[220, 52], [250, 52], [250, 304], [220, 304]], { accent: true }); d.label(262, 178, 'files', { anchor: 'start' });
+  d.node(20, 20, 200, 64, 'Your repository', { sub: 'on GitHub, holds the files' });
+  d.node(20, 140, 200, 76, 'HiveHub', { sub: ['one commit, each file’s', 'path and SHA-256'], dashed: true, plain: true });
+  d.node(20, 272, 200, 64, 'Hivemind', { sub: 'checks every hash', focal: true });
+  d.note(160, 366, 'A file that does not match its', { size: 12 });
+  d.note(160, 384, 'hash stops the install.', { size: 12 });
+  return d;
+}
+
+const PACKAGES_DESC = 'A package is one folder whose hivemind-package.json names its tools, widgets, views and agent presets; hive plugins install puts the whole box on this machine, with one switch, one version and a rollback, and hivehub publish lists the whole box on HiveHub.';
+
+function packagesOneBox() {
+  const d = new Diagram({
+    slug: 'packages-one-box', w: 640, h: 340,
+    title: 'A package is one box',
+    desc: PACKAGES_DESC,
+  });
+  d.wire([[170, 196], [170, 256]], { accent: true }); d.label(182, 230, 'hive plugins install', { anchor: 'start' });
+  d.wire([[470, 196], [470, 256]]); d.label(482, 230, 'hivehub publish', { anchor: 'start' });
+  d.zone(20, 24, 600, 172, 'One folder: @you/kit');
+  d.node(35, 56, 130, 64, 'Tools', { sub: 'run in the app' });
+  d.node(180, 56, 130, 64, 'Widgets', { sub: 'sandboxed' });
+  d.node(325, 56, 130, 64, 'Views', { sub: 'sandboxed' });
+  d.node(470, 56, 135, 64, 'Agent presets', { sub: 'a prompt' });
+  d.note(320, 160, 'hivemind-package.json names each member, every one @you/<name>', { size: 12.5 });
+  d.node(60, 256, 220, 64, 'This machine', { sub: 'one switch, one version, rollback', focal: true });
+  d.node(360, 256, 220, 64, 'HiveHub', { sub: 'one listing, every member', dashed: true, plain: true });
+  return d;
+}
+
+// The same box stacked for a phone screen, so nothing scrolls sideways.
+function packagesOneBoxPhone() {
+  const d = new Diagram({ slug: 'packages-one-box-phone', w: 320, h: 442, title: 'A package is one box', desc: PACKAGES_DESC });
+  d.wire([[86, 262], [86, 336]], { accent: true }); d.label(96, 292, 'hive plugins', { anchor: 'start' }); d.label(96, 308, 'install', { anchor: 'start' });
+  d.wire([[234, 262], [234, 336]]); d.label(244, 292, 'hivehub', { anchor: 'start' }); d.label(244, 308, 'publish', { anchor: 'start' });
+  d.zone(8, 30, 304, 232, 'One folder: @you/kit');
+  d.node(24, 60, 124, 60, 'Tools', { sub: 'run in the app' });
+  d.node(172, 60, 124, 60, 'Widgets', { sub: 'sandboxed' });
+  d.node(24, 132, 124, 60, 'Views', { sub: 'sandboxed' });
+  d.node(172, 132, 124, 60, 'Agent presets', { sub: 'a prompt' });
+  d.note(24, 220, 'hivemind-package.json names each', { anchor: 'start' });
+  d.note(24, 240, 'member, every one @you/<name>', { anchor: 'start' });
+  d.node(24, 336, 124, 86, 'This machine', { sub: ['one switch,', 'one version,', 'a rollback'], focal: true });
+  d.node(172, 336, 124, 86, 'HiveHub', { sub: ['one listing,', 'every member'], dashed: true, plain: true });
+  return d;
+}
+
+export default [packagesOneBox, packagesOneBoxPhone, connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, hivehubInstall, hivehubInstallPhone, ...howItWorks];

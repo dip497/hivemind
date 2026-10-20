@@ -8,11 +8,12 @@
  */
 import { Loading } from "../components/ui/loading";
 import { useEffect, useRef, useSyncExternalStore, type ComponentType } from "react";
-import { isPluginEnabled, pluginOptions } from "@hivemind/core/plugin-settings";
+import { isPluginEnabled, isPluginOn, pluginOptions } from "@hivemind/core/plugin-settings";
 import { toolFolder, type ToolPackage } from "@hivemind/core/tool-format";
 import { toolModuleProblem, type TileProps, type ToolModule } from "@hivemind/tile-sdk";
 import { useSettings } from "../settings-store";
-import { registerTile, unregisterTile, type KindIcon, type TileBodyArgs } from "./api";
+import { registerTile, unregisterTile, type TileBodyArgs } from "./api";
+import { maskIcon } from "../plugins/mask-icon";
 import type { ToolTileData } from "./tool-tile";
 
 export { WorkspacePropsContext } from "../workspace/workspace-props";
@@ -89,7 +90,7 @@ export function loadToolModule(pkg: ToolPackage): Promise<ToolModule> {
 /** Whether a plugin is on: one that comes with the app is, until switched off; one you added is
  *  not, until switched on. */
 export const toolOn = (state: Parameters<typeof isPluginEnabled>[0], pkg: ToolPackage): boolean =>
-  isPluginEnabled(state, "tool", pkg.id, pkg.source === "app");
+  isPluginOn(state, "tool", pkg, pkg.source === "app");
 
 function register(pkg: ToolPackage, off: Set<string>): void {
   const tools = pkg.tools.filter((t) => t.tileKind && !off.has(t.key));
@@ -119,14 +120,6 @@ function register(pkg: ToolPackage, off: Set<string>): void {
     fallback: () => <Loading label={`Loading ${pkg.name}`} />,
     minSize: { width: 240, height: 160 },
   });
-}
-
-/** A plugin's .svg drawn as the app's icons are: its shape in the text's colour, at the size asked. */
-function maskIcon(url: string): KindIcon {
-  const mask = `url("${url}") center / contain no-repeat`;
-  return function PluginIcon({ size = 16, className }) {
-    return <span aria-hidden className={className} style={{ display: "inline-block", width: size, height: size, flex: "none", background: "currentColor", mask, WebkitMask: mask }} />;
-  };
 }
 
 /** Keeps the registered tool plugins to those switched on: mounted once, by the app. */

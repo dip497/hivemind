@@ -105,6 +105,9 @@ import type { WidgetPackage } from "@hivemind/core/widget-format";
 
 export type { ToolPackage } from "@hivemind/core/tool-format";
 import type { ToolPackage } from "@hivemind/core/tool-format";
+import type { MemberChange } from "@hivemind/core/package-install";
+import type { MemberRuns } from "@hivemind/hub";
+import type { PackageOf } from "@hivemind/core/plugin-settings";
 /** A tool plugin's tile running a program in its folder: found on PATH, no shell. `maxAgeMs`
  *  shares one answer that young between tiles asking the same thing. */
 export type ToolRun = { bin: string; args: string[]; cwd: string; maxAgeMs?: number; stdin?: string };
@@ -245,16 +248,42 @@ export interface UpdateStatus {
 }
 
 import type { Appearance, Settings } from "@hivemind/core/settings-schema";
-import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
+import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
+
+/** An installed package, as the Plugins page lists it: each member with where its code runs, and
+ *  the version before this one when there is one to roll back to. */
+export interface InstalledPackageInfo {
+  id: string; name: string; version: string; on: boolean;
+  members: Array<{ kind: string; id: string; runs: MemberRuns }>;
+  previous: { version: string; on: boolean } | null;
+}
+
+/** What installing a package would do, found by installing nothing (`installPackage` with
+ *  `dryRun`, as `hive plugins install --dry-run`): each member, where it runs and what it asks
+ *  for, and how each differs from the version installed. Installed with its `token`. */
+export interface PackageReview {
+  token: string; id: string; name: string; version: string;
+  /** Whether it is on once installed. */
+  on: boolean;
+  /** The version it replaces, and whether that one is on. */
+  replaces: { version: string; on: boolean } | null;
+  members: Array<{ kind: string; id: string; name: string; permissions: string[]; runs: MemberRuns }>;
+  changes: Array<MemberChange & { name: string; runs: MemberRuns }>;
+}
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
+
 export interface ViewPackageInfo {
   id: string;
   dir: string;
   source: "user" | "repo" | "app" | "host";
   manifest: ViewManifest | null;
+  /** Its manifest's .svg icon, as a data URL. */
+  icon?: string;
   error: string | null;
   url: string | null;
+  /** The package it was installed with, for one installed. */
+  package?: PackageOf;
 }
 
 // ── full IPC surface ──────────────────────────────────────────────────────
@@ -351,15 +380,14 @@ export interface HiveIpc {
   verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string; searchedPath?: string }>;
   /** The values each of an agent's options takes, read from its CLI. Cached per binary version. */
   agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
-  previewViewInstall?(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
+  /** The catalog's entries this app cannot read, each with why; the rest are listed. */
+  pluginCatalogSkipped(): Promise<SkippedEntry[]>;
   /** A plugin's README: from its folder here (`dir`), or from the catalog for one not installed. */
   pluginReadme(from: { dir: string } | { catalog: { type: CatalogEntry["type"]; id: string } }): Promise<string | null>;
   /** The widget packages installed on this machine. */
   listWidgets(): Promise<WidgetPackage[]>;
-  /** Add a widget package from a folder the person picks; null when they pick none. */
-  installWidget?(): Promise<{ id: string; name: string } | null>;
   removeWidget(id: string): Promise<void>;
   /** An image of the widget package `widget`, as the host of `repo` has it: for a guest without it. */
   widgetAsset(repo: string, widget: string, name: string): Promise<string | null>;
@@ -383,8 +411,6 @@ export interface HiveIpc {
   toolPackages(): Promise<{ packages: ToolPackage[]; safeMode: boolean }>;
   /** What each host module a tool plugin imports exports, by name (once, before the first loads). */
   toolHostExports(map: Record<string, string[]>): Promise<void>;
-  /** Add a tool plugin from a folder the person picks; null when they pick none. */
-  installToolPackage?(): Promise<{ id: string; name: string } | null>;
   removeToolPackage(id: string): Promise<void>;
   /** A tool plugin's tile running a program in its folder. */
   toolRun(call: ToolRun): Promise<ToolRunResult>;
@@ -402,17 +428,21 @@ export interface HiveIpc {
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
    *  `installViewPackage(token)`, an agent with `installCatalogAgent(token)`, a widget with
-   *  `installCatalogWidget(token)`, a tool with `installCatalogTool(token)`. */
+   *  `installCatalogWidget(token)`, a tool with `installCatalogTool(token)`, a package with
+   *  `installCatalogPackage(token)`. */
   reviewCatalogPlugin(type: CatalogEntry["type"], id: string): Promise<
     | ({ type: "view" } & { token: string; package: ViewPackageInfo; replacesVersion: string | null })
     | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
     | { type: "widget"; token: string; id: string; name: string; permissions: string[]; code: boolean; replaces: boolean }
     | { type: "tool"; token: string; id: string; name: string; permissions: string[]; tools: string[]; service?: string; replacesVersion: string | null }
+    | ({ type: "package" } & PackageReview)
   >;
   installCatalogAgent(token: string): Promise<void>;
   installCatalogWidget(token: string): Promise<void>;
   /** Installed off, as every tool plugin is until switched on. */
   installCatalogTool(token: string): Promise<void>;
+  /** Every member at once; on or off as the review said. */
+  installCatalogPackage(token: string): Promise<void>;
   /** Remove an agent you installed; a catalog one is then never added automatically again. */
   removeAgent(id: string): Promise<void>;
   /** Add catalog agents whose CLI was found; what was added and what each can do. Runs once per launch. */
@@ -420,6 +450,19 @@ export interface HiveIpc {
   autoInstallAgents(): Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }>;
   installViewPackage(token: string): Promise<void>;
   removeViewPackage(id: string): Promise<void>;
+  /** Switch a plugin you added on or off: with its package, which a package of one is all of. */
+  switchPlugin(kind: "view" | "widget" | "tool", id: string, on: boolean): Promise<void>;
+  /** The packages installed here, each with its switch and its members by kind and id. */
+  installedPackages(): Promise<InstalledPackageInfo[]>;
+  /** Switch a whole package on or off. */
+  switchPackage(id: string, on: boolean): Promise<void>;
+  /** Put back the version of a package in use before its last update, switched as it was. */
+  rollbackPackage(id: string): Promise<void>;
+  /** Review a folder the person picks, a package or one plugin, as an install would check it;
+   *  null when they pick none. */
+  reviewPackageFolder?(): Promise<PackageReview | null>;
+  /** Install the folder last reviewed. */
+  installPackageFolder?(token: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── identity (R3) ─────────────────────────────────────────

@@ -32,11 +32,12 @@ describe("hive plugins install, a tool", () => {
     const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
     const run = (cwd: string, ...args: string[]) => hive(["plugins", ...args, "--json"], { cwd, env });
     try {
-      expect(run(tmp, "install", "@ada/prs").json).toMatchObject({ ok: true, data: { id: "@ada/prs", name: "Pull requests" } });
-      expect(fs.readFileSync(path.join(xdg, "hivemind", "tools", "ada--prs", "index.js"), "utf8")).toBe(files["index.js"]);
+      const prs = run(tmp, "install", "@ada/prs").json as { members: Array<{ dir: string }> };
+      expect(prs).toMatchObject({ id: "@ada/prs", name: "Pull requests" });
+      expect(fs.readFileSync(path.join(prs.members[0]!.dir, "index.js"), "utf8")).toBe(files["index.js"]);
       // A listing whose files say they are another tool is refused, not installed under the wrong name.
-      expect(run(tmp, "install", "@ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining("says it is @ada/prs, not @ada/liar") });
-      expect(fs.existsSync(path.join(xdg, "hivemind", "tools", "ada--liar"))).toBe(false);
+      expect(run(tmp, "install", "@ada/liar").json).toMatchObject({ error: { message: expect.stringContaining(`says it is "@ada/prs", not @ada/liar`) } });
+      expect(fs.existsSync(path.join(xdg, "hivemind", "packages", "store", "ada--liar"))).toBe(false);
 
       // Here @ada/prs is also a folder holding another tool: the id is still HiveHub's, and the
       // folder is installed only when written as a path.
@@ -44,8 +45,8 @@ describe("hive plugins install, a tool", () => {
       fs.mkdirSync(path.join(local, "@ada", "prs"), { recursive: true });
       fs.writeFileSync(path.join(local, "@ada", "prs", "hivemind-tool.json"), manifest("@ada/mine"));
       fs.writeFileSync(path.join(local, "@ada", "prs", "index.js"), "export default { tiles: {} };\n");
-      expect(run(local, "install", "@ada/prs").json).toMatchObject({ ok: true, data: { id: "@ada/prs" } });
-      expect(run(local, "install", "./@ada/prs").json).toMatchObject({ ok: true, data: { id: "@ada/mine" } });
+      expect(run(local, "install", "@ada/prs").json).toMatchObject({ id: "@ada/prs" });
+      expect(run(local, "install", "./@ada/prs").json).toMatchObject({ id: "@ada/mine" });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -65,7 +66,7 @@ describe("hive plugins install, a tool", () => {
       expect(first).toContain("hive plugins enable tool:@ada/prs");
       expect(first).toContain("It is off");
       expect(run("plugins", "list", "--kind", "tool")).toContain("open-tool @ada/prs/prs");
-      expect(hive(["plugins", "enable", "tool:@ada/prs", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: true });
+      expect(hive(["plugins", "enable", "tool:@ada/prs", "--json"], { cwd: tmp, env }).code).toBe(0);
       const again = run("plugins", "install", src);
       expect(again).toContain("It is on");
       expect(again).not.toContain("hive plugins enable");

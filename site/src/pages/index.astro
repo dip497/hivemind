@@ -1,8 +1,8 @@
 ---
 import { HIVEHUB } from "../hivehub";
-import HeroClip from '../components/HeroClip.astro';
+import SchoolOfAgents from '../components/SchoolOfAgents.astro';
 import Fonts from '../components/Fonts.astro';
-import { wideStill, phoneStill, WIDE_SIZES, PHONE_SIZES, PHONE_QUERY } from '../lib/hero-images';
+import { heroStill, HERO_SIZES } from '../lib/hero-images';
 import icons from '../generated/agent-icons.json';
 import tokens from '../generated/tokens.json';
 import { resolve } from '../lib/tokens';
@@ -21,8 +21,8 @@ const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
-// The hero's first frame is the largest paint; the head asks for it before anything else.
-const [poster, posterPhone] = await Promise.all([wideStill('poster'), phoneStill('poster')]);
+// The hero's still is the largest paint; the head asks for it before anything else.
+const heroImage = await heroStill();
 const home = new URL(link(''), Astro.site).href;
 
 // The agents people search for by name, as the generated list spells them, while it still has them.
@@ -116,8 +116,8 @@ const code: Record<string, [string, string][]> = {
     ['p', 'hive ctl spawn --agent codex --prompt "Fix the flaky cart test"'],
     ['p', 'hive ctl read $TILE    # wait for its reply'],
     ['p', 'hive ctl workflow --items "api||web||cli" --prompt "Review {item}"'],
-    ['p', 'hive tools new flaky-tests'],
-    ['p', 'hive views install @dip497/timeline'],
+    ['p', 'hive plugins new tool flaky-tests'],
+    ['p', 'hive plugins install @dip497/timeline'],
   ],
   ts: [
     ['k', 'import { connect } from "hivemind-api";'],
@@ -158,8 +158,7 @@ const code: Record<string, [string, string][]> = {
   <meta property="og:image:alt" content="Hivemind: coding agents side by side on one canvas" />
   <meta name="twitter:card" content="summary_large_image" />
   <script type="application/ld+json" set:html={JSON.stringify(structuredData).replace(/</g, '\\u003c')}></script>
-  <link rel="preload" as="image" type="image/avif" media={PHONE_QUERY} imagesrcset={posterPhone.avif} imagesizes={PHONE_SIZES} fetchpriority="high" />
-  <link rel="preload" as="image" type="image/avif" media="(min-width: 641px)" imagesrcset={poster.avif} imagesizes={WIDE_SIZES} fetchpriority="high" />
+  <link rel="preload" as="image" type="image/avif" imagesrcset={heroImage.avif} imagesizes={HERO_SIZES} fetchpriority="high" />
   <Fonts />
   <style set:html={appColours}></style>
 </head>
@@ -191,6 +190,7 @@ const code: Record<string, [string, string][]> = {
 <main id="main">
 
   <section class="hero">
+    <div class="px hero-bg" aria-hidden="true"><i style="--x:28;--y:23"></i><i class="g" style="--x:-29;--y:8"></i><i style="--x:-27;--y:4"></i><i class="v" style="--x:29;--y:8"></i><i style="--x:26;--y:19"></i><i class="r" style="--x:-26;--y:24"></i><i style="--x:-29;--y:9"></i><i class="g" style="--x:-29;--y:6"></i><i style="--x:-27;--y:20"></i><i class="v" style="--x:27;--y:5"></i><i style="--x:-26;--y:7"></i><i class="r" style="--x:-27;--y:6"></i><i style="--x:28;--y:7"></i><i class="g" style="--x:-27;--y:23"></i><i style="--x:-29;--y:10"></i><i class="v" style="--x:-28;--y:14"></i><i style="--x:-27;--y:9"></i><i class="r" style="--x:-28;--y:10"></i><i style="--x:-28;--y:3"></i><i class="g" style="--x:28;--y:10"></i><i style="--x:28;--y:6"></i><i class="v" style="--x:29;--y:23"></i></div>
     <div class="wrap">
       <div class="hero-copy">
         <div class="hero-say">
@@ -204,11 +204,12 @@ const code: Record<string, [string, string][]> = {
           </div>
         </div>
       </div>
-      <HeroClip />
+      <SchoolOfAgents />
     </div>
   </section>
 
   <section class="band" id="views" aria-labelledby="views-h">
+    <div class="px" aria-hidden="true"><i style="--x:-26;--y:1"></i><i class="v" style="--x:-29;--y:6"></i><i style="--x:-27;--y:5"></i><i class="r" style="--x:26;--y:13"></i><i style="--x:-24;--y:2"></i><i class="g" style="--x:-23;--y:1"></i><i style="--x:-29;--y:4"></i><i class="v" style="--x:-11;--y:2"></i><i style="--x:29;--y:11"></i><i class="r" style="--x:26;--y:3"></i><i style="--x:-27;--y:1"></i><i class="g" style="--x:29;--y:5"></i><i style="--x:-16;--y:2"></i><i class="v" style="--x:-28;--y:8"></i><i style="--x:-14;--y:3"></i><i class="r" style="--x:0;--y:2"></i></div>
     <div class="wrap split views">
       <div class="head reveal">
         <h2 id="views-h">The canvas is only where it starts.</h2>
@@ -235,6 +236,7 @@ const code: Record<string, [string, string][]> = {
   </section>
 
   <section class="band" id="plugins" aria-labelledby="plugins-h">
+    <div class="px" aria-hidden="true"><i style="--x:-26;--y:4"></i><i class="r" style="--x:-28;--y:8"></i><i style="--x:29;--y:16"></i><i class="a" style="--x:26;--y:5"></i><i style="--x:-29;--y:3"></i><i class="b" style="--x:27;--y:1"></i><i style="--x:-29;--y:8"></i><i class="r" style="--x:-28;--y:12"></i><i style="--x:-27;--y:15"></i><i class="a" style="--x:20;--y:3"></i><i style="--x:-26;--y:16"></i><i class="b" style="--x:-22;--y:1"></i><i style="--x:-28;--y:11"></i><i class="r" style="--x:-20;--y:2"></i><i style="--x:23;--y:3"></i><i class="a" style="--x:-3;--y:2"></i></div>
     <div class="wrap">
       <div class="head reveal center">
         <h2 id="plugins-h">Ask for a tool. It lands on the canvas, and stays up to date.</h2>
@@ -249,7 +251,7 @@ const code: Record<string, [string, string][]> = {
           <p class="b-k">How one is made</p>
           <ol>
             <li><span>You</span>“A widget for the release checklist.”</li>
-            <li><span>Agent</span><code>hive widgets new release</code> writes a starter and its <code>PROMPT.md</code>.</li>
+            <li><span>Agent</span><code>hive plugins new widget release</code> writes a starter and its <code>PROMPT.md</code>.</li>
             <li><span>Agent</span>Fills it in, installs it, and updates it as the work moves.</li>
           </ol>
           <a href={link('guide/widgets/')}>Make a widget</a>
@@ -266,6 +268,7 @@ const code: Record<string, [string, string][]> = {
   </section>
 
   <section class="band" id="api" aria-labelledby="api-h">
+    <div class="px" aria-hidden="true"><i style="--x:-20;--y:2"></i><i class="r" style="--x:12;--y:1"></i><i style="--x:26;--y:3"></i><i class="g" style="--x:-26;--y:9"></i><i style="--x:0;--y:3"></i><i class="v" style="--x:29;--y:3"></i><i style="--x:-26;--y:16"></i><i class="r" style="--x:26;--y:12"></i><i style="--x:29;--y:7"></i><i class="g" style="--x:-3;--y:3"></i><i style="--x:27;--y:11"></i><i class="v" style="--x:-12;--y:3"></i><i style="--x:24;--y:1"></i><i class="r" style="--x:-29;--y:11"></i><i style="--x:-29;--y:12"></i><i class="g" style="--x:-7;--y:1"></i></div>
     <div class="wrap split rev">
       <div class="head reveal">
         <h2 id="api-h">Everything you can click, an agent can call.</h2>
@@ -293,6 +296,7 @@ const code: Record<string, [string, string][]> = {
   </section>
 
   <section class="band" id="reach" aria-labelledby="reach-h">
+    <div class="px" aria-hidden="true"><i style="--x:-28;--y:7"></i><i class="a" style="--x:29;--y:16"></i><i style="--x:15;--y:2"></i><i class="b" style="--x:26;--y:9"></i><i style="--x:-7;--y:3"></i><i class="r" style="--x:29;--y:1"></i><i style="--x:-27;--y:1"></i><i class="a" style="--x:27;--y:2"></i><i style="--x:-29;--y:12"></i><i class="b" style="--x:-12;--y:2"></i><i style="--x:26;--y:16"></i><i class="r" style="--x:-28;--y:12"></i><i style="--x:-27;--y:3"></i><i class="a" style="--x:22;--y:2"></i><i style="--x:29;--y:11"></i><i class="b" style="--x:27;--y:4"></i></div>
     <div class="wrap">
       <div class="head reveal center">
         <h2 id="reach-h">Your machines. Your phone. Your people.</h2>
@@ -325,6 +329,7 @@ const code: Record<string, [string, string][]> = {
   </section>
 
   <section class="band" id="agents" aria-labelledby="agents-h">
+    <div class="px" aria-hidden="true"><i style="--x:-29;--y:3"></i><i class="g" style="--x:28;--y:9"></i><i style="--x:-26;--y:2"></i><i class="v" style="--x:29;--y:9"></i><i style="--x:-11;--y:1"></i><i class="r" style="--x:-13;--y:3"></i><i style="--x:-16;--y:2"></i><i class="g" style="--x:22;--y:3"></i><i style="--x:7;--y:3"></i><i class="v" style="--x:4;--y:3"></i><i style="--x:11;--y:3"></i><i class="r" style="--x:-29;--y:9"></i><i style="--x:15;--y:1"></i><i class="g" style="--x:10;--y:3"></i><i style="--x:27;--y:14"></i><i class="v" style="--x:-29;--y:13"></i></div>
     <div class="wrap">
       <div class="head reveal center">
         <h2 id="agents-h">Every coding agent, even the one that ships tomorrow.</h2>
@@ -345,6 +350,7 @@ const code: Record<string, [string, string][]> = {
   </section>
 
   <section class="band" id="numbers" aria-labelledby="numbers-h">
+    <div class="px" aria-hidden="true"><i style="--x:-26;--y:17"></i><i class="b" style="--x:29;--y:4"></i><i style="--x:27;--y:3"></i><i class="r" style="--x:29;--y:9"></i><i style="--x:-27;--y:11"></i><i class="a" style="--x:6;--y:3"></i><i style="--x:29;--y:1"></i><i class="b" style="--x:26;--y:2"></i><i style="--x:-26;--y:10"></i><i class="r" style="--x:-9;--y:3"></i><i style="--x:20;--y:3"></i><i class="a" style="--x:29;--y:17"></i><i style="--x:-29;--y:7"></i><i class="b" style="--x:15;--y:3"></i><i style="--x:-28;--y:6"></i><i class="r" style="--x:27;--y:7"></i></div>
     <div class="wrap">
       <div class="head reveal">
         <h2 id="numbers-h">Fast with many agents, measured under load.</h2>
@@ -359,6 +365,7 @@ const code: Record<string, [string, string][]> = {
   </section>
 
   <section class="band" id="faq" aria-labelledby="faq-h">
+    <div class="px" aria-hidden="true"><i style="--x:-16;--y:1"></i><i class="v" style="--x:-8;--y:2"></i><i style="--x:-29;--y:18"></i><i class="r" style="--x:-26;--y:4"></i><i style="--x:-28;--y:12"></i><i class="g" style="--x:16;--y:2"></i><i style="--x:6;--y:1"></i><i class="v" style="--x:-29;--y:17"></i><i style="--x:27;--y:4"></i><i class="r" style="--x:-27;--y:10"></i><i style="--x:-27;--y:15"></i><i class="g" style="--x:-4;--y:2"></i><i style="--x:28;--y:14"></i><i class="v" style="--x:-26;--y:2"></i><i style="--x:-29;--y:12"></i><i class="r" style="--x:27;--y:6"></i></div>
     <div class="wrap faq-wrap">
       <h2 id="faq-h" class="reveal">Questions</h2>
       <div class="faq">
@@ -368,6 +375,7 @@ const code: Record<string, [string, string][]> = {
   </section>
 
   <section class="band dl" id="download" aria-labelledby="download-h">
+    <div class="px" aria-hidden="true"><i style="--x:-26;--y:11"></i><i class="r" style="--x:21;--y:3"></i><i style="--x:27;--y:17"></i><i class="a" style="--x:-8;--y:2"></i><i style="--x:-14;--y:2"></i><i class="b" style="--x:10;--y:3"></i><i style="--x:24;--y:1"></i><i class="r" style="--x:27;--y:3"></i><i style="--x:26;--y:1"></i><i class="a" style="--x:15;--y:1"></i><i style="--x:-28;--y:11"></i><i class="b" style="--x:12;--y:1"></i><i style="--x:-29;--y:7"></i><i class="r" style="--x:-27;--y:9"></i><i style="--x:26;--y:7"></i><i class="a" style="--x:28;--y:9"></i></div>
     <div class="wrap">
       <div class="dl-head reveal">
         <h2 id="download-h">Start with one repo.</h2>
@@ -548,7 +556,20 @@ const code: Record<string, [string, string][]> = {
   @media (hover:hover) and (pointer:fine){ .copy:hover{color:var(--fg);border-color:var(--fg3)} }
 
   /* Hero: one sentence, the command, and the real app under it, already in the first screen. */
-  .hero{position:relative;padding:56px 0 96px;overflow:clip}
+  .hero{position:relative;isolation:isolate;padding:56px 0 96px;overflow:clip}
+  /* The app's canvas grid behind every section, fading toward its edges, a few of its cells lit,
+     some in the app's status colours. Static, so scrolling never repaints it. */
+  .px{position:absolute;inset:0;z-index:-1;pointer-events:none;--cell:24px}
+  .px::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at center,color-mix(in oklab,var(--fg) 14%,transparent) 1px,transparent 1.5px) 50% 0/var(--cell) var(--cell);
+    -webkit-mask-image:radial-gradient(ellipse 80% 75% at 50% 50%,#000 30%,transparent 80%);mask-image:radial-gradient(ellipse 80% 75% at 50% 50%,#000 30%,transparent 80%)}
+  .px i{position:absolute;left:calc(50% + var(--x) * var(--cell) - var(--cell) / 2);top:calc(var(--y) * var(--cell));width:var(--cell);height:var(--cell);
+    background:color-mix(in oklab,var(--c,var(--fg)) var(--m,5%),transparent);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--c,var(--fg)) var(--m,4%),transparent)}
+  .px .r{--c:var(--st-failed);--m:88%}.px .a{--c:var(--st-attention);--m:80%}.px .g{--c:var(--st-done);--m:72%}
+  .px .b{--c:var(--note-blue);--m:82%}.px .v{--c:var(--note-violet);--m:82%}
+  /* The hero's grid fades from its top, with one soft light under the picture. */
+  .hero-bg{background:radial-gradient(ellipse 58% 34% at 50% 56%,color-mix(in oklab,var(--glow) 30%,transparent),transparent 72%)}
+  .hero-bg::before{-webkit-mask-image:radial-gradient(ellipse 75% 85% at 50% 35%,#000 30%,transparent 78%);mask-image:radial-gradient(ellipse 75% 85% at 50% 35%,#000 30%,transparent 78%)}
   .hero-copy{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px 64px;align-items:start;margin:0 0 40px}
   .hero h1{font-size:clamp(40px,4.5vw,66px);letter-spacing:-.04em;max-width:15ch}
   .hero h1 span{color:var(--fg3)}
@@ -565,9 +586,10 @@ const code: Record<string, [string, string][]> = {
   }
   @media (max-width:1000px){
     .hero-copy{grid-template-columns:minmax(0,1fr)}
+    .px i{display:none}
   }
 
-  .band{padding:136px 0;border-top:1px solid var(--line);position:relative}
+  .band{padding:136px 0;border-top:1px solid var(--line);position:relative;isolation:isolate;overflow:clip}
   .head{margin-bottom:56px}
   .center{text-align:center}
   .head.center{display:grid;justify-items:center}
@@ -728,6 +750,8 @@ const code: Record<string, [string, string][]> = {
     .nav-in{height:auto;min-height:52px;padding:8px var(--gut);flex-wrap:wrap;gap:6px 14px}
     .links{order:3;width:100%;margin:0 calc(var(--gut) * -1);padding:0 var(--gut);overflow-x:auto;gap:18px;scrollbar-width:none}
     .links::-webkit-scrollbar{display:none}
+    /* The row scrolls sideways; its right edge fades so the cut-off link reads as more to come. */
+    .links{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 48px),transparent)}
     .links a{white-space:nowrap;padding:6px 0}
     .nav-in > .btn{margin-left:auto}
     .hero{padding:28px 0 64px}

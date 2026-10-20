@@ -7,8 +7,8 @@ name: ci
 on:
   push:
     branches: [main]
+  # Every pull request, stacked ones included.
   pull_request:
-    branches: [main]
   # By hand, on any branch (Actions → ci → Run workflow).
   workflow_dispatch:
 
@@ -222,9 +222,10 @@ jobs:
       - uses: actions/checkout@v7
 
       # compose's are what infra/Dockerfile.dockerignore lets in, infra/ and the hive-net the checks run.
+      # Markdown is left out: a README edit tests nothing new.
       - id: hash
         run: |
-          hash() { { date -u +%G-%V; git ls-tree -r HEAD -- .github/workflows/ci.yml rust-toolchain.toml "$@"; } | sha256sum | cut -c1-40; }
+          hash() { { date -u +%G-%V; git ls-tree -r HEAD -- .github/workflows/ci.yml rust-toolchain.toml "$@" | grep -v '\.md$'; } | sha256sum | cut -c1-40; }
           {
             echo "hive-net=$(hash crates/hive-net conformance scripts/traffic-test.sh)"
             echo "hive-phone=$(hash crates/hive-phone crates/hive-phone-ffi crates/hive-net conformance spec scripts/phone/bindings.sh apps/ios/HivePhone/Core/Generated)"

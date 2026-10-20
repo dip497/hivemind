@@ -48,47 +48,47 @@ describe("hive ctl issue verbs", () => {
   test("set-state rejects an unknown state with exit 2 and a structured error", () => {
     const r = hive(["ctl", "set-state", id, "flying", "--json"], { cwd: ws, env: env() });
     expect(r.code).toBe(2);
-    expect(r.json).toMatchObject({ ok: false, code: "USAGE" });
+    expect(r.json).toMatchObject({ error: { code: "USAGE" } });
   });
 
-  test("add-comment → { ok, activity: last 3 }", () => {
+  test("add-comment → { activity: last 3 }", () => {
     const r = hive(["ctl", "add-comment", id, "hello from ctl", "--json"], { cwd: ws, env: env() });
     expect(r.code).toBe(0);
-    const j = r.json as { ok: boolean; activity: unknown[] };
-    expect(j.ok).toBe(true);
+    const j = r.json as { activity: unknown[] };
     expect(j.activity.length).toBeLessThanOrEqual(3);
     expect(JSON.stringify(j.activity)).toContain("hello from ctl");
   });
 
-  test("mark-acceptance → { ok, criterion } and out-of-range is exit 2", () => {
+  test("mark-acceptance → { criterion } and out-of-range is exit 2", () => {
     const r = hive(["ctl", "mark-acceptance", id, "1", "--json"], { cwd: ws, env: env() });
     expect(r.code).toBe(0);
-    expect(r.json).toEqual({ ok: true, criterion: { done: true, text: "comments land" } });
+    expect(r.json).toEqual({ criterion: { done: true, text: "comments land" } });
     const undo = hive(["ctl", "mark-acceptance", id, "1", "--undone", "--json"], { cwd: ws, env: env() });
-    expect(undo.json).toEqual({ ok: true, criterion: { done: false, text: "comments land" } });
+    expect(undo.json).toEqual({ criterion: { done: false, text: "comments land" } });
     const bad = hive(["ctl", "mark-acceptance", id, "9", "--json"], { cwd: ws, env: env() });
     expect(bad.code).toBe(2);
-    expect(bad.json).toMatchObject({ ok: false, code: "USAGE" });
+    expect(bad.json).toMatchObject({ error: { code: "USAGE" } });
   });
 
   test("unknown issue id is exit 5 / not found", () => {
     const r = hive(["ctl", "add-comment", "TT-999", "x", "--json"], { cwd: ws, env: env() });
     expect(r.code).toBe(5);
-    expect((r.json as { ok: boolean }).ok).toBe(false);
+    expect(r.json).toMatchObject({ error: { code: "NOT_FOUND" } });
   });
 
-  test("delete-issue → { ok, deleted }", () => {
+  test("delete-issue → { deleted }", () => {
     const r = hive(["ctl", "delete-issue", id, "--json"], { cwd: ws, env: env() });
     expect(r.code).toBe(0);
-    expect(r.json).toEqual({ ok: true, deleted: id });
+    expect(r.json).toEqual({ deleted: id });
     expect(hive(["show", id, "--json"], { cwd: ws, env: env() }).code).not.toBe(0);
   });
 
-  test("list-workspaces is an array of {prefix,title,repo}", () => {
+  test("list-workspaces is { workspaces: [{prefix,title,repo}] }", () => {
     const r = hive(["ctl", "list-workspaces", "--json"], { cwd: ws, env: env() });
     expect(r.code).toBe(0);
-    expect(Array.isArray(r.json)).toBe(true);
-    for (const w of r.json as Array<Record<string, unknown>>) expect(Object.keys(w).sort()).toEqual(["prefix", "repo", "title"]);
+    const { workspaces } = r.json as { workspaces: Array<Record<string, unknown>> };
+    expect(Array.isArray(workspaces)).toBe(true);
+    for (const w of workspaces) expect(Object.keys(w).sort()).toEqual(["prefix", "repo", "title"]);
   });
 
   test("list-workspaces prints each workspace's prefix, title and folder, one a line", async () => {
@@ -99,15 +99,20 @@ describe("hive ctl issue verbs", () => {
     expect([r.code, r.stdout]).toEqual([0, `TT\t${path.basename(ws)}\t${ws}\n`]);
   });
 
+  test("hive list --json outside a tracker fails: exit 5 and {error:{code:NO_ROOT}} on stderr, nothing on stdout", () => {
+    const r = hive(["list", "--json"], { cwd: xdg, env: env() });
+    expect([r.code, r.stdout, JSON.parse(r.stderr)]).toEqual([5, "", { error: { code: "NO_ROOT", message: expect.stringContaining("no .hivemind/ found") } }]);
+  });
+
   test("report outside a tile is a usage error, not a crash", () => {
     const r = hive(["ctl", "report", "done", "--json"], { cwd: ws, env: env() });
     expect(r.code).toBe(2);
-    expect(r.json).toMatchObject({ ok: false, code: "USAGE" });
+    expect(r.json).toMatchObject({ error: { code: "USAGE" } });
   });
 
   test("app not running → exit 3 UNAVAILABLE", () => {
     const r = hive(["ctl", "agents", "--json"], { cwd: ws, env: { ...env(), HIVE_DRIVE_SOCK: path.join(xdg, "nope.sock") } });
     expect(r.code).toBe(3);
-    expect(r.json).toMatchObject({ ok: false, code: "UNAVAILABLE" });
+    expect(r.json).toMatchObject({ error: { code: "UNAVAILABLE" } });
   });
 });

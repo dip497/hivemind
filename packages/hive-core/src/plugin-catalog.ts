@@ -6,115 +6,17 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MIN_APP_VERSION_RE, appMeetsMinVersion } from "@hivemind/agents";
+import { appMeetsMinVersion } from "@hivemind/agents";
 import { AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
-import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
-import { TOOL_ID_RE } from "./tool-registry.js";
+import { MAX_INDEX_BYTES, checkPluginFolder, parseHubIndex, type CatalogEntry, type HubIndexReading, type PluginFile } from "@hivemind/hub";
 
 export const DEFAULT_PLUGIN_INDEX = "https://hivehub.griiken.workers.dev/api/v1/index.json";
 
-export type CatalogType = "agent" | "view" | "widget" | "tool";
-const TYPES: readonly string[] = ["agent", "view", "widget", "tool"];
-export interface CatalogFile { path: string; sha256: string }
-export interface CatalogEntry {
-  id: string;
-  type: CatalogType;
-  name: string;
-  description: string;
-  author: string;
-  version: string;
-  /** Folder of the plugin's files, relative to the index — or to `source` when set. */
-  path: string;
-  /** Where this plugin's files live, when that is not beside the index. An https base URL,
-   *  so a plugin can keep its own repository and the index stay a list. */
-  source?: string;
-  files: CatalogFile[];
-  homepage?: string;
-  /** Agents only: the CLI whose presence adds this agent automatically. */
-  bin?: string;
-  /** The oldest Hivemind this plugin runs on. Absent means any. */
-  minAppVersion?: string;
-  /** Agents only: the `icon` block of its manifest, so the list can show the agent's own
-   *  mark before anything is downloaded. Bounded here and sanitised where it is drawn —
-   *  this module does not know what an icon is, and must not start guessing. */
-  icon?: unknown;
-  /** What it is for, as its manifest says; an agent is always `agents`, and one the app does not
-   *  know is `other`. */
-  category?: PluginCategory;
-}
-
-// A view, a widget or a tool carries its publisher's scope; an agent is one name for one CLI,
-// settled in the plugins repository. A tool's folder is owner--name, so neither part holds "--".
-const SCOPED = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
-const TOOL = new RegExp(`^(?!.*--)${TOOL_ID_RE.source.slice(1)}`);
-const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, tool: TOOL, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
-const SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
-const SHA_RE = /^[0-9a-f]{64}$/;
 export const MAX_FILE = 20 << 20;
 const MAX_TOTAL = 50 << 20;
 const TIMEOUT_MS = 20_000;
 /** The install is already on disk by the time we tell the registry; don't make anyone wait. */
 const NOTE_TIMEOUT_MS = 3_000;
-
-/** Windows device names cannot be files, whatever the extension. */
-const DEVICE_RE = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
-/** Relative, no `..`, no absolute paths, no odd characters. */
-const safeRelative = (p: unknown): p is string =>
-  typeof p === "string" && p.length > 0 && p.length < 300
-  && p.split("/").every((s) => SEGMENT_RE.test(s) && s !== ".." && !DEVICE_RE.test(s));
-const text = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
-
-/** A version 1 index. A kind this app does not know is left out, so a registry that lists a new
- *  kind does not take the whole catalog away. */
-export function parseCatalog(raw: unknown): CatalogEntry[] {
-  const doc = raw as { version?: unknown; plugins?: unknown };
-  if (!doc || doc.version !== 1 || !Array.isArray(doc.plugins)) throw new Error("not a version 1 plugin index");
-  const seen = new Set<string>();
-  const known = doc.plugins.slice(0, 500).filter((p: unknown) => !!p && typeof p === "object" && TYPES.includes((p as { type?: unknown }).type as string));
-  return known.map((p: Record<string, unknown>, i) => {
-    const at = `plugins[${i}]`;
-    const type = p.type as CatalogType;
-    if (typeof p.id !== "string" || !ID_RE[type].test(p.id)) {
-      throw new Error(`${at}.id is not ${type === "agent" ? "an agent id — it must be one name" : `a ${type} id — it must be @owner/name`}`);
-    }
-    const key = `${p.type}:${p.id}`;
-    if (seen.has(key)) throw new Error(`${at} lists ${key} twice`);
-    seen.add(key);
-    if (!text(p.name, 80) || !text(p.description, 400) || !text(p.author, 80) || !text(p.version, 40)) {
-      throw new Error(`${at} needs a name, description, author and version`);
-    }
-    if (!safeRelative(p.path)) throw new Error(`${at}.path must be a relative folder`);
-    if (!Array.isArray(p.files) || !p.files.length || p.files.length > 200) throw new Error(`${at}.files must list 1-200 files`);
-    const files = p.files.map((f: Record<string, unknown>, j) => {
-      if (!f || !safeRelative(f.path) || typeof f.sha256 !== "string" || !SHA_RE.test(f.sha256)) {
-        throw new Error(`${at}.files[${j}] needs a relative path and a sha256`);
-      }
-      return { path: f.path, sha256: f.sha256 };
-    });
-    const homepage = typeof p.homepage === "string" && /^https:\/\/\S+$/.test(p.homepage) ? p.homepage : undefined;
-    // A plugin may keep its own repository; the hash still decides whether its files are
-    // the ones that were listed, so where they came from changes nothing about trust.
-    if (p.source !== undefined && (typeof p.source !== "string" || !/^https:\/\/[^\s?#]+$/.test(p.source) || p.source.includes(".."))) {
-      throw new Error(`${at}.source must be an https base URL`);
-    }
-    if (p.minAppVersion !== undefined && (typeof p.minAppVersion !== "string" || !MIN_APP_VERSION_RE.test(p.minAppVersion))) {
-      throw new Error(`${at}.minAppVersion must look like 1.2.3`);
-    }
-    if (p.icon !== undefined && (typeof p.icon !== "object" || p.icon === null || JSON.stringify(p.icon).length > 4096)) {
-      throw new Error(`${at}.icon must be a small object`);
-    }
-        if (p.bin !== undefined && (p.type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {
-      throw new Error(`${at}.bin must be the bare name of an agent's CLI`);
-    }
-    const said = parseCategory(p.category);
-    const category: PluginCategory = type === "agent" ? "agents" : "category" in said ? said.category : "other";
-    return { id: p.id, type, name: p.name, description: p.description, author: p.author, version: p.version, path: p.path, files,
-      ...(homepage ? { homepage } : {}), ...(typeof p.source === "string" ? { source: p.source } : {}),
-      ...(typeof p.bin === "string" ? { bin: p.bin } : {}),
-      ...(typeof p.minAppVersion === "string" ? { minAppVersion: p.minAppVersion } : {}),
-      ...(p.icon !== undefined ? { icon: p.icon } : {}), category };
-  });
-}
 
 /** One file, over https (or a local file: index in development). Shared with the CLI, which
  *  fetches a plugin straight from its repository — there is no hash to pin against there, so
@@ -152,9 +54,10 @@ export function catalogIndexUrl(): string {
   return process.env.HIVEMIND_PLUGIN_INDEX?.trim() || DEFAULT_PLUGIN_INDEX;
 }
 
-export async function fetchCatalog(indexUrl = catalogIndexUrl()): Promise<CatalogEntry[]> {
-  const body = await read(new URL(indexUrl), 1 << 20);
-  return parseCatalog(JSON.parse(body.toString("utf8")));
+/** The hub's index as this app reads it: the entries, and each one it skipped with the reason. */
+export async function fetchCatalog(indexUrl = catalogIndexUrl()): Promise<HubIndexReading> {
+  const body = await read(new URL(indexUrl), MAX_INDEX_BYTES);
+  return parseHubIndex(JSON.parse(body.toString("utf8")));
 }
 
 /** Tell the registry a plugin was installed, so its count is a count.
@@ -176,14 +79,19 @@ export async function noteInstall(entry: CatalogEntry, indexUrl = catalogIndexUr
   }
 }
 
-/** Download an entry's files into a fresh folder, verifying each hash. Returns the folder. */
+/** Where an entry's files are, relative to the index: under `source` when it names one, else beside the index. */
+const folderOf = (entry: CatalogEntry): string =>
+  `${entry.source ? `${entry.source.replace(/\/$/, "")}/` : ""}${entry.path ? `${entry.path}/` : ""}`;
+
+/** Download an entry's files into a fresh folder, verifying each hash, and check the folder the way
+ *  a hub checks it before listing it. Returns the folder. */
 export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<string> {
   const stage = await fs.mkdtemp(path.join(os.tmpdir(), `hm-plugin-${entry.id.replace(/[^a-z0-9-]/g, "_")}-`));
   try {
     let total = 0;
+    const folder: PluginFile[] = [];
     for (const f of entry.files) {
-      const base = entry.source ? `${entry.source.replace(/\/$/, "")}/${entry.path}/` : `${entry.path}/`;
-      const body = await read(new URL(f.path, new URL(base, indexUrl)), MAX_FILE);
+      const body = await read(new URL(f.path, new URL(folderOf(entry), indexUrl)), MAX_FILE);
       total += body.length;
       if (total > MAX_TOTAL) throw new Error(`${entry.name} is larger than allowed`);
       if (createHash("sha256").update(body).digest("hex") !== f.sha256) {
@@ -193,6 +101,12 @@ export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl
       if (!dest.startsWith(stage + path.sep)) throw new Error(`${f.path} escapes the plugin folder`);
       await fs.mkdir(path.dirname(dest), { recursive: true });
       await fs.writeFile(dest, body);
+      folder.push({ path: f.path, bytes: body });
+    }
+    const checked = await checkPluginFolder(folder);
+    if ("problem" in checked) throw new Error(`${entry.id} is not a plugin Hivemind accepts: ${checked.problem}`);
+    if (checked.plugin.type !== entry.type || checked.plugin.id !== entry.id) {
+      throw new Error(`${entry.id}'s folder says it is "${checked.plugin.id}", not ${entry.id}`);
     }
     await noteInstall(entry, indexUrl);
     return stage;
@@ -209,7 +123,7 @@ const MAX_README = 256 * 1024;
  *  when the entry lists it as one of its files, else read as is (it is shown, never run), or
  *  null when it has none. */
 export async function fetchReadme(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<string | null> {
-  const base = entry.source ? `${entry.source.replace(/\/$/, "")}/${entry.path}/` : `${entry.path}/`;
+  const base = folderOf(entry);
   const listed = entry.files.find((f) => /^readme\.md$/i.test(f.path));
   try {
     const body = await read(new URL(listed?.path ?? "README.md", new URL(base, indexUrl)), MAX_README);

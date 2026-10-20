@@ -24,7 +24,7 @@ reading, closing, naming, pipes, tools — is the workspace API on the drive soc
 
 `{"code": -32000, "message", "data": {"code"}}` for the host's own failures, `data.code` one of
 the workspace API's error codes (`workspace-api.md`, "Errors"): `BAD_REQUEST`, `UNKNOWN_METHOD`,
-`FORBIDDEN`, `NOT_FOUND`, `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `TIMEOUT`,
+`FORBIDDEN`, `NOT_FOUND`, `NO_AGENT`, `ASLEEP`, `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `TIMEOUT`,
 `UNAVAILABLE`, `OCCLUDED`, `FAILED`.
 `-32601` for an unknown method, `-32600` for a malformed message, `-32700` for bad JSON.
 
@@ -39,7 +39,8 @@ method is `UNKNOWN_METHOD`.
 - `agent.report {"message"}` → `{"delivered": true, "parent"}`: a message to the agent or program
   that started this one, put in its starter's inbox (an `agent.event` of kind `reported` for a
   program). This turn's reply is then not forwarded to it
-  as well. `NOT_FOUND` with no starter, or one that is gone.
+  as well. `NOT_FOUND` with no starter, or one that is gone. A starter asleep keeps it in its inbox
+  and is told of it once woken: the answer adds `"asleep": true` and a `note` saying so (0.33).
 - `agent.await_approval {"tool_name", "tool_input"}` → `{"decision": "allow" | "deny" | "ask",
   "reason"?}`: a supervised worker's hook, before a tool runs. Its starter is asked (an
   `approval` wait, answered with `agent.answer`); `ask` when nobody can answer, or nobody did in

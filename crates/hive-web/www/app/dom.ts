@@ -1,7 +1,7 @@
 // The page's kit: elements made directly, lists kept by key so that only what changed is touched,
 // and the Android app's components (Kit.kt) as DOM: pills, the composer, icons.
 
-import type { Mark } from "./types.js";
+import type { Mark, Photo } from "./types.js";
 
 type Child = Node | string | null | undefined | false;
 type Props = Record<string, string | number | boolean | null | undefined>;
@@ -30,6 +30,7 @@ const ICONS = {
   chat: ["M21,15a2,2 0,0 1,-2 2H7l-4,4V5a2,2 0,0 1,2 -2h14a2,2 0,0 1,2 2z"],
   more: ["M11,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0", "M18,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0", "M4,12a1,1 0,1 0,2 0a1,1 0,1 0,-2 0"],
   plus: ["M5,12h14", "M12,5v14"],
+  attach: ["M13.234,20.252L21,12.3", "M16,6l-8.414,8.586a2,2 0,0 0,2.828 2.828l8.414,-8.586a4,4 0,0 0,-5.656 -5.656l-8.415,8.585a6,6 0,1 0,8.486 8.486"],
   stop: ["M8,7h8a1,1 0,0 1,1 1v8a1,1 0,0 1,-1 1H8a1,1 0,0 1,-1 -1V8a1,1 0,0 1,1 -1z"],
   folder: ["M20,20a2,2 0,0 0,2 -2V8a2,2 0,0 0,-2 -2h-7.9a2,2 0,0 1,-1.69 -0.9L9.6,3.9A2,2 0,0 0,7.93 3H4a2,2 0,0 0,-2 2v13a2,2 0,0 0,2 2z"],
   folderOpen: ["M6,14l1.5,-2.9A2,2 0,0 1,9.24 10H20a2,2 0,0 1,1.94 2.5l-1.54,6a2,2 0,0 1,-1.95 1.5H4a2,2 0,0 1,-2 -2V5a2,2 0,0 1,2 -2h3.9a2,2 0,0 1,1.69 0.9l0.81,1.2a2,2 0,0 0,1.67 0.9H18a2,2 0,0 1,2 2v2"],
@@ -175,12 +176,26 @@ export function pill(label: string, onClick: () => void, tone = "", props: Props
 /** A reply box; `stoppable(on)` says whether what it talks to can be stopped now. */
 export type Composer = HTMLFormElement & { stoppable(on: boolean): void };
 
+/** A photo picked to go with a message: what is sent, and where its thumbnail is drawn from. */
+export interface Picked {
+  photo: Photo;
+  url: string;
+}
+
+/** What a reply box with photos does with a file picked, taken, pasted or dropped: the photo to
+ *  send, or why it cannot be. */
+export interface Attaching {
+  max: number;
+  photoOf(file: Blob): Promise<Photo>;
+  problem(why: string): void;
+}
+
 /**
  * A reply box with a round send button, ready when there is something to send: `send` says whether
  * it went, and the box empties when it did. With `stop`, while it is stoppable and nothing is typed
  * the button stops instead (Happy's agentInputPrimaryAction.ts: typing a follow-up takes priority).
  */
-export function composer(hint: string, send: (text: string) => Promise<boolean>, props: Props = {}, stop?: () => void): Composer {
+export function composer(hint: string, send: (text: string, photos: Picked[]) => Promise<boolean>, props: Props = {}, stop?: () => void, attaching?: Attaching): Composer {
   const field = h("textarea", { rows: 1, placeholder: hint, "aria-label": hint, enterkeyhint: "send" });
   const button = h("button", { type: "submit", class: "send", "aria-label": "Send", disabled: true }, icon("send"));
   const form = Object.assign(h("form", { class: "composer", ...props }, field, button), { stoppable: (on: boolean) => {
@@ -189,8 +204,65 @@ export function composer(hint: string, send: (text: string) => Promise<boolean>,
   } });
   let canStop = false;
   let stopping = false;
+  let picked: Picked[] = [];
+  const row = h("div", { class: "photos", "data-photos": "" });
+  const drawPhotos = () => {
+    row.replaceChildren(...picked.map((p) => {
+      const remove = h("button", { type: "button", class: "remove", "aria-label": "Remove the photo", "data-photo-remove": "" }, "×");
+      remove.addEventListener("click", () => {
+        picked = picked.filter((x) => x !== p);
+        drawPhotos();
+        ready();
+      });
+      return h("span", { class: "photo", "data-photo": "" }, h("img", { src: p.url, alt: "" }), remove);
+    }));
+    form.toggleAttribute("data-has-photos", picked.length > 0);
+  };
+  const add = async (files: Blob[]) => {
+    if (!attaching) return;
+    const room = attaching.max - picked.length;
+    if (files.length > room) attaching.problem(`A message takes at most ${attaching.max} photos.`);
+    for (const file of files.slice(0, Math.max(room, 0))) {
+      try {
+        const photo = await attaching.photoOf(file);
+        // The page may show a data: image, never a blob: one (its policy, hive-net pages.rs).
+        picked.push({ photo, url: `data:${photo.type};base64,${photo.data}` });
+      } catch (e) {
+        attaching.problem(e instanceof Error ? e.message : String(e));
+      }
+    }
+    drawPhotos();
+    ready();
+  };
+  if (attaching) {
+    // Picked from the phone's photos, or taken with its camera: its own sheet offers both.
+    const picker = h("input", { type: "file", accept: "image/*", multiple: true, hidden: true, "data-photo-picker": "" });
+    picker.addEventListener("change", () => {
+      const files = [...(picker.files ?? [])];
+      picker.value = "";
+      void add(files);
+    });
+    const attach = h("button", { type: "button", class: "attach", "aria-label": "Add photos", "data-attach": "" }, icon("attach"));
+    attach.addEventListener("click", () => picker.click());
+    form.prepend(row, attach, picker);
+    field.addEventListener("paste", (e) => {
+      const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      void add(files);
+    });
+    form.addEventListener("dragover", (e) => {
+      if ([...(e.dataTransfer?.items ?? [])].some((i) => i.kind === "file")) e.preventDefault();
+    });
+    form.addEventListener("drop", (e) => {
+      const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+      if (!files.length) return;
+      e.preventDefault();
+      void add(files);
+    });
+  }
   const ready = () => {
-    const has = field.value.trim() !== "";
+    const has = field.value.trim() !== "" || picked.length > 0;
     const now = !has && canStop && !!stop;
     button.classList.toggle("ready", has || now);
     button.disabled = !has && !now;
@@ -223,11 +295,13 @@ export function composer(hint: string, send: (text: string) => Promise<boolean>,
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = field.value.trim();
-    if (!text) return;
+    if (!text && !picked.length) return;
     form.inert = true;
     try {
-      if (await send(text)) {
+      if (await send(text, picked)) {
         field.value = "";
+        picked = [];
+        drawPhotos();
         grow();
       }
     } finally {

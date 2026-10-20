@@ -15,6 +15,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { TILE_LIST_DIR, dockFromList, framesDrawn, tileListReady, releaseFromList } from "./helpers/tile-list-view";
 import { seedAgents } from "./helpers/agents";
+import { installedFile } from "./helpers/install";
 
 test.use({ trace: "off" });
 
@@ -29,7 +30,6 @@ const FIXTURES = path.join(APP_DIR, "tests/e2e/fixtures/views");
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-community-xdg-"));
 seedAgents(XDG);
 const ENV = { ...process.env, XDG_CONFIG_HOME: XDG } as Record<string, string>;
-const viewsDir = () => path.join(XDG, "hivemind", "views");
 
 /** The app's control-plane socket + token (isolated userData under this run's XDG);
  *  set once the app is up so `hive plugins install|remove` can ask it to rescan. */
@@ -53,7 +53,7 @@ test.beforeAll(async () => {
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
   const installed = hive("plugins", "install", TILE_LIST_DIR);
   expect(installed.ok).toBe(true);
-  expect(installed.data.dir).toBe(path.join(viewsDir(), "tile-list"));
+  expect(installed.data.members[0].dir).toBe(installedFile(XDG, "tile-list"));
   app = await electron.launch({
     // No --user-data-dir: the profile is isolated by this run's XDG_CONFIG_HOME
     // (playwright.config.ts), and that is where the app's HCP socket lands
@@ -220,8 +220,13 @@ test("a package asking for an unknown permission is refused by install AND by th
   const r = hive("plugins", "install", path.join(FIXTURES, "greedy"));
   expect(r).toMatchObject({ ok: false, code: "invalid_view" });
   expect(r.error).toMatch(/unknown permission "fs:read"/);
-  // Dropped into the views dir by hand (bypassing the CLI) it is still refused at load.
-  fs.cpSync(path.join(FIXTURES, "greedy"), path.join(viewsDir(), "greedy"), { recursive: true });
+  // Written into an installed copy by hand (bypassing the CLI) it is still refused at load.
+  const tame = fs.mkdtempSync(path.join(os.tmpdir(), "hm-greedy-"));
+  fs.cpSync(path.join(FIXTURES, "greedy"), tame, { recursive: true });
+  const manifest = JSON.parse(fs.readFileSync(path.join(tame, "hivemind-view.json"), "utf8"));
+  fs.writeFileSync(path.join(tame, "hivemind-view.json"), JSON.stringify({ ...manifest, permissions: [] }));
+  expect(hive("plugins", "install", tame)).toMatchObject({ ok: true });
+  fs.copyFileSync(path.join(FIXTURES, "greedy", "hivemind-view.json"), installedFile(XDG, "greedy", "hivemind-view.json")!);
   await reloadViews();
   await expect.poll(async () => (await report()).refused["greedy"]).toMatch(/unknown permission "fs:read"/);
   expect((await report()).registered).toEqual(["windows", "tile-list"]);

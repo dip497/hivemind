@@ -1,10 +1,16 @@
 # hive-phone
 
-hivemind's phone, its core in Rust (`docs/design/multiplayer-2026-09-28.md` §9.3, M5): the library
-the iOS and Android apps link, on [hive-net](../hive-net), and `hive-phone`, which does in a
-terminal what the phone does, so it can be tried and tested without one. A phone runs no agents,
-and no server: it links hive-net without its server roles (`default-features = false`), and CI
-fails if it ever links them again.
+The core of Hivemind's phone apps, in Rust: the library the iOS and Android apps link, and
+`hive-phone`, which does in a terminal what the phone does, so it can be tried and tested without
+one. It is for contributors; it is not shipped.
+
+Using the phone: https://hivemind.griiken.com/guide/phone/. Design:
+`docs/design/multiplayer-2026-09-28.md` §9.3 and `docs/design/phone-app-2026-10-02.md`.
+
+A phone runs no agents and no server: it links [hive-net](../hive-net) without its server roles
+(`default-features = false`), and CI fails if it ever links them again.
+
+Run it from this folder with `cargo run --release -- <command>`:
 
 ```bash
 hive-phone id                         # this phone's id (its device key, made the first time)
@@ -64,7 +70,7 @@ cargo test --locked   # conformance/pairing.json, needs.json and push.json (the 
                       # closed in the background, a watched terminal typed into
 ```
 
-A watched terminal is drawn by the app, not the terminal (`screen.rs`, design `phone-app-2026-10-02.md`
+A watched terminal is drawn by the app, not the terminal (`screen.rs`, `phone-app-2026-10-02.md`
 §5.3): its output runs through alacritty's emulator on a thread of the watch's own, and the app is told
 only a frame's revision, then asks for the lines changed since the one it last drew, their style runs
 packed as bytes.

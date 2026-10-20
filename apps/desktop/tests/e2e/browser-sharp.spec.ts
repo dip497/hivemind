@@ -34,7 +34,7 @@ test.beforeAll(async () => {
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${path.join(root, "ud")}`], cwd: repo, env });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 15_000 });
-  await page.evaluate(() => window.hive.settingsSet("plugins.state.tool:hivemind/web", { enabled: true }));
+  await page.evaluate(() => window.hive.settingsSet("plugins.state.tool:@hivemind/web", { enabled: true }));
 });
 test.afterAll(async () => { await app?.close(); server?.close(); rmSync(root, { recursive: true, force: true }); });
 

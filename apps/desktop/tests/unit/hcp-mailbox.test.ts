@@ -210,3 +210,22 @@ test("a steering agent the person is typing to mid-turn is not typed over", asyn
   assert.deepEqual(writes, []);
   assert.equal(mb.pending(PID), 1);
 });
+
+test("photos for an agent that attaches a pasted path: each path pasted alone, then the words, then Enter; one held keeps them", async () => {
+  const { mb, writes } = harness();
+  mb.deliver(PID, "what is wrong here?", undefined, { pasted: ["/p/a.png", "/p/b.png"] });
+  await settle();
+  assert.deepEqual(writes, ["/p/a.png", "/p/b.png", " what is wrong here?", "\r"]);
+  writes.length = 0;
+  mb.setBusy(PID);
+  mb.deliver(PID, "", undefined, { pasted: ["/p/c.png"] });
+  mb.deliver(PID, "and this");
+  await settle();
+  assert.deepEqual(writes, []);
+  mb.setIdle(PID);
+  await settle();
+  assert.deepEqual(writes, ["/p/c.png", "\r"], "a photo with no words is sent alone");
+  mb.setIdle(PID);
+  await settle();
+  assert.deepEqual(writes, ["/p/c.png", "\r", "and this", "\r"], "in the order sent");
+});

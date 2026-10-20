@@ -114,7 +114,7 @@ const listSub = defineCommand({
       const parent = stripAt(String(args.parent));
       const all = await listIssues(root);
       const children = childrenOf(all, parent);
-      return ok(ctx, children, () => renderIssueList(children));
+      return ok(ctx, { issues: children }, () => renderIssueList(children));
     } catch (e) {
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "task_list_failed";

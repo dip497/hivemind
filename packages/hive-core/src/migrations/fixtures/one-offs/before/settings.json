@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "migrated": true,
+  "browserCdp": true,
+  "appearance": { "preset": "hivemind" },
+  "agents": { "defaultAgent": "claude", "autoInstall": true, "declined": ["aider"], "fromCatalog": [], "disabled": ["codex"], "options": { "claude": { "model": "opus" } } },
+  "plugins": { "disabled": ["@dip497/island"] },
+  "tools": { "enabledPlugins": ["dip497/pages"], "disabledTools": ["dip497/pages/comments"] }
+}

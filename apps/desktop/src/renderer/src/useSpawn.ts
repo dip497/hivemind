@@ -24,6 +24,8 @@ import { agentToStart, checkAgentInstalled, noAgentInstalled } from "./agent-plu
 import { isRemote } from "@hivemind/core/remote-uri";
 import { mintId } from "@hivemind/workspace-api/tile-id";
 import { getSettings } from "./settings-store";
+import { markOpenedUnread } from "./worker-tiles";
+import type { TileOpened } from "@hivemind/workspace-api/agents";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import { defaultFrame } from "@hivemind/workspace-doc/tile-list";
 import { isBox } from "./board-objects/board-model";
@@ -385,14 +387,16 @@ export function useSpawn(ctx: SpawnCtx) {
   );
 
   // A tile another writer opened (the control plane): lay it out in its frame, or, in a
-  // workspace with none, in the one a spawn here would make, and bring it forward unless it is a
-  // background worker.
-  // A background worker does not take the view, so a quiet note says where it went; one per
-  // frame, so a fan-out of workers is one note.
-  const placeArrived = useCallback((id: string, opts: { background: boolean; near?: string }) => {
+  // workspace with none, in the one a spawn here would make. One the person opened is brought
+  // forward; one an agent or a program opened only when the person's setting says go to it, and
+  // otherwise shows unread in Layers. A background worker never is: a quiet note says where it
+  // went, one per frame, so a fan-out of workers is one note.
+  const placeArrived = useCallback((id: string, opts: Pick<TileOpened, "background" | "near" | "by">) => {
     const frame = framesRef.current.find((f) => f.id === frameOfRef.current[id]) ?? ensureFrame();
-    placeInFrame(id, frame, opts);
+    const goTo = !opts.background && (opts.by === "person" || getSettings().agents.whenAgentStartsAgent === "go");
+    placeInFrame(id, frame, { background: !goTo, near: opts.near });
     if (opts.background) toast(`A worker started in ${frame.title || "this workspace"}`, { id: `worker-${frame.id}`, action: { label: "Show", onClick: () => focusTile(id) } });
+    else if (!goTo) markOpenedUnread(id);
   }, [ensureFrame, placeInFrame, focusTile]);
 
   return { placeInFrame, ensureFrame, spawnTile, spawnInto, spawnDefaultAgent, spawnAgent, spawnVis, frameOpen, openPlanReview, placeArrived };

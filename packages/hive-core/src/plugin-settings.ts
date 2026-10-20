@@ -82,6 +82,24 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
   return out;
 }
 
+/** The package an installed plugin belongs to, as its listing carries it. */
+export interface PackageOf {
+  id: string;
+  name: string;
+  version: string;
+  /** The package's switch. */
+  on: boolean;
+  /** How many plugins it holds: one is a package of one, whose switch is the plugin's. */
+  members: number;
+}
+
+/** Whether a plugin loads: one in a package when its package is on and it was not switched off
+ *  on its own; any other as `isPluginEnabled` says. */
+export function isPluginOn(states: Record<string, PluginState>, kind: PluginKind, plugin: { id: string; package?: PackageOf }, byDefault = true): boolean {
+  if (!plugin.package) return isPluginEnabled(states, kind, plugin.id, byDefault);
+  return plugin.package.on && states[pluginKey(kind, plugin.id)]?.enabled !== false;
+}
+
 /** Whether a plugin is on: as stored, else as it is by default. */
 export function isPluginEnabled(states: Record<string, PluginState>, kind: PluginKind, id: string, byDefault = true): boolean {
   return states[pluginKey(kind, id)]?.enabled ?? byDefault;
@@ -115,35 +133,6 @@ export function withPluginState(states: Record<string, PluginState>, kind: Plugi
   if (next.enabled === undefined && (!next.options || !Object.keys(next.options).length) && !next.workspaces?.length) delete out[key];
   else out[key] = next;
   return out;
-}
-
-/**
- * The records the settings.json of a version before plugin state held, in its own keys:
- * `agents.disabled`, `agents.options`, `plugins.disabled` (views), `tools.enabledPlugins` and
- * `tools.disabledTools` (a tool switched off inside a plugin is that plugin's option, false).
- */
-export function pluginStatesFromLegacy(raw: Record<string, unknown>): Record<string, PluginState> {
-  let states: Record<string, PluginState> = {};
-  const list = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-  const agents = isObj(raw.agents) ? raw.agents : {};
-  const plugins = isObj(raw.plugins) ? raw.plugins : {};
-  const tools = isObj(raw.tools) ? raw.tools : {};
-  for (const id of list(agents.disabled)) states = withPluginState(states, "agent", id, (s) => ({ ...s, enabled: false }));
-  if (isObj(agents.options)) {
-    for (const [id, opts] of Object.entries(agents.options)) {
-      if (!isObj(opts)) continue;
-      const options = Object.fromEntries(Object.entries(opts).filter(([, v]) => typeof v === "string")) as Record<string, string>;
-      states = withPluginState(states, "agent", id, (s) => ({ ...s, options: { ...s.options, ...options } }));
-    }
-  }
-  for (const id of list(plugins.disabled)) states = withPluginState(states, "view", id, (s) => ({ ...s, enabled: false }));
-  for (const id of list(tools.enabledPlugins)) states = withPluginState(states, "tool", id, (s) => ({ ...s, enabled: true }));
-  for (const toolId of list(tools.disabledTools)) {
-    const cut = toolId.lastIndexOf("/");
-    if (cut <= 0) continue;
-    states = withPluginState(states, "tool", toolId.slice(0, cut), (s) => ({ ...s, options: { ...s.options, [toolId.slice(cut + 1)]: false } }));
-  }
-  return parsePluginStates(states);
 }
 
 // ── fields of the kinds that declare them their own way ─────────────────────

@@ -1,4 +1,6 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { installPluginSwitchIpc } from "./plugin-switch.js";
+import { installPackagesIpc } from "./packages-ipc.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { toolPreferences } from "@hivemind/core/settings-schema";
@@ -11,6 +13,7 @@ import { appKeyMessage, isQuitKey } from "../shared/shortcuts.js";
 import { askToQuit, installQuitIpc, stopEverything, stopsEverything } from "./quit.js";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
+import { migrateOnStart, takeMigrationNotices } from "./migrations.js";
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
@@ -310,6 +313,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   });
   workspaceIpc.connect(win.webContents);
   launchTargets.set(wc, target);
+  const notices = takeMigrationNotices();
+  if (notices.length) wc.once("did-finish-load", () => setTimeout(() => { for (const n of notices) pushAppError(n, "migrations"); }, 2_000));
 
   attachWinStateSaver(win);
   // Maximize AFTER the window is mapped, not before. The window is created with
@@ -1044,6 +1049,7 @@ const control: ControlPlane = new ControlPlane({
   // Used by agent.send and pipe forwarding.
   write: writeTile,
   steers: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.steer,
+  pastesPhotos: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.pastedImages,
   signalsTurns: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.caps.turnSignal,
   // The host starts a spawned tile, its task on the agent's command line where it takes one there:
   // a window that shows it joins it, so whichever opens it first, the agent gets its task.
@@ -1380,7 +1386,15 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
   }),
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
-  controlApi({ control: () => control.api() }),
+  controlApi({
+    control: () => control.api(),
+    // A message's photos, on the machine its agent runs on, in a folder of its tile's.
+    keep: (bare, images) => {
+      const folder = runsIn(heldBoards(workspaceStore()), bare);
+      if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
+      return placesHere.keep(folder, images, bare);
+    },
+  }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
   conversations({
@@ -1583,6 +1597,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
+    await migrateOnStart();
     // A daemon of another protocol is replaced before anything connects to it: each connection
     // waits for this, the window does not.
     ptyDaemon.ensureFreshDaemon().catch((e: unknown) => {
@@ -1619,6 +1634,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installViewManagementIpc();
     installWidgetIpc();
     installToolPackageIpc();
+    installPluginSwitchIpc();
+    installPackagesIpc();
     installServicesIpc();
     installPluginCatalogIpc();
     installQuitIpc({

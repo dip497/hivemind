@@ -13,13 +13,12 @@ import path from "node:path";
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
-import { dialogStart, rememberPick } from "./dialog-start";
-import { app, net, protocol, dialog, type BrowserWindow, type WebFrameMain } from "electron";
+import { app, net, protocol, type BrowserWindow, type WebFrameMain } from "electron";
 import { serveScheme } from "./schemes.js";
 import { handle, handleEffect } from "./app-ipc.js";
-import { appWindowOf } from "./windows.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
+import { listInstalledViews, readViewPackage, type InstalledView } from "@hivemind/core/views";
+import { installPackage, removePlugin } from "@hivemind/core/package-install";
 import { VIEW_SCHEME, entryUrl, newNonce, pluginCsp, serveViewFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 import type { ViewFile, ViewListing } from "@hivemind/workspace-api/views";
@@ -61,7 +60,7 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
         page.searchParams.set("workspace", remote);
         const url = page.toString();
         served.set(viewHost(v.id), { id: v.id, repo: remote });
-        hosted.push({ id: v.id, dir: "", source: "host", manifest: v.manifest, error: null, url });
+        hosted.push({ id: v.id, dir: "", source: "host", manifest: v.manifest, ...(v.icon ? { icon: v.icon } : {}), error: null, url });
       }
     } catch { /* a disconnected host leaves the built-in and local views available */ }
   }
@@ -195,15 +194,6 @@ export async function reviewViewDir(dir: string, staged: boolean) {
 
 /** The renderer can install only a package it was shown for review. */
 export function installViewManagementIpc(): void {
-  handle("views:preview-install", async (event) => {
-    const win = appWindowOf(event.sender)!; // the gate answers app windows only
-    if (pending?.staged) await rm(pending.dir, { recursive: true, force: true }).catch(() => {});
-    pending = null;
-    const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", defaultPath: dialogStart("view", app.getPath("home")), properties: ["openDirectory"] });
-    if (result.canceled || !result.filePaths[0]) return null;
-    rememberPick("view", result.filePaths[0]);
-    return reviewViewDir(result.filePaths[0], false);
-  }, { local: true });
   handleEffect("views:install", (token) => ({ target: pending && token === pending.token ? pending.id : undefined }), async (_event, token: string) => {
     if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
     const candidate = pending;
@@ -211,11 +201,11 @@ export function installViewManagementIpc(): void {
     try {
       const pkg = await readViewPackage(candidate.dir, "user", false);
       if (pkg.error || JSON.stringify(pkg.manifest) !== candidate.manifest) throw new Error("The extension changed. Choose its folder again to review it.");
-      await installView(candidate.dir);
+      await installPackage(candidate.dir, { id: candidate.id });
     } finally { if (candidate.staged) await rm(candidate.dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("views:remove", (id) => ({ target: typeof id === "string" ? id : undefined }), async (_event, id: string) => {
     if (typeof id !== "string") throw new Error("Invalid extension ID");
-    await removeView(id);
+    await removePlugin("view", id);
   });
 }
