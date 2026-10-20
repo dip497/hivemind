@@ -307,7 +307,7 @@ test("what the view does is done on the board as its caller, and recorded; what 
 
 test("an agent asleep is shown asleep with when it slept, never where; the view wakes it and puts it to sleep as its caller, recorded, and a caller who may not, may not", async () => {
   const c = computer();
-  installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn"] });
+  await installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn"] });
   const before = Date.now();
   c.store.setSleeping("t1", c.repo);
   const tileOne = (told: Array<Record<string, unknown>>) => (told.filter((m) => m.type === "structure").at(-1)!.tiles as Array<Record<string, unknown>>)[0]!;

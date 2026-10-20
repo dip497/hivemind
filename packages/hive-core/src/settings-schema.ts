@@ -471,11 +471,6 @@ const VIEW_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,
 /** No toolbar can name more actions than the catalog holds. */
 const TOOLBAR_MAX_ACTIONS = 32;
 
-/** Validate + fill a parsed settings.json (any junk) into a Settings.
- *
- *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
- *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
- *  hand, base given). */
 /** What the tool registry takes, from the tool plugins' stored state: the plugins switched on,
  *  and the tools switched off inside them (each a plugin option set to false). */
 export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
@@ -490,6 +485,11 @@ export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
   return { enabledPlugins, disabledTools };
 }
 
+/** Validate + fill a parsed settings.json (any junk) into a Settings.
+ *
+ *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
+ *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
+ *  hand, base given). */
 export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
   const p = isObj(raw) ? raw : {};
   const views = isObj(p.views) ? p.views : {};

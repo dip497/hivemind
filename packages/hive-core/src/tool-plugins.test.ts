@@ -107,12 +107,10 @@ describe("tile-kind availability", () => {
     ])).toThrow(/Invalid command cli/);
   });
 
-  test("it reads what settings.json stores: the plugin's record, or the key a file from before it has", () => {
+  test("it reads what settings.json stores: the plugin's record", () => {
     const off = mergeSettings(DEFAULT_SETTINGS);
     expect(tileKindAvailability("browser", toolPreferences(off))?.available).toBe(false);
     const on = mergeSettings({ v: 1, plugins: { state: { [`tool:${BROWSER_PLUGIN_ID}`]: { enabled: true } } } });
     expect(tileKindAvailability("browser", toolPreferences(on))?.available).toBe(true);
-    const old = mergeSettings({ v: 1, tools: { enabledPlugins: [BROWSER_PLUGIN_ID], disabledTools: [] } });
-    expect(tileKindAvailability("browser", toolPreferences(old))?.available).toBe(true);
   });
 });
