@@ -6,7 +6,8 @@ description: "How the background process runs every terminal and agent, keeps th
 
 Every terminal and agent runs in the
 <Tooltip tip="The hive process that keeps terminals and agents running while the app is closed or upgrading." cta="Glossary" href="/glossary#background-process">background process</Tooltip>,
-not in the window. The window only shows them. So closing the app, or updating it, stops nothing.
+not in the window. The window only shows them. So closing the app, or updating it, stops nothing
+unless you choose **Stop everything** as you quit.
 
 <AgentPrompt description="Paste this into your coding agent to check the background process and what it runs." page="background-process">{`
 Check the Hivemind background process on this computer. Do not change anything.
@@ -28,10 +29,17 @@ Tell me anything that runs with no tile, and any tile whose program has stopped.
 
 | When | What happens |
 |---|---|
-| You close the window | Terminals and agents keep running. |
+| You quit (⌘Q on a Mac, Ctrl+Q elsewhere, or closing the last window) while something runs | The app asks: **Keep them running**, **Stop everything** or **Cancel**. With nothing running it quits at once. |
+| You quit and choose Keep them running | Terminals and agents keep running. |
+| You quit and choose Stop everything | The background process stops, as `hive daemon stop` does. Each session's screen is saved, and the next start brings it back: agents that can resume continue their conversation. Agents on other machines keep running. |
 | The background process restarts, or the computer reboots | Agents that can resume continue their conversation; others start fresh. Screens replay from disk. |
 | You close a tile (×) | Its program ends. |
 | You put an agent to sleep | Its program ends. Its tile keeps its name and conversation, with **Resume**. |
+
+Tick **Don't ask again** in that question to keep your choice. Change it back in
+Settings → About and updates → **When you quit while agents run**. **Quit and stop agents**, in the
+Open Recent menu (Ctrl+R), stops everything without asking. A quit started by an update, by
+`hive`, or by any program rather than you never asks and stops nothing.
 
 ## It also works out agent states
 

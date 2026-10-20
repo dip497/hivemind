@@ -17,7 +17,7 @@ const walk = (dir: string, base = dir): string[] => fs.readdirSync(dir).flatMap(
 const hashed = (dir: string) => walk(dir).sort().map((f) => ({ path: f, sha256: sha(fs.readFileSync(path.join(dir, f))) }));
 const field = (yaml: string, k: string) => yaml.match(new RegExp(`^${k}:\\s*"?([^"\\n]+?)"?\\s*$`, "m"))?.[1] ?? "";
 
-export interface Registry { dir: string; indexUrl: string; add(p: { id: string; type: "agent" | "view"; name: string; files: Record<string, string>; bin?: string }): void }
+export interface Registry { dir: string; indexUrl: string; add(p: { id: string; type: "agent" | "view"; name: string; files: Record<string, string>; bin?: string; category?: string }): void }
 
 /** Write the registry into `dir`. */
 export function buildRegistry(dir: string): Registry {
@@ -31,6 +31,7 @@ export function buildRegistry(dir: string): Registry {
     fs.writeFileSync(file, JSON.stringify(m, null, 2));
     plugins.push({
       id: m.id, type: "view", name: m.name, description: m.name, author: "e2e", version: m.version, path: `views/${v}`, files: hashed(dest),
+      ...(m.category ? { category: m.category } : {}),
     });
   }
   for (const a of fs.readdirSync(path.join(FIXTURES, "agents"))) {
@@ -48,13 +49,13 @@ export function buildRegistry(dir: string): Registry {
   return {
     dir,
     indexUrl: pathToFileURL(path.join(dir, "index.json")).href,
-    add({ id, type, name, files, bin }) {
+    add({ id, type, name, files, bin, category }) {
       const folder = `${type}s/${id.split("/").pop()}`;
       fs.mkdirSync(path.join(dir, folder), { recursive: true });
       for (const [f, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, folder, f), body);
       plugins.push({
         id, type, name, description: `A test ${type} from the catalog.`, author: "e2e", version: "1.0.0", path: folder,
-        ...(bin ? { bin } : {}), files: Object.entries(files).map(([f, body]) => ({ path: f, sha256: sha(body) })),
+        ...(bin ? { bin } : {}), ...(category ? { category } : {}), files: Object.entries(files).map(([f, body]) => ({ path: f, sha256: sha(body) })),
       });
       write();
     },

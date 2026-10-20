@@ -426,14 +426,15 @@ caller's connection closes, or the host disables the view (`view.ended`, with wh
   from what this device holds: the board from the store, statuses and links from the control
   plane, a selection of the session's own; and the screen as its caller says it (`viewport`,
   `theme`, then `resize` and `theme`). `hello.device` is `{touch: true, compact: true}`; no
-  `visibility` follows, and no layout is kept. `features`: `agentStatus`, and `surfaces` for a
-  screen that places its own (below).
+  `visibility` follows, and no layout is kept. `features`: `agentStatus`, `sleep`, and `surfaces`
+  for a screen that places its own (below).
 - **What the view may do** is what its manifest asks and its caller may call, both: a view on a
-  remote screen may start agents (`workspace:spawn`) when its caller may call `agent.start`, close
+  remote screen may start agents (`workspace:spawn`) when its caller may call `agent.start`, and
+  wake them and put them to sleep (view protocol 1.14) when it may call `agent.wake` and `agent.sleep`; close
   tiles (`workspace:close`) when it may call `agent.close`, and rename them (`workspace:edit`) when
   it may write the board (`store.setCore`, the owner's: a phone may not). A prompt a view writes
   and a past session it continues ask the person at this computer, so neither is served. What it
-  starts and closes is recorded as the caller's, its detail `view <id>`.
+  starts, wakes, puts to sleep and closes is recorded as the caller's, its detail `view <id>`.
 - **A screen that places live surfaces itself** (0.15, `view.open`'s `surfaces`: a phone's app,
   which draws its own terminal over the view's web view where the view's `surfaceRects` ask) is
   said to in `hello.features` (`surfaces`, view protocol 1.6), and the rects are its own: nothing

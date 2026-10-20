@@ -36,13 +36,15 @@ pub const BRIDGE: &str = include_str!("view_bridge.js");
 /// The view protocol's commands that start or close something on a board: those it says need
 /// `workspace:spawn` or `workspace:close` (`COMMAND_PERMISSION` in the view SDK's protocol.ts,
 /// conformance/view-commands.json).
-const STARTS_OR_CLOSES: [&str; 6] = [
+const STARTS_OR_CLOSES: [&str; 8] = [
     "closeTile",
     "spawnTile",
     "spawnVis",
     "spawnClaude",
     "addFrame",
     "spawnAgent",
+    "wakeAgent",
+    "sleepAgent",
 ];
 
 /// How many live surfaces a page may ask for at once, and the longest tile id: the view SDK's
