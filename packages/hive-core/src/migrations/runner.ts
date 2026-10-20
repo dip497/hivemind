@@ -169,13 +169,15 @@ async function backUp(root: string, m: Migration): Promise<string | undefined> {
   const dest = path.join(folder, m.id);
   const named = path.relative(migrationsFolder(root), dest).split(path.sep).join("/");
   if (await stat(dest).catch(() => null)) return named;
+  const there = await Promise.all(m.backsUp.map((rel) => stat(checkedPath(root, rel)).then(() => true, () => false)));
+  if (!there.includes(true)) return undefined;
   await mkdir(folder, { recursive: true, mode: 0o700 });
   for (const f of await readdir(folder)) if (f.startsWith(`.${m.id}-`)) await rm(path.join(folder, f), { recursive: true, force: true });
   const draft = path.join(folder, `.${m.id}-${randomUUID()}`);
   await mkdir(draft, { mode: 0o700 });
   for (const rel of m.backsUp) {
     const from = checkedPath(root, rel);
-    if (!(await stat(from).catch(() => null))) continue;
+    if (!there[m.backsUp.indexOf(rel)]) continue;
     await cp(from, path.join(draft, rel), { recursive: true, preserveTimestamps: true, verbatimSymlinks: true });
   }
   await rename(draft, dest);

@@ -12,6 +12,7 @@ import { hive } from "./helpers.js";
 
 const BEFORE = path.join(import.meta.dir, "..", "..", "..", "packages", "hive-core", "src", "migrations", "fixtures", "0001", "before");
 const ADOPT = "0001-adopt-plugins-as-packages";
+const ALL = [ADOPT, "0002-plugin-state-from-old-keys", "0003-remove-old-one-off-backups", "0004-remove-machines-marker"];
 
 let home: string;
 const root = () => path.join(home, "hivemind");
@@ -42,13 +43,14 @@ afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
 describe("hive migrations", () => {
   test("lists what is still to run, and what ran, by which build", () => {
     const before = hive(["migrations", "--json"], { env: env() }).json as { data: { pending: string[]; applied: unknown[] }[] };
-    expect(before.data.map((r) => [r.pending, r.applied])).toEqual([[[ADOPT], []]]);
+    expect(before.data.map((r) => [r.pending, r.applied])).toEqual([[ALL, []]]);
     // `hive migrations` itself moved nothing.
     expect(fs.existsSync(path.join(root(), "views"))).toBe(true);
     hive(["config", "path"], { env: env() });
     const after = hive(["migrations", "--json"], { env: env() }).json as { data: { pending: string[]; applied: { id: string; by: string; backupKept: boolean; result: { adopted: number } }[] }[] };
     expect(after.data.map((r) => r.pending)).toEqual([[]]);
-    expect(after.data[0]!.applied.map((a) => [a.id, a.by, a.backupKept, a.result.adopted])).toEqual([[ADOPT, "cli", true, 8]]);
+    expect(after.data[0]!.applied[0]).toMatchObject({ id: ADOPT, by: "cli", backupKept: true, result: { adopted: 8 } });
+    expect(after.data[0]!.applied.map((a) => a.id)).toEqual(ALL);
     const shown = hive(["migrations"], { env: env() }).stdout;
     expect(shown).toContain(`ran      ${ADOPT}`);
     // A plugin it could not keep is named, with what to do.
@@ -63,7 +65,8 @@ describe("hive migrations", () => {
     expect(fs.existsSync(path.join(root(), "views"))).toBe(false);
     const r = hive(["migrations", "restore", ADOPT, "--json"], { env: env() });
     expect(r.code).toBe(0);
-    expect((r.json as { data: { restored: string[] } }).data.restored).toEqual([ADOPT]);
+    // Every migration after it is undone first.
+    expect((r.json as { data: { restored: string[] } }).data.restored).toEqual([...ALL].reverse());
     expect(oldLayout()).toEqual(old);
     const ledger = JSON.parse(fs.readFileSync(path.join(root(), "migrations", "ledger.json"), "utf8")) as { applied: unknown[] };
     expect(ledger.applied).toEqual([]);

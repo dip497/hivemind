@@ -18,6 +18,7 @@ import { packagesDir, readInstalledPackages } from "../installed-packages.js";
 import { parsePluginStates, pluginKey, type PluginKind, type PluginState } from "../plugin-settings.js";
 import { readSettings, settingsPath, updateSettings } from "../settings.js";
 import type { Migration } from "./runner.js";
+import { writePluginStateFromOldKeys } from "./0002-plugin-state-from-old-keys.js";
 
 interface OldPlugin { kind: PluginKind; dir: string; path: string; id: string | null }
 
@@ -99,6 +100,7 @@ export const m0001: Migration = {
   movesFilesAnOlderAppReads: true,
   async run(ctx) {
     if (path.resolve(path.dirname(packagesDir())) !== path.resolve(ctx.root)) throw new Error(`the packages of ${ctx.root} are not kept in it`);
+    await writePluginStateFromOldKeys(settingsPath());
     const renamed = await toolStatesRenamed(settingsPath());
     const states = { ...(await readSettings(settingsPath())).plugins.state, ...renamed };
     const staging = path.join(ctx.root, "migrations", "0001-staging");

@@ -24,10 +24,10 @@
  * identical — so a lock left by a crashed writer is cleared explicitly, by a
  * human or by `breakSettingsLock`, never by a competing writer.
  */
-import { constants as fsConstants, promises as fs } from "node:fs";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { DEFAULT_SETTINGS, hasLegacyPluginKeys, mergeSettings, setPath, type Settings } from "./settings-schema.js";
+import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "./settings-schema.js";
 
 export function settingsPath(): string {
   if (process.env.HIVE_SETTINGS?.trim()) return path.resolve(process.env.HIVE_SETTINGS.trim());
@@ -54,34 +54,17 @@ export async function writeSettings(next: Settings, file: string = settingsPath(
  *  them here would drop the change they just made. */
 async function writeBoth(settings: Settings, extras: Record<string, unknown>, file: string): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await backUpBeforePluginState(file);
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
   await fs.writeFile(tmp, JSON.stringify({ ...extras, ...settings }, null, 2) + "\n", "utf8");
   await fs.rename(tmp, file);
 }
-
-/** The first write of plugin state into a file that held it in the old keys keeps the file as it
- *  was beside it (`settings.json.bak`), once: a migration that went wrong can be undone by hand. */
-async function backUpBeforePluginState(file: string): Promise<void> {
-  try {
-    const raw: unknown = JSON.parse(await fs.readFile(file, "utf8"));
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
-    const r = raw as Record<string, unknown>;
-    const hasState = typeof r.plugins === "object" && r.plugins !== null && "state" in r.plugins;
-    if (hasState || !hasLegacyPluginKeys(r)) return;
-    await fs.copyFile(file, `${file}.bak`, fsConstants.COPYFILE_EXCL).catch(() => {});
-  } catch { /* nothing to keep */ }
-}
-
-/** Top-level keys a version before plugin state used, now read into it: never carried over. */
-const RETIRED_KEYS = new Set(["tools"]);
 
 /** Top-level keys of the file that are not part of `Settings`. */
 async function unknownKeys(file: string): Promise<Record<string, unknown>> {
   try {
     const raw: unknown = JSON.parse(await fs.readFile(file, "utf8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-    const known = new Set([...Object.keys(DEFAULT_SETTINGS), ...RETIRED_KEYS]);
+    const known = new Set(Object.keys(DEFAULT_SETTINGS));
     return Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([k]) => !known.has(k)));
   } catch { return {}; }
 }

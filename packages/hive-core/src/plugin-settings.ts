@@ -134,35 +134,6 @@ export function withPluginState(states: Record<string, PluginState>, kind: Plugi
   return out;
 }
 
-/**
- * The records the settings.json of a version before plugin state held, in its own keys:
- * `agents.disabled`, `agents.options`, `plugins.disabled` (views), `tools.enabledPlugins` and
- * `tools.disabledTools` (a tool switched off inside a plugin is that plugin's option, false).
- */
-export function pluginStatesFromLegacy(raw: Record<string, unknown>): Record<string, PluginState> {
-  let states: Record<string, PluginState> = {};
-  const list = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-  const agents = isObj(raw.agents) ? raw.agents : {};
-  const plugins = isObj(raw.plugins) ? raw.plugins : {};
-  const tools = isObj(raw.tools) ? raw.tools : {};
-  for (const id of list(agents.disabled)) states = withPluginState(states, "agent", id, (s) => ({ ...s, enabled: false }));
-  if (isObj(agents.options)) {
-    for (const [id, opts] of Object.entries(agents.options)) {
-      if (!isObj(opts)) continue;
-      const options = Object.fromEntries(Object.entries(opts).filter(([, v]) => typeof v === "string")) as Record<string, string>;
-      states = withPluginState(states, "agent", id, (s) => ({ ...s, options: { ...s.options, ...options } }));
-    }
-  }
-  for (const id of list(plugins.disabled)) states = withPluginState(states, "view", id, (s) => ({ ...s, enabled: false }));
-  for (const id of list(tools.enabledPlugins)) states = withPluginState(states, "tool", id, (s) => ({ ...s, enabled: true }));
-  for (const toolId of list(tools.disabledTools)) {
-    const cut = toolId.lastIndexOf("/");
-    if (cut <= 0) continue;
-    states = withPluginState(states, "tool", toolId.slice(0, cut), (s) => ({ ...s, options: { ...s.options, [toolId.slice(cut + 1)]: false } }));
-  }
-  return parsePluginStates(states);
-}
-
 // ── fields of the kinds that declare them their own way ─────────────────────
 
 /** An agent's launch options as fields: one with its own values and no flag is a choice of

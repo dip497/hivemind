@@ -206,7 +206,7 @@ describe("settings schema", () => {
     expect(s.appearance.palette.bg).toBe(SIGNAL.palette.bg);
     expect(s.appearance.pluginSurfaces).toBe("theme");
     expect(s.views).toEqual({ defaultView: "orbit", chrome: { world: { island: "hidden" } }, toolbars: {}, layers: DEFAULT_SETTINGS.views.layers });
-    expect(s.plugins.state).toEqual({ "view:a": { enabled: false }, "view:b": { enabled: false } }); // the old key, read once
+    expect(s.plugins.state).toEqual({}); // the old key is not read: migration 0002 moves it
     // Empty stays empty: "" means "whatever the agent catalog's default is".
     expect(s.agents.defaultAgent).toBe(DEFAULT_SETTINGS.agents.defaultAgent);
     expect("extra" in s).toBe(false);
@@ -324,42 +324,6 @@ describe("settings file", () => {
     expect(raw.browserCdp).toBe(true);
     expect(raw.browserCdpPort).toBe("9333");
     expect(raw.views.defaultView).toBe("world");
-  });
-});
-
-describe("plugin state from a settings.json written before it", () => {
-  let tmp: string;
-  const saved = process.env.HIVE_SETTINGS;
-  beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-plugin-state-")); process.env.HIVE_SETTINGS = path.join(tmp, "settings.json"); });
-  afterEach(() => { if (saved === undefined) delete process.env.HIVE_SETTINGS; else process.env.HIVE_SETTINGS = saved; fs.rmSync(tmp, { recursive: true, force: true }); });
-  // The shape an install had before plugin state: every switch the person made lives in its own key.
-  const OLD = {
-    v: 1, browserCdp: true,
-    agents: { defaultAgent: "claude", autoInstall: true, declined: ["aider"], fromCatalog: [], disabled: ["codex"], options: { claude: { model: "opus" } } },
-    plugins: { disabled: ["@someone/notes"] },
-    tools: { enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser"] },
-  };
-
-  test("is read into one record per plugin, and the first write keeps the old file beside it", async () => {
-    fs.writeFileSync(settingsPath(), JSON.stringify(OLD));
-    const read = await readSettings();
-    expect(read.plugins.state).toEqual({
-      "agent:codex": { enabled: false },
-      "agent:claude": { options: { model: "opus" } },
-      "view:@someone/notes": { enabled: false },
-      "tool:@hivemind/web": { enabled: true, options: { browser: false } },
-    });
-    await writeSettings(setPath(read, "views.defaultView", "world"));
-    const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
-    expect(raw.plugins.state).toEqual(read.plugins.state);
-    expect(raw.tools).toBeUndefined();
-    expect(raw.agents.disabled).toBeUndefined();
-    expect(raw.browserCdp).toBe(true);
-    expect(JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"))).toEqual(OLD);
-    // Once written, the record is what counts, and the backup is never replaced.
-    await writeSettings(setPath(await readSettings(), "plugins.state", {}));
-    expect((await readSettings()).plugins.state).toEqual({});
-    expect(JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"))).toEqual(OLD);
   });
 });
 
