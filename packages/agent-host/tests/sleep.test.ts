@@ -169,13 +169,17 @@ test.skipIf(!unix)("a sleep that cannot be saved is an end, and a wake then find
   const v = await connect();
   v.send({ t: "attach", reqId: "a", id: "t5", spec: loop("UNSAVED") });
   for (let i = 0; i < 200 && !v.out().includes("UNSAVED"); i++) await new Promise((r) => setTimeout(r, 25));
-  fs.chmodSync(sessions, 0o500);
+  // Its sessions folder is a file for now: nothing is saved inside it, not even as root.
+  const kept = `${sessions}.kept`;
+  fs.renameSync(sessions, kept);
+  fs.writeFileSync(sessions, "");
   try {
     v.send({ t: "sleep", reqId: "s", id: "t5" });
     expect((await v.reply("slept"))?.error).toBeDefined();
     expect((await v.reply("exit"))?.slept).toBeUndefined();
   } finally {
-    fs.chmodSync(sessions, 0o700);
+    fs.rmSync(sessions);
+    fs.renameSync(kept, sessions);
   }
   v.got.length = 0;
   v.send({ t: "attach", reqId: "w", id: "t5", spec: loop("UNSAVED"), wake: true });
