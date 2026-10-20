@@ -74,7 +74,7 @@ export function tileRows(core: Core, agents: readonly AgentItem[], toolOf: ToolO
     const listedAs = listed.get(t.id);
     const program = listedAs?.program?.id ?? agentForCmd(t.cmd)?.id;
     if (program) return { ...at, kind: "agent", agent: program, ...(t.sleeping ? { state: "asleep" } : listedAs ? { state: listedAs.state } : {}) };
-    if (t.kind === "shell" || t.kind === "claude") return { ...at, kind: "terminal" };
+    if (t.cmd !== undefined) return { ...at, kind: "terminal" };
     const tool = toolOf(t.kind);
     if (tool) return { ...at, kind: "tool", ...tool };
     return { ...at, kind: t.kind };
