@@ -49,7 +49,11 @@ describe("hive migrations", () => {
     const after = hive(["migrations", "--json"], { env: env() }).json as { data: { pending: string[]; applied: { id: string; by: string; backupKept: boolean; result: { adopted: number } }[] }[] };
     expect(after.data.map((r) => r.pending)).toEqual([[]]);
     expect(after.data[0]!.applied.map((a) => [a.id, a.by, a.backupKept, a.result.adopted])).toEqual([[ADOPT, "cli", true, 8]]);
-    expect(hive(["migrations"], { env: env() }).stdout).toContain(`ran      ${ADOPT}`);
+    const shown = hive(["migrations"], { env: env() }).stdout;
+    expect(shown).toContain(`ran      ${ADOPT}`);
+    // A plugin it could not keep is named, with what to do.
+    expect(shown).toContain("not kept: widgets/clock: clock 1.0.0 is already installed as a package (the view clock)");
+    expect(shown).toContain("run `hive plugins install <that folder>`");
   });
 
   test("restore puts the old folders and settings back byte for byte, and the next start adopts them again", () => {

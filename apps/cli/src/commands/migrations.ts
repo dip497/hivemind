@@ -19,6 +19,8 @@ function render(roots: RootStatus[]): string {
     for (const a of r.applied) {
       const backup = a.backup ? (a.backupKept ? `backup in migrations/${a.backup}` : "backup gone") : "no backup";
       lines.push(`  ran      ${a.id}  ${a.at.slice(0, 16).replace("T", " ")}  by the ${a.by} ${a.app}, ${a.ms} ms; ${backup}${a.known ? "" : " (a newer build's)"}`);
+      const skipped = (a.result as { skipped?: { path: string; why: string }[] } | undefined)?.skipped ?? [];
+      for (const x of skipped) lines.push(`           not kept: ${x.path}: ${x.why}`);
     }
     for (const id of r.pending) lines.push(`  to run   ${id}`);
     if (r.failed) lines.push(`  failed   ${r.failed.id}  ${r.failed.at.slice(0, 16).replace("T", " ")}  ${r.failed.error}`);
