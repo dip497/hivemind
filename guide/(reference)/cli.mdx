@@ -189,6 +189,8 @@ hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id: installed as a package
                                         # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable @owner/name
+hive plugins install <folder>|<id> --dry-run   # what an update would change, member by member; installs nothing
+hive plugins rollback <package>         # back to the version in use before its last update, switched as it was
 hive plugins remove <plugin>|<package>  # one you added on its own, or a whole package
                                         # one plugin of a bigger package is refused (exit 7): remove the package
 hive plugins api --kind tool|widget|view   # what its code is given, as the type declarations of this version

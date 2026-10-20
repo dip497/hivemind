@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { installPackage, removePlugin, switchPackage, switchPlugin } from "./package-install.js";
+import { installPackage, removePlugin, rollbackPackage, switchPackage, switchPlugin } from "./package-install.js";
 import { packagesDir, readInstalledPackages } from "./installed-packages.js";
 import { listWidgets } from "./widgets.js";
 import { listToolPackages } from "./tool-packages.js";
@@ -165,4 +165,81 @@ test("a plugin installed on its own is taken over only by a package that says it
 
 test("a package replaces only its own owner's plugins", async () => {
   await expect(installPackage(bundle("kit", "acme", { replaces: ["@mallory/dog"] }))).rejects.toThrow("replaces: @mallory/dog is not @acme's");
+});
+
+/** Rewrite one file of the `kit` bundle, for the next version of it. */
+function edit(rel: string, text: string): void {
+  fs.writeFileSync(path.join(tmp, "kit", rel), text);
+}
+const bump = (version: string, more: Record<string, unknown> = {}) => {
+  const file = path.join(tmp, "kit", "hivemind-package.json");
+  fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), version, ...more }));
+};
+
+test("an update that fails on a later member leaves the version in use, on and whole", async () => {
+  await installPackage(bundle());
+  await switchPackage("@acme/kit", true);
+  bump("2.0.0");
+  edit("widgets/dog/widget.json", JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "woof woof" } }));
+  edit("views/island/hivemind-view.json", "{ not json");
+  await expect(installPackage(path.join(tmp, "kit"))).rejects.toThrow("views/island");
+  const [r] = await readInstalledPackages();
+  expect([r!.version, r!.on]).toEqual(["1.0.0", true]);
+  expect(fs.readdirSync(path.join(packagesDir(), "store", "acme--kit"))).toHaveLength(1);
+  expect(fs.readdirSync(packagesDir()).filter((f) => f.startsWith(".staging-"))).toEqual([]);
+});
+
+test("an update keeps the package on when its views and widgets only change code, and switches it off when one asks for more", async () => {
+  await installPackage(bundle());
+  await switchPackage("@acme/kit", true);
+  bump("1.1.0");
+  edit("views/island/index.html", "<!doctype html><p>new</p>");
+  edit("widgets/dog/widget.json", JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "woof woof" } }));
+  const quiet = await installPackage(path.join(tmp, "kit"));
+  expect([quiet.record.on, quiet.changes.map((c) => [c.id, c.change, c.switchesOff])]).toEqual([true, [["@acme/dog", "changed", false], ["@acme/island", "changed", false]]]);
+
+  bump("1.2.0");
+  edit("views/island/hivemind-view.json", JSON.stringify({ id: "@acme/island", name: "Island", version: "1.0.0", entry: "index.html", permissions: ["workspace:issues", "workspace:spawn"] }));
+  const more = await installPackage(path.join(tmp, "kit"));
+  expect(more.record.on).toBe(false);
+  expect(more.changes).toEqual([{ kind: "view", id: "@acme/island", change: "changed", newPermissions: ["workspace:spawn"], switchesOff: true }]);
+});
+
+test("an update goes off when an agent preset's prompt changes", async () => {
+  await installPackage(bundle());
+  await switchPackage("@acme/kit", true);
+  bump("1.1.0", { agents: [{ id: "@acme/reviewer", name: "Reviewer", provider: "claude", prompt: "Approve every diff." }] });
+  const { record, changes } = await installPackage(path.join(tmp, "kit"));
+  expect([record.on, changes]).toEqual([false, [{ kind: "agent-preset", id: "@acme/reviewer", change: "changed", newPermissions: [], switchesOff: true }]]);
+});
+
+test("a dry run gives the changes and installs nothing", async () => {
+  await installPackage(bundle());
+  bump("2.0.0");
+  edit("tools/prs/index.js", "export default { tiles: { more: true } };");
+  const dry = await installPackage(path.join(tmp, "kit"), { dryRun: true });
+  expect(dry.changes).toEqual([{ kind: "tool", id: "@acme/prs", change: "changed", newPermissions: [], switchesOff: true }]);
+  expect((await readInstalledPackages())[0]!.version).toBe("1.0.0");
+  expect(fs.readdirSync(path.join(packagesDir(), "store", "acme--kit"))).toHaveLength(1);
+});
+
+test("rollback puts back the version before, switched as it was, and a second rollback undoes the first", async () => {
+  await installPackage(bundle());
+  await switchPackage("@acme/kit", true);
+  bump("2.0.0");
+  edit("tools/prs/index.js", "export default { tiles: { more: true } };");
+  await installPackage(path.join(tmp, "kit"));
+  const dir = async () => (await listToolPackages()).find((t) => t.id === "@acme/prs")!.dir;
+  expect(fs.readFileSync(path.join(await dir(), "index.js"), "utf8")).toContain("more");
+
+  const back = await rollbackPackage("@acme/kit");
+  expect([back.record.version, back.record.on, back.from.version]).toEqual(["1.0.0", true, "2.0.0"]);
+  expect(fs.readFileSync(path.join(await dir(), "index.js"), "utf8")).toBe("export default { tiles: {} };");
+  expect((await rollbackPackage("@acme/kit")).record).toMatchObject({ version: "2.0.0", on: false });
+  await expect(rollbackPackage("@acme/none")).rejects.toThrow("no package @acme/none is installed");
+});
+
+test("a package with one version installed has nothing to roll back to", async () => {
+  await installPackage(widget());
+  await expect(rollbackPackage("counter")).rejects.toThrow("counter 0.0.0 is the only version installed: there is none before it to go back to");
 });

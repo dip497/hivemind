@@ -15,8 +15,9 @@ import path from "node:path";
 import { withLock } from "./settings.js";
 import type { PackageOf } from "./plugin-settings.js";
 
-/** One plugin a package holds: its kind, its id, and its folder inside the package. */
-export interface PackageMember { kind: string; id: string; path: string }
+/** One plugin a package holds: its kind, its id, its folder inside the package, the SHA-256 of
+ *  what it is, and what it asks to be allowed. What an update is compared by. */
+export interface PackageMember { kind: string; id: string; path: string; digest: string; permissions: string[] }
 
 /** One version of a package, as it was installed. */
 export interface PackageVersion {
@@ -31,8 +32,8 @@ export interface PackageRecord extends PackageVersion {
   id: string;
   /** Switched on: every member it holds can load. */
   on: boolean;
-  /** The version in use before this one, kept for `hive plugins rollback`. */
-  previous?: PackageVersion;
+  /** The version in use before this one, and whether it was on: kept for `hive plugins rollback`. */
+  previous?: PackageVersion & { on: boolean };
 }
 
 export function packagesDir(): string {
@@ -54,8 +55,9 @@ const str = (v: unknown): v is string => typeof v === "string" && v.length > 0 &
 
 function parseVersion(raw: unknown): PackageVersion | null {
   if (!isObj(raw) || !str(raw.version) || !str(raw.digest) || !/^[a-f0-9]{64}$/.test(raw.digest) || !str(raw.name) || !Array.isArray(raw.members)) return null;
-  const members = raw.members.filter((m): m is PackageMember => isObj(m) && str(m.kind) && str(m.id) && typeof m.path === "string" && !m.path.split("/").includes(".."));
-  return { version: raw.version, digest: raw.digest, name: raw.name, members: members.map(({ kind, id, path }) => ({ kind, id, path })) };
+  const members = raw.members.filter((m): m is PackageMember => isObj(m) && str(m.kind) && str(m.id) && typeof m.path === "string" && !m.path.split("/").includes("..")
+    && typeof m.digest === "string" && Array.isArray(m.permissions) && m.permissions.every((p) => typeof p === "string"));
+  return { version: raw.version, digest: raw.digest, name: raw.name, members: members.map(({ kind, id, path, digest, permissions }) => ({ kind, id, path, digest, permissions })) };
 }
 
 function parseRecords(text: string): PackageRecord[] {
@@ -66,7 +68,7 @@ function parseRecords(text: string): PackageRecord[] {
     const v = parseVersion(r);
     if (!v || !isObj(r) || !str(r.id) || /[\\]|\.\./.test(r.id)) continue;
     const previous = parseVersion(r.previous);
-    out.push({ id: r.id, ...v, on: r.on === true, ...(previous ? { previous } : {}) });
+    out.push({ id: r.id, ...v, on: r.on === true, ...(previous ? { previous: { ...previous, on: isObj(r.previous) && r.previous.on === true } } : {}) });
   }
   return out;
 }

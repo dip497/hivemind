@@ -180,10 +180,20 @@ async function snapshot(directory: string, copyTo?: string) {
 
 /** Copy the package in `directory` into `dest` (which must not be there), checked as an
  *  inspection checks it, and give the digest of what was copied. */
-export async function copyPackage(directory: string, dest: string): Promise<{ digest: string; bytes: number }> {
+export async function copyPackage(directory: string, dest: string): Promise<{ digest: string; bytes: number; files: PackageFile[] }> {
   await fs.mkdir(dest);
   const copied = await snapshot(directory, dest);
-  return { digest: copied.sha256, bytes: copied.bytes };
+  return { digest: copied.sha256, bytes: copied.bytes, files: copied.files };
+}
+
+/** One file of a package: its path inside it, its size and the SHA-256 of its bytes. */
+export interface PackageFile { path: string; bytes: number; sha256: string }
+
+/** The SHA-256 of the files in a member's folder (`.`: the whole package), each by its path
+ *  inside that folder: what changes when any of its code or files do, and only then. */
+export function folderDigest(files: readonly PackageFile[], folder: string): string {
+  const inside = folder === "." ? files.map((f) => [f.path, f.sha256]) : files.filter((f) => f.path.startsWith(`${folder}/`)).map((f) => [f.path.slice(folder.length + 1), f.sha256]);
+  return createHash("sha256").update(JSON.stringify(inside)).digest("hex");
 }
 
 export async function inspectPackage(directory: string, providers: readonly PackageProvider[]) {

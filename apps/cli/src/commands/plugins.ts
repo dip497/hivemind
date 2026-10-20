@@ -32,7 +32,7 @@ import {
   PLUGIN_KINDS, agentSettingFields, isPluginOn, isPluginId, parseSettingValue, pluginKey, pluginOptions, resolveSettings,
   serviceWorkspaces, toolSettingFields, withPluginState, type PackageOf, type PluginKind, type PluginState, type SettingField,
 } from "@hivemind/core/plugin-settings";
-import { installPackage, removePackage, removePlugin, switchPackage, switchPlugin, type InstalledPackage } from "@hivemind/core/package-install";
+import { installPackage, removePackage, removePlugin, rollbackPackage, switchPackage, switchPlugin, type InstalledPackage, type MemberChange } from "@hivemind/core/package-install";
 import { readInstalledPackages, type PackageRecord } from "@hivemind/core/installed-packages";
 import { memberKind } from "@hivemind/core/package-kinds";
 import { BUILTIN_WIDGETS } from "@hivemind/core/widget-format";
@@ -328,10 +328,11 @@ const newCmd = defineCommand({
 
 const installCmd = defineCommand({
   meta: { name: "install", description: "Add a plugin from a folder, or from HiveHub by its id" },
-  args: { source: { type: "positional", required: true, description: `a folder holding ${KINDS.map((k) => k.manifest).join(", ")} (./x, ../x, /x or ~/x); or an id on HiveHub (@owner/name)` }, json: { type: "boolean" } },
+  args: { source: { type: "positional", required: true, description: `a folder holding ${KINDS.map((k) => k.manifest).join(", ")} (./x, ../x, /x or ~/x); or an id on HiveHub (@owner/name)` }, "dry-run": { type: "boolean", description: "check it and say what would change, installing nothing" }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
     const source = String(args.source);
+    const dryRun = !!args["dry-run"];
     let staged: string | null = null;
     // Errors exit the process (`err` does), so a `finally` would never run: discard by hand.
     const discard = async () => { if (staged) await rm(staged, { recursive: true, force: true }).catch(() => {}); };
@@ -347,16 +348,21 @@ const installCmd = defineCommand({
       } else if (!fs.existsSync(source)) {
         throw new Error(`there is no folder ${path.resolve(source)}, and "${source}" is not an id on HiveHub`);
       }
-      const installed = await installPackage(staged ?? path.resolve(source), hubId ? { id: hubId } : {});
+      const installed = await installPackage(staged ?? path.resolve(source), { ...(hubId ? { id: hubId } : {}), dryRun });
       await discard();
-      const rescanned = await rescanApp(installed.members.map((m) => m.kind));
-      const report = installReport(installed, rescanned);
+      const rescanned = dryRun ? false : await rescanApp(installed.members.map((m) => m.kind));
+      const report = { ...installReport(installed, rescanned), installed: !dryRun };
+      const { record } = installed;
       return ok(ctx, report, () => [
-        `installed ${installed.record.id} (${installed.record.name}), version ${installed.record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; ${appNote(rescanned)}`,
+        dryRun
+          ? `would install ${record.id} (${record.name}), version ${record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; nothing was installed`
+          : `installed ${record.id} (${record.name}), version ${record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; ${appNote(rescanned)}`,
         ...installed.members.map((m) => `  ${memberKind(m.kind)?.noun ?? m.kind} ${m.id}${m.permissions.length ? ` (asks for ${m.permissions.join(", ")})` : ""}`),
+        ...(installed.replaced ? installed.changes.length ? ["Changes:", ...installed.changes.map((c) => `  ${changeLine(c)}`)] : ["Nothing changed."] : []),
         ...installed.tookOver.map((t) => `It took over ${t}, installed on its own before; what you set it to is kept.`),
-        installed.record.on ? "It is on." : "It is off until you switch it on, if you trust who wrote it.",
-        "Next:", steps(report.next),
+        dryRun ? (record.on ? "It would be on." : "It would be off until you switch it on.")
+          : record.on ? "It is on." : installed.changes.some((c) => c.switchesOff) && installed.replaced ? `It is off: a change above needs you to trust it again. \`hive plugins rollback ${record.id}\` puts back ${installed.replaced.version}.` : "It is off until you switch it on, if you trust who wrote it.",
+        ...(dryRun ? [] : ["Next:", steps(report.next)]),
       ].join("\n"));
     } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
   },
@@ -369,9 +375,31 @@ function installReport(installed: InstalledPackage, rescanned: boolean) {
   return {
     id: record.id, name: record.name, version: record.version, digest: record.digest, on: record.on,
     members: installed.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, dir: m.dir, permissions: m.permissions })),
-    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, rescanned, next,
+    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, changes: installed.changes, rescanned, next,
   };
 }
+
+/** One member's change, in a sentence. */
+function changeLine(c: MemberChange): string {
+  const what = `${memberKind(c.kind)?.noun ?? c.kind} ${c.id}`;
+  if (c.change === "gone") return `${what}: removed`;
+  const asks = c.newPermissions.length ? `, now asks for ${c.newPermissions.join(", ")}` : "";
+  return `${what}: ${c.change === "new" ? "added" : "changed"}${asks}${c.switchesOff ? " (switches the package off)" : ""}`;
+}
+
+const rollbackCmd = defineCommand({
+  meta: { name: "rollback", description: "Put back the version of a package in use before its last update" },
+  args: { package: { type: "positional", required: true, description: "the package's id" }, json: { type: "boolean" } },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    try {
+      const { record, from } = await rollbackPackage(String(args.package));
+      const rescanned = await rescanApp(record.members.map((m) => m.kind));
+      return ok(ctx, { id: record.id, version: record.version, on: record.on, from: from.version, rescanned },
+        () => `${record.id} is back at version ${record.version}, ${record.on ? "on" : "off"} as it was; ${from.version} is kept, and rolling back again returns to it. ${appNote(rescanned)}`);
+    } catch (e) { return fail(ctx, e, "rollback_failed"); }
+  },
+});
 
 const removeCmd = defineCommand({
   meta: { name: "remove", description: "Remove a plugin you added" },
@@ -437,5 +465,5 @@ const apiCmd = defineCommand({
 
 export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
-  subCommands: { new: newCmd, check: checkCmd, install: installCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
+  subCommands: { new: newCmd, check: checkCmd, install: installCmd, rollback: rollbackCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });

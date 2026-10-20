@@ -5,6 +5,7 @@
  * installed. Reading, installing, removing and switching packages read this table and never name
  * a kind.
  */
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { z } from "zod";
 import { isSafeRelativePath, MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/view-sdk/manifest";
@@ -21,6 +22,9 @@ export interface CheckedMember {
   version?: string;
   /** What it asks to be allowed, in the view protocol's words. */
   permissions: string[];
+  /** The SHA-256 of what it is, for a member that is no folder of its own (a preset's entry);
+   *  a folder member's is its files'. */
+  digest?: string;
 }
 
 /** The file holding a package's own manifest. */
@@ -53,9 +57,11 @@ export interface MemberKind {
   /** The file that makes a folder one of these; none for a member written in the package's
    *  manifest itself. */
   manifest?: string;
-  /** On when first installed; off until the person switches it on, for one that runs code in the
-   *  app or instructs an agent. */
-  onByDefault: boolean;
+  /** Where its code runs, which decides how much trust it needs. `sandboxed`: in a sandbox that
+   *  holds it to the permissions it asks for, so it is on when installed and goes off on an update
+   *  only when it asks for more. Any other: in the app with the app's access, or as an agent's
+   *  instructions, so it is off until switched on and goes off whenever it changes. */
+  runs: "sandboxed" | "in the app" | "as an agent's instructions";
   /** Read and check one entry of its list, in the package at `root`: the member, and its path
    *  inside the package. `id`, when given, is the id it must have (a HiveHub listing); `folder` is
    *  the name of the folder a package of one came from. */
@@ -82,7 +88,7 @@ function inFolders(k: Omit<MemberKind, "entry" | "check"> & { manifest: string; 
 
 export const MEMBER_KINDS: readonly MemberKind[] = [
   inFolders({
-    kind: "tool", noun: "tool plugin", list: "tools", most: 16, manifest: TOOL_MANIFEST, onByDefault: false,
+    kind: "tool", noun: "tool plugin", list: "tools", most: 16, manifest: TOOL_MANIFEST, runs: "in the app",
     read: async (dir, { id }) => {
       const t = await readToolPackage(dir, id ?? null);
       if (t.problem) throw new Error(t.problem);
@@ -90,14 +96,14 @@ export const MEMBER_KINDS: readonly MemberKind[] = [
     },
   }),
   inFolders({
-    kind: "widget", noun: "widget", list: "widgets", most: 16, manifest: "widget.json", onByDefault: true,
+    kind: "widget", noun: "widget", list: "widgets", most: 16, manifest: "widget.json", runs: "sandboxed",
     read: async (dir, given) => {
       const w = await widgetToInstall(dir, given);
       return { id: w.id, name: w.name, ...(w.version ? { version: w.version } : {}), permissions: w.permissions };
     },
   }),
   inFolders({
-    kind: "view", noun: "view", list: "views", most: 8, manifest: VIEW_MANIFEST, onByDefault: true,
+    kind: "view", noun: "view", list: "views", most: 8, manifest: VIEW_MANIFEST, runs: "sandboxed",
     read: async (dir, { id }) => {
       const v = await viewToInstall(dir);
       if (id && v.id !== id) throw new Error(`its ${VIEW_MANIFEST} says it is "${v.id}", not ${id}`);
@@ -106,10 +112,11 @@ export const MEMBER_KINDS: readonly MemberKind[] = [
     },
   }),
   {
-    kind: "agent-preset", noun: "agent preset", list: "agents", most: 16, entry: presetEntry, onByDefault: false,
+    kind: "agent-preset", noun: "agent preset", list: "agents", most: 16, entry: presetEntry, runs: "as an agent's instructions",
     check: async (_root, entry) => {
       const p = entry as AgentPreset;
-      return { id: p.id, name: p.name, permissions: [], path: PACKAGE_MANIFEST };
+      const digest = createHash("sha256").update(JSON.stringify([p.provider, p.model ?? null, p.prompt])).digest("hex");
+      return { id: p.id, name: p.name, permissions: [], path: PACKAGE_MANIFEST, digest };
     },
   },
 ];

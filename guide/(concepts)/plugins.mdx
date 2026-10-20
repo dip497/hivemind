@@ -100,9 +100,27 @@ is checked, and refuses one whose id another installed package holds.
 A plugin that is part of a package changes only with it. Installing it, removing it or switching
 it on apart from its package is refused, naming the package. You can switch one off on its own,
 and on again while its package is on. A plugin you installed on its own before is taken over
-only by a package that lists it in `"replaces": ["@you/name"]`; what you set it to is kept. A package that holds a tool
-or an agent preset arrives switched off. `hive plugins list` shows which package each plugin
-belongs to.
+only by a package that lists it in `"replaces": ["@you/name"]`; what you set it to is kept. `hive plugins list` shows which package each
+plugin belongs to.
+
+### Updates and rollback
+
+Views and widgets run in a sandbox that holds them to the permissions they ask for. Tools run in
+the app, and an agent preset is instructions an agent follows. So a new package that holds a tool
+or an agent preset arrives switched off, and one of only views and widgets arrives on.
+
+Installing a newer version of a package keeps its switch, unless something in it needs you to
+trust it again: a view or widget that asks for a permission it did not have, or a tool or agent
+preset that is new or changed. Then the package goes off until you switch it on.
+
+```bash
+hive plugins install ./kit --dry-run   # what would change, member by member; installs nothing
+hive plugins install ./kit             # the update, with the same list of changes
+hive plugins rollback @you/kit          # back to the version before, on or off as it was
+```
+
+The version before the one in use is kept, so a rollback needs no download. Rolling back again
+returns to the newer one.
 
 <Frame caption="Settings → Plugins">
   <img src="/images/app/settings-plugins.dark.webp" alt="Settings → Plugins: the Installed and HiveHub tabs, a search box, and the installed agents, views and widgets, each with its count." />

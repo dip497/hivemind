@@ -72,4 +72,24 @@ describe("hive plugins, packages", () => {
     expect(run("remove", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { package: "@acme/kit", removed: expect.arrayContaining(["widget:@acme/dog", "tool:@acme/prs"]) } } });
     expect(run("list", "--kind", "widget").stdout).not.toContain("@acme/dog");
   }, 60_000);
+
+  test("an update that asks for more is shown first with --dry-run, then installs off; rollback puts the old version back on", () => {
+    expect(run("install", kit(), "--json").code).toBe(0);
+    expect(run("enable", "@acme/kit").code).toBe(0);
+    const more = { "views/island/hivemind-view.json": JSON.stringify({ id: "@acme/island", name: "Island", version: "1.0.0", entry: "index.html", permissions: ["workspace:issues", "workspace:spawn"] }) };
+    kit("2.0.0", more);
+
+    const dry = run("install", path.join(tmp, "kit"), "--dry-run");
+    expect(dry.stdout).toContain("would install @acme/kit (Kit), version 2.0.0, replacing 1.0.0; nothing was installed");
+    expect(dry.stdout).toContain("view @acme/island: changed, now asks for workspace:spawn (switches the package off)");
+    expect(run("list").stdout).toMatch(/\[@acme\/kit 1\.0\.0\]$/m);
+
+    const updated = run("install", path.join(tmp, "kit"));
+    expect(updated.stdout).toContain("It is off: a change above needs you to trust it again. `hive plugins rollback @acme/kit` puts back 1.0.0.");
+    expect(run("list").stdout).toMatch(/^off\s+view:@acme\/island\s+Island\s+\[@acme\/kit 2\.0\.0, off\]$/m);
+
+    expect(run("rollback", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { id: "@acme/kit", version: "1.0.0", on: true, from: "2.0.0" } } });
+    expect(run("list").stdout).toMatch(/^on \s+view:@acme\/island\s+Island\s+\[@acme\/kit 1\.0\.0\]$/m);
+  }, 60_000);
 });
+
