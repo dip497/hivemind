@@ -11,7 +11,8 @@
     ".": "./src/index.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "publishConfig": {
     "main": "./dist/index.js",
@@ -23,6 +24,7 @@
       }
     }
   },
+  "homepage": "https://hivemind.griiken.com/guide/hub-index",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dip497/hivemind.git",
