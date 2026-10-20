@@ -113,4 +113,25 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 120_000);
+
+  test("a plugin's config cannot make the type check write outside it, nor reach a config outside it", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-config-"));
+    const dir = path.join(tmp, "tally");
+    const outside = path.join(tmp, "written.tsbuildinfo");
+    try {
+      expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      const config = path.join(dir, "jsconfig.json");
+      const own = JSON.parse(fs.readFileSync(config, "utf8"));
+      fs.writeFileSync(config, JSON.stringify({ ...own, compilerOptions: { ...own.compilerOptions, incremental: true, composite: true, tsBuildInfoFile: outside } }));
+      hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect(fs.existsSync(outside)).toBe(false);
+
+      fs.writeFileSync(path.join(tmp, "elsewhere.json"), JSON.stringify(own));
+      fs.writeFileSync(config, JSON.stringify({ extends: "../elsewhere.json" }));
+      const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect((r.json as Report).data.problems).toContainEqual(expect.objectContaining({ step: "types", file: "jsconfig.json", message: expect.stringContaining("outside its folder") }));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
