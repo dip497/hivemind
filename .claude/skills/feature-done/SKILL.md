@@ -14,6 +14,11 @@ never have to name a missing surface.
 Walk the table and write down which rows the change touches. A row that does not apply gets one
 word why ("no data change"). Brief every subagent with the rows it owns.
 
+When several agents work at once, give each one the files and contracts it owns (a manifest
+field, a schema, a command) and its own worktree and branch. No two agents add the same field,
+and no agent moves or merges into another agent's branch. Ready work lands as one combined PR
+per round, not one PR per change.
+
 ## The surfaces
 
 | # | Surface | Done means |
