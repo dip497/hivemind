@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/workspace-api",
-  "version": "2026.10.3",
+  "version": "2026.10.4",
   "private": true,
   "type": "module",
   "exports": {

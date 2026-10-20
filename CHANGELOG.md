@@ -8,6 +8,8 @@ semantic versioning.
 Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
+
+## [2026.10.4] — 2026-10-20
 - Guide: **View as Markdown** and **Copy page** open the page's Markdown again (they went to `/guide/guide/…`), and **Open in ChatGPT, Claude, Cursor or Scira AI** hands the agent the page's Markdown. A how-to's prompt box offers the same agents under **Open in…**, next to **Copy prompt**.
 - Write a package from `hive` alone: `hive plugins new package <name>` starts one with a PROMPT.md, `hive plugins new <kind> <name> --in <package>` and `hive plugins add <folder> --to <package>` add members (another owner's id is refused), and `hive plugins check <package>` checks every member with its own check, each problem at its file and line. The guide has a new Packages page.
 
@@ -2003,7 +2005,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.3...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.4...HEAD
+[2026.10.4]: https://github.com/dip497/hivemind/releases/tag/v2026.10.4
 [2026.10.3]: https://github.com/dip497/hivemind/releases/tag/v2026.10.3
 [2026.10.2]: https://github.com/dip497/hivemind/releases/tag/v2026.10.2
 [2026.10.1]: https://github.com/dip497/hivemind/releases/tag/v2026.10.1
