@@ -27,7 +27,7 @@
 
 <p align="center"><sub>The School of Agents. <i>Wallpaper: Raphael, The School of Athens (1509–1511), public domain, via artwallpapers.biz.</i></sub></p>
 
-Five agents in five terminal tabs? Cute.
+Five agents in five terminal tabs?
 
 Hivemind puts every coding agent on one board, each in a real terminal: Claude Code, Codex, Pi, and
 whatever ships next week. Then it gets weird, in a good way. Ask an agent for a view, a widget or a
