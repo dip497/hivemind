@@ -31,7 +31,7 @@ const hive = (...args: string[]) => {
 const plugin = path.join(root, "watcher");
 fs.mkdirSync(plugin, { recursive: true });
 fs.writeFileSync(path.join(plugin, "hivemind-tool.json"), JSON.stringify({
-  id: "acme/watcher", name: "Watcher", version: "1.0.0", apiVersion: 1, entry: "index.js",
+  id: "@acme/watcher", name: "Watcher", version: "1.0.0", apiVersion: 1, entry: "index.js",
   tools: [{ key: "watch", label: "Watch", tileKind: "acme-watch" }],
   service: { command: ["node", "service.js"], role: "view" },
 }));
@@ -61,23 +61,23 @@ let page: Page;
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m first", { cwd: repo });
-  expect(hive("tools", "install", plugin).status).toBe(0);
-  expect(hive("plugins", "enable", "tool:acme/watcher").status).toBe(0);
+  expect(hive("plugins", "install", plugin).status).toBe(0);
+  expect(hive("plugins", "enable", "tool:@acme/watcher").status).toBe(0);
   app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox"], cwd: repo, env });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
 });
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
-const section = () => page.locator('[data-service="acme/watcher"]');
+const section = () => page.locator('[data-service="@acme/watcher"]');
 const state = () => section().locator("[data-service-state]");
-const ours = () => (hive("grant", "list").data.data as Array<{ name: string; plugin?: string; repos: string[]; role: string }>).filter((g) => g.plugin === "acme/watcher");
+const ours = () => (hive("grant", "list").data.data as Array<{ name: string; plugin?: string; repos: string[]; role: string }>).filter((g) => g.plugin === "@acme/watcher");
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
 test("switched on, it waits for a workspace; picked, it drives that one as its own grant and no more", async () => {
   await page.locator('[aria-label="settings"]').click();
   await page.locator('[data-settings-page="plugins"]').click();
-  await page.locator('[data-plugin-open="tool:acme/watcher"]').click();
+  await page.locator('[data-plugin-open="tool:@acme/watcher"]').click();
   await page.locator('[data-plugin-tab="about"]').click();
   await expect(page.getByText("Keeps node service.js running while it is on")).toBeVisible();
   await page.locator('[data-plugin-tab="settings"]').click();
@@ -98,12 +98,12 @@ test("switched on, it waits for a workspace; picked, it drives that one as its o
 test("switched off, it stops and its grant is taken back; on again, it does not outlive the app", async () => {
   const pids = async () => [...(await section().locator("[data-service-log]").innerText()).matchAll(/started, pid (\d+)/g)].map((m) => Number(m[1]));
   const [first] = await pids();
-  expect(hive("plugins", "disable", "tool:acme/watcher").status).toBe(0);
+  expect(hive("plugins", "disable", "tool:@acme/watcher").status).toBe(0);
   await expect(state()).toHaveAttribute("data-service-state", "off");
   await expect.poll(() => alive(first!)).toBe(false);
   expect(ours()).toEqual([]);
 
-  expect(hive("plugins", "enable", "tool:acme/watcher").status).toBe(0);
+  expect(hive("plugins", "enable", "tool:@acme/watcher").status).toBe(0);
   await expect(state()).toHaveAttribute("data-service-state", "running", { timeout: 10_000 });
   await expect.poll(async () => (await pids()).length).toBe(2);
   const second = (await pids())[1]!;

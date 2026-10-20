@@ -73,6 +73,7 @@ describe("exit codes", () => {
     expect(exitCodeFor("FORBIDDEN")).toBe(EXIT.unauthorized);
     expect(exitCodeFor("RATE_LIMITED")).toBe(EXIT.refused);
     expect(exitCodeFor("DEPTH_EXCEEDED")).toBe(EXIT.refused);
+    expect(exitCodeFor("OCCLUDED")).toBe(EXIT.refused);
     expect(exitCodeFor("UNSUPPORTED")).toBe(EXIT.refused);
     expect(exitCodeFor("FAILED")).toBe(EXIT.error);
   });

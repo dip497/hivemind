@@ -152,9 +152,9 @@ test("the phone app pairs with the computer by the link it shows, finds it and i
     return said(home);
   }, { timeout: 30_000, intervals: [2_000] }).toEqual(expect.arrayContaining([["person", "fix the nav"], ["agent", "You said fix the nav"]]));
 
-  // A community view that works on a phone, installed on the computer as `hive views install`
+  // A community view that works on a phone, installed on the computer as `hive plugins install`
   // installs one, before the phone pairs.
-  const installed = spawnSync("bun", [CLI, "views", "install", VIEW, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
+  const installed = spawnSync("bun", [CLI, "plugins", "install", VIEW, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "desktop") } });
   expect(installed.status, installed.stdout + installed.stderr).toBe(0);
 
   // Settings → Connect: the link, and the phone's own UI test with it, told what it should find

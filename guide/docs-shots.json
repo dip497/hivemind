@@ -82,7 +82,7 @@
           "ctl": [
             "plugin",
             "open",
-            "tool:hivemind/issues"
+            "tool:@hivemind/issues"
           ]
         },
         {
@@ -285,7 +285,7 @@
       "name": "widgets-counter",
       "status": "todo",
       "alt": "The counter widget from the tutorial, pressed three times.",
-      "why": "Needs hive widgets new counter built in the run."
+      "why": "Needs hive plugins new widget counter built in the run."
     },
     {
       "page": "extension-authoring",
@@ -299,14 +299,14 @@
       "name": "tool-switch",
       "status": "todo",
       "alt": "A tool's page in Settings → Plugins with its switch off.",
-      "why": "Needs dip497/worktrees installed in the run's profile."
+      "why": "Needs @dip497/worktrees installed in the run's profile."
     },
     {
       "page": "tool-plugins",
       "name": "tool-branch-tile",
       "status": "todo",
       "alt": "The starter tool's tile showing the git branch.",
-      "why": "Needs hive tools new built in the run."
+      "why": "Needs hive plugins new tool built in the run."
     },
     {
       "page": "appearance",

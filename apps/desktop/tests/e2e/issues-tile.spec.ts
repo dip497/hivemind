@@ -48,7 +48,7 @@ Make it go.
   // The Issues plugin registers its tile a moment after the window loads: ask until it is there.
   await expect.poll(async () => {
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
-    return page.locator('[data-tool-plugin="hivemind/issues"]').count();
+    return page.locator('[data-tool-plugin="@hivemind/issues"]').count();
   }, { timeout: 15_000 }).toBeGreaterThan(0);
   await page.waitForTimeout(800);
 });
@@ -59,20 +59,20 @@ test.afterAll(async () => {
 });
 
 test("renders the issue card with id + title", async () => {
-  const txt = await page.evaluate(() => document.querySelector('[data-tool-plugin="hivemind/issues"]')?.textContent || "");
+  const txt = await page.evaluate(() => document.querySelector('[data-tool-plugin="@hivemind/issues"]')?.textContent || "");
   expect(txt).toContain("XX-1");
   expect(txt).toContain("Wire up the flux capacitor");
 });
 
 test("card has a state dropdown and a work button", async () => {
-  const node = page.locator('[data-tool-plugin="hivemind/issues"]');
+  const node = page.locator('[data-tool-plugin="@hivemind/issues"]');
   expect(await node.getByRole("combobox").count()).toBeGreaterThan(0);
   // work button is opacity-0 until hover but present in the DOM
   expect(await node.locator('button', { hasText: /work/ }).count()).toBeGreaterThan(0);
 });
 
 test("clicking a card opens the issue peek", async () => {
-  await page.locator('[data-tool-plugin="hivemind/issues"]').getByText("Wire up the flux capacitor").click();
+  await page.locator('[data-tool-plugin="@hivemind/issues"]').getByText("Wire up the flux capacitor").click();
   // The peek slide-over has a distinctive "Work on this" button (the tile card's
   // is just "work"). Poll until it appears — readIssue is async.
   await expect(page.getByRole("button", { name: /Work on this/i })).toBeVisible({ timeout: 5_000 });
@@ -87,7 +87,7 @@ test("changing the state from the issue peek persists it (manual override)", asy
   // carries a <select>; the tile's only select is the group-by control).
   // Agents own automatic transitions via set_state, which needs a live agent
   // — not exercised here. This verifies the manual write path works.
-  const node = page.locator('[data-tool-plugin="hivemind/issues"]');
+  const node = page.locator('[data-tool-plugin="@hivemind/issues"]');
   // Open via the card's stable handle: its root is role=button "Open issue
   // XX-1". The old `force: true` click on the card TEXT was the flake — the
   // previous test left the modal peek open, so the forced click hit the

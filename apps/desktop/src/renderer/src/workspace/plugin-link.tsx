@@ -72,6 +72,10 @@ export interface PluginLink {
   send: (m: HostMessage) => void;
   /** The share and prompt dialogs it may open: render them in its box. */
   dialogs: ReactNode;
+  /** Its code broke: it is failed, with why. */
+  fail: (reason: string) => void;
+  /** Its code painted its first content. */
+  drew: () => void;
 }
 
 export function usePluginLink(o: PluginLinkOptions): PluginLink {
@@ -333,5 +337,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       <PromptDialog ask={promptAsk} onChoose={(s) => promptAnswer.current?.(s)} />
     </>
   );
-  return { link, ready, send, dialogs };
+  const fail = useCallback((reason: string) => running.current?.disabled(reason), []);
+  const drew = useCallback(() => running.current?.drew(), []);
+  return { link, ready, send, dialogs, fail, drew };
 }

@@ -1,16 +1,9 @@
-/** What `hive views new` writes: a view that builds outside this repository. The SDK is not a
+/** What `hive plugins new view` writes: a view that builds outside this repository. The SDK is not a
  *  package to install — the app serves it to every view — so a view gets its types here and
  *  leaves `@hivemind/view-sdk` out of its bundle. */
-import { readFileSync } from "node:fs";
 import { pluginBrief } from "./plugin-brief.js";
-
-/** Embedded by scripts/build.ts; a source checkout reads the package itself. */
-declare const HIVE_VIEW_SDK: Record<string, string> | undefined;
-export const SDK_FILES = ["index.ts", "protocol.ts", "manifest.ts", "client.ts", "testing.ts"];
-const sdkSources = (): Record<string, string> => typeof HIVE_VIEW_SDK === "object" ? HIVE_VIEW_SDK
-  : Object.fromEntries(SDK_FILES.map((f) => [f, readFileSync(new URL(`../../../packages/hive-view-sdk/src/${f}`, import.meta.url), "utf8")]));
-
-const SDK_NOTE = "// The SDK Hivemind serves to your view, here for its types. Editing it changes nothing at run time.\n";
+import { typeFiles } from "./type-files.js";
+import type { TypeSetup } from "./check/types.js";
 
 const title = (name: string) => name.split("-").map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ");
 
@@ -20,26 +13,20 @@ export function starterFiles(owner: string, name: string): Record<string, string
     "hivemind-view.json": JSON.stringify({ id, name: title(name), version: "0.1.0", entry: "index.html", protocol: 1, permissions: [] }, null, 2) + "\n",
     "package.json": JSON.stringify({
       name, version: "0.1.0", private: true, type: "module",
-      scripts: { build: "node build.mjs", dev: "node build.mjs && hive views install dist", typecheck: "tsc" },
+      scripts: { build: "node build.mjs", dev: "node build.mjs && hive plugins install dist", typecheck: "tsc" },
       devDependencies: { esbuild: "^0.28.0", typescript: "^5.9.0" },
     }, null, 2) + "\n",
-    "tsconfig.json": JSON.stringify({
-      compilerOptions: {
-        target: "ES2022", module: "ESNext", moduleResolution: "Bundler", lib: ["ES2023", "DOM", "DOM.Iterable"],
-        strict: true, noEmit: true, skipLibCheck: true, types: [],
-        paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"], "@hivemind/view-sdk/testing": ["./types/view-sdk/testing.ts"] },
-      },
-      include: ["src", "types"],
-    }, null, 2) + "\n",
+    "tsconfig.json": JSON.stringify({ compilerOptions: VIEW_TYPE_SETUP.compilerOptions, include: ["src", "types"] }, null, 2) + "\n",
     ".gitignore": "node_modules/\n",
-    "build.mjs": `// dist/ is the view: publish it, or \`hive views install dist\`.
+    "build.mjs": `// dist/ is the view: publish it, or \`hive plugins install dist\`.
 import { build } from "esbuild";
 import { cpSync, rmSync } from "node:fs";
 
 rmSync("dist", { recursive: true, force: true });
 await build({
   entryPoints: ["src/main.ts"], outfile: "dist/main.js",
-  bundle: true, format: "esm", target: "es2022", minify: true,
+  // The map lets \`hive plugins check\` say which line of src/ threw.
+  bundle: true, format: "esm", target: "es2022", minify: true, sourcemap: true,
   // Served by the app; bundling a copy would pin an old one.
   external: ["@hivemind/view-sdk"],
 });
@@ -109,6 +96,16 @@ it holds the whole API and the rules of the sandbox.
 \`dist/\` is the view. Publish it on HiveHub: \`hivehub publish dist\` after pushing the commit.
 `,
   };
-  for (const [f, src] of Object.entries(sdkSources())) files[`types/view-sdk/${f}`] = SDK_NOTE + src;
-  return files;
+  return { ...files, ...VIEW_TYPE_SETUP.files() };
 }
+
+/** What a view's code is checked against: by its editor (tsconfig.json) and by `hive plugins check`. */
+export const VIEW_TYPE_SETUP: TypeSetup = {
+  compilerOptions: {
+    target: "ES2022", module: "ESNext", moduleResolution: "Bundler", lib: ["ES2023", "DOM", "DOM.Iterable"],
+    strict: true, noEmit: true, skipLibCheck: true, types: [],
+    paths: { "@hivemind/view-sdk": ["./types/view-sdk/index.ts"], "@hivemind/view-sdk/testing": ["./types/view-sdk/testing.ts"] },
+  },
+  files: () => typeFiles(["view-sdk"]),
+  isSource: (rel) => /^src\/.+\.(m?ts|tsx|m?js)$/.test(rel),
+};

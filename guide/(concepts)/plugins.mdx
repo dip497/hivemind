@@ -61,9 +61,10 @@ From a terminal:
 
 ```bash
 hive plugins list                            # every plugin here, on or off
-hive agents install claude                   # or: hive views, hive widgets, hive tools
-hive plugins enable tool:dip497/worktrees    # a tool arrives switched off
-hive plugins set view:@you/board columns all # a setting the plugin declares
+hive plugins install @dip497/worktrees        # a tool, widget or view, from HiveHub or a folder
+hive plugins enable @dip497/worktrees         # a tool arrives switched off
+hive plugins set @you/board columns all      # a setting the plugin declares
+hive agents install claude                   # agents have their own command
 ```
 
 Each plugin's page in **Settings → Plugins** has **Settings**, **Read me** and **What it can do**.
@@ -77,10 +78,10 @@ Each plugin's page in **Settings → Plugins** has **Settings**, **Read me** and
 To make your own, use **Add → Make your own…** in the toolbar, or **Add → Make your own** in
 **Settings → Plugins**. Both write a prompt you hand to a coding agent.
 
-From a terminal, each kind has a starter:
+From a terminal, start one of any kind:
 
 ```bash
-hive widgets new my-widget    # or: hive views new, hive tools new
+hive plugins new widget my-widget    # or: tool, view
 ```
 
 Each starter includes `PROMPT.md`: the whole contract for that kind in one file. Write what you
@@ -93,7 +94,7 @@ lists and runs them while the plugin is open:
 
 ```bash
 hive ctl plugin commands
-hive ctl plugin call dip497/worktrees list
+hive ctl plugin call @dip497/worktrees list
 ```
 
 ## What to do next

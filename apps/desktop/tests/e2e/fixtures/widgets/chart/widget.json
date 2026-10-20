@@ -1,0 +1,6 @@
+{
+  "id": "@example/chart",
+  "name": "Chart",
+  "version": "1.0.0",
+  "description": "A test widget that draws a node the app has no drawing for."
+}

@@ -40,7 +40,7 @@ decide what runs.
 
 ## The smallest view that works
 
-`hive views new my-view` writes all of it — the manifest, an entry page, `src/main.ts`, the
+`hive plugins new view my-view` writes all of it — the manifest, an entry page, `src/main.ts`, the
 build, and the SDK's source under `types/view-sdk/` for `tsc`. The id is scoped to the GitHub
 login (`@login/my-view`); HiveHub refuses any other scope. The parts:
 
@@ -260,7 +260,7 @@ cpSync("hivemind-view.json", "dist/hivemind-view.json");
 ```
 
 ```bash
-npm run dev                    # build, then hive views install dist; ⌘E in the app until your view
+npm run dev                    # build, then hive plugins install dist; ⌘E in the app until your view
 ```
 
 An `entry` ending in `.js` is wrapped in a host-generated page for you — use that when

@@ -170,7 +170,7 @@ export function resolveChrome(plugin: Pick<WorkspaceViewPlugin, "chrome"> | null
 // workspace/views/community (their code runs in a sandboxed iframe; the
 // registered component is the host that embeds it). The registry is an
 // external store: `useViews()` re-renders switchers when the set changes
-// (a repo switch, a `hive views install`, a plugin disabled for misbehaving).
+// (a repo switch, a `hive plugins install`, a plugin disabled for misbehaving).
 
 const views = new Map<string, WorkspaceViewPlugin>();
 const listeners = new Set<() => void>();

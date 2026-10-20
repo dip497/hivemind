@@ -24,14 +24,14 @@ describe("hive plugins", () => {
     try {
       const list = (run("list").json as { plugins: { key: string; enabled: boolean }[] }).plugins;
       const keys = list.map((p) => p.key);
-      for (const k of ["agent:claude", "view:board", "widget:note", "tool:hivemind/web"]) expect(keys).toContain(k);
+      for (const k of ["agent:claude", "view:board", "widget:note", "tool:@hivemind/web"]) expect(keys).toContain(k);
       // A tool that is not built in is off until switched on; everything else is on.
-      expect(list.find((p) => p.key === "tool:hivemind/web")?.enabled).toBe(false);
+      expect(list.find((p) => p.key === "tool:@hivemind/web")?.enabled).toBe(false);
       expect(list.find((p) => p.key === "agent:claude")?.enabled).toBe(true);
 
       expect(run("disable", "agent:claude").json).toMatchObject({ enabled: false, reloaded: false });
-      expect(run("enable", "tool:hivemind/web").json).toMatchObject({ enabled: true });
-      expect(stored()).toEqual({ "agent:claude": { enabled: false }, "tool:hivemind/web": { enabled: true } });
+      expect(run("enable", "tool:@hivemind/web").code).toBe(0);
+      expect(stored()).toEqual({ "agent:claude": { enabled: false }, "tool:@hivemind/web": { enabled: true } });
 
       expect(run("set", "view:board", "columns", "all").json).toMatchObject({ value: "all" });
       expect(run("set", "view:board", "max", "500").json).toMatchObject({ value: 50 }); // clamped to its range
@@ -44,7 +44,9 @@ describe("hive plugins", () => {
       expect(run("reset", "view:board").code).toBe(0);
       expect(stored()["view:board"]).toBeUndefined();
 
-      expect(run("enable", "board").json).toMatchObject({ error: { message: expect.stringContaining("write <kind>:<id>") } });
+      // A bare id is enough when one kind has it.
+      expect(run("enable", "board").json).toMatchObject({ key: "view:board", enabled: true });
+      expect(run("enable", "nope").json).toMatchObject({ error: { message: expect.stringContaining("there is no plugin \"nope\"") } });
       expect(run("enable", "view:nope").json).toMatchObject({ error: { message: expect.stringContaining("there is no view \"nope\"") } });
     } finally {
       fs.rmSync(xdg, { recursive: true, force: true });
@@ -59,11 +61,11 @@ describe("hive plugins", () => {
     try {
       for (const who of [{ HCP_TOKEN: "tile-token", HIVEMIND_TILE: "hm:t1" }, { HIVE_DRIVE_TOKEN: "grant-token" }]) {
         for (const [args, ask] of [
-          [["plugins", "enable", "tool:hivemind/web"], "hive plugins enable tool:hivemind/web"],
+          [["plugins", "enable", "tool:@hivemind/web"], "hive plugins enable tool:@hivemind/web"],
           [["plugins", "disable", "agent:claude"], "hive plugins disable agent:claude"],
           [["plugins", "set", "agent:claude", "model", "x"], "hive plugins set agent:claude model x"],
           [["plugins", "reset", "agent:claude"], "hive plugins reset agent:claude"],
-          [["config", "set", "plugins.state", '{"tool:hivemind/web":{"enabled":true}}'], "hive config set plugins.state"],
+          [["config", "set", "plugins.state", '{"tool:@hivemind/web":{"enabled":true}}'], "hive config set plugins.state"],
         ] as const) {
           const before = stored();
           const r = hive([...args, "--json"], { cwd: xdg, env: { ...base, ...who } });
@@ -72,7 +74,7 @@ describe("hive plugins", () => {
         }
       }
       // The person, at the same machine, may.
-      expect(hive(["plugins", "enable", "tool:hivemind/web", "--json"], { cwd: xdg, env: base }).code).toBe(0);
+      expect(hive(["plugins", "enable", "tool:@hivemind/web", "--json"], { cwd: xdg, env: base }).code).toBe(0);
     } finally {
       fs.rmSync(xdg, { recursive: true, force: true });
     }

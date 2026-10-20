@@ -25,6 +25,7 @@
  * The work lives in extracted modules/hooks that destructure a `ctx` object —
  * keep it that way (this file was decomposed out of a 3147-LOC god component).
  */
+import { lookAt } from "./workspace/tile-look";
 import { clearWork } from "./work-queue";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -449,6 +450,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     activeView: () => activeViewIdRef.current ?? FALLBACK_VIEW_ID,
     showView: (id) => setViewMode(id),
     addWidget: (id) => addBoardRef.current(`widget:${id}` as BoardChoice),
+    hasWidget: (id) => widgetPackages.some((w) => w.id === id),
     widgetRuns: (id) => !!widgetPackages.find((w) => w.id === id)?.code,
     closeTile: (id) => closeTile(id),
     widgetsOnBoard: () => board.objects.flatMap((o) => (o.kind === "widget" ? [{ id: o.id, widget: o.widget }] : [])),
@@ -1016,6 +1018,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             setSelectedTileId(id);
             focusTile(id);
             await reply(cmd.id, true, { ok: true });
+            break;
+          }
+          case "tile.look": {
+            const seen = await lookAt(String(p.tileId ?? ""), (id) => { setSelectedTileId(id); focusTile(id); });
+            await reply(cmd.id, true, seen);
             break;
           }
           default:

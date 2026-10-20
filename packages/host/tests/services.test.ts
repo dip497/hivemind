@@ -66,27 +66,27 @@ after(async () => {
 });
 
 const ci = (o: Partial<WantedService> = {}): WantedService => ({
-  plugin: "acme/ci", name: "CI", dir, service: { command: ["node", "./service.js"], role: "agents" }, workspaces: [repoA], ...o,
+  plugin: "@acme/ci", name: "CI", dir, service: { command: ["node", "./service.js"], role: "agents" }, workspaces: [repoA], ...o,
 });
 const fileService = { command: ["./service.js"], role: "agents" };
-const state = () => services.states().find((s) => s.plugin === "acme/ci");
-const ours = () => grants.list().filter((g) => g.plugin === "acme/ci");
+const state = () => services.states().find((s) => s.plugin === "@acme/ci");
+const ours = () => grants.list().filter((g) => g.plugin === "@acme/ci");
 async function until(what: string, ok: () => boolean, ms = 5_000): Promise<void> {
   const end = Date.now() + ms;
   while (!ok()) {
-    if (Date.now() > end) assert.fail(`${what} did not happen; log:\n${services.log("acme/ci")}`);
+    if (Date.now() > end) assert.fail(`${what} did not happen; log:\n${services.log("@acme/ci")}`);
     await new Promise((r) => setTimeout(r, 25));
   }
 }
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-const startedPids = () => [...services.log("acme/ci").matchAll(/started, pid (\d+)/g)].map((m) => Number(m[1]));
+const startedPids = () => [...services.log("@acme/ci").matchAll(/started, pid (\d+)/g)].map((m) => Number(m[1]));
 
 test("a service drives the workspace picked for it as a grant of its own, with none of the app's tokens", async () => {
   await drive.serving;
   mode("stay");
   await services.sync([ci({ service: { command: ["node", "service.js"], role: "agents" } })]);
-  await until("the service's first call", () => services.log("acme/ci").includes("started by"));
-  const log = services.log("acme/ci");
+  await until("the service's first call", () => services.log("@acme/ci").includes("started by"));
+  const log = services.log("@acme/ci");
   assert.match(log, new RegExp(`env  workspaces ${repoA}\\n`), "nothing of the app's environment but where and who");
   assert.ok(log.includes(`as ${JSON.stringify({ client: "CI service", role: "agents", workspace: repoA })}\n`), "it is its grant, named for its plugin, in its workspace");
   const [grant] = ours();
@@ -112,7 +112,7 @@ test("picking other workspaces starts it again, with a grant that reaches them",
   await services.sync([ci({ workspaces: [repoA, repoB] })]);
   await until("the second run", () => state()?.state === "running" && ours()[0]?.id !== first);
   assert.deepEqual(ours().map((g) => g.repos), [[repoA, repoB]], "one grant, the new one");
-  await until("it told of both", () => services.log("acme/ci").includes(`workspaces ${repoA}${path.delimiter}${repoB}\n`));
+  await until("it told of both", () => services.log("@acme/ci").includes(`workspaces ${repoA}${path.delimiter}${repoB}\n`));
   await services.sync([]);
 });
 

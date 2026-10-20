@@ -46,3 +46,12 @@ test("a widget is told at its start that the person asked for less motion, and h
   worker.postMessage({ type: "motion", payload: false });
   expect(await next()).toEqual({ type: "render", tree: { type: "text", text: "moving" } });
 });
+
+test("a drawing with a node the app does not draw is named, where it is; one the app draws whole is fine", async () => {
+  const { drawingProblem } = await import("./widget-api.js");
+  expect(drawingProblem({ type: "stack", children: [{ type: "text", text: "a" }, { type: "button", label: "b", action: 1 }] })).toBeNull();
+  expect(drawingProblem({ type: "stack", children: [{ type: "text", text: "a" }, { type: "row", children: [{ type: "chart" }] }] }))
+    .toBe('children[1].children[0] is a "chart", which the app does not draw; it draws: stack, row, text, number, meter, button, image, sprite, input, textarea, list');
+  expect(drawingProblem({ text: "no type" })).toContain("the tree is a node with no type");
+  expect(drawingProblem(null)).toBeNull();
+});

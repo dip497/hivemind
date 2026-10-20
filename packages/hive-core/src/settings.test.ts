@@ -187,8 +187,8 @@ describe("settings schema", () => {
   test("tools: a fresh install has every tool plugin off; a record switches one on", () => {
     expect(toolPreferences(mergeSettings(undefined))).toEqual({ enabledPlugins: [], disabledTools: [] });
     expect(toolPreferences(DEFAULT_SETTINGS)).toEqual({ enabledPlugins: [], disabledTools: [] });
-    const s = mergeSettings({ v: 1, plugins: { state: { "tool:hivemind/web": { enabled: true, options: { browser: false } } } } });
-    expect(toolPreferences(s)).toEqual({ enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] });
+    const s = mergeSettings({ v: 1, plugins: { state: { "tool:@hivemind/web": { enabled: true, options: { browser: false } } } } });
+    expect(toolPreferences(s)).toEqual({ enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser"] });
   });
 
   test("mergeSettings: junk falls back per field, values are clamped, unknown keys dropped", () => {
@@ -345,7 +345,7 @@ describe("plugin state from a settings.json written before it", () => {
     v: 1, browserCdp: true,
     agents: { defaultAgent: "claude", autoInstall: true, declined: ["aider"], fromCatalog: [], disabled: ["codex"], options: { claude: { model: "opus" } } },
     plugins: { disabled: ["@someone/notes"] },
-    tools: { enabledPlugins: ["hivemind/web"], disabledTools: ["hivemind/web/browser"] },
+    tools: { enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser"] },
   };
 
   test("is read into one record per plugin, and the first write keeps the old file beside it", async () => {
@@ -355,7 +355,7 @@ describe("plugin state from a settings.json written before it", () => {
       "agent:codex": { enabled: false },
       "agent:claude": { options: { model: "opus" } },
       "view:@someone/notes": { enabled: false },
-      "tool:hivemind/web": { enabled: true, options: { browser: false } },
+      "tool:@hivemind/web": { enabled: true, options: { browser: false } },
     });
     await writeSettings(setPath(read, "views.defaultView", "world"));
     const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));

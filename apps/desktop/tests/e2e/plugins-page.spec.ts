@@ -118,8 +118,8 @@ test("each category is one heading with its count, in the Add menu's order, and 
   // Installed, its program missing: not "Not installed" under Installed.
   expect(badge("agent:codex")).toEqual(["badge:Needs setup"]);
   expect(badge("view:canvas")).toEqual(["badge:In use"]);
-  expect(badge("tool:hivemind/web")).toEqual(["badge:Off"]);
-  expect(badge("tool:hivemind/code")).toEqual([]);
+  expect(badge("tool:@hivemind/web")).toEqual(["badge:Off"]);
+  expect(badge("tool:@hivemind/code")).toEqual([]);
   await expect(body().locator("[data-plugin-row]").filter({ hasText: "worker" })).toHaveCount(0);
 
   await show("HiveHub");

@@ -107,8 +107,8 @@ spawnSync("git", ["init", "-q", repo]);
 
 let hcp = {};
 const cli = (...a) => spawnSync("bun", [CLI, ...a], { cwd: repo, encoding: "utf8", env: { ...env, ...hcp } });
-const inst = cli("views", "install", PKG, "--json");
-if (inst.status !== 0) throw new Error(`views install failed: ${inst.stdout}${inst.stderr}`);
+const inst = cli("plugins", "install", PKG, "--json");
+if (inst.status !== 0) throw new Error(`plugins install failed: ${inst.stdout}${inst.stderr}`);
 
 const TCK = 100;
 const cpuTicks = (pid) => { try { const f = fs.readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1].split(" "); return Number(f[11]) + Number(f[12]); } catch { return 0; } };

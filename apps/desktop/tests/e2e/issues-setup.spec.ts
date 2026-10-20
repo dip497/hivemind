@@ -70,7 +70,7 @@ test("the empty canvas leads with a new agent, wearing its logo, and opens a fol
 });
 
 test("the Issues tool keeps issues in its folder when asked, and then its issues can be made", async () => {
-  const tile = page.locator('[data-tool-plugin="hivemind/issues"]');
+  const tile = page.locator('[data-tool-plugin="@hivemind/issues"]');
   await expect.poll(async () => {
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
     return tile.count();

@@ -40,6 +40,12 @@ function Markdown({ text, className }: { text: string; className?: string }) {
   return <Suspense fallback={null}><MarkdownPreview source={text} className={className ?? "md-preview"} /></Suspense>;
 }
 
+/** A page in a frame, a server on this machine: it runs its scripts and forms, but never moves the app's window. */
+function Frame({ src, title, className, style }: { src: string; title?: string; className?: string; style?: React.CSSProperties }) {
+  return <iframe src={src} title={title ?? src} className={className} style={{ width: "100%", height: "100%", border: 0, ...style }}
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />;
+}
+
 /** What each tile has saved, as it is now: its keys are written to `hm.setLayout` together. */
 const saved = new WeakMap<ViewClient, Record<string, unknown>>();
 function useTileState<T>(hm: ViewClient, key: string, initial: T): [T, (value: T) => void] {
@@ -64,6 +70,7 @@ export const hostSdk: HostSdk = {
   PatchView: PatchView as HostSdk["PatchView"],
   Markdown: Markdown as HostSdk["Markdown"],
   Loading: Loading as HostSdk["Loading"],
+  Frame: Frame as HostSdk["Frame"],
   useTileState: useTileState as HostSdk["useTileState"],
 };
 

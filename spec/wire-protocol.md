@@ -25,7 +25,7 @@ reading, closing, naming, pipes, tools — is the workspace API on the drive soc
 `{"code": -32000, "message", "data": {"code"}}` for the host's own failures, `data.code` one of
 the workspace API's error codes (`workspace-api.md`, "Errors"): `BAD_REQUEST`, `UNKNOWN_METHOD`,
 `FORBIDDEN`, `NOT_FOUND`, `NO_AGENT`, `ASLEEP`, `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `TIMEOUT`,
-`UNAVAILABLE`, `FAILED`.
+`UNAVAILABLE`, `OCCLUDED`, `FAILED`.
 `-32601` for an unknown method, `-32600` for a malformed message, `-32700` for bad JSON.
 
 ## Methods

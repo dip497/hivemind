@@ -1,4 +1,4 @@
-// `hive widgets`: a widget from a folder keeps its folder's name; one from HiveHub is its
+// `hive plugins` for widgets: a widget from a folder keeps its folder's name; one from HiveHub is its
 // `@owner/name`, which its own widget.json must say, with every file checked against the index.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
@@ -11,7 +11,7 @@ import { hive } from "./helpers.js";
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
-describe("hive widgets", () => {
+describe("hive plugins, widgets", () => {
   test("adds one from a folder and one from HiveHub, lists them with the app's own, and removes them", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-widgets-"));
     const xdg = path.join(tmp, "config");
@@ -36,21 +36,27 @@ describe("hive widgets", () => {
     fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("@ada/pet", files), entry("@ada/liar", files)] }));
 
     const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
-    const run = (...args: string[]) => hive(["widgets", ...args, "--json"], { cwd: tmp, env });
+    const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: tmp, env });
     try {
       expect(run("install", counter).json).toMatchObject({ id: "counter", name: "Counter", rescanned: false });
+      // A folder named like the id, in the repository an agent works in, is not what installs.
+      fs.mkdirSync(path.join(tmp, "@ada", "pet"), { recursive: true });
+      fs.writeFileSync(path.join(tmp, "@ada", "pet", "widget.json"), JSON.stringify({ id: "@ada/pet", name: "Impostor" }));
       expect(run("install", "@ada/pet").json).toMatchObject({ id: "@ada/pet", name: "Pet" });
+      fs.mkdirSync(path.join(tmp, "@ada", "gone"));
+      fs.writeFileSync(path.join(tmp, "@ada", "gone", "widget.json"), JSON.stringify({ name: "Gone" }));
+      expect(run("install", "@ada/gone").json).toMatchObject({ error: { message: expect.stringContaining("to install the folder, write ./@ada/gone") } });
       // Kept in a folder a scope and a name can never make otherwise.
       expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet", "widget.json"))).toBe(true);
       // A listing whose files say they are another widget is refused, not installed under the wrong name.
       expect(run("install", "@ada/liar").json).toMatchObject({ error: { message: expect.stringContaining('says it is "@ada/pet", not @ada/liar') } });
 
-      const ids = (run("list").json as { widgets: { id: string; builtin: boolean }[] }).widgets.map((w) => w.id);
+      const ids = (run("list", "--kind", "widget").json as { plugins: { id: string }[] }).plugins.map((w) => w.id);
       expect(ids).toEqual(expect.arrayContaining(["note", "checklist", "text", "counter", "@ada/pet"]));
 
       expect(run("remove", "@ada/pet").code).toBe(0);
       expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet"))).toBe(false);
-      expect(run("remove", "note").json).toMatchObject({ error: { message: "it comes with the app" } });
+      expect(run("remove", "widget:note").json).toMatchObject({ error: { message: "it comes with the app" } });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -60,14 +66,14 @@ describe("hive widgets", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-widget-new-"));
     const env = { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
     try {
-      expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ id: "@ada/tally" });
+      expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ id: "@ada/tally" });
       const dir = path.join(tmp, "tally");
       expect(fs.readdirSync(dir).sort()).toEqual(["PROMPT.md", "README.md", "hive.d.ts", "icon.svg", "jsconfig.json", "widget.js", "widget.json"]);
       // Its code is valid against the API it is given.
       execFileSync(path.join(import.meta.dir, "../../../node_modules/.bin/tsc"), ["-p", path.join(dir, "jsconfig.json")], { encoding: "utf8" });
-      expect(hive(["widgets", "install", dir, "--json"], { cwd: tmp, env }).json).toMatchObject({ id: "@ada/tally", name: "Tally" });
-      expect(hive(["widgets", "new", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "EXISTS" } });
-      expect(hive(["widgets", "new", "Bad Name", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "BAD_NAME" } });
+      expect(hive(["plugins", "install", dir, "--json"], { cwd: tmp, env }).json).toMatchObject({ id: "@ada/tally", name: "Tally" });
+      expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "EXISTS" } });
+      expect(hive(["plugins", "new", "widget", "Bad Name", "--owner", "ada", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "BAD_NAME" } });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -78,7 +84,7 @@ describe("hive widgets", () => {
     const env = { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
     const tsc = path.join(import.meta.dir, "../../../node_modules/.bin/tsc");
     try {
-      hive(["widgets", "new", "board", "--owner", "ada", "--json"], { cwd: tmp, env });
+      hive(["plugins", "new", "widget", "board", "--owner", "ada", "--json"], { cwd: tmp, env });
       const dir = path.join(tmp, "board");
       const check = (line: string) => {
         fs.writeFileSync(path.join(dir, "widget.js"), `/// <reference path="./hive.d.ts" />

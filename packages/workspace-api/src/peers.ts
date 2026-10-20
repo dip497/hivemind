@@ -64,7 +64,7 @@ const forbidden = (message: string): Refusal => ({ code: "FORBIDDEN", message })
 const refused = (why: Refusal): Answer => ({ error: why });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^(terminal\.(saved|write|show|resize|flow|ack|fit|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|approval|transcript|send|interrupt|close|diff|conversation|tool|rename|keys|read|output)|link\.(connect|disconnect)|tile\.focus)$/;
+const BY_TILE = /^(terminal\.(saved|write|show|resize|flow|ack|fit|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|approval|transcript|send|interrupt|close|diff|conversation|tool|rename|keys|read|output)|link\.(connect|disconnect)|tile\.(focus|look))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since|sessions)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start|places|folders|sleep|wake)|tool\.open)$/;
 /** Methods that act on a whole workspace: a folder in it, which may be another workspace, is not it. */

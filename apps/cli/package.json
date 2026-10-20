@@ -18,10 +18,14 @@
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
     "@hivemind/host": "workspace:*",
+    "@hivemind/tile-sdk": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "@hivemind/workspace-host": "workspace:*",
-    "hivemind-api": "workspace:*",
     "citty": "catalog:",
+    "hivemind-api": "workspace:*",
+    "linkedom": "^0.18.13",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "uqr": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
@@ -31,6 +35,8 @@
     "@hivemind/workspace-api": "workspace:*",
     "@types/bun": "^1.4.2",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "typescript": "catalog:"
   }
 }

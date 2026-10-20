@@ -2,6 +2,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { HiveApi } from "../shared/ipc.js";
 import { hiveOverIpc, workspaceOver, type IpcPort } from "../shared/hive-ipc.js";
+import { APP_PAGE_ARG, isAppPage } from "../shared/app-page.js";
 
 /** Main's channels over Electron IPC: a window is answered on every one of them. */
 const port: IpcPort = {
@@ -26,10 +27,14 @@ const api: HiveApi = {
   resourceUrl: (url) => url,
 };
 
-// A native agent notification was clicked → focus that tile on the canvas.
-// Bridge the IPC to the same CustomEvent the canvas already uses for fly-to.
-ipcRenderer.on("notify:focus-tile", (_e, tileId: string) => {
-  window.dispatchEvent(new CustomEvent<string>("hivemind:focus-tile", { detail: tileId }));
-});
+// Only the app's own page gets the bridge: any other document in this window gets nothing.
+const appPage = process.argv.find((a) => a.startsWith(APP_PAGE_ARG))?.slice(APP_PAGE_ARG.length);
+if (appPage && isAppPage(location.href, appPage)) {
+  // A native agent notification was clicked → focus that tile on the canvas.
+  // Bridge the IPC to the same CustomEvent the canvas already uses for fly-to.
+  ipcRenderer.on("notify:focus-tile", (_e, tileId: string) => {
+    window.dispatchEvent(new CustomEvent<string>("hivemind:focus-tile", { detail: tileId }));
+  });
 
-contextBridge.exposeInMainWorld("hive", api);
+  contextBridge.exposeInMainWorld("hive", api);
+}

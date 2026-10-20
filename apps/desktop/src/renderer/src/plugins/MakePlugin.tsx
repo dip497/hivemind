@@ -24,7 +24,7 @@ export function makePluginPrompt(kind: MakeKind, idea: string): string {
   const want = idea.trim();
   return `Build me a Hivemind ${NOUN[kind]}${want ? `: ${want}` : "."}
 
-1. Start it with \`hive ${kind}s new <name>\` in ~/hivemind-plugins (make the folder if it is not there), with a short lowercase name that says what it is.
+1. Start it with \`hive plugins new ${kind} <name>\` in ~/hivemind-plugins (make the folder if it is not there), with a short lowercase name that says what it is.
 2. Read PROMPT.md in the folder that makes: the whole contract, and how to install it, show it and check it.
 3. Build it, install it, show it with \`hive ctl plugin open\`, and check it through its own commands (\`hive ctl plugin call\`) until it does what I asked.
 4. Tell me what you made and how to use it.`;

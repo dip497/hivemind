@@ -16,7 +16,7 @@ import type { ControlWork } from "./control/methods.js";
 
 type Method =
   | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
-  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus"
+  | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus" | "tile.look"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join" | "host.add";
 
 export interface ControlApiOptions {
@@ -66,10 +66,10 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
         return (await o.control()).sessions(text(program, "program"), text(place, "place"), (limit as number | null) ?? undefined);
       },
       "tool.open": async (from, repo, tool) => {
-        const t = (tool ?? {}) as { tool?: unknown; frame?: unknown; url?: unknown };
+        const t = (tool ?? {}) as { tool?: unknown; frame?: unknown; url?: unknown; state?: unknown };
         const r = text(repo, "repo");
-        if (typeof t.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: owner/name/tool");
-        return { tile: await (await o.control()).openTool(callerOf(from), r, t.tool, { frame: t.frame, url: t.url }) };
+        if (typeof t.tool !== "string") throw new ApiError("BAD_REQUEST", "tool must be an id: @owner/name/tool");
+        return { tile: await (await o.control()).openTool(callerOf(from), r, t.tool, { frame: t.frame, url: t.url, state: t.state }) };
       },
       "link.connect": async (_from, src, dst) => { (await o.control()).connect(text(src, "src"), text(dst, "dst")); },
       "link.disconnect": async (_from, src, dst) => { (await o.control()).disconnect(text(src, "src"), dst != null ? text(dst, "dst") : undefined); },
@@ -80,6 +80,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "plugin.call": async (_from, plugin, command, args, tile) => (await o.control()).pluginCall(plugin, command, args, tile),
       "plugin.close": async (_from, instance, plugin) => (await o.control()).pluginClose(text(instance, "instance"), plugin != null ? text(plugin, "plugin") : undefined),
       "tile.focus": done((w, tile) => w.focus(text(tile, "tile"))),
+      "tile.look": async (_from, tile) => (await o.control()).look(text(tile, "tile")),
       "views.rescan": done((w) => w.rescan("views")),
       "agents.rescan": done((w) => w.rescan("agents")),
       "widgets.rescan": done((w) => w.rescan("widgets")),
