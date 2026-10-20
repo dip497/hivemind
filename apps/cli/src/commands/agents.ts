@@ -40,7 +40,7 @@ const listCmd = defineCommand({
       const rows = (await scan()).loaded.map(({ id, source, error, disabled, file, def }) => ({
         id, source, error, disabled, file, found: def?.enabled ? findBin(def.bin) : null,
       })).filter((r) => !args.found || (r.found && !r.error && !r.disabled));
-      return ok(ctx, rows, () => rows.length
+      return ok(ctx, { agents: rows }, () => rows.length
         ? rows.map((a) => {
             const state = a.error ? `UNAVAILABLE: ${a.error}` : a.disabled ? "off" : "on";
             return `${a.id.padEnd(14)} ${a.source.padEnd(8)} ${state.padEnd(4)} ${a.found ?? "—"}`;

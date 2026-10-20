@@ -2,7 +2,7 @@
 import { defineCommand } from "citty";
 import { HiveError, newMachineId, readMachines, resolveMachine, validateLabel, validateTarget, writeMachines, type Machine } from "@hivemind/core";
 import { err, ok } from "../format.js";
-import { EXIT } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { installSelf, probe, type ProbeResult } from "../remote.js";
 
 const EXIT_FOR: Record<string, number> = { machine_unreachable: EXIT.unavailable, machine_not_found: EXIT.notFound, machine_target_invalid: EXIT.usage, machine_label_invalid: EXIT.usage };
@@ -58,7 +58,7 @@ const listCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const list = await readMachines();
-      return ok(ctx, list, () => (list.length ? list.map(line).join("\n") : "no machines — `hive machine add <ssh-target>`"));
+      return ok(ctx, { machines: list }, () => (list.length ? list.map(line).join("\n") : "no machines — `hive machine add <ssh-target>`"));
     } catch (e) { return fail(ctx, e, "machine_list_failed"); }
   },
 });

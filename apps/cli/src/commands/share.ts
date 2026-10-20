@@ -15,7 +15,8 @@ import type { JoinRequests, PersonHere } from "@hivemind/workspace-api/people";
 import type { JoinReply } from "@hivemind/workspace-host/join";
 import { driveCall } from "../drive.js";
 import { err, ok, type OutCtx } from "../format.js";
-import { EXIT, HcpCliError } from "../hcp.js";
+import { HcpCliError } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 
 const LINK_ROLES = ["view", "edit", "terminals"];
 const ROLES = [...LINK_ROLES, "agents"];
@@ -135,7 +136,7 @@ const listCmd = defineCommand({
     const ctx = { json: !!args.json };
     const repo = await workspaceOf(ctx, args.workspace);
     const people = (await call(ctx, "people.list", repo)) as PersonHere[];
-    return ok(ctx, people, () => (people.length
+    return ok(ctx, { people }, () => (people.length
       ? people.map((p) => `${p.person.slice(0, 12)}  ${(p.name || "—").padEnd(16)} ${p.role.padEnd(9)} ${p.present ? "here" : ""}`).join("\n")
       : `nobody else is in ${path.basename(repo)} yet (\`hive share\`)`));
   },

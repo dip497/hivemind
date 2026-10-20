@@ -55,9 +55,9 @@ describe.skipIf(!unix)("with the app serving this machine", () => {
     fs.mkdirSync(extra);
     const r = await hiveAsync(["host", "add", extra, "--json"], { env });
     expect(r.code).toBe(0);
-    expect(r.json).toMatchObject({ ok: true, data: { repo: extra } });
+    expect(r.json).toMatchObject({ repo: extra });
     expect(store.repos()).toContain(extra);
-    expect(store.ownership(extra)?.workspaceId).toBe((r.json as { data: { workspace: string } }).data.workspace);
+    expect(store.ownership(extra)?.workspaceId).toBe((r.json as { workspace: string }).workspace);
   });
 
   test("an agent's tile may not serve a folder: it is refused, told the person runs `hive host add`, and nothing is served", async () => {
@@ -78,10 +78,10 @@ describe.skipIf(!unix)("with the app serving this machine", () => {
     expect(store.repos()).not.toContain(registeredOne);
 
     const byPrefix = await hiveAsync(["share", "maag", "--json"], { env, cwd: dir });
-    expect(byPrefix.json).toMatchObject({ ok: true, data: { workspace: registeredOne, link: "hivemind://join/manageark" } });
+    expect(byPrefix.json).toMatchObject({ workspace: registeredOne, link: "hivemind://join/manageark" });
     expect(store.repos()).toContain(registeredOne);
     const byPath = await hiveAsync(["share", loose, "--json"], { env, cwd: os.tmpdir() });
-    expect(byPath.json).toMatchObject({ ok: true, data: { workspace: loose } });
+    expect(byPath.json).toMatchObject({ workspace: loose });
   });
 
   test("`hive host install` refuses while the app runs, and names what works", () => {
@@ -96,8 +96,8 @@ describe.skipIf(!unix)("with the app serving this machine", () => {
     try {
       const r = hive(["host", "install", "--json"], { env: { ...env, XDG_CONFIG_HOME: path.join(dir, "units"), PATH: `${bin}:${process.env.PATH}` } });
       expect(r.code).toBe(3);
-      expect(r.json).toMatchObject({ ok: false, code: "app_running" });
-      expect((r.json as { error: string }).error).toContain("`hive host add <folder>` serves one more folder through it");
+      expect(r.json).toMatchObject({ error: { code: "APP_RUNNING" } });
+      expect((r.json as { error: { message: string } }).error.message).toContain("`hive host add <folder>` serves one more folder through it");
       expect(fs.existsSync(path.join(dir, "units", "systemd"))).toBe(false);
       expect(fs.existsSync(called)).toBe(false);
     } finally {

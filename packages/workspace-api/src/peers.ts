@@ -42,6 +42,10 @@ export interface PeerOf {
   url?: string;
   /** Whether a tile is in the workspace. */
   holds(tile: string): boolean;
+  /** Whether a tile it does not hold is in another workspace here. Only the person's own devices
+   *  (an owner) are told so, refused as not its own: anyone else is told such a tile is not found,
+   *  as one in no workspace is, so a token cannot learn which tiles exist elsewhere. */
+  elsewhere?(tile: string): boolean;
   /** The folders of the workspace besides its repo: its frames' worktrees, wherever git put them.
    *  None: the repo alone. */
   places?(): string[];
@@ -54,7 +58,10 @@ export interface PeerOf {
   hears?(event: string): boolean;
 }
 
-const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
+/** Why a peer's call is not answered: not its to make, or what it names is not there. */
+type Refusal = { code: "FORBIDDEN" | "NOT_FOUND"; message: string };
+const forbidden = (message: string): Refusal => ({ code: "FORBIDDEN", message });
+const refused = (why: Refusal): Answer => ({ error: why });
 
 /** Methods and notices whose first param names a tile. */
 const BY_TILE = /^(terminal\.(saved|write|show|resize|flow|ack|fit|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|approval|transcript|send|interrupt|close|diff|conversation|tool|rename|keys|read|output)|link\.(connect|disconnect)|tile\.(focus|look))$/;
@@ -261,23 +268,31 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   const notOfThis = (what: string): string => (local ? `${what} of the workspace at ${url}; ${elsewhere}` : `${what} of this workspace`);
   /** The folders this workspace is: its repo, then its worktrees. */
   const roots = (): string[] => [peer.repo, ...(peer.places?.() ?? [])];
-  const check = (method: unknown, params: unknown[]): string | null => {
+  /** A tile it names that the workspace does not hold: another workspace's is not its own; one in
+   *  none is not there. */
+  const notHeld = (tile: string): Refusal => (peer.actor.access === "owner" && peer.elsewhere?.(tile)
+    ? forbidden(notOfThis(`${tile} is not a tile`))
+    : { code: "NOT_FOUND", message: `no tile ${tile} in this workspace (${url})` });
+  const check = (method: unknown, params: unknown[]): Refusal | null => {
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
-    if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
-    if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return notOfThis("that tile is not");
-    if (typeof method !== "string") return `${String(method)} is not open to your role on this workspace`;
-    if (!(attaching || mayCall(peer.actor, method))) return refusalOf(peer.actor, method);
-    if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return notOfThis(`${String(params[0])} is not a tile`);
+    if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return forbidden(`${String(method)} is not open to this device`);
+    if (method === "terminal.open") {
+      const tile = String((params[0] as { tileId?: unknown } | null)?.tileId);
+      if (!peer.holds(tile)) return notHeld(tile);
+    }
+    if (typeof method !== "string") return forbidden(`${String(method)} is not open to your role on this workspace`);
+    if (!(attaching || mayCall(peer.actor, method))) return forbidden(refusalOf(peer.actor, method));
+    if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return notHeld(String(params[0]));
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
     // devices are the owner, there as here.
     const place = placeOf(method, params);
     if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && roots().some((r) => inWorkspace(r, place)))) {
-      return elsewhere;
+      return forbidden(elsewhere);
     }
-    if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return elsewhere;
-    if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return notOfThis("a tile there is not");
-    if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return notOfThis(`${String(params[1])} is not a tile`);
+    if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return forbidden(elsewhere);
+    if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return forbidden(notOfThis("a tile there is not"));
+    if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return notHeld(String(params[1]));
     return null;
   };
 
@@ -341,16 +356,16 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     const why = check(m.method, params);
     const cwd = (params[0] as { cwd?: unknown; attachOnly?: unknown } | null)?.cwd;
     const place = placeOf(String(m.method), params);
-    const checked = async (): Promise<string | null> => {
+    const checked = async (): Promise<Refusal | null> => {
       if (why) return why;
       if (m.method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly !== true) {
         return typeof cwd === "string" && (path.isAbsolute(peer.repo)
           ? path.isAbsolute(cwd) && await realPlace(cwd, false)
           : remoteCwdIn(peer.repo, cwd))
-          ? null : notOfThis("that working directory is not");
+          ? null : forbidden(notOfThis("that working directory is not"));
       }
       if (peer.actor.access !== "owner" && typeof place === "string" && path.isAbsolute(peer.repo)) {
-        return await realPlace(place, true) ? null : elsewhere;
+        return await realPlace(place, true) ? null : forbidden(elsewhere);
       }
       return null;
     };
@@ -362,7 +377,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
     }
     const id = m.id;
     void inTurn.then((cwdWhy) => cwdWhy || connection.closed.aborted
-      ? refused(cwdWhy ?? "connection closed") : server.answer(m.method, params, connection)).then((answer) => {
+      ? refused(cwdWhy ?? forbidden("connection closed")) : server.answer(m.method, params, connection)).then((answer) => {
       flush();
       channel.send(JSON.stringify({ id, ...scoped(m.method, answer) }));
     });

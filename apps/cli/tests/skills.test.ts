@@ -13,10 +13,10 @@ test("hive add skill replaces an older copy of a hive skill and leaves a current
 
   const first = hive(["add", "skill", "--json"], { cwd: repo });
   expect(first.code).toBe(0);
-  expect((first.json as { data: { skills: string[] } }).data.skills.sort()).toEqual(["hive-browser", "hive-work", "hive-workflow", "hivemind"]);
+  expect((first.json as { skills: string[] }).skills.sort()).toEqual(["hive-browser", "hive-work", "hive-workflow", "hivemind"]);
   expect(fs.readFileSync(file, "utf8")).toContain("hive ctl sessions claude --json");
 
   const again = hive(["add", "skill", "--json"], { cwd: repo });
-  expect((again.json as { data: { skills: string[] } }).data.skills).toEqual([]);
+  expect((again.json as { skills: string[] }).skills).toEqual([]);
   fs.rmSync(repo, { recursive: true, force: true });
 });

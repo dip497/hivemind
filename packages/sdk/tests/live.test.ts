@@ -27,7 +27,7 @@ let host: ChildProcess | undefined;
 const hive = (...args: string[]) => {
   const r = spawnSync("bun", [CLI, ...args, "--json"], { env, encoding: "utf8", timeout: 30_000 });
   if (r.status !== 0) throw new Error(`hive ${args.join(" ")}: ${r.stdout}${r.stderr}`);
-  return (JSON.parse(r.stdout) as { data: Record<string, unknown> }).data;
+  return JSON.parse(r.stdout) as Record<string, unknown>;
 };
 
 beforeAll(async () => {

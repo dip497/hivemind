@@ -297,7 +297,7 @@ test("spawn writes the tile in main: in the frame named, else beside its caller,
   const worker = await spawn({ parent: "tile-lead", prompt: "Review the auth module. Then fix it.", report: false });
   assert.deepEqual(tileOf(worker), { id: worker, kind: "claude", label: "claude #2", cmd: "claude", args: ["--dangerously-skip-permissions", "--model", "opus"], task: "Review the auth module" });
   assert.equal(frameOf(worker), "f1", "beside the agent that spawned it");
-  assert.deepEqual(ws.announced.at(-1), { tileId: worker, repo: REPO, prompt: "Review the auth module. Then fix it.", background: true, near: "tile-lead" });
+  assert.deepEqual(ws.announced.at(-1), { tileId: worker, repo: REPO, prompt: "Review the auth module. Then fix it.", background: true, near: "tile-lead", by: "agent" });
   assert.equal(frameOf(await spawn({})), "f1", "a caller in no tile: the workspace's first frame");
   assert.equal(frameOf(await spawn({ parent: "tile-lead", frame: "NOTES" })), "f2", "a frame named any way spawn takes");
   assert.equal(ws.announced.at(-1)?.near, undefined, "laid out beside its caller only in the caller's frame");

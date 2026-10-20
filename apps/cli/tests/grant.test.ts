@@ -39,17 +39,17 @@ describe.skipIf(!unix)("hive grant", () => {
   test("create prints a token that is the grant, for each workspace given; list shows it without the token; revoke takes it back", async () => {
     const made = await hive(["grant", "create", "review-bot", "-w", repoA, "--workspace", repoB, "--role", "agents", "--json"], { env: env() });
     expect(made.code).toBe(0);
-    const { grant, token } = (made.json as { data: { grant: { id: string; repos: string[]; role: string }; token: string } }).data;
+    const { grant, token } = (made.json as { grant: { id: string; repos: string[]; role: string }; token: string });
     expect(grant.repos).toEqual([fs.realpathSync(repoA), fs.realpathSync(repoB)]);
     expect(grant.role).toBe("agents");
     expect(grants.holder(token)?.id).toBe(grant.id);
 
     const listed = await hive(["grant", "list", "--json"], { env: env() });
     expect(JSON.stringify(listed.json)).not.toContain(token);
-    expect((listed.json as { data: Array<{ id: string }> }).data.map((g) => g.id)).toContain(grant.id);
+    expect((listed.json as { grants: Array<{ id: string }> }).grants.map((g) => g.id)).toContain(grant.id);
 
     const revoked = await hive(["grant", "revoke", grant.id, "--json"], { env: env() });
-    expect(revoked.json).toEqual({ ok: true, data: { revoked: true } });
+    expect(revoked.json).toEqual({ revoked: true });
     expect(grants.holder(token)).toBeNull();
     const again = await hive(["grant", "revoke", grant.id, "--json"], { env: env() });
     expect(again.code).toBe(5);

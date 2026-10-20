@@ -57,7 +57,7 @@ class LiveHost(unittest.TestCase):
         r = subprocess.run([BUN, CLI, *args, "--json"], env=cls.env, capture_output=True, text=True, timeout=30)
         if r.returncode != 0:
             raise RuntimeError("hive %s: %s%s" % (" ".join(args), r.stdout, r.stderr))
-        return json.loads(r.stdout)["data"]
+        return json.loads(r.stdout)
 
     def test_a_grant_drives_its_workspace_at_its_role_until_it_is_taken_back(self) -> None:
         made = self.hive("grant", "create", "dashboard", "-w", self.workspace, "--role", "view")

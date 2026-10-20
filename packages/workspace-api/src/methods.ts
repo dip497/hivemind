@@ -158,7 +158,8 @@ export interface WorkspaceMethods {
    *  text, each a moment after the last, as answering a picker on its screen takes. */
   "agent.keys": (tile: string, keys: string[]) => { keys: number };
   /** (0.23) The agent's reply to the turn after the last message it was sent, waiting for it up to
-   *  `timeoutMs` (2 minutes when not given). `UNSUPPORTED` for an agent that says no turn end. */
+   *  `timeoutMs` (2 minutes when not given). `UNSUPPORTED` for an agent that says no turn end;
+   *  `NO_AGENT` for a tile that runs none (0.33). */
   "agent.read": (tile: string, timeoutMs?: number) => AgentRead;
   /** (0.23) The last `lines` lines (40 when not given) of what it printed, its terminal's escapes
    *  taken out: as much as the host keeps. */

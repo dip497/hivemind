@@ -13,7 +13,7 @@ import { defaultLabel } from "../src/commands/machine.js";
 let tmp = "";
 let env: Record<string, string> = {};
 const run = (...args: string[]): Run => hive(args, { env });
-const data = (r: Run) => (r.json as { data: Record<string, unknown> }).data;
+const data = (r: Run) => (r.json as Record<string, unknown>);
 
 beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-machine-"));
@@ -53,13 +53,13 @@ describe("hive machine", () => {
   test("a host without hive is not saved unless --install", () => {
     const r = run("machine", "add", "bare", "--json");
     expect(r.code).toBe(1);
-    expect(r.json).toMatchObject({ ok: false, code: "machine_no_hive" });
-    expect(data(run("machine", "list", "--json"))).toHaveLength(1);
+    expect(r.json).toMatchObject({ error: { code: "MACHINE_NO_HIVE" } });
+    expect(data(run("machine", "list", "--json")).machines).toHaveLength(1);
   });
 
   test("--install on another platform has the remote download this version's release asset", () => {
     const r = run("machine", "add", "arm", "--install", "--json");
-    expect(r.json).toMatchObject({ ok: true, data: { target: "arm", platform: "linux-arm64", installed: true } });
+    expect(r.json).toMatchObject({ target: "arm", platform: "linux-arm64", installed: true });
     const cmd = fs.readFileSync(path.join(tmp, "installed"), "utf8");
     const { version } = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "package.json"), "utf8")) as { version: string };
     expect(cmd).toContain(`'https://github.com/dip497/hivemind/releases/download/v${version}/hive-linux-arm64'`);
@@ -69,20 +69,20 @@ describe("hive machine", () => {
 
   test("a hive too old to run the daemon counts as missing", () => {
     const r = run("machine", "add", "oldhive", "--json");
-    expect(r.json).toMatchObject({ ok: false, code: "machine_no_hive" });
-    expect(String((r.json as { error: string }).error)).toContain("too old");
+    expect(r.json).toMatchObject({ error: { code: "MACHINE_NO_HIVE" } });
+    expect(String((r.json as { error: { message: string } }).error.message)).toContain("too old");
   });
 
   test("--install for a platform with no release says so", () => {
     const r = run("machine", "add", "oldmac", "--install", "--json");
-    expect(r.json).toMatchObject({ ok: false, code: "machine_install_unavailable" });
+    expect(r.json).toMatchObject({ error: { code: "MACHINE_INSTALL_UNAVAILABLE" } });
   });
 
   test("an unreachable host is exit 3 and says to check plain ssh first", () => {
     const r = run("machine", "add", "down", "--json");
     expect(r.code).toBe(3);
-    expect(r.json).toMatchObject({ ok: false, code: "machine_unreachable" });
-    expect(String((r.json as { error: string }).error)).toContain("Connection refused");
+    expect(r.json).toMatchObject({ error: { code: "MACHINE_UNREACHABLE" } });
+    expect(String((r.json as { error: { message: string } }).error.message)).toContain("Connection refused");
   });
 
   test("an option-injection target is refused before ssh runs (exit 2)", () => {
@@ -91,20 +91,20 @@ describe("hive machine", () => {
     expect(fs.existsSync("/tmp/pwned")).toBe(false);
     const r2 = run("machine", "add", "me:pw@host", "--json");
     expect(r2.code).toBe(2);
-    expect(r2.json).toMatchObject({ code: "machine_target_invalid" });
+    expect(r2.json).toMatchObject({ error: { code: "MACHINE_TARGET_INVALID" } });
   });
 
   test("duplicate target, rename, disable/enable, remove", () => {
-    expect(run("machine", "add", "good", "--json").json).toMatchObject({ code: "machine_exists" });
-    const id = String((data(run("machine", "list", "--json")) as unknown as { id: string }[])[0]!.id);
+    expect(run("machine", "add", "good", "--json").json).toMatchObject({ error: { code: "MACHINE_EXISTS" } });
+    const id = String((data(run("machine", "list", "--json")).machines as { id: string }[])[0]!.id);
     expect(run("machine", "rename", "gpu", "GPU box", "--json").code).toBe(0);
     expect(run("machine", "disable", "GPU box", "--json").code).toBe(0);
     const ps = run("ps", "--machine", "GPU box", "--json");
-    expect(ps.json).toMatchObject({ ok: false, code: "machine_disabled" });
+    expect(ps.json).toMatchObject({ error: { code: "MACHINE_DISABLED" } });
     expect(run("machine", "enable", id, "--json").code).toBe(0);
-    expect(run("machine", "check", id, "--json").json).toMatchObject({ ok: true, data: { reachable: true, platform: "linux-arm64" } });
+    expect(run("machine", "check", id, "--json").json).toMatchObject({ reachable: true, platform: "linux-arm64" });
     expect(run("machine", "remove", id, "--json").code).toBe(0);
-    expect(data(run("machine", "list", "--json"))).toEqual([]);
+    expect(data(run("machine", "list", "--json")).machines).toEqual([]);
     expect(run("machine", "remove", id, "--json").code).toBe(5);
   });
 });

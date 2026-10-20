@@ -1,7 +1,7 @@
 /** `hive kill <session>` — end a session and its process (a detached session otherwise runs until it exits). */
 import { defineCommand } from "citty";
 import { err, ok } from "../format.js";
-import { EXIT } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { connect, DaemonUnavailable, defaultSocket, listSessions, resolveSession, SessionRefError } from "../pty-client.js";
 import { execOnMachine, loadMachine } from "../remote.js";
 

@@ -43,7 +43,7 @@ export const listCmd = defineCommand({
         all,
         filter as Parameters<typeof filterIssues>[1]
       );
-      return ok(ctx, matched, () => renderIssueList(matched));
+      return ok(ctx, { issues: matched }, () => renderIssueList(matched));
     } catch (e) {
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "list_failed";

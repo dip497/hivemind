@@ -89,7 +89,7 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
       "host.status": async () => (await o.control()).hostStatus(),
       "host.join": async (_from, link) => (await o.control()).join(text(link, "link")),
       "host.add": async (_from, folder) => (await o.control()).serve(text(folder, "folder")),
-      "agent.sleep": async (_from, repo, target, force) => (await o.control()).sleep(text(repo, "repo"), targetOf(target), force === true),
+      "agent.sleep": async (from, repo, target, force) => (await o.control()).sleep(text(repo, "repo"), targetOf(target), force === true, callerOf(from)),
       "agent.wake": async (_from, repo, target) => (await o.control()).wake(text(repo, "repo"), targetOf(target)),
     },
     effects: {
