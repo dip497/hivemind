@@ -368,7 +368,7 @@ test("an agent asking to put every agent to sleep is not put to sleep itself; na
 test("a read after a wake does not hand back the reply from before the sleep, one never read either", async () => {
   const { p } = plane();
   const api = await p.api();
-  assert.equal(api.send("a1", "echo piped"), true);
+  assert.equal(api.send("a1", "echo piped").sent, true);
   await new Promise((r) => setTimeout(r, 600));
   p.event("agent.event", { tileId: "hm:a1", event: "turn.started" });
   p.event("agent.reply", { tileId: "hm:a1", text: "before the sleep" });

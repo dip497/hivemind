@@ -66,7 +66,7 @@ test("a tile that is not open is not found by every verb that names it, at eithe
     ["focus", () => api.focus("gone")],
   ];
   for (const [verb, run] of verbs) assert.deepEqual([verb, await failure(run)], [verb, "NOT_FOUND"]);
-  assert.equal(api.send("gone", "hi"), false);
+  assert.equal(api.send("gone", "hi").sent, false);
   // The same verbs on open tiles go through.
   assert.equal(await failure(() => api.connect("a1", "a2")), "done");
   assert.equal(await failure(() => api.focus("a1")), "done");
@@ -91,7 +91,7 @@ test("read says an agent sent nothing since its last reply is idle at once, a bu
   await settle();
   assert.deepEqual(await said(3000), { status: "idle", text: null, at_once: true });
 
-  assert.equal(api.send("a1", "add the tests"), true);
+  assert.equal(api.send("a1", "add the tests").sent, true);
   await settle();
   hook("turn.started");
   assert.deepEqual(await said(0), { status: "working", text: null, at_once: true });
