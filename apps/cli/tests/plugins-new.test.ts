@@ -39,7 +39,7 @@ describe("hive plugins new", () => {
         expect(prompt).not.toContain("](/");
 
         const again = hive(["plugins", "new", k.kind, "tally", "--owner", "ada", "--dir", "work/tally", "--json"], { cwd: tmp, env });
-        expect([again.code, (again.json as { code: string }).code]).toEqual([1, "exists"]);
+        expect([again.code, (again.json as { error: { code: string } }).error.code]).toEqual([1, "EXISTS"]);
       } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
       }
@@ -89,6 +89,6 @@ describe("hive plugins new", () => {
 
   test("a kind that is not one you write is refused, naming those that are", () => {
     const r = hive(["plugins", "new", "agent", "tally", "--owner", "ada", "--json"], { cwd: os.tmpdir() });
-    expect([r.code, r.json]).toEqual([2, { ok: false, code: "usage", error: "the kind is one of: tool, widget, view" }]);
+    expect([r.code, r.json]).toEqual([2, { error: { code: "USAGE", message: "the kind is one of: tool, widget, view" } }]);
   });
 });

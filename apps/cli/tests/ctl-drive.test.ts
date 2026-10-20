@@ -213,7 +213,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       { tile: "w-3", kind: "agent", name: "asker", frame: "f1", agent: "codex", state: "waiting" },
       { tile: "me-1", kind: "agent", name: "me", frame: "f1", agent: "claude", state: "working" },
       { tile: "sh-1", kind: "terminal", name: "build", frame: null },
-      { tile: "web-1", kind: "tool", name: "Browser", frame: "f1", plugin: "hivemind/web", tool: "hivemind/web/browser" },
+      { tile: "web-1", kind: "tool", name: "Browser", frame: "f1", plugin: "@hivemind/web", tool: "@hivemind/web/browser" },
       { tile: "x-1", kind: "radar", name: "Radar", frame: null },
     ] }]);
     expect(last("store.core")).toMatchObject({ params: [repoA], by: { kind: "peer", tile: "me-1" } });
@@ -281,7 +281,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect(last("tool.open").params).toEqual([repoA, { tool: "a/b/c", state: { tab: "logs", line: 42 } }]);
     const before = calls.length;
     const bad = await hive(["ctl", "open-tool", "a/b/c", "--state", "{tab: logs}", "--repo", repoA, "--json"], { env: env() });
-    expect([bad.code, (bad.json as { code: string }).code]).toEqual([2, "USAGE"]);
+    expect([bad.code, (bad.json as { error: { code: string } }).error.code]).toEqual([2, "USAGE"]);
     expect(calls.slice(before).some((c) => c.method === "tool.open")).toBe(false);
   });
 

@@ -371,7 +371,8 @@ const checkCmd = defineCommand({
     ].join("\n");
     // The plugin's code may have left timers or sockets open: what it did is known, so stop here.
     if (!report.problems.length) { ok(ctx, report, text); process.exit(0); }
-    if (ctx.json) console.log(JSON.stringify({ ok: false, code: "check_failed", error: `${report.problems.length} problems`, data: report }, null, 2));
+    // With problems it is still the report, on stdout as a result is, and the exit says it failed.
+    if (ctx.json) console.log(JSON.stringify(report));
     else process.stderr.write(text() + "\n");
     process.exit(1);
   },

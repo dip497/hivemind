@@ -1146,7 +1146,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     },
     // The window brings it into view and waits for it to draw; the picture is cropped to its box.
     async look(tile) {
-      requireOpen(tile);
       if (!deps.captureWindow) throw new ApiError("UNSUPPORTED", "no window shows tiles here: look at a tile in the app");
       const seen = await deps.callRenderer("tile.look", { tileId: bareOf(tile) }, LOOK_MS + 2_000) as Omit<TileLook, "png" | "width" | "height"> & { rect: TileRect };
       const { rect, ...rest } = seen;

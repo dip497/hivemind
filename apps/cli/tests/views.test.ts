@@ -15,7 +15,7 @@ describe("hive plugins, views", () => {
 
     let r = hive(["plugins", "list", "--kind", "view", "--json"], { cwd: tmp, env });
     expect(r.code).toBe(0);
-    expect(r.json).toEqual({ views: [] });
+    expect(r.json).toEqual({ plugins: [] });
 
     r = hive(["plugins", "install", src, "--json"], { cwd: tmp, env });
     expect(r.code).toBe(0);

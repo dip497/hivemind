@@ -20,7 +20,7 @@ const KINDS = [
   { kind: "view", file: "src/main.ts", at: "  list.replaceChildren();", insert: "  throw new Error(\"boom while drawing\");\n" },
 ] as const;
 
-interface Report { ok: boolean; data: { steps: Record<string, string>; problems: { step: string; file?: string; line?: number; message: string }[] } }
+interface Report { steps: Record<string, string>; problems: { step: string; file?: string; line?: number; message: string }[] }
 
 describe("hive plugins check", () => {
   for (const k of KINDS) {
@@ -32,7 +32,7 @@ describe("hive plugins check", () => {
         if (k.kind === "view") installViewDeps(dir);
 
         const clean = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
-        expect([clean.code, (clean.json as Report).data]).toEqual([0, expect.objectContaining({ steps: { types: "ok", manifest: "ok", draw: "ok" }, problems: [] })]);
+        expect([clean.code, (clean.json as Report)]).toEqual([0, expect.objectContaining({ steps: { types: "ok", manifest: "ok", draw: "ok" }, problems: [] })]);
 
         const file = path.join(dir, k.file);
         const text = fs.readFileSync(file, "utf8");
@@ -44,9 +44,8 @@ describe("hive plugins check", () => {
         const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
         expect(r.code).toBe(1);
         const report = r.json as Report;
-        expect(report.ok).toBe(false);
-        expect(report.data.steps.draw).toBe("failed");
-        expect(report.data.problems.filter((p) => p.step === "draw")).toEqual([
+        expect(report.steps.draw).toBe("failed");
+        expect(report.problems.filter((p) => p.step === "draw")).toEqual([
           expect.objectContaining({ file: k.file, line, message: expect.stringContaining("boom while drawing") }),
         ]);
       } finally {
@@ -72,7 +71,7 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
 `);
       const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
       expect(fs.existsSync(mark)).toBe(false);
-      expect((r.json as Report).data.steps.draw).toBe("ok");
+      expect((r.json as Report).steps.draw).toBe("ok");
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -90,7 +89,7 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       fs.writeFileSync(path.join(bin, "tsc"), `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(mark)}, "ran");\n`, { mode: 0o755 });
       const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
       expect(fs.existsSync(mark)).toBe(false);
-      expect((r.json as Report).data.steps.types).toBe("ok");
+      expect((r.json as Report).steps.types).toBe("ok");
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -104,7 +103,7 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       const entry = path.join(dir, "index.js");
       fs.writeFileSync(entry, `process.getBuiltinModule("node:fs").writeFileSync(new URL("./seen.json", import.meta.url), JSON.stringify({ env: process.env, cwd: process.cwd() }));\n` + fs.readFileSync(entry, "utf8"));
       const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp, env: { HIVE_CHECK_SECRET: "s3cret" } });
-      expect((r.json as Report).data.steps.draw).toBe("ok");
+      expect((r.json as Report).steps.draw).toBe("ok");
       const seen = JSON.parse(fs.readFileSync(path.join(dir, "seen.json"), "utf8")) as { env: Record<string, string>; cwd: string };
       expect(seen.env.HIVE_CHECK_SECRET).toBeUndefined();
       expect([seen.env.PATH, seen.env.HOME]).toEqual([process.env.PATH, process.env.HOME]);
@@ -147,7 +146,7 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
         const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
         expect([how, fs.existsSync(outside) ? fs.readdirSync(outside) : []]).toEqual([how, []]);
         expect([how, snapshot(dir)]).toEqual([how, before]);
-        expect([how, (r.json as Report).data.steps.types]).toEqual([how, "ok"]);
+        expect([how, (r.json as Report).steps.types]).toEqual([how, "ok"]);
       }
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
@@ -163,7 +162,7 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       fs.symlinkSync(path.join(tmp, "elsewhere.js"), path.join(dir, "extra.js"));
       const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
       expect(r.code).toBe(1);
-      expect((r.json as Report).data.problems).toContainEqual(expect.objectContaining({ step: "types", file: "extra.js", message: expect.stringContaining("outside the plugin's folder") }));
+      expect((r.json as Report).problems).toContainEqual(expect.objectContaining({ step: "types", file: "extra.js", message: expect.stringContaining("outside the plugin's folder") }));
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
@@ -178,7 +177,7 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       const text = fs.readFileSync(entry, "utf8").replace("host.run(", "host.runn(");
       fs.writeFileSync(entry, text);
       const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
-      expect((r.json as Report).data.problems).toEqual(expect.arrayContaining([
+      expect((r.json as Report).problems).toEqual(expect.arrayContaining([
         expect.objectContaining({ file: "index.js", line: text.split("\n").findIndex((l) => l.includes("host.runn(")) + 1, message: expect.stringContaining("Property 'runn' does not exist on type 'TileHost'") }),
       ]));
     } finally {
