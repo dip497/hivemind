@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.10.5] — 2026-10-21
+
 - A terminal or agent that fails to start says why (the daemon's own error, or that it stopped answering) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.
 - Agents started while the computer is busy get your shell's PATH and keys: a login shell slow to answer at startup is asked again in the background instead of being replaced by another shell for the rest of the session.
 - After an update, a background process too busy to answer quickly is now still replaced when it speaks an older protocol, and the app says so when it will not stop, instead of carrying on with it.
@@ -2016,7 +2018,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.4...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.5...HEAD
+[2026.10.5]: https://github.com/dip497/hivemind/releases/tag/v2026.10.5
 [2026.10.4]: https://github.com/dip497/hivemind/releases/tag/v2026.10.4
 [2026.10.3]: https://github.com/dip497/hivemind/releases/tag/v2026.10.3
 [2026.10.2]: https://github.com/dip497/hivemind/releases/tag/v2026.10.2

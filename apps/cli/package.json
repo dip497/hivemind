@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/cli",
-  "version": "2026.10.4",
+  "version": "2026.10.5",
   "private": true,
   "type": "module",
   "bin": {
