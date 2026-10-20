@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Each release carries the hub kit, `hivemind-hub-<version>.tgz`: the plugin index reader and the plugin checks, with nothing else to install, for a hub to depend on by the release's address.
 - A plugin published from the root of its repository installs from HiveHub: its entry, whose folder is empty, was refused by the app.
 - Before a plugin from HiveHub installs, the app and `hive` check the downloaded folder with the same checks a hub runs before listing it (`checkPluginFolder` in the hub kit): files, manifest, id and category. A folder that fails, or says it is another plugin, is not installed, and the install says why.
 - The plugin catalog reads HiveHub's index through the new hub kit, `@hivemind/hub`: an entry this Hivemind cannot read is skipped with the reason, instead of the whole index being refused, and `hive views/widgets/tools/agents install <name>` says why when the one you asked for is skipped. An index may list 2,000 plugins (4 MB) instead of 500.

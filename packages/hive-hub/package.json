@@ -8,23 +8,38 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./index-format": "./src/index-format.ts",
-    "./plugin-checks": "./src/plugin-checks.ts"
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dip497/hivemind.git",
+    "directory": "packages/hive-hub"
   },
   "scripts": {
+    "build:npm": "bash scripts/build-npm.sh",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
-  "dependencies": {
+  "devDependencies": {
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
-    "@hivemind/view-sdk": "workspace:*",
-    "yaml": "catalog:"
-  },
-  "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "yaml": "catalog:"
   }
 }
