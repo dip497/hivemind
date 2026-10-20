@@ -60,7 +60,7 @@ jobs:
       - name: Build the site and its guide
         run: npm run build
 
-      - name: Every internal link leads somewhere
+      - name: Every link, anchor, Markdown copy and redirect leads somewhere
         run: node scripts/check-links.mjs
 
       - name: Every page can be found and listed by search and answer engines

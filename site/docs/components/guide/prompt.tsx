@@ -1,19 +1,15 @@
 'use client';
 import { Check, ChevronRight, Copy, Sparkles } from 'lucide-react';
 import { useState } from 'react';
-
-const CURSOR_ICON = (
-  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="size-3.5">
-    <path d="M11.925 24l10.425-6-10.425-6L1.5 18l10.425 6z" opacity=".6" />
-    <path d="M22.35 18V6L11.925 0v12l10.425 6z" opacity=".8" />
-    <path d="M11.925 0L1.5 6v12l10.425-6V0z" />
-  </svg>
-);
+import { openInAgents } from '@/lib/open-in';
+import { OpenMenu } from './open-menu';
 
 const button =
-  'inline-flex items-center gap-1.5 rounded-md border bg-fd-background px-2.5 py-1 text-xs font-medium text-fd-foreground transition-colors hover:bg-fd-accent [&_svg]:size-3.5';
+  'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors [&_svg]:size-3.5';
+const secondary = `${button} bg-fd-background text-fd-foreground hover:bg-fd-accent`;
+const primary = `${button} border-transparent bg-fd-primary text-fd-primary-foreground hover:bg-fd-primary/85`;
 
-/** Instructions a person pastes into their coding agent, ready to copy or open in Cursor. */
+/** Instructions a person pastes into their coding agent, ready to copy or open in one. */
 export function Prompt({ description, text }: { description: string; text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -27,19 +23,11 @@ export function Prompt({ description, text }: { description: string; text: strin
         <Sparkles className="size-4 shrink-0 text-fd-primary" aria-hidden="true" />
         <p className="m-0 min-w-0 flex-1 basis-56 text-fd-foreground">{description}</p>
         <div className="flex shrink-0 gap-2">
-          <button type="button" className={button} onClick={copy} aria-live="polite">
+          <button type="button" className={primary} onClick={copy} aria-live="polite">
             {copied ? <Check /> : <Copy />}
             {copied ? 'Copied' : 'Copy prompt'}
           </button>
-          <a
-            className={button}
-            href={`https://cursor.com/link/prompt?${new URLSearchParams({ text })}`}
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            {CURSOR_ICON}
-            Open in Cursor
-          </a>
+          <OpenMenu label="Open in…" links={openInAgents(text)} className={secondary} align="end" />
         </div>
       </div>
       <details className="group border-t">

@@ -20,7 +20,8 @@ npm ci && npm ci --prefix docs
 npm run dev                         # the site, without the guide
 npm run guide:dev                   # the guide alone, at http://localhost:3000/guide/
 npm run build                       # both, into dist/
-node scripts/check-links.mjs        # every internal link in dist/ leads somewhere
+node scripts/check-links.mjs        # every link, anchor, .md copy and redirect in dist/ leads somewhere
+node scripts/check-links.mjs --live https://hivemind.griiken.com   # the same on the deployed site, external links too
 node scripts/check-seo.mjs          # every page has a title, description, one h1, its own canonical
 PORT=8080 node server.mjs           # serve dist/ as Cloud Run does
 ```

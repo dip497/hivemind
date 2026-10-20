@@ -5,11 +5,10 @@
 // hashed asset is immutable, and HTML never caches or a deploy stays invisible.
 import { createServer } from "node:http";
 import { createReadStream, existsSync, statSync } from "node:fs";
-import { extname, join, normalize } from "node:path";
+import { extname, join } from "node:path";
 import { constants, createBrotliCompress, createGzip } from "node:zlib";
 import { rangeFor } from "./byte-range.mjs";
-import { downloadFor } from "./downloads.mjs";
-import { redirectFor } from "./redirects.mjs";
+import { answerFor } from "./routes.mjs";
 
 const ROOT = new URL("./dist/", import.meta.url).pathname;
 const PORT = Number(process.env.PORT ?? 8080);
@@ -43,41 +42,12 @@ function cacheFor(path) {
   return "public, max-age=3600";
 }
 
-/** The file a URL means, or null when it escapes the root or does not exist. */
-function resolve(urlPath) {
-  const clean = normalize(decodeURIComponent(urlPath.split("?")[0])).replace(/^(\.\.[/\\])+/, "");
-  const candidates = clean.endsWith("/")
-    ? [join(clean, "index.html")]
-    : [clean, `${clean}.html`, join(clean, "index.html")];
-  for (const c of candidates) {
-    const file = join(ROOT, c);
-    if (!file.startsWith(ROOT)) continue;            // no traversal out of dist/
-    // A directory's page asked for without its slash: the page's address ends in one.
-    const slashless = !clean.endsWith("/") && c.endsWith("index.html") && !clean.endsWith("index.html");
-    if (existsSync(file) && statSync(file).isFile()) return { file, path: c, clean, slashless };
-  }
-  return null;
-}
-
 createServer((req, res) => {
-  // A download link points here and is sent on to the current release, so the link in a
-  // README, a chat message or a bookmark keeps working without anyone editing it.
-  // /download is the short URL people share; the section that downloads it lives on the home page.
-  if (/^\/download\/?$/.test((req.url ?? "").split("?")[0])) {
-    res.writeHead(302, { location: "/#download", "cache-control": "public, max-age=300" });
+  const hit = answerFor(req.url ?? "/", ROOT);
+  if (hit?.location) {
+    res.writeHead(hit.status, { location: hit.location, "cache-control": hit.cache });
     return res.end();
   }
-  const moved = redirectFor(req.url ?? "/");
-  if (moved) {
-    res.writeHead(301, { location: moved, "cache-control": "public, max-age=86400" });
-    return res.end();
-  }
-  const to = downloadFor(req.url ?? "/");
-  if (to) {
-    res.writeHead(302, { location: to, "cache-control": "public, max-age=300" });
-    return res.end();
-  }
-  const hit = resolve(req.url ?? "/");
   if (!hit) {
     // The guide has its own page for a missing page, with its sidebar and search.
     const inGuide = /^\/guide(\/|$)/.test(req.url ?? "");
@@ -85,13 +55,6 @@ createServer((req, res) => {
     const has404 = existsSync(notFound);
     res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
     return has404 ? createReadStream(notFound).pipe(res) : res.end("Not found");
-  }
-  if (hit.slashless) {
-    // /guide/faq and /guide/faq/ are one page; search engines should only ever see the second.
-    // Built from the normalized path, never the raw one: "//host" must not become a redirect off-site.
-    const query = (req.url ?? "").split("?")[1];
-    res.writeHead(301, { location: `${encodeURI(hit.clean)}/${query !== undefined ? `?${query}` : ""}`, "cache-control": "public, max-age=86400" });
-    return res.end();
   }
   const encoder = encoderFor(req, hit.file);
   const headers = {
