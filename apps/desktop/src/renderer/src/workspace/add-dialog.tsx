@@ -12,7 +12,7 @@ import type { BoardChoice } from "../board-objects/board-model";
 import { useEnabledWidgetPackages } from "../board-objects/widget-runtime";
 import { WidgetIcon } from "../plugins/WidgetIcon";
 import { toolKinds, useTilesVersion } from "../tiles";
-import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
+import { CATEGORY_LABELS, groupByCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 
 /** Opens the dialog; with a frame, a tool goes into that frame. */
 export function openAdd(frameId?: string): void {
@@ -58,7 +58,7 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
   ];
   const q = query.trim().toLowerCase();
   const found = choices.filter((c) => (tab === "all" || c.type === tab) && (!q || `${c.name} ${CATEGORY_LABELS[c.category]}`.toLowerCase().includes(q)));
-  const shelves = PLUGIN_CATEGORIES.map((cat) => [cat, found.filter((c) => c.category === cat)] as const).filter(([, list]) => list.length);
+  const shelves = groupByCategory(found, (c) => c.category);
   const groups = shelf === "all" ? shelves : shelves.filter(([cat]) => cat === shelf);
   const arrow = boardItems && tab !== "tool" && shelf === "all" && (!q || "arrow".includes(q));
   const order = [...groups.flatMap(([, list]) => list), ...(arrow ? [{ id: "arrow", pick: () => onBoard("arrow") } as AddChoice] : [])];

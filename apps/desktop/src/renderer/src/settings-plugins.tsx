@@ -8,8 +8,8 @@ import { useCommunityReport } from "./workspace/views/community/registry";
 import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
 import { SvgMark } from "./agents";
 import { rescan } from "./settings-views";
-import { PLUGIN_KINDS, permissionWords, type PluginKind } from "./plugins/library";
-import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { permissionWords, type PluginKind } from "./plugins/library";
+import { CategoryGroups, PluginRow } from "./plugins/PluginList";
 import { useWidgetPackages } from "./board-objects/widget-runtime";
 import { useToolPackages } from "./tiles/tool-plugins";
 import { useSettingsNavigate } from "./settings-panels";
@@ -49,8 +49,8 @@ export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
   return <span className="catalog-monogram" style={{ "--mark-hue": hue } as CSSProperties}>{entry.id[0]?.toUpperCase()}</span>;
 }
 
-/** What HiveHub lists, filtered by the Plugins page's search and kind; each one installed after
- *  its review, here or on its own page. */
+/** What HiveHub lists, filtered by the Plugins page's search and kind and under its categories;
+ *  each one installed after its review, here or on its own page. */
 export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | PluginKind }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -163,25 +163,19 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       {q ? <>No plugins on HiveHub match “{query}”.</>
         : kind !== "all" ? `No ${kind} plugins have been published yet.` : "Nothing has been published yet."}
     </p>}
-    {PLUGIN_KINDS.map((k) => {
-      const list = shown.filter((e) => e.type === k);
-      if (!list.length) return null;
-      return <PluginGroup key={k} kind={k} count={list.length}>
-        {list.map((e) => {
-          const have = installed(e);
-          const update = outdatedOf(e);
-          const open = review?.key === key(e) ? review.data : null;
-          return <div key={key(e)} className="catalog-item" data-catalog-plugin={key(e)}>
-            <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
-              badge={have && !update ? "Installed" : undefined}
-              action={(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
-                {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined} />
-            {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
-            {open && reviewOf(e, open)}
-          </div>;
-        })}
-      </PluginGroup>;
-    })}
+    <CategoryGroups rows={shown.map((e) => {
+      const have = installed(e);
+      const update = outdatedOf(e);
+      const open = review?.key === key(e) ? review.data : null;
+      return { key: key(e), kind: e.type, category: e.category ?? "other", row: <div className="catalog-item" data-catalog-plugin={key(e)}>
+        <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
+          badge={have && !update ? "Installed" : undefined}
+          action={(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
+            {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined} />
+        {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
+        {open && reviewOf(e, open)}
+      </div> };
+    })} />
     <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
 }

@@ -351,6 +351,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       links: () => control.links(),
       start: (repo, start) => control.start(repo, start),
       close: (bare) => control.close(bare),
+      sleep: async (repo, tile) => (await control.api()).sleep(repo, tile, false),
+      wake: async (repo, tile) => (await control.api()).wake(repo, tile),
       machines,
       intents,
       widgets: widgetDomain,
