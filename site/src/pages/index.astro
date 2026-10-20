@@ -116,8 +116,8 @@ const code: Record<string, [string, string][]> = {
     ['p', 'hive ctl spawn --agent codex --prompt "Fix the flaky cart test"'],
     ['p', 'hive ctl read $TILE    # wait for its reply'],
     ['p', 'hive ctl workflow --items "api||web||cli" --prompt "Review {item}"'],
-    ['p', 'hive tools new flaky-tests'],
-    ['p', 'hive views install @dip497/timeline'],
+    ['p', 'hive plugins new tool flaky-tests'],
+    ['p', 'hive plugins install @dip497/timeline'],
   ],
   ts: [
     ['k', 'import { connect } from "hivemind-api";'],
@@ -249,7 +249,7 @@ const code: Record<string, [string, string][]> = {
           <p class="b-k">How one is made</p>
           <ol>
             <li><span>You</span>“A widget for the release checklist.”</li>
-            <li><span>Agent</span><code>hive widgets new release</code> writes a starter and its <code>PROMPT.md</code>.</li>
+            <li><span>Agent</span><code>hive plugins new widget release</code> writes a starter and its <code>PROMPT.md</code>.</li>
             <li><span>Agent</span>Fills it in, installs it, and updates it as the work moves.</li>
           </ol>
           <a href={link('guide/widgets/')}>Make a widget</a>
