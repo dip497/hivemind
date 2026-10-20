@@ -278,6 +278,8 @@ export interface ViewPackageInfo {
   dir: string;
   source: "user" | "repo" | "app" | "host";
   manifest: ViewManifest | null;
+  /** Its manifest's .svg icon, as a data URL. */
+  icon?: string;
   error: string | null;
   url: string | null;
   /** The package it was installed with, for one installed. */

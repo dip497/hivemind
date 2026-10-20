@@ -15,8 +15,10 @@ export interface ViewManifest {
    *  was published on HiveHub — `owner` is the GitHub account that published it. */
   id: string;
   name: string;
-  /** What it shows, in one line: the line on its card on the Plugins page and HiveHub. */
+  /** One line on what it is for, shown under its name wherever views are listed. */
   description?: string;
+  /** Its mark in lists: a relative path to an `.svg` in the package, drawn in one colour like the app's icons. */
+  icon?: string;
   /** semver-ish `x.y.z` (shown in `hive plugins list`; not compared by the host). */
   version: string;
   /** Relative path to ONE bundled `.html` (loaded as-is) or `.js` (wrapped in a
@@ -75,6 +77,8 @@ export const viewHost = (id: string) => (id.startsWith("@") ? id.slice(1).replac
 
 /** Whether a string is a usable view id — the one check everything that takes an id uses. */
 export const isViewId = (id: string) => ID_RE.test(id) && viewHost(id).length <= 63;
+/** The longest description a view may give, as widgets and tools allow. */
+const DESCRIPTION_MAX = 200;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
 /** A relative path that cannot leave the package dir. */
@@ -127,8 +131,13 @@ export function validateViewManifest(raw: unknown): ManifestResult {
   if ("error" in cmds) errors.push(cmds.error);
   let description: string | undefined;
   if (m.description !== undefined) {
-    if (typeof m.description !== "string" || m.description.length > 300) errors.push(`"description" must be a string of at most 300 characters`);
-    else if (m.description.trim()) description = m.description.trim();
+    if (typeof m.description !== "string" || m.description.trim().length === 0 || m.description.length > DESCRIPTION_MAX || /[\r\n]/.test(m.description)) errors.push(`"description" must be one line of at most ${DESCRIPTION_MAX} characters`);
+    else description = m.description;
+  }
+  let icon: string | undefined;
+  if (m.icon !== undefined) {
+    if (typeof m.icon !== "string" || !isSafeRelativePath(m.icon) || !m.icon.endsWith(".svg")) errors.push(`"icon" must be a relative path to an .svg file inside the package`);
+    else icon = m.icon;
   }
   let author: string | undefined;
   if (m.author !== undefined) {
@@ -186,8 +195,8 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "description", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "description", "icon", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, manifest: { id: id!, name: name!, ...(description ? { description } : {}), version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}),
+  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(description ? { description } : {}), ...(icon ? { icon } : {}), ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}),
     ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
 }

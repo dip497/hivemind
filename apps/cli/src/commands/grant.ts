@@ -12,7 +12,8 @@ import { defineCommand } from "citty";
 import path from "node:path";
 import type { ClientGrant } from "@hivemind/workspace-api/grants";
 import { err, ok } from "../format.js";
-import { EXIT, HcpCliError } from "../hcp.js";
+import { HcpCliError } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { driveSocketPath } from "hivemind-api";
 import { driveCall } from "../drive.js";
 import { duration } from "./share.js";
@@ -82,7 +83,7 @@ const listCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     const grants = (await call(ctx, "grant.list")) as ClientGrant[];
-    return ok(ctx, grants, () => (grants.length
+    return ok(ctx, { grants }, () => (grants.length
       ? grants.map((g) => `${g.id}  ${g.name}  ${g.role}  ${g.repos.join(", ")}  expires ${when(g.expires)}  last used ${g.lastUsed === null ? "never" : when(g.lastUsed)}`).join("\n")
       : "no program may drive workspaces here (`hive grant create`)"));
   },

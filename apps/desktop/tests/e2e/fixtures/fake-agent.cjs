@@ -20,16 +20,22 @@
  * a turn that echoes them, never executes them.
  * With FAKE_GATE set it first shows that text, as an agent shows a startup screen
  * before it takes anything, and the first line it reads only clears it.
+ * With FAKE_STEER set, a turn runs while it reads, and a line typed during it is taken into that
+ * turn, as claude takes one: recorded as claude 2.1.3xx records it (a queue-operation enqueue as it
+ * is typed; once the snippet is done, a remove "absorbed_mid_turn" and a queued_command attachment),
+ * and its reply says it heard it.
  *
  * Invoked through thin shims named `claude` / `droid` on PATH:
  *   exec node fake-agent.cjs claude "$@"
  */
-const { spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 
 const [, , provider, ...args] = process.argv;
+// What it shows at its prompt: FAKE_PROMPT, as claude's own (`❯ `) for its screen to read idle there.
+const PROMPT = process.env.FAKE_PROMPT || `${provider}> `;
 const tile = process.env.HIVEMIND_TILE || "no-tile";
 // The session hivemind binds (`--session-id`), as claude takes it; else one of its own.
 const bound = args.includes("--session-id") ? args[args.indexOf("--session-id") + 1] : "";
@@ -92,6 +98,8 @@ let said = 0;
 const record = (type, content) => fs.appendFileSync(transcriptPath, JSON.stringify({
   type, uuid: `${sessionId}-${++said}`, timestamp: new Date().toISOString(), cwd: process.cwd(), message: { role: type, content },
 }) + "\n");
+/** A record of claude's own kind, as it is: `queue-operation`, `attachment`. */
+const recordAs = (fields) => fs.appendFileSync(transcriptPath, JSON.stringify({ ...fields, timestamp: new Date().toISOString(), sessionId }) + "\n");
 
 // ── the initial prompt ────────────────────────────────────────────────────────
 const VALUE_FLAGS = new Set(["--settings", "--session-id", "--permission-mode", "--model", "--resume", "-r", "--auto"]);
@@ -119,7 +127,7 @@ function turn(prompt) {
     if (process.env.FAKE_TOOL_LOG) fs.appendFileSync(process.env.FAKE_TOOL_LOG, `${tool[1]} ${answer}\n`);
     process.stdout.write(`${answer}\n`);
     fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: answer });
-    process.stdout.write(`${provider}> `);
+    process.stdout.write(PROMPT);
     return;
   }
   process.stdout.write(`\n[${provider}] ▶ ${prompt}\n`);
@@ -135,23 +143,47 @@ function turn(prompt) {
     fire("PermissionRequest", { session_id: sessionId, tool_name: "AskUserQuestion", tool_input: { questions: [{ question: prompt.slice(4) }] } });
     return;
   }
+  if (process.env.FAKE_STEER) return steerable(prompt);
   const r = spawnSync("bash", ["-c", prompt], { encoding: "utf8", env: process.env, timeout: 60_000 });
   const text = ((r.stdout || "") + (r.status ? `\n[exit ${r.status}] ${r.stderr || ""}` : "")).trim() || "(no output)";
   record("user", prompt);
   reply(text);
 }
 
+/** Lines typed during the turn running now; null when none runs. */
+let absorbing = null;
+/** A turn that reads while it runs: what is typed meanwhile is taken in at its next step. */
+function steerable(prompt) {
+  record("user", prompt);
+  absorbing = [];
+  const child = spawn("bash", ["-c", prompt], { env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+  let out = "";
+  child.stdout.on("data", (d) => { out += d; });
+  child.on("close", (status) => {
+    const heard = absorbing;
+    absorbing = null;
+    for (const line of heard) {
+      const id = `${sessionId}-${++said}`;
+      recordAs({ type: "queue-operation", operation: "remove", content: line, reason: "absorbed_mid_turn", commandUuid: id, deliveryId: id });
+      recordAs({ parentUuid: null, isSidechain: false, type: "attachment", uuid: id, cwd: process.cwd(), userType: "external",
+        attachment: { type: "queued_command", prompt: line, source_uuid: id, delivery_id: id, commandMode: "prompt", origin: { kind: "human" }, timestamp: new Date().toISOString(), humanTurn: true } });
+    }
+    const text = (out.trim() || "(no output)") + (status ? ` [exit ${status}]` : "") + heard.map((l) => `\nheard while working: ${l}`).join("");
+    reply(text);
+  });
+}
+
 function reply(text) {
   record("assistant", [{ type: "text", text }]);
   process.stdout.write(`${text}\n`);
   fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: text });
-  process.stdout.write(`${provider}> `);
+  process.stdout.write(PROMPT);
 }
 
 const first = positionalPrompt();
 let gated = !!process.env.FAKE_GATE;
 if (gated) process.stdout.write(`${process.env.FAKE_GATE}\n`);
-else process.stdout.write(`fake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
+else process.stdout.write(`fake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${PROMPT}`);
 if (first) turn(first);
 
 const rl = readline.createInterface({ input: process.stdin, terminal: false });
@@ -159,21 +191,27 @@ rl.on("line", (line) => {
   if (gated) {
     // Past the startup screen: it is gone, and the prompt is up.
     gated = false;
-    process.stdout.write(`\x1b[2J\x1b[Hfake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${provider}> `);
+    process.stdout.write(`\x1b[2J\x1b[Hfake ${provider} up (tile ${tile}, hooks: ${Object.keys(HOOKS).join(",") || "none"})\n${PROMPT}`);
     return;
   }
   const text = line.trim();
-  if (!text) { process.stdout.write(`${provider}> `); return; }
+  if (!text) { process.stdout.write(PROMPT); return; }
   // A delivery is a prompt like any other, a turn with its hooks, as claude takes it: the
   // control plane holds the next delivery until that turn ends.
   if (text.startsWith("[hive]")) {
     fire("UserPromptSubmit", { session_id: sessionId, prompt: text });
     process.stdout.write(`(delivered) ${text}\n`);
     fire("Stop", { session_id: sessionId, transcript_path: transcriptPath, stop_hook_active: false, last_assistant_message: "(delivered)" });
-    process.stdout.write(`${provider}> `);
+    process.stdout.write(PROMPT);
     return;
   }
   if (picker) { const answer = picker; picker = null; answer(text); return; }
+  if (absorbing) {
+    absorbing.push(text);
+    recordAs({ type: "queue-operation", operation: "enqueue", content: text });
+    process.stdout.write(`queued: ${text}\n`);
+    return;
+  }
   turn(text);
 });
 rl.on("close", () => process.exit(0));

@@ -5,7 +5,8 @@
 import type { App } from "./app.js";
 import { type Answers, answers } from "./answers.js";
 import { Chat } from "./chat.js";
-import { Ask, type Composer, composer, h, icon, iconButton, say } from "./dom.js";
+import { Ask, type Composer, type Picked, composer, h, icon, iconButton, say } from "./dom.js";
+import { PHOTOS_MAX, photoOf } from "./photos.js";
 import { TerminalView } from "./terminal.js";
 import type { Agent, Overview } from "./types.js";
 import { NOTICES, ago, elapsed, kindLabel, stateLabel, where } from "./words.js";
@@ -26,6 +27,9 @@ export class AgentScreen {
   private readonly workingFor = h("span", {});
   private readonly working = h("p", { class: "working-line", hidden: true, "data-working-line": "" }, h("span", { class: "dot", "data-state": "working" }), this.workingFor);
   private ticking = 0;
+  /** Why a photo could not be added, above the box for a moment. */
+  private readonly problem = h("p", { class: "photo-problem", role: "status", hidden: true, "data-photo-problem": "" });
+  private problemTimer = 0;
   private readonly message: HTMLTextAreaElement;
   private readonly composing: Composer;
   private readonly term = new TerminalView();
@@ -60,11 +64,11 @@ export class AgentScreen {
       this.gone,
       this.body,
       this.dock);
-    const message = composer("Message", (text) => (this.typed ? this.typed.send(text) : this.agent ? app.send(this.agent, text) : Promise.resolve(false)), { "data-message": "" },
-      () => void this.stopIt());
+    const message = composer("Message", (text, photos) => this.sendIt(text, photos), { "data-message": "" },
+      () => void this.stopIt(), { max: PHOTOS_MAX, photoOf, problem: (why) => this.photoProblem(why) });
     this.message = message.querySelector("textarea")!;
     this.composing = message;
-    this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, message);
+    this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, this.problem, message);
   }
 
   /** `tile` was just started from here: until the computer lists it, it is starting, not gone. */
@@ -202,6 +206,34 @@ export class AgentScreen {
     const given = answers(a.tile, w, (reply) => this.app.answer(a, reply), true);
     this.typed = given.typed;
     this.waits.replaceChildren(h("div", { class: "card waiting", "data-waiting-card": w.kind }, label, given.el));
+  }
+
+  private photoProblem(why: string): void {
+    say(this.problem, why);
+    this.problem.hidden = false;
+    clearTimeout(this.problemTimer);
+    this.problemTimer = setTimeout(() => (this.problem.hidden = true), 5000);
+  }
+
+  /** A message, shown in the chat at once as it goes: sent, or held until the turn ends with a way
+   *  to send it now, which stops the turn; taken away again when it did not go. A line that answers
+   *  what the agent waits on goes as that answer. */
+  private async sendIt(text: string, photos: Picked[]): Promise<boolean> {
+    if (this.typed) {
+      if (photos.length) {
+        this.photoProblem("A photo cannot answer what it asks: answer it first.");
+        return false;
+      }
+      return this.typed.send(text);
+    }
+    const [a, chat] = [this.agent, this.chat];
+    if (!a || !chat) return false;
+    const shown = chat.sending(text, photos.map((p) => p.url));
+    const sent = await this.app.send(a, text, photos.map((p) => p.photo));
+    if (!sent) shown.failed();
+    else if (sent.held) shown.held(() => void this.stopIt());
+    else shown.sent();
+    return !!sent;
   }
 
   private async stopIt(): Promise<void> {

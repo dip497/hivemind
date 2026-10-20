@@ -32,9 +32,9 @@ export interface CatalogEntry {
   bin?: string;
   /** The oldest Hivemind this plugin runs on. Absent means any. */
   minAppVersion?: string;
-  /** Agents only: the `icon` block of its manifest, so the list can show the agent's own
-   *  mark before anything is downloaded. Bounded here and sanitised where it is drawn —
-   *  this module does not know what an icon is, and must not start guessing. */
+  /** Its mark, so the list can show it before anything is downloaded: an agent's manifest `icon`
+   *  block, or `{ image }`, a view's, widget's or tool's .svg as a data URL. Bounded here and
+   *  sanitised where it is drawn. */
   icon?: unknown;
   /** What it is for, as its manifest says; an agent is always `agents`, and one the app does not
    *  know is `other`. */
@@ -95,6 +95,12 @@ export function pathsProblem(paths: readonly string[]): string | null {
 }
 
 /** Whether `v` is JSON of at most `max` characters; nesting too deep to write is not. */
+/** A published .svg icon: HiveHub keeps ones up to 16 KiB, which base64 makes about 22 KiB. */
+const isImageIcon = (v: unknown): boolean => {
+  const image = (v as { image?: unknown } | null)?.image;
+  return typeof image === "string" && image.startsWith("data:image/svg+xml;base64,") && image.length <= 32 << 10;
+};
+
 export const smallJson = (v: unknown, max: number): boolean => {
   try { return JSON.stringify(v).length <= max; } catch { return false; }
 };
@@ -141,7 +147,7 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
   if (p.minAppVersion !== undefined && (typeof p.minAppVersion !== "string" || !MIN_APP_VERSION_RE.test(p.minAppVersion))) {
     refuse("its minAppVersion must look like 1.2.3");
   }
-  if (p.icon !== undefined && (typeof p.icon !== "object" || p.icon === null || !smallJson(p.icon, 4096))) {
+  if (p.icon !== undefined && !isImageIcon(p.icon) && (typeof p.icon !== "object" || p.icon === null || !smallJson(p.icon, 4096))) {
     refuse("its icon must be a small object");
   }
   if (p.bin !== undefined && (type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {

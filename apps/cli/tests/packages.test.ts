@@ -14,7 +14,7 @@ test("packages inspect returns a JSON plan without an app and refuses executable
     const xdg = fixtureXDG(["pi"]);
     const result = hive(["packages", "inspect", dir, "--json"], { cwd: dir, env: { XDG_CONFIG_HOME: xdg } });
     expect(result.code).toBe(0);
-    expect(result.json).toMatchObject({ ok: true, data: { mode: "inspect-only", startup: { requiresExplicitStart: true } } });
+    expect(result.json).toMatchObject({ mode: "inspect-only", startup: { requiresExplicitStart: true } });
     fs.writeFileSync(path.join(dir, "hivemind-package.json"), JSON.stringify({ ...manifest, "\x1b[2J": "untrusted key", scripts: { install: "exit 1" } }));
     const bad = hive(["packages", "inspect", dir], { cwd: dir, env: { XDG_CONFIG_HOME: xdg } });
     expect(bad.code).toBe(1);

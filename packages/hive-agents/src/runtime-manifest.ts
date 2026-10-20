@@ -97,6 +97,7 @@ function hcpEnv(def: AgentProviderDef, req: LaunchRequest): Record<string, strin
     HIVEMIND_TILE: req.tileId, // the agent's own `hive ctl` calls attribute to this tile
     HIVE_AGENT_ID: def.id, // signs the Activity rows it writes
     HIVE_AGENT_DEPTH: req.env.HIVE_AGENT_DEPTH ?? "0",
+    HIVEMIND_GUIDE: "hive guide agents", // what it runs to read how to drive other agents here
     ...(req.paths.sdk ? { [SDK_ENV.sdk]: req.paths.sdk, [SDK_ENV.sock]: req.paths.hcpSock! } : {}),
   };
 }

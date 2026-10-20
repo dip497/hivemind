@@ -118,7 +118,7 @@ function fakeDeps(over: Partial<Parameters<typeof makeDispatch>[0]> = {}) {
 test("send: writes text + carriage return", async () => {
   const { deps, writes } = fakeDeps();
   const { api } = makeDispatch(deps);
-  assert.equal(api.send("t1", "hello"), true);
+  assert.deepEqual(api.send("t1", "hello"), { sent: true, held: false });
   // Text is typed immediately; Enter follows as a SEPARATE keystroke a tick later
   // (claude's TUI drops a newline bundled with the text). Writes target the pty
   // id (`hm:<tileId>`), not the bare control-surface id.
@@ -297,7 +297,7 @@ test("spawn writes the tile in main: in the frame named, else beside its caller,
   const worker = await spawn({ parent: "tile-lead", prompt: "Review the auth module. Then fix it.", report: false });
   assert.deepEqual(tileOf(worker), { id: worker, kind: "claude", label: "claude #2", cmd: "claude", args: ["--dangerously-skip-permissions", "--model", "opus"], task: "Review the auth module" });
   assert.equal(frameOf(worker), "f1", "beside the agent that spawned it");
-  assert.deepEqual(ws.announced.at(-1), { tileId: worker, repo: REPO, prompt: "Review the auth module. Then fix it.", background: true, near: "tile-lead" });
+  assert.deepEqual(ws.announced.at(-1), { tileId: worker, repo: REPO, prompt: "Review the auth module. Then fix it.", background: true, near: "tile-lead", by: "agent" });
   assert.equal(frameOf(await spawn({})), "f1", "a caller in no tile: the workspace's first frame");
   assert.equal(frameOf(await spawn({ parent: "tile-lead", frame: "NOTES" })), "f2", "a frame named any way spawn takes");
   assert.equal(ws.announced.at(-1)?.near, undefined, "laid out beside its caller only in the caller's frame");

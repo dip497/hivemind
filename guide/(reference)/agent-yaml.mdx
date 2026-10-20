@@ -34,7 +34,7 @@ At the end, list the fixes you suggest, each with the line it changes, and wait 
 | `options` | | launch settings people choose in **Settings → Plugins** |
 | `install` | | where to get the program: `url` (https) and an optional one-line `command` |
 | `detect` | | how to read its status from its screen |
-| `answer`, `choose`, `interrupt`, `steer` | | how another device answers it |
+| `answer`, `choose`, `interrupt`, `steer`, `pastedImages` | | how another device answers it |
 | `session` | | where its sessions are, to resume and to read them |
 | `launch`, `assets`, `hooks`, `home` | | the wiring behind turn signals, supervision and hooks |
 | `icon` | | its icon, drawn with shapes |
@@ -105,7 +105,7 @@ text field.
 Regular expressions are not allowed: a bad one could stall status for every terminal. Every test
 runs in time proportional to the line.
 
-## answer, choose, interrupt, steer
+## answer, choose, interrupt, steer, pastedImages
 
 These let your phone answer the agent. Write keys as `hive ctl keys` takes them: one to four keys,
 digits quoted. Read them from the real program: a wrong key answers the wrong way.
@@ -121,6 +121,7 @@ answer:
 choose: ['{n}']          # pick option n of a question
 interrupt: [escape]      # stop it, as Stop on the phone does
 steer: true              # it reads a message typed while it works
+pastedImages: true       # a photo's path pasted alone is attached as an image
 ```
 
 ## session

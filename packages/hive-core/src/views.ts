@@ -17,6 +17,7 @@ import { isViewId, MANIFEST_FILE, validateViewManifest, type ViewManifest } from
 import { HiveError } from "./storage.js";
 import { installedMembers } from "./installed-packages.js";
 import type { PackageOf } from "./plugin-settings.js";
+import { readSvgIcon } from "./svg-icon.js";
 
 export type ViewSource = "user" | "repo" | "app";
 
@@ -26,6 +27,8 @@ export interface InstalledView {
   dir: string;
   source: ViewSource;
   manifest: ViewManifest | null;
+  /** The .svg its manifest names, as a data URL; none when that file is missing or too large. */
+  icon?: string;
   /** Why the view will not load (null = loadable). */
   error: string | null;
   /** The package it was installed with, for one installed. */
@@ -57,7 +60,8 @@ export async function readViewPackage(dir: string, source: ViewSource, installed
   } catch {
     return fail(`entry "${v.manifest.entry}" not found`);
   }
-  return { id: v.manifest.id, dir, source, manifest: v.manifest, error: null };
+  const icon = v.manifest.icon ? await readSvgIcon(dir, v.manifest.icon) : undefined;
+  return { id: v.manifest.id, dir, source, manifest: v.manifest, ...(icon ? { icon } : {}), error: null };
 }
 
 /** The id a folder is installed as: its name, or `@owner/name` when it sits inside `@owner/`. */

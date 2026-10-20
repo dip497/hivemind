@@ -30,13 +30,15 @@ export interface SpawnChange {
 }
 
 /** The control plane opened a tile, before it reaches the layout, and its host starts it: a client
- *  that shows `repo` brings it forward unless it is a `background` worker, and lays it out beside
- *  `near`, the agent tile that opened it, when both share a frame. */
+ *  that shows `repo` lays it out beside `near`, the agent tile that opened it, when both share a
+ *  frame. It brings forward one the person opened (`by` person, 0.33); one an agent or a program
+ *  opened as its person's setting says (`agents.whenAgentStartsAgent`); a `background` worker never. */
 export interface TileOpened {
   tileId: string;
   repo: string;
   background: boolean;
   near?: string;
+  by: "person" | "agent" | "program";
 }
 
 /** Who answered a wait: a person, by their id and name. */
@@ -107,7 +109,8 @@ export interface StartImage {
 export interface SleepAnswer { slept: string[]; skipped: Skipped[] }
 /** What `agent.wake` did: the agents woken, and those left as they were, and why. */
 export interface WakeAnswer { woke: string[]; skipped: Skipped[] }
-export interface Skipped { tile: string; why: string }
+/** A tile left as it was, and why; `already` when it was as asked already (asleep, or awake) (0.33). */
+export interface Skipped { tile: string; why: string; already?: true }
 
 export interface StartAgent {
   program: string;
@@ -192,12 +195,13 @@ export interface AgentChanges {
 }
 
 /** An agent's reply to the turn after the last message it was sent (0.23): `text` null when the
- *  turn carried none (`note` says why), it is still working (`timeout`), it stopped to wait on an
- *  answer (`waiting`, what on, 0.26), its tile closed or its agent exited (`closed`), or it is
- *  asleep (`asleep`, 0.29). */
+ *  turn carried none (`note` says why), it is still working when the wait ran out (`timeout`) or,
+ *  read without waiting, now (`working`, 0.33), it was sent nothing since its last reply was read
+ *  and is not working (`idle`, 0.33), it stopped to wait on an answer (`waiting`, what on, 0.26),
+ *  or its tile closed or its agent exited (`closed`). One asleep is refused `ASLEEP` (0.33). */
 export interface AgentRead {
   text: string | null;
-  finalStatus: "turn" | "timeout" | "closed" | "waiting" | "asleep";
+  finalStatus: "turn" | "timeout" | "working" | "idle" | "closed" | "waiting";
   truncated: boolean;
   note?: string;
   waiting?: NonNullable<AgentItem["waiting"]>;

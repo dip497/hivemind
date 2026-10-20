@@ -45,16 +45,13 @@ describe("hive plugins, packages", () => {
   test("a package installs as one: --json names each member with its kind and permissions, and the list names its package", () => {
     const r = run("install", kit(), "--json");
     expect(r.json).toMatchObject({
-      ok: true,
-      data: {
-        id: "@acme/kit", name: "Kit", version: "1.0.0", on: false, replaced: null,
-        members: expect.arrayContaining([
-          expect.objectContaining({ kind: "tool", id: "@acme/prs" }),
-          expect.objectContaining({ kind: "widget", id: "@acme/dog" }),
-          expect.objectContaining({ kind: "view", id: "@acme/island", permissions: ["workspace:issues"] }),
-          expect.objectContaining({ kind: "agent-preset", id: "@acme/reviewer" }),
-        ]),
-      },
+      id: "@acme/kit", name: "Kit", version: "1.0.0", on: false, replaced: null,
+      members: expect.arrayContaining([
+        expect.objectContaining({ kind: "tool", id: "@acme/prs" }),
+        expect.objectContaining({ kind: "widget", id: "@acme/dog" }),
+        expect.objectContaining({ kind: "view", id: "@acme/island", permissions: ["workspace:issues"] }),
+        expect.objectContaining({ kind: "agent-preset", id: "@acme/reviewer" }),
+      ]),
     });
     expect(run("list").stdout).toMatch(/^off\s+widget:@acme\/dog\s+Dog\s+\[@acme\/kit 1\.0\.0, off\]$/m);
   }, 60_000);
@@ -62,16 +59,16 @@ describe("hive plugins, packages", () => {
   test("one plugin of a package is refused apart from it, exit 7, naming the package; the package is switched and removed whole", () => {
     expect(run("install", kit(), "--json").code).toBe(0);
     const removing = run("remove", "widget:@acme/dog");
-    expect([removing.code, removing.stderr]).toEqual([7, expect.stringContaining("[part_of_a_package] widget @acme/dog is part of the package @acme/kit: remove the whole package with `hive plugins remove @acme/kit`")]);
-    expect(run("enable", "widget:@acme/dog", "--json")).toMatchObject({ code: 7, json: { ok: false, code: "part_of_a_package", error: "widget @acme/dog is part of the package @acme/kit, which is off: switch the package on with `hive plugins enable @acme/kit`" } });
+    expect([removing.code, removing.stderr]).toEqual([7, expect.stringContaining("[PART_OF_A_PACKAGE] widget @acme/dog is part of the package @acme/kit: remove the whole package with `hive plugins remove @acme/kit`")]);
+    expect(run("enable", "widget:@acme/dog", "--json")).toMatchObject({ code: 7, json: { error: { code: "PART_OF_A_PACKAGE", message: "widget @acme/dog is part of the package @acme/kit, which is off: switch the package on with `hive plugins enable @acme/kit`" } } });
     const dog = path.join(tmp, "dog");
     fs.mkdirSync(dog);
     fs.writeFileSync(path.join(dog, "widget.json"), JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "woof" } }));
-    expect(run("install", dog, "--json")).toMatchObject({ code: 7, json: { code: "part_of_a_package", error: expect.stringContaining("is part of the package @acme/kit") } });
+    expect(run("install", dog, "--json")).toMatchObject({ code: 7, json: { error: { code: "PART_OF_A_PACKAGE", message: expect.stringContaining("is part of the package @acme/kit") } } });
 
-    expect(run("enable", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { package: "@acme/kit", enabled: true } } });
+    expect(run("enable", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { package: "@acme/kit", enabled: true } });
     expect(run("list").stdout).toMatch(/^on \s+widget:@acme\/dog\s+Dog\s+\[@acme\/kit 1\.0\.0\]$/m);
-    expect(run("remove", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { package: "@acme/kit", removed: expect.arrayContaining(["widget:@acme/dog", "tool:@acme/prs"]) } } });
+    expect(run("remove", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { package: "@acme/kit", removed: expect.arrayContaining(["widget:@acme/dog", "tool:@acme/prs"]) } });
     expect(run("list", "--kind", "widget").stdout).not.toContain("@acme/dog");
   }, 60_000);
 
@@ -90,7 +87,7 @@ describe("hive plugins, packages", () => {
     expect(updated.stdout).toContain("It is off: a change above needs you to trust it again. `hive plugins rollback @acme/kit` puts back 1.0.0.");
     expect(run("list").stdout).toMatch(/^off\s+view:@acme\/island\s+Island\s+\[@acme\/kit 2\.0\.0, off\]$/m);
 
-    expect(run("rollback", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { id: "@acme/kit", version: "1.0.0", on: true, from: "2.0.0" } } });
+    expect(run("rollback", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { id: "@acme/kit", version: "1.0.0", on: true, from: "2.0.0" } });
     expect(run("list").stdout).toMatch(/^on \s+view:@acme\/island\s+Island\s+\[@acme\/kit 1\.0\.0\]$/m);
   }, 60_000);
 
@@ -107,9 +104,9 @@ describe("hive plugins, packages", () => {
     fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("@acme/kit"), entry("@acme/other")] }));
     const hub = (...args: string[]) => hive(["plugins", ...args], { cwd: tmp, env: { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href } });
 
-    expect(hub("install", "@acme/other", "--json")).toMatchObject({ code: 1, json: { ok: false, error: expect.stringContaining(`says it is "@acme/kit", not @acme/other`) } });
+    expect(hub("install", "@acme/other", "--json")).toMatchObject({ code: 1, json: { error: { message: expect.stringContaining(`says it is "@acme/kit", not @acme/other`) } } });
     const got = hub("install", "@acme/kit", "--json");
-    expect(got.json).toMatchObject({ ok: true, data: { id: "@acme/kit", version: "1.0.0" } });
-    expect((got.json as { data: { members: Array<{ kind: string }> } }).data.members.map((m) => m.kind).sort()).toEqual(["agent-preset", "tool", "view", "widget"]);
+    expect(got.json).toMatchObject({ id: "@acme/kit", version: "1.0.0" });
+    expect((got.json as { members: Array<{ kind: string }> }).members.map((m) => m.kind).sort()).toEqual(["agent-preset", "tool", "view", "widget"]);
   }, 60_000);
 });

@@ -17,15 +17,6 @@ describe("provenance the package claims about itself", () => {
   });
 });
 
-describe("the one line that says what a view shows", () => {
-  const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
-  it("keeps a description, and refuses one that is not a line of text", () => {
-    const r = validateViewManifest({ ...base, description: "Every tile with its title." });
-    expect(r.ok && r.manifest.description).toBe("Every tile with its title.");
-    for (const bad of [42, "x".repeat(301)]) expect(validateViewManifest({ ...base, description: bad }).ok).toBe(false);
-  });
-});
-
 describe("the screens a view says it works on", () => {
   const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
   it("keeps `phone` as it says, says nothing of it when the view does not, and refuses anything but true or false", () => {
@@ -77,5 +68,23 @@ describe("what a plugin is for", () => {
     expect(category({ category: "git" })).toBe("git");
     expect(category({})).toBe("other");
     expect(category({ category: "games" })).toEqual(['"category" must be one of code, git, agents, productivity, monitoring, team, web, fun, other']);
+  });
+});
+
+describe("how a view is shown where views are listed", () => {
+  const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
+  it("keeps a one-line description and an .svg icon inside the package", () => {
+    const r = validateViewManifest({ ...base, description: "Your issues as columns.", icon: "assets/icon.svg" });
+    expect(r.ok && [r.manifest.description, r.manifest.icon]).toEqual(["Your issues as columns.", "assets/icon.svg"]);
+  });
+  it("refuses an icon outside the package or not an .svg, and a description of several lines or over 200 characters", () => {
+    const errors = (extra: object) => { const r = validateViewManifest({ ...base, ...extra }); return r.ok ? [] : r.errors; };
+    for (const icon of ["/etc/icon.svg", "../icon.svg", "a/../../icon.svg", "icon.png", "C:/icon.svg", ""]) {
+      expect(errors({ icon })).toEqual(['"icon" must be a relative path to an .svg file inside the package']);
+    }
+    for (const description of ["Line one\nline two", "x".repeat(201), "  "]) {
+      expect(errors({ description })).toEqual(['"description" must be one line of at most 200 characters']);
+    }
+    expect(errors({ description: "x".repeat(200) })).toEqual([]);
   });
 });

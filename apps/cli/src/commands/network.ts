@@ -18,7 +18,7 @@ import { NetworkProfiles, type NetworkProfile } from "@hivemind/workspace-host/n
 import { err, ok } from "../format.js";
 import { appData } from "@hivemind/core/app-data";
 import { hiveNetBin } from "../app-data.js";
-import { EXIT } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { duration } from "./share.js";
 
 function profiles(ctx: { json: boolean }): NetworkProfiles | null {

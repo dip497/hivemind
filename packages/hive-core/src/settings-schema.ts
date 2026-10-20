@@ -311,7 +311,12 @@ export interface AgentsSettings {
   declined: string[];
   /** Agents that came from the plugin catalog, so their page can say where they are from. */
   fromCatalog: string[];
+  /** When an agent or a program starts an agent: `stay` where the person is, the new tile marked
+   *  unread in Layers, or `go` to it. One the person starts is always gone to. */
+  whenAgentStartsAgent: WhenAgentStartsAgent;
 }
+export const WHEN_AGENT_STARTS_AGENT = ["stay", "go"] as const;
+export type WhenAgentStartsAgent = (typeof WHEN_AGENT_STARTS_AGENT)[number];
 /** Who you are to the people you work with (R3): the name and colour they see beside your cursor
  *  and your edits. Each is empty until chosen. */
 export interface ProfileSettings {
@@ -365,7 +370,7 @@ export const DEFAULT_SETTINGS: Settings = {
   plugins: { state: {} },
   // Empty = "the agent catalog's default" — hive-core does not depend on
   // @hivemind/agents; preferredAgent() turns an empty or unknown id into the first installed agent.
-  agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [] },
+  agents: { defaultAgent: "", autoInstall: true, declined: [], fromCatalog: [], whenAgentStartsAgent: "stay" },
   profile: { name: "", color: "" },
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
@@ -538,6 +543,8 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
       fromCatalog: (Array.isArray(agents.fromCatalog) ? agents.fromCatalog : base.agents.fromCatalog)
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
+      whenAgentStartsAgent: WHEN_AGENT_STARTS_AGENT.includes(agents.whenAgentStartsAgent as WhenAgentStartsAgent)
+        ? (agents.whenAgentStartsAgent as WhenAgentStartsAgent) : base.agents.whenAgentStartsAgent,
     },
     profile: profileOf(p.profile, base.profile),
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },

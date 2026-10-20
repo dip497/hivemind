@@ -136,6 +136,13 @@ describe("reading an index", () => {
     }
   });
 
+  test("a view, widget or tool carries its published .svg icon, up to the size HiveHub keeps", () => {
+    const icon = { image: `data:image/svg+xml;base64,${Buffer.from(`<svg>${" ".repeat(16_000)}</svg>`).toString("base64")}` };
+    expect([one({ ...view, icon }), one({ ...view, id: "@a/clock", type: "widget", icon })]).toMatchObject([{ icon }, { icon }]);
+    for (const bad of [{ image: `data:text/html;base64,${"A".repeat(5000)}` }, { image: `data:image/svg+xml;base64,${"A".repeat(40_000)}` }]) {
+      expect(one({ ...view, icon: bad })).toBe("its icon must be a small object");
+    }
+  });
 });
 
 test("a hub writes only the entries the app reads, and names the rest", () => {

@@ -9,13 +9,11 @@ export const cmd = (args: string[]): [string, string[]] => (process.env.HIVE_BIN
 
 export interface Run { code: number | null; stdout: string; stderr: string; json: unknown }
 function parse(status: number | null, stdout: string, stderr: string): Run {
-  let json: unknown = undefined;
-  // `--json` output is either one line (ctl) or a pretty-printed object (the
-  // top-level commands): try the whole stdout first, then the last line.
-  try { json = JSON.parse(stdout.trim()); } catch {
-    try { json = JSON.parse(stdout.trim().split("\n").pop() || ""); } catch { /* not json */ }
-  }
-  return { code: status, stdout, stderr, json };
+  // With `--json`, a result is the last line on stdout; a failure, `{"error":…}` on stderr.
+  const lastJson = (text: string): unknown => {
+    try { return JSON.parse(text.trim().split("\n").pop() || ""); } catch { return undefined; }
+  };
+  return { code: status, stdout, stderr, json: lastJson(stdout) ?? lastJson(stderr) };
 }
 type Opts = { cwd?: string; env?: Record<string, string | undefined> };
 

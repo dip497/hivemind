@@ -20,7 +20,7 @@ beforeEach(() => {
 afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 interface Problem { step: string; file?: string; line?: number; message: string; member?: string }
-interface Report { ok: boolean; data: { id: string; steps: Record<string, string>; problems: Problem[] } }
+interface Report { id: string; steps: Record<string, string>; problems: Problem[] }
 
 const manifest = () => path.join(tmp, "kit", "hivemind-package.json");
 /** The line of the package's manifest that names `path`, as a person reading the file counts. */
@@ -37,14 +37,14 @@ describe("hive plugins, writing a package", () => {
     fs.symlinkSync(fs.realpathSync(path.join(REPO, "node_modules/esbuild")), path.join(modules, "esbuild"));
 
     const r = run("check", "kit", "--json");
-    expect([r.code, (r.json as Report).data]).toEqual([0, expect.objectContaining({
+    expect([r.code, (r.json as Report)]).toEqual([0, expect.objectContaining({
       id: "@ada/kit", problems: [], steps: { manifest: "ok", "tool tools/prs": "ok", "view views/board/dist": "ok" },
     })]);
 
     const installed = run("install", "./kit", "--json");
-    expect(installed.json).toMatchObject({ ok: true, data: { id: "@ada/kit", on: false, members: [
+    expect(installed.json).toMatchObject({ id: "@ada/kit", on: false, members: [
       expect.objectContaining({ kind: "tool", id: "@ada/prs" }), expect.objectContaining({ kind: "view", id: "@ada/board" }),
-    ] } });
+    ] });
   }, 240_000);
 
   test("check reports a misspelt member path and another owner's id at the line naming each, and a member's own manifest problem at its line", () => {
@@ -61,7 +61,7 @@ describe("hive plugins, writing a package", () => {
 
     const r = run("check", "kit", "--json");
     expect(r.code).toBe(1);
-    expect((r.json as Report).data.problems).toEqual([
+    expect((r.json as Report).problems).toEqual([
       expect.objectContaining({ step: "manifest", file: "hivemind-package.json", line: lineNaming("widgets/dgo"), member: "widgets/dgo", message: expect.stringContaining("there is no folder widgets/dgo") }),
       expect.objectContaining({ step: "manifest", file: "hivemind-package.json", line: lineNaming("widgets/cat"), member: "widgets/cat", message: expect.stringContaining("@bob/cat is not @ada's") }),
       expect.objectContaining({ step: "manifest", file: "views/owl/hivemind-view.json", line: colourLine, member: "views/owl/dist", message: 'unknown field "colour"' }),

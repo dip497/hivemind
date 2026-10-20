@@ -63,7 +63,7 @@ export const migrationsCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const roots = await migrationsStatus();
-      return ok(ctx, roots, () => render(roots));
+      return ok(ctx, { roots }, () => render(roots));
     } catch (e) {
       if (e instanceof LedgerUnreadableError) return err(ctx, "ledger_unreadable", e.message);
       throw e;

@@ -10,7 +10,7 @@ Using the hive commands on this page and \`hive <command> --help\`, write a shel
 
 1. Check the setup: \`hive --version\` works, and \`hive ctl agents --json\` exits 0 inside my project. Exit 3 means neither the app nor \`hive host\` runs: ask me to open the project with \`hivemind <folder>\`. See which agents can start with \`hive agents list --found\`.
 2. Ask me for the task, the list of items (files, packages, questions), and which agent to use.
-3. For each item: \`hive ctl spawn --agent <agent> --prompt "<task> for <item>" --name "<item>" --json\` prints \`{"tile": …}\`; keep the tile ids. Then for each tile: \`hive ctl read <tile> --timeout 10m --json\`. Handle the exit codes in the table on this page: 4 read again; 5 the tile was closed; 7 the agent is asleep or cannot say when it finishes; 8 it waits on an answer (show me its question from \`hive ctl agents --json\` and stop).
+3. For each item: \`hive ctl spawn --agent <agent> --prompt "<task> for <item>" --name "<item>" --json\` prints \`{"tile": …}\`; keep the tile ids. Then for each tile: \`hive ctl read <tile> --timeout 10m --json\`. Handle the exit codes in the table on this page: 4 read again; 5 the tile was closed; 7 the agent is idle or cannot say when it finishes; 8 it waits on an answer; 9 it is asleep (wake it with \`hive ctl wake <tile>\`) (show me its question from \`hive ctl agents --json\` and stop).
 4. Print each item with its reply, then close the tiles with \`hive ctl close <tile>\` unless I ask to keep them.
 5. Run it on two small items first and show me the output.
 
@@ -19,7 +19,7 @@ If a step needs anything only I can do, such as a login, ask me and wait.
 
 ## How `hive` works
 
-- `--json` prints one line of machine-readable output. Errors are `{"ok":false,"code":"…","message":"…"}`.
+- `--json` prints the result as one JSON object on one line on stdout. A failure is `{"error":{"code":"…","message":"…","fix":"…"}}` on stderr (`fix` when there is one), and exits non-zero: `hive <command> --help` ends with the exit codes. An unknown flag is a usage error (exit 2).
 - The issue commands edit files, and work without the app. `hive ctl` drives the running app or `hive host`.
 - In an agent's terminal, `hive ctl` acts as that agent in its workspace. Elsewhere it acts as you: in the workspace `--repo` names, else the open one your folder is in, else the only one open. With `HIVE_DRIVE_TOKEN` set, it acts as that program ([API](/api)).
 - You name a workspace by its folder, its folder's name, its id (four characters or more) or its issue prefix. A name two workspaces share is refused, and both are listed.
@@ -36,8 +36,9 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `part_of_a_package` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing; `tile look` of a tile something is drawn over; `hive plugins` asked to install, remove or switch on one plugin of a package apart from it |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
+| 9 | `ASLEEP` | the agent is asleep: `send`, `keys`, `read` and `connect` to it are refused (a `report` to it waits in its inbox); the fix is `hive ctl wake <tile>` |
 | 1 | `FAILED` | other |
 
 ### `hive ctl read`
@@ -49,8 +50,9 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 0 | The agent replied. | Use the reply it printed. |
 | 4 | It is still working. | Run `read` again. |
 | 5 | Its tile was closed. | Start it again if you still need it. |
-| 7 | It is asleep. | Wake it with `hive ctl wake <tile>`. |
+| 7 | It was sent nothing new, and is idle. | Send it a task. |
 | 8 | It stopped to ask you something. | Answer it, then `read` again. |
+| 9 | It is asleep. | Wake it with `hive ctl wake <tile>`. |
 
 ## Issues
 
@@ -60,6 +62,7 @@ To track work as Markdown files in `.hivemind/`. These work without the app. Gui
 hive init --prefix MYP [--no-agentic]   # create tracker (+ agentic stack by default)
 hive init                               # refresh the agentic stack
 hive add skill                          # refresh the skills only
+hive guide agents                       # print the agent guide this hive ships (also work, browser, workflow)
 
 hive new "Title" [--label l …] [--parent ID] [--state backlog] [--github N]
           [--assignee claude --assignee-type agent] [--assignee-model m]
@@ -108,6 +111,7 @@ hive ctl whoami                         # which app (hivemind or hivemind-dev), 
 hive ctl agents [--watch] [--session <id>]
                                         # the workspace's agents, their state and what each waits on;
                                         # --session: the one in that session (exit 5: none)
+hive ctl tiles                          # every tile: agents, terminals, tools, browsers
 hive ctl frames                         # frames an agent may start in: id, name, machine
 hive ctl frame add --folder /srv/web [--machine build] [--name web]
                                         # a frame on that folder, on a saved machine or one of
@@ -121,8 +125,8 @@ hive ctl sessions [agent] [--cwd dir] [--limit 100]
                                         # past sessions in a folder, to --resume
 hive ctl send <tileId> "text" [--interrupt]   # after its turn; --interrupt: stop the turn first
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
-hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait
-                                        # exit 4 timeout, 5 closed, 7 asleep, 8 waits on an answer
+hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait; idle with nothing new: exit 7
+                                        # exit 4 timeout, 5 closed, 7 idle, 8 waits on an answer, 9 asleep
 hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once (--wait at most 10m)
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
@@ -131,9 +135,9 @@ hive ctl tile look <tileId> [--out f.png] [--json]  # brought into view, waited 
                                         # {tile, state, drew, console, png} (png: the picture's path)
 hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is not open
 hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
-hive ctl wake [tile|frame]              # back in its conversation; exit 7 if nothing woke
+hive ctl wake [tile|frame]              # back in its conversation; awake already is exit 0; exit 7 if nothing woke for another reason
 hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing
-hive ctl connect <src> <dst>            # pipe src's replies into dst's input
+hive ctl connect <src> <dst>            # src's finished replies go to dst's inbox; dst is told by one line typed into it, which starts a turn
 hive ctl disconnect <src> [<dst>]
 hive ctl open-tool <owner/name/tool> [--frame f] [--url https://…]
                                         # open a tile of a tool that is switched on
@@ -141,7 +145,9 @@ hive ctl view emit <name> ['{"json":1}' | -] [--view id]
                                         # a named event to the view shown
 ```
 
-`hive ctl agents --json` prints `{"seq": 3, "agents": [ … ]}`: `seq` is the agent feed's position (`--watch` prints the events after it), and each agent is `{"workspace", "name", "tile", "agent", "program"?, "state", "since", "machine", "waiting"?, "parent"?, "interrupt"?, "conversation"?, "session"?}`. `session` appears once the agent's hooks have said it; `--session <id>` also finds a tile by the session the app tracks to resume it.
+`hive ctl agents --json` prints `{"seq": 3, "agents": [ … ]}`: `seq` is the agent feed's position (`--watch` prints the events after it), and each agent is `{"tile", "name", "agent"?, "workspace": {"id", "name"}, "state", "since", "machine", "waiting"?, "parent"?, "interrupt"?, "conversation"?, "session"?}`: `name` is the tile's name (`spawn --name`), `agent` the program it runs (`spawn --agent`), and `state` is `asleep` for one put to sleep.
+
+`hive ctl tiles --json` prints `{"tiles": [ … ]}`, every tile of the workspace in order, each `{"tile", "kind", "name", "frame", "state"?, "agent"?, "plugin"?, "tool"?}`. `kind` is `agent`, `terminal` or `tool`, or the tile's own kind when it is none of those; an agent has its `state` and `agent`, a tool its `plugin` and `tool` ids. `frame` is null for a tile in no frame. `session` appears once the agent's hooks have said it; `--session <id>` also finds a tile by the session the app tracks to resume it.
 
 `hive ctl read` gives an agent's reply to its turn, as clean text. `hive ctl stream --snapshot` gives the last lines its terminal printed, raw: escape codes stripped, but spinners, boxes and redraws left in. Read a reply with `read`; look at a screen with `stream`.
 
@@ -232,6 +238,8 @@ hive agents remove <id>                 # removes the agent from this machine; i
 
 A plugin is named by its id. Where two kinds have the same id, name it as `<kind>:<id>`, as
 `hive plugins list` prints it (`view:board`).
+
+`enable`, `disable`, `set`, `reset`, choosing `workspaces`, and `hive config set plugins.…` are the person's to run. From an agent's tile or with a program's token they are refused (`PERSON_ONLY`, exit 6), saying what to ask the person to run.
 
 ## API tokens
 

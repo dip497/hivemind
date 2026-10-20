@@ -237,6 +237,12 @@ describe("manifest validation refuses what it cannot back", () => {
     bad({ steer: "yes" }, /steer must be true or false/);
   });
 
+  test("an agent that attaches an image whose path is pasted alone says so, and anything but a flag is refused at load", () => {
+    expect(defFromManifest({ ...base, pastedImages: true }).pastedImages).toBe(true);
+    expect(defFromManifest(base).pastedImages).toBeUndefined();
+    bad({ pastedImages: "yes" }, /pastedImages must be true or false/);
+  });
+
   test("the keys that interrupt the agent's turn are carried as written, and a list that cannot be typed is refused at load", () => {
     expect(defFromManifest({ ...base, interrupt: ["escape"] }).interrupt).toEqual(["escape"]);
     expect(defFromManifest(base).interrupt).toBeUndefined();

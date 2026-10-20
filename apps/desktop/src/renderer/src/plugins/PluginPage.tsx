@@ -17,6 +17,7 @@ import { AgentActions, AgentMark, AgentPage } from "../settings-agents";
 import { ViewActions, ViewMark, ViewPage } from "../settings-views";
 import { ToolActions, ToolIcon, ToolPage } from "../settings-tools";
 import { WidgetIcon } from "./WidgetIcon";
+import { catalogImage } from "./mask-icon";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { SettingsForm } from "./SettingsForm";
@@ -129,7 +130,7 @@ function PartOf({ p }: { p: PluginRecord }) {
 /** Its own mark, as the rest of the app draws it. */
 function PluginMark({ p }: { p: PluginRecord }) {
   const widget = useWidgetPackages().find((x) => x.id === p.id);
-  if (!p.installed) return p.kind === "agent" && p.catalog ? <CatalogMark entry={p.catalog} /> : <LayoutGrid size={20} />;
+  if (!p.installed) return p.catalog && (p.kind === "agent" || catalogImage(p.catalog.icon)) ? <CatalogMark entry={p.catalog} /> : <LayoutGrid size={20} />;
   if (p.kind === "agent") return <AgentMark id={p.id} />;
   if (p.kind === "view") return <ViewMark id={p.id} />;
   if (p.kind === "tool") return <ToolIcon pluginId={p.id} size={20} />;

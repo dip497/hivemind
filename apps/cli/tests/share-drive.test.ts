@@ -55,7 +55,7 @@ afterAll(() => {
 describe.skipIf(!unix)("hive share/people/join on the drive socket", () => {
   test("people are listed and answered as the person, in the host's JSON", async () => {
     const list = await hive(["people", "list", "--json"], { env: env(), cwd: repo });
-    expect(list.json).toEqual({ ok: true, data: [{ person: "p-guest", name: "Guest", role: "edit", present: true }] });
+    expect(list.json).toEqual({ people: [{ person: "p-guest", name: "Guest", role: "edit", present: true }] });
     const allow = await hive(["people", "allow", "3", "-w", "team", "--json"], { env: env() });
     expect(allow.code).toBe(1); // not waiting
     expect(asked.at(-1)).toEqual({ method: "people.answer", params: [repo, 3, true], actor: { kind: "person" } });
@@ -63,7 +63,7 @@ describe.skipIf(!unix)("hive share/people/join on the drive socket", () => {
 
   test("join asks the host the link names, and says what it answered", async () => {
     const r = await hive(["join", "hivemind://join/x", "--json"], { env: env() });
-    expect(r.json).toEqual({ ok: true, data: { ok: true, role: "edit" } });
+    expect(r.json).toEqual({ ok: true, role: "edit" });
     expect(asked.at(-1)).toEqual({ method: "host.join", params: ["hivemind://join/x"], actor: { kind: "person" } });
   });
 
@@ -72,15 +72,15 @@ describe.skipIf(!unix)("hive share/people/join on the drive socket", () => {
     const n = asked.length;
     for (const args of [["people", "list", "-w", "team"], ["join", "hivemind://join/x"]]) {
       const r = await hive([...args, "--json"], { env: asAgent });
-      expect(r.json).toMatchObject({ ok: false, code: "refused" });
+      expect(r.json).toMatchObject({ error: { code: "REFUSED" } });
     }
     expect(asked.slice(n).map((a) => a.method)).toEqual(["host.status"]);
   });
 
   test("refused a join, an agent is told who joins and how: the person, with `hive join` in a terminal of their own", async () => {
     const r = await hive(["join", "hivemind://join/x", "--json"], { env: env(sock, tileToken(TOKEN, "hm:w-1")) });
-    expect(r.json).toMatchObject({ ok: false, code: "refused" });
-    expect((r.json as { error: string }).error).toContain("run `hive join <link>` in a terminal of your own, not from an agent's tile");
+    expect(r.json).toMatchObject({ error: { code: "REFUSED" } });
+    expect((r.json as { error: { message: string } }).error.message).toContain("run `hive join <link>` in a terminal of your own, not from an agent's tile");
   });
 
   test("a name two of the host's workspaces answer to is refused by share, people, grant and ctl alike, each listed with its id and folder; its id names one", async () => {
@@ -93,13 +93,13 @@ describe.skipIf(!unix)("hive share/people/join on the drive socket", () => {
     }
     expect(asked.slice(n).map((a) => a.method).filter((m) => m !== "host.status")).toEqual([]);
     const byId = await hive(["share", "ws-bbbb", "--json"], { env: env(), cwd: dir });
-    expect(byId.json).toMatchObject({ ok: true, data: { workspace: twins[1]!.repo, link: "hivemind://join/manageark" } });
+    expect(byId.json).toMatchObject({ workspace: twins[1]!.repo, link: "hivemind://join/manageark" });
   });
 
   test("with neither the app nor hive host running, it says so", async () => {
     const r = await hive(["people", "list", "--json"], { env: env(path.join(dir, "none.sock")) });
     expect(r.code).toBe(3);
-    expect(r.json).toMatchObject({ ok: false, code: "host_not_running" });
-    expect(String((r.json as { error: string }).error)).toMatch(/neither the hivemind app nor `hive host` is running/);
+    expect(r.json).toMatchObject({ error: { code: "HOST_NOT_RUNNING" } });
+    expect(String((r.json as { error: { message: string } }).error.message)).toMatch(/neither the hivemind app nor `hive host` is running/);
   });
 });

@@ -89,6 +89,7 @@ import { useSpawn } from "./useSpawn";
 import { useFrameOps } from "./useFrameOps";
 import { useAgentAwareness } from "./useAgentAwareness";
 import { markBackgroundTile, unmarkBackgroundTile } from "./worker-tiles";
+import type { TileOpened } from "@hivemind/workspace-api/agents";
 import { useCanvasShortcuts } from "./useCanvasShortcuts";
 import { useNodeDragStop } from "./useNodeDragStop";
 import { GitCommitModal } from "./GitCommitModal";
@@ -840,12 +841,12 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   });
   // Tiles the control plane opens, which its host starts: announced before they reach the layout
   // (whether to bring each forward), then laid out as they arrive.
-  const arrivals = useRef(new Map<string, { background: boolean; near?: string }>());
+  const arrivals = useRef(new Map<string, Pick<TileOpened, "background" | "near" | "by">>());
   useEffect(() => {
-    const off = window.hive.onHcpSpawned(({ tileId, repo, background, near }) => {
+    const off = window.hive.onHcpSpawned(({ tileId, repo, background, near, by }) => {
       if (repo !== persistKey) return;
       if (background) markBackgroundTile(tileId);
-      arrivals.current.set(tileId, { background, near });
+      arrivals.current.set(tileId, { background, near, by });
     });
     return () => { off(); arrivals.current.clear(); };
   }, [persistKey]);

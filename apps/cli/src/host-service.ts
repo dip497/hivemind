@@ -9,7 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { configDir } from "@hivemind/core/app-data";
-import { EXIT } from "./hcp.js";
+import { EXIT } from "./exit-codes.js";
 
 export const UNIT = "hive-host.service";
 

@@ -5,7 +5,8 @@
  * CLI's, with their exit codes.
  */
 import { ApiError, connect, type Identity } from "hivemind-api";
-import { HcpCliError, exitCodeFor } from "./hcp.js";
+import { HcpCliError } from "./hcp.js";
+import { exitCodeFor } from "./exit-codes.js";
 
 export interface Drive {
   as: Identity;

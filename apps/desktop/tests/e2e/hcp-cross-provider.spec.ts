@@ -76,8 +76,8 @@ function hiveLater(args: string[]): Promise<{ code: number | null; json: any }> 
 /** What an agent's `hive` is given: the token of its own tile. */
 const asAgent = (tile: string) => ({ HCP_TOKEN: tileToken(token, `hm:${tile}`) });
 /** The workspace's agents, as `hive ctl agents` lists them. */
-const agents = (): Array<{ tile: string; agent: string; parent?: string }> => hive(["ctl", "agents", "--json"]).json.agents;
-const nameOf = (tile: string) => agents().find((a) => a.tile === tile)?.agent;
+const agents = (): Array<{ tile: string; name: string; parent?: string }> => hive(["ctl", "agents", "--json"]).json.agents;
+const nameOf = (tile: string) => agents().find((a) => a.tile === tile)?.name;
 
 /** The processes running for a tile: an agent and what it starts carry the tile's id. */
 function processesOf(tileId: string): string[] {

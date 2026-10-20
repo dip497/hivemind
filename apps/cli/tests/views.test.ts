@@ -15,11 +15,11 @@ describe("hive plugins, views", () => {
 
     let r = hive(["plugins", "list", "--kind", "view", "--json"], { cwd: tmp, env });
     expect(r.code).toBe(0);
-    expect((r.json as { data: unknown[] }).data).toEqual([]);
+    expect(r.json).toEqual({ plugins: [] });
 
     r = hive(["plugins", "install", src, "--json"], { cwd: tmp, env });
     expect(r.code).toBe(0);
-    expect((r.json as { data: { members: Array<{ dir: string }> } }).data.members[0]!.dir.startsWith(path.join(tmp, "xdg", "hivemind", "packages", "store", "orbit") + path.sep)).toBe(true);
+    expect((r.json as { members: Array<{ dir: string }> }).members[0]!.dir.startsWith(path.join(tmp, "xdg", "hivemind", "packages", "store", "orbit") + path.sep)).toBe(true);
 
     r = hive(["plugins", "list", "--kind", "view"], { cwd: tmp, env });
     expect(r.stdout).toMatch(/^on\s+view:orbit\s+Orbit$/m);
@@ -30,13 +30,13 @@ describe("hive plugins, views", () => {
     fs.writeFileSync(path.join(bad, "index.html"), "");
     r = hive(["plugins", "install", bad, "--json"], { cwd: tmp, env });
     expect(r.code).toBe(1);
-    expect(r.json).toMatchObject({ ok: false, code: "invalid_view" });
-    expect((r.json as { error: string }).error).toMatch(/unknown permission "net:fetch"/);
+    expect(r.json).toMatchObject({ error: { code: "INVALID_VIEW" } });
+    expect((r.json as { error: { message: string } }).error.message).toMatch(/unknown permission "net:fetch"/);
 
     r = hive(["plugins", "remove", "orbit", "--json"], { cwd: tmp, env });
     expect(r.code).toBe(0);
     r = hive(["plugins", "remove", "view:orbit", "--json"], { cwd: tmp, env });
-    expect(r.json).toMatchObject({ ok: false, error: expect.stringContaining("there is no view \"orbit\"") });
+    expect(r.json).toMatchObject({ error: { message: expect.stringContaining("there is no view \"orbit\"") } });
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -44,7 +44,7 @@ describe("hive plugins, views", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-views-new-"));
     const env = { XDG_CONFIG_HOME: path.join(tmp, "xdg") };
     let r = hive(["plugins", "new", "view", "pulse", "--owner", "@Dip497", "--json"], { cwd: tmp, env });
-    expect(r.json).toMatchObject({ ok: true, data: { id: "@dip497/pulse" } });
+    expect(r.json).toMatchObject({ id: "@dip497/pulse" });
     const dir = path.join(tmp, "pulse");
     expect(JSON.parse(fs.readFileSync(path.join(dir, "hivemind-view.json"), "utf8")).id).toBe("@dip497/pulse");
     expect(fs.readFileSync(path.join(dir, "build.mjs"), "utf8")).toContain('external: ["@hivemind/view-sdk"]');
@@ -55,12 +55,12 @@ describe("hive plugins, views", () => {
     expect(fs.readFileSync(path.join(dir, "types/view-sdk/testing.ts"), "utf8")).toContain("export function fakeHost(");
     // The manifest it writes is one the app installs.
     r = hive(["plugins", "install", dir, "--json"], { cwd: tmp, env });
-    expect(r.json).toMatchObject({ ok: true, data: { id: "@dip497/pulse" } });
+    expect(r.json).toMatchObject({ id: "@dip497/pulse" });
 
-    expect(hive(["plugins", "new", "view", "pulse", "--owner", "dip497", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: false, code: "exists" });
-    expect(hive(["plugins", "new", "view", "Bad--name", "--owner", "dip497", "--json"], { cwd: tmp, env }).json).toMatchObject({ ok: false, code: "bad_name" });
+    expect(hive(["plugins", "new", "view", "pulse", "--owner", "dip497", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "EXISTS" } });
+    expect(hive(["plugins", "new", "view", "Bad--name", "--owner", "dip497", "--json"], { cwd: tmp, env }).json).toMatchObject({ error: { code: "BAD_NAME" } });
     // No login to scope it with, and none given: say how, rather than invent one.
-    expect(hive(["plugins", "new", "view", "other", "--json"], { cwd: tmp, env: { ...env, PATH: path.dirname(process.execPath) } }).json).toMatchObject({ ok: false, code: "no_owner" });
+    expect(hive(["plugins", "new", "view", "other", "--json"], { cwd: tmp, env: { ...env, PATH: path.dirname(process.execPath) } }).json).toMatchObject({ error: { code: "NO_OWNER" } });
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 });

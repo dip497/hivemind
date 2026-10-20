@@ -4,7 +4,7 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import { err, ok } from "../format.js";
-import { EXIT } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { defaultSocket, listSessions, MAX_SOCKET_PATH, ping } from "../pty-client.js";
 import { compiledSelf } from "../remote.js";
 import { hiveNetBin } from "../app-data.js";

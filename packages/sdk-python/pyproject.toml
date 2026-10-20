@@ -17,7 +17,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dip497/hivemind"
+Homepage = "https://hivemind.griiken.com/guide/api-connect/"
+Documentation = "https://hivemind.griiken.com/guide/api-methods/"
+Issues = "https://github.com/dip497/hivemind/issues"
 Source = "https://github.com/dip497/hivemind/tree/main/packages/sdk-python"
 
 [tool.setuptools.dynamic]

@@ -8,11 +8,10 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { parseToolManifest, toolOfFolder, type ToolPackage } from "./tool-format.js";
 import { installedMembers } from "./installed-packages.js";
+import { readSvgIcon } from "./svg-icon.js";
 
 export { TOOL_MANIFEST } from "./tool-format.js";
 import { TOOL_MANIFEST } from "./tool-format.js";
-
-const ICON_MAX = 32 * 1024;
 
 /** The package in `dir`. `folderId` is the id its folder stands for, if any. */
 export async function readToolPackage(dir: string, folderId: string | null, source: "app" | "you" = "you"): Promise<ToolPackage> {
@@ -22,8 +21,8 @@ export async function readToolPackage(dir: string, folderId: string | null, sour
   if (!(await stat(path.join(dir, pkg.entry)).catch(() => null))?.isFile()) throw new Error(`its entry ${pkg.entry} is missing`);
   for (const tile of Object.values(pkg.tiles)) {
     if (!tile.icon) continue;
-    const svg = await readFile(path.join(dir, tile.icon)).catch(() => null);
-    if (svg && svg.length <= ICON_MAX) tile.icon = `data:image/svg+xml;base64,${svg.toString("base64")}`;
+    const icon = await readSvgIcon(dir, tile.icon);
+    if (icon) tile.icon = icon;
     else delete tile.icon;
   }
   return pkg;
