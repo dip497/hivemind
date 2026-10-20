@@ -57,29 +57,27 @@ export function socketAt(sock: string): () => Promise<Duplex> {
   });
 }
 
-/** The protocol of the daemon `connect` reaches: null when none answers, 0 when it names none. */
-export async function daemonProtocol(connect: () => Promise<Duplex>, timeoutMs = 1000): Promise<number | null> {
+/** The protocol of the daemon `connect` reaches: null when none is running, 0 when it names none.
+ *  Throws when one is running but does not answer in `answerMs`: a busy daemon is still there. */
+export async function daemonProtocol(connect: () => Promise<Duplex>, answerMs = ANSWER_MS): Promise<number | null> {
   let s: Duplex;
   try { s = await connect(); } catch { return null; }
   const l = line(s);
   try {
-    return await l.ask({ t: "ping", reqId: "protocol" }, (m) => (m.t === "pong" ? m.protocol ?? 0 : undefined), timeoutMs);
-  } catch {
-    return null;
+    return await l.ask({ t: "ping", reqId: "protocol" }, (m) => (m.t === "pong" ? m.protocol ?? 0 : undefined), answerMs);
   } finally {
     l.end();
   }
 }
 
-/** The sessions of the daemon `connect` reaches; none when no daemon answers, and none is started. */
-export async function daemonSessions(connect: () => Promise<Duplex>, timeoutMs = 2000): Promise<SessionInfo[]> {
+/** The sessions of the daemon `connect` reaches; none when no daemon is running, and none is
+ *  started. Throws when one is running but does not answer in `answerMs`. */
+export async function daemonSessions(connect: () => Promise<Duplex>, answerMs = 2000): Promise<SessionInfo[]> {
   let s: Duplex;
   try { s = await connect(); } catch { return []; }
   const l = line(s);
   try {
-    return await l.ask({ t: "list", reqId: "sessions", detail: true }, (m) => (m.t === "sessions" ? m.detail ?? [] : undefined), timeoutMs);
-  } catch {
-    return [];
+    return await l.ask({ t: "list", reqId: "sessions", detail: true }, (m) => (m.t === "sessions" ? m.detail ?? [] : undefined), answerMs);
   } finally {
     l.end();
   }
@@ -114,7 +112,7 @@ export interface Retired {
 }
 
 /** Put every running session of the daemon `connect` reaches to sleep once no agent is mid-turn,
- *  then stop that daemon. `waiting` hears the sessions it waits on, and [] once it waits on none; `now` ends
+ *  then stop that daemon; throws when it does not stop. `waiting` hears the sessions it waits on, and [] once it waits on none; `now` ends
  *  the wait, ending those turns. */
 export async function retireDaemon(connect: () => Promise<Duplex>, o: { waiting: (ids: string[]) => void; now: Promise<void> }): Promise<Retired> {
   const l = line(await connect());
@@ -145,7 +143,8 @@ export async function retireDaemon(connect: () => Promise<Duplex>, o: { waiting:
       const r = await l.ask({ t: "sleep", reqId: `sleep:${s.id}`, id: s.id }, (m) => (m.t === "slept" && m.id === s.id ? m : undefined)).catch(() => null);
       if (r && !r.error) asleep.push(s); else ended.push(s.id);
     }));
-    await shutDown(l, ANSWER_MS);
+    // Going on would connect the next sessions to this daemon, which speaks another protocol.
+    if (!(await shutDown(l, ANSWER_MS))) throw new Error(`the old terminal daemon is still running after ${ANSWER_MS / 1000}s: quit Hivemind and run hive daemon stop`);
     return { asleep, ended };
   } finally {
     l.end();

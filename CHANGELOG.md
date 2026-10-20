@@ -12,6 +12,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A terminal or agent that fails to start says why ("its daemon did not answer in time", or the daemon's own error) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.
 - Agents started while the computer is busy get your shell's PATH and keys: a login shell slow to answer at startup is asked again in the background instead of being replaced by another shell for the rest of the session.
 
+- After an update, a background process too busy to answer quickly is now still replaced when it speaks an older protocol, and the app says so when it will not stop, instead of carrying on with it.
+- Quitting while the background process is busy now asks what to do instead of quitting as if nothing ran, and "Stop everything" now always stops it.
+- Model and option lists that took too long to read from an agent's CLI are read again next time instead of staying empty until the app restarts.
 - Terminals and agents slow to start, as when the app comes back after an update with many open, now open instead of saying they are not running on their machine.
 
 ## [2026.10.4] — 2026-10-20
