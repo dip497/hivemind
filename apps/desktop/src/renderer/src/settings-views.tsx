@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
-import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { PluginRow, type ListedRow } from "./plugins/PluginList";
+import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { useHubDescription } from "./plugins/library";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
@@ -18,27 +19,30 @@ export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:rel
 
 /** The views on the Plugins page: the one in use says so; one off or that cannot load is listed
  *  from its package, so it can be opened and switched back on. */
-export function ViewsSection({ matches }: { matches: (text: string) => boolean }) {
+/** The views you have, as rows of the Plugins page, each under its manifest's category; one that
+ *  comes with the app says none, so it is under Other. */
+export function useViewRows(matches: (text: string) => boolean): ListedRow[] {
   const mode = resolveViewId(useViewMode()) ?? "canvas";
   const report = useCommunityReport();
   const hub = useHubDescription();
   useEffect(rescan, []);
   const on = useViews().filter((v) => matches(`${v.label} ${v.id} ${v.hint}`));
   const off = report.packages.filter((p) => report.refused[p.id] && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
-  const count = on.length + off.length;
+  const category = (id: string): PluginCategory => report.packages.find((p) => p.id === id)?.manifest?.category ?? "other";
   // A package says what it does only through HiveHub; a built-in view says it in its hint.
   const about = (id: string): string | undefined => report.packages.some((x) => x.id === id) ? hub("view", id) : undefined;
-  if (!count) return null;
-  return <PluginGroup kind="view" count={count} foot={<p>⌘E switches between the views that are on.</p>}>
-    {on.map((v) => <PluginRow key={v.id} kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} />)}
-    {off.map((p) => {
+  return [
+    ...on.map((v): ListedRow => ({ key: `view:${v.id}`, kind: "view", category: category(v.id),
+      row: <PluginRow kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} /> })),
+    ...off.map((p): ListedRow => {
       const why = report.refused[p.id]!;
       const switchedOff = why === "disabled in Settings";
-      return <PluginRow key={p.id} kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
-        line={switchedOff ? about(p.id) ?? "" : why}
-        state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} />;
-    })}
-  </PluginGroup>;
+      return { key: `view:${p.id}`, kind: "view", category: category(p.id),
+        row: <PluginRow kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
+          line={switchedOff ? about(p.id) ?? "" : why}
+          state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} /> };
+    }),
+  ];
 }
 
 /** A view's own mark; one that cannot load yet is a puzzle piece. */

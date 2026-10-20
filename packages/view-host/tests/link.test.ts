@@ -225,9 +225,9 @@ function fakeActivity() {
 
 test("1.3: hello features list only what is wired; status carries since", () => {
   const bare = harness();
-  assert.deepEqual(bare.link.features, ["invoke", "surfaces"]);
+  assert.deepEqual(bare.link.features, ["invoke", "surfaces", "sleep"]);
   const h = harness([], ["t1"], { sinceOf: (id) => (id === "t1" ? { since: 42, exact: false } : undefined), history: async () => ({}) as never });
-  assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces"]);
+  assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces", "sleep"]);
   h.link.handle({ type: "ready", v: 1 });
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("question", {});
@@ -321,7 +321,7 @@ test("1.4: features; a status carries the agent's own, and a change in it alone 
   let push: (s: unknown) => void = () => {};
   const h = harness([], ["t1"], { agentStatus: (_id, cb) => { push = cb as never; cb({ state: "working", subagents: 0, background: 0, compacting: false, source: "hooks" }); return () => {}; } });
   h.link.handle({ type: "ready", v: 1 });
-  assert.deepEqual(h.link.features, ["agentStatus", "invoke", "surfaces"]);
+  assert.deepEqual(h.link.features, ["agentStatus", "invoke", "surfaces", "sleep"]);
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("working", {});
   push({ state: "waiting", waitingFor: "permission", subagents: 0, background: 0, compacting: false, source: "hooks" });
@@ -405,6 +405,44 @@ test("1.4: spawnAgent with a prompt needs workspace:prompt and a confirm; resume
   assert.deepEqual(h.calls, ['spawnAgent("claude","f1",{"prompt":"sent one"})', 'spawnAgent("claude","f1",{"resume":"s1"})']);
 });
 
+test("1.14: wakeAgent and sleepAgent need workspace:spawn and a tile that is there", () => {
+  const none = harness([], ["t1"]);
+  none.link.handle({ type: "ready", v: 1 });
+  none.link.handle({ type: "command", name: "wakeAgent", args: ["t1"] });
+  none.link.handle({ type: "command", name: "sleepAgent", args: ["t1"] });
+  assert.deepEqual([none.calls, none.link.stats.refused], [[], 2]);
+  const h = harness(["workspace:spawn"], ["t1"]);
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "command", name: "sleepAgent", args: ["t1"] });
+  h.link.handle({ type: "command", name: "wakeAgent", args: ["t1"] });
+  h.link.handle({ type: "command", name: "wakeAgent", args: ["ghost"] });
+  assert.deepEqual(h.calls, ['sleepAgent("t1")', 'wakeAgent("t1")']);
+  assert.equal(h.link.stats.refused, 1);
+});
+
+test("1.14: a prompt to an agent the view was told is asleep is refused ASLEEP before the person is asked; woken, it goes", async () => {
+  const asked: string[] = [];
+  const typed: string[] = [];
+  const services: LinkServices = {
+    confirmPrompt: async (req) => { asked.push(req.text); return true; },
+    sendPrompt: async (tileId, text) => { typed.push(`${tileId}:${text}`); },
+  };
+  const h = harness(["workspace:prompt"], ["t1"], services);
+  h.link.handle({ type: "ready", v: 1 });
+  const structure = (asleep: boolean) => h.link.send({ type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "claude", name: "a", ...(asleep ? { asleep: { since: 5 } } : {}) }] });
+  structure(true);
+  h.link.handle({ type: "request", requestId: 1, name: "prompt", args: [{ tileId: "t1", text: "run the tests" }] });
+  await settle();
+  const refused = responses(h.sent).at(-1)!;
+  assert.deepEqual([refused.requestId, refused.error?.code], [1, "ASLEEP"]);
+  assert.deepEqual([asked, typed, h.link.stats.refused], [[], [], 0]);
+  structure(false);
+  h.link.handle({ type: "request", requestId: 2, name: "prompt", args: [{ tileId: "t1", text: "run the tests" }] });
+  await settle();
+  assert.deepEqual(responses(h.sent).at(-1), { type: "response", requestId: 2, ok: true, result: { outcome: "sent" } });
+  assert.deepEqual(typed, ["t1:run the tests"]);
+});
+
 test("1.5: participants: those here at once, then as they change, on the view's own tiles and frames only, told again as those change, and nothing once unsubscribed", () => {
   let tell: (people: ViewParticipant[]) => void = () => {};
   let subscribed = 0;
@@ -451,9 +489,10 @@ test("1.5: a rect for a tile the view was told of and that has closed since is d
 });
 
 test("what a host cannot do at all (a remote screen: no surfaces, no folder picker, no tiles but agents' to start) is refused without being held against the view", () => {
-  const lacks = ["surfaceRects", "spawnTile", "spawnVis", "addFrame", "openFolder"];
+  const lacks = ["surfaceRects", "spawnTile", "spawnVis", "addFrame", "openFolder", "wakeAgent", "sleepAgent"];
   const h = harness(["workspace:spawn", "workspace:edit"], ["t1"], undefined, lacks);
   assert.ok(!h.link.features.includes("surfaces"), "a host that places no surfaces does not say it does");
+  assert.ok(!h.link.features.includes("sleep"), "a host that wakes no agents does not say it does");
   h.link.handle({ type: "ready", v: 1 });
   for (let i = 0; i < LIMITS.malformed; i++) {
     h.link.handle({ type: "surfaceRects", rects: [{ tileId: "t1", x: 0, y: 0, w: 10, h: 10 }] });
@@ -461,6 +500,8 @@ test("what a host cannot do at all (a remote screen: no surfaces, no folder pick
     h.link.handle({ type: "command", name: "spawnTile", args: ["shell", "f1"] });
     h.link.handle({ type: "command", name: "spawnVis", args: ["tree"] });
     h.link.handle({ type: "command", name: "addFrame", args: [] });
+    h.link.handle({ type: "command", name: "wakeAgent", args: ["t1"] });
+    h.link.handle({ type: "command", name: "sleepAgent", args: ["t1"] });
   }
   assert.deepEqual([h.link.stats.refused, h.link.stats.disabled], [0, null]);
   assert.deepEqual(h.events, ["ready"]);

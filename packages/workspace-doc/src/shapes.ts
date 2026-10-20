@@ -56,6 +56,8 @@ export interface TileRecord {
    *  Its process ended; its last screen and its conversation wait for it to be woken
    *  (docs/design/sleep-agents-2026-10-17.md). */
   sleeping?: string;
+  /** Agent only: when it was put to sleep (ms since epoch), while it sleeps. */
+  sleptAt?: number;
 }
 
 /** The kind every agent's tile has, whatever runs in it: the historical id, kept for saved
