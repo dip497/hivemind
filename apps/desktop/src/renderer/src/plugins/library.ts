@@ -109,7 +109,7 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
     for (const p of report.packages) {
       const m = p.manifest;
       out.push({
-        kind: "view", id: p.id, name: m?.name ?? p.id, description: listed.get(`view:${p.id}`)?.description ?? "",
+        kind: "view", id: p.id, name: m?.name ?? p.id, description: m?.description ?? listed.get(`view:${p.id}`)?.description ?? "",
         ...(m?.version ? { version: m.version } : {}), ...(m?.author ? { author: m.author } : {}),
         origin: p.source === "user" ? "you" : p.source === "app" ? "app" : "repo", installed: true, can: permissionWords(m?.permissions ?? []),
         readme: { dir: p.dir }, problem: p.error ?? (report.refused[p.id] !== "disabled in Settings" ? report.refused[p.id] : null) ?? null, dir: p.dir,

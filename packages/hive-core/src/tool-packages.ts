@@ -8,6 +8,7 @@ import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat } from "node:fs
 import os from "node:os";
 import path from "node:path";
 import { isToolId, parseToolManifest, toolFolder, type ToolPackage } from "./tool-format.js";
+import { readSvgIcon } from "./svg-icon.js";
 import { withPluginState } from "./plugin-settings.js";
 import { settingsPath, updateSettings } from "./settings.js";
 
@@ -18,8 +19,6 @@ export function userToolsDir(): string {
   return path.join(base, "hivemind", "tools");
 }
 
-const ICON_MAX = 32 * 1024;
-
 /** The package in `dir`. `folderId` is the id its folder stands for, if any. */
 export async function readToolPackage(dir: string, folderId: string | null, source: "app" | "you" = "you"): Promise<ToolPackage> {
   let raw: unknown;
@@ -28,8 +27,8 @@ export async function readToolPackage(dir: string, folderId: string | null, sour
   if (!(await stat(path.join(dir, pkg.entry)).catch(() => null))?.isFile()) throw new Error(`its entry ${pkg.entry} is missing`);
   for (const tile of Object.values(pkg.tiles)) {
     if (!tile.icon) continue;
-    const svg = await readFile(path.join(dir, tile.icon)).catch(() => null);
-    if (svg && svg.length <= ICON_MAX) tile.icon = `data:image/svg+xml;base64,${svg.toString("base64")}`;
+    const icon = await readSvgIcon(dir, tile.icon);
+    if (icon) tile.icon = icon;
     else delete tile.icon;
   }
   return pkg;

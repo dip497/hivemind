@@ -13,6 +13,7 @@ import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar, type ToolbarActionId, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { useCommunityReport } from "./workspace/views/community/registry";
+import { MaskIcon } from "./plugins/mask-icon";
 import { useSettingsNavigate } from "./settings-panels";
 
 export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); };
@@ -29,8 +30,11 @@ export function useViewRows(matches: (text: string) => boolean): ListedRow[] {
   const on = useViews().filter((v) => matches(`${v.label} ${v.id} ${v.hint}`));
   const off = report.packages.filter((p) => report.refused[p.id] && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
   const category = (id: string): PluginCategory => report.packages.find((p) => p.id === id)?.manifest?.category ?? "other";
-  // A package says what it does only through HiveHub; a built-in view says it in its hint.
-  const about = (id: string): string | undefined => report.packages.some((x) => x.id === id) ? hub("view", id) : undefined;
+  // A package says what it does in its manifest, else through HiveHub; a built-in view in its hint.
+  const about = (id: string): string | undefined => {
+    const pkg = report.packages.find((x) => x.id === id);
+    return pkg ? pkg.manifest?.description ?? hub("view", id) : undefined;
+  };
   return [
     ...on.map((v): ListedRow => ({ key: `view:${v.id}`, kind: "view", category: category(v.id),
       row: <PluginRow kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} /> })),
@@ -38,17 +42,19 @@ export function useViewRows(matches: (text: string) => boolean): ListedRow[] {
       const why = report.refused[p.id]!;
       const switchedOff = why === "disabled in Settings";
       return { key: `view:${p.id}`, kind: "view", category: category(p.id),
-        row: <PluginRow kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
+        row: <PluginRow kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={p.icon ? <MaskIcon url={p.icon} /> : <Puzzle />}
           line={switchedOff ? about(p.id) ?? "" : why}
           state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} /> };
     }),
   ];
 }
 
-/** A view's own mark; one that cannot load yet is a puzzle piece. */
+/** A view's own mark: one switched off still shows its package's icon; without one, a puzzle piece. */
 export function ViewMark({ id, size = 22 }: { id: string; size?: number }) {
-  const Icon = useViews().find((v) => v.id === id)?.icon ?? Puzzle;
-  return <Icon size={size} />;
+  const Icon = useViews().find((v) => v.id === id)?.icon;
+  const icon = useCommunityReport().packages.find((p) => p.id === id)?.icon;
+  if (Icon) return <Icon size={size} />;
+  return icon ? <MaskIcon url={icon} size={size} /> : <Puzzle size={size} />;
 }
 
 /** At the top of a view's page: using it, and switching one you added on or off. */

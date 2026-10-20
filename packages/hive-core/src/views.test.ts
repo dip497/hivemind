@@ -32,6 +32,21 @@ describe("view packages", () => {
     expect((await readViewPackage(path.join(tmp, "noentry"), "user")).error).toMatch(/entry "index.html" not found/);
   });
 
+  test("a view's icon is the .svg its manifest names, as a data URL; a missing or over 32 KB one leaves the view loading with none", async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>';
+    pkg(path.join(tmp, "board"), { ...good("board"), icon: "icon.svg" });
+    fs.writeFileSync(path.join(tmp, "board", "icon.svg"), svg);
+    const v = await readViewPackage(path.join(tmp, "board"), "user");
+    expect([v.error, v.icon]).toEqual([null, `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`]);
+    pkg(path.join(tmp, "plain"), { ...good("plain"), icon: "gone.svg" });
+    const plain = await readViewPackage(path.join(tmp, "plain"), "user");
+    expect([plain.error, plain.icon]).toEqual([null, undefined]);
+    pkg(path.join(tmp, "heavy"), { ...good("heavy"), icon: "icon.svg" });
+    fs.writeFileSync(path.join(tmp, "heavy", "icon.svg"), `<svg>${" ".repeat(32 * 1024)}</svg>`);
+    const heavy = await readViewPackage(path.join(tmp, "heavy"), "user");
+    expect([heavy.error, heavy.icon]).toEqual([null, undefined]);
+  });
+
   test("install copies into the user dir, list finds it, remove deletes it", async () => {
     pkg(path.join(tmp, "src", "orbit"), good("orbit"));
     fs.mkdirSync(path.join(tmp, "src", "orbit", "node_modules", "x"), { recursive: true });

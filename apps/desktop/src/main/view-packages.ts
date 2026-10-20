@@ -61,7 +61,7 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
         page.searchParams.set("workspace", remote);
         const url = page.toString();
         served.set(viewHost(v.id), { id: v.id, repo: remote });
-        hosted.push({ id: v.id, dir: "", source: "host", manifest: v.manifest, error: null, url });
+        hosted.push({ id: v.id, dir: "", source: "host", manifest: v.manifest, ...(v.icon ? { icon: v.icon } : {}), error: null, url });
       }
     } catch { /* a disconnected host leaves the built-in and local views available */ }
   }

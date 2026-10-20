@@ -70,3 +70,21 @@ describe("what a plugin is for", () => {
     expect(category({ category: "games" })).toEqual(['"category" must be one of code, git, agents, productivity, monitoring, team, web, fun, other']);
   });
 });
+
+describe("how a view is shown where views are listed", () => {
+  const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
+  it("keeps a one-line description and an .svg icon inside the package", () => {
+    const r = validateViewManifest({ ...base, description: "Your issues as columns.", icon: "assets/icon.svg" });
+    expect(r.ok && [r.manifest.description, r.manifest.icon]).toEqual(["Your issues as columns.", "assets/icon.svg"]);
+  });
+  it("refuses an icon outside the package or not an .svg, and a description of several lines or over 200 characters", () => {
+    const errors = (extra: object) => { const r = validateViewManifest({ ...base, ...extra }); return r.ok ? [] : r.errors; };
+    for (const icon of ["/etc/icon.svg", "../icon.svg", "a/../../icon.svg", "icon.png", "C:/icon.svg", ""]) {
+      expect(errors({ icon })).toEqual(['"icon" must be a relative path to an .svg file inside the package']);
+    }
+    for (const description of ["Line one\nline two", "x".repeat(201), "  "]) {
+      expect(errors({ description })).toEqual(['"description" must be one line of at most 200 characters']);
+    }
+    expect(errors({ description: "x".repeat(200) })).toEqual([]);
+  });
+});
