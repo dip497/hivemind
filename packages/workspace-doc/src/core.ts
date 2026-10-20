@@ -135,13 +135,18 @@ export function writeTileName(doc: LoroDoc, tileId: string, name: string): boole
   return true;
 }
 
-/** Put the tile `tileId` to sleep in the folder `folder`, or wake it (null). False when `doc` has no
- *  such tile. */
-export function writeTileSleeping(doc: LoroDoc, tileId: string, folder: string | null): boolean {
+/** Put the tile `tileId` to sleep in the folder `folder` at the time `at` (ms since epoch), or wake
+ *  it (null). False when `doc` has no such tile. */
+export function writeTileSleeping(doc: LoroDoc, tileId: string, folder: string | null, at = Date.now()): boolean {
   const record = doc.getMap(TILES).get(tileId);
   if (!isMap(record)) return false;
-  if (folder) record.set("sleeping", folder);
-  else record.delete("sleeping");
+  if (folder) {
+    record.set("sleeping", folder);
+    record.set("sleptAt", at);
+  } else {
+    record.delete("sleeping");
+    record.delete("sleptAt");
+  }
   return true;
 }
 

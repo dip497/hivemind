@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MIN_APP_VERSION_RE, appMeetsMinVersion } from "@hivemind/agents";
 import { AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
+import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { TOOL_ID_RE } from "./tool-registry.js";
 
 export const DEFAULT_PLUGIN_INDEX = "https://hivehub.griiken.workers.dev/api/v1/index.json";
@@ -37,6 +38,9 @@ export interface CatalogEntry {
    *  mark before anything is downloaded. Bounded here and sanitised where it is drawn —
    *  this module does not know what an icon is, and must not start guessing. */
   icon?: unknown;
+  /** What it is for, as its manifest says; an agent is always `agents`, and one the app does not
+   *  know is `other`. */
+  category?: PluginCategory;
 }
 
 // A view, a widget or a tool carries its publisher's scope; an agent is one name for one CLI,
@@ -102,11 +106,13 @@ export function parseCatalog(raw: unknown): CatalogEntry[] {
         if (p.bin !== undefined && (p.type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {
       throw new Error(`${at}.bin must be the bare name of an agent's CLI`);
     }
+    const said = parseCategory(p.category);
+    const category: PluginCategory = type === "agent" ? "agents" : "category" in said ? said.category : "other";
     return { id: p.id, type, name: p.name, description: p.description, author: p.author, version: p.version, path: p.path, files,
       ...(homepage ? { homepage } : {}), ...(typeof p.source === "string" ? { source: p.source } : {}),
       ...(typeof p.bin === "string" ? { bin: p.bin } : {}),
       ...(typeof p.minAppVersion === "string" ? { minAppVersion: p.minAppVersion } : {}),
-      ...(p.icon !== undefined ? { icon: p.icon } : {}) };
+      ...(p.icon !== undefined ? { icon: p.icon } : {}), category };
   });
 }
 

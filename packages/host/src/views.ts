@@ -73,6 +73,10 @@ export interface ViewsOptions {
   start(repo: string, start: { program?: string; frame?: string; name?: string }): Promise<string>;
   /** End a tile's session and take it off its board, as `agent.close` does: false when no board here has it. */
   close(tile: string): Promise<boolean>;
+  /** Put the agent of a tile on the board at `repo` to sleep, as `agent.sleep` does (one busy is left
+   *  awake), and wake one asleep, as `agent.wake` does. */
+  sleep(repo: string, tile: string): Promise<unknown>;
+  wake(repo: string, tile: string): Promise<unknown>;
   /** The machines this device knows, by what each is called. */
   machines: KnownMachines;
   /** How this device's link to the machine a frame's folder is on is doing; none: not known here. */
@@ -282,6 +286,9 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
       return true;
     },
     renameTile: (id, name) => { o.store().renameTile(id, cleanName(name), WRITER); },
+    // Served with `workspace:spawn`, held to the caller's own rules for each.
+    sleepAgent: (id) => { if (s.from.may?.("agent.sleep") ?? true) act(s, { verb: "agent.sleep", target: id }, () => o.sleep(s.repo, id)); },
+    wakeAgent: (id) => { if (s.from.may?.("agent.wake") ?? true) act(s, { verb: "agent.wake", target: id }, () => o.wake(s.repo, id)); },
     subscribeTileStatus: (tile, cb) => watch(tile, (status) => cb(tileStatusOf(status).status)),
   });
 

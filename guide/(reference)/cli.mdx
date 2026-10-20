@@ -94,7 +94,7 @@ hive ctl set-state MYP-1 in_progress [--note "…"]
 hive ctl add-comment MYP-1 "root cause found in …"
 hive ctl mark-acceptance MYP-1 0 [--undone]   # 0-based index from hive show --json
 hive ctl delete-issue MYP-1                   # irreversible
-hive ctl list-workspaces
+hive ctl list-workspaces                      # prefix, title and folder of each
 ```
 
 ## `hive ctl`: agents and tiles
@@ -102,7 +102,12 @@ hive ctl list-workspaces
 To start, message, read and close agents and tiles in the running app. Guide: [Coordinate agents](/agent-workflows).
 
 ```text
-hive ctl agents [--watch]               # the workspace's agents, their state and what each waits on
+hive ctl whoami                         # which app (hivemind or hivemind-dev), its data folder and
+                                        # sockets, and you: person, agent or program; workspace,
+                                        # tile and session
+hive ctl agents [--watch] [--session <id>]
+                                        # the workspace's agents, their state and what each waits on;
+                                        # --session: the one in that session (exit 5: none)
 hive ctl frames                         # frames an agent may start in: id, name, machine
 hive ctl frame add --folder /srv/web [--machine build] [--name web]
                                         # a frame on that folder, on a saved machine or one of
@@ -135,6 +140,10 @@ hive ctl open-tool <owner/name/tool> [--frame f] [--url https://…]
 hive ctl view emit <name> ['{"json":1}' | -] [--view id]
                                         # a named event to the view shown
 ```
+
+`hive ctl agents --json` prints `{"seq": 3, "agents": [ … ]}`: `seq` is the agent feed's position (`--watch` prints the events after it), and each agent is `{"workspace", "name", "tile", "agent", "program"?, "state", "since", "machine", "waiting"?, "parent"?, "interrupt"?, "conversation"?, "session"?}`. `session` appears once the agent's hooks have said it; `--session <id>` also finds a tile by the session the app tracks to resume it.
+
+`hive ctl read` gives an agent's reply to its turn, as clean text. `hive ctl stream --snapshot` gives the last lines its terminal printed, raw: escape codes stripped, but spinners, boxes and redraws left in. Read a reply with `read`; look at a screen with `stream`.
 
 ```text
 hive ctl workflow --shape fanout|pipeline|mapreduce

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appKeyMessage, appShortcut, menuKey } from "../../src/shared/shortcuts";
+import { appKeyMessage, appShortcut, isQuitKey, menuKey } from "../../src/shared/shortcuts";
 
 const key = (k: string, mods: Partial<{ control: boolean; meta: boolean; shift: boolean; alt: boolean }> = {}) =>
   appShortcut({ key: k, control: false, meta: false, shift: false, alt: false, ...mods });
@@ -59,4 +59,17 @@ test("each app key is one message to the page, the same from main and in a brows
   assert.equal(msg(".", { control: true, shift: true }), null);
   assert.equal(msg("b", { control: true }), null);
   assert.equal(msg("F", { control: true, shift: true, alt: true }), null);
+});
+
+test("Quit is ⌘Q on macOS and Ctrl+Q elsewhere, and no other Q", () => {
+  const q = (mods: Partial<{ control: boolean; meta: boolean; shift: boolean; alt: boolean }>, platform: string, k = "q") =>
+    isQuitKey({ key: k, control: false, meta: false, shift: false, alt: false, ...mods }, platform);
+  assert.equal(q({ control: true }, "linux"), true);
+  assert.equal(q({ control: true }, "win32", "Q"), true);
+  assert.equal(q({ meta: true }, "darwin"), true);
+  assert.equal(q({ control: true }, "darwin"), false, "Ctrl+Q stays with a terminal on a Mac");
+  assert.equal(q({ meta: true }, "linux"), false);
+  assert.equal(q({ control: true, shift: true }, "linux"), false);
+  assert.equal(q({ control: true, alt: true }, "linux"), false);
+  assert.equal(q({}, "linux"), false);
 });

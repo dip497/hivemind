@@ -63,6 +63,21 @@ describe("reading the index", () => {
     // Its folder on disk is owner--name, so a `--` in the id could stand for two tools.
     expect(bad("@dip497/work--trees")).toThrow(/a tool id/);
   });
+
+  test("each entry has the category its manifest gave it: other when it gave none the app knows, agents for an agent", () => {
+    const base = { name: "X", description: "d", author: "a", version: "1", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
+    const listed = parseCatalog({ version: 1, plugins: [
+      { ...base, id: "@a/git-graph", type: "view", path: "views/g", category: "git" },
+      { ...base, id: "@a/pet", type: "widget", path: "widgets/p", category: "fun" },
+      { ...base, id: "dip497/ports", type: "tool", path: "tools/p", category: "monitoring" },
+      { ...base, id: "@a/none", type: "widget", path: "widgets/n" },
+      { ...base, id: "@a/odd", type: "widget", path: "widgets/o", category: "games" },
+      { ...base, id: "gemini", type: "agent", path: "agents/gemini" },
+    ] });
+    expect(listed.map((e) => [e.id, e.category])).toEqual([
+      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
+    ]);
+  });
 });
 
 describe("staging a download", () => {

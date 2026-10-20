@@ -7,7 +7,8 @@ import { listWidgets } from "@hivemind/core/widgets";
 import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
 import { installServicesIpc, startServices, stopServices } from "./services.js";
 import { listToolPackages } from "@hivemind/core/tool-packages";
-import { appKeyMessage } from "../shared/shortcuts.js";
+import { appKeyMessage, isQuitKey } from "../shared/shortcuts.js";
+import { askToQuit, installQuitIpc, stopEverything, stopsEverything } from "./quit.js";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
@@ -301,6 +302,12 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   const wc = win.webContents;
   keepOnAppPage(wc, appPage);
   registerWindow(win);
+  // Closing the last window quits, so it is a person's quit and asks first.
+  win.on("close", (e) => {
+    if (quitting || openWindows().length > 1) return;
+    e.preventDefault();
+    void askToQuit(win);
+  });
   workspaceIpc.connect(win.webContents);
   launchTargets.set(wc, target);
 
@@ -343,6 +350,11 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   wc.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown") return;
     if (wc.isDestroyed()) return;
+    if (isQuitKey(input, process.platform)) {
+      event.preventDefault();
+      void askToQuit(win);
+      return;
+    }
     // F11 → native fullscreen. Hides the OS titlebar (and the desktop top bar on
     // GNOME) so the canvas + wallpaper go edge-to-edge. Pair with the eye/zen
     // toggle to also hide the in-app chrome for a pure-wallpaper view.
@@ -392,6 +404,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     const pageId = guest.id;
     pages.add(pageId);
     guest.once("destroyed", () => { pages.delete(pageId); forgetBrowserPage(pageId); });
+    // The tile zooms its page to the canvas zoom: that must not carry to other pages of the same site.
+    guest.setZoomMode("isolated");
     guest.setWindowOpenHandler(({ url }) => {
       // A link/popup (target=_blank, window.open) inside a BrowserTile guest →
       // hand it back to the host renderer so the owning tile opens it as a NEW
@@ -1383,6 +1397,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     links: () => control.links(),
     start: (repo, start) => control.start(repo, start),
     close: (bare) => control.close(bare),
+    sleep: async (repo, tile) => (await control.api()).sleep(repo, tile, false),
+    wake: async (repo, tile) => (await control.api()).wake(repo, tile),
     machines: knownMachines,
     linkState,
     intents: hostIntents(),
@@ -1605,6 +1621,10 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installToolPackageIpc();
     installServicesIpc();
     installPluginCatalogIpc();
+    installQuitIpc({
+      agent: (s) => !!agentForCmd(s.cmd) || control.agentOf.has(toBareId(s.id)),
+      agentTile: (tileId) => control.agentOf.has(toBareId(tileId)),
+    });
     handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));
 
     // A repo's agents belong to that repo. Opening a second workspace must not take the
@@ -2004,6 +2024,9 @@ function startHcpControlPlane(): void {
   ptyDaemon.setDaemonEventSink((topic, data) => control.fromMachine(topic, data));
 }
 
+/** A quit is under way: windows close without asking. */
+let quitting = false;
+
 // The normal quit hangs (~60s): this UI process owns no PTY
 // children to reap, yet some platform handle keeps the loop alive. Terminal
 // state is safe in the detached daemon, so we force a hard exit. BUT first flush
@@ -2024,8 +2047,9 @@ function forceExitAfterFlush(): void {
     /* best-effort */
   }
   // A settings write still running (the window's last edit, sent as it closed) finishes
-  // first: app.exit would cut it off.
-  void settingsSettled(SETTINGS_QUIT_WAIT_MS).then(() => {
+  // first: app.exit would cut it off. So does stopping the background process, when asked to.
+  const stopped = stopsEverything() ? stopEverything() : Promise.resolve();
+  void Promise.all([settingsSettled(SETTINGS_QUIT_WAIT_MS), stopped]).then(() => {
     const t = setTimeout(() => app.exit(0), 150);
     t.unref?.();
   });
@@ -2053,6 +2077,7 @@ app.on("window-all-closed", () => forceExitAfterFlush());
 // terminal sessions stay in the daemon, and only this app's socket to it goes, so it cannot stall
 // the exit.
 app.on("before-quit", () => {
+  quitting = true;
   flushWorkspaceStore();
   stopNetwork();
   forceExitAfterFlush();

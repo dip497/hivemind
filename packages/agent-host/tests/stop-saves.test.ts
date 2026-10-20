@@ -1,12 +1,14 @@
 // The real daemon: stopped (SIGTERM) right after a session printed, and after its last viewer
 // left, which starts a save of its own, it still saves that output, and a daemon started again
-// shows it.
+// shows it. Stopped as `hive daemon stop` and the app's "Stop everything" stop it, its sessions
+// end, and the next daemon has each one saved, to come back from.
 import { afterAll, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { frame, makeLineDecoder, type ClientMsg, type ServerMsg } from "../src/pty-protocol.ts";
+import { socketAt, stopDaemon } from "../src/daemon-replace.ts";
 
 const DAEMON = path.join(import.meta.dir, "../src/pty-daemon.ts");
 const dir = fs.mkdtempSync("/tmp/hss-");
@@ -50,5 +52,36 @@ test.skipIf(process.platform === "win32")("a daemon stopped as a session's viewe
   const back = await after.until((m): m is Extract<ServerMsg, { t: "attached" }> => m.t === "attached");
   expect(back?.replay).toContain("LAST-42");
   after.send({ t: "kill", id: "t1" });
+  after.c.destroy();
+}, 120_000);
+
+test.skipIf(process.platform === "win32")("a stopped daemon ends its sessions, and the next one has each saved to come back from", async () => {
+  if (daemon && daemon.exitCode === null) { const gone = new Promise((r) => daemon!.once("exit", r)); daemon.kill("SIGKILL"); await gone; }
+  fs.rmSync(sock, { force: true });
+  await start();
+  const spec = { cwd: dir, cmd: "sh", args: ["-c", "echo BEFORE-STOP-$((6*7)); exec sleep 60"], cols: 80, rows: 24 };
+  const v = await connect();
+  v.send({ t: "attach", reqId: "a", id: "t2", spec });
+  const attached = await v.until((m): m is Extract<ServerMsg, { t: "attached" }> => m.t === "attached");
+  await v.until((m): m is Extract<ServerMsg, { t: "data" }> => m.t === "data" && m.data.includes("BEFORE-STOP-42"));
+  const exited = new Promise((r) => daemon!.once("exit", r));
+
+  expect(await stopDaemon(socketAt(sock))).toBe(true);
+  await exited;
+  const alive = () => { try { process.kill(attached!.pid, 0); return true; } catch { return false; } };
+  for (let i = 0; i < 100 && alive(); i++) await new Promise((r) => setTimeout(r, 50));
+  expect(alive()).toBe(false);
+
+  fs.rmSync(sock, { force: true });
+  await start();
+  const after = await connect();
+  after.send({ t: "list", reqId: "l", detail: true });
+  const listed = await after.until((m): m is Extract<ServerMsg, { t: "sessions" }> => m.t === "sessions");
+  expect(listed?.detail?.map((s) => [s.id, s.state])).toContainEqual(["t2", "frozen"]);
+  expect(listed?.detail?.filter((s) => s.state === "live")).toEqual([]);
+  after.send({ t: "attach", reqId: "b", id: "t2", spec: { ...spec, args: ["-c", "exec sleep 60"] } });
+  const back = await after.until((m): m is Extract<ServerMsg, { t: "attached" }> => m.t === "attached");
+  expect(back?.replay).toContain("BEFORE-STOP-42");
+  after.send({ t: "kill", id: "t2" });
   after.c.destroy();
 }, 120_000);
