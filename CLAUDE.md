@@ -10,6 +10,14 @@ Update the status table in `docs/plans/multiplayer.md` in the same commit as the
 describes, so the next session picks up where this one stopped. Its **Working rules** (modular
 code, one owner per job, no seams for tests) apply to every item.
 
+## Definition of done
+
+A user-facing change is done only when every surface it touches is done: the agent-native CLI,
+the app UI, the phone page, the guide and references, agent briefs, READMEs, HiveHub,
+hivemind-plugins, local-data migrations, contract versions, security, tests, CHANGELOG and
+cleanup. Walk `.claude/skills/feature-done/SKILL.md` before planning or briefing, and report
+against its table.
+
 ## Tests
 
 Every test written or changed passes the authoring gate in `.claude/skills/test-audit/SKILL.md`

@@ -32,7 +32,8 @@ linux-unpacked/
 # hive-browser backs the Browser tile; adding-an-agent-provider and hivemind-custom-view
 # are the procedures a contributor (or their agent) follows to wire a new CLI agent, or to
 # write a view, end to end; test-audit is the gate every new or changed test passes;
-# maintaining-docs is how the guide in guide/ is written and checked.
+# maintaining-docs is how the guide in guide/ is written and checked;
+# feature-done is the definition of done for every user-facing change.
 .claude/*
 !.claude/skills/
 .claude/skills/*
@@ -41,6 +42,7 @@ linux-unpacked/
 !.claude/skills/hivemind-custom-view/
 !.claude/skills/test-audit/
 !.claude/skills/maintaining-docs/
+!.claude/skills/feature-done/
 .hyperresearch/
 research/
 # screenshots/ are the README demo images — they MUST be committed so GitHub
