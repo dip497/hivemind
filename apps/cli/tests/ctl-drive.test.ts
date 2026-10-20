@@ -48,7 +48,8 @@ beforeAll(async () => {
   for (const r of [repoA, repoB]) fs.mkdirSync(path.join(r, "sub"), { recursive: true });
   const answers = Object.fromEntries([
     answer("host.status", () => ({ workspaces: [repoA, nested, repoB, onBox].map((repo) => ({ repo, workspace: null })) })),
-    answer("agent.list", () => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking] })),
+    // The agent me-1 is in workspace a, its hooks having said its session.
+    answer("agent.list", (repo) => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking, ...(repo === repoA ? [{ tile: "me-1", agent: "me", state: "working", session: "sess-42" }] : [])] })),
     answer("agent.answer", (_tile, since) => ({ answered: since === 77 })),
     answer("agent.approval", () => ({ request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
@@ -154,7 +155,38 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     const nowhere = await hive(["ctl", "spawn", "--agent", "codex", "--frame", "b", "--json"], { cwd: dir, env: asAgent() });
     expect([nowhere.code, (nowhere.json as { code: string }).code, calls.some((c) => c.method === "agent.start")]).toEqual([5, "NOT_FOUND", false]);
     const elsewhere = await hive(["ctl", "spawn", "--agent", "codex", "--repo", repoB, "--json"], { env: asAgent() });
-    expect([elsewhere.code, (elsewhere.json as { code: string }).code]).toEqual([6, "FORBIDDEN"]);
+    expect([elsewhere.code, elsewhere.json]).toEqual([6, {
+      ok: false, code: "FORBIDDEN",
+      message: `this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`,
+    }]);
+    const notMine = await hive(["ctl", "send", "w-1", "hi", "--json"], { env: asAgent() });
+    expect([notMine.code, (notMine.json as { message: string }).message]).toEqual([6,
+      `w-1 is not a tile of the workspace at ${repoA}; this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`]);
+  });
+
+  test("whoami says which app it reaches, from the drive socket's folder, and as whom: an agent's workspace, tile and session", async () => {
+    const hcpSock = path.join(dir, "hcp.sock");
+    const r = await hive(["ctl", "whoami", "--json"], { env: { ...asAgent(), HIVE_HCP_SOCK: hcpSock } });
+    expect([r.code, r.json]).toEqual([0, {
+      instance: path.basename(dir), appData: dir, driveSocket: sock, hcpSocket: hcpSock,
+      running: true, as: "agent", workspace: repoA, tile: "me-1", session: "sess-42",
+    }]);
+    const text = await hive(["ctl", "whoami"], { env: { ...asAgent(), HIVE_HCP_SOCK: hcpSock } });
+    expect(text.stdout).toBe([
+      `instance   ${path.basename(dir)}`, `app data   ${dir}`, `drive      ${sock}`, `hcp        ${hcpSock}`,
+      "as         agent", `workspace  ${repoA}`, "tile       me-1", "session    sess-42", "",
+    ].join("\n"));
+    const person = await hive(["ctl", "whoami", "--json"], { cwd: path.join(repoB, "sub"), env: { ...env(), HIVE_HCP_SOCK: hcpSock } });
+    expect(person.json).toMatchObject({ as: "person", workspace: repoB, tile: null, session: null });
+  });
+
+  test("whoami with no app on the socket names the instance it looked for, hivemind-dev here, and exits 3", async () => {
+    const dev = path.join(dir, "hivemind-dev");
+    const r = await hive(["ctl", "whoami", "--json"], { env: { XDG_CONFIG_HOME: xdg, HIVE_DRIVE_SOCK: path.join(dev, "drive.sock"), HIVE_HCP_SOCK: path.join(dev, "hcp.sock") } });
+    expect([r.code, r.json]).toEqual([3, {
+      instance: "hivemind-dev", appData: dev, driveSocket: path.join(dev, "drive.sock"), hcpSocket: path.join(dev, "hcp.sock"),
+      running: false, as: null, workspace: null, tile: null, session: null,
+    }]);
   });
 
   test("each verb is its API method", async () => {
