@@ -1,7 +1,7 @@
 import { docs } from 'collections/server';
 import { type InferPageType, loader } from 'fumadocs-core/source';
 import type * as PageTree from 'fumadocs-core/page-tree';
-import { absoluteLinks, appName, docsUrl, pageMarkdownPath, siteUrl } from './shared';
+import { absoluteLinks, appName, docsUrl, pageMarkdownPath, repoUrl, siteUrl } from './shared';
 
 export const source = loader({
   baseUrl: '/',
@@ -45,7 +45,9 @@ export function llmsIndex() {
   const lines = [
     `# ${appName}`,
     '',
-    '> A workspace your coding agents build and work in: run them side by side, add your own views, widgets and tools, and drive it all from other computers, your phone or your own program.',
+    '> Hivemind is a free, open-source desktop app for Linux, macOS and Windows. It runs Claude Code, Codex, opencode, Cursor, Copilot and any other coding agent with a command line side by side, each in a real terminal, and your agents build the views, widgets and tools of the workspace they work in.',
+    '',
+    `You and your own programs drive it with the \`hive\` command and an API, from other computers or your phone. Website: ${siteUrl}/ · Source (MIT): ${repoUrl} · Plugins: https://hivehub.griiken.workers.dev/ · Compared with similar apps: ${siteUrl}/compare/`,
     '',
     `Every page is also Markdown: add .md to its address. All of them in one file: ${docsUrl}/llms-full.txt`,
   ];

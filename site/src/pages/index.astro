@@ -12,7 +12,7 @@ const link = (path: string) => `${base}/${path}`;
 // the agents people search for, so "hivemind" plus an agent's name finds this page.
 const title = 'Hivemind: run Claude Code, Codex and every coding agent side by side';
 const description =
-  'Free, open-source app that runs Claude Code, Codex, opencode and any coding agent side by side in real terminals. Your agents build its views and tools. MIT, no account.';
+  'Free, open-source app that runs Claude Code, Codex, opencode and any coding agent side by side in real terminals. Your agents build its views and tools.';
 const repo = 'https://github.com/dip497/hivemind';
 const changelog = `${repo}/blob/main/CHANGELOG.md#2026103--2026-10-18`;
 const install = 'bash <(curl -fsSL https://hivemind.griiken.com/install.sh)';
@@ -21,6 +21,8 @@ const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
+const cardAlt = 'Hivemind: your agents build the workspace they work in. Claude Code, Codex and every coding agent, side by side.';
+const screenshot = new URL(link('shots/hero/school-of-agents.webp'), Astro.site).href;
 // The hero's still is the largest paint; the head asks for it before anything else.
 const heroImage = await heroStill();
 const home = new URL(link(''), Astro.site).href;
@@ -82,7 +84,7 @@ const structuredData = {
       installUrl: new URL(link('guide/install/'), Astro.site).href,
       softwareHelp: { '@type': 'CreativeWork', url: new URL(link('guide/'), Astro.site).href },
       image: ogImage,
-      screenshot: ogImage,
+      screenshot,
       publisher: { '@id': `${home}#organization` },
       sameAs: [repo],
     },
@@ -155,8 +157,12 @@ const code: Record<string, [string, string][]> = {
   <meta property="og:image" content={ogImage} />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Hivemind: coding agents side by side on one canvas" />
+  <meta property="og:image:alt" content={cardAlt} />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content={ogImage} />
+  <meta name="twitter:image:alt" content={cardAlt} />
   <script type="application/ld+json" set:html={JSON.stringify(structuredData).replace(/</g, '\\u003c')}></script>
   <link rel="preload" as="image" type="image/avif" imagesrcset={heroImage.avif} imagesizes={HERO_SIZES} fetchpriority="high" />
   <Fonts />
@@ -410,6 +416,7 @@ const code: Record<string, [string, string][]> = {
         <a href={link('guide/cli/')}>CLI reference</a>
         <a href={HIVEHUB}>HiveHub</a>
         <a href={link('guide/docs-for-agents/')}>For agents</a>
+        <a href={link('compare/')}>Compared with other apps</a>
         <a href={repo}>GitHub</a>
       </nav>
     </div>

@@ -39,7 +39,14 @@ for (const file of htmlFiles(ROOT)) {
   if (h1s !== 1) say(`${h1s} <h1> elements, not 1`);
   if (top.includes("/guide/guide/")) say("an address in <head> repeats /guide/");
   for (const [, json] of html.matchAll(/<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)) {
-    try { JSON.parse(json); } catch (e) { say(`structured data does not parse: ${e.message}`); }
+    let data;
+    try { data = JSON.parse(json); } catch (e) { say(`structured data does not parse: ${e.message}`); continue; }
+    // Search engines ignore questions in structured data that the page does not show.
+    const text = html.replace(/<script[\s\S]*?<\/script>/g, " ").replace(/<[^>]+>/g, " ").replace(/&#x27;|&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    for (const node of data["@graph"] ?? [data]) {
+      if (node["@type"] !== "FAQPage") continue;
+      for (const { name } of node.mainEntity) if (!text.includes(name)) say(`FAQ question "${name}" is not shown on the page`);
+    }
   }
 }
 
