@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Terminals and agents slow to start, as when the app comes back after an update with many open, now open instead of saying they are not running on their machine.
+
 ## [2026.10.4] — 2026-10-20
 
 - Search finds every word you type, at the start of a word, closest match first: `git pr` finds Pull requests, the same in Settings → Plugins, the Add menu, `hive plugins search` (new) and on HiveHub. The Add menu's search also lists tools and widgets from HiveHub you have not installed, with Install; HiveHub's list in Settings shows 25 a category with Show more, and long branch and remote folder lists show the first ones with Show more.
@@ -84,7 +86,6 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - API access: with `hive host` running, tokens made and taken back in the app's Settings now work there at once; before, a new one was refused and one taken back kept working. A plugin service's token left behind by an app that was killed stops working as soon as the app or host starts again.
 
 - API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
-
 
 - A supervised agent's tool use waits on its starter again: `hive ctl approve` and the drive API's `agent.answer` find it in the agent list, waiting on approval, until it is answered. The machine's terminal daemon keeps each session's status, and it overwrote the wait the app held.
 

@@ -21,8 +21,9 @@ export interface SpawnOpts {
   wake?: boolean;
 }
 
-/** How long a sleep or a wake is waited for: an agent may take seconds to end, or to resume. */
-const WAKE_TIMEOUT_MS = 30_000;
+/** How long a start, a sleep or a wake is waited for: with many sessions starting at once (an app
+ *  coming back after an update), one may take far longer than an attach to begin, end or resume. */
+const START_TIMEOUT_MS = 30_000;
 /** How long a sleeping session's saved screen is waited for. */
 const SAVED_TIMEOUT_MS = 10_000;
 
@@ -305,8 +306,8 @@ export class DaemonEndpoint {
     const reqId = `a${++this.seq}`;
     const result = new Promise<Attached & { error?: string; gone?: true }>((resolve) => {
       this.pending.set(reqId, resolve);
-      // A wake starts an agent that resumes its conversation: given as long as a sleep.
-      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, Math.max(this.o.attachTimeoutMs ?? 6000, opts.wake ? WAKE_TIMEOUT_MS : 0));
+      // Only showing a session is quick; a start or a wake begins a process, given as long as a sleep.
+      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, Math.max(this.o.attachTimeoutMs ?? 6000, opts.noSpawn ? 0 : START_TIMEOUT_MS));
       t.unref?.();
     });
     try {
@@ -352,7 +353,7 @@ export class DaemonEndpoint {
 
   /** End the session's process but keep it, its screen saved, for an attach to bring back. Rejects
    *  with the daemon's reason. */
-  async sleep(tileId: string, timeoutMs = WAKE_TIMEOUT_MS): Promise<void> {
+  async sleep(tileId: string, timeoutMs = START_TIMEOUT_MS): Promise<void> {
     const r = await this.request<Extract<ServerMsg, { t: "slept" }>>({ t: "sleep", reqId: `z${++this.seq}`, id: tileId }, timeoutMs);
     if (r.error) throw new Error(r.error);
   }
