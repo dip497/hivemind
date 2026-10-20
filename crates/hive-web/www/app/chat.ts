@@ -48,7 +48,7 @@ export class Chat {
   private drawing = new Set<string>();
   private session = "";
   /** The person's messages not yet in the session file, oldest first, with when each was sent. */
-  private pending: Array<{ el: HTMLElement; text: string; at: number }> = [];
+  private pending: Array<{ el: HTMLElement; text: string; photos: boolean; at: number }> = [];
 
   /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. */
   constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
@@ -116,12 +116,14 @@ export class Chat {
     slice();
   }
 
-  /** `text`, sent now: shown at the foot as going, until the session file has it. */
-  sending(text: string): Sending {
+  /** `text`, sent now with the photos whose thumbnails `photos` draws: shown at the foot as going,
+   *  until the session file has it. */
+  sending(text: string, photos: string[] = []): Sending {
     const state = h("span", {}, "Sending…");
     const line = h("p", { class: "pending-state", "data-pending-state": "" }, state);
-    const el = h("div", { class: "pending", "data-pending": "going" }, h("div", { class: "said-person", "data-who": "person" }, text), line);
-    const mine = { el, text: text.trim(), at: Date.now() };
+    const thumbs = photos.length ? h("div", { class: "photos", "data-pending-photos": "" }, ...photos.map((src) => h("span", { class: "photo" }, h("img", { src, alt: "" })))) : null;
+    const el = h("div", { class: "pending", "data-pending": "going" }, thumbs, text ? h("div", { class: "said-person", "data-who": "person" }, text) : null, line);
+    const mine = { el, text: text.trim(), photos: photos.length > 0, at: Date.now() };
     this.pending.push(mine);
     this.el.append(el);
     this.nothing.hidden = true;
@@ -150,7 +152,8 @@ export class Chat {
   /** A message of the person's in the session file: the same one shown as being sent goes. */
   private arrived(e: Entry): void {
     const text = (e.text ?? "").trim();
-    const mine = this.pending.find((p) => p.text === text && e.at >= p.at - SKEW_MS);
+    // With photos, the session file has their paths after the words, or the agent's own marks.
+    const mine = this.pending.find((p) => (p.text === text || (p.photos && text.startsWith(p.text))) && e.at >= p.at - SKEW_MS);
     if (mine) this.drop(mine);
   }
 

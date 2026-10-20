@@ -140,8 +140,9 @@ export interface MethodDeps {
    *  back at its prompt. A message typed into a mid-turn TUI lands in the composer
    *  unsubmitted and is never read — see hcp/mailbox.ts. `onSent` fires when the
    *  text actually reaches the terminal (which is when an approval's answer-clock
-   *  should start). Returns false only if the tile's pty is dead. */
-  deliverToTile: (ptyId: string, text: string, onSent?: () => void) => boolean;
+   *  should start). `photos`: the paths of photos given with it, which its agent is handed as its
+   *  manifest says it takes them. Returns false only if the tile's pty is dead. */
+  deliverToTile: (ptyId: string, text: string, onSent?: () => void, photos?: string[]) => boolean;
   /** What other agents have for an agent (by bare id), until it reads them. */
   inbox: Pick<Inbox, "post" | "wait" | "given" | "forget">;
   /** A tile's session was put to sleep: its turn is over. Its exit says so too, when something here
@@ -239,7 +240,7 @@ export interface ControlWork {
   /** Hand `text` to the agent of `tile` as its next prompt, held while it is in a turn unless it
    *  reads one there; the read that follows waits for the turn it causes. `sent` false: no agent
    *  runs there; `held`: it waits for the turn to end. */
-  send(tile: string, text: string): { sent: boolean; held: boolean };
+  send(tile: string, text: string, photos?: string[]): { sent: boolean; held: boolean };
   /** Type `keys` into the terminal of `tile`, one by one: how many. */
   keys(tile: string, keys: string[]): number;
   /** The reply of the turn after the last prompt sent to `tile`, waiting up to `timeoutMs`. */
@@ -932,7 +933,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const api: ControlWork = {
     sleep: sleepTiles,
     wake: wakeTiles,
-    send(tile, text) {
+    send(tile, text, photos) {
       refuseAsleep(tile);
       // Delivered through the mailbox, which types text-then-Enter as separate writes (a bundled
       // newline is dropped by claude's TUI) and HOLDS it while the agent is mid-turn, where it
@@ -941,7 +942,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       const sent = holdUntilSent(pid);
       // Typed in at once, it is sent before deliverToTile returns.
       let typed = false;
-      const ok = deps.deliverToTile(pid, text, () => { typed = true; armRead(tile); sent(); });
+      const ok = deps.deliverToTile(pid, text, () => { typed = true; armRead(tile); sent(); }, photos);
       if (!ok) sent();
       return { sent: ok, held: ok && !typed };
     },

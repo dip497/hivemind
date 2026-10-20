@@ -417,6 +417,8 @@ export interface AgentProviderDef {
   interrupt?: readonly string[];
   /** It reads a message typed while it works, at its next step. */
   steer?: boolean;
+  /** It attaches an image whose path is pasted alone into its prompt. */
+  pastedImages?: boolean;
 }
 
 /** The keys that allow, and the keys that deny, what an agent asks on its screen. */

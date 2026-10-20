@@ -1025,6 +1025,7 @@ const control: ControlPlane = new ControlPlane({
   // Used by agent.send and pipe forwarding.
   write: writeTile,
   steers: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.steer,
+  pastesPhotos: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.pastedImages,
   signalsTurns: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.caps.turnSignal,
   // The host starts a spawned tile, its task on the agent's command line where it takes one there:
   // a window that shows it joins it, so whichever opens it first, the agent gets its task.
@@ -1350,7 +1351,15 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
   }),
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
-  controlApi({ control: () => control.api() }),
+  controlApi({
+    control: () => control.api(),
+    // A message's photos, on the machine its agent runs on, in a folder of its tile's.
+    keep: (bare, images) => {
+      const folder = runsIn(heldBoards(workspaceStore()), bare);
+      if (folder === null) throw new ApiError("NOT_FOUND", `no tile ${bare} is open`);
+      return placesHere.keep(folder, images, bare);
+    },
+  }),
   // What an agent here and the person say to each other, from its session file, as it is written
   // (M5, spec/agents.md "Conversation").
   conversations({

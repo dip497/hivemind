@@ -266,7 +266,7 @@ test("the header is the agent's name and state in plain words, Terminal as an ic
   const did = () => page.evaluate(() => (window as unknown as { calls: string[][] }).calls.filter((c) => c[0] !== "conversation"));
   await expect.poll(did).toEqual([["close", "t1"]]);
   // At work and nothing typed: the box's button stops it. Typing makes it send again.
-  const button = page.locator("[data-message] button");
+  const button = page.locator("[data-message] button.send");
   await expect(button).toHaveAttribute("aria-label", "Stop");
   await button.click();
   await expect.poll(did).toEqual([["close", "t1"], ["stop", "t1"]]);

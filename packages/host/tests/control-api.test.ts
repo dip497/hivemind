@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { Intent } from "@hivemind/workspace-host/intents";
 import { PROMPT_MAX } from "@hivemind/view-sdk/protocol";
-import { controlApi } from "../src/control-api.ts";
+import { controlApi, type ControlApiOptions } from "../src/control-api.ts";
 import type { ControlWork } from "../src/control/methods.ts";
 
 const person: Connection = { actor: { kind: "person" }, send: () => {}, closed: new AbortController().signal };
@@ -15,14 +15,14 @@ const agent: Connection = { actor: { kind: "peer", person: "t7", device: "t7", a
 
 /** The control plane, answering each piece of work with `answers[name]`: what it was asked, and
  *  what the API recorded. */
-function plane(answers: Partial<Record<keyof ControlWork, unknown>> = {}) {
+function plane(answers: Partial<Record<keyof ControlWork, unknown>> = {}, keep?: ControlApiOptions["keep"]) {
   const asked: Array<[string, ...unknown[]]> = [];
   const work = new Proxy({} as ControlWork, {
     // Not a promise: awaited, it is the work itself.
     get: (_t, name: string) => (name === "then" ? undefined : (...args: unknown[]) => { asked.push([name, ...args]); return answers[name as keyof ControlWork]; }),
   });
   const recorded: Array<{ verb: string; target?: string; actor: Connection["actor"] }> = [];
-  const server = new WorkspaceServer([controlApi({ control: async () => work })], {
+  const server = new WorkspaceServer([controlApi({ control: async () => work, ...(keep ? { keep } : {}) })], {
     perform: async (actor, intent: Intent<unknown>, run) => {
       const r = await run();
       recorded.push({ verb: intent.verb, ...(intent.target !== undefined ? { target: typeof intent.target === "function" ? intent.target(r) : intent.target } : {}), actor });
@@ -46,7 +46,7 @@ test("each method is the control plane's work, its answer in the API's shape", a
   assert.deepEqual(await c.call(person, "tools.rescan"), { result: null }, "a machine method asked for what it does answers null");
   assert.deepEqual(await c.call(person, "host.status"), { result: { workspaces: [] } });
   assert.deepEqual(c.asked, [
-    ["send", "t1", "fix the tests\nthen push"],
+    ["send", "t1", "fix the tests\nthen push", undefined],
     ["rename", "t1", "reviewer"],
     ["keys", "t1", ["y", "Enter"]],
     ["read", "t1", 5_000],
@@ -105,4 +105,23 @@ test("a malformed call is a bad request, and the control plane is asked nothing"
     assert.equal((await c.call(person, method, ...params)).error?.code, "BAD_REQUEST", `${method} ${JSON.stringify(params).slice(0, 60)}`);
   }
   assert.deepEqual(c.asked, []);
+});
+
+test("a message's photos are kept for its tile and handed on with it, by their paths; words may be none then; a photo that is not what it says, or one where none are taken, is refused and nothing is sent", async () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]).toString("base64");
+  const kept: Array<[string, unknown]> = [];
+  const c = plane({ send: { sent: true, held: true } }, async (tile, images) => { kept.push([tile, images]); return images.map((_, i) => `/photos/x/${i}.png`); });
+  assert.deepEqual(await c.call(person, "agent.send", "hm:t1", "what is this?", { images: [{ type: "image/png", data: png }] }),
+    { result: { sent: true, held: true, photos: ["/photos/x/0.png"] } });
+  assert.deepEqual(await c.call(person, "agent.send", "t1", "", { images: [{ type: "image/png", data: png }, { type: "image/png", data: png }] }),
+    { result: { sent: true, held: true, photos: ["/photos/x/0.png", "/photos/x/1.png"] } });
+  assert.deepEqual(kept.map(([t]) => t), ["t1", "t1"]);
+  assert.deepEqual(c.asked, [["send", "hm:t1", "what is this?", ["/photos/x/0.png"]], ["send", "t1", "", ["/photos/x/0.png", "/photos/x/1.png"]]]);
+  c.asked.length = 0;
+  const svg = Buffer.from("<svg onload=alert(1)>").toString("base64");
+  assert.equal((await c.call(person, "agent.send", "t1", "look", { images: [{ type: "image/png", data: svg }] })).error?.code, "BAD_REQUEST");
+  assert.equal((await c.call(person, "agent.send", "t1", "", { images: [] })).error?.code, "BAD_REQUEST");
+  assert.equal((await plane({ send: { sent: true, held: false } }).call(person, "agent.send", "t1", "look", { images: [{ type: "image/png", data: png }] })).error?.code, "UNSUPPORTED");
+  assert.deepEqual(c.asked, []);
+  assert.equal(kept.length, 2);
 });

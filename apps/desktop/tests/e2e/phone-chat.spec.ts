@@ -1,9 +1,11 @@
-// A message sent from the phone page while its agent works (crates/hive-web/www/app/agent.ts): Claude
-// Code takes a line typed mid-turn into the turn that runs and records it, not as a prompt of the
-// person's, but as a queued_command attachment. The page shows it at once, and keeps showing it
-// once the session file has it. The agent is the scripted stand-in (fixtures/fake-agent.cjs, with
-// FAKE_STEER) behind the real claude manifest and hooks, on a network of its own whose server
-// serves the page.
+// Messages sent from the phone page's chat (crates/hive-web/www/app/agent.ts). One sent while its
+// agent works: Claude Code takes a line typed mid-turn into the turn that runs and records it, not
+// as a prompt of the person's, but as a queued_command attachment; the page shows it at once, and
+// keeps showing it once the session file has it. One held for an agent that reads none mid-turn
+// shows as queued and goes when its turn ends. Photos picked go with a message, kept on the
+// computer, and the agent is given their paths. The agent is the scripted stand-in
+// (fixtures/fake-agent.cjs) behind the real claude manifest and hooks, on a network of its own whose
+// server serves the page.
 import { test, expect, chromium, type Browser, type ElectronApplication } from "@playwright/test";
 import { execSync, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -75,7 +77,7 @@ async function chatWith(steers: boolean) {
   };
   const transcripts = path.join(home, ".claude", "projects");
   const recorded = () => fs.readdirSync(transcripts, { recursive: true }).filter((f) => String(f).endsWith(".jsonl")).map((f) => fs.readFileSync(path.join(transcripts, String(f)), "utf8")).join("");
-  return { page, box, send, recorded, person: page.locator('[data-chat] [data-who="person"]'), agent: page.locator('[data-chat] [data-who="agent"]') };
+  return { page, box, send, recorded, home, person: page.locator('[data-chat] [data-who="person"]'), agent: page.locator('[data-chat] [data-who="agent"]') };
 }
 
 test("a message sent from the phone while Claude Code works shows in its chat at once, as the person's, and stays there once Claude Code takes it into the running turn", async ({}, testInfo) => {
@@ -127,4 +129,57 @@ test("messages sent from the phone while an agent that reads only at its prompt 
   const prompts = recorded().split("\n").filter(Boolean).map((l) => JSON.parse(l) as { type: string; message?: { content: unknown } }).filter((r) => r.type === "user").map((r) => r.message!.content);
   expect(prompts).toEqual([first, "echo second", "echo third"]);
   await page.screenshot({ path: testInfo.outputPath("queued-sent.png") });
+});
+
+test("photos picked on the phone go with a message: shown before it is sent, one removed stays behind, and the agent is given the path of each, kept on the computer outside the project, bytes intact", async ({}, testInfo) => {
+  test.skip(!hiveNetBuilt() || !hiveWebBuilt(), "build hive-net (cargo build in crates/hive-net) and the page (crates/hive-web/build.sh) first");
+  test.setTimeout(240_000);
+  const { page, box, recorded } = await chatWith(true);
+  // Screenshots, as a phone's camera roll holds them: PNGs drawn by the browser.
+  const drawn = async (color: string) => Buffer.from(await page.evaluate(async (c) => {
+    const canvas = Object.assign(document.createElement("canvas"), { width: 240, height: 160 });
+    const g = canvas.getContext("2d")!;
+    g.fillStyle = c;
+    g.fillRect(0, 0, 240, 160);
+    g.fillStyle = "#fff";
+    g.font = "28px sans-serif";
+    g.fillText("Log in", 70, 90);
+    const blob = await new Promise<Blob>((done) => canvas.toBlob((b) => done(b!), "image/png"));
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  }, color));
+  const photo = await drawn("#d9480f");
+  const other = await drawn("#1971c2");
+  await page.locator("[data-photo-picker]").setInputFiles([
+    { name: "login.png", mimeType: "image/png", buffer: photo },
+    { name: "again.png", mimeType: "image/png", buffer: other },
+  ]);
+  const thumbs = page.locator("[data-message] [data-photo]");
+  await expect(thumbs).toHaveCount(2);
+  // Drawn, as the page's policy lets it draw an image.
+  await expect.poll(() => thumbs.locator("img").evaluateAll((imgs) => imgs.map((i) => (i as HTMLImageElement).naturalWidth))).toEqual([240, 240]);
+  await page.screenshot({ path: testInfo.outputPath("attach-picked.png") });
+  await thumbs.nth(1).locator("[data-photo-remove]").click();
+  await expect(thumbs).toHaveCount(1);
+  await box.fill("echo what is wrong here");
+  await page.locator("[data-message] button[type=submit]").click();
+  await expect(box).toHaveValue("", { timeout: 10_000 });
+  await expect(thumbs).toHaveCount(0);
+  await expect(page.locator("[data-chat] [data-pending-photos] img")).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("attach-sent.png") });
+
+  // The agent was given the words, then the photo's path, as a person drags a file into its
+  // terminal: one prompt, pasted whole.
+  const prompts = () => recorded().split("\n").filter(Boolean).map((l) => JSON.parse(l) as { type: string; message?: { content: unknown } })
+    .filter((r) => r.type === "user" && typeof r.message?.content === "string").map((r) => r.message!.content as string);
+  await expect.poll(prompts, { timeout: 30_000 }).toHaveLength(1);
+  const [given] = prompts();
+  expect(given).toMatch(/^echo what is wrong here\s+\/\S+\.png$/);
+  const kept = given!.split(/\s+/).at(-1)!;
+  expect(path.isAbsolute(kept)).toBe(true);
+  expect(fs.readFileSync(kept)).toEqual(photo);
+  expect(kept.startsWith(path.join(root, "desktop", "hivemind-dev", "photos") + path.sep)).toBe(true);
+  expect(fs.statSync(kept).mode & 0o777).toBe(0o600);
+  await expect(page.locator('[data-chat] [data-who="person"]')).toHaveText([given!], { timeout: 30_000 });
+  await expect(page.locator("[data-chat] [data-pending]")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("attach-delivered.png") });
 });

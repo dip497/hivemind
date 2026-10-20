@@ -34,6 +34,8 @@ icon:
 # A message typed while it works is read after its next tool call, in that turn: codex 0.163.0
 # shows "Messages to be submitted after next tool call".
 steer: true
+# An image whose path is pasted alone is attached: codex 0.163.0 shows "[Image #1]".
+pastedImages: true
 options:
 - id: model
   label: Model

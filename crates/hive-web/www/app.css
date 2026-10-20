@@ -149,6 +149,18 @@ button { cursor: pointer; }
   flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; resize: none;
   padding: 6px 0; max-height: 132px; font-size: 16px; line-height: 24px;
 }
+/* With photos: their thumbnails on a row of their own above the words, a paperclip before them. */
+.composer { flex-wrap: wrap; }
+.composer .photos { flex-basis: 100%; padding: 8px 0 4px; }
+.composer:not([data-has-photos]) .photos { display: none; }
+.composer:has(.attach) { padding-left: 6px; }
+.composer .attach {
+  flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0;
+  display: grid; place-items: center; background: transparent; color: var(--text2);
+}
+.composer .attach .icon { width: 20px; height: 20px; }
+.photo-problem { margin: 0; padding: 0 8px; font: 400 13px/18px var(--sans); color: var(--err); }
+.pending .photos { justify-content: flex-end; }
 .composer textarea::placeholder { color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .send {
   flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; padding: 0;

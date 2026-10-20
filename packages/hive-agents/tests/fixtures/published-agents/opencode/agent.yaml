@@ -25,6 +25,8 @@ icon:
       opacity: '0.65'
   - path:
       d: M18 12H6V30H18V12ZM24 36H0V6H24V36Z
+# An image whose path is pasted alone is attached: opencode 1.17.12 shows "[Image 1]".
+pastedImages: true
 options:
 - id: mode
   label: Approval

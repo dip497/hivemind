@@ -430,17 +430,23 @@ pub struct Taken {
     pub held: bool,
 }
 
-/// Send the agent of `tile` in `workspace` the message `text`: it is typed in as its next prompt
-/// once it is at its prompt, or into its turn when it reads one there (spec/needs.md, "Sending").
-/// None when no agent runs there.
+/// Send the agent of `tile` in `workspace` the message `text`, with `images` (none: words alone,
+/// which then may not be empty): it is typed in as its next prompt once it is at its prompt, or into
+/// its turn when it reads one there (spec/needs.md, "Sending"). None when no agent runs there.
 pub async fn send(
     connection: &Connection,
     workspace: &str,
     tile: &str,
     text: &str,
+    images: &[crate::control::Image],
 ) -> Result<Option<Taken>> {
     let mut w = Workspace::open(connection, workspace).await?;
-    let result = w.call("agent.send", json!([tile, text])).await?;
+    let params = if images.is_empty() {
+        json!([tile, text])
+    } else {
+        json!([tile, text, { "images": images }])
+    };
+    let result = w.call("agent.send", params).await?;
     Ok(
         (result.get("sent").and_then(Value::as_bool) == Some(true)).then(|| Taken {
             held: result.get("held").and_then(Value::as_bool) == Some(true),

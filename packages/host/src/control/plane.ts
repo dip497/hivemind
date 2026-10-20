@@ -32,6 +32,7 @@ import { SubagentReaper } from "./subagent-reaper.js";
 import { TurnTracker } from "./turn-tracker.js";
 import { Waits } from "../waits.js";
 import { socketIn } from "../socket-in.js";
+import { withPhotos } from "../start-places.js";
 
 /** The verbs' dependencies that only the embedder has; the plane provides the rest. */
 export type EmbedderDeps = Omit<
@@ -50,6 +51,9 @@ export interface ControlPlaneOptions {
   write(ptyId: string, data: string, paste?: boolean): boolean;
   /** Whether a tile's agent reads a message typed while it works (its file says `steer`). */
   steers?(bareTile: string): boolean;
+  /** Whether the agent of a tile attaches a photo whose path is pasted alone (its file says
+   *  `pastedImages`). */
+  pastesPhotos?(bareTile: string): boolean;
   /** Whether a tile's agent reports its turns (its file says `turnSignal`): only then is a turn
    *  its screen shows one whose end will be known. */
   signalsTurns?(bareTile: string): boolean;
@@ -220,7 +224,11 @@ export class ControlPlane {
       ...o.methods(),
       agentOf: (bare) => this.agentOf.get(bare),
       writeToTile: (ptyId, data) => this.write(ptyId, data),
-      deliverToTile: (ptyId, text, onSent) => this.mailbox.deliver(ptyId, text, onSent),
+      // An agent that attaches a photo whose path is pasted alone is given each so; any other, the
+      // paths in its message, where it reads them.
+      deliverToTile: (ptyId, text, onSent, photos) => (photos?.length && (o.pastesPhotos?.(toBareId(ptyId)) ?? false)
+        ? this.mailbox.deliver(ptyId, text, onSent, { pasted: photos })
+        : this.mailbox.deliver(ptyId, withPhotos(text, photos ?? []), onSent)),
       inbox: this.inbox,
       slept: (bare) => this.slept(bare),
       woke: (bare, ready) => this.woke(bare, ready),

@@ -335,7 +335,6 @@ export class StartScreen {
     this.photosRow.replaceChildren(...this.photos.map((p, i) => {
       const remove = h("button", { type: "button", class: "remove", "aria-label": "Remove the photo", "data-start-photo-remove": String(i) }, "×");
       remove.addEventListener("click", () => this.pick(() => {
-        URL.revokeObjectURL(p.url);
         this.photos.splice(i, 1);
       }));
       return h("span", { class: "photo", "data-start-photo": "" }, h("img", { src: p.url, alt: "" }), remove);
@@ -349,7 +348,8 @@ export class StartScreen {
     try {
       for (const file of files) {
         const photo = await photoOf(file);
-        this.photos.push({ ...photo, url: URL.createObjectURL(file) });
+        // The page may show a data: image, never a blob: one (its policy, hive-net pages.rs).
+        this.photos.push({ ...photo, url: `data:${photo.type};base64,${photo.data}` });
       }
     } catch (e) {
       this.problem = `That photo could not be read: ${message(e)}`;
@@ -358,7 +358,6 @@ export class StartScreen {
   }
 
   private dropPhotos(): void {
-    for (const p of this.photos) URL.revokeObjectURL(p.url);
     this.photos = [];
   }
 

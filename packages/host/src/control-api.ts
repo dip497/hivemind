@@ -12,6 +12,8 @@ import { named } from "@hivemind/workspace-api/server";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { promptProblem } from "@hivemind/view-sdk/protocol";
+import type { StartImage } from "@hivemind/workspace-api/agents";
+import { imagesOf } from "./start-places.js";
 import type { ControlWork } from "./control/methods.js";
 
 type Method =
@@ -22,6 +24,9 @@ type Method =
 export interface ControlApiOptions {
   /** The control plane's work, once it is ready. */
   control(): Promise<ControlWork>;
+  /** Keep the photos given with a message to the agent of `tile` (bare) on the machine it runs on:
+   *  their paths. None: a message takes no photos here. */
+  keep?(tile: string, images: StartImage[]): Promise<string[]>;
 }
 
 const text = (v: unknown, what: string): string => {
@@ -42,11 +47,19 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
     async (_from: Connection, ...p: unknown[]) => { await run(await o.control(), ...p); return null; };
   return {
     answers: {
-      "agent.send": async (_from, tile, message) => {
-        const problem = promptProblem(message);
+      "agent.send": async (_from, tile, message, given) => {
+        const images = imagesOf((given as { images?: unknown } | null | undefined)?.images);
+        // With photos, the words may be none.
+        const problem = images?.length && message === "" ? null : promptProblem(message);
         if (problem) throw new ApiError("BAD_REQUEST", problem);
-        const { sent, held } = (await o.control()).send(text(tile, "tile"), message as string);
-        return held ? { sent, held } : { sent };
+        const t = text(tile, "tile");
+        let photos: string[] | undefined;
+        if (images?.length) {
+          if (!o.keep) throw new ApiError("UNSUPPORTED", "a message here takes no photos");
+          photos = await o.keep(toBareId(t), images);
+        }
+        const { sent, held } = (await o.control()).send(t, message as string, photos);
+        return { sent, ...(held ? { held } : {}), ...(photos ? { photos } : {}) };
       },
       "agent.rename": async (_from, tile, name) => ({ name: (await o.control()).rename(text(tile, "tile"), typeof name === "string" ? name : "") }),
       "agent.keys": async (_from, tile, keys) => {

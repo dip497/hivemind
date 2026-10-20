@@ -4,7 +4,7 @@
  * folders the person opened lately; inside a project, its folders. Never the rest of the disk. A
  * folder is a path here or a `machine://` uri, as a frame holds it. Electron-free.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { optionChoices, type AgentProviderDef } from "@hivemind/agents";
@@ -25,6 +25,15 @@ export const FOLDERS_MAX = 200;
 export const IMAGES_MAX = 4;
 export const IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_TYPES: Record<StartImage["type"], string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" };
+/** How long a photo is kept: one older is deleted the next time a photo is kept there. */
+export const PHOTOS_KEPT_DAYS = 7;
+/** Whether `head`, a file's first bytes, begins as a file of `type` does. */
+const BEGINS: Record<StartImage["type"], (head: Buffer) => boolean> = {
+  "image/png": (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  "image/jpeg": (b) => b.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])),
+  "image/gif": (b) => ["GIF87a", "GIF89a"].includes(b.subarray(0, 6).toString("latin1")),
+  "image/webp": (b) => b.subarray(0, 4).toString("latin1") === "RIFF" && b.subarray(8, 12).toString("latin1") === "WEBP",
+};
 
 /** A machine's files, as far as starting an agent there reads them. */
 export interface MachineFs {
@@ -33,8 +42,9 @@ export interface MachineFs {
   readdir(dir: string): Promise<RemoteDirEntry[]>;
   /** Which of the commands `bins` are found there. */
   found(bins: string[]): Promise<string[]>;
-  /** Keep the photo `data` as `name` there: its path. */
-  keep(name: string, data: Buffer): Promise<string>;
+  /** Keep the photo `data` as `name` there, in its folder `under` when given: its path. Photos kept
+   *  there more than PHOTOS_KEPT_DAYS ago go. */
+  keep(name: string, data: Buffer, under?: string): Promise<string>;
   /** What the command of `def` there lists for each of its options; none: it is not asked. */
   choices?(def: AgentProviderDef): Promise<Record<string, string[]>>;
 }
@@ -87,13 +97,29 @@ export function localFs(photos: () => string): MachineFs {
       const listed = discoverOptions(def).then((o) => Object.fromEntries(Object.entries(o).map(([id, c]) => [id, c.values])));
       return Promise.race([listed, new Promise<Record<string, string[]>>((r) => setTimeout(() => r({}), LISTED_WAIT_MS).unref())]);
     },
-    keep: async (name, data) => {
-      await fs.promises.mkdir(photos(), { recursive: true, mode: 0o700 });
-      const at = path.join(photos(), name);
+    keep: async (name, data, under) => {
+      await forgetOld(photos());
+      const dir = under ? path.join(photos(), under) : photos();
+      await fs.promises.mkdir(dir, { recursive: true, mode: 0o700 });
+      const at = path.join(dir, name);
       await fs.promises.writeFile(at, data, { mode: 0o600 });
       return at;
     },
   };
+}
+
+/** Delete the photos in `dir` and its folders kept more than PHOTOS_KEPT_DAYS ago, and the folders
+ *  they leave empty. */
+async function forgetOld(dir: string, top = true): Promise<void> {
+  const before = Date.now() - PHOTOS_KEPT_DAYS * 86_400_000;
+  let entries: fs.Dirent[];
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    const at = path.join(dir, e.name);
+    if (e.isDirectory()) await forgetOld(at, false);
+    else if (e.isFile() && (await fs.promises.stat(at)).mtimeMs < before) await fs.promises.rm(at, { force: true });
+  }
+  if (!top) await fs.promises.rmdir(dir).catch(() => {});
 }
 
 /** An agent as `agent.startable` lists it: its model and mode choices, those its command `listed`
@@ -240,13 +266,16 @@ export class StartPlaces {
     return frame.id;
   }
 
-  /** Keep `images` on the machine `folder` is on: their paths. */
-  async keep(folder: string, images: StartImage[]): Promise<string[]> {
+  /** Keep `images` on the machine `folder` is on, a folder of their own for the tile `tile` when
+   *  given, each under a name of its own: their paths. */
+  async keep(folder: string, images: StartImage[], tile?: string): Promise<string[]> {
     const spot = spotOf(folder);
     if (!spot) throw new ApiError("BAD_REQUEST", "that is a folder neither here nor on a saved machine");
     const files = await this.files(spot.machine);
+    // Named from the tile, never by it: a name is hex alone, nothing to climb out with.
+    const under = tile === undefined ? undefined : createHash("sha256").update(tile).digest("hex").slice(0, 16);
     const kept: string[] = [];
-    for (const i of images) kept.push(await files.keep(`${randomBytes(8).toString("hex")}.${IMAGE_TYPES[i.type]}`, Buffer.from(i.data, "base64")));
+    for (const i of images) kept.push(await files.keep(`${randomBytes(8).toString("hex")}.${IMAGE_TYPES[i.type]}`, Buffer.from(i.data, "base64"), under));
     return kept;
   }
 
@@ -261,14 +290,20 @@ export class StartPlaces {
   }
 }
 
-/** `start.images`, checked: at most `IMAGES_MAX`, each a known type of at most `IMAGE_BYTES`. */
+/** A prompt with the paths of the photos given with it after it, a line each, as a person drags a
+ *  file into a terminal: an agent reads each from its path. */
+export const withPhotos = (prompt: string | undefined, paths: readonly string[]): string => [prompt, paths.join("\n")].filter(Boolean).join("\n\n");
+
+/** `start.images` or a message's, checked: at most `IMAGES_MAX`, each a known type of at most
+ *  `IMAGE_BYTES`, whose bytes begin as that type's do, whatever it is called. */
 export function imagesOf(value: unknown): StartImage[] | undefined {
   if (value == null) return undefined;
-  if (!Array.isArray(value) || value.length > IMAGES_MAX) throw new ApiError("BAD_REQUEST", `start.images is a list of at most ${IMAGES_MAX} photos`);
+  if (!Array.isArray(value) || value.length > IMAGES_MAX) throw new ApiError("BAD_REQUEST", `images is a list of at most ${IMAGES_MAX} photos`);
   return value.map((v) => {
     const i = v as Partial<StartImage> | null;
     if (!i || typeof i.type !== "string" || !Object.hasOwn(IMAGE_TYPES, i.type) || typeof i.data !== "string") throw new ApiError("BAD_REQUEST", "a photo is { type, data }: a png, jpeg, webp or gif, in base64");
     if (i.data.length > Math.ceil(IMAGE_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]*={0,2}$/.test(i.data)) throw new ApiError("BAD_REQUEST", `a photo is base64 of at most ${IMAGE_BYTES} bytes`);
+    if (!BEGINS[i.type as StartImage["type"]](Buffer.from(i.data.slice(0, 16), "base64"))) throw new ApiError("BAD_REQUEST", `a photo's bytes are not a ${IMAGE_TYPES[i.type as StartImage["type"]]}, as it says`);
     return { type: i.type as StartImage["type"], data: i.data };
   });
 }

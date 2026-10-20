@@ -517,16 +517,22 @@ impl Host {
             .map_err(err)
     }
 
-    /// Send the agent of `tile` the message `text`, typed in once it is at its prompt, or into its
-    /// turn when it reads one there: `{held}`, whether it waits for the turn to end; null when no
-    /// agent runs there.
+    /// Send the agent of `tile` the message `text` with `images` (`[{type, data}]`, the bytes in
+    /// base64), typed in once it is at its prompt, or into its turn when it reads one there:
+    /// `{held}`, whether it waits for the turn to end; null when no agent runs there.
     pub async fn send(
         &self,
         workspace: String,
         tile: String,
         text: String,
+        images: JsValue,
     ) -> Result<JsValue, JsError> {
-        match workspace::send(&self.connection, &workspace, &tile, &text)
+        let images: Vec<control::Image> = if images.is_undefined() || images.is_null() {
+            vec![]
+        } else {
+            serde_json::from_value(from_js(&images)?).map_err(err)?
+        };
+        match workspace::send(&self.connection, &workspace, &tile, &text, &images)
             .await
             .map_err(err)?
         {

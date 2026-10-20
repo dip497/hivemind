@@ -164,7 +164,8 @@ person types one at its terminal (0.33). The `agent.read` after it waits for the
 (0.23). It answers `{ "sent": true }`, with `"held": true` while it waits for the turn to end
 (0.33), or `{ "sent": false }` when no agent runs there. A device shows the message as the
 person's at once, held or not, and shows it from the agent's session file once that has it; one
-held offers to stop the turn (`agent.interrupt`), after which it goes. One may send who may drive
+held offers to stop the turn (`agent.interrupt`), after which it goes. A message may carry up to 4
+photos (`agent.send`'s `images`, 0.33); one held keeps them. One may send who may drive
 the workspace's agents, and the person's own devices, a phone among them. A phone may also type
 into a terminal it watches, as the person, asking for its keyboard while someone else holds it
 (`workspace-api.md`, "Peers").
