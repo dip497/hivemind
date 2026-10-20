@@ -2,7 +2,9 @@
  *  types hold against what it is given, its manifest is one the app loads, and its code loads and
  *  draws once against a fake app. Seeing it in the real app is `tile look` / `plugin open`. */
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import type { AuthoredKind } from "../plugin-kinds.js";
 import { compiledSelf } from "../remote.js";
 import type { Problem } from "./problem.js";
@@ -26,6 +28,17 @@ function drawApart(dir: string): Problem[] {
   return [{ step: "draw", message: `drawing it stopped: ${why}` }];
 }
 
+/** The line of the manifest that holds the field a problem names (its first quoted word), when it
+ *  holds one: `unknown field "description"` is placed at `"description":`. */
+function fieldLine(file: string, message: string): number | undefined {
+  const field = /"([^"]+)"/.exec(message)?.[1];
+  if (!field) return undefined;
+  let text: string;
+  try { text = readFileSync(file, "utf8"); } catch { return undefined; }
+  const i = text.split("\n").findIndex((l) => l.includes(`"${field}":`));
+  return i < 0 ? undefined : i + 1;
+}
+
 export interface CheckReport {
   kind: AuthoredKind["kind"];
   dir: string;
@@ -38,7 +51,10 @@ export interface CheckReport {
 
 export async function checkPlugin(k: AuthoredKind, dir: string): Promise<CheckReport> {
   const types = checkTypes(dir, k.types, k.noun);
-  const manifest: Problem[] = (await k.validate(dir)).map((message) => ({ step: "manifest", file: k.manifest, message }));
+  const manifest: Problem[] = (await k.validate(dir)).map((message) => {
+    const line = fieldLine(path.join(dir, k.manifest), message);
+    return { step: "manifest", file: k.manifest, ...(line ? { line } : {}), message };
+  });
   // A manifest the app would not load says nothing of what its code draws.
   const draw = manifest.length ? null : drawApart(dir);
   const state = (ran: boolean, problems: Problem[], why = "") => (!ran ? why : problems.length ? "failed" : "ok");

@@ -17,6 +17,15 @@ describe("provenance the package claims about itself", () => {
   });
 });
 
+describe("the one line that says what a view shows", () => {
+  const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
+  it("keeps a description, and refuses one that is not a line of text", () => {
+    const r = validateViewManifest({ ...base, description: "Every tile with its title." });
+    expect(r.ok && r.manifest.description).toBe("Every tile with its title.");
+    for (const bad of [42, "x".repeat(301)]) expect(validateViewManifest({ ...base, description: bad }).ok).toBe(false);
+  });
+});
+
 describe("the screens a view says it works on", () => {
   const base = { id: "view", name: "V", version: "1.0.0", entry: "index.html", protocol: 1, permissions: [] };
   it("keeps `phone` as it says, says nothing of it when the view does not, and refuses anything but true or false", () => {

@@ -293,7 +293,7 @@ const HUB_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 const PACKAGE = { kind: "package", noun: "package", guide: "https://hivemind.griiken.com/guide/packages/" } as const;
 const NEW_KINDS = `${KIND_NAMES}, ${PACKAGE.kind}`;
 /** A folder as printed, so `install` never reads it as an id on HiveHub. */
-const shownPath = (given: string) => (/^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`);
+const shownPath = (given: string) => (given === "." || /^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`);
 /** `to` as written from the current folder. */
 const shownFrom = (to: string) => shownPath(path.relative(process.cwd(), to) || ".");
 

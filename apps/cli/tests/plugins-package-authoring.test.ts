@@ -47,19 +47,24 @@ describe("hive plugins, writing a package", () => {
     ] } });
   }, 240_000);
 
-  test("check reports a misspelt member path and a member with another owner's id at the line that names each", () => {
+  test("check reports a misspelt member path and another owner's id at the line naming each, and a member's own manifest problem at its line", () => {
     run("new", "package", "kit", "--owner", "ada");
     run("new", "widget", "dog", "--in", "kit");
     run("new", "widget", "cat", "--in", "kit");
     fs.writeFileSync(manifest(), fs.readFileSync(manifest(), "utf8").replace('"widgets/dog"', '"widgets/dgo"'));
     const cat = path.join(tmp, "kit", "widgets", "cat", "widget.json");
     fs.writeFileSync(cat, fs.readFileSync(cat, "utf8").replace('"@ada/cat"', '"@bob/cat"'));
+    run("new", "view", "owl", "--in", "kit");
+    const owl = path.join(tmp, "kit", "views", "owl", "hivemind-view.json");
+    fs.writeFileSync(owl, fs.readFileSync(owl, "utf8").replace('"protocol": 1,', '"protocol": 1,\n  "colour": "red",'));
+    const colourLine = fs.readFileSync(owl, "utf8").split("\n").findIndex((l) => l.includes('"colour":')) + 1;
 
     const r = run("check", "kit", "--json");
     expect(r.code).toBe(1);
     expect((r.json as Report).data.problems).toEqual([
       expect.objectContaining({ step: "manifest", file: "hivemind-package.json", line: lineNaming("widgets/dgo"), member: "widgets/dgo", message: expect.stringContaining("there is no folder widgets/dgo") }),
       expect.objectContaining({ step: "manifest", file: "hivemind-package.json", line: lineNaming("widgets/cat"), member: "widgets/cat", message: expect.stringContaining("@bob/cat is not @ada's") }),
+      expect.objectContaining({ step: "manifest", file: "views/owl/hivemind-view.json", line: colourLine, member: "views/owl/dist", message: 'unknown field "colour"' }),
     ]);
   }, 120_000);
 

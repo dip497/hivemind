@@ -10,7 +10,7 @@ const title = (name: string) => name.split("-").map((w) => w[0]!.toUpperCase() +
 export function starterFiles(owner: string, name: string, inPackage?: InPackage): Record<string, string> {
   const id = `@${owner}/${name}`;
   const files: Record<string, string> = {
-    "hivemind-view.json": JSON.stringify({ id, name: title(name), version: "0.1.0", entry: "index.html", protocol: 1, permissions: [] }, null, 2) + "\n",
+    "hivemind-view.json": JSON.stringify({ id, name: title(name), description: "What it shows, in one line.", version: "0.1.0", entry: "index.html", protocol: 1, permissions: [] }, null, 2) + "\n",
     "package.json": JSON.stringify({
       name, version: "0.1.0", private: true, type: "module",
       scripts: { build: "node build.mjs", dev: `node build.mjs && hive plugins install ${inPackage?.root ?? "dist"}`, typecheck: "tsc" },

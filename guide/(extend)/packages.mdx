@@ -47,13 +47,13 @@ Which packages arrive switched off, and which updates need your trust again, are
     the package's owner:
 
     ```bash
-    hive plugins new tool prs --in kit       # kit/tools/prs
-    hive plugins new widget dog --in kit     # kit/widgets/dog
-    hive plugins new view board --in kit     # kit/views/board, named by its built dist/
-    hive plugins add ../counter --to kit     # one you already wrote, copied into kit/widgets/counter
+    hive plugins new tool prs --in kit      # kit/tools/prs
+    hive plugins new widget dog --in kit    # kit/widgets/dog
+    hive plugins new view board --in kit    # kit/views/board, named by its dist/
+    hive plugins add ../counter --to kit    # copied to kit/widgets/counter
     ```
 
-    `add` refuses a plugin whose id is not yours (`@you/<name>`), and changes nothing. Each new
+    `add` takes one you already wrote. It refuses a plugin whose id is not yours (`@you/<name>`), and changes nothing. Each new
     member has its own `PROMPT.md` with the guide of its kind: [tools](/tool-plugins),
     [widgets](/widgets) or [views](/extension-authoring). For a view, run `npm install` in its
     folder once.
