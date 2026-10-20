@@ -52,7 +52,24 @@ beforeAll(async () => {
   const answers = Object.fromEntries([
     answer("host.status", () => ({ workspaces: [repoA, nested, repoB, onBox].map((repo) => ({ repo, workspace: null })) })),
     // The agent me-1 is in workspace a, its hooks having said its session.
-    answer("agent.list", (repo) => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking, ...(repo === repoA ? [{ tile: "me-1", agent: "me", state: "working", session: "sess-42" }] : [])] })),
+    answer("agent.list", (repo) => ({ seq: 3, agents: [listed(repo, worker), listed(repo, asking), ...(repo === repoA ? [listed(repo, { tile: "me-1", agent: "me", state: "working", session: "sess-42" })] : [])] })),
+    // Workspace a: the agents above, w-1 put to sleep, a shell, a browser, a tool no plugin here
+    // gives. Workspace b: only its agents.
+    answer("store.core", (repo) => ({
+      frames: [{ id: "f1", title: "a", workspacePath: repo }],
+      tiles: [
+        { id: "w-1", kind: "claude", label: "codex", cmd: "codex", ...(repo === repoA ? { sleeping: repoA } : {}) },
+        { id: "w-3", kind: "claude", label: "codex", cmd: "codex" },
+        ...(repo === repoA ? [
+          { id: "me-1", kind: "claude", label: "claude", cmd: "claude" },
+          { id: "sh-1", kind: "shell", label: "bash", cmd: "bash" },
+          { id: "web-1", kind: "browser", label: "Browser" },
+          { id: "x-1", kind: "radar", label: "Radar" },
+        ] : []),
+      ],
+      tileNames: { "w-1": "worker", "sh-1": "build" },
+      frameOf: { "w-1": "f1", "w-3": "f1", "me-1": "f1", "web-1": "f1" },
+    })),
     answer("agent.answer", (_tile, since) => ({ answered: since === 77 })),
     answer("agent.approval", () => ({ request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
@@ -111,6 +128,16 @@ afterAll(() => {
 const last = (method: string) => calls.findLast((c) => c.method === method)!;
 /** A worker waiting on its supervisor's answer to a tool use. */
 const asking = { tile: "w-3", agent: "asker", state: "waiting", waiting: { kind: "approval", since: 77, approval: { request: "req-1", tool: "Bash", summary: "rm -rf dist", expiresAt: 0 } } };
+const worker = { tile: "w-1", agent: "worker", state: "interrupted" };
+/** An agent as the host lists it: `name` the workspace's, `agent` the tile's, `program` what it runs. */
+const listed = (repo: unknown, a: { tile: string; agent: string }) => ({
+  workspace: `id-${path.basename(String(repo))}`, name: path.basename(String(repo)), program: { id: a.tile === "me-1" ? "claude" : "codex", label: "" }, since: 5, machine: "here", ...a,
+});
+/** The same agent as `hive ctl agents` prints it: `name` the tile's, `agent` the program. */
+const row = (repo: string, a: { tile: string; agent: string; state: string }, state = a.state) => {
+  const { tile, agent, ...rest } = a;
+  return { tile, name: agent, agent: tile === "me-1" ? "claude" : "codex", workspace: { id: `id-${path.basename(repo)}`, name: path.basename(repo) }, since: 5, machine: "here", ...rest, state };
+};
 
 describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
   test("a program given a grant's token (a plugin's service) is that grant, in its workspace; one reaching several drives the one HIVE_WORKSPACE names", async () => {
@@ -129,7 +156,7 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
   test("as the person, a verb acts on the open workspace this folder is in (the innermost), else the only one, else asks which; --repo names it", async () => {
     const r = await hive(["ctl", "agents", "--json"], { cwd: path.join(repoB, "sub"), env: env() });
     expect([r.code, r.stdout.trim().split("\n").length]).toEqual([0, 1]);
-    expect(r.json).toEqual({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking] });
+    expect(r.json).toEqual({ seq: 3, agents: [row(repoB, worker), row(repoB, asking)] });
     expect(last("agent.list").params).toEqual([repoB]);
     await hive(["ctl", "frames", "--repo", repoA, "--json"], { cwd: dir, env: env() });
     expect(last("agent.startable").params).toEqual([repoA]);
@@ -167,14 +194,33 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([notMine.code, (notMine.json as { error: { message: string } }).error.message]).toEqual([5, `no tile b-1 in this workspace (${repoA})`]);
   });
 
+  test("agents and tiles name each field as the flags that set it: name is the tile's (spawn --name), agent the program (spawn --agent), workspace its id and name; one put to sleep is asleep; tiles lists every tile, a tool with its plugin", async () => {
+    const agents = await hive(["ctl", "agents", "--json"], { env: asAgent() });
+    expect([agents.code, agents.json]).toEqual([0, { seq: 3, agents: [row(repoA, worker, "asleep"), row(repoA, asking), row(repoA, { tile: "me-1", agent: "me", state: "working", session: "sess-42" } as never)] }]);
+    const byName = (agents.json as { agents: Array<{ name: string; tile: string }> }).agents.find((a) => a.name === "worker");
+    expect(byName?.tile).toBe("w-1");
+    const tiles = await hive(["ctl", "tiles", "--json"], { env: asAgent() });
+    expect([tiles.code, tiles.json]).toEqual([0, { tiles: [
+      { tile: "w-1", kind: "agent", name: "worker", frame: "f1", agent: "codex", state: "asleep" },
+      { tile: "w-3", kind: "agent", name: "asker", frame: "f1", agent: "codex", state: "waiting" },
+      { tile: "me-1", kind: "agent", name: "me", frame: "f1", agent: "claude", state: "working" },
+      { tile: "sh-1", kind: "terminal", name: "build", frame: null },
+      { tile: "web-1", kind: "tool", name: "Browser", frame: "f1", plugin: "hivemind/web", tool: "hivemind/web/browser" },
+      { tile: "x-1", kind: "radar", name: "Radar", frame: null },
+    ] }]);
+    expect(last("store.core")).toMatchObject({ params: [repoA], by: { kind: "peer", tile: "me-1" } });
+    const lines = await hive(["ctl", "tiles"], { env: asAgent() });
+    expect(lines.stdout.split("\n")[3]).toBe("sh-1\tterminal\tbuild\t-\t");
+  });
+
   test("agents --session finds the agent in that session, as its hooks said it or as the app tracks its tile's; none is exit 5", async () => {
     const mine = await hive(["ctl", "agents", "--session", "sess-42", "--json"], { env: asAgent() });
-    expect([mine.code, mine.json]).toEqual([0, { seq: 3, agents: [{ tile: "me-1", agent: "me", state: "working", session: "sess-42" }] }]);
-    expect((await hive(["ctl", "agents", "--session", "sess-42"], { env: asAgent() })).stdout).toBe("me-1\tme\tworking\n");
+    expect([mine.code, mine.json]).toEqual([0, { seq: 3, agents: [row(repoA, { tile: "me-1", agent: "me", state: "working", session: "sess-42" } as never)] }]);
+    expect((await hive(["ctl", "agents", "--session", "sess-42"], { env: asAgent() })).stdout).toBe("me-1\tme\tclaude\tworking\n");
     // A session the app tracks for w-1 (resumed into it), which its status has not said.
     writeTrackedSession(path.join(dir, TILE_SESSIONS_DIR), "hm:w-1", "resumed-7");
     const tracked = await hive(["ctl", "agents", "--session", "resumed-7", "--repo", repoA, "--json"], { env: env() });
-    expect([tracked.code, tracked.json]).toEqual([0, { seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }] }]);
+    expect([tracked.code, tracked.json]).toEqual([0, { seq: 3, agents: [row(repoA, worker, "asleep")] }]);
     const none = await hive(["ctl", "agents", "--session", "nope", "--json"], { env: asAgent() });
     expect([none.code, none.json]).toEqual([5, { error: { code: "NOT_FOUND", message: `no agent of the workspace at ${repoA} is in session nope` } }]);
   });

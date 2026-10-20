@@ -35,11 +35,18 @@ import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
 import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
 import { isRemote } from "@hivemind/core/remote-uri";
+
+type Core = NonNullable<Result<"store.core">>;
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, resolveAgent, superviseOf, workflowPlan } from "../ctl-args.js";
 import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
-import type { InboxMessage } from "@hivemind/workspace-api/agents";
+import type { AgentItem, InboxMessage } from "@hivemind/workspace-api/agents";
+import type { Result } from "@hivemind/workspace-api/methods";
+import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
+import { createToolRegistry } from "@hivemind/core/tool-registry";
+import { listToolPackages } from "@hivemind/core/tool-packages";
+import { agentRows, tileRows, type AgentRow, type ToolOf } from "../tile-rows.js";
 import { PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList } from "@hivemind/workspace-api/plugins";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
@@ -202,15 +209,14 @@ const whoami = defineCommand({
   },
 });
 
-type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string }; session?: string };
 type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };
 
-/** One agent as a line: its tile, name, state, and what it waits on. */
-const agentLine = (a: FeedAgent): string => `${a.tile}\t${a.agent}\t${a.state}${a.waiting ? `\twaiting: ${a.waiting.kind}` : ""}`;
+/** One agent as a line: its tile, name, program, state, and what it waits on. */
+const agentLine = (a: AgentRow): string => `${a.tile}\t${a.name}\t${a.agent ?? "-"}\t${a.state}${a.waiting ? `\twaiting: ${a.waiting.kind}` : ""}`;
 
 // The workspace's agents, as the app's agent feed says; --watch follows what happens to them.
 const agents = defineCommand({
-  meta: { name: "agents", description: "The workspace's agents and what each waits on; --watch follows what happens to them" },
+  meta: { name: "agents", description: "The workspace's agents: tile, name, agent (the program, as spawn --agent takes it), workspace {id, name}, state (asleep when put to sleep) and what each waits on; --watch follows what happens to them" },
   args: {
     ...repoArg,
     watch: { type: "boolean", description: "keep going: print each turn ended, wait and answer as it happens (one JSON per line with --json)" },
@@ -227,7 +233,7 @@ const agents = defineCommand({
       const heard: FeedEvent[] = [];
       let show = (e: FeedEvent) => { heard.push(e); };
       d.on("agent.event", (at, e) => { if (at === repo) show(e as FeedEvent); });
-      let listed = await d.call("agent.list", [repo]) as { seq: number; agents: FeedAgent[] };
+      let listed = await d.call("agent.list", [repo]) as { seq: number; agents: AgentItem[] };
       if (args.session) {
         const id = String(args.session);
         // What its hooks last said, or the session the app tracks for its tile to resume.
@@ -236,13 +242,14 @@ const agents = defineCommand({
         if (!inIt.length) { d.close(); throw new HcpCliError("NOT_FOUND", `no agent of the workspace at ${repo} is in session ${id}`, EXIT.notFound); }
         listed = { ...listed, agents: inIt };
       }
+      const rows = agentRows(listed.agents, await d.call("store.core", [repo]) as Core | null);
       if (!args.watch) {
         d.close();
-        if (json) return console.log(JSON.stringify(listed));
-        console.log(listed.agents.map(agentLine).join("\n") || "no agents");
+        if (json) return console.log(JSON.stringify({ seq: listed.seq, agents: rows }));
+        console.log(rows.map(agentLine).join("\n") || "no agents");
         return;
       }
-      if (!json) for (const a of listed.agents) console.log(agentLine(a));
+      if (!json) for (const a of rows) console.log(agentLine(a));
       let seq = listed.seq;
       show = (e) => {
         if (e.seq <= seq) return;
@@ -252,6 +259,37 @@ const agents = defineCommand({
       for (const e of heard) show(e);
       await d.closed;
       throw new HcpCliError("UNAVAILABLE", "the app or host stopped", EXIT.unavailable);
+    } catch (e) { fail(e, json); }
+  },
+});
+
+/** The plugin and tool each tool tile kind is of, as the tool plugins here say. */
+async function toolKinds(): Promise<ToolOf> {
+  const added = await listToolPackages().catch(() => []);
+  const registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...added.filter((t) => !t.problem)]);
+  return (kind) => {
+    const tool = registry.tileKindOwner(kind);
+    const plugin = tool ? registry.tools.find((t) => t.id === tool)?.pluginId : undefined;
+    return tool && plugin ? { plugin, tool } : null;
+  };
+}
+
+const tiles = defineCommand({
+  meta: { name: "tiles", description: "Every tile of the workspace: tile, kind (agent, terminal, tool, …), name, frame, an agent's state and program, a tool's plugin" },
+  args: { ...repoArg, ...JSON_ARG },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const rows = await onDrive(async (d) => {
+        const repo = await workspaceOf(d, args.repo);
+        const core = await d.call("store.core", [repo]) as Core | null;
+        if (!core) throw new HcpCliError("NOT_FOUND", `no workspace is open at ${repo}`, EXIT.notFound);
+        const { agents } = await d.call("agent.list", [repo]) as { agents: AgentItem[] };
+        await ensureAgentCatalog();
+        return tileRows(core, agents, await toolKinds());
+      });
+      if (json) return console.log(JSON.stringify({ tiles: rows }));
+      console.log(rows.map((t) => [t.tile, t.kind, t.name, t.frame ?? "-", t.state ?? t.agent ?? t.plugin ?? ""].join("\t")).join("\n") || "no tiles");
     } catch (e) { fail(e, json); }
   },
 });
@@ -761,7 +799,7 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    whoami, agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
+    whoami, agents, tiles, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
