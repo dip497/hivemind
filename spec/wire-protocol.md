@@ -39,7 +39,8 @@ method is `UNKNOWN_METHOD`.
 - `agent.report {"message"}` → `{"delivered": true, "parent"}`: a message to the agent or program
   that started this one, put in its starter's inbox (an `agent.event` of kind `reported` for a
   program). This turn's reply is then not forwarded to it
-  as well. `NOT_FOUND` with no starter, or one that is gone.
+  as well. `NOT_FOUND` with no starter, or one that is gone. A starter asleep keeps it in its inbox
+  and is told of it once woken: the answer adds `"asleep": true` and a `note` saying so (0.33).
 - `agent.await_approval {"tool_name", "tool_input"}` → `{"decision": "allow" | "deny" | "ask",
   "reason"?}`: a supervised worker's hook, before a tool runs. Its starter is asked (an
   `approval` wait, answered with `agent.answer`); `ask` when nobody can answer, or nobody did in

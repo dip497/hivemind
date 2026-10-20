@@ -787,7 +787,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           const child = bareOf(String(p.callerTile ?? ""));
           const parent = parentOf(child);
           if (!parent) throw new ApiError("NOT_FOUND", "no parent agent to report to");
-          if (!isClient(parent)) refuseAsleep(parent);
           const message = String(p.message ?? "").trim();
           if (!message) throw new ApiError("BAD_REQUEST", "message required");
           // A program that started it hears it as an event of the agent feed.
@@ -799,6 +798,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           deps.inbox.post(parent, { from: child, name: label(child), kind: "report", text: message });
           // Its own summary stands for this turn: the turn's reply is not sent as well.
           deps.turns.markReported(ptyId(child));
+          // A starter asleep keeps it in its inbox, told of it once it is woken.
+          if (recordOf(parent)?.sleeping) return { delivered: true, parent, asleep: true, note: `delivered to ${parent}'s inbox; it is asleep and reads it when woken` };
           return { delivered: true, parent };
         });
 

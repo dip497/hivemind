@@ -20,7 +20,7 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `UNKNOWN_METHOD` | No such method on this host. |
 | `FORBIDDEN` | The caller may not do this: a peer's role on the workspace does not allow it (below), or no token says who it is. It never ran. |
 | `NOT_FOUND` | What it names is not there: a tile, a frame, a workspace (0.23). |
-| `ASLEEP` | The agent it names is asleep: `agent.send`, `agent.keys`, `agent.read`, `link.connect` at either end, and an agent's report to its starter asleep. `hive ctl wake` it first (0.33). |
+| `ASLEEP` | The agent it names is asleep: `agent.send`, `agent.keys`, `agent.read` and `link.connect` at either end. `hive ctl wake` it first (0.33). An agent's report to its starter asleep is kept in that one's inbox, the answer saying `asleep` (0.33). |
 | `NO_AGENT` | The tile is there but runs no agent (a tool, a browser, a shell), and the method asks an agent's reply (0.33). |
 | `UNSUPPORTED` | The agent cannot do what it asks: it says no turn end to read a reply by, has no permission system to supervise, or keeps no sessions to resume (0.23). |
 | `RATE_LIMITED`, `DEPTH_EXCEEDED` | Too many started at once, or one started too far below the person: ask again later, or from higher up (0.23). It never ran. The limit is 16 agents, tools or widgets a minute for each tree of callers (a grant, an agent the person started, or the person, with every agent started under it), and 64 for the machine; a start refused for anything else uses none of it. |

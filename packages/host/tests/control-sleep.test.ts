@@ -330,10 +330,9 @@ const outcome = async (run: () => unknown): Promise<string> => {
   try { await run(); return "done"; } catch (e) { return (e as { code?: string }).code ?? String(e); }
 };
 
-test("every verb that needs its agent running is refused ASLEEP, saying the wake that fixes it: send, keys, read, a pipe from or to it, a report to it", async () => {
+test("every verb that needs its agent running is refused ASLEEP, saying the wake that fixes it: send, keys, read, a pipe from or to it", async () => {
   const { p } = plane();
   const api = await p.api();
-  const child = await p.start(REPO, { program: "acme", parent: "a1" });
   await api.sleep(REPO, "a1", true);
   const verbs: Array<[string, () => unknown]> = [
     ["send", () => api.send("a1", "next task")],
@@ -341,7 +340,6 @@ test("every verb that needs its agent running is refused ASLEEP, saying the wake
     ["read", () => api.read("a1", 10_000)],
     ["connect from it", () => api.connect("a1", "a2")],
     ["connect to it", () => api.connect("a2", "a1")],
-    ["report to it", () => p.agentChannel("agent.report", { message: "done" }, { actor: { kind: "tile", tile: child } } as never)],
   ];
   for (const [verb, run] of verbs) assert.deepEqual([verb, await outcome(run)], [verb, "ASLEEP"]);
   await assert.rejects(Promise.resolve().then(() => api.send("a1", "x")), /tile a1 is asleep: wake it with hive ctl wake a1/);
@@ -380,4 +378,22 @@ test("a read after a wake does not hand back the reply from before the sleep, on
   const r = await api.read("a1", 0);
   assert.notEqual(r.text, "before the sleep");
   assert.equal(r.finalStatus, "idle");
+});
+
+test("a worker's report to a starter asleep waits in its inbox, saying so, and the starter is told of it once woken", async () => {
+  const { p, typed, settle } = plane();
+  const api = await p.api();
+  const child = await p.start(REPO, { program: "acme", parent: "a1" });
+  await api.sleep(REPO, "a1", true);
+  const as = (tile: string) => ({ actor: { kind: "tile", tile } }) as never;
+  assert.deepEqual(await p.agentChannel("agent.report", { message: "tests added" }, as(child)),
+    { delivered: true, parent: "a1", asleep: true, note: "delivered to a1's inbox; it is asleep and reads it when woken" });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(typed("a1"), "", "nothing is typed into it while it sleeps");
+  await api.wake(REPO, "a1");
+  settle("a1");
+  await new Promise((r) => setTimeout(r, 600));
+  assert.match(typed("a1"), /hive ctl inbox/);
+  const { messages } = await p.agentChannel("agent.inbox", {}, as("a1")) as { messages: Array<{ from: string; kind: string; text: string }> };
+  assert.deepEqual(messages.map((m) => [m.from, m.kind, m.text]), [[child, "report", "tests added"]]);
 });
