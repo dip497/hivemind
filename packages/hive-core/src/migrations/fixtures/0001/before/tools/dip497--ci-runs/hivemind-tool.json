@@ -1,1 +1,1 @@
-{"id":"@dip497/ci-runs","name":"CI runs","version":"1.0.0","apiVersion":1,"entry":"index.js","settings":[{"id":"count","label":"Runs to list","type":"number","default":40}],"tools":[{"key":"main","label":"CI runs","tileKind":"ci-runs"}]}
+{"id":"dip497/ci-runs","name":"CI runs","version":"1.0.0","apiVersion":1,"entry":"index.js","settings":[{"id":"count","label":"Runs to list","type":"number","default":40}],"tools":[{"key":"main","label":"CI runs","tileKind":"ci-runs"}]}

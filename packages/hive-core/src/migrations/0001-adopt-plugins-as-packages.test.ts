@@ -81,20 +81,28 @@ describe("0001-adopt-plugins-as-packages", () => {
     expect(s.state).toEqual({
       "tool:@dip497/github-prs": { options: { count: 80 } },
       "tool:@dip497/worktrees": { enabled: true },
-      "tool:@dip497/ci-runs": { options: { count: 120 } },
+      "tool:@dip497/ci-runs": { options: { count: 120, since: "7d" } }, // its old and new keys merged
       "widget:pomodoro": { options: { minutes: 50 } },
       "widget:@dip497/dog": { options: { name: "Rex" } },
     });
     const result = report!.applied[0]!.result;
     expect(result.adopted).toBe(8);
     expect(result.skipped.map((x) => x.path)).toEqual(["widgets/agents", "widgets/clock", "widgets/odd", "tools/dip497--old-format"]);
-    expect(result.skipped.find((x) => x.path === "widgets/clock")!.why).toContain("clock 1.0.0 is already installed as a package");
+    // A view and a widget of one name: the second is kept in the backup, and the reason says what to do.
+    expect(result.skipped.find((x) => x.path === "widgets/clock")!.why).toContain("clock 1.0.0 is already installed as a package (the view clock)");
+    expect(result.skipped.find((x) => x.path === "widgets/clock")!.why).toContain("@you/clock, and run `hive plugins install <that folder>`");
     // The old folders are gone, and only in the backup, byte for byte.
     expect(s.old).toEqual([]);
     expect(s.backup).toEqual(files(FIXTURE));
-    // Its files are the old folder's.
+    // A tool that said dip497/pages: its files are the old folder's, its manifest says @dip497/pages.
     const pages = fs.readdirSync(path.join(root(), "packages", "store", "dip497--pages"));
-    expect(files(path.join(root(), "packages", "store", "dip497--pages", pages[0]!))).toEqual(files(path.join(FIXTURE, "tools", "dip497--pages")));
+    const stored = path.join(root(), "packages", "store", "dip497--pages", pages[0]!);
+    const { "hivemind-tool.json": _m, ...rest } = files(stored);
+    const { "hivemind-tool.json": _o, ...oldRest } = files(path.join(FIXTURE, "tools", "dip497--pages"));
+    expect(rest).toEqual(oldRest);
+    const was = JSON.parse(fs.readFileSync(path.join(FIXTURE, "tools", "dip497--pages", "hivemind-tool.json"), "utf8"));
+    expect(JSON.parse(fs.readFileSync(path.join(stored, "hivemind-tool.json"), "utf8"))).toEqual({ ...was, id: "@dip497/pages" });
+    expect(fs.existsSync(path.join(root(), "migrations", "0001-staging"))).toBe(false);
   });
 
   test("a second run does nothing", () => {
