@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
 import { type SessionInfo, DAEMON_PROTOCOL_VERSION, SOCKET_NAME } from "@hivemind/agent-host/pty-protocol";
-import { daemonProtocol, retireDaemon, socketAt, wakeSessions } from "@hivemind/agent-host/daemon-replace";
+import { daemonProtocol, daemonSessions, retireDaemon, socketAt, stopDaemon as stopDaemonAt, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { reachDaemon } from "@hivemind/agent-host/daemon-start";
 import { lastingDaemon } from "@hivemind/agent-host/daemon-runtime";
@@ -162,4 +162,14 @@ export function detachPty(tileId: string): void {
 /** App quit: sessions PERSIST in the daemon; only our socket goes, so it can't stall exit. */
 export function killAll(): void {
   local.close();
+}
+/** The sessions running on this computer, asked of a daemon already running: none is started to ask. */
+export async function runningSessions(): Promise<SessionInfo[]> {
+  return (await daemonSessions(socketAt(socketPath()))).filter((s) => s.state === "live" && !s.asleep);
+}
+/** Stop this computer's daemon as `hive daemon stop` does, after our own socket goes so nothing
+ *  here starts another: every session ends, saved, and comes back when the daemon next starts. */
+export async function stopDaemon(): Promise<void> {
+  local.close();
+  await stopDaemonAt(socketAt(socketPath()));
 }

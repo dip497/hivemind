@@ -1,21 +1,22 @@
 /**
  * What a view is told the workspace holds (view protocol `structure`): its frames, each with its
  * colour, the machine it runs on, the frame it nests in, its branch and its folder; its tiles, each
- * with its frame, its name, the agent it runs and its icon; and the links between agents. One builder for
+ * with its frame, its name, the agent it runs, its icon and whether it sleeps; and the links between agents. One builder for
  * every host of a view: the window's, from its model, and a device's for a remote screen, from its
  * store (docs/design/phone-app-2026-10-02.md §6.1). No DOM and no Node: each host says how it
  * resolves a frame's colour and names its machine.
  */
 import type { HostMessage, ViewFrameFolder, ViewFrameMachine } from "@hivemind/view-sdk/protocol";
 import type { FrameListing, TileListing } from "@hivemind/workspace-doc/tile-list";
+import type { TileRecord } from "@hivemind/workspace-doc/shapes";
 
 /** A frame, as `structure` reads it. */
 export interface StructureFrame extends FrameListing {
   parentFrameId?: string;
 }
 
-/** A tile, as `structure` reads it. */
-export type StructureTile = Pick<TileListing, "id" | "kind" | "label">;
+/** A tile, as `structure` reads it: an agent's says whether it sleeps, and since when. */
+export type StructureTile = Pick<TileListing, "id" | "kind" | "label"> & Pick<TileRecord, "sleeping" | "sleptAt">;
 
 export interface StructureSource<F extends StructureFrame, T extends StructureTile> {
   frames: readonly F[];
@@ -62,7 +63,8 @@ export function viewStructure<F extends StructureFrame, T extends StructureTile>
     tiles: s.tiles.map((t) => {
       const agent = s.agent(t);
       const icon = s.icon?.(t);
-      return { id: t.id, frameId: s.frameOf[t.id] ?? null, kind: t.kind, name: s.name(t) ?? t.label, ...(agent ? { agent } : {}), ...(icon ? { icon } : {}) };
+      const asleep = t.sleeping ? { asleep: typeof t.sleptAt === "number" ? { since: t.sleptAt } : {} } : {};
+      return { id: t.id, frameId: s.frameOf[t.id] ?? null, kind: t.kind, name: s.name(t) ?? t.label, ...(agent ? { agent } : {}), ...(icon ? { icon } : {}), ...asleep };
     }),
     links: { pipes: s.links.pipes.map(({ src, dst }) => ({ src, dst })), spawns: s.links.spawns.map(({ parent, child }) => ({ parent, child })) },
   };
