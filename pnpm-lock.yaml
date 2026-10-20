@@ -738,6 +738,9 @@ importers:
       '@hivemind/view-sdk':
         specifier: workspace:*
         version: link:../hive-view-sdk
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
     devDependencies:
       '@hivemind/tsconfig':
         specifier: workspace:*

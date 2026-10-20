@@ -74,10 +74,15 @@ const idRule: Record<CatalogType, string> = {
   widget: "a widget id — it must be @owner/name",
 };
 
+/** Why `id` cannot be a listed plugin of this kind, or null. */
+export const idProblem = (type: CatalogType, id: unknown): string | null =>
+  typeof id === "string" && ID_RE[type].test(id) ? null : `its id is not ${idRule[type]}`;
+
 /** One entry as this app reads it, or throws Unreadable with the reason. */
 function readEntry(p: Record<string, unknown>): CatalogEntry {
   const type = p.type as CatalogType;
-  if (typeof p.id !== "string" || !ID_RE[type].test(p.id)) refuse(`its id is not ${idRule[type]}`);
+  const badId = idProblem(type, p.id);
+  if (badId) refuse(badId);
   if (!text(p.name, 80) || !text(p.description, 400) || !text(p.author, 80) || !text(p.version, 40)) {
     refuse("it needs a name, description, author and version");
   }

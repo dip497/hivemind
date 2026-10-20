@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { appMeetsMinVersion } from "@hivemind/agents";
 import { AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
-import { MAX_INDEX_BYTES, parseHubIndex, type CatalogEntry, type HubIndexReading } from "@hivemind/hub";
+import { MAX_INDEX_BYTES, checkPluginFolder, parseHubIndex, type CatalogEntry, type HubIndexReading, type PluginFile } from "@hivemind/hub";
 
 export const DEFAULT_PLUGIN_INDEX = "https://hivehub.griiken.workers.dev/api/v1/index.json";
 
@@ -79,11 +79,13 @@ export async function noteInstall(entry: CatalogEntry, indexUrl = catalogIndexUr
   }
 }
 
-/** Download an entry's files into a fresh folder, verifying each hash. Returns the folder. */
+/** Download an entry's files into a fresh folder, verifying each hash, and check the folder the way
+ *  a hub checks it before listing it. Returns the folder. */
 export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<string> {
   const stage = await fs.mkdtemp(path.join(os.tmpdir(), `hm-plugin-${entry.id.replace(/[^a-z0-9-]/g, "_")}-`));
   try {
     let total = 0;
+    const folder: PluginFile[] = [];
     for (const f of entry.files) {
       const base = entry.source ? `${entry.source.replace(/\/$/, "")}/${entry.path}/` : `${entry.path}/`;
       const body = await read(new URL(f.path, new URL(base, indexUrl)), MAX_FILE);
@@ -96,6 +98,12 @@ export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl
       if (!dest.startsWith(stage + path.sep)) throw new Error(`${f.path} escapes the plugin folder`);
       await fs.mkdir(path.dirname(dest), { recursive: true });
       await fs.writeFile(dest, body);
+      folder.push({ path: f.path, bytes: body });
+    }
+    const checked = await checkPluginFolder(folder);
+    if ("problem" in checked) throw new Error(`${entry.id} is not a plugin Hivemind accepts: ${checked.problem}`);
+    if (checked.plugin.type !== entry.type || checked.plugin.id !== entry.id) {
+      throw new Error(`${entry.id}'s folder says it is "${checked.plugin.id}", not ${entry.id}`);
     }
     await noteInstall(entry, indexUrl);
     return stage;

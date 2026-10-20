@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { parseHubIndex, type CatalogEntry } from "@hivemind/hub";
 import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, noteInstall, stageEntry } from "./plugin-catalog.js";
 
+const ORBIT = JSON.stringify({ id: "@hivemind/orbit", name: "Orbit", entry: "orbit.js" });
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
 function registry(files: Record<string, string>, entry: Partial<CatalogEntry> = {}) {
@@ -31,10 +32,19 @@ describe("reading the index", () => {
 
 describe("staging a download", () => {
   test("files land in a fresh folder when every hash matches", async () => {
-    const { url } = registry({ "hivemind-view.json": '{"id":"orbit"}', "orbit.js": "run()" });
+    const { url } = registry({ "hivemind-view.json": ORBIT, "orbit.js": "run()" });
     const [e] = (await fetchCatalog(url)).plugins;
     const dir = await stageEntry(e!, url);
     expect(readFileSync(join(dir, "orbit.js"), "utf8")).toBe("run()");
+  });
+
+  test("a folder a hub would refuse is not installed, though every hash matches", async () => {
+    const { url } = registry({ "hivemind-view.json": JSON.stringify({ id: "@hivemind/orbit", name: "Orbit", entry: "missing.js" }), "orbit.js": "run()" });
+    const [e] = (await fetchCatalog(url)).plugins;
+    await expect(stageEntry(e!, url)).rejects.toThrow("@hivemind/orbit is not a plugin Hivemind accepts: hivemind-view.json names an entry file that is not in the folder");
+    const other = registry({ "hivemind-view.json": ORBIT.replace("@hivemind/orbit", "@hivemind/other"), "orbit.js": "run()" });
+    const [o] = (await fetchCatalog(other.url)).plugins;
+    await expect(stageEntry(o!, other.url)).rejects.toThrow('@hivemind/orbit\'s folder says it is "@hivemind/other", not @hivemind/orbit');
   });
 
   test("a file changed after listing fails the install and leaves nothing behind", async () => {

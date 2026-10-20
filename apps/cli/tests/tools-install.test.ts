@@ -35,7 +35,7 @@ describe("hive tools install", () => {
       expect(run(tmp, "install", "ada/prs").json).toMatchObject({ ok: true, data: { id: "ada/prs", name: "Pull requests" } });
       expect(fs.readFileSync(path.join(xdg, "hivemind", "tools", "ada--prs", "index.js"), "utf8")).toBe(files["index.js"]);
       // A listing whose files say they are another tool is refused, not installed under the wrong name.
-      expect(run(tmp, "install", "ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining("says it is ada/prs, not ada/liar") });
+      expect(run(tmp, "install", "ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining(`says it is "ada/prs", not ada/liar`) });
       expect(fs.existsSync(path.join(xdg, "hivemind", "tools", "ada--liar"))).toBe(false);
 
       // Here ada/prs is a folder holding another tool: the folder is what gets installed.

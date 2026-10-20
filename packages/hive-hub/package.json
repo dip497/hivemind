@@ -1,7 +1,7 @@
 {
   "name": "@hivemind/hub",
   "version": "2026.10.3",
-  "description": "The hub kit: the plugin index format every Hivemind hub serves and the app reads.",
+  "description": "The hub kit: the plugin index format every Hivemind hub serves and the app reads, and the checks a plugin folder passes before a hub lists it or the app installs it.",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -9,7 +9,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./index-format": "./src/index-format.ts"
+    "./index-format": "./src/index-format.ts",
+    "./plugin-checks": "./src/plugin-checks.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -18,7 +19,8 @@
   "dependencies": {
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
-    "@hivemind/view-sdk": "workspace:*"
+    "@hivemind/view-sdk": "workspace:*",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@hivemind/tsconfig": "workspace:*",

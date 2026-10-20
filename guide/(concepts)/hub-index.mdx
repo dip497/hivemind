@@ -38,4 +38,13 @@ An index lists at most 2,000 plugins and is at most 4 MB. Past 2,000, the rest a
 
 The index format and its reader are one package in the Hivemind repository, the hub kit (`@hivemind/hub`). The app and `hive` read every index with it.
 
+The kit also holds the checks a plugin folder must pass. A hub built on the kit runs them before it lists a plugin. The app runs the same checks on the files it downloaded, before it installs them:
+
+- at most 200 files, 2 MB per file and 8 MB in all, each a plain relative path;
+- one manifest Hivemind accepts: `agent.yaml`, `hivemind-view.json`, `widget.json` or `hivemind-tool.json`;
+- an id that fits its kind, and a category Hivemind knows;
+- a view's entry file, a widget's code or drawing, and a version on widgets and tools.
+
+A folder that fails, or that says it is another plugin than the one listed, is not installed, and the install says why.
+
 <LastValidated />
