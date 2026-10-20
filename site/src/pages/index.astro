@@ -1,8 +1,8 @@
 ---
 import { HIVEHUB } from "../hivehub";
-import HeroClip from '../components/HeroClip.astro';
+import SchoolOfAgents from '../components/SchoolOfAgents.astro';
 import Fonts from '../components/Fonts.astro';
-import { wideStill, phoneStill, WIDE_SIZES, PHONE_SIZES, PHONE_QUERY } from '../lib/hero-images';
+import { heroStill, HERO_SIZES } from '../lib/hero-images';
 import icons from '../generated/agent-icons.json';
 import tokens from '../generated/tokens.json';
 import { resolve } from '../lib/tokens';
@@ -21,8 +21,8 @@ const installPs = 'irm https://hivemind.griiken.com/install.ps1 | iex';
 const dl = (key: string) => `${base}/download/${key}`;
 const agents = icons.agents;
 const ogImage = new URL(link('shots/og.jpg'), Astro.site).href;
-// The hero's first frame is the largest paint; the head asks for it before anything else.
-const [poster, posterPhone] = await Promise.all([wideStill('poster'), phoneStill('poster')]);
+// The hero's still is the largest paint; the head asks for it before anything else.
+const heroImage = await heroStill();
 const home = new URL(link(''), Astro.site).href;
 
 // The agents people search for by name, as the generated list spells them, while it still has them.
@@ -158,8 +158,7 @@ const code: Record<string, [string, string][]> = {
   <meta property="og:image:alt" content="Hivemind: coding agents side by side on one canvas" />
   <meta name="twitter:card" content="summary_large_image" />
   <script type="application/ld+json" set:html={JSON.stringify(structuredData).replace(/</g, '\\u003c')}></script>
-  <link rel="preload" as="image" type="image/avif" media={PHONE_QUERY} imagesrcset={posterPhone.avif} imagesizes={PHONE_SIZES} fetchpriority="high" />
-  <link rel="preload" as="image" type="image/avif" media="(min-width: 641px)" imagesrcset={poster.avif} imagesizes={WIDE_SIZES} fetchpriority="high" />
+  <link rel="preload" as="image" type="image/avif" imagesrcset={heroImage.avif} imagesizes={HERO_SIZES} fetchpriority="high" />
   <Fonts />
   <style set:html={appColours}></style>
 </head>
@@ -191,6 +190,11 @@ const code: Record<string, [string, string][]> = {
 <main id="main">
 
   <section class="hero">
+    <div class="hero-bg" aria-hidden="true">
+      <i style="--x:-27;--y:3"></i><i style="--x:-26;--y:4"></i><i style="--x:-21;--y:11"></i>
+      <i style="--x:24;--y:2"></i><i style="--x:25;--y:2"></i><i style="--x:25;--y:3"></i><i style="--x:27;--y:9"></i>
+      <i style="--x:-6;--y:1"></i><i style="--x:13;--y:13"></i>
+    </div>
     <div class="wrap">
       <div class="hero-copy">
         <div class="hero-say">
@@ -204,7 +208,7 @@ const code: Record<string, [string, string][]> = {
           </div>
         </div>
       </div>
-      <HeroClip />
+      <SchoolOfAgents />
     </div>
   </section>
 
@@ -548,7 +552,16 @@ const code: Record<string, [string, string][]> = {
   @media (hover:hover) and (pointer:fine){ .copy:hover{color:var(--fg);border-color:var(--fg3)} }
 
   /* Hero: one sentence, the command, and the real app under it, already in the first screen. */
-  .hero{position:relative;padding:56px 0 96px;overflow:clip}
+  .hero{position:relative;isolation:isolate;padding:56px 0 96px;overflow:clip}
+  /* The app's canvas grid behind the hero, fading toward the edges, a few of its cells lit, and one
+     soft light under the picture. Static, so scrolling never repaints it. */
+  .hero-bg{position:absolute;inset:0;z-index:-1;pointer-events:none;--cell:24px;
+    background:radial-gradient(ellipse 58% 34% at 50% 56%,color-mix(in oklab,var(--glow) 30%,transparent),transparent 72%)}
+  .hero-bg::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at center,color-mix(in oklab,var(--fg) 14%,transparent) 1px,transparent 1.5px) 50% 0/var(--cell) var(--cell);
+    -webkit-mask-image:radial-gradient(ellipse 75% 85% at 50% 35%,#000 30%,transparent 78%);mask-image:radial-gradient(ellipse 75% 85% at 50% 35%,#000 30%,transparent 78%)}
+  .hero-bg i{position:absolute;left:calc(50% + var(--x) * var(--cell) - var(--cell) / 2);top:calc(var(--y) * var(--cell));width:var(--cell);height:var(--cell);
+    background:color-mix(in oklab,var(--fg) 5%,transparent);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--fg) 4%,transparent)}
   .hero-copy{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px 64px;align-items:start;margin:0 0 40px}
   .hero h1{font-size:clamp(40px,4.5vw,66px);letter-spacing:-.04em;max-width:15ch}
   .hero h1 span{color:var(--fg3)}
