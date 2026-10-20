@@ -5,6 +5,8 @@ the cases in `../../conformance`. Not used by the app: a Rust daemon replaces th
 only when it passes the whole conformance suite and wins the benchmark
 (`docs/design/agent-host-oss-2026-09-25.md`, S6).
 
+What the status means on a tile: https://hivemind.griiken.com/guide/agent-states/.
+
 ```bash
 cargo test --release                                     # conformance
 cargo build --release --bin bench
