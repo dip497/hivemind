@@ -146,12 +146,46 @@ fs.mkdirSync(steps, { recursive: true });
 fs.writeFileSync(path.join(HOME, ".clip.sh"), `clock() { cat "$CLIP_CUE/clock" 2>/dev/null || echo 0; }
 spin() { local start=$(clock) g=(✻ ✶ ✳ ✢); local end=$(( start + $2 )); local cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2); local more=" · esc to interrupt"; [ $(( \${#1} + 30 )) -gt "\${cols:-200}" ] && more=""; while [ "$(clock)" -lt "$end" ]; do local c=$(( $(clock) - start )); printf '\\r\\e[?25l\\e[38;5;208m%s\\e[0m %s… (%ss%s)\\e[K' "\${g[$(( c / 400 % 4 ))]}" "$1" $(( c / 1000 + 1 )) "$more"; sleep 0.03; done; printf '\\r\\e[K'; }
 `);
-const say = (t) => `printf '\\n\\e[37m⏺\\e[0m %s\\n' "${t}"`;
+// What the agent prints wraps to its terminal's width the way a real agent's does: at a space, or
+// after a slash or a comma in a long path or JSON, with later lines under the text, not the bullet.
+function printAsAgent() {
+  const [kind, arg, text] = process.argv.slice(2);
+  const width = process.stdout.columns || 200;
+  const wrap = (line, w) => {
+    const out = [];
+    let chars = [...line];
+    while (chars.length > w) {
+      // A space unless it leaves the line short; then after a slash or comma; else mid-word.
+      const last = (at) => { for (let i = w; i > 0; i--) if (at(i)) return i; return 0; };
+      const space = last((i) => chars[i] === " ");
+      const cut = space >= w / 2 ? space : last((i) => chars[i - 1] === "/" || chars[i - 1] === ",") || space || w;
+      out.push(chars.slice(0, cut).join("").trimEnd());
+      chars = chars.slice(cut);
+      if (chars[0] === " ") chars = chars.slice(1);
+    }
+    out.push(chars.join(""));
+    return out;
+  };
+  const print = (lines, first, rest, look = (l) => l) => lines.forEach((l, i) => process.stdout.write(`${i ? rest : first}${look(l, i)}\n`));
+  if (kind === "bullet") {
+    print(wrap(text, width - 3), `\x1b[${arg}m⏺\x1b[0m `, "  ", (l, i) => (i ? l : l.replace(/^([A-Za-z]+)\(/, "\x1b[1m$1\x1b[0m(")));
+    return;
+  }
+  let input = "";
+  process.stdin.on("data", (d) => { input += d; }).on("end", () => {
+    const lines = input.replaceAll(process.env.HOME, "~").split("\n").filter((l, i, all) => i < all.length - 1 || l).map((l) => l.replace(/;.*/, "")).slice(0, Number(arg));
+    print(lines.flatMap((l) => wrap(l, width - 6)), "  ⎿  ", "     ", (l) => `\x1b[38;5;244m${l}\x1b[0m`);
+  });
+}
+fs.writeFileSync(path.join(HOME, ".print-as-agent.mjs"), `(${printAsAgent})();\n`);
+const asAgent = `"${process.execPath}" ~/.print-as-agent.mjs`;
+const say = (t) => `echo; ${asAgent} bullet 37 "${t}"`;
 /** One real command as the agent runs it, with the first lines of what it printed. */
-const run = (c, lines = 2) => `printf '\\n\\e[32m⏺\\e[0m \\e[1mBash\\e[0m(%s)\\n' "${c.replace(/"/g, '\\"')}"; (${c}) 2>&1 | sed -e "s#$HOME#~#g" -e 's/;.*//' -e 's/^/  \\x1b[38;5;244m⎿  /' -e 's/$/\\x1b[0m/' | head -n ${lines}`;
+const run = (c, lines = 2) => `echo; ${asAgent} bullet 32 "Bash(${c.replace(/"/g, '\\"')})"; (${c}) 2>&1 | tee -a "$CLIP_CUE/printed" | ${asAgent} shown ${lines}`;
 const spin = (task, ms) => `spin "${task}" ${ms}`;
 const STEP = [
-  [run("hive views list", 4)],
+  // Printed once the window and the terminal have their filmed size, so it wraps to that size.
+  [`until [ -f "$CLIP_CUE/sized" ]; do sleep 0.2; done`, run("hive views list", 4)],
   [spin("Reading the views guide", 1500), say("I'll add the Island view and switch to it."),
     run("hive views install ~/plugins/island && hive plugins enable view:@dip497/island", 1),
     `for k in "sky ${SKY}" "motion full" "frameRate 60"; do hive plugins set view:@dip497/island $k >/dev/null; done`,
@@ -265,6 +299,26 @@ for (const p of Object.keys(PROJECTS)) {
 const lead = tiles["my-workspace"];
 const cue = (name, what) => fs.writeFileSync(path.join(CUE, tiles[name].replace(/^hm:/, "")), what);
 await wait(4000);
+// The Island is opened once off camera and removed again, so when the agent installs it on camera
+// its code and shaders are warm and `plugin open` finds it ready, as on a machine that has run it.
+{
+  cli("views", "install", path.join(HOME, "plugins/island"));
+  cli("plugins", "enable", "view:@dip497/island");
+  cli("ctl", "plugin", "open", "view:@dip497/island");
+  for (let end = Date.now() + 120_000; Date.now() < end; await wait(1000)) {
+    const census = cli("ctl", "plugin", "call", "@dip497/island", "census");
+    if (census.status === 0) break;
+    if (/stopped|did not start/.test(`${census.stdout}${census.stderr}`)) {
+      cli("ctl", "plugin", "close", "view:@dip497/island");
+      await wait(2000);
+      cli("ctl", "plugin", "open", "view:@dip497/island");
+    }
+  }
+  await wait(3000);
+  cli("ctl", "plugin", "open", "view:canvas");
+  await wait(1500);
+  cli("views", "remove", "@dip497/island");
+}
 // Turns finished earlier today, so the islands already have houses; then most of them at work.
 for (let round = 0; round < 4; round++) {
   for (const [, , name, task] of WORKERS) cue(name, `work ${task}`);
@@ -290,8 +344,8 @@ for (let i = 0; i < 20; i++) {
   if (i === 19) throw new Error(`the window stays ${got.join("x")}`);
   await wait(500);
 }
-// On a phone the agent's terminal is sized to the screen, so its lines wrap to fit, the way a
-// person drags its corner.
+// A tile is sized to what the screen shows, so its lines wrap to fit, the way a person drags its
+// corner.
 async function resizeTile(id, width, height) {
   const node = page.locator(`.react-flow__node[data-id="${id}"]`).first();
   // Its corner shows only while it is selected: focusing it selects it and brings it to 100%, then
@@ -312,30 +366,83 @@ async function resizeTile(id, width, height) {
     if (await out.isVisible()) await out.click(); else await page.keyboard.press("Control+Minus");
     await wait(400);
   }
+  // A finished turn's card in the corner would take the drag.
+  await clearCards(10_000);
   const zoom = await page.$eval(".react-flow__viewport", (e) => new DOMMatrix(getComputedStyle(e).transform).a);
-  const box = await node.boundingBox();
-  const corner = await node.locator(".react-flow__resize-control.handle.bottom.right").first().boundingBox({ timeout: 10_000 });
-  if (!box || !corner) throw new Error("no corner to drag");
-  const from = { x: corner.x + corner.width / 2, y: corner.y + corner.height / 2 };
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + width * zoom, box.y + height * zoom, { steps: 12 });
-  await page.mouse.up();
-  await wait(1000);
-  const got = await node.evaluate((e) => [e.offsetWidth, e.offsetHeight]);
+  let got = [];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const box = await node.boundingBox();
+    const corner = await node.locator(".react-flow__resize-control.handle.bottom.right").first().boundingBox({ timeout: 10_000 });
+    if (!box || !corner) throw new Error("no corner to drag");
+    const from = { x: corner.x + corner.width / 2, y: corner.y + corner.height / 2 };
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + width * zoom, box.y + height * zoom, { steps: 12 });
+    await page.mouse.up();
+    await wait(1000);
+    got = await node.evaluate((e) => [e.offsetWidth, e.offsetHeight]);
+    if (Math.abs(got[0] - width) <= 8 && Math.abs(got[1] - height) <= 8) break;
+  }
   console.log(`${id} is ${got.join("x")}`);
+  if (Math.abs(got[0] - width) > 8 || Math.abs(got[1] - height) > 8) throw new Error(`${id} stayed ${got.join("x")}, not ${width}x${height}`);
 }
-if (PHONE) await resizeTile(lead, SIZE.width - 24, SIZE.height - 120);
-await wait(1500);
-const focused = cli("ctl", "focus", lead);
-if (focused.status !== 0) throw new Error(`focus ${lead}: ${focused.stdout}${focused.stderr}`);
+/** Wait for the cards of finished turns to leave; one still there after `ms` (a card pauses while
+ *  the window has lost focus) is dismissed with its own button, as a person would. */
+async function clearCards(ms) {
+  for (const end = Date.now() + ms; Date.now() < end && (await page.locator(".hm-toast").count()); ) await wait(300);
+  for (const x of await page.locator('.hm-toast [aria-label="Dismiss notification"]').all()) await x.click({ force: true }).catch(() => {});
+  await wait(600);
+}
+// The CI light's card sits in the top right corner: the terminal and the tool are sized and placed
+// to fill the screen below it and right of the projects list, so the card covers none of their
+// lines and none run off the edge.
+const TILE = { left: 12, width: 0, height: SIZE.height - 54 - 176, top: 176 };
+/** Bring a tile to the screen at 100%, its top just below the card. */
+async function place(id) {
+  const focused = cli("ctl", "focus", id);
+  if (focused.status !== 0) throw new Error(`focus ${id}: ${focused.stdout}${focused.stderr}`);
+  await wait(1500);
+  const node = page.locator(`.react-flow__node[data-id="${id}"]`).first();
+  let perPixel = 2;
+  for (let i = 0; i < 8; i++) {
+    const box = await node.boundingBox();
+    const before = box.y;
+    const off = TILE.top - before;
+    if (Math.abs(off) < 2) return;
+    // A turn of the wheel over the canvas itself pans it; other tiles may sit all round this one,
+    // so the turn goes to the canvas, not to whatever is under the pointer.
+    await page.evaluate(([dy, x, y]) => document.querySelector(".react-flow__pane")
+      .dispatchEvent(new WheelEvent("wheel", { deltaY: dy, clientX: x, clientY: y, bubbles: true, cancelable: true })), [-off * perPixel, box.x + box.width / 2, box.y + box.height / 2]);
+    await wait(900);
+    const moved = (await node.boundingBox()).y - before;
+    if (Math.abs(moved) > 1) perPixel = Math.min(8, Math.max(0.25, Math.abs((off * perPixel) / moved)));
+  }
+  throw new Error(`${id} would not move to the top ${TILE.top}`);
+}
+{
+  // Where the canvas starts on screen: at 100% the agent's tile is drawn from there.
+  cli("ctl", "focus", lead);
+  // Measured once the camera has landed: the same place three times running.
+  let left = NaN;
+  for (let i = 0, same = 0; i < 40 && same < 3; i++) {
+    await wait(300);
+    const x = Math.round((await page.locator(`.react-flow__node[data-id="${lead}"]`).first().boundingBox()).x);
+    same = x === left ? same + 1 : 0;
+    left = x;
+  }
+  TILE.left = PHONE ? 12 : Math.round(Math.max(12, left));
+  TILE.width = SIZE.width - TILE.left - 12;
+}
+await resizeTile(lead, TILE.width, TILE.height);
+await place(lead);
+fs.writeFileSync(path.join(CUE, "sized"), "");
 /** The pointer leaves what it clicked, so no tooltip stays in the shot. */
 // Not over the cards in the corner: a card under the pointer stays.
 const rest = () => page.mouse.move(SIZE.width * 0.4, SIZE.height * 0.3);
 await rest();
 // The finished turns' cards leave after 7 s.
 await wait(9000);
-for (const end = Date.now() + 30_000; Date.now() < end && await page.locator(".hm-toast").count(); ) await wait(500);
+await clearCards(30_000);
 
 // ── the camera ─────────────────────────────────────────────────────────────────────────────────
 const FRAME_MS = 1000 / FPS;
@@ -501,6 +608,9 @@ try {
     if (again.status !== 0) throw new Error(`island storefront: ${again.stdout}${again.stderr}`);
     await wait(5000);
   });
+  // What the agent printed is on camera when the film comes back to it.
+  const printed = fs.readFileSync(path.join(CUE, "printed"), "utf8");
+  if (!/switched to view @dip497\/island: ready/.test(printed)) throw new Error(`the Island was not ready when the agent opened it: ${printed.trim().split("\n").pop()}`);
   await mark("island");
   await film(0.8);
   // A new agent starts on the island: its worker and workshop appear, and it goes to work.
@@ -516,12 +626,12 @@ try {
   // Back to the agent's terminal, at full size.
   await offCamera(async () => {
     cli("ctl", "plugin", "open", "view:canvas");
-    cli("ctl", "focus", lead);
+    await place(lead);
     await rest();
     const end = Date.now() + 30_000;
     while (Date.now() < end && !(await terminalShown())) await wait(300);
     // and the card for the turn finished on the island has gone
-    for (const until = Date.now() + 12_000; Date.now() < until && (await page.locator(".hm-toast").count()); ) await wait(300);
+    await clearCards(12_000);
     await wait(1500);
   });
   // 2. a widget
@@ -535,19 +645,48 @@ try {
   await film(0.6);
   await ask("Find the flaky tests.");
   const flaky = async () => (await cliAsync("ctl", "plugin", "call", "dip497/flaky-tests", "flaky")).status === 0;
-  if (PHONE) {
-    // The tool opens wider than a phone: it is sized to the screen off camera, then filmed whole.
+  {
+    // The tool opens at its own size: it is sized to the screen off camera, then filmed whole.
     const toolTile = () => page.evaluate(() => [...document.querySelectorAll(".react-flow__node")].find((n) => n.textContent.includes("Flaky tests #"))?.getAttribute("data-id") ?? null);
-    await filmUntilLeaving(async () => !!(await toolTile()), 120);
+    // Its id is kept when it first shows: the canvas draws only the tiles in view.
+    let id = null;
+    await filmUntilLeaving(async () => !!(id = await toolTile()), 120);
     await offCamera(async () => {
-      const id = await toolTile();
-      await resizeTile(id, SIZE.width - 24, SIZE.height - 120);
-      cli("ctl", "focus", id);
+      await resizeTile(id, TILE.width, TILE.height);
+      // Further under the agent's terminal, in the same frame, so the strip above the tool shows the
+      // frame's empty floor rather than the terminal's last lines.
+      const leadNode = page.locator(`.react-flow__node[data-id="${lead}"]`).first();
+      const toolNode = page.locator(`.react-flow__node[data-id="${id}"]`).first();
+      let leadBox, toolBox, to;
+      for (let i = 0; i < 8; i++) {
+        [leadBox, toolBox] = [await leadNode.boundingBox(), await toolNode.boundingBox()];
+        const zoom = await page.$eval(".react-flow__viewport", (e) => new DOMMatrix(getComputedStyle(e).transform).a);
+        to = { x: toolBox.x, y: leadBox.y + leadBox.height + (TILE.top + 80) * zoom };
+        const shown = (b) => b.x >= 0 && b.y >= 0 && b.x + b.width <= SIZE.width;
+        if (to.y + 40 <= SIZE.height - 60 && shown(toolBox) && shown(leadBox)) break;
+        const out = page.getByTitle("Zoom out (Ctrl -)").first();
+        if (await out.isVisible()) await out.click(); else await page.keyboard.press("Control+Minus");
+        await wait(500);
+      }
+      const head = await toolNode.locator(".tile-drag-handle").first().boundingBox();
+      const grip = { x: head.x + head.width * 0.35, y: head.y + head.height / 2 };
+      // The widget cards float over everything; for the drag they are set aside, so it lands on the tile.
+      await page.evaluate(() => { document.querySelector("[data-widget-layer]").style.visibility = "hidden"; });
+      await page.mouse.move(grip.x, grip.y);
+      await page.mouse.down();
+      await page.mouse.move(grip.x + (to.x - toolBox.x) / 2, grip.y + (to.y - toolBox.y) / 2, { steps: 6 });
+      await page.mouse.move(grip.x + to.x - toolBox.x, grip.y + to.y - toolBox.y, { steps: 6 });
+      await page.mouse.up();
+      await page.evaluate(() => { document.querySelector("[data-widget-layer]").style.visibility = ""; getSelection()?.removeAllRanges(); });
+      await wait(1200);
+      const moved = await toolNode.boundingBox();
+      console.log(`${id} moved from ${Math.round(toolBox.x)},${Math.round(toolBox.y)} to ${Math.round(moved.x)},${Math.round(moved.y)}; the terminal is at ${Math.round(leadBox.x)},${Math.round(leadBox.y)}`);
+      await place(id);
       await rest();
       for (const end = Date.now() + 120_000; Date.now() < end && !(await flaky()); ) await wait(500);
       await wait(1500);
     });
-  } else await filmUntil(flaky, 120);
+  }
   await film(4);
   await mark("end");
 } catch (e) {
