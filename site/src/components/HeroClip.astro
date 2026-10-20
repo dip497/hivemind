@@ -10,7 +10,7 @@ const STEPS: Record<string, { tab: string; say: string; alt: string }> = {
   view: { tab: 'A view', say: '“Show my workspace as islands.”',
     alt: 'An agent’s terminal in Hivemind, where the person asks it to show the workspace as islands.' },
   widget: { tab: 'A widget', say: '“Put a CI light where I can see it.”',
-    alt: 'A CI light widget, green after the build passed, over the Island view beside the agent’s terminal.' },
+    alt: 'A CI light widget, green after the build passed, beside the agent’s terminal.' },
   tool: { tab: 'A tool', say: '“Find the flaky tests.”',
     alt: 'The Flaky tests tool open on the canvas, each test with one square per run.' },
 };
@@ -22,7 +22,7 @@ const steps = await Promise.all(clip.steps.map(async (s) => {
 const sources = { wide: [shot('clip.webm'), shot('clip.mp4')], mid: [shot('clip-1440.webm'), shot('clip-1440.mp4')], phone: [shot('clip-phone.webm'), shot('clip-phone.mp4')] };
 ---
 
-<figure class="hc" data-hc data-steps={JSON.stringify(clip.steps)} data-sources={JSON.stringify(sources)} data-wide-sizes={WIDE_SIZES} data-phone-sizes={PHONE_SIZES}
+<figure class="hc" data-hc data-steps={JSON.stringify(clip.steps)} data-phone-steps={JSON.stringify(clip.phone.steps)} data-sources={JSON.stringify(sources)} data-wide-sizes={WIDE_SIZES} data-phone-sizes={PHONE_SIZES}
   aria-label="One take of Hivemind: an agent adds a view, a widget and a tool to the workspace it works in.">
   <div class="hc-steps" role="tablist" aria-label="What the person asks for">
     {steps.map((s, i) => (
@@ -88,7 +88,11 @@ const sources = { wide: [shot('clip.webm'), shot('clip.mp4')], mid: [shot('clip-
 <script>
   const root = document.querySelector<HTMLElement>('[data-hc]');
   if (root) {
-    const steps: { key: string; at: number }[] = JSON.parse(root.dataset.steps!);
+    type Step = { key: string; at: number };
+    const wideSteps: Step[] = JSON.parse(root.dataset.steps!);
+    const phoneSteps: Step[] = JSON.parse(root.dataset.phoneSteps!);
+    // The phone clip is its own take, so its steps start at their own times.
+    let steps = wideSteps;
     const sources: Record<'wide' | 'mid' | 'phone', string[]> = JSON.parse(root.dataset.sources!);
     const video = root.querySelector('video')!;
     const poster = root.querySelector<HTMLImageElement>('[data-poster]')!;
@@ -137,6 +141,7 @@ const sources = { wide: [shot('clip.webm'), shot('clip.mp4')], mid: [shot('clip-
       loaded = true;
       const width = root.getBoundingClientRect().width * devicePixelRatio;
       const pick = phone.matches ? sources.phone : width > 1600 ? sources.wide : sources.mid;
+      steps = phone.matches ? phoneSteps : wideSteps;
       pick.forEach((src) => {
         const s = document.createElement('source');
         s.src = src; s.type = src.endsWith('.webm') ? 'video/webm' : 'video/mp4';
