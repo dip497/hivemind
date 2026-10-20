@@ -10,6 +10,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ## [Unreleased]
 
 - The plugin catalog reads HiveHub's index through the new hub kit, `@hivemind/hub`: an entry this Hivemind cannot read is skipped with the reason, instead of the whole index being refused, and `hive views/widgets/tools/agents install <name>` says why when the one you asked for is skipped. An index may list 2,000 plugins (4 MB) instead of 500.
+- `hive ctl agents --session <id>` finds the agent in that session, as its hooks said it or as the app tracks its tile's session to resume it; none is exit 5. The CLI reference documents the `{seq, agents}` shape, and says `read` gives an agent's clean reply while `stream --snapshot` gives the raw lines its terminal printed.
+- `hive ctl whoami [--json]` says which app it reaches (`hivemind` or `hivemind-dev`, from its data folder), the drive and control sockets, and who you are there: the person, an agent (its workspace folder, tile and session) or a program. `hive ctl list-workspaces` prints each workspace's prefix, title and folder, one a line. An agent or a program refused another workspace or tile is told the folder its token drives and that another needs the person or a grant (`hive grant create`); `--repo` help says so too.
 - Agents: a worker whose session exits or restarts (a crash, a reboot, a restart in its tile) still reports to the agent that started it, and its parent's restart no longer cuts it off; only closing a tile forgets who started it. The `hivemind` skill tells agents to reach other tiles with `hive ctl send`, `report`, `inbox` and `read`.
 - Views can tell an agent is asleep (view protocol 1.14, feature `sleep`): its tile in `structure` carries `asleep: { since }`, `hm.commands.wakeAgent(tileId)` and `sleepAgent(tileId)` wake it and put it to sleep (permission `workspace:spawn`), and `hm.prompt` to a sleeping agent is refused `ASLEEP`, as `hive ctl send` is.
 - Settings ▸ Plugins lists what you have and what HiveHub has under categories, in the same order and with the same names as the Add menu; each HiveHub entry carries its manifest's category, and every agent is under Agents.
@@ -42,7 +44,6 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
 
-- API access: a token made to last 25 days or more (`hive grant create --expires 30d`) no longer has its connection closed right after it opens.
 
 - A supervised agent's tool use waits on its starter again: `hive ctl approve` and the drive API's `agent.answer` find it in the agent list, waiting on approval, until it is answered. The machine's terminal daemon keeps each session's status, and it overwrote the wait the app held.
 
