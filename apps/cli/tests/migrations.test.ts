@@ -87,7 +87,7 @@ describe("hive migrations", () => {
   test("restore of an id that never ran is refused with what to run instead", () => {
     const r = hive(["migrations", "restore", "0999-nothing", "--json"], { env: env() });
     expect(r.code).toBe(7);
-    expect((r.json as { error: string }).error).toContain("`hive migrations` lists those that have");
+    expect((r.json as { error: { message: string } }).error.message).toContain("`hive migrations` lists those that have");
   });
 });
 

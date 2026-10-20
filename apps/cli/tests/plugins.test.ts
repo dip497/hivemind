@@ -60,6 +60,8 @@ describe("hive plugins", () => {
     const settings = path.join(xdg, "hivemind", "settings.json");
     const stored = () => (fs.existsSync(settings) ? fs.readFileSync(settings, "utf8") : null);
     try {
+      // The data is first brought up to this build's shape, by the person; what follows changes nothing.
+      expect(hive(["plugins", "list", "--json"], { cwd: xdg, env: base }).code).toBe(0);
       for (const who of [{ HCP_TOKEN: "tile-token", HIVEMIND_TILE: "hm:t1" }, { HIVE_DRIVE_TOKEN: "grant-token" }]) {
         for (const [args, ask] of [
           [["plugins", "enable", "tool:@hivemind/web"], "hive plugins enable tool:@hivemind/web"],
@@ -70,7 +72,7 @@ describe("hive plugins", () => {
         ] as const) {
           const before = stored();
           const r = hive([...args, "--json"], { cwd: xdg, env: { ...base, ...who } });
-          const error = (JSON.parse(r.stderr) as { error: { code: string; message: string } }).error;
+          const error = (r.json as { error: { code: string; message: string } }).error;
           expect([args.join(" "), r.code, error.code, error.message.includes(ask), stored()]).toEqual([args.join(" "), 6, "PERSON_ONLY", true, before]);
         }
       }

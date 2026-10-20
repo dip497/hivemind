@@ -74,7 +74,7 @@ describe("hive plugins, writing a package", () => {
     const before = fs.readFileSync(manifest(), "utf8");
 
     const r = run("add", "dog", "--to", "kit", "--json");
-    expect([r.code, (r.json as { code: string }).code]).toEqual([1, "not_the_owner"]);
+    expect([r.code, (r.json as { error: { code: string } }).error.code]).toEqual([1, "NOT_THE_OWNER"]);
     expect(fs.readFileSync(manifest(), "utf8")).toBe(before);
     expect(fs.existsSync(path.join(tmp, "kit", "widgets", "dog"))).toBe(false);
   }, 60_000);

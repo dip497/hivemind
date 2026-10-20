@@ -8,7 +8,7 @@ import { appData } from "@hivemind/core/app-data";
 import { migrationsStatus, restoreMigration, RestoreRefusedError, type RootStatus } from "@hivemind/core/migrations/manage";
 import { LedgerUnreadableError } from "@hivemind/core/migrations/ledger";
 import { appRunning, askHost, controlSocket } from "../host-control.js";
-import { EXIT } from "../hcp.js";
+import { EXIT } from "../exit-codes.js";
 import { err, ok } from "../format.js";
 
 function render(roots: RootStatus[]): string {

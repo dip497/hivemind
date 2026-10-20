@@ -9,21 +9,23 @@ import { readRunningApp } from "@hivemind/core/migrations/manage";
 import { appData } from "@hivemind/core/app-data";
 import { appMeetsMinVersion } from "@hivemind/agents";
 import { appRunning } from "./host-control.js";
+import { printFailure } from "./exit-codes.js";
 
 const TOUCHES_NOTHING = new Set(["--version", "-v", "--help", "-h", "migrations"]);
 
 export async function migrateOnStart(argv: readonly string[], app: string): Promise<void> {
   if (!argv.length || TOUCHES_NOTHING.has(argv[0]!) || argv.includes("--help") || argv.includes("-h")) return;
   const by = argv[0] === "host" && argv[1] === "run" ? "host" : "cli";
-  const say = (line: string) => process.stderr.write(`hive: ${line}\n`);
+  // With --json what a command prints is its one JSON object, so the notices are left out.
+  const json = argv.includes("--json");
+  const say = (line: string) => { if (!json) process.stderr.write(`hive: ${line}\n`); };
   try {
     for (const r of await runMigrations({ by, app, say, olderAppRunning: () => olderAppRunning(app) })) {
       for (const a of r.applied) say(`updated your data: ${a.id}${summary(a.result)}`);
     }
   } catch (e) {
     if (e instanceof MigrationsLockedError || e instanceof LedgerUnreadableError) {
-      say(e.message);
-      process.exit(1);
+      printFailure(json, { code: e instanceof MigrationsLockedError ? "MIGRATIONS_LOCKED" : "LEDGER_UNREADABLE", message: e.message }, 1);
     }
     throw e;
   }
