@@ -33,7 +33,8 @@ describe("hive widgets", () => {
       files: Object.entries(list).map(([p, text]) => ({ path: p, sha256: sha(text) })),
     });
     const index = path.join(tmp, "hub", "index.json");
-    fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("@ada/pet", files), entry("@ada/liar", files)] }));
+    fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("@ada/pet", files), entry("@ada/liar", files),
+      { ...entry("@ada/newer", files), minAppVersion: "next" }] }));
 
     const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href };
     const run = (...args: string[]) => hive(["widgets", ...args, "--json"], { cwd: tmp, env });
@@ -44,6 +45,9 @@ describe("hive widgets", () => {
       expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet", "widget.json"))).toBe(true);
       // A listing whose files say they are another widget is refused, not installed under the wrong name.
       expect(run("install", "@ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining('says it is "@ada/pet", not @ada/liar') });
+      // An entry this Hivemind cannot read costs only that entry, and says why.
+      expect(run("install", "@ada/newer").json).toMatchObject({ ok: false,
+        error: expect.stringContaining("@ada/newer is on the registry, but this Hivemind cannot read its entry: its minAppVersion must look like 1.2.3") });
 
       const ids = (run("list").json as { data: { id: string; builtin: boolean }[] }).data.map((w) => w.id);
       expect(ids).toEqual(expect.arrayContaining(["note", "checklist", "text", "counter", "@ada/pet"]));

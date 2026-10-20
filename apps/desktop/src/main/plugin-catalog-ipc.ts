@@ -5,7 +5,8 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { app } from "electron";
 import { handle, handleEffect } from "./app-ipc.js";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, stageEntry, type CatalogEntry } from "@hivemind/core/plugin-catalog";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, stageEntry } from "@hivemind/core/plugin-catalog";
+import type { CatalogEntry } from "@hivemind/hub";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
@@ -48,10 +49,11 @@ const readmes = new WeakMap<CatalogEntry, Promise<string | null>>();
 
 function catalogNow(): Promise<CatalogEntry[]> {
   if (Date.now() - fetchedAt < CATALOG_FRESH_MS) return Promise.resolve(catalog);
-  fetching ??= fetchCatalog().then((list) => {
-    catalog = list;
+  fetching ??= fetchCatalog().then(({ plugins, skipped }) => {
+    for (const s of skipped) console.warn(`[plugins] the index's entry ${s.id ?? `#${s.position}`} is skipped: ${s.reason}`);
+    catalog = plugins;
     fetchedAt = Date.now();
-    return list;
+    return plugins;
   }).finally(() => { fetching = null; });
   return fetching;
 }

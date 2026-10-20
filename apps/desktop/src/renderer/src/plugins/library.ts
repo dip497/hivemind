@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { agentDisclosures, defFromManifest } from "@hivemind/agents";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
-import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
+import type { CatalogEntry } from "@hivemind/hub";
 import { useAgentEntries } from "../agent-plugins";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { useViews } from "../workspace/workspace-view";

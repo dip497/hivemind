@@ -245,7 +245,7 @@ export interface UpdateStatus {
 }
 
 import type { Appearance, Settings } from "@hivemind/core/settings-schema";
-import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
+import type { CatalogEntry } from "@hivemind/hub";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
 export interface ViewPackageInfo {

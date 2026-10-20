@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@hivemind/agents": "workspace:*",
+    "@hivemind/hub": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
     "yaml": "catalog:",

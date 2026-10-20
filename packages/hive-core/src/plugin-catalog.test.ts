@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, noteInstall, parseCatalog, stageEntry, type CatalogEntry } from "./plugin-catalog.js";
+import { parseHubIndex, type CatalogEntry } from "@hivemind/hub";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, noteInstall, stageEntry } from "./plugin-catalog.js";
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
@@ -23,74 +24,22 @@ function registry(files: Record<string, string>, entry: Partial<CatalogEntry> = 
 describe("reading the index", () => {
   test("a well-formed index lists its plugins", async () => {
     const { url } = registry({ "hivemind-view.json": "{}" });
-    const [e] = await fetchCatalog(url);
+    const [e] = (await fetchCatalog(url)).plugins;
     expect(e).toMatchObject({ id: "@hivemind/orbit", type: "view", version: "0.1.0" });
-  });
-
-  test("entries that could reach outside their folder or skip integrity are refused", () => {
-    const base = { id: "@a/x", type: "view", name: "X", description: "d", author: "a", version: "1", path: "views/x", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
-    const bad = (patch: object) => () => parseCatalog({ version: 1, plugins: [{ ...base, ...patch }] });
-    // A view carries its publisher's scope; an agent is one name, never scoped.
-    expect(bad({ id: "x" })).toThrow(/must be @owner\/name/);
-    expect(bad({ id: "a/x" })).toThrow(/must be @owner\/name/);
-    expect(bad({ id: "@a/x--y" })).toThrow(/must be @owner\/name/);
-    expect(bad({ type: "agent", id: "@a/x" })).toThrow(/must be one name/);
-    expect(() => parseCatalog({ version: 1, plugins: [{ ...base, type: "agent", id: "gemini" }] })).not.toThrow();
-    expect(bad({ path: "../etc" })).toThrow(/relative folder/);
-    expect(bad({ path: "/abs" })).toThrow(/relative folder/);
-    expect(bad({ files: [{ path: "../../x", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
-    expect(bad({ files: [{ path: "a.js" }] })).toThrow(/sha256/);
-    expect(bad({ files: [{ path: "NUL.js", sha256: "0".repeat(64) }] })).toThrow(/relative path/);
-    expect(bad({ bin: "x" })).toThrow(/bare name of an agent/); // views have no CLI
-    expect(bad({ type: "agent", id: "x", bin: "../bin/sh" })).toThrow(/bare name/);
-    expect(bad({ id: "Bad Id" })).toThrow(/view id/);
-    expect(() => parseCatalog({ version: 2, plugins: [] })).toThrow(/version 1/);
-  });
-
-  test("a widget is scoped like a view, and a kind this app does not know is left out, not the catalog", () => {
-    const view = { id: "@a/x", type: "view", name: "X", description: "d", author: "a", version: "1", path: "views/x", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
-    const widget = { ...view, id: "@a/pet", type: "widget", path: "widgets/pet" };
-    const listed = parseCatalog({ version: 1, plugins: [view, widget, { ...view, id: "@a/later", type: "theme" }] });
-    expect(listed.map((e) => `${e.type}:${e.id}`)).toEqual(["view:@a/x", "widget:@a/pet"]);
-    expect(() => parseCatalog({ version: 1, plugins: [{ ...widget, id: "pet" }] })).toThrow(/a widget id — it must be @owner\/name/);
-  });
-
-  test("a tool is listed under the id the app gives it, owner/name with no @", () => {
-    const tool = { id: "dip497/worktrees", type: "tool", name: "Worktrees", description: "d", author: "dip497", version: "1.0.0", path: "tools/worktrees", files: [{ path: "index.js", sha256: "0".repeat(64) }] };
-    expect(parseCatalog({ version: 1, plugins: [tool] }).map((e) => `${e.type}:${e.id}`)).toEqual(["tool:dip497/worktrees"]);
-    const bad = (id: string) => () => parseCatalog({ version: 1, plugins: [{ ...tool, id }] });
-    expect(bad("@dip497/worktrees")).toThrow(/a tool id — it must be owner\/name/);
-    // Its folder on disk is owner--name, so a `--` in the id could stand for two tools.
-    expect(bad("dip497/work--trees")).toThrow(/a tool id/);
-  });
-
-  test("each entry has the category its manifest gave it: other when it gave none the app knows, agents for an agent", () => {
-    const base = { name: "X", description: "d", author: "a", version: "1", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
-    const listed = parseCatalog({ version: 1, plugins: [
-      { ...base, id: "@a/git-graph", type: "view", path: "views/g", category: "git" },
-      { ...base, id: "@a/pet", type: "widget", path: "widgets/p", category: "fun" },
-      { ...base, id: "dip497/ports", type: "tool", path: "tools/p", category: "monitoring" },
-      { ...base, id: "@a/none", type: "widget", path: "widgets/n" },
-      { ...base, id: "@a/odd", type: "widget", path: "widgets/o", category: "games" },
-      { ...base, id: "gemini", type: "agent", path: "agents/gemini" },
-    ] });
-    expect(listed.map((e) => [e.id, e.category])).toEqual([
-      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
-    ]);
   });
 });
 
 describe("staging a download", () => {
   test("files land in a fresh folder when every hash matches", async () => {
     const { url } = registry({ "hivemind-view.json": '{"id":"orbit"}', "orbit.js": "run()" });
-    const [e] = await fetchCatalog(url);
+    const [e] = (await fetchCatalog(url)).plugins;
     const dir = await stageEntry(e!, url);
     expect(readFileSync(join(dir, "orbit.js"), "utf8")).toBe("run()");
   });
 
   test("a file changed after listing fails the install and leaves nothing behind", async () => {
     const { root, url } = registry({ "orbit.js": "run()" });
-    const [e] = await fetchCatalog(url);
+    const [e] = (await fetchCatalog(url)).plugins;
     writeFileSync(join(root, "views", "orbit", "orbit.js"), "steal()");
     let staged = "";
     await expect(stageEntry(e!, url).then((d) => { staged = d; })).rejects.toThrow(/changed after it was listed/);
@@ -103,40 +52,12 @@ describe("staging a download", () => {
   });
 });
 
-test("a plugin may live in its own repository, and a source that is not an https base is refused", async () => {
-  const entry = { id: "far", type: "agent", name: "Far", description: "d", author: "a", version: "1.0.0",
-    path: "agents/far", source: "https://example.test/repo/", files: [{ path: "agent.yaml", sha256: "0".repeat(64) }] };
-  const [parsed] = parseCatalog({ version: 1, plugins: [entry] });
-  expect(parsed!.source).toBe("https://example.test/repo/");
-  for (const bad of ["http://example.test/", "https://example.test/../etc", "file:///etc", 7]) {
-    expect(() => parseCatalog({ version: 1, plugins: [{ ...entry, source: bad }] })).toThrow(/source must be an https base URL/);
-  }
-  // Absent is the normal case: the files sit beside the index.
-  expect(parseCatalog({ version: 1, plugins: [{ ...entry, source: undefined }] })[0]!.source).toBeUndefined();
-});
-
-test("a plugin can name the oldest Hivemind it runs on", () => {
-  const base = { id: "@a/new", type: "view", name: "N", description: "d", author: "a", version: "1.0.0",
-    path: "views/new", files: [{ path: "index.html", sha256: "0".repeat(64) }] };
-  expect(parseCatalog({ version: 1, plugins: [{ ...base, minAppVersion: "2.4.0" }] })[0]!.minAppVersion).toBe("2.4.0");
-  expect(() => parseCatalog({ version: 1, plugins: [{ ...base, minAppVersion: "next" }] })).toThrow(/minAppVersion/);
+test("a plugin that needs a newer Hivemind is told apart before it is downloaded", () => {
   expect(appMeetsMinVersion("2.4.0", "2.4.0")).toBe(true);
   expect(appMeetsMinVersion("2.4.1", "2.4.0")).toBe(true);
   expect(appMeetsMinVersion("2.10.0", "2.9.9")).toBe(true);
   expect(appMeetsMinVersion("2.3.9", "2.4.0")).toBe(false);
   expect(appMeetsMinVersion("1.17.0", undefined)).toBe(true);
-});
-
-test("an agent may carry its own mark, bounded but not understood here", () => {
-  const base = { id: "acme", type: "agent", name: "Acme", description: "d", author: "a", version: "1.0.0",
-    path: "agents/acme", files: [{ path: "agent.yaml", sha256: "0".repeat(64) }] };
-  const icon = { viewBox: "0 0 16 16", shapes: [{ rect: { x: "2", y: "2", width: "12", height: "12" } }] };
-  // Carried through as written: what an icon may contain is decided where it is drawn.
-  expect(parseCatalog({ version: 1, plugins: [{ ...base, icon }] })[0]!.icon).toEqual(icon);
-  expect(parseCatalog({ version: 1, plugins: [{ ...base }] })[0]!.icon).toBeUndefined();
-  for (const bad of ["<svg/>", 7, { shapes: Array.from({ length: 400 }, () => ({ rect: { x: "1" } })) }]) {
-    expect(() => parseCatalog({ version: 1, plugins: [{ ...base, icon: bad }] })).toThrow(/icon must be a small object/);
-  }
 });
 
 describe("telling the registry an install happened", () => {
@@ -181,8 +102,8 @@ describe("telling the registry an install happened", () => {
 });
 
 test("an installed agent follows the catalog only while it is the catalog's own, untouched copy", () => {
-  const entry = parseCatalog({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
-    version: "1.0.0", path: "agents/claude", minAppVersion: "2026.9.6", files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] })[0]!;
+  const entry = parseHubIndex({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
+    version: "1.0.0", path: "agents/claude", minAppVersion: "2026.9.6", files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] }).plugins[0]!;
   const old = "a".repeat(64);
   const base = { fromCatalog: true, manifestSha: old, recordedSha: old, appVersion: "2026.9.6" };
   expect(catalogAgentNeedsUpdate(entry, base)).toBe(true);
@@ -199,8 +120,8 @@ test("an installed agent follows the catalog only while it is the catalog's own,
 });
 
 test("an agent this app cannot load is repaired from the catalog, however it was installed", () => {
-  const entry = parseCatalog({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
-    version: "1.0.0", path: "agents/claude", minAppVersion: "2026.9.7", files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] })[0]!;
+  const entry = parseHubIndex({ version: 1, plugins: [{ id: "claude", type: "agent", name: "Claude", description: "d", author: "a",
+    version: "1.0.0", path: "agents/claude", minAppVersion: "2026.9.7", files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] }).plugins[0]!;
   // Installed by an older app, so nothing recorded it and it is not in fromCatalog — and its
   // manifest is one this app refuses. It does nothing as it is, so the catalog's copy wins.
   const broken = { fromCatalog: false, manifestSha: "a".repeat(64), recordedSha: null, appVersion: "2026.9.7", broken: true };
@@ -211,9 +132,9 @@ test("an agent this app cannot load is repaired from the catalog, however it was
 });
 
 test("a file is the catalog's when its repository on GitHub holds those exact bytes", async () => {
-  const entry = parseCatalog({ version: 1, plugins: [{ id: "codex", type: "agent", name: "Codex", description: "d", author: "a",
+  const entry = parseHubIndex({ version: 1, plugins: [{ id: "codex", type: "agent", name: "Codex", description: "d", author: "a",
     version: "1.0.0", path: "agents/codex", source: `https://raw.githubusercontent.com/dip497/hivemind-plugins/${"1".repeat(40)}/`,
-    files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] })[0]!;
+    files: [{ path: "agent.yaml", sha256: "b".repeat(64) }] }] }).plugins[0]!;
   const asked: string[] = [];
   const answering = async (status: number | Error, fn: () => Promise<boolean>): Promise<boolean> => {
     const real = globalThis.fetch;
@@ -233,4 +154,34 @@ test("a file is the catalog's when its repository on GitHub holds those exact by
   asked.length = 0;
   expect(await answering(200, () => catalogRepoHolds({ ...entry, source: "https://example.test/repo/" }, hello))).toBe(false);
   expect(asked).toEqual([]);
+});
+
+describe("a hub's index read through the hub kit", () => {
+  const typical = (i: number) => ({
+    id: `@acme/plugin-${i}`, type: "widget", name: `Plugin ${i}`, author: "acme", version: "1.0.0", path: `widgets/plugin-${i}`,
+    // About the size of a real entry: HiveHub's average is 1,693 bytes as served.
+    description: "A widget that shows something useful on the board. ".repeat(7),
+    source: `https://raw.githubusercontent.com/acme/hivemind-plugins/${"1".repeat(40)}/`,
+    files: Array.from({ length: 6 }, (_, j) => ({ path: `file-${j}.js`, sha256: sha(`${i}-${j}`) })),
+  });
+  const served = (plugins: unknown[]) => {
+    const root = mkdtempSync(join(tmpdir(), "hm-hub-"));
+    writeFileSync(join(root, "index.json"), JSON.stringify({ version: 1, plugins }, null, 2));
+    return pathToFileURL(join(root, "index.json")).href;
+  };
+
+  test("one entry this app cannot read is skipped and named, and the rest are still listed", async () => {
+    const url = served([typical(1), { ...typical(2), id: "not a widget id" }, typical(3)]);
+    const read = await fetchCatalog(url);
+    expect(read.plugins.map((e) => e.id)).toEqual(["@acme/plugin-1", "@acme/plugin-3"]);
+    expect(read.skipped).toEqual([{ position: 1, id: "not a widget id", reason: "its id is not a widget id — it must be @owner/name" }]);
+  });
+
+  test("an index past 500 typical entries comes through whole, up to 2,000, and says what it left out", async () => {
+    const url = served(Array.from({ length: 2001 }, (_, i) => typical(i)));
+    const read = await fetchCatalog(url);
+    expect(read.plugins).toHaveLength(2000);
+    expect(read.plugins.at(-1)!.id).toBe("@acme/plugin-1999");
+    expect(read.skipped).toEqual([{ position: 2000, id: null, reason: "the index lists 2001 plugins; Hivemind reads the first 2000" }]);
+  });
 });

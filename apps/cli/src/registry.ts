@@ -10,8 +10,13 @@ export const AGENT_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 export async function stageFromRegistry(id: string, type: "agent" | "view" | "widget" | "tool") {
   const { appMeetsMinVersion, catalogIndexUrl, fetchCatalog, stageEntry } = await import("@hivemind/core/plugin-catalog");
-  const entry = (await fetchCatalog()).find((e) => e.id === id);
-  if (!entry) throw new Error(`${id} is not on the registry (${catalogIndexUrl()})`);
+  const { plugins, skipped } = await fetchCatalog();
+  const entry = plugins.find((e) => e.id === id);
+  if (!entry) {
+    const unreadable = skipped.find((s) => s.id === id);
+    if (unreadable) throw new Error(`${id} is on the registry, but this Hivemind cannot read its entry: ${unreadable.reason}`);
+    throw new Error(`${id} is not on the registry (${catalogIndexUrl()})`);
+  }
   if (entry.type !== type) throw new Error(`${id} is a${entry.type === "agent" ? "n" : ""} ${entry.type} — use \`hive ${entry.type}s install ${id}\``);
   if (!appMeetsMinVersion(pkg.version, entry.minAppVersion)) {
     throw new Error(`${id} needs Hivemind ${entry.minAppVersion} or newer; this is ${pkg.version}`);
