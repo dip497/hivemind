@@ -12,6 +12,7 @@ import { hiveNetBuilt, ownNetwork, person } from "./helpers/multiplayer";
 import { connectPage, offerToConnect } from "./helpers/phone";
 import { addFromMenu } from "./helpers/board";
 import { stopDaemons } from "./helpers/daemons";
+import { installPlugin } from "./helpers/install";
 
 const WWW = path.resolve("../../crates/hive-web/www");
 const hiveWebBuilt = () => fs.existsSync(path.join(WWW, "pkg", "hive_web_bg.wasm")) && fs.existsSync(path.join(WWW, "js", "views.js"));
@@ -51,10 +52,12 @@ test("the phone page lists the computer's phone views and shows one on its own o
   const home = path.join(root, "home");
   fs.mkdirSync(home);
   const config = path.join(root, "desktop", "hivemind");
-  for (const view of ["widget-viewer", "phone-hostile", "phone-probe"]) fs.cpSync(path.join(FIXTURES, view), path.join(config, "views", view), { recursive: true });
-  fs.mkdirSync(path.join(config, "widgets", "counter"), { recursive: true });
-  fs.writeFileSync(path.join(config, "widgets", "counter", "widget.json"), JSON.stringify({ name: "Counter" }));
-  fs.writeFileSync(path.join(config, "widgets", "counter", "widget.js"), COUNTER);
+  for (const view of ["widget-viewer", "phone-hostile", "phone-probe"]) installPlugin(path.dirname(config), path.join(FIXTURES, view));
+  const counterSource = path.join(root, "src", "counter");
+  fs.mkdirSync(counterSource, { recursive: true });
+  fs.writeFileSync(path.join(counterSource, "widget.json"), JSON.stringify({ name: "Counter" }));
+  fs.writeFileSync(path.join(counterSource, "widget.js"), COUNTER);
+  installPlugin(path.dirname(config), counterSource);
   const desktop = await person(root, "desktop", repo, apps, { HOME: home });
   expect(await desktop.evaluate((l) => window.hive.useNetwork(l), net.link)).toMatchObject({ admission: "enrolled" });
   const me = await desktop.evaluate(() => window.hive.identity());

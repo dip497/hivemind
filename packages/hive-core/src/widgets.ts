@@ -1,23 +1,18 @@
 /**
- * Widget packages on this machine: `<config>/hivemind/widgets/<id>/`, beside the views, each a
- * `widget.json` ({ id?, name, version?, description?, icon?, options?, chrome?, permissions?, placement?, size?, draw? }),
- * the `widget.js` a window runs in a worker, and the images it draws. A folder that cannot be read
- * is skipped. One from HiveHub says its `@owner/name` id in its widget.json and lives in
- * `owner--name`. The app and the CLI read, add and remove them here.
+ * Widgets on this machine: the app's own, and those of installed packages
+ * (`./installed-packages.ts`). A widget is a folder with a `widget.json` ({ id?, name, version?,
+ * description?, icon?, options?, chrome?, permissions?, placement?, size?, draw? }), the
+ * `widget.js` a window runs in a worker, and the images it draws. One from HiveHub says its
+ * `@owner/name` id in its widget.json. The app and the CLI read them here.
  */
-import { cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat } from "node:fs/promises";
-import os from "node:os";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { installedMembers } from "./installed-packages.js";
 import { parseSettingFields } from "@hivemind/view-sdk/settings";
 import { VIEW_PERMISSIONS } from "@hivemind/view-sdk/protocol";
 import { parseCategory } from "@hivemind/view-sdk/category";
 import { parsePluginCommands } from "@hivemind/view-sdk/commands";
 import { BUILTIN_WIDGETS, isWidgetId, widgetFolder, type WidgetPackage } from "./widget-format.js";
-
-export function userWidgetsDir(): string {
-  const base = process.env.XDG_CONFIG_HOME?.trim() || path.join(os.homedir(), ".config");
-  return path.join(base, "hivemind", "widgets");
-}
 
 /** The package in `dir`, read and checked, or why it is not one. Its id is the `@owner/name` its
  *  widget.json says when it lives in that id's folder, else its folder's name. */
@@ -81,50 +76,31 @@ async function imagesIn(dir: string): Promise<Record<string, string>> {
 /** An image of the installed widget `widget`, as a data URL, or null. */
 export async function widgetAsset(widget: string, name: string): Promise<string | null> {
   if (!isWidgetId(widget) || name.includes("/") || name.includes("\\") || name.startsWith(".")) return null;
-  try { return (await readWidget(path.join(userWidgetsDir(), widgetFolder(widget)), widget)).assets[name] ?? null; } catch { return null; }
+  const member = (await installedMembers("widget")).find((m) => m.id === widget);
+  if (!member) return null;
+  try { return (await readWidget(member.dir, widget)).assets[name] ?? null; } catch { return null; }
 }
 
-export async function listWidgets(dir = userWidgetsDir()): Promise<WidgetPackage[]> {
-  const folders = (await readdir(dir).catch(() => [] as string[])).filter((f) => !f.startsWith("."));
-  const found = (await Promise.all(folders.sort().map((f) => readWidget(path.join(dir, f)).catch(() => null))))
+/** The widgets that come with the app, and those of installed packages: one of the same id
+ *  replaces the app's. One that cannot be read is left out. */
+export async function listWidgets(): Promise<WidgetPackage[]> {
+  const found = (await Promise.all((await installedMembers("widget")).map((m) =>
+    readWidget(m.dir, m.id).then((w): WidgetPackage => ({ ...w, package: m.package }), () => null))))
     .filter((w): w is WidgetPackage => w !== null);
   const mine = new Set(found.map((w) => w.id));
   return [...BUILTIN_WIDGETS.filter((b) => !mine.has(b.id)), ...found];
 }
 
-/**
- * Copy the widget in `src` into the widgets folder, replacing one with the same id, and return it.
- * Its id is `id` (a HiveHub listing, which its widget.json must name too), else the `@owner/name`
- * its widget.json says, else its folder's name made safe. It is checked before anything is
- * replaced, and copied whole before it takes the old one's place.
- */
-export async function installWidget(src: string, id?: string, dir = userWidgetsDir()): Promise<WidgetPackage> {
-  const read = await readWidget(src, id ?? "candidate");
-  const meta = JSON.parse(await readFile(path.join(src, "widget.json"), "utf8")) as { id?: unknown };
+/** The widget in `dir`, checked for installing. Its id is `id` (a HiveHub listing, which its
+ *  widget.json must name too), else the `@owner/name` its widget.json says, else `folder`, the
+ *  name of the folder it came from, made safe. */
+export async function widgetToInstall(dir: string, given: { id?: string; folder: string }): Promise<WidgetPackage> {
+  const { id } = given;
+  const read = await readWidget(dir, id ?? "candidate");
+  const meta = JSON.parse(await readFile(path.join(dir, "widget.json"), "utf8")) as { id?: unknown };
   if (id && meta.id !== id) throw new Error(`its widget.json says it is ${JSON.stringify(meta.id ?? null)}, not ${id}`);
   const want = id ?? (typeof meta.id === "string" && meta.id.startsWith("@") && isWidgetId(meta.id)
-    ? meta.id : path.basename(path.resolve(src)).replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 60) || "widget");
+    ? meta.id : given.folder.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 60) || "widget");
   if (!isWidgetId(want)) throw new Error(`${want} is not a widget id`);
-  await mkdir(dir, { recursive: true });
-  const staging = await mkdtemp(path.join(dir, ".install-"));
-  const dest = path.join(dir, widgetFolder(want));
-  try {
-    await cp(src, path.join(staging, "next"), { recursive: true });
-    await rm(dest, { recursive: true, force: true });
-    await rename(path.join(staging, "next"), dest);
-  } finally {
-    await rm(staging, { recursive: true, force: true });
-  }
-  return { ...read, id: want, dir: dest };
-}
-
-/** Remove an installed widget. A built-in cannot be; one installed in its place can, which
- *  brings the built-in back. */
-export async function removeWidget(id: string, dir = userWidgetsDir()): Promise<void> {
-  if (!isWidgetId(id)) throw new Error(`${id} is not a widget id`);
-  const at = path.join(dir, widgetFolder(id));
-  if (!(await stat(at).catch(() => null))) {
-    throw new Error(BUILTIN_WIDGETS.some((b) => b.id === id) ? "it comes with the app" : `no widget ${id} is installed`);
-  }
-  await rm(at, { recursive: true, force: true });
+  return { ...read, id: want, dir };
 }

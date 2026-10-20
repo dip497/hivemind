@@ -13,9 +13,10 @@ import { existsSync } from "node:fs";
 import { agentDisclosures, isGenericRuntime } from "@hivemind/agents";
 import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
-import { installWidget, listWidgets, readWidget } from "@hivemind/core/widgets";
+import { listWidgets, readWidget } from "@hivemind/core/widgets";
+import { installPackage } from "@hivemind/core/package-install";
 import { widgetsChanged } from "./widgets.js";
-import { installToolPackage, listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
+import { listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
 import { toolsChanged } from "./tool-packages.js";
 import { reloadSettings } from "./settings-store.js";
 import { applyShellEnvToProcess } from "@hivemind/agent-host/shell-env";
@@ -205,7 +206,7 @@ export function installPluginCatalogIpc(): void {
     if (!pendingWidget || pendingWidget.token !== token) throw new Error("Review the widget again before installing it.");
     const { dir, id } = pendingWidget;
     pendingWidget = null;
-    try { await installWidget(dir, id); widgetsChanged(); }
+    try { await installPackage(dir, { id }); widgetsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("plugins:install-tool", (token) => ({ target: pendingTool && pendingTool.token === token ? pendingTool.id : undefined }), async (_event, token: string) => {
@@ -213,7 +214,7 @@ export function installPluginCatalogIpc(): void {
     const { dir, id } = pendingTool;
     pendingTool = null;
     // It arrives off, an update too: switching it on trusts the code that was there.
-    try { await installToolPackage(dir, id); await reloadSettings(); toolsChanged(); }
+    try { await installPackage(dir, { id }); await reloadSettings(); toolsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (_event, token: string) => {

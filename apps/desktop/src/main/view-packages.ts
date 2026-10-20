@@ -19,7 +19,8 @@ import { serveScheme } from "./schemes.js";
 import { handle, handleEffect } from "./app-ipc.js";
 import { appWindowOf } from "./windows.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listInstalledViews, readViewPackage, installView, removeView, type InstalledView } from "@hivemind/core/views";
+import { listInstalledViews, readViewPackage, type InstalledView } from "@hivemind/core/views";
+import { installPackage, removePlugin } from "@hivemind/core/package-install";
 import { VIEW_SCHEME, entryUrl, newNonce, pluginCsp, serveViewFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 import type { ViewFile, ViewListing } from "@hivemind/workspace-api/views";
@@ -211,11 +212,11 @@ export function installViewManagementIpc(): void {
     try {
       const pkg = await readViewPackage(candidate.dir, "user", false);
       if (pkg.error || JSON.stringify(pkg.manifest) !== candidate.manifest) throw new Error("The extension changed. Choose its folder again to review it.");
-      await installView(candidate.dir);
+      await installPackage(candidate.dir, { id: candidate.id });
     } finally { if (candidate.staged) await rm(candidate.dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("views:remove", (id) => ({ target: typeof id === "string" ? id : undefined }), async (_event, id: string) => {
     if (typeof id !== "string") throw new Error("Invalid extension ID");
-    await removeView(id);
+    await removePlugin("view", id);
   });
 }

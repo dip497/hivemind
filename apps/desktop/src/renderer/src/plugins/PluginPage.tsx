@@ -7,12 +7,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
 import { CatalogMark, cleanError } from "../settings-plugins";
-import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
+import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import { Switch } from "../components/ui/switch";
 import { useSettingsNavigate } from "../settings-panels";
-import { setPluginEnabled, setPluginOption, useSettings } from "../settings-store";
+import { setPluginOption, switchPlugin, useSettings } from "../settings-store";
 import { AgentActions, AgentMark, AgentPage } from "../settings-agents";
 import { ViewActions, ViewMark, ViewPage } from "../settings-views";
 import { ToolActions, ToolIcon, ToolPage } from "../settings-tools";
@@ -120,11 +120,12 @@ function PluginMark({ p }: { p: PluginRecord }) {
 
 /** What is done to it as a whole, on every tab: switching it on or off, making it the one used. */
 function PluginActions({ p }: { p: PluginRecord }) {
-  const on = isPluginEnabled(useSettings().plugins.state, "widget", p.id);
+  const widget = useWidgetPackages().find((x) => x.id === p.id);
+  const on = isPluginOn(useSettings().plugins.state, "widget", widget ?? p);
   if (p.kind === "agent") return <AgentActions id={p.id} />;
   if (p.kind === "view") return <ViewActions id={p.id} />;
   if (p.kind === "tool") return <ToolActions id={p.id} />;
-  return <Switch aria-label={`Enable ${p.name}`} checked={on} onCheckedChange={() => setPluginEnabled("widget", p.id, !on)} />;
+  return <Switch aria-label={`Enable ${p.name}`} checked={on} onCheckedChange={() => void switchPlugin("widget", widget ?? p, !on)} />;
 }
 
 /** A plugin's Settings tab: its kind's own controls, then the fields it declares. */
@@ -149,7 +150,7 @@ function ViewDeclaredSettings({ id }: { id: string }) {
 /** A widget is switched on or off here; what each placed one shows is set on it, on the board. */
 function WidgetSettings({ id }: { id: string }) {
   const w = useWidgetPackages().find((x) => x.id === id);
-  const on = isPluginEnabled(useSettings().plugins.state, "widget", id);
+  const on = isPluginOn(useSettings().plugins.state, "widget", w ?? { id });
   if (!w) return null;
   return <div className="plugin-page" data-widget-page={id}>
     {!on && <p className="settings-note">Off: it is not offered to add, and the ones placed keep what they hold but do not run.</p>}

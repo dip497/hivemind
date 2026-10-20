@@ -1,11 +1,11 @@
-/** The kinds of plugin you write and install, each as data: what makes a folder one, its id, its
- *  starter, how it is copied in and taken out, and the steps to see it. `hive plugins new|install|
- *  remove` is one path over this table. */
+/** The kinds of plugin you write, each as data: what makes a folder one, its id, its starter, how
+ *  it is checked, and the steps to see it. `hive plugins new|check` is one path over this table;
+ *  installing and removing are the package store's (`@hivemind/core/package-install`), the same
+ *  for every kind. */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { installView, removeView } from "@hivemind/core";
-import { installToolPackage, readToolPackage, removeToolPackage, TOOL_MANIFEST } from "@hivemind/core/tool-packages";
-import { installWidget, readWidget, removeWidget } from "@hivemind/core/widgets";
+import { readToolPackage, TOOL_MANIFEST } from "@hivemind/core/tool-packages";
+import { readWidget } from "@hivemind/core/widgets";
 import { MANIFEST_FILE as VIEW_MANIFEST, validateViewManifest } from "@hivemind/view-sdk/manifest";
 import type { Problem } from "./check/problem.js";
 import { TOOL_TYPE_SETUP, toolStarter, WIDGET_TYPE_SETUP, widgetStarter } from "./starters.js";
@@ -13,8 +13,6 @@ import { starterFiles as viewStarter, VIEW_TYPE_SETUP } from "./view-starter.js"
 import type { TypeSetup } from "./check/types.js";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
 import { declaration, typeSources } from "./type-files.js";
-
-export interface Installed { id: string; name: string; dir: string }
 
 export interface AuthoredKind {
   /** As a plugin record names it: `<kind>:<id>`. */
@@ -25,9 +23,6 @@ export interface AuthoredKind {
   manifest: string;
   idOf(owner: string, name: string): string;
   starter(owner: string, name: string): Record<string, string>;
-  /** Copies a checked folder in; `hubId` is the id HiveHub listed it under. */
-  install(dir: string, hubId?: string): Promise<Installed>;
-  remove(id: string): Promise<void>;
   /** What a running app is asked, in order, to load them again. */
   rescan: string[];
   /** On once installed, or off until you switch it on. */
@@ -64,8 +59,6 @@ export const KINDS: readonly AuthoredKind[] = [
     kind: "tool", noun: "tool plugin", manifest: TOOL_MANIFEST,
     idOf: (owner, name) => `@${owner}/${name}`,
     starter: toolStarter,
-    install: (dir, hubId) => installToolPackage(dir, hubId),
-    remove: removeToolPackage,
     rescan: ["settings.reload", "tools.rescan"],
     onByDefault: false,
     prepare: () => [],
@@ -81,8 +74,6 @@ export const KINDS: readonly AuthoredKind[] = [
     kind: "widget", noun: "widget", manifest: "widget.json",
     idOf: (owner, name) => `@${owner}/${name}`,
     starter: widgetStarter,
-    install: async (dir, hubId) => { const w = await installWidget(dir, hubId); return { id: w.id, name: w.name, dir: w.dir ?? dir }; },
-    remove: removeWidget,
     rescan: ["widgets.rescan"],
     onByDefault: true,
     prepare: () => [],
@@ -98,8 +89,6 @@ export const KINDS: readonly AuthoredKind[] = [
     kind: "view", noun: "view", manifest: VIEW_MANIFEST,
     idOf: (owner, name) => `@${owner}/${name}`,
     starter: viewStarter,
-    install: async (dir) => { const v = await installView(dir); return { id: v.id, name: v.manifest?.name ?? v.id, dir: v.dir }; },
-    remove: removeView,
     rescan: ["views.rescan"],
     onByDefault: true,
     prepare: (dir) => [`cd ${dir} && npm install`],

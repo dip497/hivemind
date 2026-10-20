@@ -29,7 +29,8 @@ folder.
 | What | Where | Note |
 |---|---|---|
 | Settings | config folder, `settings.json` | shared by the app and `hive`. Every setting: [Settings](/settings) |
-| Agent files, views, widgets, tools | config folder, `agents/`, `views/`, `widgets/`, `tools/` | a project may add its own in `.hivemind/agents/` and `.hivemind/views/` |
+| Agent files | config folder, `agents/` | a project may add its own in `.hivemind/agents/` |
+| Views, widgets and tools you install | config folder, `packages/` | each version's files in `packages/store/`, never changed; which version is in use and whether it is on in `packages/installed.json`. A project may add its own views in `.hivemind/views/` |
 | Saved machines | config folder, `machines.json` | |
 | Each workspace's layout: frames, tiles, viewport | app data folder, `workspaces/` | one file per project; shared workspaces in `shared/` |
 | Window sizes and places | app data folder, `window-state.json` | |

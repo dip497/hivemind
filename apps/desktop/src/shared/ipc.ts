@@ -420,6 +420,8 @@ export interface HiveIpc {
   autoInstallAgents(): Promise<{ added: Array<{ id: string; label: string; does: string[] }>; updated: Array<{ id: string; label: string }> }>;
   installViewPackage(token: string): Promise<void>;
   removeViewPackage(id: string): Promise<void>;
+  /** Switch a plugin you added on or off: with its package, which a package of one is all of. */
+  switchPlugin(kind: "view" | "widget" | "tool", id: string, on: boolean): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── identity (R3) ─────────────────────────────────────────

@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import { freePort, launchWindow, type AppWindow } from "./helpers/window";
 import { addFromMenu } from "./helpers/board";
+import { installPlugin } from "./helpers/install";
 
 // A widget a plugin draws: a count, and a button that adds to it in its code.
 const COUNTER = `
@@ -36,11 +37,12 @@ test.beforeAll(async () => {
   fs.mkdirSync(repo);
   execFileSync("git", ["init", "-q"], { cwd: repo });
   // Its own config: the widget and the view are this test's, and so is the setting it turns on.
-  const counter = path.join(xdg, "hivemind", "widgets", "counter");
+  const counter = path.join(root, "src", "counter");
   fs.mkdirSync(counter, { recursive: true });
   fs.writeFileSync(path.join(counter, "widget.json"), JSON.stringify({ name: "Counter" }));
   fs.writeFileSync(path.join(counter, "widget.js"), COUNTER);
-  fs.cpSync(path.join(process.cwd(), "tests/e2e/fixtures/views/widget-viewer"), path.join(xdg, "hivemind", "views", "widget-viewer"), { recursive: true });
+  installPlugin(xdg, counter);
+  installPlugin(xdg, path.join(process.cwd(), "tests/e2e/fixtures/views/widget-viewer"));
   const env: Record<string, string | undefined> = { ...process.env, XDG_CONFIG_HOME: xdg };
   delete env.ELECTRON_RUN_AS_NODE;
   app = await launchWindow({ cwd: repo, env, args: [`--user-data-dir=${path.join(root, "ud")}`] });

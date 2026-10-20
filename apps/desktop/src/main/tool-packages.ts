@@ -12,9 +12,10 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dialog, net } from "electron";
 import { serveScheme } from "./schemes.js";
-import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { isToolId, toolOfFolder, type ToolPackage } from "@hivemind/core/tool-format";
-import { installToolPackage, listToolPackages, removeToolPackage, toolFile } from "@hivemind/core/tool-packages";
+import { listToolPackages, toolFile } from "@hivemind/core/tool-packages";
+import { installPackage, removePlugin } from "@hivemind/core/package-install";
 import { handle } from "./app-ipc.js";
 import { appWindowOf, broadcast } from "./windows.js";
 import { getSettings, reloadSettings } from "./settings-store.js";
@@ -26,7 +27,7 @@ export const appToolsDir = (): string => fileURLToPath(new URL("../tools", impor
 /** The packages from the last listing, by id: which folder each is served from. */
 const listed = new Map<string, ToolPackage>();
 export const listTools = async (): Promise<ToolPackage[]> => {
-  const packages = await listToolPackages(undefined, appToolsDir());
+  const packages = await listToolPackages(appToolsDir());
   listed.clear();
   for (const p of packages) if (!listed.has(p.id)) listed.set(p.id, p);
   return packages;
@@ -66,8 +67,8 @@ export function handleToolProtocol(): void {
       const id = toolOfFolder(u.host);
       const pkg = isToolId(id) ? listed.get(id) ?? (await listTools()).find((p) => p.id === id) : undefined;
       const app = pkg?.source === "app";
-      if (!pkg || (safeMode() && !app) || !isPluginEnabled(getSettings().plugins.state, "tool", id, app)) return served("not switched on", "text/plain", 404);
-      const file = toolFile(id, decodeURIComponent(u.pathname.replace(/^\/+/, "")), app ? appToolsDir() : undefined);
+      if (!pkg || (safeMode() && !app) || !isPluginOn(getSettings().plugins.state, "tool", pkg, app)) return served("not switched on", "text/plain", 404);
+      const file = toolFile(pkg.dir, decodeURIComponent(u.pathname.replace(/^\/+/, "")));
       const type = file ? TYPES[path.extname(file).toLowerCase()] : undefined;
       if (!file || !type) return served("not served", "text/plain", 403);
       const res = await net.fetch(pathToFileURL(file).toString());
@@ -165,14 +166,14 @@ export function installToolPackageIpc(): void {
     const picked = await (win ? dialog.showOpenDialog(win, opts) : dialog.showOpenDialog(opts));
     const from = picked.filePaths[0];
     if (picked.canceled || !from) return null;
-    const pkg = await installToolPackage(from);
+    const { record } = await installPackage(from);
     await reloadSettings();
     toolsChanged();
-    return { id: pkg.id, name: pkg.name };
+    return { id: record.id, name: record.name };
   }, { local: true });
   handle("tools:remove", async (_e, id: unknown) => {
     if (typeof id !== "string") throw new Error("not a tool plugin");
-    await removeToolPackage(id);
+    await removePlugin("tool", id);
     toolsChanged();
   });
   handle("tools:run", (_e, call: ToolRun) => runTool(call));

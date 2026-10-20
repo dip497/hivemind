@@ -168,6 +168,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     autoInstallAgents: () => port.invoke("agents:auto-install"),
     installViewPackage: (token) => port.invoke("views:install", token),
     removeViewPackage: (id) => port.invoke("views:remove", id),
+    switchPlugin: (kind, id, on) => port.invoke("plugins:switch", kind, id, on),
     onViewRunaway: (cb) => port.on("views:runaway", cb),
     checkForUpdate: local("checkForUpdate", invoke("checkForUpdate")),
     runUpgrade: local("runUpgrade", invoke("runUpgrade")),

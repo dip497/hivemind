@@ -1,4 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { installPluginSwitchIpc } from "./plugin-switch.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { toolPreferences } from "@hivemind/core/settings-schema";
@@ -1603,6 +1604,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installViewManagementIpc();
     installWidgetIpc();
     installToolPackageIpc();
+    installPluginSwitchIpc();
     installServicesIpc();
     installPluginCatalogIpc();
     handle("views:list", wrap(async (_e, repoRoot: string | null) => listViewPackages(repoRoot ? String(repoRoot) : null)));

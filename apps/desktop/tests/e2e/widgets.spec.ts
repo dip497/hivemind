@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { installPlugin } from "./helpers/install";
 
 // It also counts, in what it keeps, how many times its code has started: switching views must
 // not start it again.
@@ -24,10 +25,11 @@ test("a widget is offered, added, drawn in every view, and its button changes wh
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-ud-"));
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
   // Widgets live beside the views, in the config folder the CLI reads too.
-  const counter = path.join(ud, "config", "hivemind", "widgets", "counter");
+  const counter = path.join(ud, "src", "counter");
   fs.mkdirSync(counter, { recursive: true });
   fs.writeFileSync(path.join(counter, "widget.json"), JSON.stringify({ name: "Counter" }));
   fs.writeFileSync(path.join(counter, "widget.js"), COUNTER);
+  installPlugin(path.join(ud, "config"), counter);
   const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
@@ -57,8 +59,7 @@ test("a widget is offered, added, drawn in every view, and its button changes wh
 
     // A view that shows widgets (a phone's way of showing them) draws the counter, and a press
     // there reaches its code, here in this window.
-    const viewer = path.join(ud, "config", "hivemind", "views", "widget-viewer");
-    fs.cpSync(path.join(process.cwd(), "tests/e2e/fixtures/views/widget-viewer"), viewer, { recursive: true });
+    installPlugin(path.join(ud, "config"), path.join(process.cwd(), "tests/e2e/fixtures/views/widget-viewer"));
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:reload-views")));
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "widget-viewer" } })));
     const frame = page.frameLocator('[data-community-view="widget-viewer"] iframe');
@@ -102,10 +103,11 @@ test("a widget reads the workspace through hive.hm, held to what its widget.json
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-hm-repo-"));
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-hm-ud-"));
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
-  const dir = path.join(ud, "config", "hivemind", "widgets", "tiles");
+  const dir = path.join(ud, "src", "tiles");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "widget.json"), JSON.stringify({ name: "Tiles" }));
   fs.writeFileSync(path.join(dir, "widget.js"), TILES);
+  installPlugin(path.join(ud, "config"), dir);
   const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
@@ -144,11 +146,12 @@ test("a widget walking and stepping through its sprite costs the page no layout 
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-walk-repo-"));
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-walk-ud-"));
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
-  const dir = path.join(ud, "config", "hivemind", "widgets", "walker");
+  const dir = path.join(ud, "src", "walker");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "widget.json"), JSON.stringify({ name: "Walker", chrome: "none" }));
   fs.writeFileSync(path.join(dir, "widget.js"), WALKER);
   fs.writeFileSync(path.join(dir, "walk.svg"), WALK_SHEET);
+  installPlugin(path.join(ud, "config"), dir);
   const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
@@ -198,7 +201,7 @@ test("a widget with no card, sent to the right edge, reaches it however narrow i
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-edge-repo-"));
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-edge-ud-"));
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
-  const dir = path.join(ud, "config", "hivemind", "widgets", "edge");
+  const dir = path.join(ud, "src", "edge");
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "widget.json"), JSON.stringify({ name: "Edge", chrome: "none" }));
   fs.writeFileSync(path.join(dir, "widget.js"), `hive.on("start", () => {
@@ -206,6 +209,7 @@ test("a widget with no card, sent to the right edge, reaches it however narrow i
   hive.moveTo({ x: 1, y: "bottom" }, { over: 0 });
 });`);
   fs.writeFileSync(path.join(dir, "walk.svg"), WALK_SHEET);
+  installPlugin(path.join(ud, "config"), dir);
   const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
   delete env.ELECTRON_RUN_AS_NODE;
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });

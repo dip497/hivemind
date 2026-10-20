@@ -82,6 +82,23 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
   return out;
 }
 
+/** The package an installed plugin belongs to, as its listing carries it. */
+export interface PackageOf {
+  id: string;
+  version: string;
+  /** The package's switch. */
+  on: boolean;
+  /** How many plugins it holds: one is a package of one, whose switch is the plugin's. */
+  members: number;
+}
+
+/** Whether a plugin loads: one in a package when its package is on and it was not switched off
+ *  on its own; any other as `isPluginEnabled` says. */
+export function isPluginOn(states: Record<string, PluginState>, kind: PluginKind, plugin: { id: string; package?: PackageOf }, byDefault = true): boolean {
+  if (!plugin.package) return isPluginEnabled(states, kind, plugin.id, byDefault);
+  return plugin.package.on && states[pluginKey(kind, plugin.id)]?.enabled !== false;
+}
+
 /** Whether a plugin is on: as stored, else as it is by default. */
 export function isPluginEnabled(states: Record<string, PluginState>, kind: PluginKind, id: string, byDefault = true): boolean {
   return states[pluginKey(kind, id)]?.enabled ?? byDefault;

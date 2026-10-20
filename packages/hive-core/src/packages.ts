@@ -56,10 +56,14 @@ function parseJson(text: string, name: string): unknown {
   try { return JSON.parse(text); } catch { return fail(`invalid JSON in ${name}`); }
 }
 
-/** Hash a bounded directory without importing package code or following file symlinks.
- * This is an inspection snapshot, not an authorization token for a future install.
- * An installer must independently verify its private staging directory at commit time. */
-async function snapshot(directory: string) {
+/** Folders a package never carries: what a build or a checkout leaves beside the plugin. */
+const LEFT_OUT = new Set(["node_modules", ".git"]);
+
+/** Hash a bounded directory without importing package code or following file symlinks, and
+ * copy each file into `copyTo` as it is read when one is given. The digest is of what was read,
+ * so a copy is exactly what its digest names. Without `copyTo` this is an inspection snapshot,
+ * not an authorization token for a future install. */
+async function snapshot(directory: string, copyTo?: string) {
   const root = path.resolve(directory);
   const rootStat = await fs.lstat(root);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail("package root must be a directory, not a symlink");
@@ -70,7 +74,9 @@ async function snapshot(directory: string) {
   let entries = 0;
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > PACKAGE_LIMITS.depth) fail("package directory is too deep");
+    if (copyTo) await fs.mkdir(path.join(copyTo, dir), { recursive: true });
     for await (const entry of await fs.opendir(path.join(root, dir))) {
+      if (entry.isDirectory() && LEFT_OUT.has(entry.name)) continue;
       if (++entries > PACKAGE_LIMITS.files) fail("package has too many entries");
       const name = dir ? `${dir}/${entry.name}` : entry.name;
       if (!isSafeRelativePath(name) || /[\x00-\x1f\x7f]/.test(name)) fail("invalid package entry path");
@@ -84,6 +90,8 @@ async function snapshot(directory: string) {
       const capture = name === PACKAGE_MANIFEST || name.endsWith("/hivemind-view.json");
       // O_NONBLOCK prevents a substituted FIFO from blocking before fstat can reject it.
       const handle = await fs.open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      // A service the package runs keeps its executable bit; nothing else of the mode is kept.
+      const out = copyTo ? await fs.open(path.join(copyTo, name), "wx", (info.mode & 0o755) | 0o600) : null;
       try {
         const before = await handle.stat();
         if (!before.isFile() || before.nlink !== 1 || before.ino !== info.ino || before.dev !== info.dev) fail(`entry changed during inspection: ${name}`);
@@ -100,19 +108,28 @@ async function snapshot(directory: string) {
           if (size > limit || bytes > PACKAGE_LIMITS.bytes) fail("package exceeds size limits");
           const chunk = buffer.subarray(0, bytesRead);
           hash.update(chunk);
+          if (out) await out.write(chunk);
           if (capture) chunks.push(Buffer.from(chunk));
         }
         const after = await handle.stat();
         if (size !== before.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) fail(`entry changed during inspection: ${name}`);
         files.push({ path: name, bytes: size, sha256: hash.digest("hex") });
         if (capture) json.set(name, Buffer.concat(chunks).toString("utf8"));
-      } finally { await handle.close(); }
+      } finally { await handle.close(); await out?.close(); }
     }
   }
   await walk("", 0);
   files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   const sha256 = createHash("sha256").update(JSON.stringify(files)).digest("hex");
   return { files, json, bytes, sha256 };
+}
+
+/** Copy the package in `directory` into `dest` (which must not be there), checked as an
+ *  inspection checks it, and give the digest of what was copied. */
+export async function copyPackage(directory: string, dest: string): Promise<{ digest: string; bytes: number }> {
+  await fs.mkdir(dest);
+  const copied = await snapshot(directory, dest);
+  return { digest: copied.sha256, bytes: copied.bytes };
 }
 
 export async function inspectPackage(directory: string, providers: readonly PackageProvider[]) {

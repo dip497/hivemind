@@ -6,8 +6,9 @@
  *
  *   hive plugins new <tool|widget|view> <name> [--dir <folder>] [--owner <login>]   a starter that works, with PROMPT.md
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
- *                                                  (@owner/name is HiveHub's: write a folder as ./x)
- *   hive plugins remove <plugin>                   one you added; what shows it stays, saying it is missing
+ *                                                  (@owner/name is HiveHub's: write a folder as ./x);
+ *                                                  every install is a package, a folder of one plugin a package of one
+ *   hive plugins remove <plugin>                   one you added, with its package; what shows it stays, saying it is missing
  *   hive plugins check <folder> [--json]           its types, its manifest, and its code drawn once
  *   hive plugins api --kind <tool|widget|view>     what its code is given, as type declarations
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
@@ -26,9 +27,11 @@ import path from "node:path";
 import { defineCommand } from "citty";
 import { HiveError, findRoot, listInstalledViews, readSettings, updateSettings } from "@hivemind/core";
 import {
-  PLUGIN_KINDS, agentSettingFields, isPluginEnabled, isPluginId, parseSettingValue, pluginKey, pluginOptions, resolveSettings,
-  serviceWorkspaces, toolSettingFields, withPluginState, type PluginKind, type PluginState, type SettingField,
+  PLUGIN_KINDS, agentSettingFields, isPluginOn, isPluginId, parseSettingValue, pluginKey, pluginOptions, resolveSettings,
+  serviceWorkspaces, toolSettingFields, withPluginState, type PackageOf, type PluginKind, type PluginState, type SettingField,
 } from "@hivemind/core/plugin-settings";
+import { installPackage, removePlugin, switchPlugin, type InstalledPackage } from "@hivemind/core/package-install";
+import { BUILTIN_WIDGETS } from "@hivemind/core/widget-format";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
@@ -54,6 +57,8 @@ interface Plugin {
   opens?: string[];
   /** Where it is installed, for one you added. */
   dir?: string;
+  /** The package it was installed with, for one you added. */
+  package?: PackageOf;
 }
 
 /** Every plugin this machine has: agents, installed views, widgets (built in and added), tools
@@ -67,10 +72,10 @@ async function inventory(): Promise<Plugin[]> {
   const added = await listToolPackages();
   const out: Plugin[] = [
     ...agents.map((a): Plugin => ({ key: pluginKey("agent", a.id), kind: "agent", id: a.id, name: a.def?.label ?? a.id, enabledByDefault: true, fields: a.def ? agentSettingFields(a.def) : [], problem: a.error })),
-    ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest?.settings ?? [], problem: v.error, dir: v.dir })),
-    ...widgets.map((w): Plugin => ({ key: pluginKey("widget", w.id), kind: "widget", id: w.id, name: w.name, enabledByDefault: true, fields: [], problem: null, ...(w.dir ? { dir: w.dir } : {}) })),
+    ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest?.settings ?? [], problem: v.error, dir: v.dir, ...(v.package ? { package: v.package } : {}) })),
+    ...widgets.map((w): Plugin => ({ key: pluginKey("widget", w.id), kind: "widget", id: w.id, name: w.name, enabledByDefault: true, fields: [], problem: null, ...(w.dir ? { dir: w.dir } : {}), ...(w.package ? { package: w.package } : {}) })),
     ...BUNDLED_TOOL_PLUGINS.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.tools.map((x) => x.label).join(", "), enabledByDefault: !!t.builtin, fields: toolSettingFields(t), problem: null, opens: opensOf(t) })),
-    ...added.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.name, enabledByDefault: false, fields: [...toolSettingFields(t), ...t.settings], problem: t.problem, ...(t.service ? { service: t.service.command } : {}), opens: opensOf(t), dir: t.dir })),
+    ...added.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.name, enabledByDefault: false, fields: [...toolSettingFields(t), ...t.settings], problem: t.problem, ...(t.service ? { service: t.service.command } : {}), opens: opensOf(t), dir: t.dir, ...(t.package ? { package: t.package } : {}) })),
   ];
   return out;
 }
@@ -116,9 +121,9 @@ const listCmd = defineCommand({
       const states = (await readSettings()).plugins.state;
       const rows = (await inventory()).filter((p) => !args.kind || p.kind === args.kind).map((p) => ({
         key: p.key, kind: p.kind, id: p.id, name: p.name,
-        enabled: isPluginEnabled(states, p.kind, p.id, p.enabledByDefault),
+        enabled: isPluginOn(states, p.kind, p, p.enabledByDefault),
         settings: resolveSettings(p.fields, pluginOptions(states, p.kind, p.id)), problem: p.problem,
-        ...(p.opens ? { opens: p.opens } : {}), ...(p.dir ? { dir: p.dir } : {}),
+        ...(p.opens ? { opens: p.opens } : {}), ...(p.dir ? { dir: p.dir } : {}), ...(p.package ? { package: p.package } : {}),
       }));
       return ok(ctx, rows, () => rows.map((r) => [`${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.problem ? `  (${r.problem})` : ""}`,
         ...(r.opens ?? []).map((t) => `       open-tool ${t}`)].join("\n")).join("\n") || "no plugins");
@@ -135,7 +140,7 @@ const showCmd = defineCommand({
       const p = await find(String(args.plugin));
       const states = (await readSettings()).plugins.state;
       const values = resolveSettings(p.fields, pluginOptions(states, p.kind, p.id));
-      const data = { key: p.key, name: p.name, enabled: isPluginEnabled(states, p.kind, p.id, p.enabledByDefault), fields: p.fields, values };
+      const data = { key: p.key, name: p.name, enabled: isPluginOn(states, p.kind, p, p.enabledByDefault), fields: p.fields, values, ...(p.package ? { package: p.package } : {}) };
       return ok(ctx, data, () => [`${p.name} (${p.key}) — ${data.enabled ? "on" : "off"}`,
         ...(p.fields.length ? p.fields.map((f) => `  ${f.id.padEnd(16)} ${show(values[f.id]).padEnd(14)} ${f.type === "choice" ? f.values.join(" | ") : f.type}${f.label !== f.id ? `  ${f.label}` : ""}`)
           : ["  nothing to set"])].join("\n"));
@@ -150,6 +155,12 @@ const switchCmd = (on: boolean) => defineCommand({
     const ctx = { json: !!args.json };
     try {
       const p = await find(String(args.plugin));
+      // One you added is switched with its package; one that comes with the app by its own setting.
+      if (p.package) {
+        const pkg = await switchPlugin(p.kind, p.id, on);
+        const reloaded = (await Promise.all([driveCall("settings.reload", [], 5000).then(() => true, () => false), rescanApp([p.kind])]))[0];
+        return ok(ctx, { key: p.key, enabled: on, package: pkg?.id ?? p.package.id, reloaded }, () => `${p.key} ${on ? "on" : "off"}; ${note(reloaded)}`);
+      }
       const { reloaded } = await change(p, (s) => ({ ...s, enabled: on }));
       return ok(ctx, { key: p.key, enabled: on, reloaded }, () => `${p.key} ${on ? "on" : "off"}; ${note(reloaded)}`);
     } catch (e) { return fail(ctx, e, "switch_failed"); }
@@ -232,9 +243,10 @@ function githubLogin(): string | null {
   try { return execFileSync("gh", ["api", "user", "--jq", ".login"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null; } catch { return null; }
 }
 
-/** Ask a running app to load them again. False when no app is reachable. */
-async function rescanApp(k: AuthoredKind): Promise<boolean> {
-  try { for (const m of k.rescan) await driveCall(m, [], 5000); return true; } catch { return false; }
+/** Ask a running app to load plugins of these kinds again. False when no app is reachable. */
+async function rescanApp(kinds: readonly string[]): Promise<boolean> {
+  const methods = [...new Set(kinds.flatMap((k) => kindNamed(k)?.rescan ?? []))];
+  try { for (const m of methods) await driveCall(m, [], 5000); return true; } catch { return false; }
 }
 const appNote = (rescanned: boolean) => (rescanned ? "app updated" : "app not running — it loads it when it starts");
 const steps = (lines: string[]) => lines.map((l) => `  ${l}`).join("\n");
@@ -296,35 +308,41 @@ const installCmd = defineCommand({
     // Errors exit the process (`err` does), so a `finally` would never run: discard by hand.
     const discard = async () => { if (staged) await rm(staged, { recursive: true, force: true }).catch(() => {}); };
     try {
-      let k: AuthoredKind | undefined;
       let hubId: string | undefined;
       // An id is always HiveHub's: a folder in someone else's repository cannot pass for it.
       if (HUB_ID.test(source)) {
         const folder = fs.existsSync(source) ? `; to install the folder, write ./${source}` : "";
         const got = await stageFromRegistry(source).catch((e: unknown) => { throw new Error(`${e instanceof Error ? e.message : String(e)}${folder}`); });
         staged = got.dir;
-        k = kindNamed(got.entry.type);
-        if (!k) throw new Error(`${source} is an agent: \`hive agents install ${source}\``);
+        if (got.entry.type === "agent") throw new Error(`${source} is an agent: \`hive agents install ${source}\``);
         hubId = source;
-      } else if (fs.existsSync(source)) {
-        k = KINDS.find((x) => fs.existsSync(path.join(source, x.manifest)));
-        if (!k) throw new Error(`${path.resolve(source)} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
-      } else {
+      } else if (!fs.existsSync(source)) {
         throw new Error(`there is no folder ${path.resolve(source)}, and "${source}" is not an id on HiveHub`);
       }
-      const p = await k.install(staged ?? path.resolve(source), hubId);
+      const installed = await installPackage(staged ?? path.resolve(source), hubId ? { id: hubId } : {});
       await discard();
-      const rescanned = await rescanApp(k);
-      const enabled = isPluginEnabled((await readSettings()).plugins.state, k.kind, p.id, k.onByDefault);
-      const next = [...(enabled ? [] : [`hive plugins enable ${k.kind}:${p.id}`]), ...k.see(p.id)];
-      return ok(ctx, { kind: k.kind, id: p.id, name: p.name, dir: p.dir, enabled, rescanned, next }, () => [
-        `installed ${k.noun} ${p.id} (${p.name}) → ${p.dir}; ${appNote(rescanned)}`,
-        enabled ? "It is on." : "It is off until you switch it on, if you trust who wrote it.",
-        "Next:", steps(next),
+      const rescanned = await rescanApp(installed.members.map((m) => m.kind));
+      const report = installReport(installed, rescanned);
+      return ok(ctx, report, () => [
+        `installed ${installed.record.id} (${installed.record.name}), version ${installed.record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; ${appNote(rescanned)}`,
+        ...installed.members.map((m) => `  ${kindNamed(m.kind)?.noun ?? m.kind} ${m.id} → ${m.dir}`),
+        installed.record.on ? "It is on." : "It is off until you switch it on, if you trust who wrote it.",
+        "Next:", steps(report.next),
       ].join("\n"));
     } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
   },
 });
+
+/** What `install` says it did, for a person and as --json. */
+function installReport(installed: InstalledPackage, rescanned: boolean) {
+  const { record } = installed;
+  const next = [...(record.on ? [] : [`hive plugins enable ${record.members[0]!.kind}:${record.members[0]!.id}`]), ...installed.members.flatMap((m) => kindNamed(m.kind)?.see(m.id) ?? [])];
+  return {
+    id: record.id, name: record.name, version: record.version, digest: record.digest, on: record.on,
+    members: installed.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, dir: m.dir, permissions: m.permissions })),
+    replaced: installed.replaced?.version ?? null, rescanned, next,
+  };
+}
 
 const removeCmd = defineCommand({
   meta: { name: "remove", description: "Remove a plugin you added" },
@@ -333,11 +351,11 @@ const removeCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const p = await find(String(args.plugin));
-      const k = kindNamed(p.kind);
-      if (!k) throw new Error(`${p.key} is an agent: \`hive agents remove ${p.id}\``);
-      await k.remove(p.id);
-      const rescanned = await rescanApp(k);
-      return ok(ctx, { key: p.key, rescanned }, () => `removed ${p.key}; ${appNote(rescanned)}`);
+      if (p.kind === "agent") throw new Error(`${p.key} is an agent: \`hive agents remove ${p.id}\``);
+      if (!p.package) throw new Error(p.kind === "widget" && BUILTIN_WIDGETS.some((b) => b.id === p.id) || p.kind === "tool" ? "it comes with the app" : `${p.key} was not installed with \`hive plugins install\`: it comes with the app or with this repository`);
+      const gone = await removePlugin(p.kind, p.id);
+      const rescanned = await rescanApp(gone.members.map((m) => m.kind));
+      return ok(ctx, { key: p.key, package: gone.id, removed: gone.members.map((m) => `${m.kind}:${m.id}`), rescanned }, () => `removed ${gone.id} (${gone.members.map((m) => `${m.kind}:${m.id}`).join(", ")}); ${appNote(rescanned)}`);
     } catch (e) { return fail(ctx, e, "remove_failed"); }
   },
 });

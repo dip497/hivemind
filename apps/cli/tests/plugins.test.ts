@@ -10,7 +10,7 @@ import { fixtureXDG } from "./agents-fixtures.js";
 describe("hive plugins", () => {
   test("lists every kind, switches one on and off, and sets what its settings take", () => {
     const xdg = fixtureXDG(["claude"]);
-    const view = path.join(xdg, "hivemind", "views", "board");
+    const view = path.join(xdg, "board-source");
     fs.mkdirSync(view, { recursive: true });
     fs.writeFileSync(path.join(view, "index.html"), "<p>board</p>");
     fs.writeFileSync(path.join(view, "hivemind-view.json"), JSON.stringify({
@@ -22,6 +22,7 @@ describe("hive plugins", () => {
     const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: xdg, env });
     const stored = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind", "settings.json"), "utf8")).plugins.state;
     try {
+      expect(run("install", view).json).toMatchObject({ ok: true, data: { id: "board" } });
       const list = (run("list").json as { data: { key: string; enabled: boolean }[] }).data;
       const keys = list.map((p) => p.key);
       for (const k of ["agent:claude", "view:board", "widget:note", "tool:@hivemind/web"]) expect(keys).toContain(k);

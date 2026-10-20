@@ -9,7 +9,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { findBin } from "@hivemind/agents/discover";
-import { isPluginEnabled, serviceWorkspaces, type PluginState } from "@hivemind/core/plugin-settings";
+import { isPluginOn, serviceWorkspaces, type PluginState } from "@hivemind/core/plugin-settings";
 import { toolFolder, type ToolPackage, type ToolService } from "@hivemind/core/tool-format";
 import { ROLES, type Role } from "@hivemind/workspace-host/access";
 import type { Grants } from "./grants.js";
@@ -31,7 +31,7 @@ export interface WantedService {
 export function wantedServices(packages: ToolPackage[], states: Record<string, PluginState>, safeMode: boolean): WantedService[] {
   if (safeMode) return [];
   return packages
-    .filter((p) => p.service && !p.problem && isPluginEnabled(states, "tool", p.id, p.source === "app"))
+    .filter((p) => p.service && !p.problem && isPluginOn(states, "tool", p, p.source === "app"))
     .map((p) => ({ plugin: p.id, name: p.name, dir: p.dir, service: p.service!, workspaces: serviceWorkspaces(states, p.id) }));
 }
 

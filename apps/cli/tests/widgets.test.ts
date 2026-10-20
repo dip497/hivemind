@@ -42,12 +42,15 @@ describe("hive plugins, widgets", () => {
       // A folder named like the id, in the repository an agent works in, is not what installs.
       fs.mkdirSync(path.join(tmp, "@ada", "pet"), { recursive: true });
       fs.writeFileSync(path.join(tmp, "@ada", "pet", "widget.json"), JSON.stringify({ id: "@ada/pet", name: "Impostor" }));
-      expect(run("install", "@ada/pet").json).toMatchObject({ ok: true, data: { id: "@ada/pet", name: "Pet" } });
+      const pet = run("install", "@ada/pet").json as { data: { members: Array<{ dir: string }> } };
+      expect(pet).toMatchObject({ ok: true, data: { id: "@ada/pet", name: "Pet" } });
       fs.mkdirSync(path.join(tmp, "@ada", "gone"));
       fs.writeFileSync(path.join(tmp, "@ada", "gone", "widget.json"), JSON.stringify({ name: "Gone" }));
       expect(run("install", "@ada/gone").json).toMatchObject({ ok: false, error: expect.stringContaining("to install the folder, write ./@ada/gone") });
-      // Kept in a folder a scope and a name can never make otherwise.
-      expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet", "widget.json"))).toBe(true);
+      // Kept in its package's folder, which a scope and a name can never make otherwise.
+      const petDir = pet.data.members[0]!.dir;
+      expect(petDir.startsWith(path.join(xdg, "hivemind", "packages", "store", "ada--pet") + path.sep)).toBe(true);
+      expect(fs.existsSync(path.join(petDir, "widget.json"))).toBe(true);
       // A listing whose files say they are another widget is refused, not installed under the wrong name.
       expect(run("install", "@ada/liar").json).toMatchObject({ ok: false, error: expect.stringContaining('says it is "@ada/pet", not @ada/liar') });
 
@@ -55,7 +58,7 @@ describe("hive plugins, widgets", () => {
       expect(ids).toEqual(expect.arrayContaining(["note", "checklist", "text", "counter", "@ada/pet"]));
 
       expect(run("remove", "@ada/pet").json).toMatchObject({ ok: true });
-      expect(fs.existsSync(path.join(xdg, "hivemind", "widgets", "ada--pet"))).toBe(false);
+      expect(fs.existsSync(petDir)).toBe(false);
       expect(run("remove", "widget:note").json).toMatchObject({ ok: false, error: "it comes with the app" });
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });

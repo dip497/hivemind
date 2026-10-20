@@ -12,6 +12,7 @@ import type { PluginCommand } from "@hivemind/view-sdk/commands";
 /** A widget's id: a bare name (a built-in, or one added from a folder), or `@owner/name` for one
  *  published on HiveHub, the owner being the account that published it. */
 const WIDGET_ID_RE = /^(?:@(?!.*--)[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}|[a-zA-Z0-9_-]{1,60})$/;
+import type { PackageOf } from "./plugin-settings.js";
 export const isWidgetId = (id: string): boolean => WIDGET_ID_RE.test(id);
 
 /** The folder a widget lives in under the widgets folder: `@owner/name` as `owner--name`, which no
@@ -48,6 +49,8 @@ export interface WidgetPackage {
   readme?: string;
   /** Its folder, for one installed. */
   dir?: string;
+  /** The package it was installed with. */
+  package?: PackageOf;
 }
 
 /** A mark drawn the way an installed widget's SVG icon is: lines on a 24 px grid, in one colour. */
