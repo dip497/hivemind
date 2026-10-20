@@ -970,7 +970,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       requireOpen(tile);
       const bare = bareOf(tile);
       const record = recordOf(bare);
-      if (record && !providerOf(tile) && !(record.kind === AGENT_TILE_KIND && agentForCmd(record.cmd ?? ""))) {
+      if (record && !providerOf(tile) && (record.kind !== AGENT_TILE_KIND || (record.cmd !== undefined && !agentForCmd(record.cmd)))) {
         throw new ApiError("NO_AGENT", `no agent runs in tile ${bare}, so no reply will come from it`);
       }
       if (record?.sleeping) return asleepRead(bare);
