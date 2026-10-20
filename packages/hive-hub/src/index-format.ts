@@ -8,6 +8,8 @@ import { MIN_APP_VERSION_RE } from "@hivemind/agents";
 import { TOOL_ID_RE } from "@hivemind/core/tool-registry";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 
+export { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
+
 export type CatalogType = "agent" | "view" | "widget" | "tool";
 const TYPES: readonly string[] = ["agent", "view", "widget", "tool"];
 export interface CatalogFile { path: string; sha256: string }
@@ -18,7 +20,8 @@ export interface CatalogEntry {
   description: string;
   author: string;
   version: string;
-  /** Folder of the plugin's files, relative to the index — or to `source` when set. */
+  /** Folder of the plugin's files, relative to the index — or to `source` when set. Empty when
+   *  the files sit at that base itself, as a plugin published from a repository's root does. */
   path: string;
   /** Where this plugin's files live, when that is not beside the index. An https base URL,
    *  so a plugin can keep its own repository and the index stay a list. */
@@ -86,7 +89,7 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
   if (!text(p.name, 80) || !text(p.description, 400) || !text(p.author, 80) || !text(p.version, 40)) {
     refuse("it needs a name, description, author and version");
   }
-  if (!safeRelative(p.path)) refuse("its path must be a relative folder");
+  if (p.path !== "" && !safeRelative(p.path)) refuse("its path must be a relative folder");
   if (!Array.isArray(p.files) || !p.files.length || p.files.length > 200) refuse("its files must list 1-200 files");
   const files = (p.files as Record<string, unknown>[]).map((f, j) => {
     if (!f || !safeRelative(f.path) || typeof f.sha256 !== "string" || !SHA_RE.test(f.sha256)) {
@@ -147,4 +150,10 @@ export function parseHubIndex(raw: unknown): HubIndexReading {
       reason: `the index lists ${doc.plugins.length} plugins; Hivemind reads the first ${MAX_INDEX_ENTRIES}` });
   }
   return { plugins, skipped };
+}
+
+/** The index a hub serves: only the entries the app reads, as it reads them, and the rest named. */
+export function writeHubIndex(entries: readonly unknown[]): { index: { version: 1; plugins: CatalogEntry[] }; skipped: SkippedEntry[] } {
+  const { plugins, skipped } = parseHubIndex({ version: 1, plugins: entries });
+  return { index: { version: 1, plugins }, skipped };
 }

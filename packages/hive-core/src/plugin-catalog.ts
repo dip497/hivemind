@@ -79,6 +79,10 @@ export async function noteInstall(entry: CatalogEntry, indexUrl = catalogIndexUr
   }
 }
 
+/** Where an entry's files are, relative to the index: under `source` when it names one, else beside the index. */
+const folderOf = (entry: CatalogEntry): string =>
+  `${entry.source ? `${entry.source.replace(/\/$/, "")}/` : ""}${entry.path ? `${entry.path}/` : ""}`;
+
 /** Download an entry's files into a fresh folder, verifying each hash, and check the folder the way
  *  a hub checks it before listing it. Returns the folder. */
 export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<string> {
@@ -87,8 +91,7 @@ export async function stageEntry(entry: CatalogEntry, indexUrl = catalogIndexUrl
     let total = 0;
     const folder: PluginFile[] = [];
     for (const f of entry.files) {
-      const base = entry.source ? `${entry.source.replace(/\/$/, "")}/${entry.path}/` : `${entry.path}/`;
-      const body = await read(new URL(f.path, new URL(base, indexUrl)), MAX_FILE);
+      const body = await read(new URL(f.path, new URL(folderOf(entry), indexUrl)), MAX_FILE);
       total += body.length;
       if (total > MAX_TOTAL) throw new Error(`${entry.name} is larger than allowed`);
       if (createHash("sha256").update(body).digest("hex") !== f.sha256) {
@@ -120,7 +123,7 @@ const MAX_README = 256 * 1024;
  *  when the entry lists it as one of its files, else read as is (it is shown, never run), or
  *  null when it has none. */
 export async function fetchReadme(entry: CatalogEntry, indexUrl = catalogIndexUrl()): Promise<string | null> {
-  const base = entry.source ? `${entry.source.replace(/\/$/, "")}/${entry.path}/` : `${entry.path}/`;
+  const base = folderOf(entry);
   const listed = entry.files.find((f) => /^readme\.md$/i.test(f.path));
   try {
     const body = await read(new URL(listed?.path ?? "README.md", new URL(base, indexUrl)), MAX_README);

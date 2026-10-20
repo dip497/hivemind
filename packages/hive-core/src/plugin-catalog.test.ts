@@ -47,6 +47,19 @@ describe("staging a download", () => {
     await expect(stageEntry(o!, other.url)).rejects.toThrow('@hivemind/orbit\'s folder says it is "@hivemind/other", not @hivemind/orbit');
   });
 
+  test("a plugin published from the root of its repository installs from there", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hm-registry-"));
+    writeFileSync(join(root, "hivemind-view.json"), ORBIT);
+    writeFileSync(join(root, "orbit.js"), "run()");
+    const files = ["hivemind-view.json", "orbit.js"].map((f) => ({ path: f, sha256: sha(readFileSync(join(root, f), "utf8")) }));
+    writeFileSync(join(root, "index.json"), JSON.stringify({ version: 1, plugins: [
+      { id: "@hivemind/orbit", type: "view", name: "Orbit", description: "d", author: "a", version: "1.0.0", path: "", files }] }));
+    const url = pathToFileURL(join(root, "index.json")).href;
+    const read = await fetchCatalog(url);
+    expect(read.skipped).toEqual([]);
+    expect(readFileSync(join(await stageEntry(read.plugins[0]!, url), "orbit.js"), "utf8")).toBe("run()");
+  });
+
   test("a file changed after listing fails the install and leaves nothing behind", async () => {
     const { root, url } = registry({ "orbit.js": "run()" });
     const [e] = (await fetchCatalog(url)).plugins;

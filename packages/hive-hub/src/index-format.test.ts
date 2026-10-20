@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseHubIndex } from "./index-format.js";
+import { parseHubIndex, writeHubIndex } from "./index-format.js";
 
 const view = { id: "@a/x", type: "view", name: "X", description: "d", author: "a", version: "1", path: "views/x", files: [{ path: "a.js", sha256: "0".repeat(64) }] };
 /** What the index says about one entry: the entry it lists, or the reason it was skipped. */
@@ -104,4 +104,11 @@ describe("reading an index", () => {
     }
   });
 
+});
+
+test("a hub writes only the entries the app reads, and names the rest", () => {
+  const { index, skipped } = writeHubIndex([view, { ...view, id: "@a/old", type: "tool" }]);
+  expect(index.plugins.map((e) => e.id)).toEqual(["@a/x"]);
+  expect(skipped).toEqual([{ position: 1, id: "@a/old", reason: "its id is not a tool id — it must be owner/name" }]);
+  expect(parseHubIndex(JSON.parse(JSON.stringify(index))).skipped).toEqual([]);
 });
