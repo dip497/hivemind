@@ -36,7 +36,7 @@ import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
 import { stageFromRegistry } from "../registry.js";
-import { checkPlugin } from "../check/check.js";
+import { checkPlugin, DRAW_ALONE } from "../check/check.js";
 import { where } from "../check/problem.js";
 
 interface Plugin {
@@ -343,7 +343,7 @@ const removeCmd = defineCommand({
 });
 
 const checkCmd = defineCommand({
-  meta: { name: "check", description: "Check a plugin's folder: its types, its manifest, and its code loaded and drawn once against a fake app" },
+  meta: { name: "check", description: "Check a plugin's folder: its types, its manifest, and its code loaded and drawn once against a fake app. It runs the plugin's own code, as `bun test` would: check only code you would run" },
   args: { folder: { type: "positional", required: true, description: "the plugin's folder" }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
@@ -351,11 +351,17 @@ const checkCmd = defineCommand({
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return err(ctx, "not_found", `there is no folder ${dir}`);
     const k = KINDS.find((x) => fs.existsSync(path.join(dir, x.manifest)));
     if (!k) return err(ctx, "not_a_plugin", `${dir} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
+    if (process.env[DRAW_ALONE] === "1") {
+      const problems = await k.draw(dir).catch((e: unknown) => [{ step: "draw", message: `drawing it failed: ${e instanceof Error ? e.message : String(e)}` }]);
+      process.stdout.write(JSON.stringify(problems) + "\n");
+      process.exit(0);
+    }
     const report = await checkPlugin(k, dir).catch((e: unknown) => fail(ctx, e, "check_failed"));
     const text = () => [
       ...report.problems.map((p) => `${p.step.padEnd(8)} ${where(p) ? `${where(p)}  ` : ""}${p.message}`),
       `${report.problems.length ? `${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}` : "ok"}: ${k.noun} in ${dir}`,
       ...Object.entries(report.steps).map(([step, s]) => `  ${step.padEnd(9)} ${s}`),
+      "It ran the plugin's own code, in its folder, with only PATH and HOME of your environment.",
     ].join("\n");
     // The plugin's code may have left timers or sockets open: what it did is known, so stop here.
     if (!report.problems.length) { ok(ctx, report, text); process.exit(0); }

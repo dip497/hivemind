@@ -95,4 +95,22 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 120_000);
+
+  test("a tool's code runs in its own folder, seeing none of the environment but PATH and HOME", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-env-"));
+    const dir = path.join(tmp, "tally");
+    try {
+      expect(hive(["plugins", "new", "tool", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      const entry = path.join(dir, "index.js");
+      fs.writeFileSync(entry, `process.getBuiltinModule("node:fs").writeFileSync(new URL("./seen.json", import.meta.url), JSON.stringify({ env: process.env, cwd: process.cwd() }));\n` + fs.readFileSync(entry, "utf8"));
+      const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp, env: { HIVE_CHECK_SECRET: "s3cret" } });
+      expect((r.json as Report).data.steps.draw).toBe("ok");
+      const seen = JSON.parse(fs.readFileSync(path.join(dir, "seen.json"), "utf8")) as { env: Record<string, string>; cwd: string };
+      expect(seen.env.HIVE_CHECK_SECRET).toBeUndefined();
+      expect([seen.env.PATH, seen.env.HOME]).toEqual([process.env.PATH, process.env.HOME]);
+      expect(fs.realpathSync(seen.cwd)).toBe(fs.realpathSync(dir));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
