@@ -5,7 +5,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
+import { ShowMore, useShowMore } from "../components/ui/show-more";
 import type { GitBranchList } from "../../../shared/ipc";
+
+const BRANCHES_FIRST = 100;
 
 export function BranchPicker({
   label,
@@ -41,6 +44,9 @@ export function BranchPicker({
   const q = query.trim().toLowerCase();
   const local = (branches?.local ?? []).filter((b) => b.toLowerCase().includes(q));
   const remote = (branches?.remote ?? []).filter((b) => b.toLowerCase().includes(q));
+  // A repository can have thousands of remote branches; the filter finds the rest.
+  const [localLimit, moreLocal] = useShowMore(BRANCHES_FIRST, BRANCHES_FIRST, q);
+  const [remoteLimit, moreRemote] = useShowMore(BRANCHES_FIRST, BRANCHES_FIRST, q);
 
   const pick = (v: string | undefined) => { onChange(v); setOpen(false); setQuery(""); };
 
@@ -77,7 +83,7 @@ export function BranchPicker({
             {local.length > 0 && (
               <div className="px-2 pt-1.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Local</div>
             )}
-            {local.map((b) => (
+            {local.slice(0, localLimit).map((b) => (
               <MenuItem
                 key={`l:${b}`}
                 size="sm"
@@ -89,10 +95,11 @@ export function BranchPicker({
                 {b}
               </MenuItem>
             ))}
+            <ShowMore left={local.length - localLimit} step={BRANCHES_FIRST} onClick={moreLocal} className="text-chip" />
             {remote.length > 0 && (
               <div className="px-2 pt-1.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Remote</div>
             )}
-            {remote.map((b) => (
+            {remote.slice(0, remoteLimit).map((b) => (
               <MenuItem
                 key={`r:${b}`}
                 size="sm"
@@ -104,6 +111,7 @@ export function BranchPicker({
                 {b}
               </MenuItem>
             ))}
+            <ShowMore left={remote.length - remoteLimit} step={BRANCHES_FIRST} onClick={moreRemote} className="text-chip" />
             {local.length === 0 && remote.length === 0 && (
               <div className="px-2 py-2 text-[var(--color-fg3)]">{branches ? "no match" : "loading…"}</div>
             )}

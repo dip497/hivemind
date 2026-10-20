@@ -28,6 +28,7 @@
     "./toolbar": "./src/toolbar.ts",
     "./layers": "./src/layers.ts",
     "./plugin-catalog": "./src/plugin-catalog.ts",
+    "./plugin-search": "./src/plugin-search.ts",
     "./ipc": "./src/ipc.ts",
     "./app-data": "./src/app-data.ts",
     "./migrations": "./src/migrations/runner.ts",

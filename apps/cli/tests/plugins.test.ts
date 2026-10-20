@@ -54,6 +54,30 @@ describe("hive plugins", () => {
     }
   }, 60_000);
 
+  test("search finds HiveHub's plugins by every word, best match first, and refuses a limit it cannot use", () => {
+    const xdg = fixtureXDG([]);
+    const entry = (type: string, id: string, name: string, description: string, category: string) =>
+      ({ id, type, name, description, author: "dip497", version: "1.0.0", category, path: `${type}s/${id.split("/").pop()}`, files: [{ path: "x", sha256: "0".repeat(64) }] });
+    fs.writeFileSync(path.join(xdg, "index.json"), JSON.stringify({ version: 1, plugins: [
+      entry("agent", "claude", "Claude", "Anthropic's Claude Code, with approvals, status and session resume.", "agents"),
+      entry("agent", "aider", "Aider", "AI pair programming in your terminal, with git built in.", "agents"),
+      entry("tool", "@dip497/github-prs", "Pull requests", "The repository's GitHub pull requests.", "git"),
+      entry("tool", "@dip497/flaky-tests", "Flaky tests", "Runs the tests several times.", "code"),
+    ] }));
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: `file://${path.join(xdg, "index.json")}` };
+    const run = (...args: string[]) => hive(["plugins", "search", ...args, "--json"], { cwd: xdg, env });
+    try {
+      const ids = (r: ReturnType<typeof run>) => (r.json as { plugins: { id: string }[] }).plugins.map((p) => p.id);
+      expect(ids(run("git", "pr"))).toEqual(["@dip497/github-prs", "aider"]);
+      expect(ids(run("tests", "flaky"))).toEqual(["@dip497/flaky-tests"]);
+      expect(ids(run("pr", "--kind", "agent"))).toEqual(["aider"]);
+      expect(run("pr", "--limit", "1").json).toMatchObject({ total: 2, plugins: [{ id: "@dip497/github-prs" }] });
+      const bad = run("pr", "--limit", "-1");
+      expect(bad.code).not.toBe(0);
+      expect(bad.json).toMatchObject({ error: { message: "--limit is a whole number from 1 to 100" } });
+    } finally { fs.rmSync(xdg, { recursive: true, force: true }); }
+  });
+
   test("only the person switches plugins and changes their settings: an agent in a tile or a program with a grant is refused, told what to ask the person to run, and nothing is stored", () => {
     const xdg = fixtureXDG(["claude"]);
     const base = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock") };

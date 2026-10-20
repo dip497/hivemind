@@ -6,7 +6,8 @@
  */
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
-import { CatalogMark, cleanError } from "../settings-plugins";
+import { CatalogMark } from "../settings-plugins";
+import { cleanError } from "./catalog-install";
 import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";

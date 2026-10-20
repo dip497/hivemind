@@ -15,6 +15,7 @@
  *   hive plugins check <folder> [--json]           its types, its manifest, and its code drawn once;
  *                                                  of a package, its manifest and every member
  *   hive plugins api --kind <tool|widget|view>     what its code is given, as type declarations
+ *   hive plugins search [words…] [--kind <kind>] [--limit N] [--json]   HiveHub's plugins, best match first
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
  *
@@ -48,6 +49,7 @@ import { driveCall } from "../drive.js";
 import { personOnly } from "../person-only.js";
 import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
 import { stageFromRegistry } from "../registry.js";
+import { searchPlugins } from "@hivemind/core/plugin-search";
 import { checkPlugin, DRAW_ALONE } from "../check/check.js";
 import { checkPackage } from "../check/package.js";
 import { where } from "../check/problem.js";
@@ -158,6 +160,34 @@ const listCmd = defineCommand({
       return ok(ctx, { plugins: rows }, () => rows.map((r) => [`${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.package && r.package.members > 1 ? `  [${r.package.id} ${r.package.version}${r.package.on ? "" : ", off"}]` : ""}${r.problem ? `  (${r.problem})` : ""}`,
         ...(r.opens ?? []).map((t) => `       open-tool ${t}`)].join("\n")).join("\n") || "no plugins");
     } catch (e) { return fail(ctx, e, "list_failed"); }
+  },
+});
+
+const searchCmd = defineCommand({
+  meta: { name: "search", description: "Find plugins on HiveHub by words, best match first" },
+  args: {
+    words: { type: "positional", required: false, description: "every word must start a word of its name, id, category or description" },
+    kind: { type: "string", description: "agent, view, widget, tool or package" },
+    limit: { type: "string", description: "how many to show, 1 to 100 (default 20)" },
+    json: { type: "boolean" },
+  },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    const limit = args.limit === undefined ? 20 : Number(args.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) return err(ctx, "usage", "--limit is a whole number from 1 to 100");
+    const kinds = [...PLUGIN_KINDS, "package"];
+    if (args.kind && !kinds.includes(args.kind)) return err(ctx, "usage", `--kind is one of: ${kinds.join(", ")}`);
+    const query = (args._ as string[]).join(" ");
+    try {
+      const { fetchCatalog } = await import("@hivemind/core/plugin-catalog");
+      const found = searchPlugins((await fetchCatalog()).plugins.filter((p) => !args.kind || p.type === args.kind), query);
+      const shown = found.slice(0, limit).map((p) => ({ id: p.id, type: p.type, name: p.name, description: p.description, category: p.category ?? "other" }));
+      return ok(ctx, { plugins: shown, total: found.length }, () => shown.length
+        ? [...shown.map((p) => `${p.type.padEnd(7)} ${p.id.padEnd(30)} ${p.description}`),
+          ...(found.length > limit ? [`${found.length - limit} more: add a word, or --limit ${Math.min(100, found.length)}`] : []),
+          "Install one: hive plugins install <id> (an agent: hive agents install <id>)"].join("\n")
+        : `nothing on HiveHub matches "${query}"`);
+    } catch (e) { return fail(ctx, e, "search_failed"); }
   },
 });
 
@@ -560,5 +590,5 @@ const apiCmd = defineCommand({
 
 export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
-  subCommands: { new: newCmd, add: addCmd, check: checkCmd, install: installCmd, rollback: rollbackCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
+  subCommands: { new: newCmd, add: addCmd, check: checkCmd, install: installCmd, search: searchCmd, rollback: rollbackCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });
