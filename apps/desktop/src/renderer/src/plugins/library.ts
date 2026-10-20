@@ -7,13 +7,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { agentDisclosures, defFromManifest } from "@hivemind/agents";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
-import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
+import type { CatalogEntry } from "@hivemind/hub";
 import { useAgentEntries } from "../agent-plugins";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { useViews } from "../workspace/workspace-view";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useToolPackages } from "../tiles/tool-plugins";
-import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { useSettings } from "../settings-store";
 
 import type { PluginKind } from "./kinds";
@@ -133,7 +133,7 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
     for (const t of tools.filter((x) => x.source === "you")) {
       out.push({
         kind: "tool", id: t.id, name: t.name, description: t.description, origin: "you", installed: true,
-        enabled: isPluginEnabled(state, "tool", t.id, false), ...(t.version ? { version: t.version } : {}),
+        enabled: isPluginOn(state, "tool", t, false), ...(t.version ? { version: t.version } : {}),
         can: [
           "Runs inside the app, with the access it has: your files, your programs and your logins.",
           ...(t.service ? [`Keeps ${t.service.command.join(" ")} running while it is on, which drives the workspaces you pick for it.`] : []),
@@ -145,7 +145,8 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
     }
     const have = new Set(out.map((p) => `${p.kind}:${p.id}`));
     for (const e of catalog ?? []) {
-      if (have.has(`${e.type}:${e.id}`)) continue;
+      // A package is listed on its own row, not as one plugin.
+      if (have.has(`${e.type}:${e.id}`) || e.type === "package") continue;
       out.push({
         kind: e.type as PluginKind, id: e.id, name: e.name, description: e.description, author: e.author, version: e.version,
         origin: "hub", installed: false, can: [], readme: { catalog: { type: e.type, id: e.id } }, catalog: e,

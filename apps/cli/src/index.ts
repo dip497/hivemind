@@ -39,6 +39,8 @@ import { killCmd } from "./commands/kill.js";
 import { pushCmd } from "./commands/push.js";
 import { joinCmd, peopleCmd, shareCmd } from "./commands/share.js";
 import { grantCmd } from "./commands/grant.js";
+import { migrateOnStart } from "./migrate-on-start.js";
+import { migrationsCmd } from "./commands/migrations.js";
 import { guideCmd } from "./commands/guide.js";
 import { runCli } from "./cli-runner.js";
 
@@ -98,9 +100,11 @@ const main = defineCommand({
     network: networkCmd,
     kill: killCmd,
     push: pushCmd,
+    migrations: migrationsCmd,
     guide: guideCmd,
   },
 });
 
 preprocessArgv();
+await migrateOnStart(process.argv.slice(2), pkg.version);
 await runCli(main, process.argv.slice(2));

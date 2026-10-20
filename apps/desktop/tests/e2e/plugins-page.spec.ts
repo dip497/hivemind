@@ -94,7 +94,7 @@ test("one row of controls: yours or HiveHub's and a search, then a tab per kind;
     await expect(controls.getByRole("tablist", { name: "Show" }).getByRole("tab")).toHaveText(["Installed", "HiveHub"]);
     await expect(controls.getByRole("tab", { name: scope, exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(controls.getByRole("searchbox", { name: "Search plugins" })).toBeVisible();
-    await expect(body().getByRole("tablist", { name: "Kind" }).getByRole("tab")).toHaveText([/^Agents \d+$/, /^Views \d+$/, /^Widgets \d+$/, /^Tools \d+$/]);
+    await expect(body().getByRole("tablist", { name: "Kind" }).getByRole("tab")).toHaveText([/^Agents \d+$/, /^Views \d+$/, /^Widgets \d+$/, /^Tools \d+$/, /^Packages \d+$/]);
     await expect(body().getByRole("combobox")).toHaveCount(0);
     await expect(body().getByRole("tablist")).toHaveCount(2);
     await expect(body().getByRole("group")).toHaveCount(0);

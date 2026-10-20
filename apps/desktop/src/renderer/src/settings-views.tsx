@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { PluginRow, type ListedRow } from "./plugins/PluginList";
@@ -7,7 +7,7 @@ import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { useHubDescription } from "./plugins/library";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
-import { getSettings, patchSettings, useSettings, setPluginEnabled } from "./settings-store";
+import { getSettings, patchSettings, useSettings, switchPlugin } from "./settings-store";
 import { getView, resolveChrome, resolveViewId, useViews } from "./workspace/workspace-view";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
@@ -15,6 +15,7 @@ import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar, type ToolbarActionId, type Too
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { MaskIcon } from "./plugins/mask-icon";
 import { useSettingsNavigate } from "./settings-panels";
+import { heldOffByPackage, partOfPackage } from "./plugins/package-rows";
 
 export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); };
 
@@ -33,7 +34,8 @@ export function useViewRows(matches: (text: string) => boolean): ListedRow[] {
   // A package says what it does in its manifest, else through HiveHub; a built-in view in its hint.
   const about = (id: string): string | undefined => {
     const pkg = report.packages.find((x) => x.id === id);
-    return pkg ? pkg.manifest?.description ?? hub("view", id) : undefined;
+    const part = pkg && partOfPackage(pkg);
+    return part ? `Part of ${part.name}` : pkg ? pkg.manifest?.description ?? hub("view", id) : undefined;
   };
   return [
     ...on.map((v): ListedRow => ({ key: `view:${v.id}`, kind: "view", category: category(v.id),
@@ -61,13 +63,13 @@ export function ViewMark({ id, size = 22 }: { id: string; size?: number }) {
 export function ViewActions({ id }: { id: string }) {
   const view = useViews().find((v) => v.id === id);
   const mode = resolveViewId(useViewMode()) ?? "canvas";
-  const on = isPluginEnabled(useSettings().plugins.state, "view", id);
   const pkg = useCommunityReport().packages.find((p) => p.id === id);
+  const on = isPluginOn(useSettings().plugins.state, "view", pkg ?? { id });
   const name = view?.label ?? pkg?.manifest?.name ?? id;
   return <>
     {view && (mode === id ? <span className="agent-badge">In use</span> : <Button variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>)}
-    {pkg && <Switch aria-label={`Enable ${name}`} checked={on} disabled={!view && !!pkg.error}
-      onCheckedChange={() => { setPluginEnabled("view", id, !on); rescan(); }} />}
+    {pkg && <Switch aria-label={`Enable ${name}`} checked={on} disabled={(!view && !!pkg.error) || heldOffByPackage(pkg)}
+      onCheckedChange={() => void switchPlugin("view", pkg, !on).then(rescan)} />}
   </>;
 }
 
@@ -80,11 +82,11 @@ export function ViewPage({ id }: { id: string }) {
   // Every hook runs first: switching this view off unregisters it while the page is still mounted.
   const pkg = report.packages.find((p) => p.id === id);
   if (!view && pkg) {
-    const on = isPluginEnabled(settings.plugins.state, "view", id);
+    const on = isPluginOn(settings.plugins.state, "view", pkg);
     const name = pkg.manifest?.name ?? id;
     return <div className="plugin-page" data-view-page={id}>
       <p className={on ? "settings-note error" : "settings-note"}>{on ? report.refused[id] ?? pkg.error : "Switch it on to choose it as your workspace view."}</p>
-      {pkg.source === "user" && <RemoveView id={id} name={name} onRemoved={() => go("plugins")} />}
+      {pkg.source === "user" && !partOfPackage(pkg) && <RemoveView id={id} name={name} onRemoved={() => go("plugins")} />}
     </div>;
   }
   if (!view) return <p className="settings-empty">There is no view named {id}.</p>;
@@ -122,7 +124,7 @@ export function ViewPage({ id }: { id: string }) {
         <dt>Location</dt><dd className="settings-path">{pkg.dir}</dd>
         <dt>Additional access</dt><dd>{pkg.manifest?.permissions.join(", ") || "None"}</dd>
       </dl>
-      {pkg.source === "user" && <RemoveView id={id} name={view.label} onRemoved={() => go("plugins")} />}
+      {pkg.source === "user" && !partOfPackage(pkg) && <RemoveView id={id} name={view.label} onRemoved={() => go("plugins")} />}
     </section>}
   </div>;
 }

@@ -25,6 +25,9 @@ import { parseSettingFields, type SettingField } from "@hivemind/view-sdk/settin
 import { isToolId, type ToolPluginContribution } from "./tool-registry.js";
 
 /** The version of the contract a tool plugin's module is written against. */
+import type { PackageOf } from "./plugin-settings.js";
+/** The file that makes a folder a tool plugin. */
+export const TOOL_MANIFEST = "hivemind-tool.json";
 export const TOOL_API_VERSION = 1;
 
 /** Tool plugin ids that only the app's own plugins may have. */
@@ -83,6 +86,8 @@ export interface ToolPackage extends ToolPluginContribution {
   dir: string;
   /** Why it cannot load here; null when it can. */
   problem: string | null;
+  /** The package it was installed with; none for one that comes with the app. */
+  package?: PackageOf;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);

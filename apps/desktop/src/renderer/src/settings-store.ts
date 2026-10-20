@@ -15,7 +15,7 @@
  * "what the file says, plus the patches we have not persisted yet", so a
  * broadcast never yanks the control the user is dragging.
  */
-import { pluginKey, withPluginState, type PluginKind, type PluginState } from "@hivemind/core/plugin-settings";
+import { pluginKey, withPluginState, type PackageOf, type PluginKind, type PluginState } from "@hivemind/core/plugin-settings";
 import { useSyncExternalStore } from "react";
 import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "@hivemind/core/settings-schema";
 
@@ -148,6 +148,14 @@ export function setServiceWorkspaces(id: string, workspaces: string[]): void {
 /** Switch one plugin on or off, whatever its kind. */
 export function setPluginEnabled(kind: PluginKind, id: string, on: boolean): void {
   patchPluginState(kind, id, (s) => ({ ...s, enabled: on }));
+}
+
+/** Switch a plugin on or off: one you added with its package (main does it, as `hive plugins
+ *  enable` would), any other by its own record. */
+export function switchPlugin(kind: PluginKind, plugin: { id: string; package?: PackageOf }, on: boolean): Promise<void> {
+  if (plugin.package && kind !== "agent") return window.hive.switchPlugin(kind, plugin.id, on);
+  setPluginEnabled(kind, plugin.id, on);
+  return Promise.resolve();
 }
 
 /** Set one of a plugin's options (undefined or empty: back to its default). */

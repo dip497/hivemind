@@ -203,4 +203,42 @@ function hivehubInstallPhone() {
   return d;
 }
 
-export default [connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, hivehubInstall, hivehubInstallPhone, ...howItWorks];
+const PACKAGES_DESC = 'A package is one folder whose hivemind-package.json names its tools, widgets, views and agent presets; hive plugins install puts the whole box on this machine, with one switch, one version and a rollback, and hivehub publish lists the whole box on HiveHub.';
+
+function packagesOneBox() {
+  const d = new Diagram({
+    slug: 'packages-one-box', w: 640, h: 340,
+    title: 'A package is one box',
+    desc: PACKAGES_DESC,
+  });
+  d.wire([[170, 196], [170, 256]], { accent: true }); d.label(182, 230, 'hive plugins install', { anchor: 'start' });
+  d.wire([[470, 196], [470, 256]]); d.label(482, 230, 'hivehub publish', { anchor: 'start' });
+  d.zone(20, 24, 600, 172, 'One folder: @you/kit');
+  d.node(35, 56, 130, 64, 'Tools', { sub: 'run in the app' });
+  d.node(180, 56, 130, 64, 'Widgets', { sub: 'sandboxed' });
+  d.node(325, 56, 130, 64, 'Views', { sub: 'sandboxed' });
+  d.node(470, 56, 135, 64, 'Agent presets', { sub: 'a prompt' });
+  d.note(320, 160, 'hivemind-package.json names each member, every one @you/<name>', { size: 12.5 });
+  d.node(60, 256, 220, 64, 'This machine', { sub: 'one switch, one version, rollback', focal: true });
+  d.node(360, 256, 220, 64, 'HiveHub', { sub: 'one listing, every member', dashed: true, plain: true });
+  return d;
+}
+
+// The same box stacked for a phone screen, so nothing scrolls sideways.
+function packagesOneBoxPhone() {
+  const d = new Diagram({ slug: 'packages-one-box-phone', w: 320, h: 442, title: 'A package is one box', desc: PACKAGES_DESC });
+  d.wire([[86, 262], [86, 336]], { accent: true }); d.label(96, 292, 'hive plugins', { anchor: 'start' }); d.label(96, 308, 'install', { anchor: 'start' });
+  d.wire([[234, 262], [234, 336]]); d.label(244, 292, 'hivehub', { anchor: 'start' }); d.label(244, 308, 'publish', { anchor: 'start' });
+  d.zone(8, 30, 304, 232, 'One folder: @you/kit');
+  d.node(24, 60, 124, 60, 'Tools', { sub: 'run in the app' });
+  d.node(172, 60, 124, 60, 'Widgets', { sub: 'sandboxed' });
+  d.node(24, 132, 124, 60, 'Views', { sub: 'sandboxed' });
+  d.node(172, 132, 124, 60, 'Agent presets', { sub: 'a prompt' });
+  d.note(24, 220, 'hivemind-package.json names each', { anchor: 'start' });
+  d.note(24, 240, 'member, every one @you/<name>', { anchor: 'start' });
+  d.node(24, 336, 124, 86, 'This machine', { sub: ['one switch,', 'one version,', 'a rollback'], focal: true });
+  d.node(172, 336, 124, 86, 'HiveHub', { sub: ['one listing,', 'every member'], dashed: true, plain: true });
+  return d;
+}
+
+export default [packagesOneBox, packagesOneBoxPhone, connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, hivehubInstall, hivehubInstallPhone, ...howItWorks];

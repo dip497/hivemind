@@ -2,12 +2,12 @@
 import { TOOL_API_VERSION } from "@hivemind/core/tool-format";
 import { TOOL_MANIFEST } from "@hivemind/core/tool-packages";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
-import { pluginBrief } from "./plugin-brief.js";
+import { pluginBrief, type InPackage } from "./plugin-brief.js";
 import { typeFiles } from "./type-files.js";
 import type { TypeSetup } from "./check/types.js";
 
-/** The files of a starter tool plugin `name`, owned by `owner`. */
-export function toolStarter(owner: string, name: string): Record<string, string> {
+/** The files of a starter tool plugin `name`, owned by `owner`; written in a package, when given. */
+export function toolStarter(owner: string, name: string, inPackage?: InPackage): Record<string, string> {
   const id = `@${owner}/${name}`;
   const tileKind = `${owner}-${name}`.slice(0, 41);
   const manifest = {
@@ -18,8 +18,8 @@ export function toolStarter(owner: string, name: string): Record<string, string>
   return {
     [TOOL_MANIFEST]: JSON.stringify(manifest, null, 2) + "\n",
     "index.js": STARTER_JS.replace("__KIND__", JSON.stringify(tileKind)),
-    "README.md": `# ${manifest.name}\n\n${manifest.description}\n\nAdd it to the app, switch it on and open it:\n\n\`\`\`bash\nhive plugins install .\nhive plugins enable tool:${id}\nhive ctl plugin open tool:${id}\n\`\`\`\n`,
-    "PROMPT.md": pluginBrief("tool", id),
+    "README.md": `# ${manifest.name}\n\n${manifest.description}\n\nAdd it to the app, switch it on and open it:\n\n\`\`\`bash\nhive plugins install ${inPackage?.root ?? "."}\nhive plugins enable ${inPackage ? inPackage.id : `tool:${id}`}\nhive ctl plugin open tool:${id}\n\`\`\`\n`,
+    "PROMPT.md": pluginBrief("tool", id, inPackage),
     "jsconfig.json": JSON.stringify({ compilerOptions: TOOL_TYPE_SETUP.compilerOptions, include: ["*.js", "types"] }, null, 2) + "\n",
     ...TOOL_TYPE_SETUP.files(),
   };
@@ -99,7 +99,7 @@ export default { tiles: { __KIND__: Tile } };
 `;
 
 /** A widget that works as written: a counter with a button, kept with the workspace. */
-export function widgetStarter(owner: string, name: string): Record<string, string> {
+export function widgetStarter(owner: string, name: string, inPackage?: InPackage): Record<string, string> {
   const title = name.replace(/-/g, " ").replace(/^./, (c) => c.toUpperCase());
   return {
     "widget.json": JSON.stringify({
@@ -122,6 +122,6 @@ hive.on("action", (a) => {
     "jsconfig.json": JSON.stringify({ compilerOptions: WIDGET_TYPE_SETUP.compilerOptions, include: ["*.js", "*.d.ts"] }, null, 2) + "\n",
     "icon.svg": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="3"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>\n',
     "README.md": `# ${title}\n\nCounts presses. Shown on its HiveHub page and in the app before anyone installs it: say what it does and what it asks for.\n`,
-    "PROMPT.md": pluginBrief("widget", `@${owner}/${name}`),
+    "PROMPT.md": pluginBrief("widget", `@${owner}/${name}`, inPackage),
   };
 }

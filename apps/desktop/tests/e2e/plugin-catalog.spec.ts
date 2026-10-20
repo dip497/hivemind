@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { buildRegistry, SCOPE } from "./helpers/registry";
+import { installedFile } from "./helpers/install";
 
 let app: ElectronApplication;
 let page: Page;
@@ -46,6 +47,9 @@ test.beforeAll(async () => {
   registry = path.join(root, "registry");
   const hub = buildRegistry(registry);
   hub.add({ id: CODER, type: "agent", name: "Catalog Coder", files: { "agent.yaml": AGENT } });
+  // From a hub newer than this app: a kind it does not know, and an entry it cannot read.
+  hub.list({ id: `${SCOPE}/sky`, type: "theme", name: "Sky", description: "d", author: "e2e", version: "1.0.0", path: "themes/sky", files: [{ path: "theme.json", sha256: "0".repeat(64) }] });
+  hub.list({ id: `${SCOPE}/broken`, type: "view", name: "Broken", description: "d", author: "e2e", version: "1.0.0", path: "views/broken", files: [] });
   execFileSync("git", ["init", "-q", root]);
   const env = {
     ...process.env, XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: path.join(xdg, "hivemind", "settings.json"),
@@ -73,15 +77,25 @@ test("the catalog lists the published plugins, and search and type filters narro
   await page.getByLabel("Search plugins").fill("");
 });
 
+test("an entry this app cannot read is named with why, and the rest are listed", async () => {
+  await hub();
+  await expect(entry("view", TILE_LIST)).toBeVisible();
+  const skipped = page.locator("[data-catalog-skipped]");
+  await expect(skipped).toContainText("2 plugins on HiveHub are not shown");
+  await expect(skipped.locator(`[data-catalog-skipped-entry="${SCOPE}/sky"]`)).toHaveText(`${SCOPE}/sky: its type, "theme", is not a kind this Hivemind knows`);
+  await expect(skipped.locator(`[data-catalog-skipped-entry="${SCOPE}/broken"]`)).toHaveText(`${SCOPE}/broken: its files must list 1-200 files`);
+  if (process.env.SHOT) { await skipped.scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT }); }
+});
+
 test("a view installs only after review, and lands in the user's views", async () => {
   await hub("view");
   await entry("view", TILE_LIST).getByRole("button", { name: "Install" }).click();
   const review = page.getByRole("region", { name: "Review Tile list" });
   await expect(review).toContainText("matches the checksum");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", TILE_LIST))).toBe(false);
+  expect(installedFile(xdg, TILE_LIST)).toBeNull();
   await review.getByRole("button", { name: "Install" }).click();
   await expect(entry("view", TILE_LIST)).toContainText("Installed");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", TILE_LIST, "main.js"))).toBe(true);
+  expect(installedFile(xdg, TILE_LIST, "main.js")).not.toBeNull();
   await yours("view");
   await expect(page.locator(`[data-plugin-row="view:${TILE_LIST}"]`)).toBeVisible();
 });
@@ -116,7 +130,7 @@ test("a file that changed after it was listed is refused", async () => {
   await hub("view");
   await entry("view", PEOPLE).getByRole("button", { name: "Install" }).click();
   await expect(entry("view", PEOPLE).getByRole("alert")).toContainText("changed after it was listed");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", PEOPLE))).toBe(false);
+  expect(installedFile(xdg, PEOPLE)).toBeNull();
 });
 
 test("HiveHub opened again lists what it fetched a moment ago, without waiting on the index", async () => {

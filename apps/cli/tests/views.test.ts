@@ -19,7 +19,7 @@ describe("hive plugins, views", () => {
 
     r = hive(["plugins", "install", src, "--json"], { cwd: tmp, env });
     expect(r.code).toBe(0);
-    expect((r.json as { id: string; dir: string }).dir).toBe(path.join(tmp, "xdg", "hivemind", "views", "orbit"));
+    expect((r.json as { members: Array<{ dir: string }> }).members[0]!.dir.startsWith(path.join(tmp, "xdg", "hivemind", "packages", "store", "orbit") + path.sep)).toBe(true);
 
     r = hive(["plugins", "list", "--kind", "view"], { cwd: tmp, env });
     expect(r.stdout).toMatch(/^on\s+view:orbit\s+Orbit$/m);

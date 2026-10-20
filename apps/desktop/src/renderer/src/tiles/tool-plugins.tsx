@@ -8,7 +8,7 @@
  */
 import { Loading } from "../components/ui/loading";
 import { useEffect, useRef, useSyncExternalStore, type ComponentType } from "react";
-import { isPluginEnabled, pluginOptions } from "@hivemind/core/plugin-settings";
+import { isPluginEnabled, isPluginOn, pluginOptions } from "@hivemind/core/plugin-settings";
 import { toolFolder, type ToolPackage } from "@hivemind/core/tool-format";
 import { toolModuleProblem, type TileProps, type ToolModule } from "@hivemind/tile-sdk";
 import { useSettings } from "../settings-store";
@@ -90,7 +90,7 @@ export function loadToolModule(pkg: ToolPackage): Promise<ToolModule> {
 /** Whether a plugin is on: one that comes with the app is, until switched off; one you added is
  *  not, until switched on. */
 export const toolOn = (state: Parameters<typeof isPluginEnabled>[0], pkg: ToolPackage): boolean =>
-  isPluginEnabled(state, "tool", pkg.id, pkg.source === "app");
+  isPluginOn(state, "tool", pkg, pkg.source === "app");
 
 function register(pkg: ToolPackage, off: Set<string>): void {
   const tools = pkg.tools.filter((t) => t.tileKind && !off.has(t.key));

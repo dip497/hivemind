@@ -17,7 +17,7 @@ const walk = (dir: string, base = dir): string[] => fs.readdirSync(dir).flatMap(
 const hashed = (dir: string) => walk(dir).sort().map((f) => ({ path: f, sha256: sha(fs.readFileSync(path.join(dir, f))) }));
 const field = (yaml: string, k: string) => yaml.match(new RegExp(`^${k}:\\s*"?([^"\\n]+?)"?\\s*$`, "m"))?.[1] ?? "";
 
-export interface Registry { dir: string; indexUrl: string; add(p: { id: string; type: "agent" | "view"; name: string; files: Record<string, string>; bin?: string; category?: string }): void }
+export interface Registry { dir: string; indexUrl: string; /** An entry written as given, for one this app must skip. */ list(entry: Record<string, unknown>): void; add(p: { id: string; type: "agent" | "view"; name: string; files: Record<string, string>; bin?: string; category?: string }): void }
 
 /** Write the registry into `dir`. */
 export function buildRegistry(dir: string): Registry {
@@ -49,6 +49,7 @@ export function buildRegistry(dir: string): Registry {
   return {
     dir,
     indexUrl: pathToFileURL(path.join(dir, "index.json")).href,
+    list(entry) { plugins.push(entry); write(); },
     add({ id, type, name, files, bin, category }) {
       const folder = `${type}s/${id.split("/").pop()}`;
       fs.mkdirSync(path.join(dir, folder), { recursive: true });

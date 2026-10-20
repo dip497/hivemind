@@ -3,8 +3,8 @@ import { FileCode, Earth, ListTodo, Puzzle, Trash } from "./components/icons";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { toolPreferences } from "@hivemind/core/settings-schema";
-import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
-import { patchPluginState, setPluginOption, useSettings } from "./settings-store";
+import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
+import { patchPluginState, setPluginOption, switchPlugin, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";
 import { useSettingsNavigate } from "./settings-panels";
@@ -14,6 +14,7 @@ import { SettingsForm } from "./plugins/SettingsForm";
 import { ServiceSection } from "./plugins/ServiceSection";
 import { cleanError } from "./settings-plugins";
 import { PluginRow, type ListedRow } from "./plugins/PluginList";
+import { heldOffByPackage, partOfPackage } from "./plugins/package-rows";
 import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { tileKind, useTilesVersion } from "./tiles/api";
 import type { ToolPackage } from "@hivemind/core/tool-format";
@@ -27,8 +28,8 @@ function useToolEnabled(pluginId: string): [boolean, () => void] {
   const settings = useSettings();
   const added = useAdded(pluginId);
   if (added) {
-    const on = isPluginEnabled(settings.plugins.state, "tool", pluginId, false);
-    return [on, () => patchPluginState("tool", pluginId, (s) => ({ ...s, enabled: !on }))];
+    const on = isPluginOn(settings.plugins.state, "tool", added, false);
+    return [on, () => void switchPlugin("tool", added, !on).catch((e: unknown) => toast.error(cleanError(e)))];
   }
   return bundledEnabled(pluginId, settings);
 }
@@ -62,7 +63,8 @@ function ToolRow({ pluginId }: { pluginId: string }) {
   const [enabled] = useToolEnabled(pluginId);
   const added = useAdded(pluginId);
   const problem = useToolProblem(pluginId);
-  const about = added?.description ?? BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools[0]?.description ?? "";
+  const part = added && partOfPackage(added);
+  const about = part ? `Part of ${part.name}` : added?.description ?? BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools[0]?.description ?? "";
   return <PluginRow kind="tool" id={pluginId} name={toolLabel(pluginId)} mark={<ToolIcon pluginId={pluginId} size={16} />}
     line={problem ?? about} state={problem ? "unavailable" : enabled ? "on" : "off"} badge={problem ? "Can't load" : enabled ? undefined : "Off"} />;
 }
@@ -104,7 +106,7 @@ export function useToolRows(matches: (text: string) => boolean): { rows: ListedR
 export function ToolActions({ id }: { id: string }) {
   const [enabled, toggle] = useToolEnabled(id);
   const added = useAdded(id);
-  return <Switch aria-label={`Enable ${toolLabel(id)}`} checked={enabled} disabled={!!added?.problem} onCheckedChange={toggle} />;
+  return <Switch aria-label={`Enable ${toolLabel(id)}`} checked={enabled} disabled={!!added?.problem || (!!added && heldOffByPackage(added))} onCheckedChange={toggle} />;
 }
 
 export function ToolPage({ id }: { id: string }) {
@@ -120,7 +122,7 @@ export function ToolPage({ id }: { id: string }) {
     </section>}
     {added?.service && <ServiceSection id={id} service={added.service} on={enabled} />}
     {id === BROWSER_PLUGIN_ID && <BrowserControl toolOn={enabled} />}
-    {added && <RemoveTool pkg={added} />}
+    {added && !partOfPackage(added) && <RemoveTool pkg={added} />}
   </div>;
 }
 

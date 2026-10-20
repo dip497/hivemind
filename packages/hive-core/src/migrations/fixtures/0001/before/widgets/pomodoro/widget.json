@@ -1,0 +1,1 @@
+{"name": "Pomodoro", "options": [{"id": "minutes", "label": "Minutes", "type": "number", "default": 25}], "icon": "icon.svg"}

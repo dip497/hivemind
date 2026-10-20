@@ -1,12 +1,14 @@
 /**
  * Settings ▸ Plugins: every plugin on one page, the ones you have or the ones on HiveHub, found by
- * one search, one tab per kind as HiveHub has them. Each category, as the
- * Add menu has them, is a group of rows alike; a row opens the plugin's page, where it is set up, switched off or removed. Adding
- * one that is not on HiveHub, made by an agent or from a folder, is one menu at the top.
+ * one search, one tab per kind as HiveHub has them, then Packages. Each category, as the Add menu
+ * has them, is a group of rows alike; a row opens the plugin's page, where it is set up, switched
+ * off or removed. Adding one that is not on HiveHub, made by an agent or from a folder, is one
+ * menu at the top; a folder is reviewed first, as `hive plugins install --dry-run` reviews it.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { ChevronDown, FolderPlus, Plus, Sparkles } from "../components/icons";
-import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
@@ -16,19 +18,23 @@ import { SETTINGS_PAGES } from "../settings-registry";
 import { useAgentRows } from "../settings-agents";
 import { useViewRows, rescan } from "../settings-views";
 import { useToolRows } from "../settings-tools";
-import { BrowsePlugins, cleanError, type Preview } from "../settings-plugins";
+import { BrowsePlugins, cleanError } from "../settings-plugins";
 import { useHubDescription } from "./library";
-import { rowsInKindTab, type PluginKind } from "./kinds";
+import { rowsInKindTab, type PluginTab } from "./kinds";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./PluginList";
 import { WidgetIcon } from "./WidgetIcon";
+import { PackageReview } from "./PackageReview";
+import { usePackageRows } from "./PackagesSection";
+import { partOfPackage } from "./package-rows";
 import { pluginsScope, pluginsTab, setPluginsScope, setPluginsTab, type PluginsScope } from "./scope";
+import type { PackageReview as Review } from "../../../shared/ipc";
 
 const SCOPES: [PluginsScope, string][] = [["installed", "Installed"], ["hub", "HiveHub"]];
 
 export function PluginsHome() {
   const [query, setQuery] = useState("");
-  const [tab, setTabState] = useState<PluginKind>(pluginsTab);
-  const setTab = (t: PluginKind) => { setTabState(t); setPluginsTab(t); };
+  const [tab, setTabState] = useState<PluginTab>(pluginsTab);
+  const setTab = (t: PluginTab) => { setTabState(t); setPluginsTab(t); };
   const [scope, setScopeState] = useState<PluginsScope>(pluginsScope);
   const setScope = (s: PluginsScope) => { setScopeState(s); setPluginsScope(s); };
   const q = query.trim().toLowerCase();
@@ -48,8 +54,7 @@ export function PluginsHome() {
         <DropdownMenuContent align="end" className="min-w-56">
           {/* Not on HiveHub nor here: an agent makes it. */}
           <DropdownMenuItem data-make-plugin-open onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: tab === "tool" || tab === "view" ? tab : "widget" } }))}><Sparkles />Make your own</DropdownMenuItem>
-          {fromFolder.items.length > 0 && <DropdownMenuSeparator />}
-          {fromFolder.items}
+          {fromFolder.item && <><DropdownMenuSeparator />{fromFolder.item}</>}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -64,18 +69,21 @@ export function PluginsHome() {
       ? <BrowsePlugins query={query} tab={tab} onTab={setTab} />
       : <>
         <InstalledPlugins matches={matches} tab={tab} onTab={setTab} />
-        <p className="settings-empty plugins-none">Nothing you have matches. <button type="button" className="settings-link" onClick={() => setScope("hub")}>Look on HiveHub</button></p>
+        <p className="settings-empty plugins-none">{tab === "package" && !q
+          ? "No package holding several plugins is installed."
+          : <>Nothing you have matches. <button type="button" className="settings-link" onClick={() => setScope("hub")}>Look on HiveHub</button></>}</p>
       </>}
   </div>;
 }
 
-/** The plugins you have, the open tab's kind under its categories. */
-function InstalledPlugins({ matches, tab, onTab }: { matches: (text: string) => boolean; tab: PluginKind; onTab: (tab: PluginKind) => void }) {
+/** The plugins you have, the open tab's kind under its categories, or the packages. */
+function InstalledPlugins({ matches, tab, onTab }: { matches: (text: string) => boolean; tab: PluginTab; onTab: (tab: PluginTab) => void }) {
   const agents = useAgentRows(matches);
   const views = useViewRows(matches);
   const widgets = useWidgetRows(matches);
   const tools = useToolRows(matches);
-  const { counts, groups } = rowsInKindTab([...agents.rows, ...views, ...widgets, ...tools.rows], tab);
+  const packages = usePackageRows(matches);
+  const { counts, groups } = rowsInKindTab([...agents.rows, ...views, ...widgets, ...tools.rows, ...packages], tab);
   return <>
     <KindTabs counts={counts} tab={tab} onChange={onTab} />
     {tab === "tool" && tools.warning && <p role="status" className="settings-message">{tools.warning}</p>}
@@ -90,51 +98,43 @@ function useWidgetRows(matches: (text: string) => boolean): ListedRow[] {
   const state = useSettings().plugins.state;
   const hub = useHubDescription();
   return widgets.map((w) => {
-    const on = isPluginEnabled(state, "widget", w.id);
+    const on = isPluginOn(state, "widget", w);
+    const part = partOfPackage(w);
     return { key: `widget:${w.id}`, kind: "widget", category: w.category ?? "other",
       row: <PluginRow kind="widget" id={w.id} name={w.name} mark={<WidgetIcon pkg={w} />}
-        line={w.description || hub("widget", w.id)} state={on ? "on" : "off"} badge={on ? undefined : "Off"} /> };
+        line={part ? `Part of ${part.name}` : w.description || hub("widget", w.id)} state={on ? "on" : "off"} badge={on ? undefined : "Off"} /> };
   });
 }
 
-/** Adding a view, a widget or a tool from a folder on this computer: the Add menu's items, and
- *  what they say after. A view is reviewed first. An agent from a folder is
- *  `hive agents install <folder>`. */
-function useAddFromFolder(): { items: ReactNode[]; panel: ReactNode; busy: boolean } {
-  const [preview, setPreview] = useState<Preview | null>(null);
+/** Adding a package, or one plugin, from a folder on this computer: the Add menu's item, then the
+ *  review of what it holds and, for one installed already, what changes. An agent from a folder
+ *  is `hive agents install <folder>`. */
+function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean } {
+  const [review, setReview] = useState<Review | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const ref = useRef<HTMLElement | null>(null);
   const act = async (fn: () => Promise<void>) => {
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true); setError(null);
     try { await fn(); } catch (e) { setError(cleanError(e)); } finally { setBusy(false); }
   };
-  // Added from a folder this computer's picker chooses: not from a browser tab.
-  const { previewViewInstall, installWidget, installToolPackage } = window.hive;
-  const items = [
-    previewViewInstall && <DropdownMenuItem key="view" data-view-install onSelect={() => void act(async () => setPreview(await previewViewInstall()))}><FolderPlus />Add a view from a folder</DropdownMenuItem>,
-    installWidget && <DropdownMenuItem key="widget" data-widget-install onSelect={() => void act(async () => {
-      const added = await installWidget();
-      if (added) setNotice(`${added.name} added. Put it in a workspace with + on the toolbar.`);
-    })}><FolderPlus />Add a widget from a folder</DropdownMenuItem>,
-    installToolPackage && <DropdownMenuItem key="tool" data-tool-install onSelect={() => void act(async () => {
-      const added = await installToolPackage();
-      if (added) setNotice(`${added.name} added. It is off: open it to switch it on if you trust who wrote it.`);
-    })}><FolderPlus />Add a tool from a folder</DropdownMenuItem>,
-  ].filter(Boolean);
+  // From a folder this computer's picker chooses: not from a browser tab.
+  const { reviewPackageFolder, installPackageFolder } = window.hive;
+  const item = reviewPackageFolder && <DropdownMenuItem data-folder-install onSelect={() => void act(async () => {
+    setReview(null);
+    const r = await reviewPackageFolder();
+    setReview(r);
+    if (r) requestAnimationFrame(() => ref.current?.focus());
+  })}><FolderPlus />Add from a folder</DropdownMenuItem>;
   const panel = <>
     {error && <div role="alert" className="settings-message error">{error}</div>}
-    {notice && <div role="status" className="settings-message">{notice}</div>}
-    {preview && <section className="settings-install-review" aria-label="Review extension">
-      <div className="settings-section-heading"><h3>Review installation</h3><span>{preview.package.manifest?.name} · {preview.package.manifest?.version}</span></div>
-      <p>This view can display workspace names and agent status, and open your existing tools.</p>
-      <p>{preview.package.manifest?.permissions.length ? `Additional access: ${preview.package.manifest.permissions.join(", ")}` : "No additional access requested."}</p>
-      {preview.replacesVersion && <p className="settings-note">Replaces installed version {preview.replacesVersion}. Your saved layout is kept.</p>}
-      <div className="settings-actions"><Button variant="outline" disabled={busy} onClick={() => setPreview(null)}>Cancel</Button><Button disabled={busy} onClick={() => void act(async () => {
-        await window.hive.installViewPackage(preview.token);
-        setNotice(`${preview.package.manifest?.name} installed. Choose it under Views when you’re ready.`); setPreview(null); rescan();
-      })}>{busy ? "Installing…" : preview.replacesVersion ? "Replace extension" : "Install extension"}</Button></div>
+    {review && installPackageFolder && <section ref={ref} tabIndex={-1} className="settings-install-review" aria-label={`Review ${review.name}`}>
+      <PackageReview review={review} heading />
+      <div className="settings-actions"><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>Cancel</Button><Button disabled={busy} data-folder-install-do onClick={() => void act(async () => {
+        await installPackageFolder(review.token);
+        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`, { id: `package:${review.id}` }); setReview(null); rescan();
+      })}>{busy ? "Installing…" : review.replaces ? "Update" : "Install"}</Button></div>
     </section>}
   </>;
-  return { items, panel, busy };
+  return { item, panel, busy };
 }

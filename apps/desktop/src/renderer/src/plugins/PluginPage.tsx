@@ -7,12 +7,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
 import { CatalogMark, cleanError } from "../settings-plugins";
-import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
+import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import { Switch } from "../components/ui/switch";
 import { useSettingsNavigate } from "../settings-panels";
-import { setPluginEnabled, setPluginOption, useSettings } from "../settings-store";
+import { setPluginOption, switchPlugin, useSettings } from "../settings-store";
 import { AgentActions, AgentMark, AgentPage } from "../settings-agents";
 import { ViewActions, ViewMark, ViewPage } from "../settings-views";
 import { ToolActions, ToolIcon, ToolPage } from "../settings-tools";
@@ -21,7 +21,9 @@ import { catalogImage } from "./mask-icon";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { SettingsForm } from "./SettingsForm";
-import { setPluginsScope } from "./scope";
+import { setPluginsScope, showPackage } from "./scope";
+import { heldOffByPackage, partOfPackage } from "./package-rows";
+import { useToolPackages } from "../tiles/tool-plugins";
 import { KIND_LABEL, ORIGIN_LABEL, useCatalog, usePlugins, type PluginRecord } from "./library";
 
 const MarkdownPreview = lazy(() => import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })));
@@ -76,6 +78,7 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
         </div>
       </header>
       {p.problem && <p role="status" className="settings-note error">{p.problem}</p>}
+      <PartOf p={p} />
 
       <div role="tablist" aria-label={`${p.name}`} className="plugin-tabs">
         {tabs.map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} data-plugin-tab={t} onClick={() => setTab(t)}>{TAB_LABEL[t]}</button>)}
@@ -109,6 +112,21 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
   );
 }
 
+/** For a member of a package of several: which, and that its switch waits on the package's. */
+function PartOf({ p }: { p: PluginRecord }) {
+  const go = useSettingsNavigate();
+  const widget = useWidgetPackages().find((x) => x.id === p.id);
+  const tool = useToolPackages().packages.find((x) => x.id === p.id && x.source === "you");
+  const view = useCommunityReport().packages.find((x) => x.id === p.id);
+  const of = p.kind === "widget" ? widget : p.kind === "tool" ? tool : p.kind === "view" ? view : undefined;
+  const part = of && partOfPackage(of);
+  if (!part) return null;
+  return <p className="settings-note" data-part-of={part.id}>
+    Part of <button type="button" className="settings-link" onClick={() => { showPackage(part.id); go("plugins"); }}>{part.name}</button>
+    {heldOffByPackage(of) ? ", which is off: switch the package on first." : ". Installed, updated and removed with it."}
+  </p>;
+}
+
 /** Its own mark, as the rest of the app draws it. */
 function PluginMark({ p }: { p: PluginRecord }) {
   const widget = useWidgetPackages().find((x) => x.id === p.id);
@@ -121,11 +139,12 @@ function PluginMark({ p }: { p: PluginRecord }) {
 
 /** What is done to it as a whole, on every tab: switching it on or off, making it the one used. */
 function PluginActions({ p }: { p: PluginRecord }) {
-  const on = isPluginEnabled(useSettings().plugins.state, "widget", p.id);
+  const widget = useWidgetPackages().find((x) => x.id === p.id);
+  const on = isPluginOn(useSettings().plugins.state, "widget", widget ?? p);
   if (p.kind === "agent") return <AgentActions id={p.id} />;
   if (p.kind === "view") return <ViewActions id={p.id} />;
   if (p.kind === "tool") return <ToolActions id={p.id} />;
-  return <Switch aria-label={`Enable ${p.name}`} checked={on} onCheckedChange={() => setPluginEnabled("widget", p.id, !on)} />;
+  return <Switch aria-label={`Enable ${p.name}`} checked={on} disabled={!!widget && heldOffByPackage(widget)} onCheckedChange={() => void switchPlugin("widget", widget ?? p, !on)} />;
 }
 
 /** A plugin's Settings tab: its kind's own controls, then the fields it declares. */
@@ -150,14 +169,14 @@ function ViewDeclaredSettings({ id }: { id: string }) {
 /** A widget is switched on or off here; what each placed one shows is set on it, on the board. */
 function WidgetSettings({ id }: { id: string }) {
   const w = useWidgetPackages().find((x) => x.id === id);
-  const on = isPluginEnabled(useSettings().plugins.state, "widget", id);
+  const on = isPluginOn(useSettings().plugins.state, "widget", w ?? { id });
   if (!w) return null;
   return <div className="plugin-page" data-widget-page={id}>
     {!on && <p className="settings-note">Off: it is not offered to add, and the ones placed keep what they hold but do not run.</p>}
     {w.options.length > 0
       ? <p className="settings-note">Each one you place has its own {w.options.map((o) => o.label.toLowerCase()).join(", ")}: select it and use the settings button above it.</p>
       : <p className="settings-note">It has nothing to set.</p>}
-    {!w.builtin && <RemoveWidget id={id} name={w.name} />}
+    {!w.builtin && !partOfPackage(w) && <RemoveWidget id={id} name={w.name} />}
   </div>;
 }
 

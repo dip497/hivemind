@@ -10,7 +10,7 @@ import { fixtureXDG } from "./agents-fixtures.js";
 describe("hive plugins", () => {
   test("lists every kind, switches one on and off, and sets what its settings take", () => {
     const xdg = fixtureXDG(["claude"]);
-    const view = path.join(xdg, "hivemind", "views", "board");
+    const view = path.join(xdg, "board-source");
     fs.mkdirSync(view, { recursive: true });
     fs.writeFileSync(path.join(view, "index.html"), "<p>board</p>");
     fs.writeFileSync(path.join(view, "hivemind-view.json"), JSON.stringify({
@@ -22,6 +22,7 @@ describe("hive plugins", () => {
     const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: xdg, env });
     const stored = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind", "settings.json"), "utf8")).plugins.state;
     try {
+      expect(run("install", view).json).toMatchObject({ id: "board" });
       const list = (run("list").json as { plugins: { key: string; enabled: boolean }[] }).plugins;
       const keys = list.map((p) => p.key);
       for (const k of ["agent:claude", "view:board", "widget:note", "tool:@hivemind/web"]) expect(keys).toContain(k);
@@ -59,6 +60,8 @@ describe("hive plugins", () => {
     const settings = path.join(xdg, "hivemind", "settings.json");
     const stored = () => (fs.existsSync(settings) ? fs.readFileSync(settings, "utf8") : null);
     try {
+      // The data is first brought up to this build's shape, by the person; what follows changes nothing.
+      expect(hive(["plugins", "list", "--json"], { cwd: xdg, env: base }).code).toBe(0);
       for (const who of [{ HCP_TOKEN: "tile-token", HIVEMIND_TILE: "hm:t1" }, { HIVE_DRIVE_TOKEN: "grant-token" }]) {
         for (const [args, ask] of [
           [["plugins", "enable", "tool:@hivemind/web"], "hive plugins enable tool:@hivemind/web"],
@@ -69,7 +72,7 @@ describe("hive plugins", () => {
         ] as const) {
           const before = stored();
           const r = hive([...args, "--json"], { cwd: xdg, env: { ...base, ...who } });
-          const error = (JSON.parse(r.stderr) as { error: { code: string; message: string } }).error;
+          const error = (r.json as { error: { code: string; message: string } }).error;
           expect([args.join(" "), r.code, error.code, error.message.includes(ask), stored()]).toEqual([args.join(" "), 6, "PERSON_ONLY", true, before]);
         }
       }

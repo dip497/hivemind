@@ -1,0 +1,1 @@
+{"id":"dip497/renamed","name":"Old format","version":"1.0.0","apiVersion":1,"entry":"index.js","settings":[{"id":"count","label":"Runs to list","type":"number","default":40}],"tools":[{"key":"main","label":"Old format","tileKind":"old-format"}]}

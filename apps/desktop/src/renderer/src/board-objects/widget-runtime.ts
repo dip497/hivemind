@@ -12,7 +12,7 @@
  * motion is smooth everywhere without a stream of drawings.
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { isPluginEnabled, resolveSettings } from "@hivemind/core/plugin-settings";
+import { isPluginOn, resolveSettings } from "@hivemind/core/plugin-settings";
 import type { BoardObject, WidgetObject } from "@hivemind/workspace-doc/shapes";
 import type { WidgetPackage } from "../../../shared/ipc";
 import { BUILTIN_WIDGETS, viewWidget } from "@hivemind/core/widget-format";
@@ -202,7 +202,7 @@ export function useEnabledWidgetPackages(): WidgetPackage[] {
   const state = useSettings().plugins.state;
   // Which are off, as text: any other setting changed (a view switched, a theme) must not hand
   // the runner a new list, which starts every widget's code again and loses what it was doing.
-  const off = all.filter((p) => !isPluginEnabled(state, "widget", p.id)).map((p) => p.id).join("\n");
+  const off = all.filter((p) => !isPluginOn(state, "widget", p)).map((p) => p.id).join("\n");
   return useMemo(() => {
     const skip = new Set(off ? off.split("\n") : []);
     return all.filter((p) => !skip.has(p.id));

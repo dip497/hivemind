@@ -9,7 +9,7 @@ import { Badge } from "../components/ui/badge";
 import { MenuItem } from "../components/ui/menu-item";
 import { useSettingsNavigate } from "../settings-panels";
 import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
-import { KIND_LABEL, PLUGIN_KINDS, type PluginKind } from "./kinds";
+import { PLUGIN_TABS, TAB_LABEL, type PluginKind, type PluginTab } from "./kinds";
 
 export type RowState = "on" | "off" | "missing" | "unavailable";
 
@@ -43,7 +43,7 @@ export function PluginRow({ kind, id, name, line, mark, state = "on", badge, act
 }
 
 /** One row of the list, with the category it is listed under. */
-export interface ListedRow { key: string; kind: PluginKind; category: PluginCategory; row: ReactNode }
+export interface ListedRow { key: string; kind: PluginTab; category: PluginCategory; row: ReactNode }
 
 function PluginGroup({ category, count, foot, children }: { category: PluginCategory; count: number; foot?: ReactNode; children: ReactNode }) {
   const title = CATEGORY_LABELS[category];
@@ -56,25 +56,30 @@ function PluginGroup({ category, count, foot, children }: { category: PluginCate
   );
 }
 
-/** One tab per kind, each with how many rows it has. */
-export function KindTabs({ counts, tab, onChange }: { counts: Record<PluginKind, number>; tab: PluginKind; onChange: (tab: PluginKind) => void }) {
+/** One tab per kind, then Packages, each with how many rows it has. */
+export function KindTabs({ counts, tab, onChange }: { counts: Record<PluginTab, number>; tab: PluginTab; onChange: (tab: PluginTab) => void }) {
   const step = (e: KeyboardEvent<HTMLDivElement>) => {
     const by = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
     if (!by) return;
-    const next = PLUGIN_KINDS[(PLUGIN_KINDS.indexOf(tab) + by + PLUGIN_KINDS.length) % PLUGIN_KINDS.length]!;
+    const next = PLUGIN_TABS[(PLUGIN_TABS.indexOf(tab) + by + PLUGIN_TABS.length) % PLUGIN_TABS.length]!;
     onChange(next);
     e.currentTarget.querySelector<HTMLElement>(`[data-plugins-kind="${next}"]`)?.focus();
   };
   return <div role="tablist" aria-label="Kind" className="plugins-scope self-start" onKeyDown={step} data-plugins-kinds>
-    {PLUGIN_KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={tab === k} tabIndex={tab === k ? 0 : -1}
-      data-plugins-kind={k} onClick={() => onChange(k)}>{KIND_LABEL[k]}s <span className="plugins-kind-count">{counts[k]}</span></button>)}
+    {PLUGIN_TABS.map((k) => <button key={k} type="button" role="tab" aria-selected={tab === k} tabIndex={tab === k ? 0 : -1}
+      data-plugins-kind={k} onClick={() => onChange(k)}>{TAB_LABEL[k]} <span className="plugins-kind-count">{counts[k]}</span></button>)}
   </div>;
 }
 
 /** Rows under their category's heading, in the Add menu's order. A category with a foot is shown
- *  even with no rows, so what it does by itself stays reachable. */
-export function CategoryGroups({ groups: listed, feet = {} }: { groups: [PluginCategory, ListedRow[]][]; feet?: Partial<Record<PluginCategory, ReactNode>> }) {
-  const groups = new Map(listed);
+ *  even with no rows, so what it does by itself stays reachable. Rows with no category (packages)
+ *  are one list without a heading. */
+export function CategoryGroups({ groups: listed, feet = {} }: { groups: [PluginCategory | null, ListedRow[]][]; feet?: Partial<Record<PluginCategory, ReactNode>> }) {
+  const plain = listed.find(([c]) => c === null)?.[1];
+  if (plain) return <section className="plugins-group" aria-label="Packages" data-plugins-category="package">
+    <div className="plugin-rows">{plain.map((r) => <Fragment key={r.key}>{r.row}</Fragment>)}</div>
+  </section>;
+  const groups = new Map(listed as [PluginCategory, ListedRow[]][]);
   return <>
     {PLUGIN_CATEGORIES.filter((c) => groups.has(c) || feet[c]).map((c) => {
       const list = groups.get(c) ?? [];
