@@ -5,11 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { err, ok } from "../format.js";
 import { EXIT } from "../exit-codes.js";
-import { connect, defaultSocket, listSessions, MAX_SOCKET_PATH, ping } from "../pty-client.js";
+import { defaultSocket, listSessions, MAX_SOCKET_PATH, ping } from "../pty-client.js";
 import { compiledSelf } from "../remote.js";
 import { hiveNetBin } from "../app-data.js";
 import { BRIDGE_READY, DAEMON_PROTOCOL_VERSION } from "@hivemind/agent-host/pty-protocol";
 import { startDaemon } from "@hivemind/agent-host/daemon-start";
+import { socketAt, stopDaemon } from "@hivemind/agent-host/daemon-replace";
 
 /** Set by scripts/build.ts so bun embeds the addon; absent when running from source. */
 declare const HIVE_PTY_NATIVE: string | undefined;
@@ -111,15 +112,11 @@ const stopCmd = defineCommand({
     const sock = String(args.socket || defaultSocket());
     if (!(await ping(sock))) return ok(ctx, { socket: sock, stopped: false }, () => `not running (${sock})`);
     try {
-      const c = await connect(sock);
-      c.send({ t: "shutdown" });
-      c.close();
-    } catch { /* raced with its own exit */ }
-    for (let t = 0; t < 10_000; t += 100) {
-      if (!(await ping(sock, 300))) return ok(ctx, { socket: sock, stopped: true }, () => `stopped (${sock})`);
-      await new Promise((r) => setTimeout(r, 100));
+      await stopDaemon(socketAt(sock));
+    } catch {
+      return err(ctx, "daemon_stop_timeout", `daemon on ${sock} is still answering after 10s`, EXIT.timeout);
     }
-    return err(ctx, "daemon_stop_timeout", `daemon on ${sock} is still answering after 10s`, EXIT.timeout);
+    return ok(ctx, { socket: sock, stopped: true }, () => `stopped (${sock})`);
   },
 });
 

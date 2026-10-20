@@ -1,8 +1,8 @@
 /** Ctrl+R — VS Code's Open Recent: the projects opened before, the workspaces on this person's
- *  hosts (R14) and those shared with them (M1), a way to browse for another, and another window on
- *  this one. */
+ *  hosts (R14) and those shared with them (M1), a way to browse for another, another window on
+ *  this one, and quitting. */
 import { Suspense, lazy, useEffect, useState } from "react";
-import { AppWindow, FolderOpen, History, LogIn, Server, Users } from "./components/icons";
+import { AppWindow, FolderOpen, History, LogIn, LogOut, Power, Server, Users } from "./components/icons";
 import { Dialog, DialogContent, DialogTitle } from "./components/ui/dialog";
 import { MenuItem } from "./components/ui/menu-item";
 // Joining loads when its page is opened.
@@ -109,6 +109,18 @@ export function RecentProjects({ open, joining: joinFirst = false, recents, curr
           <MenuItem data-join onClick={() => setJoining(true)}>
             <LogIn /><span className="flex-1">Join a shared workspace…</span>
           </MenuItem>
+          {window.hive.quit && window.hive.quitAndStopEverything && (
+            <>
+              <div className="my-1 border-t border-[var(--color-line)]" />
+              <MenuItem data-quit onClick={() => { onClose(); void window.hive.quit?.(); }}>
+                <LogOut /><span className="flex-1">Quit</span>
+                <kbd className="font-mono text-count text-[var(--color-fg2)]">{window.hive.platform === "darwin" ? "⌘Q" : "Ctrl Q"}</kbd>
+              </MenuItem>
+              <MenuItem data-quit-stop-agents onClick={() => { onClose(); void window.hive.quitAndStopEverything?.(); }}>
+                <Power /><span className="flex-1">Quit and stop agents</span>
+              </MenuItem>
+            </>
+          )}
         </div>
         )}
       </DialogContent>

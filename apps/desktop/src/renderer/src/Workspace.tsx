@@ -1254,11 +1254,13 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     },
     renameTile,
     openFolder: (frameId) => void bindWorkspace(frameId),
+    wakeAgent: (tileId) => void sleepActions.wake(tileId),
+    sleepAgent: (tileId) => void sleepActions.sleep(tileId),
     // Module-level bus functions: stable identities, so status never enters the
     // memo deps — a status transition re-renders nothing here.
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
     tileStatus: statusOf,
-  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace]);
+  }), [setSelectedTileId, setSelectedFrameId, focusTile, closeTile, spawnTile, spawnVis, spawnDefaultAgent, addFrame, renameTile, bindWorkspace, sleepActions]);
 
 
   // The canvas plugin's private runtime access (milestone-1 seam).

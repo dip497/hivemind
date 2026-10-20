@@ -38,6 +38,7 @@ import { PresenceLayer, followPerson, onHost, useFollowing, usePeopleHere } from
 import { BoardContext } from "../../board-objects/board-context";
 import { isBoxType } from "../../board-objects/board-model";
 import { useOnViewportChange, useReactFlow, useStore } from "@xyflow/react";
+import { tileScaleMayHaveChanged } from "../tile-scale";
 import { snapViewportCrisp, CameraMoves, FocusMode, FocusOnTile, PanMomentum, ViewportSnap } from "../../canvas-camera";
 import { buildBaseNodes, reuseNodes } from "../../canvas-node-build";
 import type { WorkspaceViewPlugin, WorkspaceViewProps } from "../workspace-view";
@@ -290,6 +291,7 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
   const onMove = useCallback((e: unknown, vp: { x: number; y: number; zoom: number }) => {
     currentViewportRef.current = vp;
     alignText();
+    tileScaleMayHaveChanged();
     if (inMomentumRef.current) return; // ignore self-generated moves
     if (!e) return; // a programmatic flight is not a flick to fling
     const s = panSamplesRef.current;

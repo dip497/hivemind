@@ -57,9 +57,10 @@ export function refusedEdit(before: KeptCore | null, after: KeptCore | null, acc
     if (!now.frames.has(id) && placed(frame) && !theirs(frame)) return `frame ${id} runs its tiles in a folder: taking it away is the owner's`;
   }
 
-  // Whether a tile sleeps, and where, is the host's: its wake, its screen and its end go there.
+  // Whether a tile sleeps, where and since when, is the host's: its wake, its screen and its end go there.
   for (const [id, tile] of now.tiles) {
-    if (!same(was.tiles.get(id)?.sleeping, tile.sleeping)) return `whether tile ${id} sleeps is the owner's to say`;
+    const earlier = was.tiles.get(id);
+    if (!same(earlier?.sleeping, tile.sleeping) || !same(earlier?.sleptAt, tile.sleptAt)) return `whether tile ${id} sleeps is the owner's to say`;
   }
 
   if (drives(access)) return null;

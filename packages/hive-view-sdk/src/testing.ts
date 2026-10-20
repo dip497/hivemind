@@ -45,7 +45,8 @@ export interface FakeHostOptions {
   viewport?: { w: number; h: number };
   visible?: boolean;
   /** The result for each request, by name; one not given is answered `UNSUPPORTED`. A throw is
-   *  answered as an error, with the thrown `code` if it has one. */
+   *  answered as an error, with the thrown `code` if it has one. A `prompt` to a tile the last
+   *  `structure` said is asleep is answered `ASLEEP`, as the app answers it, whatever is given. */
   answers?: { [N in RequestName]?: (args: RequestArgs<N>) => unknown };
 }
 
@@ -96,6 +97,7 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
   let tiles = new Set<string>();
   let frames = new Set<string>();
   const announced = new Set<string>();
+  let asleep = new Set<string>();
   const scope: HostScope = { capabilities, features, hasTile: (id) => tiles.has(id), hasFrame: (id) => frames.has(id), announced: (id) => announced.has(id) };
   const received: PluginMessage[] = [];
   const refused: string[] = [];
@@ -114,6 +116,8 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
   const post = (msg: HostMessage) => port.postMessage(msg);
   const answer = async (m: Request) => {
     const fail = (code: RequestErrorCode, message: string) => post({ type: "response", requestId: m.requestId, ok: false, error: { code, message } });
+    // As the app refuses it, before anyone is asked: a tile the last `structure` said is asleep.
+    if (m.name === "prompt" && asleep.has(m.args[0].tileId)) return fail("ASLEEP", `tile ${m.args[0].tileId} is asleep: wake it first`);
     const give = opts.answers?.[m.name] as ((args: unknown) => unknown) | undefined;
     if (!give) return fail("UNSUPPORTED", `this host does not answer ${m.name}`);
     try {
@@ -194,6 +198,7 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
       if (msg.type === "structure") {
         tiles = new Set(msg.tiles.map((t) => t.id));
         frames = new Set(msg.frames.map((f) => f.id));
+        asleep = new Set(msg.tiles.flatMap((t) => (t.asleep ? [t.id] : [])));
         for (const id of tiles) announced.add(id);
       }
       post(msg);

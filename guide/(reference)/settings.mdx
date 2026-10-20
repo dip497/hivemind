@@ -111,7 +111,7 @@ The `views.layers` values are what the Layers panel's **View** menu sets.
 |---|---|
 | `plugins.state.<kind>:<id>` | whether that plugin is on, and the values of its settings. Change them on its page, or with `hive plugins enable`, `disable`, `set` and `reset`. |
 
-## profile, network, browserApp
+## profile, network, browserApp, quit
 
 | Path | Default | Means |
 |---|---|---|
@@ -121,5 +121,6 @@ The `views.layers` values are what the Layers panel's **View** menu sets.
 | `browserApp.enabled` | `false` | serve the app to a browser tab on this computer |
 | `browserApp.port` | `4483` | 1024 to 65535 |
 | `browserApp.names` | none | other host names a browser may use, such as your Tailscale name |
+| `quit.whenRunning` | `ask` | what quitting does while terminals or agents run here: `ask`, `keep-running` or `stop-everything` |
 
 <LastValidated />

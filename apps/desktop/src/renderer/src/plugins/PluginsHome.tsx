@@ -1,7 +1,7 @@
 /**
  * Settings ▸ Plugins: every plugin of every kind on one page, the ones you have or the ones on
- * HiveHub, found by one search and one kind filter in one row of controls. Each kind is a group of
- * rows alike; a row opens the plugin's page, where it is set up, switched off or removed. Adding
+ * HiveHub, found by one search and one kind filter in one row of controls. Each category, as the
+ * Add menu has them, is a group of rows alike; a row opens the plugin's page, where it is set up, switched off or removed. Adding
  * one that is not on HiveHub, made by an agent or from a folder, is one menu at the top.
  */
 import { useEffect, useState, type ReactNode } from "react";
@@ -14,12 +14,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useSettings } from "../settings-store";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { SETTINGS_PAGES } from "../settings-registry";
-import { AgentsSection } from "../settings-agents";
-import { ViewsSection, rescan } from "../settings-views";
-import { ToolsSection } from "../settings-tools";
+import { useAgentRows } from "../settings-agents";
+import { useViewRows, rescan } from "../settings-views";
+import { useToolRows } from "../settings-tools";
 import { BrowsePlugins, cleanError, type Preview } from "../settings-plugins";
 import { KIND_LABEL, PLUGIN_KINDS, useHubDescription, type PluginKind } from "./library";
-import { PluginGroup, PluginRow } from "./PluginList";
+import { CategoryGroups, PluginRow, type ListedRow } from "./PluginList";
 import { WidgetIcon } from "./WidgetIcon";
 import { pluginsScope, setPluginsScope, type PluginsScope } from "./scope";
 
@@ -70,28 +70,37 @@ export function PluginsHome() {
     {scope === "hub"
       ? <BrowsePlugins query={query} kind={kind} />
       : <>
-        {show("agent") && <AgentsSection matches={matches} />}
-        {show("view") && <ViewsSection matches={matches} />}
-        {show("widget") && <WidgetsSection matches={matches} />}
-        {show("tool") && <ToolsSection matches={matches} />}
+        <InstalledPlugins matches={matches} show={show} />
         <p className="settings-empty plugins-none">Nothing you have matches. <button type="button" className="settings-link" onClick={() => setScope("hub")}>Look on HiveHub</button></p>
       </>}
   </div>;
 }
 
-/** The widgets you have; one that is off is not offered and does not run. */
-function WidgetsSection({ matches }: { matches: (text: string) => boolean }) {
+/** The plugins you have, of the kinds shown, under their categories. */
+function InstalledPlugins({ matches, show }: { matches: (text: string) => boolean; show: (k: PluginKind) => boolean }) {
+  const agents = useAgentRows(matches);
+  const views = useViewRows(matches);
+  const widgets = useWidgetRows(matches);
+  const tools = useToolRows(matches);
+  const rows = [...(show("agent") ? agents.rows : []), ...(show("view") ? views : []), ...(show("widget") ? widgets : []), ...(show("tool") ? tools.rows : [])];
+  return <>
+    {show("tool") && tools.warning && <p role="status" className="settings-message">{tools.warning}</p>}
+    <CategoryGroups rows={rows} feet={show("agent") && agents.foot ? { agents: agents.foot } : {}} />
+    {show("view") && views.length > 0 && <p className="settings-note">⌘E switches between the views that are on.</p>}
+  </>;
+}
+
+/** The widgets you have, each under its category; one that is off is not offered and does not run. */
+function useWidgetRows(matches: (text: string) => boolean): ListedRow[] {
   const widgets = useWidgetPackages().filter((w) => matches(`${w.name} ${w.id} ${w.description ?? ""}`));
   const state = useSettings().plugins.state;
   const hub = useHubDescription();
-  if (!widgets.length) return null;
-  return <PluginGroup kind="widget" count={widgets.length}>
-    {widgets.map((w) => {
-      const on = isPluginEnabled(state, "widget", w.id);
-      return <PluginRow key={w.id} kind="widget" id={w.id} name={w.name} mark={<WidgetIcon pkg={w} />}
-        line={w.description || hub("widget", w.id)} state={on ? "on" : "off"} badge={on ? undefined : "Off"} />;
-    })}
-  </PluginGroup>;
+  return widgets.map((w) => {
+    const on = isPluginEnabled(state, "widget", w.id);
+    return { key: `widget:${w.id}`, kind: "widget", category: w.category ?? "other",
+      row: <PluginRow kind="widget" id={w.id} name={w.name} mark={<WidgetIcon pkg={w} />}
+        line={w.description || hub("widget", w.id)} state={on ? "on" : "off"} badge={on ? undefined : "Off"} /> };
+  });
 }
 
 /** Adding a view, a widget or a tool from a folder on this computer: the Add menu's items, and
