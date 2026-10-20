@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { Check, Copy, ExternalLink, Trash, TriangleAlert } from "./components/icons";
 import {
@@ -7,7 +7,7 @@ import {
 } from "@hivemind/agents";
 import { patchSettings, useSettings, setPluginOption } from "./settings-store";
 import { Button } from "./components/ui/button";
-import { PluginGroup, PluginRow, type RowState } from "./plugins/PluginList";
+import { PluginRow, type ListedRow, type RowState } from "./plugins/PluginList";
 import { useHubDescription } from "./plugins/library";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
@@ -63,8 +63,9 @@ function useOptionChoices(def: AgentProviderDef): Choices | null {
   return choices;
 }
 
-/** The agents on the Plugins page: ready ones (the default says so), not installed, off. */
-export function AgentsSection({ matches }: { matches: (text: string) => boolean }) {
+/** The agents on the Plugins page, all under Agents: ready ones (the default says so), not
+ *  installed, off. The foot is what the list does by itself; none while a search hides every agent. */
+export function useAgentRows(matches: (text: string) => boolean): { rows: ListedRow[]; foot: ReactNode } {
   const all = useCards().filter((c) => c.def?.enabled || c.error);
   const cards = all.filter((c) => matches(`${c.def?.label ?? c.id} ${c.id} ${c.def?.bin ?? ""}`));
   const presence = useAgentPresence();
@@ -83,28 +84,25 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
     : missing(c) ? `Needs the ${c.def?.bin ?? c.id} command`
     : c.description || hub("agent", c.id);
   const badge = (c: Card) => ({ on: c.id === defaultId ? "Default" : undefined, missing: "Needs setup", off: "Off", unavailable: "Can't load" })[state(c)];
-  // Searching hides it when nothing matches; otherwise its footer stays, even with no agents.
-  if (!cards.length && !matches("")) return null;
-  return (
-    <PluginGroup kind="agent" count={cards.length} foot={<>
-      {savedCard ? (
-        <p role="status" className="warn">
-          {label(savedCard)} is {savedCard.on ? "not installed" : "switched off"}, so {all.find((c) => c.id === defaultId)?.def?.label ?? defaultId} starts instead.
-        </p>
-      ) : !all.some((c) => c.id === defaultId && state(c) === "on") ? (
-        <p role="status" className="error">Your default agent is not ready on this machine. Open another to make it the default, or install it.</p>
-      ) : <p>{"⌘\\"} and the toolbar's agent button start the default.</p>}
-      <div className="plugins-group-setting" data-auto-install>
-        <label htmlFor="agents-auto-install">Add agents found on this machine</label>
-        <span>· one you remove stays removed</span>
-        <Switch id="agents-auto-install" size="sm" checked={autoInstall} aria-label="Add agents found on this machine"
-          onCheckedChange={() => patchSettings("agents.autoInstall", !autoInstall)} />
-      </div>
-    </>}>
-      {shown.map((c) => <PluginRow key={c.id} kind="agent" id={c.id} name={label(c)} line={line(c)} state={state(c)} badge={badge(c)}
-        mark={<SvgMark icon={c.def?.icon ?? GENERIC_AGENT_ICON} />} />)}
-    </PluginGroup>
-  );
+  const rows = shown.map((c): ListedRow => ({ key: `agent:${c.id}`, kind: "agent", category: "agents",
+    row: <PluginRow kind="agent" id={c.id} name={label(c)} line={line(c)} state={state(c)} badge={badge(c)}
+      mark={<SvgMark icon={c.def?.icon ?? GENERIC_AGENT_ICON} />} /> }));
+  if (!cards.length && !matches("")) return { rows, foot: null };
+  return { rows, foot: <>
+    {savedCard ? (
+      <p role="status" className="warn">
+        {label(savedCard)} is {savedCard.on ? "not installed" : "switched off"}, so {all.find((c) => c.id === defaultId)?.def?.label ?? defaultId} starts instead.
+      </p>
+    ) : !all.some((c) => c.id === defaultId && state(c) === "on") ? (
+      <p role="status" className="error">Your default agent is not ready on this machine. Open another to make it the default, or install it.</p>
+    ) : <p>{"⌘\\"} and the toolbar's agent button start the default.</p>}
+    <div className="plugins-group-setting" data-auto-install>
+      <label htmlFor="agents-auto-install">Add agents found on this machine</label>
+      <span>· one you remove stays removed</span>
+      <Switch id="agents-auto-install" size="sm" checked={autoInstall} aria-label="Add agents found on this machine"
+        onCheckedChange={() => patchSettings("agents.autoInstall", !autoInstall)} />
+    </div>
+  </> };
 }
 
 /** An agent's own mark, as its tile and the switcher draw it. */

@@ -45,3 +45,10 @@ export function appKeyMessage(i: KeyInput): [channel: string, ...args: string[]]
   const menu = menuKey(i);
   return menu ? [`menu:${menu}`] : null;
 }
+
+/** Quit: ⌘Q on macOS, Ctrl+Q elsewhere, taken from a terminal too as VS Code takes it. Main
+ *  handles it; a browser tab on the app has no app to quit. */
+export function isQuitKey(i: KeyInput, platform: string): boolean {
+  if (i.alt || i.shift || i.key.toLowerCase() !== "q") return false;
+  return platform === "darwin" ? i.meta && !i.control : i.control && !i.meta;
+}

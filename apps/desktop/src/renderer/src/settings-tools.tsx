@@ -13,7 +13,9 @@ import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
 import { SettingsForm } from "./plugins/SettingsForm";
 import { ServiceSection } from "./plugins/ServiceSection";
 import { cleanError } from "./settings-plugins";
-import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { PluginRow, type ListedRow } from "./plugins/PluginList";
+import type { PluginCategory } from "@hivemind/view-sdk/category";
+import { tileKind, useTilesVersion } from "./tiles/api";
 import type { ToolPackage } from "@hivemind/core/tool-format";
 
 /** A tool plugin you added, by id; undefined for one that comes with the app. */
@@ -79,16 +81,23 @@ function RemoveTool({ pkg }: { pkg: ToolPackage }) {
 }
 
 /** The tools on the Plugins page: the ones included, the optional ones, then the ones you added. */
-export function ToolsSection({ matches }: { matches: (text: string) => boolean }) {
+/** The tools you have, as rows of the Plugins page: one that comes with the app under its tile's
+ *  category, as the Add menu lists it, and one you added under its manifest's. The warning is for
+ *  safe mode, where none you added runs. */
+export function useToolRows(matches: (text: string) => boolean): { rows: ListedRow[]; warning: string | null } {
   const shown = BUNDLED_TOOL_PLUGINS.filter((p) => matches(`${toolLabel(p.id)} ${p.id} ${p.tools.map((t) => t.description ?? "").join(" ")}`));
   const { packages, safeMode } = useToolPackages();
+  useTilesVersion();
   const added = packages.filter((p) => p.source === "you" && matches(`${p.name} ${p.id} ${p.description}`));
-  const ids = [...shown.filter((p) => p.builtin), ...shown.filter((p) => !p.builtin), ...added].map((p) => p.id);
-  if (!ids.length) return null;
-  return <PluginGroup kind="tool" count={ids.length}
-    foot={added.length > 0 && safeMode ? <p className="warn">Hivemind started in safe mode: no tool you added runs until you start it normally.</p> : undefined}>
-    {ids.map((id) => <ToolRow key={id} pluginId={id} />)}
-  </PluginGroup>;
+  const bundled = [...shown.filter((p) => p.builtin), ...shown.filter((p) => !p.builtin)];
+  const row = (id: string, category: PluginCategory): ListedRow => ({ key: `tool:${id}`, kind: "tool", category, row: <ToolRow pluginId={id} /> });
+  return {
+    rows: [
+      ...bundled.map((p) => row(p.id, p.tools.map((t) => t.tileKind ? tileKind(t.tileKind).category : undefined).find((c) => c !== undefined) ?? "other")),
+      ...added.map((p) => row(p.id, p.category)),
+    ],
+    warning: added.length > 0 && safeMode ? "Hivemind started in safe mode: no tool you added runs until you start it normally." : null,
+  };
 }
 
 /** At the top of a tool's page: switching it on or off. */

@@ -15,7 +15,7 @@ import {
   LayoutGridIcon, LayoutListIcon, ListTodoIcon, LoaderCircleIcon, LogInIcon, LogOutIcon, Mail01Icon,
   MailOpenIcon, Maximize01Icon, MessageSquareIcon, MessagesSquareIcon, MonitorIcon, MonitorSmartphoneIcon, Moon02Icon,
   MoveUpRightIcon, NetworkIcon, PaletteIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PanelsTopLeftIcon, PencilIcon, PinIcon,
-  PinOffIcon, PlayIcon, PlusIcon, PuzzleIcon, RefreshCwIcon, RotateCwIcon,
+  PinOffIcon, PlayIcon, PlusIcon, PowerIcon, PuzzleIcon, RefreshCwIcon, RotateCwIcon,
   Search01Icon, ServerIcon, ServerOffIcon, Settings01Icon, Settings02Icon, DashboardSquareAddIcon, SlidersHorizontalIcon,
   SmartphoneIcon, SparklesIcon, SquareDashedIcon, SquarePenIcon, SquareTerminalIcon, Tag01Icon, TerminalIcon, TrashIcon,
   TriangleAlertIcon, Unlink01Icon, UnplugIcon, Upload01Icon, UserPlusIcon, UserRoundIcon, UsersIcon,
@@ -115,6 +115,7 @@ export const Pin = icon("pin", PinIcon);
 export const PinOff = icon("pin-off", PinOffIcon);
 export const Play = icon("play", PlayIcon);
 export const Plus = icon("plus", PlusIcon);
+export const Power = icon("power", PowerIcon);
 export const Puzzle = icon("puzzle", PuzzleIcon);
 export const RefreshCw = icon("refresh", RefreshCwIcon);
 export const RotateCw = icon("rotate-cw", RotateCwIcon);
