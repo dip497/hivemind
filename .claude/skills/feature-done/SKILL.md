@@ -34,7 +34,7 @@ per round, not one PR per change.
 | 9 | **Local data** | If what is on disk changes, a numbered migration ships in the same release (`packages/hive-core/src/migrations/`), tested on old-shaped data. Users never lose installs, settings or state. |
 | 10 | **Contracts and versions** | A changed protocol, manifest, `hive ctl --json` shape or CLI flag bumps its own version and gets a **Breaking:** CHANGELOG line. No shims for older app versions. |
 | 11 | **Security** | New input from plugins, peers, the phone or the network is checked at the boundary; secrets by name only; sandboxes hold. Address every security-review finding before reporting. |
-| 12 | **Tests** | Behaviour tests at the real boundary pass `.claude/skills/test-audit/SKILL.md`, each shown failing first. One focused e2e for a new user flow; the full suite runs once after merge. |
+| 12 | **Tests** | Behaviour tests at the real boundary pass `.claude/skills/test-audit/SKILL.md`, each shown failing first. Locally run only the test files for what you touched, plus typecheck; CI (about 5 min, on GitHub) runs every suite on the PR, so do not repeat it on the laptop. One focused e2e for a new user flow; the full e2e runs once per round, after merge, and before a release. |
 | 13 | **CHANGELOG and release** | One line under `[Unreleased]` in the user's words. Release and installer steps still work (`scripts/install-*-test.sh` when assets or install paths change). |
 | 14 | **Cleanup** | Every worktree, shell, monitor, dev server and container you started is closed or listed. Old text, flags and code the change replaces are removed in the same change. |
 
