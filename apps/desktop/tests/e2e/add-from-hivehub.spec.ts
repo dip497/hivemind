@@ -41,6 +41,11 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 const menu = () => page.locator("[data-add-menu]");
+/** Escape, and wait for it to be gone: a closing menu still answers to the next search. */
+async function closeMenu() {
+  await page.keyboard.press("Escape");
+  await expect(menu()).toHaveCount(0);
+}
 async function search(words: string) {
   if (!await menu().count()) await page.locator('[data-toolbar-action="board"]').first().click();
   const box = menu().getByRole("textbox");
@@ -53,7 +58,7 @@ test("a search lists what HiveHub has that is not installed, five at a time", as
   await expect(hub.locator("[data-add-hub-entry]")).toHaveCount(5);
   await hub.locator("[data-show-more]").click();
   await expect(hub.locator("[data-add-hub-entry]")).toHaveCount(15);
-  await page.keyboard.press("Escape");
+  await closeMenu();
 });
 
 test("a tool installed from the Add menu is reviewed first, arrives switched off, and is added once switched on", async () => {
@@ -72,19 +77,20 @@ test("a tool installed from the Add menu is reviewed first, arrives switched off
   await toolPage.getByRole("switch").click();
   await expect(toolPage.getByRole("switch")).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("Escape");
-  await expect(page.locator(".settings-dialog")).toHaveCount(0);
+  // Gone, overlay too: until then a click on Add lands on Settings as it closes.
+  await expect(page.locator('[role="dialog"]')).toHaveCount(0);
 
   await search("commits");
   await expect(menu().locator('[data-board-choice="tile:commits"]')).toBeVisible();
   await expect(menu().locator("[data-add-hub-entry]")).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  await closeMenu();
 });
 
 test("nothing installed or on HiveHub matching offers to make one", async () => {
   await search("zzzz nothing");
   await expect(menu().locator('[data-add-hub="none"]')).toBeVisible();
   await expect(menu().locator("[data-add-make]")).toBeVisible();
-  await page.keyboard.press("Escape");
+  await closeMenu();
 });
 
 test("HiveHub's list in Settings draws 25 of a category, and the rest on request", async () => {

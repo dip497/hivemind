@@ -40,7 +40,7 @@ export function matchScore(words: readonly string[], p: Searchable): number | nu
 export function searchPlugins<T extends Searchable>(list: readonly T[], query: string): T[] {
   const words = searchWords(query);
   return list.flatMap((p) => { const score = matchScore(words, p); return score === null ? [] : [{ p, score }]; })
-    .sort((a, b) => b.score - a.score || (b.p.installs ?? 0) - (a.p.installs ?? 0) || a.p.name.localeCompare(b.p.name))
+    .sort((a, b) => b.score - a.score || (b.p.installs ?? 0) - (a.p.installs ?? 0) || a.p.name.localeCompare(b.p.name, undefined, { numeric: true }))
     .map(({ p }) => p);
 }
 

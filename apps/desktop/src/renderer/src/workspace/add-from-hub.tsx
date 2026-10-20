@@ -61,16 +61,19 @@ export function FromHiveHub({ query, tab, shelf, installedCount, close }: {
     // Installed and on, it is in the list above, ready to add.
     && !(installed(e) && isOn(e))), q) : [];
 
+  // Installed from here, on, and found by this search: it moved to the list above.
+  const movedUp = done && installed(done.entry) && isOn(done.entry) && searchPlugins([done.entry], q).length > 0
+    ? <p role="status" className={QUIET} data-add-hub-done>{done.entry.name} is installed and listed above.</p> : null;
   if (catalog === null) return <p className={QUIET} data-add-hub="loading">Searching HiveHub…</p>;
   if (catalog === "unreachable") return <p className={QUIET} data-add-hub="unreachable">HiveHub could not be reached, so only what is installed is shown.</p>;
   if (!matches.length) return <>
-    {done && <p role="status" className={QUIET} data-add-hub-done>{done.entry.name} is installed and listed above.</p>}
+    {movedUp}
     {!installedCount && <p className={QUIET} data-add-hub="none">Nothing installed or on HiveHub matches “{query.trim()}”. Make your own below.</p>}
   </>;
 
   return <div role="group" aria-label="From HiveHub" data-add-hub="results">
+    {movedUp}
     <div className={HEADING}>From HiveHub</div>
-    {done && <p role="status" className={QUIET} data-add-hub-done>{done.entry.name} is installed{installed(done.entry) && isOn(done.entry) ? " and listed above" : ""}.</p>}
     {matches.slice(0, limit).map((e) => {
       const key = catalogKey(e);
       const open = review?.key === key ? review.data : null;

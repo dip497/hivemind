@@ -46,7 +46,7 @@ export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
   if (icon) return <SvgMark icon={icon} size={20} />;
   let hue = 0;
   for (const c of entry.id) hue = (hue * 31 + c.charCodeAt(0)) % 360;
-  return <span className="catalog-monogram" style={{ "--mark-hue": hue } as CSSProperties}>{entry.id[0]?.toUpperCase()}</span>;
+  return <span className="catalog-monogram" style={{ "--mark-hue": hue } as CSSProperties}>{entry.id.replace(/^@[^/]*\//, "")[0]?.toUpperCase()}</span>;
 }
 
 /** Rows a HiveHub category shows before its "Show more", so a catalog of thousands draws a few dozen. */
