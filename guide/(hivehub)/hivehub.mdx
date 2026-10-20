@@ -15,7 +15,7 @@ Look up a Hivemind plugin on HiveHub for me. Do not install anything.
 
 1. Get the \`hivehub\` command if \`command -v hivehub\` finds nothing: \`curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub\`. It needs Node 20 or newer.
 2. Run \`hivehub search\` with a few words for what I want. Add \`--type agent\`, \`view\`, \`widget\` or \`tool\` if I named a kind.
-3. Run \`hivehub info <id>\` on the best match (it takes a view's or widget's \`@owner/name\`, or an agent's name). For a tool, open \`https://hivehub.griiken.workers.dev/p/<id>\` instead.
+3. Run \`hivehub info <id>\` on the best match, with the id \`hivehub search\` printed.
 4. Tell me its kind, version, who published it, the GitHub repository and commit its files come from, and every line under "does": what it asks for.
 
 At the end, tell me to install it from Settings → Plugins, on the HiveHub tab, where Hivemind shows the same review before it adds anything.
@@ -113,6 +113,12 @@ A value not on this list is refused, by HiveHub when you publish and by Hivemind
   </Card>
   <Card title="Plugins" icon="puzzle-piece" href="/plugins">
     The four kinds, where each sits on screen, and how to make one.
+  </Card>
+  <Card title="The hivehub command" icon="terminal" href="/hivehub-command">
+    Every command and flag, to publish and find plugins from a terminal.
+  </Card>
+  <Card title="HiveHub API" icon="code" href="/hivehub-api">
+    The index, search, install and publish routes, with their limits and errors.
   </Card>
 </CardGroup>
 

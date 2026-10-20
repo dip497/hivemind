@@ -27,9 +27,9 @@ At the end, give me the plugin's page on HiveHub, and tell me others install it 
 - Its id is in your own GitHub account: `@you/name` for a widget or view, `you/name` for a tool.
   Nobody can publish into someone else's account, and an id stays with the account that first
   published it.
-- Its folder is in a GitHub repository you can push to. It holds at most 200 files, each at most
-  2 MB, 8 MB in all.
-- You sign in with GitHub to publish.
+- Its folder is in a public GitHub repository you can push to, and within HiveHub's
+  [limits](/hivehub-api#limits).
+- You sign in with GitHub to publish: [Signing in to HiveHub](/hivehub-sign-in).
 
 ## Get it ready
 
@@ -92,7 +92,8 @@ Then publish it in one of three ways: the web form, the `hivehub` command, or Gi
     hivehub login
     ```
 
-    It prints a link and a code. Open the link and type the code on GitHub.
+    It prints a link and a code. Open the link and type the code on GitHub. Where the login is
+    kept, and how long it lasts: [`hivehub login`](/hivehub-sign-in#hivehub-login).
 
     Check: it says `Signed in as <your login>.`
   </Step>
@@ -103,7 +104,8 @@ Then publish it in one of three ways: the web form, the `hivehub` command, or Gi
     ```
 
     It publishes the folder at the commit you pushed. First it shows a preview: the id, version,
-    repository and commit, files, and what the plugin asks for. Answer `y` to publish.
+    repository and commit, files, and what the plugin asks for. Answer `y` to publish. Every
+    flag: [`hivehub publish`](/hivehub-command#hivehub-publish).
 
     Check: it prints `Published <id>` and the plugin's page on HiveHub.
   </Step>
@@ -111,9 +113,9 @@ Then publish it in one of three ways: the web form, the `hivehub` command, or Gi
 
 ## From GitHub Actions
 
-Store a GitHub personal access token as the repository secret `HIVEHUB_TOKEN`. It must belong
-to an account that can push to the repository, and that account publishes the plugin. Then add
-a workflow:
+Store a GitHub token as the repository secret `HIVEHUB_TOKEN`. Its account publishes the
+plugin. Which token to make: [A token for CI](/hivehub-sign-in#a-token-for-ci). Then add a
+workflow:
 
 ```yaml .github/workflows/hivehub.yml
 name: Publish to HiveHub
@@ -138,9 +140,8 @@ jobs:
 The job publishes the commit it runs on. `--yes` answers the question, because a job has no one
 to ask. Any other CI works the same way with `HIVEHUB_TOKEN` set.
 
-A job with `permissions: id-token: write` and no `HIVEHUB_TOKEN` signs in as its own repository,
-with no token to store. HiveHub accepts that sign-in only from the agents repository's `main`
-branch, which is how agents are published.
+Signing in as the job's own repository, with no token stored, works today only for
+`dip497/hivemind-plugins` on `main`: see [GitHub Actions](/hivehub-sign-in#github-actions).
 
 ## Publish an agent
 
@@ -186,21 +187,8 @@ the line it has. Everyone who has the plugin sees **Update** on the **HiveHub** 
 
 ## Reference
 
-```text
-hivehub login                  sign in with GitHub
-hivehub publish [folder]       publish a plugin folder at its current commit
-    --repo owner/name          publish from GitHub directly, without a local copy
-    --path <folder>            with --repo: the folder in the repository
-    --ref <commit|branch>      default: HEAD
-    --description "…"          the one line on its card
-    --yes                      skip the question (for agents and CI)
-hivehub search [words] [--type agent|view|widget|tool]
-hivehub info @owner/name | agent
-hivehub whoami
-hivehub logout
-```
-
-`--json` on any command prints one object a line. When `HIVEHUB_TOKEN` is set, it is used in place of
-`hivehub login`.
+- [The `hivehub` command](/hivehub-command): every command, flag, message and exit code.
+- [Signing in to HiveHub](/hivehub-sign-in): every way to sign in, and how to revoke it.
+- [HiveHub API](/hivehub-api): the publish route, its errors and its limits.
 
 <LastValidated />
