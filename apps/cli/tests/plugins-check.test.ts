@@ -54,4 +54,27 @@ describe("hive plugins check", () => {
       }
     }, 120_000);
   }
+
+  test("a widget's code reaches nothing of this machine: no process, no Bun, no import", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-escape-"));
+    const dir = path.join(tmp, "tally");
+    const mark = path.join(tmp, "escaped");
+    try {
+      expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      const ways = ["console.log", "console.error", "setTimeout", "this", "globalThis", "hive.render", "self.postMessage"];
+      fs.writeFileSync(path.join(dir, "widget.js"), `const MARK = ${JSON.stringify(mark)};
+const out = (p) => { try { const fs = p && p.getBuiltinModule && p.getBuiltinModule("node:fs"); if (fs) fs.writeFileSync(MARK, "escaped"); } catch {} };
+for (const way of ${JSON.stringify(ways)}) {
+  try { out(Function("w", "return w.constructor.constructor('return typeof process === \\"object\\" ? process : null')()")(eval(way))); } catch {}
+}
+import("node:fs").then((fs) => fs.writeFileSync(MARK, "escaped"), () => {});
+hive.on("start", () => hive.render({ type: "text", text: "here" }));
+`);
+      const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect(fs.existsSync(mark)).toBe(false);
+      expect((r.json as Report).data.steps.draw).toBe("ok");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
