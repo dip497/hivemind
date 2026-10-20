@@ -1,7 +1,7 @@
 import { docs } from 'collections/server';
 import { type InferPageType, loader } from 'fumadocs-core/source';
 import type * as PageTree from 'fumadocs-core/page-tree';
-import { absoluteLinks, appName, docsUrl, pageMarkdownPath, siteUrl } from './shared';
+import { absoluteLinks, appName, docsUrl, pageAddress, pageMarkdownAddress, repoUrl, siteUrl } from './shared';
 
 export const source = loader({
   baseUrl: '/',
@@ -25,8 +25,6 @@ export const source = loader({
 
 export type GuidePage = InferPageType<typeof source>;
 
-const markdownAddress = (page: GuidePage) => `${siteUrl}${pageMarkdownPath(page.slugs)}`;
-
 /** A diagram as a picture link: the list under it in the page carries the same facts as text. */
 const diagramsAsLinks = (markdown: string) =>
   markdown.replace(
@@ -37,7 +35,7 @@ const diagramsAsLinks = (markdown: string) =>
 /** One page as Markdown, with every link a full address so it reads the same anywhere. */
 export async function pageMarkdown(page: GuidePage) {
   const body = absoluteLinks(diagramsAsLinks(await page.data.getText('processed')));
-  return `# ${page.data.title}\n\n> ${page.data.description}\n\nSource: ${docsUrl}${page.url}\n\n${body.trim()}\n`;
+  return `# ${page.data.title}\n\n> ${page.data.description}\n\nSource: ${pageAddress(page.url)}\n\n${body.trim()}\n`;
 }
 
 /** llms.txt: every page with its one-line description, grouped as the sidebar groups them. */
@@ -45,7 +43,9 @@ export function llmsIndex() {
   const lines = [
     `# ${appName}`,
     '',
-    '> A workspace your coding agents build and work in: run them side by side, add your own views, widgets and tools, and drive it all from other computers, your phone or your own program.',
+    '> Hivemind is a free, open-source desktop app for Linux, macOS and Windows. It runs Claude Code, Codex, opencode, Cursor, Copilot and any other coding agent with a command line side by side, each in a real terminal, and your agents build the views, widgets and tools of the workspace they work in.',
+    '',
+    `You and your own programs drive it with the \`hive\` command and an API, from other computers or your phone. Website: ${siteUrl}/ · Source (MIT): ${repoUrl} · Plugins: https://hivehub.griiken.workers.dev/ · Compared with similar apps: ${siteUrl}/compare/`,
     '',
     `Every page is also Markdown: add .md to its address. All of them in one file: ${docsUrl}/llms-full.txt`,
   ];
@@ -59,7 +59,7 @@ export function llmsIndex() {
         visit(node.children, depth + 1);
       } else {
         const page = source.getNodePage(node);
-        if (page) lines.push(`- [${page.data.title}](${markdownAddress(page)}): ${page.data.description}`);
+        if (page) lines.push(`- [${page.data.title}](${pageMarkdownAddress(page.slugs)}): ${page.data.description}`);
       }
     }
   };

@@ -8,6 +8,7 @@ semantic versioning.
 Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
+- Guide: **View as Markdown** and **Copy page** open the page's Markdown again (they went to `/guide/guide/…`), and **Open in ChatGPT, Claude, Cursor or Scira AI** hands the agent the page's Markdown. A how-to's prompt box offers the same agents under **Open in…**, next to **Copy prompt**.
 - Write a package from `hive` alone: `hive plugins new package <name>` starts one with a PROMPT.md, `hive plugins new <kind> <name> --in <package>` and `hive plugins add <folder> --to <package>` add members (another owner's id is refused), and `hive plugins check <package>` checks every member with its own check, each problem at its file and line. The guide has a new Packages page.
 
 - hive-net starts on a machine with no network route, such as one offline or in a container with no network: before, it stopped at once saying `Cannot bind to IPv4 or IPv6`, so the app could not pair or share there.

@@ -107,7 +107,8 @@ Every page is built twice: as HTML for people, and as Markdown for agents. Keep 
 - `/guide/<name>.md` is the page as Markdown. `llms.txt` lists every page with its description.
   `llms-full.txt` is every page in one file. All come from `site/docs/lib/source.ts`. A
   `<Diagram>` becomes a link to its SVG plus your text list, which is why the list matters.
-- Each page's **Copy page** and **Open** menu comes free. Don't rebuild it in the page.
+- Each page's **Copy page** and **Open** menu comes free. Don't rebuild it in the page. The agents
+  that menu and every prompt box offer are one list, in `site/docs/lib/open-in.tsx`.
 - A how-to page gets an `<AgentPrompt>` near the top: the instructions a person pastes into their
   coding agent to do the job. It must work for an agent that never saw the page. The format and
   rules are in [references/writing-pages.md](references/writing-pages.md#a-prompt-where-it-applies).
@@ -126,7 +127,10 @@ Run these from the repo root, one at a time on a busy machine (`nice -n 10`). Th
 1. `npm run diagrams` in `site/`, if any diagram changed. Commit the `.svg` and the `html/` page.
 2. `verify-geometry.py` on `guide/images/*.svg`: 0 findings.
 3. The site build: the guide must compile.
-4. `node scripts/check-links.mjs` in `site/`: every link and picture leads somewhere.
+4. `node scripts/check-links.mjs` in `site/`: every link, picture, `#heading`, Markdown copy, Open
+   menu and prompt-box link, `llms.txt` entry and redirect on the built site leads somewhere.
+   After a deploy, `node scripts/check-links.mjs --live https://hivemind.griiken.com` checks the
+   real site, external links too.
 5. Screenshots of every page you changed at 1440 and 390, light and dark. **Look at them.** Check
    the diagram text is readable, nothing scrolls the page sideways, and the dark theme has no
    unreadable grey.

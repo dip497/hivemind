@@ -18,7 +18,8 @@
     "install:check": "node scripts/sync-install.mjs --check",
     "icons:sync": "node scripts/sync-agent-icons.mjs",
     "icons:check": "node scripts/sync-agent-icons.mjs --check",
-    "diagrams": "node scripts/diagrams/build.mjs"
+    "diagrams": "node scripts/diagrams/build.mjs",
+    "social-card": "node scripts/social-card.mjs"
   },
   "dependencies": {
     "astro": "7.3.1",

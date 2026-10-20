@@ -13,6 +13,7 @@ export const downloadUrl = `${siteUrl}/download`;
 
 /** The picture a link to any guide page shows when it is shared: the website's own card. */
 export const ogImage = `${siteUrl}/shots/og.jpg`;
+export const cardAlt = `${appName}: your agents build the workspace they work in`;
 
 /**
  * A guide page's one address, in full, with the trailing slash the export gives every page.
@@ -33,12 +34,20 @@ export function pageMarkdownPath(slugs: string[]) {
   return `${basePath}/${slugs.length === 0 ? 'index' : slugs.join('/')}.md`;
 }
 
+/** A page's Markdown copy in full, for anything read off the site: an agent, a search engine. */
+export function pageMarkdownAddress(slugs: string[]) {
+  return `${siteUrl}${pageMarkdownPath(slugs)}`;
+}
+
 /** Turns the guide's root-relative links and pictures into full addresses, for text read elsewhere. */
 export function absoluteLinks(markdown: string) {
   const inGuide = `${basePath.slice(1)}/`;
   return markdown.replace(
-    /(\]\(|(?:href|src|poster|img)=")\/(?!\/)(\S*)/g,
-    (_all, lead: string, rest: string) =>
-      rest.startsWith(inGuide) ? `${lead}${siteUrl}/${rest}` : `${lead}${docsUrl}/${rest}`,
+    /(\]\(|(?:href|src|poster|img)=")\/(?!\/)([^\s)"#?]*)/g,
+    (_all, lead: string, path: string) => {
+      // A page's address ends in a slash; without it the reader takes a redirect first.
+      const page = path && !path.endsWith('/') && !/\.\w+$/.test(path) ? `${path}/` : path;
+      return page.startsWith(inGuide) ? `${lead}${siteUrl}/${page}` : `${lead}${docsUrl}/${page}`;
+    },
   );
 }
