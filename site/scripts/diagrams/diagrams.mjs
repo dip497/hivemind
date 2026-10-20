@@ -174,4 +174,23 @@ function hostMove() {
   return d;
 }
 
-export default [connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, ...howItWorks];
+function packagesOneBox() {
+  const d = new Diagram({
+    slug: 'packages-one-box', w: 640, h: 340,
+    title: 'A package is one box',
+    desc: 'A package is one folder whose hivemind-package.json names its tools, widgets, views and agent presets; hive plugins install puts the whole box on this machine, with one switch, one version and a rollback, and hivehub publish lists the whole box on HiveHub.',
+  });
+  d.wire([[170, 196], [170, 256]], { accent: true }); d.label(182, 230, 'hive plugins install', { anchor: 'start' });
+  d.wire([[470, 196], [470, 256]]); d.label(482, 230, 'hivehub publish', { anchor: 'start' });
+  d.zone(20, 24, 600, 172, 'One folder: @you/kit');
+  d.node(35, 56, 130, 64, 'Tools', { sub: 'run in the app' });
+  d.node(180, 56, 130, 64, 'Widgets', { sub: 'sandboxed' });
+  d.node(325, 56, 130, 64, 'Views', { sub: 'sandboxed' });
+  d.node(470, 56, 135, 64, 'Agent presets', { sub: 'a prompt' });
+  d.note(320, 160, 'hivemind-package.json names each member, every one @you/<name>', { size: 12.5 });
+  d.node(60, 256, 220, 64, 'This machine', { sub: 'one switch, one version, rollback', focal: true });
+  d.node(360, 256, 220, 64, 'HiveHub', { sub: 'one listing, every member', dashed: true, plain: true });
+  return d;
+}
+
+export default [packagesOneBox, connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, ...howItWorks];

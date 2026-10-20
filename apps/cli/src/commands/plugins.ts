@@ -5,11 +5,15 @@
  * up at once.
  *
  *   hive plugins new <tool|widget|view> <name> [--dir <folder>] [--owner <login>]   a starter that works, with PROMPT.md
+ *   hive plugins new package <name> [--dir <folder>]  a package to hold several, with PROMPT.md
+ *   hive plugins new <tool|widget|view> <name> --in <package folder>   a starter, as a member of that package
+ *   hive plugins add <folder> --to <package folder>  one already written, as a member of that package
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
  *                                                  (@owner/name is HiveHub's: write a folder as ./x);
  *                                                  every install is a package, a folder of one plugin a package of one
  *   hive plugins remove <plugin>                   one you added, with its package; what shows it stays, saying it is missing
- *   hive plugins check <folder> [--json]           its types, its manifest, and its code drawn once
+ *   hive plugins check <folder> [--json]           its types, its manifest, and its code drawn once;
+ *                                                  of a package, its manifest and every member
  *   hive plugins api --kind <tool|widget|view>     what its code is given, as type declarations
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
@@ -44,7 +48,10 @@ import { driveCall } from "../drive.js";
 import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
 import { stageFromRegistry } from "../registry.js";
 import { checkPlugin, DRAW_ALONE } from "../check/check.js";
+import { checkPackage } from "../check/package.js";
 import { where } from "../check/problem.js";
+import { PACKAGE_MANIFEST, memberFormat } from "@hivemind/core/package-format";
+import { addEntry, arrivesOff, memberId, memberPath, packageStarter, readPackageFolder, type PackageFolder } from "../package-authoring.js";
 
 interface Plugin {
   key: string;
@@ -282,47 +289,127 @@ const KIND_NAMES = KINDS.map((k) => k.kind).join(", ");
 /** An id HiveHub lists: `@owner/name`. */
 const HUB_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 
+/** The kind `hive plugins new` starts that holds the others. */
+const PACKAGE = { kind: "package", noun: "package", guide: "https://hivemind.griiken.com/guide/packages/" } as const;
+const NEW_KINDS = `${KIND_NAMES}, ${PACKAGE.kind}`;
+/** A folder as printed, so `install` never reads it as an id on HiveHub. */
+const shownPath = (given: string) => (/^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`);
+/** `to` as written from the current folder. */
+const shownFrom = (to: string) => shownPath(path.relative(process.cwd(), to) || ".");
+
+/** Write `files` into `dir`; half a starter is worse than none, so a failure takes back what was
+ *  written, the folder too if it was made here. */
+async function writeStarter(dir: string, files: Record<string, string>): Promise<void> {
+  const there = fs.existsSync(dir);
+  try {
+    for (const [file, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+      await writeFile(path.join(dir, file), text);
+    }
+  } catch (e) {
+    if (there) for (const f of await readdir(dir).catch(() => [])) await rm(path.join(dir, f), { recursive: true, force: true });
+    else await rm(dir, { recursive: true, force: true });
+    throw e;
+  }
+}
+
+const notEmpty = async (dir: string) => fs.existsSync(dir) && (!fs.statSync(dir).isDirectory() || (await readdir(dir)).length > 0);
+
 const newCmd = defineCommand({
-  meta: { name: "new", description: "Start a plugin that works as written, with a PROMPT.md to hand your coding agent" },
+  meta: { name: "new", description: "Start a plugin that works as written, or a package to hold several, with a PROMPT.md to hand your coding agent" },
   args: {
-    kind: { type: "positional", required: true, description: KIND_NAMES },
+    kind: { type: "positional", required: true, description: NEW_KINDS },
     name: { type: "positional", required: true, description: "lowercase letters, digits and single dashes" },
-    dir: { type: "string", description: "the folder to start it in (default: ./<name>); it must be empty or not there" },
-    owner: { type: "string", description: "your GitHub login (default: the account `gh` is signed in as)" },
+    dir: { type: "string", description: "the folder to start it in (default: ./<name>, or <package>/<tools|widgets|views>/<name> with --in); it must be empty or not there" },
+    in: { type: "string", description: "a package's folder: start it there, as one of the package's members" },
+    owner: { type: "string", description: "your GitHub login (default: the account `gh` is signed in as; with --in, the package's owner)" },
     json: { type: "boolean" },
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
-    const k = kindNamed(String(args.kind));
-    if (!k) return err(ctx, "usage", `the kind is one of: ${KIND_NAMES}`, 2);
+    const isPackage = String(args.kind) === PACKAGE.kind;
+    const k = isPackage ? null : kindNamed(String(args.kind));
+    if (!isPackage && !k) return err(ctx, "usage", `the kind is one of: ${NEW_KINDS}`, 2);
+    if (isPackage && args.in) return err(ctx, "usage", "a package holds tools, widgets and views, not another package", 2);
     const name = String(args.name);
     if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(name) || name.includes("--")) return err(ctx, "bad_name", `"${name}" is not a name: lowercase letters, digits and single dashes`);
-    const owner = (args.owner ? String(args.owner) : githubLogin())?.replace(/^@/, "").toLowerCase() ?? null;
-    if (!owner) return err(ctx, "no_owner", `pass --owner <your GitHub login>: a ${k.noun} is published under its owner's login`);
-    const id = k.idOf(owner, name);
-    const given = args.dir ? String(args.dir) : name;
-    const dir = path.resolve(given);
-    // Printed as a path, so `install` never reads it as an id on HiveHub.
-    const shown = /^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`;
-    const there = fs.existsSync(dir);
-    if (there && (!fs.statSync(dir).isDirectory() || (await readdir(dir)).length)) return err(ctx, "exists", `${dir} is already there and not an empty folder`);
-    try {
-      for (const [file, text] of Object.entries(k.starter(owner, name))) {
-        await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
-        await writeFile(path.join(dir, file), text);
-      }
-    } catch (e) {
-      // Half a starter is worse than none: what was written goes, the folder too if it was made here.
-      if (there) for (const f of await readdir(dir).catch(() => [])) await rm(path.join(dir, f), { recursive: true, force: true });
-      else await rm(dir, { recursive: true, force: true });
-      return fail(ctx, e, "new_failed");
+    let pkg: PackageFolder | null = null;
+    if (args.in) {
+      try { pkg = await readPackageFolder(String(args.in)); } catch (e) { return fail(ctx, e, "not_a_package"); }
     }
-    const next = [...k.prepare(shown), `hive plugins check ${shown}`, ...k.add(shown), ...(k.onByDefault ? [] : [`hive plugins enable ${k.kind}:${id}`]), ...k.see(id)];
-    return ok(ctx, { kind: k.kind, id, dir, next, prompt: path.join(dir, "PROMPT.md"), guide: k.guide }, () => [
-      `started ${k.noun} ${id} in ${dir}`, "Next:", steps(next),
+    const given = args.owner ? String(args.owner).replace(/^@/, "").toLowerCase() : null;
+    if (pkg && given && given !== pkg.owner) return err(ctx, "not_the_owner", `${pkg.id} is ${pkg.owner}'s: every member of it is @${pkg.owner}/<name>`);
+    const owner = pkg?.owner ?? given ?? githubLogin()?.toLowerCase() ?? null;
+    if (!owner) return err(ctx, "no_owner", `pass --owner <your GitHub login>: a ${k?.noun ?? PACKAGE.noun} is published under its owner's login`);
+    const dir = args.dir ? path.resolve(String(args.dir)) : pkg && k ? path.join(pkg.dir, memberFormat(k.kind)!.list, name) : path.resolve(name);
+    const shown = args.dir ? shownPath(String(args.dir)) : shownFrom(dir);
+    if (pkg && !dir.startsWith(pkg.dir + path.sep)) return err(ctx, "usage", `--dir must be inside the package, ${pkg.dir}`, 2);
+    if (await notEmpty(dir)) return err(ctx, "exists", `${dir} is already there and not an empty folder`);
+
+    if (!k) {
+      const id = `@${owner}/${name}`;
+      try { await writeStarter(dir, packageStarter(owner, name)); } catch (e) { return fail(ctx, e, "new_failed"); }
+      const next = [...KINDS.map((x) => `hive plugins new ${x.kind} <name> --in ${shown}`), `hive plugins add <folder> --to ${shown}`];
+      return ok(ctx, { kind: PACKAGE.kind, id, dir, next, prompt: path.join(dir, "PROMPT.md"), guide: PACKAGE.guide }, () => [
+        `started package ${id} in ${dir}; it holds nothing yet`, "Add its members:", steps(next),
+        `Want an agent to build it? Write your idea into ${shown}/PROMPT.md and hand it that file.`,
+        `Guide: ${PACKAGE.guide}`,
+      ].join("\n"));
+    }
+
+    const id = k.idOf(owner, name);
+    const inPackage = pkg ? { root: path.relative(dir, pkg.dir).split(path.sep).join("/"), id: pkg.id } : undefined;
+    try {
+      await writeStarter(dir, k.starter(owner, name, inPackage));
+      if (pkg) await addEntry(pkg, k, memberPath(pkg, k, dir));
+    } catch (e) { return fail(ctx, e, "new_failed"); }
+    const at = pkg ? shownFrom(pkg.dir) : shown;
+    const next = pkg
+      ? [...k.prepare(shown), `hive plugins check ${at}`, `hive plugins install ${at}`, ...(arrivesOff(pkg) ? [`hive plugins enable ${pkg.id}`] : []), ...k.see(id)]
+      : [...k.prepare(shown), `hive plugins check ${shown}`, ...k.add(shown), ...(k.onByDefault ? [] : [`hive plugins enable ${k.kind}:${id}`]), ...k.see(id)];
+    return ok(ctx, { kind: k.kind, id, dir, ...(pkg ? { package: pkg.id } : {}), next, prompt: path.join(dir, "PROMPT.md"), guide: k.guide }, () => [
+      `started ${k.noun} ${id} in ${dir}${pkg ? `, a member of ${pkg.id}` : ""}`, "Next:", steps(next),
       `Want an agent to build it? Write your idea into ${shown}/PROMPT.md and hand it that file.`,
       `Guide: ${k.guide}`,
     ].join("\n"));
+  },
+});
+
+/** Copy a plugin's folder, without what a build or a checkout leaves beside it. */
+const copyMember = (from: string, to: string) =>
+  fs.cpSync(from, to, { recursive: true, errorOnExist: true, filter: (f) => !["node_modules", ".git"].includes(path.basename(f)) });
+
+const addCmd = defineCommand({
+  meta: { name: "add", description: "Make a plugin already written a member of a package: copied into it when it is outside, and named in its hivemind-package.json" },
+  args: {
+    folder: { type: "positional", required: true, description: "the plugin's folder" },
+    to: { type: "string", required: true, description: "the package's folder" },
+    json: { type: "boolean" },
+  },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    try {
+      const pkg = await readPackageFolder(String(args.to));
+      const from = path.resolve(String(args.folder));
+      if (!fs.existsSync(from) || !fs.statSync(from).isDirectory()) return err(ctx, "not_found", `there is no folder ${from}`);
+      const k = KINDS.find((x) => fs.existsSync(path.join(from, x.manifest)));
+      if (!k) return err(ctx, "not_a_plugin", `${from} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
+      const id = await memberId(k, from);
+      if (!id.startsWith(`@${pkg.owner}/`)) return err(ctx, "not_the_owner", `${k.noun} ${id} is not @${pkg.owner}'s: every member of ${pkg.id} is @${pkg.owner}/<name>. Give it an id of @${pkg.owner}/<name> in its ${k.manifest} first`);
+      const inside = from.startsWith(pkg.dir + path.sep);
+      const dir = inside ? from : path.join(pkg.dir, memberFormat(k.kind)!.list, path.basename(from));
+      if (!inside && fs.existsSync(dir)) return err(ctx, "exists", `${dir} is already there: move the plugin into the package yourself, or remove that folder`);
+      const entry = memberPath(pkg, k, dir);
+      const list = (pkg.manifest[memberFormat(k.kind)!.list] as Array<{ path?: string }> | undefined) ?? [];
+      if (list.some((e) => e.path === entry)) return err(ctx, "already_a_member", `${PACKAGE_MANIFEST} already names ${entry}`);
+      if (!inside) copyMember(from, dir);
+      await addEntry(pkg, k, entry);
+      const at = shownFrom(pkg.dir);
+      const next = [`hive plugins check ${at}`, `hive plugins install ${at}`, ...(arrivesOff(pkg) ? [`hive plugins enable ${pkg.id}`] : []), ...k.see(id)];
+      return ok(ctx, { package: pkg.id, kind: k.kind, id, path: entry, copied: !inside, dir, next }, () => [
+        `added ${k.noun} ${id} to ${pkg.id} as ${entry}${inside ? "" : `, copied from ${from}`}`, "Next:", steps(next),
+      ].join("\n"));
+    } catch (e) { return fail(ctx, e, "add_failed"); }
   },
 });
 
@@ -424,26 +511,28 @@ const removeCmd = defineCommand({
 });
 
 const checkCmd = defineCommand({
-  meta: { name: "check", description: "Check a plugin's folder: its types, its manifest, and its code loaded and drawn once against a fake app. It runs the plugin's own code, as `bun test` would: check only code you would run" },
-  args: { folder: { type: "positional", required: true, description: "the plugin's folder" }, json: { type: "boolean" } },
+  meta: { name: "check", description: "Check a plugin's folder: its types, its manifest, and its code loaded and drawn once against a fake app; of a package's folder, its hivemind-package.json and every member. It runs the plugin's own code, as `bun test` would: check only code you would run" },
+  args: { folder: { type: "positional", required: true, description: "the plugin's or the package's folder" }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
     const dir = path.resolve(String(args.folder));
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return err(ctx, "not_found", `there is no folder ${dir}`);
-    const k = KINDS.find((x) => fs.existsSync(path.join(dir, x.manifest)));
-    if (!k) return err(ctx, "not_a_plugin", `${dir} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
-    if (process.env[DRAW_ALONE] === "1") {
+    const isPackage = fs.existsSync(path.join(dir, PACKAGE_MANIFEST));
+    const k = isPackage ? null : KINDS.find((x) => fs.existsSync(path.join(dir, x.manifest)));
+    if (!isPackage && !k) return err(ctx, "not_a_plugin", `${dir} holds no ${[PACKAGE_MANIFEST, ...KINDS.map((x) => x.manifest)].join(", ")}`);
+    if (k && process.env[DRAW_ALONE] === "1") {
       const problems = await k.draw(dir).catch((e: unknown) => [{ step: "draw", message: `drawing it failed: ${e instanceof Error ? e.message : String(e)}` }]);
       process.stdout.write(JSON.stringify(problems) + "\n");
       process.exit(0);
     }
-    const report = await checkPlugin(k, dir).catch((e: unknown) => fail(ctx, e, "check_failed"));
+    const report = await (k ? checkPlugin(k, dir) : checkPackage(dir)).catch((e: unknown) => fail(ctx, e, "check_failed"));
+    const what = k ? k.noun : `package${"id" in report && report.id ? ` ${report.id}` : ""}`;
     const text = () => [
       ...report.problems.map((p) => `${p.step.padEnd(8)} ${where(p) ? `${where(p)}  ` : ""}${p.message}`),
-      `${report.problems.length ? `${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}` : "ok"}: ${k.noun} in ${dir}`,
-      ...Object.entries(report.steps).map(([step, s]) => `  ${step.padEnd(9)} ${s}`),
+      `${report.problems.length ? `${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}` : "ok"}: ${what} in ${dir}`,
+      ...Object.entries(report.steps).map(([step, s], _, all) => `  ${step.padEnd(Math.max(9, ...all.map(([x]) => x.length + 1)))} ${s}`),
       ...report.notes,
-      "It ran the plugin's own code, in its folder, with only PATH and HOME of your environment.",
+      `It ran ${k ? "the plugin's" : "each member's"} own code, in its folder, with only PATH and HOME of your environment.`,
     ].join("\n");
     // The plugin's code may have left timers or sockets open: what it did is known, so stop here.
     if (!report.problems.length) { ok(ctx, report, text); process.exit(0); }
@@ -465,5 +554,5 @@ const apiCmd = defineCommand({
 
 export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
-  subCommands: { new: newCmd, check: checkCmd, install: installCmd, rollback: rollbackCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
+  subCommands: { new: newCmd, add: addCmd, check: checkCmd, install: installCmd, rollback: rollbackCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });

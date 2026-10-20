@@ -8,6 +8,7 @@ semantic versioning.
 Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
+- Write a package from `hive` alone: `hive plugins new package <name>` starts one with a PROMPT.md, `hive plugins new <kind> <name> --in <package>` and `hive plugins add <folder> --to <package>` add members (another owner's id is refused), and `hive plugins check <package>` checks every member with its own check, each problem at its file and line. The guide has a new Packages page.
 
 - **Settings → Plugins** shows a package that holds several plugins as one row with one switch; open it to see its members. A member can be switched off on its own, and on only while its package is on; each keeps its own settings page.
 - Packages can come from HiveHub: `hive plugins install @owner/name` of a listed package installs every member at once, each file checked against the index, and **Settings → Plugins → HiveHub** lists packages with what each holds, where its code runs and what it asks for before you install. `hive plugins install --json` of a package is unchanged.
