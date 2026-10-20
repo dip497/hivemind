@@ -85,6 +85,9 @@ interface Status {
 }
 /** The host's status; undefined while it is starting. */
 const status = (on: Record<string, string> = env) => data<Status | undefined>(hive(["host", "status", "--json"], { env: on }));
+/** Where the host is reached now: paired, it starts again as the person, at new addresses, which
+ *  its pairing link does not have. */
+const hostAddrs = (on: Record<string, string>) => status(on)?.network?.addrs ?? [];
 
 /** A network with a lookup server and no relays, as its admin signed it, its files in `at`: the
  *  signed profile's file. */
@@ -268,7 +271,7 @@ describe.skipIf(!built)("hive host", () => {
       expect(await until(() => read(path.join(builds, "after.txt")), "the shell to run on")).toBe("finished");
 
       // A device that is not the person's is not let in to start one.
-      const theirs = deviceSessions({ dial: (device) => stranger.dial(device, where), mine: () => true });
+      const theirs = deviceSessions({ dial: (device) => stranger.dial(device, { ...where, addrs: hostAddrs(own) }), mine: () => true });
       await expect(theirs.start({ ...shell, tileId: "hm:t-theirs", args: ["-c", "touch theirs.txt"] }, { data: () => {}, exit: () => {} })).rejects.toThrow();
       expect(fs.existsSync(path.join(builds, "theirs.txt"))).toBe(false);
       theirs.close();
@@ -329,6 +332,7 @@ describe.skipIf(!built)("hive host", () => {
       });
       hostCert = paired.with.certificate;
       await until(() => status(own)?.person === keys.personId || null, "the host to be the laptop's person");
+      where = { addrs: hostAddrs(own), relay: offered.relay };
       laptop.admit(lists.admitted());
 
       // The guest is in, on the laptop. Each connection keeps a copy of its own, and is told where
@@ -393,7 +397,7 @@ describe.skipIf(!built)("hive host", () => {
       expect(await until(() => status(own)?.workspaces.find((w) => w.workspace === workspace) ?? null, "the host to hold it")).toEqual({ workspace, repo: machineUri(keys.deviceId, repo) });
 
       // The guest follows it to the host, as the role they had; the frame says where it runs.
-      const followed = await until(() => follow(offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the host");
+      const followed = await until(() => follow(offered.device, hostAddrs(own)).then((r) => (r.access ? r : null)), "the guest to be let in at the host");
       expect(followed.access).toBe("edit");
       expect(followed.replica.getCore(workspaceUrl(workspace))!.frames[0]!.workspacePath).toBe(machineUri(keys.deviceId, repo));
       // Whoever comes back to the laptop for it is told where it is.
@@ -404,7 +408,7 @@ describe.skipIf(!built)("hive host", () => {
       // The guest changes it at the host.
       const atHost = followed.replica.getCore(workspaceUrl(workspace))!;
       followed.replica.setCore(workspaceUrl(workspace), { ...atHost, frames: atHost.frames.map((f) => ({ ...f, title: "built at the host" })) }, { base: atHost });
-      await until(() => follow(offered.device, offered.addrs).then((r) => r.replica.getCore(workspaceUrl(workspace))?.frames[0]?.title === "built at the host"), "the host to have the guest's change");
+      await until(() => follow(offered.device, hostAddrs(own)).then((r) => r.replica.getCore(workspaceUrl(workspace))?.frames[0]?.title === "built at the host"), "the host to have the guest's change");
 
       // Only the owner's devices ask for it: the guest, who is in it, is refused.
       const asking = await guest.dial(offered.device, where);
@@ -438,10 +442,10 @@ describe.skipIf(!built)("hive host", () => {
         replicate(kept, workspaceUrl(workspace), streamOf(keeping, "sync"), { workspace, changes: () => () => {}, onWelcome: resolve });
       })).toBe("owner");
       keeping.close();
-      const there2 = await until(() => follow(offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the host again");
+      const there2 = await until(() => follow(offered.device, hostAddrs(own)).then((r) => (r.access ? r : null)), "the guest to be let in at the host again");
       const was = there2.replica.getCore(workspaceUrl(workspace))!;
       there2.replica.setCore(workspaceUrl(workspace), { ...was, frames: was.frames.map((f) => ({ ...f, title: "changed while the laptop was away" })) }, { base: was });
-      await until(() => follow(offered.device, offered.addrs).then((r) => r.replica.getCore(workspaceUrl(workspace))?.frames[0]?.title === "changed while the laptop was away"), "the host to have the guest's change");
+      await until(() => follow(offered.device, hostAddrs(own)).then((r) => r.replica.getCore(workspaceUrl(workspace))?.frames[0]?.title === "changed while the laptop was away"), "the host to have the guest's change");
 
       // The host goes. The laptop hosts it again from the copy it kept, one move later, its frame
       // plainly its own, and says so at the lookup server; the guest finds it there and is let in.
@@ -458,7 +462,7 @@ describe.skipIf(!built)("hive host", () => {
       runHost(own);
       await until(() => store.getCore(repo)?.frames[0]?.title === "changed while the laptop was away", "the host to hand over what it had");
       expect(store.getCore(repo)!.frames[0]!.workspacePath).toBe(repo);
-      const late = await until(() => follow(offered.device, offered.addrs).then((r) => r.moved), "the host to say where it is now");
+      const late = await until(() => follow(offered.device, hostAddrs(own)).then((r) => r.moved), "the host to say where it is now");
       expect(late).toMatchObject({ host: keys.deviceId, seq: 5 });
       expect(await guest.verifyHost(key, late.record)).toEqual({ host: keys.deviceId, seq: 5 });
     } finally {
@@ -532,9 +536,10 @@ describe.skipIf(!built)("hive host", () => {
         code: offered.code, offering: offered.device, ask: (hello) => laptop.pair(offered.device, where, hello),
       })).with.certificate;
       await until(() => status(own)?.person === keys.personId || null, "the host to be the laptop's person");
+      where = { addrs: hostAddrs(own), relay: offered.relay };
       laptop.admit(lists.admitted());
       const notice = await hosting.moveTo(repo, offered.device);
-      const atHost = await until(() => enter(guest, offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the guest to be let in at the host");
+      const atHost = await until(() => enter(guest, offered.device, hostAddrs(own)).then((r) => (r.access ? r : null)), "the guest to be let in at the host");
       expect(atHost.access).toBe("edit");
 
       // Someone with a link asks to join while none of the owner's devices is connected there: the
@@ -571,7 +576,7 @@ describe.skipIf(!built)("hive host", () => {
       expect(await client.call("people.answer", url, question.req, true)).toEqual({ answered: true });
       expect(await joining).toEqual({ ok: true, role: "view", workspace });
       expect(await settled).toEqual([url, question.req]);
-      const joined = await until(() => enter(newcomer, offered.device, offered.addrs).then((r) => (r.access ? r : null)), "the newcomer to be let in");
+      const joined = await until(() => enter(newcomer, offered.device, hostAddrs(own)).then((r) => (r.access ? r : null)), "the newcomer to be let in");
       expect(joined.access).toBe("view");
 
       // A new role for the guest, and the newcomer taken off: each one's connection closes.
@@ -580,7 +585,7 @@ describe.skipIf(!built)("hive host", () => {
       await client.call("people.remove", url, newKeys.personId);
       expect(await joined.closed).toContain("removed");
       // Nor are they let in again: the host's network turns them away at the door.
-      expect(await (await enter(newcomer, offered.device, offered.addrs)).closed).toContain("not admitted");
+      expect(await (await enter(newcomer, offered.device, hostAddrs(own))).closed).toContain("not admitted");
 
       // The laptop's list is the host's, the workspace's folder on the laptop its own; only the
       // owner's devices are sent it, the guest asking too.
