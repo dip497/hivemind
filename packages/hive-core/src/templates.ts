@@ -344,6 +344,7 @@ Ids from other registered repos resolve automatically.
 ## Tools, widgets and views (plugins)
 \`\`\`bash
 hive plugins list --json                                   # every plugin, on or off, by id
+hive plugins search git pr --json                          # what HiveHub has, best match first; then \`hive plugins install <id>\`
 hive ctl open-tool @hivemind/web/browser --url https://example.com --json   # a tool's tile beside you (the hive-browser skill drives it)
 hive ctl plugin open widget:@dip497/progress --json        # get one running: tool:…, widget:… or view:…, as plugins list keys it
                                                            # → answers once it can be called: {"widget","instance","state":"ready","commands":[…]}

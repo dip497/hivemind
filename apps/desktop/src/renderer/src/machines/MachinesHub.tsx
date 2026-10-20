@@ -10,6 +10,7 @@ import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { ShowMore, useShowMore } from "../components/ui/show-more";
 import { Switch } from "../components/ui/switch";
 import type { DeviceWorkspace, MachineInfo, PairedDeviceSummary, RemoteDirEntry } from "../../../shared/ipc";
 import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
@@ -524,6 +525,9 @@ function DeviceFolders({ device, onPick }: { device: PairedDeviceSummary; onPick
   );
 }
 
+/** Folders a listing draws before its "Show more"; a folder like node_modules can hold thousands. */
+const FOLDERS_FIRST = 200;
+
 function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; onPick: (uri: string) => void; actionLabel: string }) {
   const base = useMemo(() => machineUri(machine.id), [machine.id]);
   const [dir, setDir] = useState("");
@@ -562,7 +566,9 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
   const open = (d: string) => { pushRecent(machine, d); onPick(machineUri(machine.id, d)); };
   const expand = (p: string) => (p === "~" ? home : p.startsWith("~/") && home ? posixJoin(home, p.slice(2)) : p);
   const q = filter.trim().toLowerCase();
-  const shown = entries.filter((e) => (q.startsWith(".") || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)));
+  const matching = entries.filter((e) => (q.startsWith(".") || !e.name.startsWith(".")) && (!q || e.name.toLowerCase().includes(q)));
+  const [folderLimit, moreFolders] = useShowMore(FOLDERS_FIRST, FOLDERS_FIRST, `${dir}\n${q}`);
+  const shown = matching.slice(0, folderLimit);
   const showRecent = !q && dir === home && recent.length > 0;
   const crumbs = dir.split("/").filter(Boolean);
   useEffect(() => { listRef.current?.querySelector(`[data-row="${cursor}"]`)?.scrollIntoView({ block: "nearest" }); }, [cursor]);
@@ -665,7 +671,7 @@ function FolderPicker({ machine, onPick, actionLabel }: { machine: MachineInfo; 
               >Open</Button>
               <ChevronRight size={13} className="shrink-0 text-[var(--color-fg3)]" />
             </div>
-          ))
+          )).concat(<ShowMore key="more" left={matching.length - shown.length} step={FOLDERS_FIRST} onClick={moreFolders} />)
         )}
       </div>
       <footer className="flex items-center gap-2 px-3 py-2.5 border-t border-[var(--color-line2)]">

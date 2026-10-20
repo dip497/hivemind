@@ -12,7 +12,7 @@ import { toolLabel } from "./settings-nav";
 import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
 import { SettingsForm } from "./plugins/SettingsForm";
 import { ServiceSection } from "./plugins/ServiceSection";
-import { cleanError } from "./settings-plugins";
+import { cleanError } from "./plugins/catalog-install";
 import { PluginRow, type ListedRow } from "./plugins/PluginList";
 import { heldOffByPackage, partOfPackage } from "./plugins/package-rows";
 import type { PluginCategory } from "@hivemind/view-sdk/category";

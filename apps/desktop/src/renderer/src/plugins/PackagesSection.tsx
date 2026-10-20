@@ -14,7 +14,7 @@ import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useToolPackages } from "../tiles/tool-plugins";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { rescan } from "../settings-views";
-import { cleanError } from "../settings-plugins";
+import { cleanError } from "./catalog-install";
 import { PluginRow, type ListedRow } from "./PluginList";
 import { MemberIcon, MEMBER_KIND, RUNS_LABEL } from "./PackageReview";
 import { packageRows, type PackageRow } from "./package-rows";

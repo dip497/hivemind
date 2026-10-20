@@ -1,7 +1,7 @@
 /**
  * Add something: any tool's tile or any widget, and on the canvas an arrow between two things. One
  * dialog wherever it is asked for (the toolbar's Add, the Layers panel's row, a frame's menu), so
- * it works in a view that shows no toolbar.
+ * it works in a view that shows no toolbar. A search also looks on HiveHub for what is not installed.
  */
 import { useEffect, useState } from "react";
 import { MoveUpRight, Sparkles } from "../components/icons";
@@ -11,6 +11,8 @@ import { MenuItem } from "../components/ui/menu-item";
 import type { BoardChoice } from "../board-objects/board-model";
 import { useEnabledWidgetPackages } from "../board-objects/widget-runtime";
 import { WidgetIcon } from "../plugins/WidgetIcon";
+import { FromHiveHub } from "./add-from-hub";
+import { searchPlugins } from "@hivemind/core/plugin-search";
 import { toolKinds, useTilesVersion } from "../tiles";
 import { CATEGORY_LABELS, groupByCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 
@@ -57,7 +59,7 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
     ...widgets.map((w): AddChoice => ({ id: `widget:${w.id}`, name: w.name, type: "widget", category: w.category ?? "other", icon: <WidgetIcon pkg={w} size={14} />, pick: () => onBoard(`widget:${w.id}`) })),
   ];
   const q = query.trim().toLowerCase();
-  const found = choices.filter((c) => (tab === "all" || c.type === tab) && (!q || `${c.name} ${CATEGORY_LABELS[c.category]}`.toLowerCase().includes(q)));
+  const found = q ? searchPlugins(choices.filter((c) => tab === "all" || c.type === tab), q) : choices.filter((c) => tab === "all" || c.type === tab);
   const shelves = groupByCategory(found, (c) => c.category);
   const groups = shelf === "all" ? shelves : shelves.filter(([cat]) => cat === shelf);
   const arrow = boardItems && tab !== "tool" && shelf === "all" && (!q || "arrow".includes(q));
@@ -118,7 +120,8 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
                   <span className="grid size-4 shrink-0 place-items-center [&>svg]:size-3.5"><MoveUpRight /></span><span className="flex-1">Arrow</span>
                 </MenuItem>
               </>}
-              {order.length === 0 && <p className="px-2 py-3 text-label text-[var(--color-fg2)]">Nothing matches.</p>}
+              {order.length === 0 && !q && <p className="px-2 py-3 text-label text-[var(--color-fg2)]">Nothing matches.</p>}
+              <FromHiveHub query={query} tab={tab} shelf={shelf} installedCount={order.length} close={() => setOpen(false)} />
             </div>
           </div>
           {/* Not here yet: an agent makes it. */}

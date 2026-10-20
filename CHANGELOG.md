@@ -8,6 +8,7 @@ semantic versioning.
 Each release is published to [GitHub Releases](https://github.com/dip497/hivemind/releases) with prebuilt artifacts (`hive-linux-x86_64`, `hivemind-<version>-x86_64.AppImage`, `hive-darwin-arm64`, `hivemind-<version>-arm64-mac.zip`).
 
 ## [Unreleased]
+- Search finds every word you type, at the start of a word, closest match first: `git pr` finds Pull requests, the same in Settings → Plugins, the Add menu, `hive plugins search` (new) and on HiveHub. The Add menu's search also lists tools and widgets from HiveHub you have not installed, with Install; HiveHub's list in Settings shows 25 a category with Show more, and long branch and remote folder lists show the first ones with Show more.
 
 ## [2026.10.4] — 2026-10-20
 - Guide: **View as Markdown** and **Copy page** open the page's Markdown again (they went to `/guide/guide/…`), and **Open in ChatGPT, Claude, Cursor or Scira AI** hands the agent the page's Markdown. A how-to's prompt box offers the same agents under **Open in…**, next to **Copy prompt**.

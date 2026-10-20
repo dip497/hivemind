@@ -3,10 +3,11 @@
  * as the Add menu groups them, with its count, and one row per plugin with the same parts. What a row's plugin can be set to
  * is on its own page; the row says only its state.
  */
-import { Fragment, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight } from "../components/icons";
 import { Badge } from "../components/ui/badge";
 import { MenuItem } from "../components/ui/menu-item";
+import { ShowMore } from "../components/ui/show-more";
 import { useSettingsNavigate } from "../settings-panels";
 import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 import { PLUGIN_TABS, TAB_LABEL, type PluginKind, type PluginTab } from "./kinds";
@@ -73,19 +74,23 @@ export function KindTabs({ counts, tab, onChange }: { counts: Record<PluginTab, 
 
 /** Rows under their category's heading, in the Add menu's order. A category with a foot is shown
  *  even with no rows, so what it does by itself stays reachable. Rows with no category (packages)
- *  are one list without a heading. */
-export function CategoryGroups({ groups: listed, feet = {} }: { groups: [PluginCategory | null, ListedRow[]][]; feet?: Partial<Record<PluginCategory, ReactNode>> }) {
+ *  are one list without a heading. With `first`, each list draws that many and a "Show more". */
+export function CategoryGroups({ groups: listed, feet = {}, first = Infinity }: { groups: [PluginCategory | null, ListedRow[]][]; feet?: Partial<Record<PluginCategory, ReactNode>>; first?: number }) {
+  const [limits, setLimits] = useState<Record<string, number>>({});
+  const limitOf = (c: string) => limits[c] ?? first;
+  const rowsOf = (c: string, list: ListedRow[]) => <>
+    {list.slice(0, limitOf(c)).map((r) => <Fragment key={r.key}>{r.row}</Fragment>)}
+    <ShowMore left={list.length - limitOf(c)} step={first} onClick={() => setLimits((m) => ({ ...m, [c]: limitOf(c) + first }))} />
+  </>;
   const plain = listed.find(([c]) => c === null)?.[1];
   if (plain) return <section className="plugins-group" aria-label="Packages" data-plugins-category="package">
-    <div className="plugin-rows">{plain.map((r) => <Fragment key={r.key}>{r.row}</Fragment>)}</div>
+    <div className="plugin-rows">{rowsOf("package", plain)}</div>
   </section>;
   const groups = new Map(listed as [PluginCategory, ListedRow[]][]);
   return <>
     {PLUGIN_CATEGORIES.filter((c) => groups.has(c) || feet[c]).map((c) => {
       const list = groups.get(c) ?? [];
-      return <PluginGroup key={c} category={c} count={list.length} foot={feet[c]}>
-        {list.map((r) => <Fragment key={r.key}>{r.row}</Fragment>)}
-      </PluginGroup>;
+      return <PluginGroup key={c} category={c} count={list.length} foot={feet[c]}>{rowsOf(c, list)}</PluginGroup>;
     })}
   </>;
 }

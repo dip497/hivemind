@@ -18,7 +18,9 @@ import { SETTINGS_PAGES } from "../settings-registry";
 import { useAgentRows } from "../settings-agents";
 import { useViewRows, rescan } from "../settings-views";
 import { useToolRows } from "../settings-tools";
-import { BrowsePlugins, cleanError } from "../settings-plugins";
+import { BrowsePlugins } from "../settings-plugins";
+import { cleanError } from "./catalog-install";
+import { textMatches } from "@hivemind/core/plugin-search";
 import { useHubDescription } from "./library";
 import { rowsInKindTab, type PluginTab } from "./kinds";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./PluginList";
@@ -37,8 +39,7 @@ export function PluginsHome() {
   const setTab = (t: PluginTab) => { setTabState(t); setPluginsTab(t); };
   const [scope, setScopeState] = useState<PluginsScope>(pluginsScope);
   const setScope = (s: PluginsScope) => { setScopeState(s); setPluginsScope(s); };
-  const q = query.trim().toLowerCase();
-  const matches = (text: string) => !q || text.toLowerCase().includes(q);
+  const matches = (text: string) => textMatches(query, text);
   const fromFolder = useAddFromFolder();
   // Read again whenever the window comes back: a plugin added from a terminal shows up.
   useEffect(() => {
@@ -69,7 +70,7 @@ export function PluginsHome() {
       ? <BrowsePlugins query={query} tab={tab} onTab={setTab} />
       : <>
         <InstalledPlugins matches={matches} tab={tab} onTab={setTab} />
-        <p className="settings-empty plugins-none">{tab === "package" && !q
+        <p className="settings-empty plugins-none">{tab === "package" && !query.trim()
           ? "No package holding several plugins is installed."
           : <>Nothing you have matches. <button type="button" className="settings-link" onClick={() => setScope("hub")}>Look on HiveHub</button></>}</p>
       </>}

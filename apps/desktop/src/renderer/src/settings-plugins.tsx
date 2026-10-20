@@ -1,29 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { setViewMode } from "./workspace/view-mode-store";
 import { Blocks, ChevronDown, ChevronRight, LayoutGrid } from "./components/icons";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
 import { Loading } from "./components/ui/loading";
-import { useCommunityReport } from "./workspace/views/community/registry";
-import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
 import { SvgMark } from "./agents";
 import { MaskIcon, catalogImage } from "./plugins/mask-icon";
 import { rescan } from "./settings-views";
-import { permissionWords } from "./plugins/library";
+import { searchPlugins } from "@hivemind/core/plugin-search";
 import { rowsInKindTab, TAB_LABEL, type PluginTab } from "./plugins/kinds";
-import { MemberIcon, MEMBER_KIND, PackageReview, RUNS_LABEL, askedFor } from "./plugins/PackageReview";
+import { MemberIcon, MEMBER_KIND, RUNS_LABEL, askedFor } from "./plugins/PackageReview";
+import { InstallReview, catalogKey, cleanError, useCatalogInstall, useInstalledVersion, type CatalogEntry } from "./plugins/catalog-install";
 import { memberFormat } from "@hivemind/hub";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./plugins/PluginList";
-import { useWidgetPackages } from "./board-objects/widget-runtime";
-import { useToolPackages } from "./tiles/tool-plugins";
 import { useSettingsNavigate } from "./settings-panels";
 
-export const cleanError = (e: unknown): string =>
-  e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': Error: /, "") : "The plugin could not be updated.";
-
-type Entry = Awaited<ReturnType<typeof window.hive.pluginCatalog>>[number];
-type Review = Awaited<ReturnType<typeof window.hive.reviewCatalogPlugin>>;
+type Entry = CatalogEntry;
 
 /** Numeric dotted compare; anything unparsable counts as equal. */
 type Skipped = Awaited<ReturnType<typeof window.hive.pluginCatalogSkipped>>[number];
@@ -56,23 +49,19 @@ export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
   return <span className="catalog-monogram" style={{ "--mark-hue": hue } as CSSProperties}>{entry.id[0]?.toUpperCase()}</span>;
 }
 
+/** Rows a HiveHub category shows before its "Show more", so a catalog of thousands draws a few dozen. */
+const CATALOG_FIRST = 25;
+
 /** What HiveHub lists, found by the Plugins page's search, the open tab's kind under its
  *  categories; each one installed after its review, here or on its own page. */
 export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: PluginTab; onTab: (tab: PluginTab) => void }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [skipped, setSkipped] = useState<Skipped[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [review, setReview] = useState<{ key: string; data: Review } | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<{ key: string; message: string } | null>(null);
-  const [done, setDone] = useState<{ entry: Entry } | null>(null);
   const [outdated, setOutdated] = useState<string[]>([]);
   const [holding, setHolding] = useState<string | null>(null);
-  const reviewRef = useRef<HTMLElement | null>(null);
-  const views = useCommunityReport().packages;
-  const agents = useAgentEntries();
-  const widgets = useWidgetPackages();
-  const tools = useToolPackages().packages;
+  const { review, busy, error, done, reviewRef, startReview, install, cancel } = useCatalogInstall();
+  const installed = useInstalledVersion();
   const go = useSettingsNavigate();
   const load = () => {
     setLoadError(null); setEntries(null);
@@ -87,80 +76,15 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
   useEffect(load, []);
   useEffect(rescan, []);
 
-  // A package is installed when one of its members is, under it.
-  const packageVersion = (id: string): string | null =>
-    [...views.map((v) => v.package), ...widgets.map((w) => w.package), ...tools.map((t) => t.package)].find((p) => p?.id === id)?.version ?? null;
-  const installed = (e: Entry): string | null =>
-    e.type === "package" ? packageVersion(e.id)
-    : e.type === "view" ? views.find((v) => v.id === e.id)?.manifest?.version ?? null
-    // A widget that says no version is older than any listed one.
-    : e.type === "widget" ? (widgets.some((w) => w.id === e.id) ? widgets.find((w) => w.id === e.id)!.version ?? "0.0.0" : null)
-    : e.type === "tool" ? (tools.some((t) => t.id === e.id && t.source === "you") ? tools.find((t) => t.id === e.id && t.source === "you")!.version ?? "0.0.0" : null)
-    : agents.some((a) => a.id === e.id && a.source === "user") ? "installed" : null;
   const q = query.trim().toLowerCase();
-  const shown = (entries ?? []).filter((e) => !q || `${e.name} ${e.description} ${e.author}`.toLowerCase().includes(q));
-  const key = (e: Entry) => `${e.type}:${e.id}`;
+  const shown = searchPlugins(entries ?? [], query);
+  const key = catalogKey;
   // A view says which version it is; an agent does not, so what it has is compared by content
   // instead — the same hash the catalog pins it by.
   const outdatedOf = (e: Entry): boolean => {
     const have = installed(e);
     return e.type === "agent" ? outdated.includes(e.id) : !!have && newer(e.version, have);
   };
-
-  const startReview = async (e: Entry) => {
-    setBusy(key(e)); setError(null); setDone(null); setReview(null);
-    try {
-      setReview({ key: key(e), data: await window.hive.reviewCatalogPlugin(e.type, e.id) });
-      requestAnimationFrame(() => reviewRef.current?.focus());
-    }
-    catch (err) { setError({ key: key(e), message: cleanError(err) }); }
-    finally { setBusy(null); }
-  };
-  const install = async (e: Entry, r: Review) => {
-    setBusy(key(e)); setError(null);
-    try {
-      if (r.type === "view") { await window.hive.installViewPackage(r.token); rescan(); }
-      else if (r.type === "widget") await window.hive.installCatalogWidget(r.token);
-      else if (r.type === "tool") await window.hive.installCatalogTool(r.token);
-      else if (r.type === "package") { await window.hive.installCatalogPackage(r.token); rescan(); }
-      else { await window.hive.installCatalogAgent(r.token); await syncAgentPlugins(); }
-      setReview(null);
-      setDone({ entry: e });
-    } catch (err) { setError({ key: key(e), message: cleanError(err) }); }
-    finally { setBusy(null); }
-  };
-
-  const reviewOf = (e: Entry, open: Review) => <section ref={reviewRef} tabIndex={-1} className="settings-install-review" aria-label={`Review ${e.name}`}>
-    {open.type === "widget" ? <>
-      <p>Adds {open.name}, a widget you put in a workspace from the toolbar's Add menu. {open.code
-        ? "Its code runs in a worker that cannot reach the internet or your files; it hands the app what to draw."
-        : "It has no code: the app draws it from its description."}</p>
-      <p>{open.permissions.length ? <>It may also: {permissionWords(open.permissions).join("; ")}.</> : "It asks for nothing beyond showing itself and what it keeps."}</p>
-      {open.replaces && <p className="settings-note">Replaces the {open.name} you installed before. What each placed one holds is kept.</p>}
-    </> : open.type === "tool" ? <>
-      <p>Adds {open.name}: {open.tools.join(", ")}, opened from a frame or the Add menu. It runs inside Hivemind with the app's access to your files and network, so it is installed switched off. Switch it on from its page once you trust who wrote it.</p>
-      <p>{open.permissions.length ? <>Its tiles may also: {permissionWords(open.permissions).join("; ")}.</> : "Its tiles ask for nothing more."}</p>
-      {open.service && <p>While it is on, it keeps this running: <code className="catalog-flag">{open.service}</code></p>}
-      {open.replacesVersion && <p className="settings-note">Replaces version {open.replacesVersion}. Like any update to a tool, it is switched off until you switch it on again.</p>}
-    </> : open.type === "package" ? <PackageReview review={open} />
-    : open.type === "view" ? <>
-      <p>This view can show workspace names and agent status, and open your existing tools.</p>
-      <p>{open.package.manifest?.permissions.length ? `Additional access: ${open.package.manifest.permissions.join(", ")}` : "No additional access requested."}</p>
-      {open.replacesVersion && <p className="settings-note">Replaces version {open.replacesVersion}. Your saved layout is kept.</p>}
-    </> : <>
-      <p>Adds {open.label}. Each launch runs this in a terminal tile{open.worker ? "" : "; other agents cannot collect its replies"}:</p>
-      <pre className="catalog-command"><code>{open.command}</code></pre>
-      {open.flags.length > 0 && <p>Its launch options can add: {open.flags.map((f) => <code key={f} className="catalog-flag">{f}</code>)}</p>}
-      {open.does.length > 0 && <ul className="catalog-does">{open.does.map((d) => <li key={d}>{d}</li>)}</ul>}
-      <p>No code is installed — it runs the <code>{open.bin}</code> you install yourself.{open.install && <> Get it from <a href={open.install.url} target="_blank" rel="noreferrer">its install page</a>.</>}</p>
-      {open.replaces && <p className="settings-note">Replaces the {open.label} you installed before.</p>}
-    </>}
-    <p className="settings-note">Every file matches the checksum in the catalog index. The index itself is not signed, so install only what you trust.</p>
-    <div className="settings-actions">
-      <Button variant="outline" disabled={busy === key(e)} onClick={() => setReview(null)}>Cancel</Button>
-      <Button disabled={busy === key(e)} onClick={() => void install(e, open)}>{busy === key(e) ? "Installing…" : outdatedOf(e) ? "Update" : "Install"}</Button>
-    </div>
-  </section>;
 
   const { counts, groups } = rowsInKindTab(shown.map((e): ListedRow => {
     const have = installed(e);
@@ -174,7 +98,7 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
         : <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" || catalogImage(e.icon) ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
           badge={have && !update ? "Installed" : undefined} action={action} />}
       {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
-      {open && reviewOf(e, open)}
+      {open && <InstallReview entry={e} review={open} busy={busy === key(e)} update={outdatedOf(e)} reviewRef={reviewRef} onCancel={cancel} onInstall={() => void install(e, open)} />}
     </div> };
   }), tab);
 
@@ -195,7 +119,7 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
     {entries && !groups.length && <p className="settings-empty">
       {q ? <>No {TAB_LABEL[tab].toLowerCase()} on HiveHub match “{query}”.</> : `No ${TAB_LABEL[tab].toLowerCase()} have been published yet.`}
     </p>}
-    <CategoryGroups groups={groups} />
+    <CategoryGroups key={`${tab}:${q}`} groups={groups} first={CATALOG_FIRST} />
     {entries && skipped.length > 0 && <SkippedEntries skipped={skipped} />}
     <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
