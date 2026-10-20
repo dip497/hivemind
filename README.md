@@ -8,6 +8,8 @@
 
 <p align="center"><b>Your agents build the workspace they work in.</b></p>
 
+<p align="center">A desktop app for Linux, macOS and Windows that runs Claude Code, Codex and every coding agent side by side.</p>
+
 <p align="center">
   <a href="https://hivemind.griiken.com/">Website</a> ·
   <a href="https://hivemind.griiken.com/guide/">Guide</a> ·

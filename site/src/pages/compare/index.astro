@@ -1,0 +1,216 @@
+---
+import Shell from "../../layouts/Shell.astro";
+import { HIVEHUB } from "../../hivehub";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const link = (p: string) => `${base}/${p}`;
+const repo = "https://github.com/dip497/hivemind";
+const checked = "20 October 2026";
+const title = "Hivemind vs Conductor, Superset, Orca, cmux and Claude Squad";
+const description =
+  "Apps that run Claude Code, Codex and other coding agents side by side, compared from each one's own site: platforms, license, price, agents, remote use and plugins.";
+
+// Each fact comes from the tool's own site, README, LICENSE or pricing page, read on the date above.
+const tools = [
+  {
+    name: "Hivemind",
+    url: link(""),
+    is: "A desktop app where your coding agents run side by side and build the views, widgets and tools of your workspace.",
+    form: "Desktop app, plus the hive command and an API",
+    runs: "Linux x86_64, macOS (Apple Silicon), Windows x64",
+    license: "MIT, free",
+    agents: "Any coding agent with a command line: Claude Code, Codex, opencode, Cursor, Copilot, Amp, Aider and more",
+    remote: "Other computers over ssh; a phone page in your browser",
+    plugins: "Yes: views, widgets, tools and agents, written by you or your agents",
+    sources: [[repo, "GitHub"], [link("guide/faq/"), "FAQ"]],
+  },
+  {
+    name: "Conductor",
+    url: "https://www.conductor.build",
+    is: "“A Mac app for running Claude Code, Codex, and Cursor agents in parallel across isolated workspaces.”",
+    form: "Desktop app, with cloud workspaces",
+    runs: "macOS",
+    license: "Closed source. Free tier; Pro $50 a month; Teams $60 a user a month",
+    agents: "Claude Code, Codex, Cursor, OpenCode",
+    remote: "Cloud sandboxes and a mobile app on paid plans",
+    plugins: "Not stated",
+    sources: [["https://www.conductor.build", "site"], ["https://www.conductor.build/pricing", "pricing"]],
+  },
+  {
+    name: "Superset",
+    url: "https://superset.sh",
+    is: "“One workspace for orchestrating any coding agent.”",
+    form: "Desktop app, plus a CLI, an SDK and an MCP server",
+    runs: "macOS; Linux (experimental); Windows not yet",
+    license: "Elastic License 2.0 (source available). Free tier and paid seats",
+    agents: "Any command-line coding agent, such as Claude Code, OpenCode and Codex",
+    remote: "Other machines over ssh; cloud workspaces on paid plans; iPhone and iPad app",
+    plugins: "Not stated",
+    sources: [["https://superset.sh", "site"], ["https://github.com/superset-sh/superset", "GitHub"]],
+  },
+  {
+    name: "Orca",
+    url: "https://www.onorca.dev",
+    is: "“The agent development environment.”",
+    form: "Desktop app",
+    runs: "macOS, Windows, Linux",
+    license: "MIT, free",
+    agents: "Claude Code, Codex, Gemini, Cursor CLI, Copilot, OpenCode, Pi and other command-line agents",
+    remote: "Remote development over ssh; iOS and Android companion app",
+    plugins: "Not stated",
+    sources: [["https://www.onorca.dev", "site"], ["https://github.com/stablyai/orca", "GitHub"]],
+  },
+  {
+    name: "cmux",
+    url: "https://cmux.com",
+    is: "“Free and open source macOS terminal for AI coding agents.”",
+    form: "Native terminal app",
+    runs: "macOS",
+    license: "GPL-3.0 (app); free, with a paid edition",
+    agents: "Claude Code, Codex, OpenCode, Gemini CLI, Amp, Aider, Cline and other terminal agents",
+    remote: "ssh workspaces; an iOS app in beta",
+    plugins: "Not stated (has a command-line and socket API)",
+    sources: [["https://cmux.com", "site"], ["https://github.com/manaflow-ai/cmux", "GitHub"]],
+  },
+  {
+    name: "Claude Squad",
+    url: "https://github.com/smtg-ai/claude-squad",
+    is: "“A terminal app that manages multiple Claude Code, Codex, Gemini (and other local agents including Aider) in separate workspaces.”",
+    form: "Terminal app (runs in tmux)",
+    runs: "Not stated; installs with Homebrew or a script",
+    license: "AGPL-3.0, free",
+    agents: "Claude Code by default; Codex, Gemini, Aider or any program you name",
+    remote: "Not stated",
+    plugins: "Not stated",
+    sources: [["https://github.com/smtg-ai/claude-squad", "GitHub"]],
+  },
+  {
+    name: "Emdash",
+    url: "https://emdash.com",
+    is: "“Open-source agentic development environment.”",
+    form: "Desktop app",
+    runs: "macOS, Windows, Linux",
+    license: "Apache-2.0, free",
+    agents: "Claude Code, Codex, Amp, Copilot, OpenCode, Qwen Code, Droid, Cursor and more",
+    remote: "Remote machines over ssh",
+    plugins: "Not stated",
+    sources: [["https://emdash.com", "site"], ["https://github.com/generalaction/emdash", "GitHub"]],
+  },
+];
+
+const rows: [string, keyof (typeof tools)[number]][] = [
+  ["What it is", "is"],
+  ["Kind", "form"],
+  ["Runs on", "runs"],
+  ["License and price", "license"],
+  ["Coding agents", "agents"],
+  ["Other computers and phone", "remote"],
+  ["Your own views, widgets and tools", "plugins"],
+];
+
+const questions = [
+  {
+    q: "Which of these run on Linux and Windows?",
+    a: "Hivemind, Orca and Emdash ship for macOS, Linux and Windows. Superset runs on macOS, with Linux experimental. Conductor and cmux are macOS only.",
+  },
+  {
+    q: "Which are open source?",
+    a: "Hivemind and Orca (MIT), Emdash (Apache-2.0), cmux (GPL-3.0) and Claude Squad (AGPL-3.0). Superset's source is public under the Elastic License 2.0, which is not an open-source license. Conductor is closed source.",
+  },
+  {
+    q: "What does Hivemind do that the others don't say they do?",
+    a: "Your agents add to the app itself. Ask one for a view, a widget or a tool, and it writes a plugin that appears in your workspace while you watch. None of the others above says on its site that you can add your own views, widgets or tools.",
+  },
+  {
+    q: "When is another app the better choice?",
+    a: "Conductor and Superset run agents in cloud workspaces on their paid plans; Hivemind runs them on your own computers, and on machines you reach over ssh. cmux is a native macOS terminal, where Hivemind is an Electron app. Claude Squad stays inside your terminal. Orca and Superset have phone apps; Hivemind's phone page runs in your phone's browser.",
+  },
+];
+
+const page = new URL(link("compare/"), Astro.site).href;
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Hivemind", item: new URL(link(""), Astro.site).href },
+        { "@type": "ListItem", position: 2, name: "Compared with other apps", item: page },
+      ],
+    },
+    {
+      "@type": "FAQPage",
+      "@id": `${page}#faq`,
+      mainEntity: questions.map(({ q, a }) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+    },
+  ],
+};
+---
+<Shell title={title} description={description}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(structuredData).replace(/</g, "\\u003c")}></script>
+  <article class="wrap cmp">
+    <h1>Hivemind and other apps that run coding agents side by side</h1>
+    <p class="lede">
+      Hivemind is a free desktop app where Claude Code, Codex and every other coding agent run side by side, each in a
+      real terminal, and build the views, widgets and tools of your workspace. These apps also run several coding agents
+      at once. Each fact below comes from the app's own site or repository, checked on {checked}.
+    </p>
+
+    <div class="scroll" role="region" aria-label="Comparison table" tabindex="0">
+      <table>
+        <thead>
+          <tr><th scope="col"><span class="sr">Question</span></th>{tools.map((t) => <th scope="col"><a href={t.url}>{t.name}</a></th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, key]) => (
+            <tr><th scope="row">{label}</th>{tools.map((t) => <td>{t[key] as string}</td>)}</tr>
+          ))}
+          <tr><th scope="row">Sources</th>{tools.map((t) => (
+            <td>{(t.sources as string[][]).map(([href, name], i) => <>{i > 0 && ", "}<a href={href}>{name}</a></>)}</td>
+          ))}</tr>
+        </tbody>
+      </table>
+    </div>
+
+    <section class="qa" aria-label="Questions">
+      {questions.map(({ q, a }) => (
+        <>
+          <h2>{q}</h2>
+          <p>{a}</p>
+        </>
+      ))}
+    </section>
+
+    <h2>Not in the table</h2>
+    <p>
+      Crystal is now <a href="https://github.com/stravu/crystal">Nimbalyst</a>. Vibe Kanban's company shut down in
+      April 2026, and <a href="https://vibekanban.com/blog/shutdown">the project carries on</a> as community-maintained
+      open source.
+    </p>
+
+    <p class="sub">
+      Something here out of date? <a href={`${repo}/issues/new`}>Open an issue</a> and it gets fixed.
+      Next: <a href={link("guide/getting-started/")}>install Hivemind and run your first agent</a>, or browse <a href={HIVEHUB}>plugins on HiveHub</a>.
+    </p>
+  </article>
+</Shell>
+
+<style>
+  .cmp{padding-top:56px}
+  .cmp h1{font-size:clamp(32px,4vw,52px);line-height:1.05;max-width:22ch}
+  .cmp h2{font-size:22px;line-height:1.25;margin-top:40px}
+  .cmp h2 + p{margin-top:10px;max-width:72ch}
+  .cmp a{color:var(--fg);text-underline-offset:3px}
+  .scroll{margin-top:36px;overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;font-size:14px;line-height:1.45;min-width:1100px}
+  th,td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+  tr:last-child > *{border-bottom:0}
+  thead th{color:var(--fg);font-weight:600;font-size:15px;background:var(--bg2,transparent)}
+  tbody th{color:var(--fg);font-weight:500;width:150px;position:sticky;left:0;background:var(--bg);z-index:1}
+  thead th:first-child{position:sticky;left:0;background:var(--bg);z-index:1}
+  td:nth-child(2),thead th:nth-child(2){background:color-mix(in oklab,var(--fg) 5%,transparent)}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .qa{margin-top:16px}
+  .cmp .sub{margin-top:40px}
+  @media (max-width:640px){ .cmp{padding:36px 16px 0} }
+</style>

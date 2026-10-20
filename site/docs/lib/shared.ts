@@ -13,6 +13,7 @@ export const downloadUrl = `${siteUrl}/download`;
 
 /** The picture a link to any guide page shows when it is shared: the website's own card. */
 export const ogImage = `${siteUrl}/shots/og.jpg`;
+export const cardAlt = `${appName}: your agents build the workspace they work in`;
 
 /**
  * A guide page's one address, in full, with the trailing slash the export gives every page.

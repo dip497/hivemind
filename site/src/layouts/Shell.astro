@@ -35,7 +35,12 @@ const ogImage = new URL(link("shots/og.jpg"), Astro.site).href;
   <meta property="og:image" content={ogImage} />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Hivemind: your agents build the workspace they work in" />
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content={title} />
+  <meta name="twitter:description" content={description} />
+  <meta name="twitter:image" content={ogImage} />
+  <slot name="head" />
   <link rel="icon" href={link("favicon.svg")} />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -67,7 +72,7 @@ const ogImage = new URL(link("shots/og.jpg"), Astro.site).href;
 
 <footer class="foot">
   <div class="wrap">
-    <p>Hivemind · <a href={repo}>GitHub</a> · <a href={link("guide/")}>Docs</a> · MIT</p>
+    <p>Hivemind · <a href={repo}>GitHub</a> · <a href={link("guide/")}>Docs</a> · <a href={link("compare/")}>Compared with other apps</a> · MIT</p>
   </div>
 </footer>
 
