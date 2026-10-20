@@ -18,6 +18,7 @@ import {
   type PackageMember, type PackageRecord, type PackageVersion,
 } from "./installed-packages.js";
 import { updateSettings } from "./settings.js";
+import { HiveError } from "./storage.js";
 import { pluginKey, type PluginKind } from "./plugin-settings.js";
 
 /** A member as installed: where it is, and what its kind read from it. */
@@ -28,7 +29,19 @@ export interface InstalledPackage {
   members: InstalledMember[];
   /** The version it replaced, if one was installed. */
   replaced: PackageVersion | null;
+  /** The plugins installed on their own that it took over (`replaces`), their settings kept. */
+  tookOver: string[];
 }
+
+/** Refused because a package holds it: one of its plugins cannot be installed, removed or switched
+ *  on apart from it. */
+export class PartOfPackageError extends HiveError {
+  constructor(message: string, readonly packageId: string) {
+    super("part_of_a_package", message);
+  }
+}
+
+const nounOf = (kind: string): string => memberKind(kind)?.noun ?? kind;
 
 const versionOf = (r: PackageVersion): PackageVersion => ({ version: r.version, digest: r.digest, name: r.name, members: r.members });
 
@@ -61,9 +74,17 @@ export async function installPackage(src: string, given: { id?: string } = {}): 
     const dest = versionFolder(read.id, next);
     const installed = await changeInstalledPackages(async (records) => {
       const old = records.find((r) => r.id === read.id);
+      // What it takes over: plugins of its owner installed on their own, each a package of one.
+      const taken = records.filter((r) => read.replaces.includes(r.id) && r.id !== read.id);
+      for (const t of taken) {
+        if (t.members.length !== 1 || t.members[0]!.id !== t.id) throw new PartOfPackageError(`${read.id} replaces ${t.id}, but ${t.id} is a package of ${t.members.length}, not a plugin installed on its own: remove ${t.id} first`, t.id);
+      }
       for (const m of read.members) {
         const owner = packageHolding(records, m.kind, m.id);
-        if (owner && owner.id !== read.id) throw new Error(`${memberKind(m.kind)?.noun ?? m.kind} ${m.id} belongs to the package ${owner.id}: remove ${owner.id} first, or install ${owner.id} again to update it`);
+        if (!owner || owner.id === read.id || taken.includes(owner)) continue;
+        throw new PartOfPackageError(owner.members.length > 1
+          ? `${nounOf(m.kind)} ${m.id} is part of the package ${owner.id}: install ${owner.id} again to update it, or remove ${owner.id} first`
+          : `${nounOf(m.kind)} ${m.id} is installed on its own: add "replaces": ["${owner.id}"] to ${read.id}'s ${"hivemind-package.json"} to take it over, or remove it first`, owner.id);
       }
       if (!existsSync(dest)) {
         await mkdir(path.dirname(dest), { recursive: true });
@@ -77,11 +98,14 @@ export async function installPackage(src: string, given: { id?: string } = {}): 
         ...(old && !same ? { previous: versionOf(old) } : old?.previous ? { previous: old.previous } : {}),
       };
       return {
-        records: [...records.filter((r) => r.id !== read.id), record],
-        result: { record, members: read.members.map((m) => ({ ...m, dir: path.join(dest, m.path) })), replaced: old ? versionOf(old) : null },
+        records: [...records.filter((r) => r.id !== read.id && !taken.includes(r)), record],
+        result: {
+          record, members: read.members.map((m) => ({ ...m, dir: path.join(dest, m.path) })), replaced: old ? versionOf(old) : null,
+          tookOver: taken.map((t) => t.id),
+        },
       };
     });
-    await pruneStore(read.id);
+    for (const t of [read.id, ...installed.tookOver]) await pruneStore(t);
     return installed;
   } finally {
     await rm(staging, { recursive: true, force: true });
@@ -100,10 +124,12 @@ export async function removePackage(id: string): Promise<PackageRecord> {
   return gone;
 }
 
-/** Remove the package that holds plugin `kind:id`. */
+/** Remove plugin `kind:id`, installed on its own: its package of one. One that is part of a
+ *  bigger package is removed only with it. */
 export async function removePlugin(kind: PluginKind, id: string): Promise<PackageRecord> {
   const r = packageHolding(await readInstalledPackages(), kind, id);
-  if (!r) throw new Error(`no ${memberKind(kind)?.noun ?? kind} ${id} is installed`);
+  if (!r) throw new Error(`no ${nounOf(kind)} ${id} is installed`);
+  if (r.members.length > 1) throw new PartOfPackageError(`${nounOf(kind)} ${id} is part of the package ${r.id}: remove the whole package with \`hive plugins remove ${r.id}\``, r.id);
   return removePackage(r.id);
 }
 
@@ -120,18 +146,22 @@ export async function switchPackage(id: string, on: boolean): Promise<PackageRec
 /**
  * Switch plugin `kind:id` on or off, when an installed package holds it, and give that package;
  * null when none does (one that comes with the app, or a repository's), whose switch is its own
- * setting. A package of one is switched as a whole.
+ * setting. A package of one is switched as a whole. One of a bigger package can be switched off
+ * on its own, and on again only while its package is on.
  */
 export async function switchPlugin(kind: PluginKind, id: string, on: boolean): Promise<PackageRecord | null> {
   const r = packageHolding(await readInstalledPackages(), kind, id);
   if (!r) return null;
+  const alone = r.members.length === 1;
+  if (!alone && on && !r.on) throw new PartOfPackageError(`${nounOf(kind)} ${id} is part of the package ${r.id}, which is off: switch the package on with \`hive plugins enable ${r.id}\``, r.id);
   const key = pluginKey(kind, id);
-  // Its own switch is the package's: one left off from before would keep it off for good.
+  // On: nothing of its own keeps it off. Off, in a bigger package: off on its own.
   await updateSettings((cur) => {
     const { [key]: state, ...rest } = cur.plugins.state;
-    if (!state || state.enabled === undefined) return cur;
-    const { enabled: _, ...kept } = state;
-    return { ...cur, plugins: { ...cur.plugins, state: Object.keys(kept).length ? { ...rest, [key]: kept } : rest } };
+    const { enabled: _, ...kept } = state ?? {};
+    const next = !alone && !on ? { ...kept, enabled: false } : kept;
+    if (JSON.stringify(next) === JSON.stringify(state ?? {})) return cur;
+    return { ...cur, plugins: { ...cur.plugins, state: Object.keys(next).length ? { ...rest, [key]: next } : rest } };
   });
-  return switchPackage(r.id, on);
+  return alone ? switchPackage(r.id, on) : r;
 }

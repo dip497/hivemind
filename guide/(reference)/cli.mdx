@@ -36,7 +36,7 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing; `tile look` of a tile something is drawn over |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `part_of_a_package` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing; `tile look` of a tile something is drawn over; `hive plugins` asked to install, remove or switch on one plugin of a package apart from it |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 1 | `FAILED` | other |
 
@@ -189,11 +189,13 @@ hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id: installed as a package
                                         # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable @owner/name
-hive plugins remove <plugin>            # one you added, with its package
+hive plugins remove <plugin>|<package>  # one you added on its own, or a whole package
+                                        # one plugin of a bigger package is refused (exit 7): remove the package
 hive plugins api --kind tool|widget|view   # what its code is given, as the type declarations of this version
 hive plugins list [--kind agent|view|widget|tool]   # every plugin on this machine, on or off, and why any fails to load
 hive plugins show claude                # its settings: each one's value and what it takes
-hive plugins enable @hivemind/web        # or disable
+hive plugins enable @hivemind/web        # or disable; a package by its id switches all it holds
+                                        # one plugin of a package can be switched off alone, on only while its package is on
 hive plugins set @you/board columns all # checked against what the setting takes
 hive plugins reset @you/board [columns] # back to its default
 hive plugins workspaces <tool> <folder>…   # the workspaces a tool's service drives (hive host)

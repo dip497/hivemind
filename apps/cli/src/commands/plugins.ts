@@ -14,7 +14,9 @@
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
  *
- * A plugin is named by its id, or as <kind>:<id> when two kinds have that id.
+ * A plugin is named by its id, or as <kind>:<id> when two kinds have that id. A package is named
+ * by its id, or as package:<id>: remove, enable and disable take one. A plugin that is part of a
+ * bigger package is not installed, removed or switched on apart from it (exit 7).
  *   hive plugins enable <plugin>  |  disable <plugin>
  *   hive plugins set <plugin> <setting> <value>    checked against the setting (a choice, a number…)
  *   hive plugins reset <plugin> [setting]          back to its default (every setting, without one)
@@ -30,7 +32,8 @@ import {
   PLUGIN_KINDS, agentSettingFields, isPluginOn, isPluginId, parseSettingValue, pluginKey, pluginOptions, resolveSettings,
   serviceWorkspaces, toolSettingFields, withPluginState, type PackageOf, type PluginKind, type PluginState, type SettingField,
 } from "@hivemind/core/plugin-settings";
-import { installPackage, removePlugin, switchPlugin, type InstalledPackage } from "@hivemind/core/package-install";
+import { installPackage, removePackage, removePlugin, switchPackage, switchPlugin, type InstalledPackage } from "@hivemind/core/package-install";
+import { readInstalledPackages, type PackageRecord } from "@hivemind/core/installed-packages";
 import { memberKind } from "@hivemind/core/package-kinds";
 import { BUILTIN_WIDGETS } from "@hivemind/core/widget-format";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
@@ -101,6 +104,22 @@ async function find(raw: string): Promise<Plugin> {
   throw new Error(`there is no plugin "${raw}" on this machine (\`hive plugins list\` shows them)`);
 }
 
+/** What remove, enable and disable name: a plugin, or an installed package by its id
+ *  (`package:<id>`, or an id no plugin has). */
+async function findTarget(raw: string): Promise<{ plugin: Plugin } | { package: PackageRecord }> {
+  const records = await readInstalledPackages();
+  if (raw.startsWith("package:")) {
+    const r = records.find((x) => x.id === raw.slice("package:".length));
+    if (!r) throw new Error(`no package ${raw.slice("package:".length)} is installed (\`hive plugins list\` shows them)`);
+    return { package: r };
+  }
+  try { return { plugin: await find(raw) }; } catch (e) {
+    const r = records.find((x) => x.id === raw);
+    if (r) return { package: r };
+    throw e;
+  }
+}
+
 /** One plugin's record changed inside the settings lock, and a running app told. */
 async function change(p: Plugin, fn: (s: PluginState) => PluginState): Promise<{ state: PluginState; reloaded: boolean }> {
   const after = await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state: withPluginState(cur.plugins.state, p.kind, p.id, fn) } }));
@@ -108,8 +127,10 @@ async function change(p: Plugin, fn: (s: PluginState) => PluginState): Promise<{
   return { state: after.plugins.state[p.key] ?? {}, reloaded };
 }
 const note = (reloaded: boolean) => (reloaded ? "app reloaded" : "app not running — applies on next start");
+/** A plugin a package holds, asked to change apart from it, is refused as the control plane
+ *  refuses (exit 7); anything else fails (exit 1). */
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never =>
-  err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e));
+  err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e), e instanceof HiveError && e.code === "part_of_a_package" ? 7 : 1);
 const show = (v: unknown) => (typeof v === "string" ? JSON.stringify(v) : String(v));
 
 const listCmd = defineCommand({
@@ -155,7 +176,13 @@ const switchCmd = (on: boolean) => defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const p = await find(String(args.plugin));
+      const target = await findTarget(String(args.plugin));
+      if ("package" in target) {
+        const r = await switchPackage(target.package.id, on);
+        const reloaded = (await Promise.all([driveCall("settings.reload", [], 5000).then(() => true, () => false), rescanApp(r.members.map((m) => m.kind))]))[0];
+        return ok(ctx, { package: r.id, enabled: on, reloaded }, () => `${r.id} ${on ? "on" : "off"}, with ${r.members.length} plugin${r.members.length === 1 ? "" : "s"}; ${note(reloaded)}`);
+      }
+      const p = target.plugin;
       // One you added is switched with its package; one that comes with the app by its own setting.
       if (p.package) {
         const pkg = await switchPlugin(p.kind, p.id, on);
@@ -327,6 +354,7 @@ const installCmd = defineCommand({
       return ok(ctx, report, () => [
         `installed ${installed.record.id} (${installed.record.name}), version ${installed.record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; ${appNote(rescanned)}`,
         ...installed.members.map((m) => `  ${memberKind(m.kind)?.noun ?? m.kind} ${m.id}${m.permissions.length ? ` (asks for ${m.permissions.join(", ")})` : ""}`),
+        ...installed.tookOver.map((t) => `It took over ${t}, installed on its own before; what you set it to is kept.`),
         installed.record.on ? "It is on." : "It is off until you switch it on, if you trust who wrote it.",
         "Next:", steps(report.next),
       ].join("\n"));
@@ -337,11 +365,11 @@ const installCmd = defineCommand({
 /** What `install` says it did, for a person and as --json. */
 function installReport(installed: InstalledPackage, rescanned: boolean) {
   const { record } = installed;
-  const next = [...(record.on ? [] : [`hive plugins enable ${record.members[0]!.kind}:${record.members[0]!.id}`]), ...installed.members.flatMap((m) => kindNamed(m.kind)?.see(m.id) ?? [])];
+  const next = [...(record.on ? [] : [`hive plugins enable ${record.members.length === 1 ? `${record.members[0]!.kind}:${record.members[0]!.id}` : record.id}`]), ...installed.members.flatMap((m) => kindNamed(m.kind)?.see(m.id) ?? [])];
   return {
     id: record.id, name: record.name, version: record.version, digest: record.digest, on: record.on,
     members: installed.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, dir: m.dir, permissions: m.permissions })),
-    replaced: installed.replaced?.version ?? null, rescanned, next,
+    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, rescanned, next,
   };
 }
 
@@ -351,12 +379,18 @@ const removeCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const p = await find(String(args.plugin));
+      const target = await findTarget(String(args.plugin));
+      const said = (gone: PackageRecord, rescanned: boolean) => ok(ctx, { package: gone.id, removed: gone.members.map((m) => `${m.kind}:${m.id}`), rescanned },
+        () => `removed ${gone.id} (${gone.members.map((m) => `${m.kind}:${m.id}`).join(", ")}); ${appNote(rescanned)}`);
+      if ("package" in target) {
+        const gone = await removePackage(target.package.id);
+        return said(gone, await rescanApp(gone.members.map((m) => m.kind)));
+      }
+      const p = target.plugin;
       if (p.kind === "agent") throw new Error(`${p.key} is an agent: \`hive agents remove ${p.id}\``);
       if (!p.package) throw new Error(p.kind === "widget" && BUILTIN_WIDGETS.some((b) => b.id === p.id) || p.kind === "tool" ? "it comes with the app" : `${p.key} was not installed with \`hive plugins install\`: it comes with the app or with this repository`);
       const gone = await removePlugin(p.kind, p.id);
-      const rescanned = await rescanApp(gone.members.map((m) => m.kind));
-      return ok(ctx, { key: p.key, package: gone.id, removed: gone.members.map((m) => `${m.kind}:${m.id}`), rescanned }, () => `removed ${gone.id} (${gone.members.map((m) => `${m.kind}:${m.id}`).join(", ")}); ${appNote(rescanned)}`);
+      return said(gone, await rescanApp(gone.members.map((m) => m.kind)));
     } catch (e) { return fail(ctx, e, "remove_failed"); }
   },
 });

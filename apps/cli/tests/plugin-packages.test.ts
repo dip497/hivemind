@@ -56,4 +56,20 @@ describe("hive plugins, packages", () => {
     });
     expect(run("list").stdout).toMatch(/^off\s+widget:@acme\/dog\s+Dog\s+\[@acme\/kit 1\.0\.0, off\]$/m);
   }, 60_000);
+
+  test("one plugin of a package is refused apart from it, exit 7, naming the package; the package is switched and removed whole", () => {
+    expect(run("install", kit(), "--json").code).toBe(0);
+    const removing = run("remove", "widget:@acme/dog");
+    expect([removing.code, removing.stderr]).toEqual([7, expect.stringContaining("[part_of_a_package] widget @acme/dog is part of the package @acme/kit: remove the whole package with `hive plugins remove @acme/kit`")]);
+    expect(run("enable", "widget:@acme/dog", "--json")).toMatchObject({ code: 7, json: { ok: false, code: "part_of_a_package", error: "widget @acme/dog is part of the package @acme/kit, which is off: switch the package on with `hive plugins enable @acme/kit`" } });
+    const dog = path.join(tmp, "dog");
+    fs.mkdirSync(dog);
+    fs.writeFileSync(path.join(dog, "widget.json"), JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "woof" } }));
+    expect(run("install", dog, "--json")).toMatchObject({ code: 7, json: { code: "part_of_a_package", error: expect.stringContaining("is part of the package @acme/kit") } });
+
+    expect(run("enable", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { package: "@acme/kit", enabled: true } } });
+    expect(run("list").stdout).toMatch(/^on \s+widget:@acme\/dog\s+Dog\s+\[@acme\/kit 1\.0\.0\]$/m);
+    expect(run("remove", "@acme/kit", "--json")).toMatchObject({ code: 0, json: { data: { package: "@acme/kit", removed: expect.arrayContaining(["widget:@acme/dog", "tool:@acme/prs"]) } } });
+    expect(run("list", "--kind", "widget").stdout).not.toContain("@acme/dog");
+  }, 60_000);
 });

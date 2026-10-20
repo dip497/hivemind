@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { installPackage, removePlugin, switchPlugin } from "./package-install.js";
+import { installPackage, removePlugin, switchPackage, switchPlugin } from "./package-install.js";
 import { packagesDir, readInstalledPackages } from "./installed-packages.js";
 import { listWidgets } from "./widgets.js";
 import { listToolPackages } from "./tool-packages.js";
@@ -133,6 +133,36 @@ test("a member whose id has another owner is refused, and nothing is installed",
 
 test("a member another installed package holds is refused, naming that package", async () => {
   await installPackage(bundle());
-  await expect(installPackage(bundle("pets"))).rejects.toThrow("tool plugin @acme/prs belongs to the package @acme/kit");
+  await expect(installPackage(bundle("pets"))).rejects.toThrow("tool plugin @acme/prs is part of the package @acme/kit: install @acme/kit again to update it, or remove @acme/kit first");
   expect((await readInstalledPackages()).map((r) => r.id)).toEqual(["@acme/kit"]);
+});
+
+test("one plugin of a bigger package is not removed apart from it, and is switched on only while its package is on", async () => {
+  await installPackage(bundle());
+  await expect(removePlugin("widget", "@acme/dog")).rejects.toMatchObject({ code: "part_of_a_package", message: "widget @acme/dog is part of the package @acme/kit: remove the whole package with `hive plugins remove @acme/kit`" });
+  await expect(switchPlugin("widget", "@acme/dog", true)).rejects.toThrow("widget @acme/dog is part of the package @acme/kit, which is off: switch the package on with `hive plugins enable @acme/kit`");
+  await switchPackage("@acme/kit", true);
+  await switchPlugin("widget", "@acme/dog", false);
+  const dog = () => listWidgets().then((all) => all.find((w) => w.id === "@acme/dog")!);
+  const on = async () => isPluginOn((await readSettings()).plugins.state, "widget", await dog());
+  expect([(await readInstalledPackages())[0]!.on, await on()]).toEqual([true, false]);
+  await switchPlugin("widget", "@acme/dog", true);
+  expect(await on()).toBe(true);
+});
+
+test("a plugin installed on its own is taken over only by a package that says it replaces it, and keeps its settings", async () => {
+  const dog = folder("dog", { "widget.json": JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "woof" } }) });
+  await installPackage(dog);
+  fs.writeFileSync(process.env.HIVE_SETTINGS!, JSON.stringify({ plugins: { state: { "widget:@acme/dog": { options: { bark: "loud" } } } } }));
+  await expect(installPackage(bundle())).rejects.toThrow('widget @acme/dog is installed on its own: add "replaces": ["@acme/dog"] to @acme/kit\'s hivemind-package.json to take it over, or remove it first');
+  fs.rmSync(path.join(tmp, "kit"), { recursive: true });
+  const { tookOver } = await installPackage(bundle("kit", "acme", { replaces: ["@acme/dog"] }));
+  expect(tookOver).toEqual(["@acme/dog"]);
+  expect((await readInstalledPackages()).map((r) => r.id)).toEqual(["@acme/kit"]);
+  expect(fs.existsSync(path.join(packagesDir(), "store", "acme--dog"))).toBe(false);
+  expect((await readSettings()).plugins.state["widget:@acme/dog"]).toEqual({ options: { bark: "loud" } });
+});
+
+test("a package replaces only its own owner's plugins", async () => {
+  await expect(installPackage(bundle("kit", "acme", { replaces: ["@mallory/dog"] }))).rejects.toThrow("replaces: @mallory/dog is not @acme's");
 });

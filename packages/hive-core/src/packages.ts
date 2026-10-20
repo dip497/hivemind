@@ -20,6 +20,8 @@ const schema = z.strictObject({
   id: z.string().regex(MEMBER_ID, "is @owner/name"),
   name: label,
   version: z.string().regex(VERSION),
+  /** Plugins of its owner installed on their own, which it takes over with their settings. */
+  replaces: z.array(z.string().regex(MEMBER_ID, "is @owner/name")).max(16).default([]),
   ...Object.fromEntries(MEMBER_KINDS.map((k) => [k.list, z.array(k.entry).max(k.most).default([])])),
   startup: z.strictObject({
     view: z.string().optional(),
@@ -33,6 +35,7 @@ export interface PackageManifest {
   id: string;
   name: string;
   version: string;
+  replaces: string[];
   startup?: { view?: string; agents: string[]; maxConcurrent: number };
   /** The members, by the list each kind is named in (`tools`, `widgets`, `views`, `agents`). */
   [list: string]: unknown;
@@ -45,6 +48,9 @@ export function parsePackageManifest(raw: unknown): PackageManifest {
   const result = schema.safeParse(raw);
   if (!result.success) return fail(result.error.issues.map((e) => `${e.path.join(".") || "manifest"}: ${e.message}`).join("; "));
   const m = result.data as unknown as PackageManifest;
+  const owner = m.id.slice(0, m.id.indexOf("/"));
+  for (const r of m.replaces) if (!r.startsWith(`${owner}/`)) fail(`replaces: ${r} is not ${owner}'s; a package takes over only its own owner's plugins`);
+  unique(m.replaces, "replaces");
   if (MEMBER_KINDS.every((k) => !listOf(m, k.list).length)) fail(`package must hold a ${MEMBER_KINDS.map((k) => k.noun).join(", ")}`);
   for (const k of MEMBER_KINDS) unique(listOf(m, k.list).map((e) => { const x = e as { path?: string; id?: string }; return x.path ?? x.id ?? ""; }), `${k.noun} in ${k.list}`);
   if (m.startup) {
@@ -70,6 +76,8 @@ export interface PackageRead {
   name: string;
   version: string;
   members: PackageMemberRead[];
+  /** The packages of one it takes over (`replaces`). */
+  replaces: string[];
   /** Its `hivemind-package.json`; null for a package of one. */
   manifest: PackageManifest | null;
 }
@@ -94,12 +102,12 @@ export async function readPackage(dir: string, given: { id?: string; folder: str
       }
     }
     unique(members.map((x) => `${x.kind}:${x.id}`), "member id");
-    return { id: m.id, name: m.name, version: m.version, members, manifest: m };
+    return { id: m.id, name: m.name, version: m.version, members, replaces: m.replaces, manifest: m };
   }
   const k = MEMBER_KINDS.find((x) => x.manifest && existsSync(path.join(dir, x.manifest)));
   if (!k) return fail(`it holds no ${[PACKAGE_MANIFEST, ...MEMBER_KINDS.flatMap((x) => x.manifest ?? [])].join(", ")}`);
   const c = await k.check(dir, { path: "." }, given);
-  return { id: c.id, name: c.name, version: c.version && VERSION.test(c.version) ? c.version : "0.0.0", members: [{ ...c, kind: k.kind }], manifest: null };
+  return { id: c.id, name: c.name, version: c.version && VERSION.test(c.version) ? c.version : "0.0.0", members: [{ ...c, kind: k.kind }], replaces: [], manifest: null };
 }
 
 /** Folders a package never carries: what a build or a checkout leaves beside the plugin. */

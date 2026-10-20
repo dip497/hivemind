@@ -95,7 +95,12 @@ each tool, widget and view, each with its own manifest, and the agent presets it
 ```
 
 Every member's id has the package's owner (`@you/…`). Installing checks each member as its kind
-is checked, and refuses one whose id another installed package holds. A package that holds a tool
+is checked, and refuses one whose id another installed package holds.
+
+A plugin that is part of a package changes only with it. Installing it, removing it or switching
+it on apart from its package is refused, naming the package. You can switch one off on its own,
+and on again while its package is on. A plugin you installed on its own before is taken over
+only by a package that lists it in `"replaces": ["@you/name"]`; what you set it to is kept. A package that holds a tool
 or an agent preset arrives switched off. `hive plugins list` shows which package each plugin
 belongs to.
 
