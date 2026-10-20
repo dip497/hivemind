@@ -60,6 +60,7 @@ To track work as Markdown files in `.hivemind/`. These work without the app. Gui
 hive init --prefix MYP [--no-agentic]   # create tracker (+ agentic stack by default)
 hive init                               # refresh the agentic stack
 hive add skill                          # refresh the skills only
+hive guide agents                       # print the agent guide this hive ships (also work, browser, workflow)
 
 hive new "Title" [--label l …] [--parent ID] [--state backlog] [--github N]
           [--assignee claude --assignee-type agent] [--assignee-model m]
@@ -132,7 +133,7 @@ hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is 
 hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
 hive ctl wake [tile|frame]              # back in its conversation; exit 7 if nothing woke
 hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing
-hive ctl connect <src> <dst>            # pipe src's replies into dst's input
+hive ctl connect <src> <dst>            # src's finished replies go to dst's inbox; dst is told by one line typed into it, which starts a turn
 hive ctl disconnect <src> [<dst>]
 hive ctl open-tool <owner/name/tool> [--frame f] [--url https://…]
                                         # open a tile of a tool that is switched on

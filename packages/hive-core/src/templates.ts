@@ -315,7 +315,7 @@ hive ctl approve <reqId> allow --json                       # allow | deny | alw
 
 ## Connect two agents
 \`\`\`bash
-hive ctl connect <srcTileId> <dstTileId> --json    # src's finished replies go to dst's inbox
+hive ctl connect <srcTileId> <dstTileId> --json    # src's finished replies go to dst's inbox; one line typed into dst tells it (a turn of its own)
 hive ctl disconnect <srcTileId> [<dstTileId>]
 \`\`\`
 

@@ -439,8 +439,8 @@ const rename = sub("rename", "Name an agent; with no name, take its name away",
   { ...tileArg, name: { type: "positional", required: false, description: "the name every surface shows it by" } },
   (a) => onDrive((d) => d.call("agent.rename", [a.tileId, a.name ?? ""])));
 
-const connect = sub("connect", "Pipe src agent's replies into dst agent's input",
-  { src: { type: "positional", required: true }, dst: { type: "positional", required: true } },
+const connect = sub("connect", "Send src agent's finished replies to dst's inbox, not its input: dst is told by one line typed into it (\"[hive] Your agents sent you messages. Read them: hive ctl inbox\"), which starts a turn of its own",
+  { src: { type: "positional", required: true, description: "the agent whose replies are sent, by its tile id" }, dst: { type: "positional", required: true, description: "the agent whose inbox gets them, by its tile id" } },
   (a) => onDrive(async (d) => {
     await d.call("link.connect", [a.src, a.dst]);
     return { connected: { src: String(a.src), dst: String(a.dst) } };
