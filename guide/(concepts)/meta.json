@@ -10,6 +10,7 @@
     "background-process",
     "hive-cli",
     "plugins",
+    "hub-index",
     "how-devices-connect",
     "phone-page",
     "remote-machines",
