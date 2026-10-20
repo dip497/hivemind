@@ -32,11 +32,21 @@ const cssUrls = (css) =>
   [...css.replace(/url\(\s*(?:"data:[^"]*"|'data:[^']*'|data:[^)]*)\s*\)/g, "").matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)]
     .map(([, value]) => ({ attr: "url()", value: decode(value) }));
 
+/** Script bodies and comments hold no links; repeated until nothing changes, so no fragment is left. */
+function stripScriptsAndComments(html) {
+  let prev;
+  do {
+    prev = html;
+    html = html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script[^>]*>/gi, "$1").replace(/<!--[\s\S]*?--!?>/g, "");
+  } while (html !== prev);
+  return html;
+}
+
 /** Each link in an HTML page, with the attribute it sits in, and the ids its #anchors can point at. */
 function readHtml(html) {
   const links = [];
   const ids = new Set();
-  const body = html.replace(/(<script\b[^>]*>)[\s\S]*?<\/script>/gi, "$1").replace(/<!--[\s\S]*?-->/g, "");
+  const body = stripScriptsAndComments(html);
   for (const [, tag, attrText] of body.matchAll(/<([a-zA-Z][\w-]*)\b([^>]*)>/g)) {
     const attrs = {};
     for (const [, name, value] of attrText.matchAll(/([\w:-]+)="([^"]*)"/g)) attrs[name.toLowerCase()] = decode(value);

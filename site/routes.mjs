@@ -45,6 +45,7 @@ export function answerFor(url, root) {
     // /guide/faq and /guide/faq/ are one page; search engines should only ever see the second.
     // Built from the normalized path, never the raw one: "//host" must not become a redirect off-site.
     const location = `${encodeURI(hit.clean)}/${query !== undefined ? `?${query}` : ""}`;
+    if (!location.startsWith("/") || location.startsWith("//") || location.startsWith("/\\")) return null;
     return { status: 301, location, cache: "public, max-age=86400" };
   }
   return { file: hit.file, path: hit.path };
