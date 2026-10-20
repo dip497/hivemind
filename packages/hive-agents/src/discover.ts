@@ -150,6 +150,9 @@ function killTree(pid: number | undefined): void {
   try { process.kill(-pid, "SIGKILL"); } catch { /* already gone */ }
 }
 
+/** A probe that ran out of time: the CLI may only have started slowly, so it is no verdict. */
+class DidNotFinish extends Error {}
+
 function run(file: string, args: string[], opts: { stderr: boolean; timeoutMs?: number }): Promise<{ code: number | null; out: string }> {
   return new Promise((resolve, reject) => {
     // npm's .cmd shims need a shell on Windows; args here are fixed tokens, never user text.
@@ -166,7 +169,7 @@ function run(file: string, args: string[], opts: { stderr: boolean; timeoutMs?: 
     child.stderr.on("data", (b: Buffer) => take(b, "err"));
     const timer = setTimeout(() => {
       killTree(child.pid);
-      reject(new Error(`${path.basename(file)} ${args.join(" ")} did not finish in ${(opts.timeoutMs ?? TIMEOUT_MS) / 1000}s`));
+      reject(new DidNotFinish(`${path.basename(file)} ${args.join(" ")} did not finish in ${(opts.timeoutMs ?? TIMEOUT_MS) / 1000}s`));
     }, opts.timeoutMs ?? TIMEOUT_MS);
     child.on("error", (e) => { clearTimeout(timer); reject(e); });
     child.on("close", (code) => {
@@ -211,8 +214,10 @@ export function verifyAgent(def: AgentProviderDef): Promise<AgentPresence> {
   return hit;
 }
 
-async function probe(file: string, options: readonly AgentOption[]): Promise<Record<string, OptionChoices>> {
-  const help = run(file, ["--help"], { stderr: true }).then((r) => r.out, () => "");
+/** The choices of each option, and whether any command ran out of time. */
+async function probe(file: string, options: readonly AgentOption[]): Promise<{ choices: Record<string, OptionChoices>; timedOut: boolean }> {
+  let timedOut = false;
+  const help = run(file, ["--help"], { stderr: true }).then((r) => r.out, (e: unknown) => { if (e instanceof DidNotFinish) timedOut = true; return ""; });
   const entries = await Promise.all(options.map(async (o): Promise<[string, OptionChoices]> => {
     let error: string | undefined;
     if (o.list) {
@@ -221,12 +226,15 @@ async function probe(file: string, options: readonly AgentOption[]): Promise<Rec
         const values = code === 0 ? choicesFromList(out, o.list) : [];
         if (values.length) return [o.id, { values, from: "list" }];
         if (code !== 0) error = `${path.basename(file)} ${o.list.args.join(" ")} failed`;
-      } catch (e) { error = (e as Error).message; }
+      } catch (e) {
+        if (e instanceof DidNotFinish) timedOut = true;
+        error = (e as Error).message;
+      }
     }
     const values = o.flag ? choicesFromHelp(await help, o.flag) : [];
     return [o.id, { values, from: values.length ? "help" : null, ...(error ? { error } : {}) }];
   }));
-  return Object.fromEntries(entries);
+  return { choices: Object.fromEntries(entries), timedOut };
 }
 
 export async function discoverOptions(def: AgentProviderDef): Promise<Record<string, OptionChoices>> {
@@ -240,7 +248,10 @@ export async function discoverOptions(def: AgentProviderDef): Promise<Record<str
   const key = `${def.id}\0${keyOf(presence.path)}`;
   let hit = probes.get(key);
   if (!hit) {
-    hit = probe(presence.path, options);
+    hit = probe(presence.path, options).then(({ choices, timedOut }) => {
+      if (timedOut) probes.delete(key); // ask again next time, as verifyAgent does
+      return choices;
+    });
     probes.set(key, hit);
   }
   return hit;

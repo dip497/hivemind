@@ -34,9 +34,12 @@ export function stopEverything(): Promise<void> {
 }
 
 async function question(): Promise<QuitQuestion> {
-  const running = await runningSessions();
+  const elsewhere = sessionsKeptElsewhere().filter((id) => isAgentTile(id)).length;
+  // A background process too busy to answer may still be running agents: ask rather than guess none.
+  const running = await runningSessions().catch(() => null);
+  if (!running) return { agents: 0, terminals: 0, elsewhere, uncounted: true };
   const agents = running.filter((s) => isAgent(s)).length;
-  return { agents, terminals: running.length - agents, elsewhere: sessionsKeptElsewhere().filter((id) => isAgentTile(id)).length };
+  return { agents, terminals: running.length - agents, elsewhere };
 }
 
 /** A person asked to quit: from `win`, by its keys, by closing the last window, or from the app's commands. */
@@ -44,9 +47,10 @@ export async function askToQuit(win: BrowserWindow | null): Promise<void> {
   if (asking && !asking.isDestroyed()) return void asking.focus();
   const choice = getSettings().quit.whenRunning;
   if (choice === "keep-running") return void app.quit();
-  const q = await question();
-  if (q.agents + q.terminals === 0) return void app.quit();
+  // Stopping needs no count: a busy background process that answers late still stops.
   if (choice === "stop-everything") return quitAndStopEverything();
+  const q = await question();
+  if (!q.uncounted && q.agents + q.terminals === 0) return void app.quit();
   // A window that cannot show the question quits as quitting always has.
   if (!win || win.isDestroyed() || win.webContents.isCrashed()) return void app.quit();
   asking = win;
