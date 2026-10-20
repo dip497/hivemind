@@ -117,7 +117,7 @@ test("each category is one heading with its count, in the Add menu's order, and 
   // Every agent is under Agents; a tool is under its tile's category, as in the Add menu; a widget
   // under its own; a view that comes with the app says none.
   expect(under(mine, "agent:claude")).toEqual(["Agents"]);
-  expect(under(mine, "tool:hivemind/code")).toEqual(["Code"]);
+  expect(under(mine, "tool:@hivemind/code")).toEqual(["Code"]);
   expect(under(mine, "widget:note")).toEqual(["Productivity"]);
   expect(under(mine, "view:canvas")).toEqual(["Other"]);
 
@@ -134,8 +134,8 @@ test("each category is one heading with its count, in the Add menu's order, and 
   // Installed, its program missing: not "Not installed" under Installed.
   expect(badge("agent:codex")).toEqual(["badge:Needs setup"]);
   expect(badge("view:canvas")).toEqual(["badge:In use"]);
-  expect(badge("tool:hivemind/web")).toEqual(["badge:Off"]);
-  expect(badge("tool:hivemind/code")).toEqual([]);
+  expect(badge("tool:@hivemind/web")).toEqual(["badge:Off"]);
+  expect(badge("tool:@hivemind/code")).toEqual([]);
   await expect(body().locator("[data-plugin-row]").filter({ hasText: "worker" })).toHaveCount(0);
 
   await show("HiveHub");

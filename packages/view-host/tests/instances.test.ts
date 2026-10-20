@@ -31,6 +31,16 @@ test("a plugin is starting until its code connects, then ready; one disabled is 
   expect(p.list()).toEqual([]);
 });
 
+test("a plugin has not drawn until its host says it painted; drawing again changes nothing", () => {
+  const p = new PluginInstances();
+  const w = p.start(plugin());
+  w.connected();
+  expect(p.list()[0]!.drew).toBe(false);
+  w.drew();
+  w.drew();
+  expect(p.list()[0]!.drew).toBe(true);
+});
+
 test("a plugin whose code does not connect in time is failed, saying so; one that connects in time is not", () => {
   const p = new PluginInstances();
   p.start(plugin());
@@ -64,18 +74,18 @@ test("each refusal carries the code an agent's exit status is made from", async 
   const p = new PluginInstances();
   const failed = p.start(plugin({ plugin: "agent-board", kind: "view", instance: "agent-board" }));
   failed.disabled("12 malformed or unauthorised messages");
-  p.start(plugin({ plugin: "dip497/worktrees", kind: "tool", instance: "tile-a", label: "Worktrees" })).connected();
-  p.start(plugin({ plugin: "dip497/worktrees", kind: "tool", instance: "tile-b", label: "Worktrees 2" })).connected();
+  p.start(plugin({ plugin: "@dip497/worktrees", kind: "tool", instance: "tile-a", label: "Worktrees" })).connected();
+  p.start(plugin({ plugin: "@dip497/worktrees", kind: "tool", instance: "tile-b", label: "Worktrees 2" })).connected();
   p.start(plugin({ instance: "widget-1" }));
   const by = Date.now() + 30_000;
   const slow = refusal(p.call("@dip497/progress", "add", null, undefined, Date.now() + 2_000));
   jest.advanceTimersByTime(2_000);
   expect([
-    await refusal(p.call("nobody/nothing", "list", null, undefined, by)),
-    await refusal(p.call("dip497/worktrees", "launch", null, "tile-a", by)),
-    await refusal(p.call("dip497/worktrees", "add", null, "tile-z", by)),
-    await refusal(p.call("dip497/worktrees", "add", null, undefined, by)),
-    await refusal(p.call("dip497/worktrees", "add", "x".repeat(70_000), "tile-a", by)),
+    await refusal(p.call("@nobody/nothing", "list", null, undefined, by)),
+    await refusal(p.call("@dip497/worktrees", "launch", null, "tile-a", by)),
+    await refusal(p.call("@dip497/worktrees", "add", null, "tile-z", by)),
+    await refusal(p.call("@dip497/worktrees", "add", null, undefined, by)),
+    await refusal(p.call("@dip497/worktrees", "add", "x".repeat(70_000), "tile-a", by)),
     await refusal(p.call("agent-board", "add", null, undefined, by)),
     await slow,
   ].map((r) => r?.[0])).toEqual(["NOT_FOUND", "NOT_FOUND", "NOT_FOUND", "BAD_REQUEST", "BAD_REQUEST", "FAILED", "TIMEOUT"]);

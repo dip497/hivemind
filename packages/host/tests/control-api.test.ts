@@ -51,7 +51,7 @@ test("each method is the control plane's work, its answer in the API's shape", a
     ["keys", "t1", ["y", "Enter"]],
     ["read", "t1", 5_000],
     ["sessions", "claude", "/work/api", 3],
-    ["openTool", undefined, "/work/api", "a/b/c", { frame: undefined, url: "https://x" }],
+    ["openTool", undefined, "/work/api", "a/b/c", { frame: undefined, url: "https://x", state: undefined }],
     ["connect", "t1", "t2"],
     ["disconnect", "t1", undefined],
     ["rescan", "tools"],

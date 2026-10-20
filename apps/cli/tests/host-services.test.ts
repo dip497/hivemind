@@ -33,7 +33,7 @@ async function until<T>(get: () => T | null | undefined | false, what: string, m
   throw new Error(`timed out waiting for ${what}; log:\n${log()}`);
 }
 const log = () => { try { return fs.readFileSync(path.join(data, "services", "acme--watcher.log"), "utf8"); } catch { return ""; } };
-const ours = () => ((run("grant", "list").json as { data?: Array<{ plugin?: string; repos: string[]; role: string }> }).data ?? []).filter((g) => g.plugin === "acme/watcher");
+const ours = () => ((run("grant", "list").json as { data?: Array<{ plugin?: string; repos: string[]; role: string }> }).data ?? []).filter((g) => g.plugin === "@acme/watcher");
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
 afterAll(() => {
@@ -47,7 +47,7 @@ describe.skipIf(!unix)("a tool plugin's service under hive host", () => {
     fs.mkdirSync(repo, { recursive: true });
     fs.mkdirSync(plugin, { recursive: true });
     fs.writeFileSync(path.join(plugin, "hivemind-tool.json"), JSON.stringify({
-      id: "acme/watcher", name: "Watcher", version: "1.0.0", apiVersion: 1, entry: "index.js",
+      id: "@acme/watcher", name: "Watcher", version: "1.0.0", apiVersion: 1, entry: "index.js",
       tools: [{ key: "watch", label: "Watch", tileKind: "acme-watch" }],
       service: { command: ["node", "service.js"], role: "view" },
     }));
@@ -59,9 +59,9 @@ describe.skipIf(!unix)("a tool plugin's service under hive host", () => {
       c.on("data", (d) => { for (const l of String(d).split("\\n")) if (l.includes('"hello"')) console.log("hello " + JSON.stringify(JSON.parse(l).hello.as ?? JSON.parse(l))); });
       c.on("error", (e) => console.log("drive " + e.message));
     `);
-    expect(run("tools", "install", plugin).code).toBe(0);
-    expect(run("plugins", "enable", "tool:acme/watcher").code).toBe(0);
-    expect(run("plugins", "workspaces", "tool:acme/watcher").json).toMatchObject({ data: { workspaces: [] } });
+    expect(run("plugins", "install", plugin).code).toBe(0);
+    expect(run("plugins", "enable", "tool:@acme/watcher").code).toBe(0);
+    expect(run("plugins", "workspaces", "tool:@acme/watcher").json).toMatchObject({ data: { workspaces: [] } });
 
     host = spawn(...cmd(["host", "run"]), { env: { ...sealedEnv(), ...env }, stdio: "ignore" });
     await until(() => (run("host", "status").json as { data?: { running?: boolean } })?.data?.running, "the host to answer");
@@ -70,18 +70,18 @@ describe.skipIf(!unix)("a tool plugin's service under hive host", () => {
     await new Promise((r) => setTimeout(r, 2_500));
     expect(ours()).toEqual([]);
 
-    const picked = run("plugins", "workspaces", "tool:acme/watcher", repo);
+    const picked = run("plugins", "workspaces", "tool:@acme/watcher", repo);
     expect(picked.json).toMatchObject({ data: { workspaces: [repo] } });
     await until(() => log().includes("hello "), "the service's hello");
     expect(log()).toContain(`hello ${JSON.stringify({ client: "Watcher service", role: "view", workspace: repo })}`);
     expect(ours()).toMatchObject([{ repos: [repo], role: "view" }]);
     const pid = Number(/started, pid (\d+)/.exec(log())![1]);
 
-    expect(run("plugins", "disable", "tool:acme/watcher").code).toBe(0);
+    expect(run("plugins", "disable", "tool:@acme/watcher").code).toBe(0);
     await until(() => !alive(pid), "the service stopping when switched off");
     expect(ours()).toEqual([]);
 
-    expect(run("plugins", "enable", "tool:acme/watcher").code).toBe(0);
+    expect(run("plugins", "enable", "tool:@acme/watcher").code).toBe(0);
     await until(() => (log().match(/started, pid/g) ?? []).length === 2, "the service starting again");
     const again = Number([...log().matchAll(/started, pid (\d+)/g)].at(-1)![1]);
     host.kill("SIGTERM");

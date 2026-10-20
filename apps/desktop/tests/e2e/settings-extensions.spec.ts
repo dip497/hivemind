@@ -168,21 +168,21 @@ test("Tools: the ones that ship are on, an optional one is off, and one is switc
   const tool = (id: string) => page.locator(`[data-plugin-row="tool:${id}"]`);
   // The regression this guards: a built-in read as OFF because its state asked whether it was
   // switched on, which a built-in never needs to be.
-  await expect(tool("hivemind/code")).toHaveAttribute("data-state", "on");
-  await expect(tool("hivemind/issues")).toHaveAttribute("data-state", "on");
-  await expect(tool("hivemind/web")).toHaveAttribute("data-state", "off");
+  await expect(tool("@hivemind/code")).toHaveAttribute("data-state", "on");
+  await expect(tool("@hivemind/issues")).toHaveAttribute("data-state", "on");
+  await expect(tool("@hivemind/web")).toHaveAttribute("data-state", "off");
 
   // Switching one off switches off its own tools, in its record.
-  const state = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).plugins.state["tool:hivemind/code"];
-  await tool("hivemind/code").click();
+  const state = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).plugins.state["tool:@hivemind/code"];
+  await tool("@hivemind/code").click();
   const on = page.getByRole("switch", { name: "Enable Code", exact: true });
   await expect(on).toHaveAttribute("aria-checked", "true");
   await on.click();
   await expect(on).toHaveAttribute("aria-checked", "false");
   await expect.poll(state).toEqual({ options: { editor: false } });
   await settings("plugins");
-  await expect(tool("hivemind/code")).toHaveAttribute("data-state", "off");
-  await tool("hivemind/code").click();
+  await expect(tool("@hivemind/code")).toHaveAttribute("data-state", "off");
+  await tool("@hivemind/code").click();
   await on.click();
   await expect.poll(state).toBeUndefined();
 });

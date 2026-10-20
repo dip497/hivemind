@@ -9,15 +9,15 @@ Build a counter <Tooltip tip="A small live card on the canvas, drawn by a few li
 Build a Hivemind widget (a small live card on the canvas, drawn by its own code in a worker) and, if I want, publish it on HiveHub.
 
 1. Ask me what the widget should show and do, and its name (lowercase letters, digits and dashes).
-2. Start it: \`hive widgets new <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`widget.json\`, \`widget.js\`, \`hive.d.ts\`, \`README.md\` and \`PROMPT.md\`.
+2. Start it: \`hive plugins new widget <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`widget.json\`, \`widget.js\`, \`hive.d.ts\`, \`README.md\` and \`PROMPT.md\`.
 3. Read \`PROMPT.md\` in full: it is the whole contract. Write what I asked for under its "What I want". The widget has no network and no files. What it draws and its state are each up to 16 KB.
-4. Install it, again after each change: \`hive widgets install <folder>\`. Check it prints "app updated".
+4. Check it, then install it, again after each change: \`hive plugins check <folder>\` must say ok (it names the file and line of each problem), then \`hive plugins install <folder>\`. Check it prints "app updated".
 5. Put one on the canvas: \`hive ctl plugin open widget:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable widget:@owner/name\`.
 6. Declare one command in \`widget.json\` under "commands", answered with \`hive.hm.onCommand\`, that reports what the widget shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, and \`README.md\` says what it does.
 8. Publish only if I say so. Follow the "Publish a plugin" page (https://hivemind.griiken.com/guide/publish-to-hivehub.md): push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
 
-At the end, tell me the widget's id, the command others use to install it (\`hive widgets install @owner/name\`), and anything you could not check.
+At the end, tell me the widget's id, the command others use to install it (\`hive plugins install @owner/name\`), and anything you could not check.
 `}</AgentPrompt>
 
 ## What others have built
@@ -52,7 +52,7 @@ Each of these is a widget on HiveHub, as `@dip497/<name>`.
     Make a starter widget called `counter`:
 
     ```bash
-    hive widgets new counter
+    hive plugins new widget counter
     ```
 
     Check: it prints `created @<your login>/counter`. The `counter` folder holds `widget.json`,
@@ -61,7 +61,7 @@ Each of these is a widget on HiveHub, as `@dip497/<name>`.
   </Step>
   <Step title="Install it">
     ```bash
-    hive widgets install counter
+    hive plugins install counter
     ```
 
     Check: it prints `installed @<your login>/counter (Counter)` and `app updated`.
@@ -107,7 +107,7 @@ Each of these is a widget on HiveHub, as `@dip497/<name>`.
     In `widget.js`, change `label: "presses"` to `label: "clicks"`. Then install it again:
 
     ```bash
-    hive widgets install counter
+    hive plugins install counter
     ```
 
     Check: the card now reads **clicks**.
@@ -121,7 +121,7 @@ Each of these is a widget on HiveHub, as `@dip497/<name>`.
 
 ## What you did
 
-- You started a widget with `hive widgets new` and installed it with `hive widgets install`.
+- You started a widget with `hive plugins new widget` and installed it with `hive plugins install`.
 - You drew it with `hive.render`, kept its count in `hive.state`, and answered its button.
 - You changed it and gave it an option people can set.
 
@@ -224,14 +224,16 @@ hive ctl plugin call @dip497/progress add '{"text":"Run the tests"}'
 - Nothing it draws is saved.
 
 Nobody else's computer runs your code. On your phone, a view that shows widgets draws them
-(`hive views install @dip497/widgets`).
+(`hive plugins install @dip497/widgets`).
 
 ### Commands
 
 ```bash
-hive widgets list                       # the app's own widgets and the ones you added
-hive widgets install <folder>|@owner/name
-hive widgets remove <id>                # what each placed one holds stays on its canvas
+hive plugins new widget <name> [--dir folder]   # a starter, with PROMPT.md
+hive plugins check <folder>                     # its types, its widget.json, and its first drawing, with file:line
+hive plugins install <folder>|@owner/name
+hive plugins list --kind widget                 # the app's own widgets and the ones you added
+hive plugins remove <id>                        # what each placed one holds stays on its canvas
 ```
 
 <LastValidated />

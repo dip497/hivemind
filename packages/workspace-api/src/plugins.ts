@@ -30,6 +30,8 @@ export interface PluginInstance {
   reason?: string;
   /** Since when it is in this state (ms since the epoch). */
   since: number;
+  /** Its code has drawn something: a frame was painted after its first non-empty content. */
+  drew: boolean;
   commands: PluginCommandInfo[];
 }
 
@@ -50,3 +52,27 @@ export const PLUGIN_CALL_HOST_MS = PLUGIN_CALL_MS + 5_000;
 export const PLUGIN_CALL_CLIENT_MS = PLUGIN_CALL_MS + 10_000;
 /** How long `plugin.open` waits, in the window, for what it opened to be ready to call. */
 export const PLUGIN_OPEN_MS = 10_000;
+
+/** One line a plugin's code wrote to the console, or an error it threw. */
+export interface ConsoleLine { level: "log" | "info" | "warn" | "error" | "debug"; text: string; at: number }
+
+/** How many console lines are kept for each plugin tile, newest last. */
+export const CONSOLE_LINES = 100;
+
+/** What `tile.look` answers (0.32): the tile as it is drawn now, and what its code said. */
+export interface TileLook {
+  tile: string;
+  /** Its plugin's state; null for a tile no plugin draws. */
+  state: PluginState | null;
+  reason?: string;
+  drew: boolean;
+  /** The last lines its code wrote, oldest first; empty for a tile no plugin draws. */
+  console: ConsoleLine[];
+  /** The tile's box in the window, as a PNG, base64. */
+  png: string;
+  width: number;
+  height: number;
+}
+
+/** How long `tile.look` waits, in the window, for the tile to be in view and drawn. */
+export const LOOK_MS = 8_000;

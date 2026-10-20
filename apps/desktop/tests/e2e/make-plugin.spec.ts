@@ -38,7 +38,7 @@ test("from the Add menu's Tools: a tool, the idea in its prompt, copied or hande
   await expect(dialog.locator("[data-make-copy]")).toHaveText("Copied");
   const copied = await clipboard();
   expect(copied).toContain("Build me a Hivemind tool plugin: Lists the open issues assigned to me");
-  expect(copied).toContain("`hive tools new <name>`");
+  expect(copied).toContain("`hive plugins new tool <name>`");
   expect(copied).toContain("PROMPT.md");
 
   await dialog.locator("[data-make-start]").click();
@@ -55,5 +55,5 @@ test("from Settings ▸ Plugins: a widget by default, a view when chosen", async
   await dialog.locator('[data-make-kind="view"]').click();
   await dialog.locator("[data-make-copy]").click();
   await expect(dialog.locator("[data-make-copy]")).toHaveText("Copied");
-  expect(await clipboard()).toContain("`hive views new <name>`");
+  expect(await clipboard()).toContain("`hive plugins new view <name>`");
 });

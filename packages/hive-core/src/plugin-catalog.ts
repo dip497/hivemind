@@ -43,9 +43,8 @@ export interface CatalogEntry {
   category?: PluginCategory;
 }
 
-// A view or a widget carries its publisher's scope; an agent is one name for one CLI, settled in
-// the plugins repository; a tool is the app's own tool id, owner/name, whose folder is owner--name
-// — the same split the registry enforces when it lists them.
+// A view, a widget or a tool carries its publisher's scope; an agent is one name for one CLI,
+// settled in the plugins repository. A tool's folder is owner--name, so neither part holds "--".
 const SCOPED = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 const TOOL = new RegExp(`^(?!.*--)${TOOL_ID_RE.source.slice(1)}`);
 const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, tool: TOOL, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
@@ -76,7 +75,7 @@ export function parseCatalog(raw: unknown): CatalogEntry[] {
     const at = `plugins[${i}]`;
     const type = p.type as CatalogType;
     if (typeof p.id !== "string" || !ID_RE[type].test(p.id)) {
-      throw new Error(`${at}.id is not ${type === "agent" ? "an agent id — it must be one name" : type === "tool" ? "a tool id — it must be owner/name" : `a ${type} id — it must be @owner/name`}`);
+      throw new Error(`${at}.id is not ${type === "agent" ? "an agent id — it must be one name" : `a ${type} id — it must be @owner/name`}`);
     }
     const key = `${p.type}:${p.id}`;
     if (seen.has(key)) throw new Error(`${at} lists ${key} twice`);

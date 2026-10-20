@@ -1,0 +1,24 @@
+{
+  "id": "@example/frames",
+  "name": "Frames",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "other",
+  "description": "A test tool: a page in a frame, from the address its setting holds.",
+  "entry": "index.js",
+  "permissions": [],
+  "settings": [
+    { "id": "url", "label": "Address to frame", "type": "text", "default": "", "maxLength": 200 }
+  ],
+  "tools": [
+    {
+      "key": "frames",
+      "label": "Frames",
+      "description": "A page in a frame.",
+      "tileKind": "frames",
+      "size": { "width": 600, "height": 400 },
+      "needsRepo": false,
+      "singleton": true
+    }
+  ]
+}

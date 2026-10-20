@@ -28,7 +28,10 @@ import {
   HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, requireRoot, rootForId, updateIssue,
   type IssueState,
 } from "@hivemind/core";
-import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile } from "../hcp.js";
+import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile, sockPath } from "../hcp.js";
+import { driveSocketPath } from "hivemind-api";
+import { appData } from "@hivemind/core/app-data";
+import { readTrackedSession, TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
 import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
@@ -38,7 +41,8 @@ import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 import type { InboxMessage } from "@hivemind/workspace-api/agents";
-import { PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList } from "@hivemind/workspace-api/plugins";
+import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
+import os from "node:os";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -118,9 +122,81 @@ async function workspaceOf(d: Drive, repo: unknown): Promise<string> {
   return named.repo;
 }
 
-const repoArg = { repo: { type: "string", description: "the workspace: its folder, name or id (default: your own, as an agent; else the one this folder is in)" } } as const;
+const repoArg = { repo: { type: "string", description: "the workspace: for the person, its folder, name, id or prefix (default: the one this folder is in); an agent or a grant drives only its own, by its folder (`hive ctl whoami` says which)" } } as const;
 
-type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string } };
+/** Which app `hive ctl` reaches and as whom. */
+interface WhoAmI {
+  /** "hivemind" for the release app, "hivemind-dev" for a dev run: the app data folder's name. */
+  instance: string;
+  appData: string;
+  driveSocket: string;
+  hcpSocket: string;
+  running: boolean;
+  as: "person" | "agent" | "program" | null;
+  /** A program's grant, by its name. */
+  grant?: string;
+  workspace: string | null;
+  tile: string | null;
+  /** The agent's session, once its hooks have said it. */
+  session: string | null;
+}
+
+/** The app data folder a socket is in; null for a named pipe, which names none. */
+const folderOfSocket = (sock: string): string | null => (sock.startsWith("\\\\.\\pipe\\") ? null : path.dirname(sock));
+
+/** The data folder of the app `hive ctl` reaches: where its drive socket is, else the default. */
+const appDataReached = (): string => folderOfSocket(driveSocketPath()) ?? appData();
+
+async function whoAmI(): Promise<WhoAmI> {
+  const driveSocket = driveSocketPath();
+  const hcpSocket = sockPath();
+  const folder = appDataReached();
+  const tile = ownTile()?.replace(/^hm:/, "") ?? null;
+  const here = { instance: path.basename(folder), appData: folder, driveSocket, hcpSocket };
+  let d: Drive;
+  try {
+    d = await openDrive();
+  } catch (e) {
+    if (e instanceof HcpCliError && e.code === "UNAVAILABLE") return { ...here, running: false, as: null, workspace: null, tile, session: null };
+    throw e;
+  }
+  try {
+    if (d.as === "person") {
+      const workspace = await workspaceOf(d, undefined).catch(() => null);
+      return { ...here, running: true, as: "person", workspace, tile, session: null };
+    }
+    if ("client" in d.as) return { ...here, running: true, as: "program", grant: d.as.client, workspace: d.as.workspace, tile: null, session: null };
+    const me = d.as.agent;
+    const listed = await d.call("agent.list", [d.as.workspace]).catch(() => null) as { agents: Array<{ tile: string; session?: string }> } | null;
+    const session = listed?.agents.find((a) => a.tile === me)?.session ?? null;
+    return { ...here, running: true, as: "agent", workspace: d.as.workspace, tile: me, session };
+  } finally {
+    d.close();
+  }
+}
+
+const whoami = defineCommand({
+  meta: { name: "whoami", description: "Which app this reaches and as whom: its data folder and sockets, hivemind or hivemind-dev, the workspace, your tile and session" },
+  args: { ...JSON_ARG },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const me = await whoAmI();
+      if (json) console.log(JSON.stringify(me));
+      else {
+        const as = me.as === null ? "nobody: no app or host answers on the drive socket" : me.grant ? `program (grant ${me.grant})` : me.as;
+        console.log([
+          `instance   ${me.instance}`, `app data   ${me.appData}`, `drive      ${me.driveSocket}`, `hcp        ${me.hcpSocket}`,
+          `as         ${as}`, `workspace  ${me.workspace ?? "none"}`, `tile       ${me.tile ?? "none"}`,
+          `session    ${me.session ?? (me.as === "agent" ? "not known yet: its agent has not said it" : "none")}`,
+        ].join("\n"));
+      }
+      if (!me.running) process.exit(EXIT.unavailable);
+    } catch (e) { fail(e, json); }
+  },
+});
+
+type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string }; session?: string };
 type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };
 
 /** One agent as a line: its tile, name, state, and what it waits on. */
@@ -132,11 +208,13 @@ const agents = defineCommand({
   args: {
     ...repoArg,
     watch: { type: "boolean", description: "keep going: print each turn ended, wait and answer as it happens (one JSON per line with --json)" },
+    session: { type: "string", description: "only the agent in this session (its id, as `hive ctl sessions` or its hooks give it); exit 5 when none is" },
     ...JSON_ARG,
   },
   async run({ args }) {
     const json = !!args.json;
     try {
+      if (args.session && args.watch) throw new UsageError("--session lists once: it does not go with --watch");
       const d = await openDrive();
       const repo = await workspaceOf(d, args.repo);
       // Heard from before the list, so nothing that happens meanwhile is missed.
@@ -144,6 +222,14 @@ const agents = defineCommand({
       let show = (e: FeedEvent) => { heard.push(e); };
       d.on("agent.event", (at, e) => { if (at === repo) show(e as FeedEvent); });
       let listed = await d.call("agent.list", [repo]) as { seq: number; agents: FeedAgent[] };
+      if (args.session) {
+        const id = String(args.session);
+        // What its hooks last said, or the session the app tracks for its tile to resume.
+        const tracked = path.join(appDataReached(), TILE_SESSIONS_DIR);
+        const inIt = listed.agents.filter((a) => a.session === id || readTrackedSession(tracked, `hm:${a.tile}`) === id);
+        if (!inIt.length) { d.close(); throw new HcpCliError("NOT_FOUND", `no agent of the workspace at ${repo} is in session ${id}`, EXIT.notFound); }
+        listed = { ...listed, agents: inIt };
+      }
       if (!args.watch) {
         d.close();
         if (json) return console.log(JSON.stringify(listed));
@@ -192,11 +278,18 @@ async function frameIn(d: Drive, repo: string, given: string): Promise<string> {
 }
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
-  tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
+  tool: { type: "positional", required: true, description: "tool id, as `hive plugins list` prints it (@hivemind/web/browser), or its package id when the package has one tool (@hivemind/web)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
+  state: { type: "string", description: "the tile's first state, a JSON object: what the tool's useTileState(hm, key, …) reads under each key" },
   ...repoArg,
-}, (a) => onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}) }])));
+}, (a) => {
+  let state: unknown;
+  if (a.state) {
+    try { state = JSON.parse(String(a.state)); } catch { throw new UsageError(`--state must be JSON: ${String(a.state).slice(0, 80)}`); }
+  }
+  return onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}), ...(state !== undefined ? { state } : {}) }]));
+});
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tile }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
@@ -527,8 +620,18 @@ const deleteIssueCmd = sub("delete-issue", "Delete an issue file (irreversible)"
   return { ok: true, deleted: String(a.id) };
 });
 
-const listWorkspacesCmd = sub("list-workspaces", "List every registered workspace (prefix, title, repo)", {},
-  async () => (await listWorkspaces({ persistPrune: true })).map((w) => ({ prefix: w.prefix, title: w.title, repo: w.repo })));
+const listWorkspacesCmd = defineCommand({
+  meta: { name: "list-workspaces", description: "List every registered workspace: its prefix, title and folder (`repo` in --json)" },
+  args: { ...JSON_ARG },
+  async run({ args }) {
+    const json = !!args.json;
+    try {
+      const all = (await listWorkspaces({ persistPrune: true })).map((w) => ({ prefix: w.prefix, title: w.title, repo: w.repo }));
+      if (json) console.log(JSON.stringify(all));
+      else console.log(all.map((w) => `${w.prefix}\t${w.title}\t${w.repo}`).join("\n") || "no workspaces registered");
+    } catch (e) { fail(e, json); }
+  },
+});
 
 type EmitResult = { id: string; delivered: boolean; view: string; reason?: "no-listener" | "not-active"; buffered?: boolean };
 
@@ -601,7 +704,7 @@ const pluginCall = defineCommand({
 const pluginOpen = defineCommand({
   meta: { name: "open", description: "Get a plugin running so its commands can be called: open a tool's tile, add a widget to the board, switch to a view" },
   args: {
-    plugin: { type: "positional", required: true, description: "tool:owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
+    plugin: { type: "positional", required: true, description: "tool:@owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
     frame: { type: "string", description: "frame to open a tool's tile in (default: beside you)" },
     ...JSON_ARG,
   },
@@ -609,6 +712,8 @@ const pluginOpen = defineCommand({
     const json = !!args.json;
     try {
       const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tile?: string; widget?: string; view?: string } & Partial<PluginInstance>;
+      // Open but failed is a failure to branch on; what it opened is still printed, to look at or close.
+      if (r.state === "failed") process.exitCode = EXIT.error;
       if (json) { console.log(JSON.stringify(r)); return; }
       const what = r.tile ? `opened tile ${r.tile}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`;
       // A plugin with code says whether it can be called yet.
@@ -638,9 +743,25 @@ const pluginList = defineCommand({
 });
 
 const pluginClose = sub("close", "Close a plugin: close a tool's tile, take a widget off the board (one drawn without code too), leave a view for the canvas", {
-  instance: { type: "positional", required: true, description: "which one: its instance, as `hive ctl plugin list` names it, a widget's id on the board, or the plugin as `plugin open` takes it (widget:@owner/name, tool:owner/name, view:id) when one copy is open" },
+  instance: { type: "positional", required: true, description: "which one: its instance, as `hive ctl plugin list` names it, a widget's id on the board, or the plugin as `plugin open` takes it (widget:@owner/name, tool:@owner/name, view:id) when one copy is open" },
   plugin: { type: "string", description: "the plugin it must be (refused when another runs as that instance)" },
 }, (args) => onDrive((d) => d.call("plugin.close", [String(args.instance), ...(args.plugin ? [String(args.plugin)] : [])])));
+
+const tileLook = sub("look", "Bring a tile into view, wait for it to draw, and save a picture of it with its plugin's state and console", {
+  ...tileArg,
+  out: { type: "string", description: "where the PNG goes (default: a new file in the temp folder)" },
+}, async (a) => {
+  const seen = await onDrive((d) => d.call("tile.look", [a.tileId], LOOK_MS + 10_000)) as TileLook;
+  const file = path.resolve(a.out ? String(a.out) : path.join(os.tmpdir(), `hive-look-${seen.tile.replace(/[^\w-]/g, "_")}-${Date.now()}.png`));
+  fs.writeFileSync(file, Buffer.from(seen.png, "base64"));
+  const { png: _, ...rest } = seen;
+  return { ...rest, png: file };
+});
+
+const tile = defineCommand({
+  meta: { name: "tile", description: "Look at a tile as the person sees it" },
+  subCommands: { look: tileLook },
+});
 
 const plugin = defineCommand({
   meta: { name: "plugin", description: "Drive the plugins in the app: list what runs, open one, list and call their commands, close one" },
@@ -650,8 +771,8 @@ const plugin = defineCommand({
 export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
-    agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
-    focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
+    whoami, agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
+    focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
   },

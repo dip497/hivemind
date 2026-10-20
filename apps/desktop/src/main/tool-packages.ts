@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { dialog, net } from "electron";
 import { serveScheme } from "./schemes.js";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
-import { isToolId, type ToolPackage } from "@hivemind/core/tool-format";
+import { isToolId, toolOfFolder, type ToolPackage } from "@hivemind/core/tool-format";
 import { installToolPackage, listToolPackages, removeToolPackage, toolFile } from "@hivemind/core/tool-packages";
 import { handle } from "./app-ipc.js";
 import { appWindowOf, broadcast } from "./windows.js";
@@ -63,7 +63,7 @@ export function handleToolProtocol(): void {
         const code = m ? hostModule(m[1]!) : null;
         return code ? served(code, "text/javascript") : served("no such host module", "text/plain", 404);
       }
-      const id = u.host.replace("--", "/");
+      const id = toolOfFolder(u.host);
       const pkg = isToolId(id) ? listed.get(id) ?? (await listTools()).find((p) => p.id === id) : undefined;
       const app = pkg?.source === "app";
       if (!pkg || (safeMode() && !app) || !isPluginEnabled(getSettings().plugins.state, "tool", id, app)) return served("not switched on", "text/plain", 404);

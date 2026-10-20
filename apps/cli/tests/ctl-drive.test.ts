@@ -6,11 +6,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { Intents, type Actor } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import { tileToken } from "@hivemind/agent-host/hooks/token";
+import { TILE_SESSIONS_DIR, writeTrackedSession } from "@hivemind/agents/node";
 import { serveDrive, type DriveServer } from "@hivemind/host/drive";
 import { Grants } from "@hivemind/host/grants";
 import { cmd, hiveAsync as hive, sealedEnv } from "./helpers.js";
@@ -48,7 +50,8 @@ beforeAll(async () => {
   for (const r of [repoA, repoB]) fs.mkdirSync(path.join(r, "sub"), { recursive: true });
   const answers = Object.fromEntries([
     answer("host.status", () => ({ workspaces: [repoA, nested, repoB, onBox].map((repo) => ({ repo, workspace: null })) })),
-    answer("agent.list", () => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking] })),
+    // The agent me-1 is in workspace a, its hooks having said its session.
+    answer("agent.list", (repo) => ({ seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }, asking, ...(repo === repoA ? [{ tile: "me-1", agent: "me", state: "working", session: "sess-42" }] : [])] })),
     answer("agent.answer", (_tile, since) => ({ answered: since === 77 })),
     answer("agent.approval", () => ({ request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
@@ -73,12 +76,14 @@ beforeAll(async () => {
     answer("link.connect", () => null),
     answer("link.disconnect", () => null),
     answer("tile.focus", () => null),
+    answer("tile.look", (tile) => ({ tile, state: "ready", drew: true, console: [{ level: "warn", text: "slow", at: 1 }], png: Buffer.from("not really a png").toString("base64"), width: 2, height: 1 })),
     answer("agent.output", (_t, lines) => ({ text: `last ${String(lines)} lines\n` })),
     answer("terminal.open", (opts) => ({ pid: (opts as { tileId: string }).tileId === "hm:ghost" ? -1 : 7, joined: true })),
     answer("view.emit", (name) => (name === "ci.build" ? { id: "ev_1", delivered: true, view: "@a/valley" } : { id: "ev_3", delivered: false, view: "canvas", reason: "no-listener", buffered: true })),
     answer("plugin.commands", () => ({ plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] })),
     // As the host answers (control/methods.ts pluginOpen): a tool's tile, else the window's answer.
-    answer("plugin.open", (plugin) => (String(plugin).startsWith("tool:") ? { tile: "t-9" } : { widget: "w-5" })),
+    answer("plugin.open", (plugin) => (plugin === "tool:a/broken" ? { tile: "t-8", instance: "t-8", state: "failed", reason: "Unexpected token", commands: [] }
+      : String(plugin).startsWith("tool:") ? { tile: "t-9" } : { widget: "w-5" })),
     answer("plugin.list", () => ({
       plugins: [
         { plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", state: "ready", since: 1, commands: [{ name: "add", description: "Add a step." }] },
@@ -154,7 +159,50 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     const nowhere = await hive(["ctl", "spawn", "--agent", "codex", "--frame", "b", "--json"], { cwd: dir, env: asAgent() });
     expect([nowhere.code, (nowhere.json as { code: string }).code, calls.some((c) => c.method === "agent.start")]).toEqual([5, "NOT_FOUND", false]);
     const elsewhere = await hive(["ctl", "spawn", "--agent", "codex", "--repo", repoB, "--json"], { env: asAgent() });
-    expect([elsewhere.code, (elsewhere.json as { code: string }).code]).toEqual([6, "FORBIDDEN"]);
+    expect([elsewhere.code, elsewhere.json]).toEqual([6, {
+      ok: false, code: "FORBIDDEN",
+      message: `this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`,
+    }]);
+    const notMine = await hive(["ctl", "send", "w-1", "hi", "--json"], { env: asAgent() });
+    expect([notMine.code, (notMine.json as { message: string }).message]).toEqual([6,
+      `w-1 is not a tile of the workspace at ${repoA}; this token drives the workspace at ${repoA} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`]);
+  });
+
+  test("agents --session finds the agent in that session, as its hooks said it or as the app tracks its tile's; none is exit 5", async () => {
+    const mine = await hive(["ctl", "agents", "--session", "sess-42", "--json"], { env: asAgent() });
+    expect([mine.code, mine.json]).toEqual([0, { seq: 3, agents: [{ tile: "me-1", agent: "me", state: "working", session: "sess-42" }] }]);
+    expect((await hive(["ctl", "agents", "--session", "sess-42"], { env: asAgent() })).stdout).toBe("me-1\tme\tworking\n");
+    // A session the app tracks for w-1 (resumed into it), which its status has not said.
+    writeTrackedSession(path.join(dir, TILE_SESSIONS_DIR), "hm:w-1", "resumed-7");
+    const tracked = await hive(["ctl", "agents", "--session", "resumed-7", "--repo", repoA, "--json"], { env: env() });
+    expect([tracked.code, tracked.json]).toEqual([0, { seq: 3, agents: [{ tile: "w-1", agent: "worker", state: "idle" }] }]);
+    const none = await hive(["ctl", "agents", "--session", "nope", "--json"], { env: asAgent() });
+    expect([none.code, none.json]).toEqual([5, { ok: false, code: "NOT_FOUND", message: `no agent of the workspace at ${repoA} is in session nope` }]);
+  });
+
+  test("whoami says which app it reaches, from the drive socket's folder, and as whom: an agent's workspace, tile and session", async () => {
+    const hcpSock = path.join(dir, "hcp.sock");
+    const r = await hive(["ctl", "whoami", "--json"], { env: { ...asAgent(), HIVE_HCP_SOCK: hcpSock } });
+    expect([r.code, r.json]).toEqual([0, {
+      instance: path.basename(dir), appData: dir, driveSocket: sock, hcpSocket: hcpSock,
+      running: true, as: "agent", workspace: repoA, tile: "me-1", session: "sess-42",
+    }]);
+    const text = await hive(["ctl", "whoami"], { env: { ...asAgent(), HIVE_HCP_SOCK: hcpSock } });
+    expect(text.stdout).toBe([
+      `instance   ${path.basename(dir)}`, `app data   ${dir}`, `drive      ${sock}`, `hcp        ${hcpSock}`,
+      "as         agent", `workspace  ${repoA}`, "tile       me-1", "session    sess-42", "",
+    ].join("\n"));
+    const person = await hive(["ctl", "whoami", "--json"], { cwd: path.join(repoB, "sub"), env: { ...env(), HIVE_HCP_SOCK: hcpSock } });
+    expect(person.json).toMatchObject({ as: "person", workspace: repoB, tile: null, session: null });
+  });
+
+  test("whoami with no app on the socket names the instance it looked for, hivemind-dev here, and exits 3", async () => {
+    const dev = path.join(dir, "hivemind-dev");
+    const r = await hive(["ctl", "whoami", "--json"], { env: { XDG_CONFIG_HOME: xdg, HIVE_DRIVE_SOCK: path.join(dev, "drive.sock"), HIVE_HCP_SOCK: path.join(dev, "hcp.sock") } });
+    expect([r.code, r.json]).toEqual([3, {
+      instance: "hivemind-dev", appData: dev, driveSocket: path.join(dev, "drive.sock"), hcpSocket: path.join(dev, "hcp.sock"),
+      running: false, as: null, workspace: null, tile: null, session: null,
+    }]);
   });
 
   test("each verb is its API method", async () => {
@@ -172,6 +220,28 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
       ["agent.close", "w-1"], ["tile.focus", "w-1"], ["link.connect", "w-1", "w-2"], ["link.disconnect", "w-1"], ["link.disconnect", "w-1", "w-2"],
       ["tool.open", repoA, { tool: "a/b/c", url: "https://x" }], ["agent.sessions", repoA, "codex", 5],
     ]);
+  });
+
+  test("open-tool --state hands the tile its first state as JSON; what is not JSON is a usage error, sent nowhere", async () => {
+    const r = await hive(["ctl", "open-tool", "a/b/c", "--state", '{"tab":"logs","line":42}', "--repo", repoA, "--json"], { env: env() });
+    expect(r.code).toBe(0);
+    expect(last("tool.open").params).toEqual([repoA, { tool: "a/b/c", state: { tab: "logs", line: 42 } }]);
+    const before = calls.length;
+    const bad = await hive(["ctl", "open-tool", "a/b/c", "--state", "{tab: logs}", "--repo", repoA, "--json"], { env: env() });
+    expect([bad.code, (bad.json as { code: string }).code]).toEqual([2, "USAGE"]);
+    expect(calls.slice(before).some((c) => c.method === "tool.open")).toBe(false);
+  });
+
+  test("tile look saves the picture where --out says, else in the temp folder, and prints its path with the tile's state and console", async () => {
+    const out = path.join(dir, "look.png");
+    const r = await hive(["ctl", "tile", "look", "w-1", "--out", out, "--json"], { env: env() });
+    expect([r.code, r.json]).toEqual([0, { tile: "w-1", state: "ready", drew: true, console: [{ level: "warn", text: "slow", at: 1 }], png: out, width: 2, height: 1 }]);
+    expect(fs.readFileSync(out, "utf8")).toBe("not really a png");
+    expect(last("tile.look").params).toEqual(["w-1"]);
+    const elsewhere = (await hive(["ctl", "tile", "look", "w-1", "--json"], { env: env() })).json as { png: string };
+    expect(path.dirname(elsewhere.png)).toBe(os.tmpdir());
+    expect(fs.readFileSync(elsewhere.png, "utf8")).toBe("not really a png");
+    fs.rmSync(elsewhere.png);
   });
 
   test("sleep and wake a tile, a frame or every agent of the workspace, as agent.sleep and agent.wake; nothing done with something left is exit 7, saying why", async () => {
@@ -302,6 +372,9 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
   test("plugin: commands lists what runs; open says what it opened; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
     expect((await hive(["ctl", "plugin", "open", "tool:a/b"], { env: env() })).stdout.trim()).toBe("opened tile t-9");
     expect((await hive(["ctl", "plugin", "open", "widget:@a/progress"], { env: env() })).stdout.trim()).toBe("added widget w-5");
+    const broken = await hive(["ctl", "plugin", "open", "tool:a/broken"], { env: env() });
+    expect([broken.code, broken.stdout.trim()]).toEqual([1, "opened tile t-8, and it failed: Unexpected token"]);
+    expect((await hive(["ctl", "plugin", "open", "tool:a/broken", "--json"], { env: env() })).code).toBe(1);
     const list = await hive(["ctl", "plugin", "commands"], { env: env() });
     expect(list.stdout).toContain("@a/progress  (widget Progress, w1)");
     expect(list.stdout).toContain('add                Add a step.  args: { "text": string }');

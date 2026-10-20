@@ -57,7 +57,7 @@ export interface PeerOf {
 const refused = (message: string): Answer => ({ error: { code: "FORBIDDEN", message } });
 
 /** Methods and notices whose first param names a tile. */
-const BY_TILE = /^(terminal\.(saved|write|show|resize|flow|ack|fit|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|approval|transcript|send|interrupt|close|diff|conversation|tool|rename|keys|read|output)|link\.(connect|disconnect)|tile\.focus)$/;
+const BY_TILE = /^(terminal\.(saved|write|show|resize|flow|ack|fit|close|detach|keyboard\.(ask|give|take))|plan\.decide|agent\.(answer|approval|transcript|send|interrupt|close|diff|conversation|tool|rename|keys|read|output)|link\.(connect|disconnect)|tile\.(focus|look))$/;
 /** Methods and notices whose first param names the workspace, or a place in it (its `.hivemind`). */
 const BY_WORKSPACE = /^(store|git|worktree|file|issue|review|people|frame)\.|^(plan\.list|agent\.(list|since|sessions)|presence\.set|widget\.(all|draw|run|release|asset|packages|press)|agent\.(startable|start|places|folders|sleep|wake)|tool\.open)$/;
 /** Methods that act on a whole workspace: a folder in it, which may be another workspace, is not it. */
@@ -252,25 +252,32 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   server.connect(connection);
   void channel.closed.then(() => gone.abort());
 
+  // A program here (an agent's tile token, a grant) names the workspace by its folder: a refusal
+  // says which folder it drives and how another is reached.
+  const local = url === peer.repo;
+  const elsewhere = local
+    ? `this token drives the workspace at ${url} only; for another workspace, the person runs the command or makes a grant for it (\`hive grant create\`)`
+    : "name this workspace by its id: nothing else of the host's is open to you";
+  const notOfThis = (what: string): string => (local ? `${what} of the workspace at ${url}; ${elsewhere}` : `${what} of this workspace`);
   /** The folders this workspace is: its repo, then its worktrees. */
   const roots = (): string[] => [peer.repo, ...(peer.places?.() ?? [])];
   const check = (method: unknown, params: unknown[]): string | null => {
     // Showing a terminal that is running already is watching it; starting one is not.
     const attaching = method === "terminal.open" && (params[0] as { attachOnly?: unknown } | null)?.attachOnly === true;
     if (peer.allows && !(typeof method === "string" && peer.allows(method, params))) return `${String(method)} is not open to this device`;
-    if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return "that tile is not of this workspace";
+    if (method === "terminal.open" && !peer.holds(String((params[0] as { tileId?: unknown } | null)?.tileId))) return notOfThis("that tile is not");
     if (typeof method !== "string") return `${String(method)} is not open to your role on this workspace`;
     if (!(attaching || mayCall(peer.actor, method))) return refusalOf(peer.actor, method);
-    if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return `${String(params[0])} is not a tile of this workspace`;
+    if (BY_TILE.test(method) && !peer.holds(String(params[0]))) return notOfThis(`${String(params[0])} is not a tile`);
     // A guest names this workspace, by its id, and nothing else on the host. The person's own
     // devices are the owner, there as here.
     const place = placeOf(method, params);
     if (peer.actor.access !== "owner" && place != null && !(typeof place === "string" && roots().some((r) => inWorkspace(r, place)))) {
-      return "name this workspace by its id: nothing else of the host's is open to you";
+      return elsewhere;
     }
-    if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return "name this workspace by its id: nothing else of the host's is open to you";
-    if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return "a tile there is not of this workspace";
-    if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return `${String(params[1])} is not a tile of this workspace`;
+    if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return elsewhere;
+    if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return notOfThis("a tile there is not");
+    if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return notOfThis(`${String(params[1])} is not a tile`);
     return null;
   };
 
@@ -340,10 +347,10 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
         return typeof cwd === "string" && (path.isAbsolute(peer.repo)
           ? path.isAbsolute(cwd) && await realPlace(cwd, false)
           : remoteCwdIn(peer.repo, cwd))
-          ? null : "that working directory is not of this workspace";
+          ? null : notOfThis("that working directory is not");
       }
       if (peer.actor.access !== "owner" && typeof place === "string" && path.isAbsolute(peer.repo)) {
-        return await realPlace(place, true) ? null : "name this workspace by its id: nothing else of the host's is open to you";
+        return await realPlace(place, true) ? null : elsewhere;
       }
       return null;
     };
