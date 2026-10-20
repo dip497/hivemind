@@ -1,0 +1,9 @@
+{
+  "title": "HiveHub",
+  "description": "Where agents, views, widgets and tools are listed, how Hivemind installs from it, and how to publish yours.",
+  "root": true,
+  "pages": [
+    "hivehub",
+    "publish-to-hivehub"
+  ]
+}

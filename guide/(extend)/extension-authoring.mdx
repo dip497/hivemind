@@ -15,7 +15,7 @@ Build a Hivemind view (a sandboxed web page that draws the whole workspace its o
 5. Show it: \`hive ctl plugin open view:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable view:@owner/name\` first.
 6. Declare one command in \`hivemind-view.json\` under "commands", answered with \`hm.onCommand\`, that reports what the view shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it follows the light and the dark theme (\`applyThemeVars\`), the manifest has a one-line description, a "category" and only the permissions it uses, and \`README.md\` says what it does.
-8. Publish only if I say so. Commit \`dist/\` with the source, because HiveHub publishes the pushed commit. Follow the "Publish to HiveHub" page and run \`hivehub publish dist\`. If I must sign in, ask me to open the link and type the code myself.
+8. Publish only if I say so. Commit \`dist/\` with the source, because HiveHub publishes the pushed commit. Follow the "Publish a plugin" page (https://hivemind.griiken.com/guide/publish-to-hivehub.md) and run \`hivehub publish dist\`. If I must sign in, ask me to open the link and type the code myself.
 
 At the end, tell me the view's id, the command others use to install it (\`hive views install @owner/name\`), and anything you could not check.
 `}</AgentPrompt>
@@ -129,7 +129,7 @@ Each is on HiveHub as `@dip497/<name>`.
 ## Next
 
 - Want an agent to build the rest? Write your idea at the top of `PROMPT.md` and hand it the file.
-- Share it: [Publish to HiveHub](/publish-to-hivehub).
+- Share it: [Publish a plugin](/publish-to-hivehub) on HiveHub.
 - A real example with a saved layout and agent commands:
   [`views/agent-board`](https://github.com/dip497/hivemind-plugins/tree/main/views/agent-board).
 - Something wrong? See [Troubleshooting](/troubleshooting).

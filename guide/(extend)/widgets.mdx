@@ -15,7 +15,7 @@ Build a Hivemind widget (a small live card on the canvas, drawn by its own code 
 5. Put one on the canvas: \`hive ctl plugin open widget:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable widget:@owner/name\`.
 6. Declare one command in \`widget.json\` under "commands", answered with \`hive.hm.onCommand\`, that reports what the widget shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, and \`README.md\` says what it does.
-8. Publish only if I say so. Follow the "Publish to HiveHub" page: push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
+8. Publish only if I say so. Follow the "Publish a plugin" page (https://hivemind.griiken.com/guide/publish-to-hivehub.md): push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
 
 At the end, tell me the widget's id, the command others use to install it (\`hive widgets install @owner/name\`), and anything you could not check.
 `}</AgentPrompt>
@@ -128,7 +128,7 @@ Each of these is a widget on HiveHub, as `@dip497/<name>`.
 ## Next
 
 - Want an agent to build the rest? Write your idea at the top of `PROMPT.md` and hand it the file.
-- Share it: [Publish to HiveHub](/publish-to-hivehub).
+- Share it: [Publish a plugin](/publish-to-hivehub) on HiveHub.
 - Something wrong? See [Troubleshooting](/troubleshooting).
 
 ## Widget reference
