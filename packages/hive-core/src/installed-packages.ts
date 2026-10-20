@@ -83,7 +83,7 @@ export async function readInstalledPackages(): Promise<PackageRecord[]> {
 export async function installedMembers(kind: string): Promise<Array<{ id: string; dir: string; package: PackageOf }>> {
   return (await readInstalledPackages()).flatMap((r) => r.members.filter((m) => m.kind === kind).map((m) => ({
     id: m.id, dir: path.join(versionFolder(r.id, r), m.path),
-    package: { id: r.id, version: r.version, on: r.on, members: r.members.length },
+    package: { id: r.id, name: r.name, version: r.version, on: r.on, members: r.members.length },
   })));
 }
 

@@ -66,3 +66,30 @@ test("a view reads what the person set it to, and hears each change", async () =
   // A host before 1.7 sends none: empty, so a view reads each with its default beside it.
   expect((await fakeHost().connect()).settings).toEqual({});
 });
+
+test("1.14: a view sees which agent is asleep and since when, wakes it with workspace:spawn, and a prompt to it is refused ASLEEP", async () => {
+  const host = fakeHost({ capabilities: ["workspace:spawn", "workspace:prompt"], answers: { prompt: () => ({ outcome: "sent" }) } });
+  const hm = await host.connect();
+  expect(hm.supports("sleep")).toBe(true);
+  const tiles: unknown[] = [];
+  hm.on("structure", (s) => tiles.push(...s.tiles));
+  host.send({ ...structure, tiles: [{ id: "t1", frameId: "f1", kind: "claude", name: "a", agent: "claude", asleep: { since: 1_760_700_000_000 } }] });
+  await host.settle();
+  expect(tiles).toEqual([{ id: "t1", frameId: "f1", kind: "claude", name: "a", agent: "claude", asleep: { since: 1_760_700_000_000 } }]);
+  const [asleep] = await Promise.allSettled([hm.prompt("t1", "run the tests")]);
+  expect(asleep).toMatchObject({ status: "rejected", reason: { code: "ASLEEP" } });
+  hm.commands.wakeAgent("t1");
+  hm.commands.sleepAgent("t1");
+  await host.settle();
+  expect(host.commands).toEqual([{ name: "wakeAgent", args: ["t1"] }, { name: "sleepAgent", args: ["t1"] }]);
+  host.send({ ...structure, tiles: [{ id: "t1", frameId: "f1", kind: "claude", name: "a", agent: "claude" }] });
+  await host.settle();
+  expect(await hm.prompt("t1", "run the tests")).toBe("sent");
+  expect(host.refused).toEqual([]);
+});
+
+test("1.14: waking or putting an agent to sleep needs workspace:spawn", async () => {
+  const hm = await fakeHost().connect();
+  expect(() => hm.commands.wakeAgent("t1")).toThrow(/workspace:spawn/);
+  expect(() => hm.commands.sleepAgent("t1")).toThrow(/workspace:spawn/);
+});

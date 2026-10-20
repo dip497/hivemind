@@ -105,6 +105,7 @@ test("install review, cancellation, invalid packages, replacement, disabling and
   await choose(source);
   await page.getByRole("button", { name: "Install extension", exact: true }).click();
   const row = page.locator('[data-plugin-row="view:settings-demo"]');
+  await page.locator('[data-plugins-kind="view"]').click();
   await expect(row).toBeVisible();
   expect(installedFile(xdg, "settings-demo", "main.js")).not.toBeNull();
 
@@ -164,6 +165,7 @@ test("Appearance contains the former drawer controls and mounts terminal colours
 
 test("Tools: the ones that ship are on, an optional one is off, and one is switched on its own page", async () => {
   await settings("plugins");
+  await page.locator('[data-plugins-kind="tool"]').click();
   const tool = (id: string) => page.locator(`[data-plugin-row="tool:${id}"]`);
   // The regression this guards: a built-in read as OFF because its state asked whether it was
   // switched on, which a built-in never needs to be.

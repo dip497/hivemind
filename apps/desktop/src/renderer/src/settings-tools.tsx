@@ -13,8 +13,10 @@ import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
 import { SettingsForm } from "./plugins/SettingsForm";
 import { ServiceSection } from "./plugins/ServiceSection";
 import { cleanError } from "./settings-plugins";
-import { PluginGroup, PluginRow } from "./plugins/PluginList";
-import { underPackageRow } from "./plugins/package-rows";
+import { PluginRow, type ListedRow } from "./plugins/PluginList";
+import { heldOffByPackage, partOfPackage } from "./plugins/package-rows";
+import type { PluginCategory } from "@hivemind/view-sdk/category";
+import { tileKind, useTilesVersion } from "./tiles/api";
 import type { ToolPackage } from "@hivemind/core/tool-format";
 
 /** A tool plugin you added, by id; undefined for one that comes with the app. */
@@ -61,7 +63,8 @@ function ToolRow({ pluginId }: { pluginId: string }) {
   const [enabled] = useToolEnabled(pluginId);
   const added = useAdded(pluginId);
   const problem = useToolProblem(pluginId);
-  const about = added?.description ?? BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools[0]?.description ?? "";
+  const part = added && partOfPackage(added);
+  const about = part ? `Part of ${part.name}` : added?.description ?? BUNDLED_TOOL_PLUGINS.find((p) => p.id === pluginId)?.tools[0]?.description ?? "";
   return <PluginRow kind="tool" id={pluginId} name={toolLabel(pluginId)} mark={<ToolIcon pluginId={pluginId} size={16} />}
     line={problem ?? about} state={problem ? "unavailable" : enabled ? "on" : "off"} badge={problem ? "Can't load" : enabled ? undefined : "Off"} />;
 }
@@ -80,23 +83,30 @@ function RemoveTool({ pkg }: { pkg: ToolPackage }) {
 }
 
 /** The tools on the Plugins page: the ones included, the optional ones, then the ones you added. */
-export function ToolsSection({ matches }: { matches: (text: string) => boolean }) {
+/** The tools you have, as rows of the Plugins page: one that comes with the app under its tile's
+ *  category, as the Add menu lists it, and one you added under its manifest's. The warning is for
+ *  safe mode, where none you added runs. */
+export function useToolRows(matches: (text: string) => boolean): { rows: ListedRow[]; warning: string | null } {
   const shown = BUNDLED_TOOL_PLUGINS.filter((p) => matches(`${toolLabel(p.id)} ${p.id} ${p.tools.map((t) => t.description ?? "").join(" ")}`));
   const { packages, safeMode } = useToolPackages();
-  const added = packages.filter((p) => p.source === "you" && !underPackageRow(p) && matches(`${p.name} ${p.id} ${p.description}`));
-  const ids = [...shown.filter((p) => p.builtin), ...shown.filter((p) => !p.builtin), ...added].map((p) => p.id);
-  if (!ids.length) return null;
-  return <PluginGroup kind="tool" count={ids.length}
-    foot={added.length > 0 && safeMode ? <p className="warn">Hivemind started in safe mode: no tool you added runs until you start it normally.</p> : undefined}>
-    {ids.map((id) => <ToolRow key={id} pluginId={id} />)}
-  </PluginGroup>;
+  useTilesVersion();
+  const added = packages.filter((p) => p.source === "you" && matches(`${p.name} ${p.id} ${p.description}`));
+  const bundled = [...shown.filter((p) => p.builtin), ...shown.filter((p) => !p.builtin)];
+  const row = (id: string, category: PluginCategory): ListedRow => ({ key: `tool:${id}`, kind: "tool", category, row: <ToolRow pluginId={id} /> });
+  return {
+    rows: [
+      ...bundled.map((p) => row(p.id, p.tools.map((t) => t.tileKind ? tileKind(t.tileKind).category : undefined).find((c) => c !== undefined) ?? "other")),
+      ...added.map((p) => row(p.id, p.category)),
+    ],
+    warning: added.length > 0 && safeMode ? "Hivemind started in safe mode: no tool you added runs until you start it normally." : null,
+  };
 }
 
 /** At the top of a tool's page: switching it on or off. */
 export function ToolActions({ id }: { id: string }) {
   const [enabled, toggle] = useToolEnabled(id);
   const added = useAdded(id);
-  return <Switch aria-label={`Enable ${toolLabel(id)}`} checked={enabled} disabled={!!added?.problem} onCheckedChange={toggle} />;
+  return <Switch aria-label={`Enable ${toolLabel(id)}`} checked={enabled} disabled={!!added?.problem || (!!added && heldOffByPackage(added))} onCheckedChange={toggle} />;
 }
 
 export function ToolPage({ id }: { id: string }) {
@@ -112,7 +122,7 @@ export function ToolPage({ id }: { id: string }) {
     </section>}
     {added?.service && <ServiceSection id={id} service={added.service} on={enabled} />}
     {id === BROWSER_PLUGIN_ID && <BrowserControl toolOn={enabled} />}
-    {added && <RemoveTool pkg={added} />}
+    {added && !partOfPackage(added) && <RemoveTool pkg={added} />}
   </div>;
 }
 

@@ -85,6 +85,7 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
 /** The package an installed plugin belongs to, as its listing carries it. */
 export interface PackageOf {
   id: string;
+  name: string;
   version: string;
   /** The package's switch. */
   on: boolean;

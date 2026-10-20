@@ -250,9 +250,28 @@ export interface UpdateStatus {
 import type { Appearance, Settings } from "@hivemind/core/settings-schema";
 import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 
+/** An installed package, as the Plugins page lists it: each member with where its code runs, and
+ *  the version before this one when there is one to roll back to. */
+export interface InstalledPackageInfo {
+  id: string; name: string; version: string; on: boolean;
+  members: Array<{ kind: string; id: string; runs: MemberRuns }>;
+  previous: { version: string; on: boolean } | null;
+}
+
+/** What installing a package would do, found by installing nothing (`installPackage` with
+ *  `dryRun`, as `hive plugins install --dry-run`): each member, where it runs and what it asks
+ *  for, and how each differs from the version installed. Installed with its `token`. */
+export interface PackageReview {
+  token: string; id: string; name: string; version: string;
+  /** Whether it is on once installed. */
+  on: boolean;
+  /** The version it replaces, and whether that one is on. */
+  replaces: { version: string; on: boolean } | null;
+  members: Array<{ kind: string; id: string; name: string; permissions: string[]; runs: MemberRuns }>;
+  changes: Array<MemberChange & { name: string; runs: MemberRuns }>;
+}
+
 /** One community view package as the main process sees it (see main/view-packages.ts). */
-/** An installed package, as the Plugins page lists it. */
-export interface InstalledPackageInfo { id: string; name: string; version: string; on: boolean; members: Array<{ kind: string; id: string }> }
 
 export interface ViewPackageInfo {
   id: string;
@@ -359,15 +378,12 @@ export interface HiveIpc {
   verifyAgent(id: string): Promise<{ path: string | null; version?: string; mismatch?: string; searchedPath?: string }>;
   /** The values each of an agent's options takes, read from its CLI. Cached per binary version. */
   agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
-  previewViewInstall?(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
   /** A plugin's README: from its folder here (`dir`), or from the catalog for one not installed. */
   pluginReadme(from: { dir: string } | { catalog: { type: CatalogEntry["type"]; id: string } }): Promise<string | null>;
   /** The widget packages installed on this machine. */
   listWidgets(): Promise<WidgetPackage[]>;
-  /** Add a widget package from a folder the person picks; null when they pick none. */
-  installWidget?(): Promise<{ id: string; name: string } | null>;
   removeWidget(id: string): Promise<void>;
   /** An image of the widget package `widget`, as the host of `repo` has it: for a guest without it. */
   widgetAsset(repo: string, widget: string, name: string): Promise<string | null>;
@@ -391,8 +407,6 @@ export interface HiveIpc {
   toolPackages(): Promise<{ packages: ToolPackage[]; safeMode: boolean }>;
   /** What each host module a tool plugin imports exports, by name (once, before the first loads). */
   toolHostExports(map: Record<string, string[]>): Promise<void>;
-  /** Add a tool plugin from a folder the person picks; null when they pick none. */
-  installToolPackage?(): Promise<{ id: string; name: string } | null>;
   removeToolPackage(id: string): Promise<void>;
   /** A tool plugin's tile running a program in its folder. */
   toolRun(call: ToolRun): Promise<ToolRunResult>;
@@ -417,8 +431,7 @@ export interface HiveIpc {
     | { type: "agent"; token: string; id: string; label: string; bin: string; command: string; flags: string[]; worker: boolean; replaces: boolean; does: string[]; reads?: string; install?: { url: string; command?: string } }
     | { type: "widget"; token: string; id: string; name: string; permissions: string[]; code: boolean; replaces: boolean }
     | { type: "tool"; token: string; id: string; name: string; permissions: string[]; tools: string[]; service?: string; replacesVersion: string | null }
-    | { type: "package"; token: string; id: string; name: string; version: string; on: boolean; replacesVersion: string | null;
-        members: Array<{ kind: string; id: string; name: string; permissions: string[]; runs: MemberRuns }>; changes: MemberChange[] }
+    | ({ type: "package" } & PackageReview)
   >;
   installCatalogAgent(token: string): Promise<void>;
   installCatalogWidget(token: string): Promise<void>;
@@ -439,6 +452,13 @@ export interface HiveIpc {
   installedPackages(): Promise<InstalledPackageInfo[]>;
   /** Switch a whole package on or off. */
   switchPackage(id: string, on: boolean): Promise<void>;
+  /** Put back the version of a package in use before its last update, switched as it was. */
+  rollbackPackage(id: string): Promise<void>;
+  /** Review a folder the person picks, a package or one plugin, as an install would check it;
+   *  null when they pick none. */
+  reviewPackageFolder?(): Promise<PackageReview | null>;
+  /** Install the folder last reviewed. */
+  installPackageFolder?(token: string): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── identity (R3) ─────────────────────────────────────────
@@ -796,6 +816,14 @@ export interface HiveIpc {
   setBrowserCdpEnabled?(enabled: boolean): Promise<{ ok: true }>;
   /** Restart the app so a settings change that needs a fresh launch takes hold. */
   relaunchApp?(): Promise<void>;
+  /** Quit as a person does: asks first when agents or terminals run here (`onQuitAsk`). */
+  quit?(): Promise<void>;
+  /** Quit and stop every agent and terminal here, without asking. */
+  quitAndStopEverything?(): Promise<void>;
+  /** The answer to `onQuitAsk`. */
+  answerQuit?(answer: QuitAnswer): Promise<void>;
+  /** Main asks whether what runs here keeps running after the app quits. */
+  onQuitAsk?(cb: (q: QuitQuestion) => void): () => void;
 
 
   /** Reply to a main→renderer HCP command (a control-plane verb that needs the
@@ -803,6 +831,12 @@ export interface HiveIpc {
   /** `code`: why it failed, as the workspace API says it (`NOT_FOUND`, `TIMEOUT` …); another is FAILED. */
   hcpResult?(id: string, ok: boolean, result?: unknown, errorMessage?: string, code?: string): Promise<void>;
 }
+
+/** What runs as the person quits: agents and terminals on this computer, and agents on other
+ *  machines, which keep running there whatever the answer. */
+export interface QuitQuestion { agents: number; terminals: number; elsewhere: number }
+/** `remember`: keep the choice in settings and stop asking. */
+export interface QuitAnswer { choice: "keep-running" | "stop-everything" | "cancel"; remember: boolean }
 
 /** A control-plane verb main asks the renderer to execute (request-id correlated
  *  with `hcpResult`). */

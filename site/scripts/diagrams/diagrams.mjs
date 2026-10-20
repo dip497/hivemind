@@ -174,4 +174,33 @@ function hostMove() {
   return d;
 }
 
-export default [connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, ...howItWorks];
+// HiveHub's registry.ts draft() lists one commit and a SHA-256 per file; plugin-catalog.ts stageEntry() checks each.
+const HIVEHUB_DESC = 'Publishing makes HiveHub read your repository at one commit and list every file with its SHA-256 hash. Hivemind reads that listing, downloads each file from your repository at that commit, and checks it against its hash; a file that differs stops the install.';
+
+function hivehubInstall() {
+  const d = new Diagram({ slug: 'hivehub-install', w: 790, h: 214, title: 'Where a plugin’s files come from', desc: HIVEHUB_DESC });
+  d.wire([[210, 62], [300, 62]]); d.label(255, 46, 'publish');
+  d.wire([[490, 62], [580, 62]]); d.label(535, 46, 'listing');
+  d.wire([[115, 100], [115, 144], [675, 144], [675, 100]], { accent: true }); d.label(395, 160, 'files');
+  d.node(20, 24, 190, 76, 'Your repository', { sub: 'on GitHub, holds the files' });
+  d.node(300, 24, 190, 76, 'HiveHub', { sub: ['one commit, each file’s', 'path and SHA-256'], dashed: true, plain: true });
+  d.node(580, 24, 190, 76, 'Hivemind', { sub: 'checks every hash', focal: true });
+  d.note(395, 198, 'A file that does not match its hash stops the install.', { size: 12 });
+  return d;
+}
+
+// The same parts stacked for a phone screen.
+function hivehubInstallPhone() {
+  const d = new Diagram({ slug: 'hivehub-install-phone', w: 320, h: 400, title: 'Where a plugin’s files come from', desc: HIVEHUB_DESC });
+  d.wire([[120, 84], [120, 140]]); d.label(132, 112, 'publish', { anchor: 'start' });
+  d.wire([[120, 216], [120, 272]]); d.label(132, 244, 'listing', { anchor: 'start' });
+  d.wire([[220, 52], [250, 52], [250, 304], [220, 304]], { accent: true }); d.label(262, 178, 'files', { anchor: 'start' });
+  d.node(20, 20, 200, 64, 'Your repository', { sub: 'on GitHub, holds the files' });
+  d.node(20, 140, 200, 76, 'HiveHub', { sub: ['one commit, each file’s', 'path and SHA-256'], dashed: true, plain: true });
+  d.node(20, 272, 200, 64, 'Hivemind', { sub: 'checks every hash', focal: true });
+  d.note(160, 366, 'A file that does not match its', { size: 12 });
+  d.note(160, 384, 'hash stops the install.', { size: 12 });
+  return d;
+}
+
+export default [connectInvite, phoneTerminal, widgetsRunner, issueStates, apiDrive, pluginKinds, workflowsLoop, hostMove, hivehubInstall, hivehubInstallPhone, ...howItWorks];

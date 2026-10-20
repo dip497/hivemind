@@ -99,6 +99,7 @@ test("selecting Browser as the only shortcut cannot activate it", async () => {
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
   await page.locator('[data-layers-rail="settings"]').click();
   await page.locator('[data-settings-page="plugins"]').click();
+  await page.locator('[data-plugins-kind="tool"]').click();
   await page.locator('[data-plugin-row="tool:@hivemind/web"]').click();
   await expect(page.getByRole("switch", { name: "Enable Browser", exact: true })).toHaveAttribute("aria-checked", "false");
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();

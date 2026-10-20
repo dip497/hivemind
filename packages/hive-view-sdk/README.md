@@ -71,6 +71,16 @@ window does, and so does a phone's app, which puts its own live terminal over yo
 rect asks. On a screen that does not, lay the view out without them. A host before 1.6 never says
 it; every such host is a desktop window, which places them.
 
+Protocol 1.14 says which agents are asleep (`hm.supports("sleep")`): their process ended, their
+tile kept with its last screen and its conversation until they are woken.
+
+```ts
+hm.on("structure", ({ tiles }) => tiles.filter((t) => t.asleep)); // t.asleep.since: when it was put to sleep
+hm.commands.wakeAgent(tileId);                    // "workspace:spawn": back in its conversation
+hm.commands.sleepAgent(tileId);                   // "workspace:spawn": one busy sleeps only if the person says so
+await hm.prompt(tileId, "run the tests");         // a sleeping one is refused, code "ASLEEP": wake it first
+```
+
 Test a view without the app against the fake host in `@hivemind/view-sdk/testing`: it greets the
 view as the app does, checks what the view sends by the app's rules and says why it would refuse
 the rest.
@@ -85,7 +95,7 @@ host.commands; host.rects; host.refused;          // what the app would run, sho
 ```
 
 `closeTile` needs `"permissions": ["workspace:close"]`; `spawnTile` / `spawnVis` /
-`spawnClaude` / `addFrame` / `spawnAgent` need `"workspace:spawn"`; `renameTile` /
+`spawnClaude` / `addFrame` / `spawnAgent` / `wakeAgent` / `sleepAgent` need `"workspace:spawn"`; `renameTile` /
 `openFolder` need `"workspace:edit"`; `prompt`, and `spawnAgent` with a `prompt`, need
 `"workspace:prompt"`; `sessions`, and `spawnAgent` with `resume`, need `"workspace:sessions"`. Unknown permissions are refused at install. Protocol details: `src/protocol.ts`; complete views:
 `views/agent-board` (a persisted layout and agent commands) and `views/widgets` (the workspace's

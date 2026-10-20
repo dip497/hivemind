@@ -15,7 +15,7 @@ import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
 import { listWidgets, readWidget } from "@hivemind/core/widgets";
 import { installPackage } from "@hivemind/core/package-install";
-import { memberKind } from "@hivemind/core/package-kinds";
+import { packageReview } from "./packages-ipc.js";
 import { widgetsChanged } from "./widgets.js";
 import { listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
 import { toolsChanged } from "./tool-packages.js";
@@ -149,11 +149,7 @@ export function installPluginCatalogIpc(): void {
         const r = await installPackage(dir, { id: entry.id, dryRun: true });
         if (pendingPackage) await rm(pendingPackage.dir, { recursive: true, force: true }).catch(() => {});
         pendingPackage = { token: newNonce(), dir, id: entry.id };
-        return {
-          type: "package", token: pendingPackage.token, id: entry.id, name: r.record.name, version: r.record.version, on: r.record.on,
-          members: r.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, permissions: m.permissions, runs: memberKind(m.kind)?.runs ?? "in the app" })),
-          replacesVersion: r.replaced?.version ?? null, changes: r.changes,
-        };
+        return { type: "package", ...(await packageReview(r, pendingPackage.token)) };
       } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
     }
     if (entry.type === "view") {

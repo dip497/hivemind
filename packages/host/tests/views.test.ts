@@ -63,6 +63,8 @@ function computer() {
   let links = { pipes: [] as Array<{ src: string; dst: string }>, spawns: [] as Array<{ parent: string; child: string }> };
   const started: Array<{ repo: string; start: object }> = [];
   const closed: string[] = [];
+  const slept: string[] = [];
+  const woke: string[] = [];
   const pressed: Array<{ id: string; press: unknown }> = [];
   const intents = new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") }));
   const store: WorkspaceStore = new WorkspaceStore({
@@ -82,6 +84,9 @@ function computer() {
       return "t3";
     },
     close: async (tile) => { closed.push(tile); return store.removeTile(tile) !== null; },
+    // As the control plane does, once the agent's process has ended or started again.
+    sleep: async (at, tile) => { slept.push(`${at}:${tile}`); store.setSleeping(tile, at); },
+    wake: async (at, tile) => { woke.push(`${at}:${tile}`); store.setSleeping(tile, null); },
     machines: { self: () => ({ device: "d1", name: "desk" }), mine: () => undefined, whose: () => undefined, saved: (id) => (id === "m1" ? "build box" : undefined) },
     intents,
     widgets: { watch: (_repo, cb) => { cb([]); return () => {}; }, press: (_repo, id, press) => pressed.push({ id, press }) },
@@ -119,7 +124,7 @@ function computer() {
   const said = (c: { got: EventMessage[] }, session: string) =>
     c.got.filter((e) => e.event === "view.said" && e.params[0] === session).map((e) => e.params[1] as Record<string, unknown>);
   const audit = () => fs.readFileSync(path.join(dir, "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
-  return { pressed,  dir, repo, store, status, started, closed, caller, call, post, screen, said, audit, setLinks: (l: typeof links) => { links = l; server.publish("link.pipe", { src: "t1", dst: "t2", connected: true }); } };
+  return { pressed,  dir, repo, store, status, started, closed, slept, woke, caller, call, post, screen, said, audit, setLinks: (l: typeof links) => { links = l; server.publish("link.pipe", { src: "t1", dst: "t2", connected: true }); } };
 }
 const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catch (e) { return (e as { code?: string }).code; } };
 
@@ -193,7 +198,7 @@ test("a view opened on a workspace here is told, once ready, where it is (a phon
   assert.deepEqual(c.said(phone, session), [
     {
       type: "hello", v: 1, pluginId: "priya-board", capabilities: ["workspace:spawn", "workspace:close", "workspace:edit"], theme: { colors: {} },
-      layout: null, viewport: { w: 0, h: 0 }, visible: true, features: ["agentStatus", "widgets", "invoke"], device: { touch: true, compact: true },
+      layout: null, viewport: { w: 0, h: 0 }, visible: true, features: ["agentStatus", "widgets", "invoke", "sleep"], device: { touch: true, compact: true },
     },
     {
       type: "structure",
@@ -230,9 +235,9 @@ test("a screen that places live surfaces itself says so, and its view is told it
     c.post(phone, session, { type: "ready", v: 1 });
     return (c.said(phone, session).find((m) => m.type === "hello") as { features: string[] }).features;
   };
-  assert.deepEqual(await features(true), ["agentStatus", "widgets", "invoke", "surfaces"]);
-  assert.deepEqual(await features(false), ["agentStatus", "widgets", "invoke"]);
-  assert.deepEqual(await features(), ["agentStatus", "widgets", "invoke"]);
+  assert.deepEqual(await features(true), ["agentStatus", "widgets", "invoke", "surfaces", "sleep"]);
+  assert.deepEqual(await features(false), ["agentStatus", "widgets", "invoke", "sleep"]);
+  assert.deepEqual(await features(), ["agentStatus", "widgets", "invoke", "sleep"]);
   assert.equal(await code(c.call("view.open", ["priya-board", c.repo, null, "yes"], phone)), "BAD_REQUEST");
 });
 
@@ -298,6 +303,42 @@ test("what the view does is done on the board as its caller, and recorded; what 
   // What it had selected is gone, and it is told so.
   assert.deepEqual(told.filter((m) => m.type === "selection").at(-1), { type: "selection", tileId: null, frameId: null, fresh: true });
   assert.deepEqual(recorded().at(-1), { actor: { kind: "person" }, verb: "agent.close", target: "t2", detail: "view priya-board", outcome: "ok" });
+});
+
+test("an agent asleep is shown asleep with when it slept, never where; the view wakes it and puts it to sleep as its caller, recorded, and a caller who may not, may not", async () => {
+  const c = computer();
+  installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn"] });
+  const before = Date.now();
+  c.store.setSleeping("t1", c.repo);
+  const tileOne = (told: Array<Record<string, unknown>>) => (told.filter((m) => m.type === "structure").at(-1)!.tiles as Array<Record<string, unknown>>)[0]!;
+  // A phone that may start agents but not wake or sleep them: its view may not either.
+  const starts = c.caller((method) => method === "agent.start");
+  const { session: s1 } = (await c.call("view.open", ["priya-board", c.repo], starts)) as { session: string };
+  c.post(starts, s1, { type: "ready", v: 1 });
+  c.post(starts, s1, { type: "command", name: "wakeAgent", args: ["t1"] });
+  await wait(50);
+  assert.deepEqual(c.woke, []);
+
+  const phone = c.caller();
+  const { session } = (await c.call("view.open", ["priya-board", c.repo], phone)) as { session: string };
+  c.post(phone, session, { type: "ready", v: 1 });
+  const asleep = tileOne(c.said(phone, session));
+  assert.deepEqual(Object.keys(asleep), ["id", "frameId", "kind", "name", "agent", "asleep"]);
+  const since = (asleep.asleep as { since: number }).since;
+  assert.ok(since >= before && since <= Date.now(), `slept at ${since}`);
+  c.post(phone, session, { type: "command", name: "wakeAgent", args: ["t1"] });
+  const recorded = () => (fs.existsSync(path.join(c.dir, "audit.jsonl")) ? c.audit() : []).map(({ verb, target, detail, outcome }) => ({ verb, target, detail, outcome }));
+  for (let t = 0; t < 2_000 && recorded().length < 1; t += 20) await wait(20);
+  assert.deepEqual(c.woke, [`${c.repo}:t1`]);
+  assert.equal(tileOne(c.said(phone, session)).asleep, undefined, "woken, it is told the agent is awake");
+  c.post(phone, session, { type: "command", name: "sleepAgent", args: ["t1"] });
+  for (let t = 0; t < 2_000 && recorded().length < 2; t += 20) await wait(20);
+  assert.deepEqual(c.slept, [`${c.repo}:t1`]);
+  assert.ok(tileOne(c.said(phone, session)).asleep);
+  assert.deepEqual(recorded(), [
+    { verb: "agent.wake", target: "t1", detail: "view priya-board", outcome: "ok" },
+    { verb: "agent.sleep", target: "t1", detail: "view priya-board", outcome: "ok" },
+  ]);
 });
 
 test("a tile's status follows the view that asks: its bucket and its agent's, now and as it changes, until it stops asking", async () => {

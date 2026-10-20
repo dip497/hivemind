@@ -10,15 +10,15 @@ import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { dialog, net } from "electron";
+import { net } from "electron";
 import { serveScheme } from "./schemes.js";
 import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { isToolId, toolOfFolder, type ToolPackage } from "@hivemind/core/tool-format";
 import { listToolPackages, toolFile } from "@hivemind/core/tool-packages";
-import { installPackage, removePlugin } from "@hivemind/core/package-install";
+import { removePlugin } from "@hivemind/core/package-install";
 import { handle } from "./app-ipc.js";
-import { appWindowOf, broadcast } from "./windows.js";
-import { getSettings, reloadSettings } from "./settings-store.js";
+import { broadcast } from "./windows.js";
+import { getSettings } from "./settings-store.js";
 import type { ToolRun, ToolRunResult } from "../shared/ipc.js";
 
 export const PLUGIN_SCHEME = "hm-plugin";
@@ -160,17 +160,6 @@ export function installToolPackageIpc(): void {
       .filter(([k, v]) => /^[a-z-]+$/.test(k) && Array.isArray(v))
       .map(([k, v]) => [k, (v as unknown[]).filter((n): n is string => typeof n === "string")]));
   });
-  handle("tools:install", async (e) => {
-    const win = appWindowOf(e.sender);
-    const opts = { properties: ["openDirectory" as const], title: "Add a tool plugin" };
-    const picked = await (win ? dialog.showOpenDialog(win, opts) : dialog.showOpenDialog(opts));
-    const from = picked.filePaths[0];
-    if (picked.canceled || !from) return null;
-    const { record } = await installPackage(from);
-    await reloadSettings();
-    toolsChanged();
-    return { id: record.id, name: record.name };
-  }, { local: true });
   handle("tools:remove", async (_e, id: unknown) => {
     if (typeof id !== "string") throw new Error("not a tool plugin");
     await removePlugin("tool", id);

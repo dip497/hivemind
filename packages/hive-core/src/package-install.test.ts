@@ -42,7 +42,7 @@ test("installing a widget folder gives a package of one, and removing the widget
   expect(record).toMatchObject({ id: "counter", name: "Counter", version: "0.0.0", on: true, members: [{ kind: "widget", id: "counter", path: "." }] });
   expect(record!.digest).toMatch(/^[a-f0-9]{64}$/);
   const listed = (await listWidgets()).find((w) => w.id === "counter");
-  expect(listed?.package).toEqual({ id: "counter", version: "0.0.0", on: true, members: 1 });
+  expect(listed?.package).toEqual({ id: "counter", name: "Counter", version: "0.0.0", on: true, members: 1 });
 
   await removePlugin("widget", "counter");
   expect(await readInstalledPackages()).toEqual([]);

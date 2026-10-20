@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
-import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { PluginRow, type ListedRow } from "./plugins/PluginList";
+import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { useHubDescription } from "./plugins/library";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
@@ -13,35 +14,40 @@ import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar, type ToolbarActionId, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { useSettingsNavigate } from "./settings-panels";
-import { underPackageRow } from "./plugins/package-rows";
+import { heldOffByPackage, partOfPackage } from "./plugins/package-rows";
 
 export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); };
 
 /** The views on the Plugins page: the one in use says so; one off or that cannot load is listed
  *  from its package, so it can be opened and switched back on. */
-export function ViewsSection({ matches }: { matches: (text: string) => boolean }) {
+/** The views you have, as rows of the Plugins page, each under its manifest's category; one that
+ *  comes with the app says none, so it is under Other. */
+export function useViewRows(matches: (text: string) => boolean): ListedRow[] {
   const mode = resolveViewId(useViewMode()) ?? "canvas";
   const report = useCommunityReport();
   const hub = useHubDescription();
   useEffect(rescan, []);
-  // A view in a package of several is listed under its package.
-  const inPackage = new Set(report.packages.filter(underPackageRow).map((p) => p.id));
-  const on = useViews().filter((v) => !inPackage.has(v.id) && matches(`${v.label} ${v.id} ${v.hint}`));
-  const off = report.packages.filter((p) => report.refused[p.id] && !inPackage.has(p.id) && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
-  const count = on.length + off.length;
+  const on = useViews().filter((v) => matches(`${v.label} ${v.id} ${v.hint}`));
+  const off = report.packages.filter((p) => report.refused[p.id] && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
+  const category = (id: string): PluginCategory => report.packages.find((p) => p.id === id)?.manifest?.category ?? "other";
   // A package says what it does only through HiveHub; a built-in view says it in its hint.
-  const about = (id: string): string | undefined => report.packages.some((x) => x.id === id) ? hub("view", id) : undefined;
-  if (!count) return null;
-  return <PluginGroup kind="view" count={count} foot={<p>⌘E switches between the views that are on.</p>}>
-    {on.map((v) => <PluginRow key={v.id} kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} />)}
-    {off.map((p) => {
+  const about = (id: string): string | undefined => {
+    const pkg = report.packages.find((x) => x.id === id);
+    const part = pkg && partOfPackage(pkg);
+    return part ? `Part of ${part.name}` : pkg ? hub("view", id) : undefined;
+  };
+  return [
+    ...on.map((v): ListedRow => ({ key: `view:${v.id}`, kind: "view", category: category(v.id),
+      row: <PluginRow kind="view" id={v.id} name={v.label} line={about(v.id) ?? v.hint} mark={<v.icon />} badge={mode === v.id ? "In use" : undefined} /> })),
+    ...off.map((p): ListedRow => {
       const why = report.refused[p.id]!;
       const switchedOff = why === "disabled in Settings";
-      return <PluginRow key={p.id} kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
-        line={switchedOff ? about(p.id) ?? "" : why}
-        state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} />;
-    })}
-  </PluginGroup>;
+      return { key: `view:${p.id}`, kind: "view", category: category(p.id),
+        row: <PluginRow kind="view" id={p.id} name={p.manifest?.name ?? p.id} mark={<Puzzle />}
+          line={switchedOff ? about(p.id) ?? "" : why}
+          state={switchedOff ? "off" : "unavailable"} badge={switchedOff ? "Off" : "Can't load"} /> };
+    }),
+  ];
 }
 
 /** A view's own mark; one that cannot load yet is a puzzle piece. */
@@ -59,7 +65,7 @@ export function ViewActions({ id }: { id: string }) {
   const name = view?.label ?? pkg?.manifest?.name ?? id;
   return <>
     {view && (mode === id ? <span className="agent-badge">In use</span> : <Button variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>)}
-    {pkg && <Switch aria-label={`Enable ${name}`} checked={on} disabled={!view && !!pkg.error}
+    {pkg && <Switch aria-label={`Enable ${name}`} checked={on} disabled={(!view && !!pkg.error) || heldOffByPackage(pkg)}
       onCheckedChange={() => void switchPlugin("view", pkg, !on).then(rescan)} />}
   </>;
 }
@@ -77,7 +83,7 @@ export function ViewPage({ id }: { id: string }) {
     const name = pkg.manifest?.name ?? id;
     return <div className="plugin-page" data-view-page={id}>
       <p className={on ? "settings-note error" : "settings-note"}>{on ? report.refused[id] ?? pkg.error : "Switch it on to choose it as your workspace view."}</p>
-      {pkg.source === "user" && <RemoveView id={id} name={name} onRemoved={() => go("plugins")} />}
+      {pkg.source === "user" && !partOfPackage(pkg) && <RemoveView id={id} name={name} onRemoved={() => go("plugins")} />}
     </div>;
   }
   if (!view) return <p className="settings-empty">There is no view named {id}.</p>;
@@ -115,7 +121,7 @@ export function ViewPage({ id }: { id: string }) {
         <dt>Location</dt><dd className="settings-path">{pkg.dir}</dd>
         <dt>Additional access</dt><dd>{pkg.manifest?.permissions.join(", ") || "None"}</dd>
       </dl>
-      {pkg.source === "user" && <RemoveView id={id} name={view.label} onRemoved={() => go("plugins")} />}
+      {pkg.source === "user" && !partOfPackage(pkg) && <RemoveView id={id} name={view.label} onRemoved={() => go("plugins")} />}
     </section>}
   </div>;
 }

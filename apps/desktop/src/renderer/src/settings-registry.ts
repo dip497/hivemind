@@ -31,7 +31,7 @@ export const SETTINGS_PAGES: readonly SettingsPageDef[] = [
   { id: "plugins", group: "Plugins", label: "Plugins", icon: Blocks, description: "Agents, views, widgets and tools: the ones you have and the ones on HiveHub.", chunk: "lazy" },
   { id: "browser", group: "Advanced", label: "In a browser", hint: "This app in a browser tab here", icon: Globe, description: "Serve this app, whole, to a browser tab on this computer.", chunk: "lazy" },
   { id: "servers", group: "Advanced", label: "Servers", hint: "Reach your devices from other networks", icon: Network, description: "The server your devices use to find each other when they are not on the same network.", chunk: "lazy" },
-  { id: "about", group: "Advanced", label: "About and updates", icon: Info, description: "Version, updates, and whether the app checks for them.", chunk: "eager" },
+  { id: "about", group: "Advanced", label: "About and updates", icon: Info, description: "Version, updates, whether the app checks for them, and what quitting does.", chunk: "eager" },
 ] as const;
 
 /** The sidebar: each group's pages, in order. */

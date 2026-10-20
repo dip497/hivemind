@@ -343,6 +343,7 @@
 .plugins-scope > button { padding: 0 10px; border-radius: 4px; font-size: var(--text-label); color: var(--color-fg2); }
 .plugins-scope > button:hover { color: var(--color-fg); }
 .plugins-scope > button[aria-selected=true] { background: var(--color-bg); color: var(--color-fg); box-shadow: var(--hm-shadow-1); }
+.plugins-kind-count { margin-left: 4px; color: var(--color-fg3); }
 .plugins-group { display: flex; flex-direction: column; gap: 8px; }
 .plugins-group-heading { display: flex; align-items: baseline; gap: 6px; font-size: var(--text-body); font-weight: 600; color: var(--color-fg); }
 .plugins-group-heading > span { font-size: var(--text-label); font-weight: 400; color: var(--color-fg3); }
@@ -352,7 +353,7 @@
 .plugins-group-setting { display: flex; align-items: center; gap: 6px; }
 .plugins-group-setting label { color: var(--color-fg2); }
 .plugins-group-setting > [role=switch] { margin-left: auto; }
-[data-plugins-home]:has([data-plugins-kind]) .plugins-none { display: none; }
+[data-plugins-home]:has([data-plugins-category]) .plugins-none { display: none; }
 .catalog-item > .settings-install-review, .catalog-item > [role=alert] { margin: 0 12px 12px 40px; }
 .plugin-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--color-line); }
 .plugin-tabs > button { padding: 6px 10px; font-size: var(--text-body); color: var(--color-fg2); border-bottom: 2px solid transparent; margin-bottom: -1px; }
@@ -372,3 +373,23 @@
 .package-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 8px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; border-radius: 6px; }
 .package-members { margin-left: 22px; border-left: 1px solid var(--color-line2); padding-left: 4px; }
 .package-members .plugin-row:not(:has(> button)) { padding: 8px; }
+.package-members .settings-remove-confirm { margin: 8px; padding: 12px; border-radius: 6px; background: var(--color-bg2); }
+.package-rollback-open { align-self: flex-start; margin: 4px 0 6px 2px; color: var(--color-fg2); }
+
+/* A package's review, before it is installed or updated: one line per member, what it is and
+   where it runs, then what it may do or what changed. */
+.package-review-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.package-review-member { display: flex; align-items: flex-start; gap: 10px; }
+.package-review-member > .plugin-row-mark { padding-top: 2px; }
+.package-review-member .plugin-row-detail { white-space: normal; }
+.package-review-asks, .package-review-change { font-size: var(--text-label); line-height: 1.45; color: var(--color-fg); }
+.package-review-off { font-size: var(--text-label); line-height: 1.45; color: var(--color-warn); }
+.package-review-versions { margin-top: 0; font-variant-numeric: tabular-nums; }
+.settings-install-review .package-review-outcome { margin-top: 14px; color: var(--color-fg); }
+.settings-install-review .package-review-outcome.warn { color: var(--color-warn); }
+.package-review-all { margin-top: 14px; }
+.package-review-all > summary { cursor: pointer; font-size: var(--text-label); color: var(--color-fg2); }
+.package-review-all > summary:hover { color: var(--color-fg); }
+.catalog-holds-toggle { display: inline-flex; align-items: center; gap: 4px; margin: 0 0 6px 36px; font-size: var(--text-label); color: var(--color-fg2); }
+.catalog-holds-toggle:hover { color: var(--color-fg); }
+.catalog-holds { margin: 0 12px 12px 36px; }

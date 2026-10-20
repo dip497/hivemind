@@ -33,7 +33,7 @@ the tools that ship with the app load.
 
 ## What you install from HiveHub
 
-<Tooltip tip="The catalogue Hivemind installs agents and plugins from." cta="Glossary" href="/glossary#hivehub">HiveHub</Tooltip> lists every file of a plugin with its SHA-256 hash and the commit it came from. Every file is checked against that hash before it installs. A file that changed after listing fails the install.
+<Tooltip tip="The catalogue Hivemind installs agents and plugins from." cta="Glossary" href="/glossary#hivehub">HiveHub</Tooltip> lists every file of a plugin with its hash, and Hivemind checks each file before it installs: see [Files stay in the author's repository](/hivehub#files-stay-in-the-authors-repository).
 
 - `hive agents install`, from HiveHub or from a repository, prints what the agent runs first. It installs only when you run it again with `--yes`.
 - When you install from HiveHub, the app sends one request to count the install. It carries no id, no machine name and no headers of its own. HiveHub counts the same plugin from one address once a day.

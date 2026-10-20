@@ -24,14 +24,16 @@ one wins.
 | `events` (1.3) | `events[]`, `replay?` | After `subscribeEvents`; one message per host task |
 | `activity` (1.3) | `levels: Record<id, 0..3>` | After `watchActivity`; only changes, ≤ 4/s, none while hidden |
 | `presence` (1.3) | `presence {state, since, focused}` | After `subscribePresence`; on change |
-| `response` (1.3) | `requestId`, `ok`, `result \| error {code}` | The answer to `request`; codes `UNSUPPORTED`, `BAD_REQUEST`, `BUSY`, `DECLINED`, `INTERNAL` |
+| `response` (1.3) | `requestId`, `ok`, `result \| error {code}` | The answer to `request`; codes `UNSUPPORTED`, `BAD_REQUEST`, `BUSY`, `DECLINED`, `INTERNAL`, and (1.14) `ASLEEP` |
 | `status` (1.4) | `agent? {state, waitingFor?, subagents, background, compacting, source?}` | On agent tiles; `state`: idle, working, waiting, done, failed, interrupted, limited, exited |
 | `hello` (1.5) | `device? {touch, compact}` | What the view is on; `hm.device` reads a desktop's from a host that predates it |
 | `participants` (1.5) | `participants [{id, person, name, color, cursor: {tileId} \| null, selection}]` | After `subscribeParticipants`; everyone else here, on each change of who, the tile their pointer is over or their selection — only of your tiles and frames |
+| `structure` (1.14) | `tiles[].asleep? {since?}` | The agent is asleep: its process ended, its tile kept with its last screen and its conversation until it is woken. `since`: when it was put to sleep (ms since epoch). Absent while awake. Its `status` stays what it was left at: draw `asleep` over it |
 
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
 `history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
-`participants`. A host that predates 1.3 sends none.
+`participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run). A
+host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
 approval | input}`, `subagents {active}`, `tileOpened {frameId, tileKind, agent?, spawnedBy?}`,
@@ -61,7 +63,7 @@ compute one from a theme token yourself.
 | `watchActivity` (1.3) | `tileIds[]` | The whole watched set, ≤ 256 |
 | `subscribePresence` / `unsubscribePresence` (1.3) | — | |
 | `request` (1.3) | `requestId`, `name: history \| share`, `args` | `history [{day}]`; `share [{png: ArrayBuffer, suggestedName?}]` — the one non-JSON value |
-| `request` (1.4) | `name: agents \| sessions \| prompt` | `agents [{}]` → `{agents}`; `sessions [{agent, frameId}]` → `{sessions: [{id, updated?, prompt?}]}`; `prompt [{tileId, text}]` → `{outcome: sent \| cancelled}` |
+| `request` (1.4) | `name: agents \| sessions \| prompt` | `agents [{}]` → `{agents}`; `sessions [{agent, frameId}]` → `{sessions: [{id, updated?, prompt?}]}`; `prompt [{tileId, text}]` → `{outcome: sent \| cancelled}`; (1.14) a tile asleep is refused `ASLEEP` before the user is asked, as `hive ctl send` refuses it: wake it first |
 | `subscribeParticipants` / `unsubscribeParticipants` (1.5) | — | `onParticipants()` handles both ends |
 
 Sending a 1.3 message to a host that did not advertise the feature is a refusal, like an
@@ -85,6 +87,8 @@ the host never named in a `structure` is one; the SDK (1.5) holds such a rect ba
 | `spawnAgent(agentId \| null, frameId \| null, { prompt?, name?, resume? })` | `workspace:spawn`; with `prompt` also `workspace:prompt` (the user confirms); with `resume` also `workspace:sessions` |
 | `renameTile(id, name)` | `workspace:edit` |
 | `openFolder(frameId)` | `workspace:edit` |
+| `wakeAgent(tileId)` (1.14) | `workspace:spawn`; wakes the agent asleep there, in its conversation |
+| `sleepAgent(tileId)` (1.14) | `workspace:spawn`; puts the agent to sleep; one busy is put to sleep only if the person says so |
 
 `spawnTile`'s free-form options are deliberately not exposed: an agent's command line
 is not something a view chooses. `spawnAgent` takes a catalog id, never a command.

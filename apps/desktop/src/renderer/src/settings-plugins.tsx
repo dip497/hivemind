@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { setViewMode } from "./workspace/view-mode-store";
-import { LayoutGrid } from "./components/icons";
+import { Blocks, ChevronDown, ChevronRight, LayoutGrid } from "./components/icons";
 import { iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
 import { Loading } from "./components/ui/loading";
@@ -8,13 +8,14 @@ import { useCommunityReport } from "./workspace/views/community/registry";
 import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
 import { SvgMark } from "./agents";
 import { rescan } from "./settings-views";
-import { PLUGIN_KINDS, permissionWords, type PluginKind } from "./plugins/library";
-import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { permissionWords } from "./plugins/library";
+import { rowsInKindTab, TAB_LABEL, type PluginTab } from "./plugins/kinds";
+import { MemberIcon, MEMBER_KIND, PackageReview, RUNS_LABEL, askedFor } from "./plugins/PackageReview";
+import { memberFormat } from "@hivemind/core/package-format";
+import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./plugins/PluginList";
 import { useWidgetPackages } from "./board-objects/widget-runtime";
 import { useToolPackages } from "./tiles/tool-plugins";
 import { useSettingsNavigate } from "./settings-panels";
-
-export type Preview = NonNullable<Awaited<ReturnType<NonNullable<typeof window.hive.previewViewInstall>>>>;
 
 export const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': Error: /, "") : "The plugin could not be updated.";
@@ -49,9 +50,9 @@ export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
   return <span className="catalog-monogram" style={{ "--mark-hue": hue } as CSSProperties}>{entry.id[0]?.toUpperCase()}</span>;
 }
 
-/** What HiveHub lists, filtered by the Plugins page's search and kind; each one installed after
- *  its review, here or on its own page. */
-export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | PluginKind }) {
+/** What HiveHub lists, found by the Plugins page's search, the open tab's kind under its
+ *  categories; each one installed after its review, here or on its own page. */
+export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: PluginTab; onTab: (tab: PluginTab) => void }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [review, setReview] = useState<{ key: string; data: Review } | null>(null);
@@ -59,6 +60,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [done, setDone] = useState<{ entry: Entry } | null>(null);
   const [outdated, setOutdated] = useState<string[]>([]);
+  const [holding, setHolding] = useState<string | null>(null);
   const reviewRef = useRef<HTMLElement | null>(null);
   const views = useCommunityReport().packages;
   const agents = useAgentEntries();
@@ -88,8 +90,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     : e.type === "tool" ? (tools.some((t) => t.id === e.id && t.source === "you") ? tools.find((t) => t.id === e.id && t.source === "you")!.version ?? "0.0.0" : null)
     : agents.some((a) => a.id === e.id && a.source === "user") ? "installed" : null;
   const q = query.trim().toLowerCase();
-  const shown = (entries ?? []).filter((e) => (kind === "all" || e.type === kind)
-    && (!q || `${e.name} ${e.description} ${e.author}`.toLowerCase().includes(q)));
+  const shown = (entries ?? []).filter((e) => !q || `${e.name} ${e.description} ${e.author}`.toLowerCase().includes(q));
   const key = (e: Entry) => `${e.type}:${e.id}`;
   // A view says which version it is; an agent does not, so what it has is compared by content
   // instead — the same hash the catalog pins it by.
@@ -153,6 +154,22 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     </div>
   </section>;
 
+  const { counts, groups } = rowsInKindTab(shown.map((e): ListedRow => {
+    const have = installed(e);
+    const update = outdatedOf(e);
+    const open = review?.key === key(e) ? review.data : null;
+    const action = (!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
+      {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined;
+    return { key: key(e), kind: e.type, category: e.category ?? "other", row: <div className="catalog-item" data-catalog-plugin={key(e)}>
+      {e.type === "package"
+        ? <CatalogPackageRow entry={e} installed={!!have && !update} action={action} open={holding === e.id} toggle={() => setHolding(holding === e.id ? null : e.id)} />
+        : <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
+          badge={have && !update ? "Installed" : undefined} action={action} />}
+      {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
+      {open && reviewOf(e, open)}
+    </div> };
+  }), tab);
+
   return <div className="settings-stack">
     {done && <div role="status" className="settings-message catalog-done">
       <span>{done.entry.name} is installed.</span>
@@ -166,77 +183,39 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       <div className="settings-actions"><Button variant="outline" onClick={load}>Try again</Button></div>
     </div>}
     {!entries && !loadError && <Loading label="Loading the catalog" />}
-    {entries && !shown.length && <p className="settings-empty">
-      {q ? <>No plugins on HiveHub match “{query}”.</>
-        : kind !== "all" ? `No ${kind} plugins have been published yet.` : "Nothing has been published yet."}
+    {entries && <KindTabs counts={counts} tab={tab} onChange={onTab} />}
+    {entries && !groups.length && <p className="settings-empty">
+      {q ? <>No {TAB_LABEL[tab].toLowerCase()} on HiveHub match “{query}”.</> : `No ${TAB_LABEL[tab].toLowerCase()} have been published yet.`}
     </p>}
-    {(() => {
-      const list = kind === "all" ? shown.filter((e) => e.type === "package") : [];
-      if (!list.length) return null;
-      return <section className="plugins-group" aria-label="Packages" data-plugins-kind="package">
-        <h3 className="plugins-group-heading">Packages<span>{list.length}</span></h3>
-        <div className="plugin-rows">{list.map((e) => {
-          const have = installed(e);
-          const update = outdatedOf(e);
-          const open = review?.key === key(e) ? review.data : null;
-          return <div key={key(e)} className="catalog-item" data-catalog-plugin={key(e)}>
-            <div className="plugin-row" data-plugin-row={key(e)}>
-              <span className="plugin-row-mark" aria-hidden="true"><LayoutGrid size={16} /></span>
-              <span className="plugin-row-text">
-                <span className="plugin-row-name">{e.name}</span>
-                <span className="plugin-row-detail">{e.description}{e.members ? ` · ${e.members.length} plugins` : ""}</span>
-              </span>
-              {(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
-                {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : have && !update ? <span className="settings-note">Installed</span> : null}
-            </div>
-            {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
-            {open && reviewOf(e, open)}
-          </div>;
-        })}</div>
-      </section>;
-    })()}
-    {PLUGIN_KINDS.map((k) => {
-      const list = shown.filter((e) => e.type === k);
-      if (!list.length) return null;
-      return <PluginGroup key={k} kind={k} count={list.length}>
-        {list.map((e) => {
-          const have = installed(e);
-          const update = outdatedOf(e);
-          const open = review?.key === key(e) ? review.data : null;
-          return <div key={key(e)} className="catalog-item" data-catalog-plugin={key(e)}>
-            <PluginRow kind={k} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
-              badge={have && !update ? "Installed" : undefined}
-              action={(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
-                {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined} />
-            {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
-            {open && reviewOf(e, open)}
-          </div>;
-        })}
-      </PluginGroup>;
-    })}
+    <CategoryGroups groups={groups} />
     <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
 }
 
-const RUNS_WORDS: Record<string, string> = {
-  sandboxed: "runs in a sandbox, held to what it asks for",
-  "in the app": "runs inside Hivemind, with the app's access to your files and network",
-  "as an agent's instructions": "instructions an agent follows",
-};
-
-/** What a package holds, each member with where it runs and what it asks for, and what an update
- *  changes; installed as one. */
-function PackageReview({ review }: { review: Extract<Review, { type: "package" }> }) {
+/** A package HiveHub lists: one row, opened to what it holds as HiveHub read it, before anything
+ *  is downloaded. The review checks every member again from its files. */
+function CatalogPackageRow({ entry: e, installed, action, open, toggle }: { entry: Entry; installed: boolean; action: ReactNode; open: boolean; toggle: () => void }) {
+  const Chevron = open ? ChevronDown : ChevronRight;
   return <>
-    <p>Adds {review.name} {review.version}, a package of {review.members.length}. They are installed, updated and removed together.</p>
-    <ul className="catalog-does" data-package-members>
-      {review.members.map((m) => <li key={`${m.kind}:${m.id}`} data-package-member={`${m.kind}:${m.id}`}>
-        <strong>{m.name}</strong> ({m.kind}, {RUNS_WORDS[m.runs] ?? m.runs}){m.permissions.length ? `: may ${permissionWords(m.permissions).join("; ")}` : ""}
+    <div className="plugin-row" data-plugin-row={`package:${e.id}`}>
+      <span className="plugin-row-mark" aria-hidden="true"><Blocks size={16} /></span>
+      <span className="plugin-row-text">
+        <span className="plugin-row-name">{e.name}</span>
+        {e.description && <span className="plugin-row-detail">{e.description}</span>}
+      </span>
+      {action ?? (installed && <span className="plugin-row-detail">Installed</span>)}
+    </div>
+    {e.members && <button type="button" className="catalog-holds-toggle" aria-expanded={open} onClick={toggle} data-package-holds-open={e.id}>
+      <Chevron size={13} />What it holds ({e.members.length})</button>}
+    {open && e.members && <ul className="package-review-list catalog-holds" data-package-holds={e.id}>
+      {e.members.map((m) => <li key={`${m.kind}:${m.id}`} className="package-review-member">
+        <span className="plugin-row-mark" aria-hidden="true"><MemberIcon kind={m.kind} /></span>
+        <span className="plugin-row-text">
+          <span className="plugin-row-name">{m.name}</span>
+          <span className="plugin-row-detail">{MEMBER_KIND[m.kind] ?? m.kind}{memberFormat(m.kind) ? ` · ${RUNS_LABEL[memberFormat(m.kind)!.runs]}` : ""}</span>
+          <span className="package-review-asks">{m.permissions.length ? `May ${askedFor(m.permissions).join("; ")}` : "Asks for nothing more"}</span>
+        </span>
       </li>)}
-    </ul>
-    {review.replacesVersion && <p className="settings-note">Replaces version {review.replacesVersion}. {review.changes.length
-      ? `Changed: ${review.changes.map((c) => `${c.id} (${c.change}${c.newPermissions.length ? `, now asks for ${c.newPermissions.join(", ")}` : ""})`).join("; ")}.`
-      : "Nothing in it changed."}</p>}
-    <p>{review.on ? "It is on once installed." : "It is installed switched off. Switch it on from Settings → Plugins once you trust who wrote it."}</p>
+    </ul>}
   </>;
 }

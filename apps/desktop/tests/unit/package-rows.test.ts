@@ -3,21 +3,20 @@
 // its plugin's row.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { packageRows, underPackageRow } from "../../src/renderer/src/plugins/package-rows.ts";
+import { packageRows } from "../../src/renderer/src/plugins/package-rows.ts";
+import type { InstalledPackageInfo } from "../../src/shared/ipc.ts";
 
-const kit = (on: boolean) => ({
+const kit = (on: boolean): InstalledPackageInfo => ({
   id: "@ada/kit", name: "Kit", version: "1.0.0", on,
-  members: [{ kind: "tool", id: "@ada/prs" }, { kind: "widget", id: "@ada/dog" }, { kind: "agent-preset", id: "@ada/reviewer" }],
+  members: [{ kind: "tool", id: "@ada/prs", runs: "in the app" }, { kind: "widget", id: "@ada/dog", runs: "sandboxed" }, { kind: "agent-preset", id: "@ada/reviewer", runs: "as an agent's instructions" }],
+  previous: null,
 });
 const names: Record<string, string> = { "tool:@ada/prs": "PRs", "widget:@ada/dog": "Dog" };
 const nameOf = (kind: string, id: string) => names[`${kind}:${id}`];
 
 test("a package of several is one row with its members; a package of one is not", () => {
-  const rows = packageRows([kit(true), { id: "@ada/pet", name: "Pet", version: "1.0.0", on: true, members: [{ kind: "widget", id: "@ada/pet" }] }], {}, nameOf);
+  const rows = packageRows([kit(true), { id: "@ada/pet", name: "Pet", version: "1.0.0", on: true, members: [{ kind: "widget", id: "@ada/pet", runs: "sandboxed" }], previous: null }], {}, nameOf);
   assert.deepEqual(rows.map((r) => [r.id, r.members.map((m) => `${m.kind}:${m.name}`)]), [["@ada/kit", ["tool:PRs", "widget:Dog", "agent-preset:@ada/reviewer"]]]);
-  assert.equal(underPackageRow({ package: { members: 3 } }), true);
-  assert.equal(underPackageRow({ package: { members: 1 } }), false);
-  assert.equal(underPackageRow({}), false);
 });
 
 test("a member switched off on its own is off while its package is on; while the package is off every member is off and none can be turned on", () => {

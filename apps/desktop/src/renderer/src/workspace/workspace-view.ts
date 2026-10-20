@@ -88,6 +88,9 @@ export interface WorkspaceCommands {
   renameTile: (id: string, name: string) => void;
   /** Ask the user for a folder to bind the frame to. */
   openFolder: (frameId: string) => void;
+  /** Wake the agent asleep in a tile; put one to sleep, asking first when it is busy. */
+  wakeAgent: (tileId: string) => void;
+  sleepAgent: (tileId: string) => void;
   /** Live agent status, PER TILE, off the awareness bus. Deliberately not on
    *  the model: a status transition (~1 Hz while agents work) reaches only the
    *  subscribers of that tile — a 3D view colours one object, a rail recolours

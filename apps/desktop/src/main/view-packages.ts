@@ -13,11 +13,9 @@ import path from "node:path";
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
-import { dialogStart, rememberPick } from "./dialog-start";
-import { app, net, protocol, dialog, type BrowserWindow, type WebFrameMain } from "electron";
+import { app, net, protocol, type BrowserWindow, type WebFrameMain } from "electron";
 import { serveScheme } from "./schemes.js";
 import { handle, handleEffect } from "./app-ipc.js";
-import { appWindowOf } from "./windows.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, type InstalledView } from "@hivemind/core/views";
 import { installPackage, removePlugin } from "@hivemind/core/package-install";
@@ -196,15 +194,6 @@ export async function reviewViewDir(dir: string, staged: boolean) {
 
 /** The renderer can install only a package it was shown for review. */
 export function installViewManagementIpc(): void {
-  handle("views:preview-install", async (event) => {
-    const win = appWindowOf(event.sender)!; // the gate answers app windows only
-    if (pending?.staged) await rm(pending.dir, { recursive: true, force: true }).catch(() => {});
-    pending = null;
-    const result = await dialog.showOpenDialog(win, { title: "Choose a view extension", buttonLabel: "Review extension", defaultPath: dialogStart("view", app.getPath("home")), properties: ["openDirectory"] });
-    if (result.canceled || !result.filePaths[0]) return null;
-    rememberPick("view", result.filePaths[0]);
-    return reviewViewDir(result.filePaths[0], false);
-  }, { local: true });
   handleEffect("views:install", (token) => ({ target: pending && token === pending.token ? pending.id : undefined }), async (_event, token: string) => {
     if (!pending || token !== pending.token) throw new Error("Choose the extension folder again");
     const candidate = pending;

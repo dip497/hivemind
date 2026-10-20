@@ -16,9 +16,8 @@ import { useToolPackages } from "../tiles/tool-plugins";
 import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { useSettings } from "../settings-store";
 
-export type PluginKind = "agent" | "view" | "widget" | "tool";
-export const PLUGIN_KINDS: readonly PluginKind[] = ["agent", "view", "widget", "tool"];
-export const KIND_LABEL: Record<PluginKind, string> = { agent: "Agent", view: "View", widget: "Widget", tool: "Tool" };
+import type { PluginKind } from "./kinds";
+export { KIND_LABEL, type PluginKind } from "./kinds";
 
 /** Where a plugin came from: with the app, added by you, from the repository you have open, or
  *  from HiveHub (installed from it, or only listed there). */

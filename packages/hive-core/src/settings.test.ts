@@ -228,6 +228,14 @@ describe("settings schema", () => {
     expect(mergeSettings({ network: { updateCheck: true } }, off).network.updateCheck).toBe(true);
   });
 
+  test("quit: asks until a choice is kept, and only a known choice changes it", () => {
+    expect(mergeSettings({}).quit).toEqual({ whenRunning: "ask" });
+    const stop = mergeSettings({ quit: { whenRunning: "stop-everything" } });
+    expect(stop.quit.whenRunning).toBe("stop-everything");
+    expect(mergeSettings({ quit: { whenRunning: "explode" } }, stop).quit.whenRunning).toBe("stop-everything");
+    expect(mergeSettings({ quit: { whenRunning: "keep-running" } }, stop).quit.whenRunning).toBe("keep-running");
+  });
+
   test("profile: a name and colour are kept as given and cleared by empty; a bad one keeps what was there", () => {
     expect(mergeSettings({}).profile).toEqual({ name: "", color: "" });
     const set = mergeSettings({ profile: { name: "  Priya Shah  ", color: "#3B82F6" } });
