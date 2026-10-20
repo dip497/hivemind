@@ -1,0 +1,16 @@
+{
+  "migrated": true,
+  "v": 1,
+  "appearance": { "preset": "hivemind" },
+  "plugins": {
+    "state": {
+      "tool:@dip497/pages": { "enabled": true },
+      "tool:@dip497/github-prs": { "enabled": true, "options": { "count": 80 } },
+      "tool:@dip497/worktrees": { "enabled": true },
+      "tool:@dip497/ci-runs": { "options": { "count": 120 } },
+      "widget:pomodoro": { "options": { "minutes": 50 } },
+      "widget:@dip497/dog": { "enabled": false, "options": { "name": "Rex" } },
+      "view:@dip497/island": { "enabled": false }
+    }
+  }
+}

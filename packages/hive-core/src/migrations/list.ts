@@ -4,8 +4,9 @@
  * that can still update has run it.
  */
 import type { Migration } from "./runner.js";
+import { m0001 } from "./0001-adopt-plugins-as-packages.js";
 
-export const MIGRATIONS: readonly Migration[] = [];
+export const MIGRATIONS: readonly Migration[] = [m0001];
 
 /** The list is the order, so it is checked at start: a number used twice, or out of order, stops
  *  the build that has it before it touches any data. */
