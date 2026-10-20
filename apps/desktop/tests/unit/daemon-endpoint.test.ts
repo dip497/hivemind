@@ -368,3 +368,23 @@ test("an attach that may start a session carries the environment as it is now, a
     await d.close();
   }
 });
+
+test("a start the daemon answers late still starts; only showing a session gives up at the attach timeout", async () => {
+  const sock = path.join(dir, "slow.sock");
+  // As a daemon busy starting many sessions at once: every answer comes after the attach timeout.
+  const server = net.createServer((c) => {
+    c.on("error", () => {});
+    c.on("data", makeLineDecoder((line) => {
+      const m = JSON.parse(line) as ClientMsg;
+      if (m.t === "attach") setTimeout(() => c.write(frame({ t: "attached", reqId: m.reqId, id: m.id, pid: 42, isNew: true, replay: "" })), 300);
+    }));
+  });
+  await new Promise<void>((r) => server.listen(sock, () => { server.unref(); r(); }));
+  const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), attachTimeoutMs: 100 });
+  const started = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
+  assert.equal(started.pid, 42);
+  const shown = await ep.spawn({ tileId: "t2", cwd: "/", cmd: "sh", cols: 80, rows: 24, noSpawn: true }, { onData: () => {}, onExit: () => {} });
+  assert.equal(shown.pid, -1);
+  ep.close();
+  await new Promise<void>((r) => server.close(() => r()));
+});
