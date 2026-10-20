@@ -10,7 +10,7 @@ const REPO = path.join(import.meta.dir, "../../..");
 /** What `npm install` puts in a view starter's folder, taken from this checkout. */
 const installViewDeps = (dir: string) => {
   fs.mkdirSync(path.join(dir, "node_modules"));
-  const deps = { esbuild: path.join(REPO, "node_modules/esbuild"), typescript: path.join(REPO, "apps/cli/node_modules/typescript") };
+  const deps = { esbuild: path.join(REPO, "node_modules/esbuild") };
   for (const [name, from] of Object.entries(deps)) fs.symlinkSync(fs.realpathSync(from), path.join(dir, "node_modules", name));
 };
 
@@ -73,6 +73,24 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
       expect(fs.existsSync(mark)).toBe(false);
       expect((r.json as Report).data.steps.draw).toBe("ok");
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  test("the type check never runs a tsc the plugin's folder holds", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-tsc-"));
+    const dir = path.join(tmp, "tally");
+    const mark = path.join(tmp, "ran");
+    try {
+      expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      const bin = path.join(dir, "node_modules", "typescript", "bin");
+      fs.mkdirSync(bin, { recursive: true });
+      fs.writeFileSync(path.join(dir, "node_modules", "typescript", "package.json"), JSON.stringify({ name: "typescript", version: "7.0.0", bin: { tsc: "bin/tsc" } }));
+      fs.writeFileSync(path.join(bin, "tsc"), `#!/usr/bin/env node\nrequire("node:fs").writeFileSync(${JSON.stringify(mark)}, "ran");\n`, { mode: 0o755 });
+      const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect(fs.existsSync(mark)).toBe(false);
+      expect((r.json as Report).data.steps.types).toBe("ok");
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
