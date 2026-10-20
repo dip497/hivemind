@@ -1,0 +1,286 @@
+---
+title: "HiveHub API"
+sidebarTitle: "API"
+description: "Every public HiveHub route: the index Hivemind reads, search, one plugin, install, publish and the command's sign-in, with the auth each needs, its request, response, limits and errors."
+---
+
+HiveHub answers at `https://hivehub.griiken.workers.dev`. Every response is JSON, except the
+command itself. Reading needs no sign-in. Publishing needs a GitHub sign-in:
+[Signing in to HiveHub](/hivehub-sign-in).
+
+<AgentPrompt description="Paste this into your coding agent to turn the routes on this page into a small script that lists HiveHub's plugins." page="hivehub-api">{`
+Using HiveHub's public API, write a small script that lists its plugins of one kind.
+
+1. Ask me which kind I want: agent, view, widget or tool.
+2. Call \`GET https://hivehub.griiken.workers.dev/api/v1/plugins?type=<kind>&sort=new\`. It needs no sign-in.
+3. For each plugin in \`plugins\`, print its \`id\`, \`version\`, \`publisher\`, \`installs\` and \`description\`, and every line of \`does\` indented below it.
+4. Do not call \`/resolve\`: it counts an install.
+5. Run it and show me the output.
+`}</AgentPrompt>
+
+## Routes
+
+| Method and path | Auth | What it is for |
+|---|---|---|
+| [`GET /api/v1/index.json`](#the-index) | None | Every plugin, as Hivemind reads it. |
+| [`GET /api/v1/plugins`](#search) | None | Search. |
+| [`GET /api/v1/plugins/<id>`](#one-plugin) | None | One plugin in full. |
+| [`GET /api/v1/plugins/<id>/resolve`](#install) | None | What an install downloads. Counts the install. |
+| [`POST /api/publish`](#publish) | A GitHub sign-in | Preview, then publish. |
+| [`GET /api/v1/cli`](#sign-in-for-the-command) | None | What `hivehub login` needs to start. |
+| [`POST /api/cli/refresh`](#renew-a-login) | A refresh token | Renew a `hivehub login`. |
+| [`GET /hivehub.mjs`](#the-command-itself) | None | The `hivehub` command. |
+| `GET /auth/github`, `GET /auth/callback`, `POST /auth/signout` | | Signing in on the web: [On the web](/hivehub-sign-in#on-the-web). |
+
+`<id>` is a view's or widget's `@owner/name`, a tool's `owner/name`, or an agent's name, such as
+`gemini`. The `GET` routes under `/api/v1/plugins` and the index allow any origin, so a web page
+can call them.
+
+## The index
+
+`GET /api/v1/index.json`. Every plugin of every kind, in the shape Hivemind installs from.
+Hivemind reads it from **Settings → Plugins**, or from the address in `HIVEMIND_PLUGIN_INDEX`.
+
+```bash
+curl -s https://hivehub.griiken.workers.dev/api/v1/index.json
+```
+
+```json
+{
+  "version": 1,
+  "plugins": [
+    {
+      "id": "dip497/worktrees",
+      "type": "tool",
+      "name": "Worktrees",
+      "description": "Every git worktree of the repository: its branch, uncommitted changes and how far it is from the base; review one with an agent, remove the merged ones.",
+      "author": "dip497",
+      "version": "1.0.0",
+      "path": "tools/worktrees",
+      "source": "https://raw.githubusercontent.com/dip497/hivemind-plugins/71363c7903321e43dec78d9e97e085020e1e40a7/",
+      "files": [{ "path": "hivemind-tool.json", "sha256": "b4743098…" }],
+      "homepage": "https://github.com/dip497/hivemind-plugins",
+      "minAppVersion": "2026.10.3",
+      "category": "git"
+    }
+  ]
+}
+```
+
+| Field | What it is |
+|---|---|
+| `version` | The index format's version: `1`. |
+| `id` | The id it installs by. |
+| `type` | `agent`, `view`, `widget` or `tool`. |
+| `name` | Its name. |
+| `description` | The one line on its card. |
+| `author` | The GitHub login that published it. |
+| `version` | The plugin's version, from its manifest. An agent is always `1.0.0`. |
+| `path` | Its folder in the repository. Empty for the top of it. |
+| `source` | The repository at the published commit, on `raw.githubusercontent.com`. A file's address is `source` + `path` + `/` + the file's path. |
+| `files` | Every file's `path`, relative to the folder, and its `sha256`. |
+| `homepage` | Its repository on GitHub, or an agent's install page. Left out when there is none. |
+| `bin` | An agent's program. Agents only. |
+| `minAppVersion` | The oldest Hivemind it runs on. Left out when it has none. |
+| `icon` | An agent's icon from its manifest, or `{"image": "…"}` for a view, widget or tool: a one-colour SVG kept inline, or a link to a picture in its folder. Left out when it has none. |
+| `category` | Its [category](/hivehub#categories). |
+
+The index format itself is defined by Hivemind's hub kit; this table is what HiveHub serves today.
+Packages, several plugins of one owner installed as one (`type: "package"` with `members`),
+arrive with the packages release.
+
+- At most 500 plugins, sorted by name. A plugin taken down is left out.
+- A plugin whose id no longer fits its kind's rule is left out, because Hivemind refuses an
+  index with one id it cannot read.
+- It may be cached for 5 minutes.
+
+## Search
+
+`GET /api/v1/plugins`. What the site and `hivehub search` call.
+
+```bash
+curl -s 'https://hivehub.griiken.workers.dev/api/v1/plugins?q=board&type=view&sort=new'
+```
+
+| Parameter | What it does | Default |
+|---|---|---|
+| `q` | Words matched anywhere in the id, name or one line. Its first 80 characters count. | everything |
+| `type` | `agent`, `view`, `widget` or `tool`. Any other value is ignored. | every kind |
+| `category` | One of the [categories](/hivehub#categories). Any other value is ignored. | every category |
+| `sort` | `new`: newest first. `name`: by name. Anything else: most installs first, then by name. | most installs |
+| `limit` | How many to return, at most 500. | 100 |
+
+It returns `{"plugins": [...]}`, each in the shape of [one plugin](#one-plugin). A plugin taken
+down is left out.
+
+## One plugin
+
+`GET /api/v1/plugins/<id>`. Everything a person needs to decide whether to install it.
+
+```bash
+curl -s https://hivehub.griiken.workers.dev/api/v1/plugins/dip497/worktrees
+```
+
+It returns every field of [the index](#the-index) entry, and these:
+
+| Field | What it is |
+|---|---|
+| `publisher` | The GitHub account that signed in and published it, or `null`. `author` is what the plugin says about itself; this is checked. |
+| `repo` | Its GitHub repository, `owner/name`. |
+| `ref` | The commit it was published at. |
+| `does` | What it asks for, one line each, in the words Hivemind shows before it installs. |
+| `traits` | For an agent, whether it signals when its turn ends (`worker`), can resume a session (`resumes`) and can supervise others (`supervises`). `null` for the rest. |
+| `note` | An agent's note from its manifest, or `null`. |
+| `manifest` | Its manifest file, as published. |
+| `installs` | How many installs were counted. |
+| `updatedAt` | When it was last published, in milliseconds since 1970. |
+
+| Status | Body | When |
+|---|---|---|
+| 404 | `{"error": "no such plugin"}` | No plugin has that id, it was taken down, or the id fits no kind's rule. |
+
+## Install
+
+`GET /api/v1/plugins/<id>/resolve`. Hivemind calls it once it has downloaded and checked a
+plugin's files. It returns the plugin's [index](#the-index) entry and counts one install.
+
+```bash
+curl -s https://hivehub.griiken.workers.dev/api/v1/plugins/gemini/resolve
+```
+
+How it counts: HiveHub makes a keyed hash of the day, the plugin and the caller's network
+address, and stores only the hash. The same address counts once a day for each plugin. A hash
+holds the day, so it cannot be matched with tomorrow's, and the hashes are deleted after two
+days. Nothing else is sent or kept. What Hivemind sends: [What you install from HiveHub](/security-and-privacy#what-you-install-from-hivehub).
+
+Its errors are those of [one plugin](#one-plugin).
+
+## Publish
+
+`POST /api/publish`. Two steps: send the request without `confirm` to see what would be listed,
+then again with `"confirm": true` to list it. The web form and `hivehub publish` both do this.
+
+```bash
+curl -s https://hivehub.griiken.workers.dev/api/publish \
+  -H "authorization: Bearer $HIVEHUB_TOKEN" -H 'content-type: application/json' \
+  -d '{"repo": "you/plugins", "path": "widgets/counter", "ref": "main"}'
+```
+
+**Auth**, one of:
+
+| How | Sent as | Details |
+|---|---|---|
+| A GitHub token | `Authorization: Bearer <token>` | [A token for CI](/hivehub-sign-in#a-token-for-ci) |
+| A web sign-in | The `hh_session` and `hh_gh` cookies | [On the web](/hivehub-sign-in#on-the-web) |
+| A GitHub Actions id token | `Authorization: Bearer <id token>` and `X-GitHub-Token: <the job's GITHUB_TOKEN>` | [GitHub Actions](/hivehub-sign-in#github-actions). Only `dip497/hivemind-plugins` on `main`. |
+
+**Body:**
+
+| Field | What it is | Default |
+|---|---|---|
+| `repo` | The GitHub repository, `owner/name`. A `https://github.com/` address works too. | required |
+| `ref` | A commit, branch or tag. Ignored for a GitHub Actions id token, which publishes its job's commit. | the default branch's latest commit |
+| `path` | The plugin's folder in the repository. | the top of it |
+| `description` | The one line on its card, at most 400 characters. Empty keeps the line it has, or uses the manifest's `description` the first time. | |
+| `confirm` | `true` to publish. Anything else returns the preview. | |
+
+**Response:** `{"preview": {...}}` without `confirm`, with the fields of [one plugin](#one-plugin)
+that describe it (`id`, `type`, `name`, `description`, `version`, `repo`, `ref`, `path`,
+`source`, `files`, `does`, `manifest`, `category` and the rest). `{"published": "<id>"}` with
+it.
+
+What it checks, in order: that you can push to the repository (asked of GitHub), the folder
+against the [limits](#limits), the manifest by Hivemind's own rules, and that the id is yours.
+Only with `confirm` does it check that nobody else has the id.
+
+**Errors:**
+
+| Status | `error` | Why |
+|---|---|---|
+| 400 | `expected JSON` | The body is not JSON. |
+| 400 | `give a repository as owner/name` | No `repo`, or not `owner/name`. |
+| 401 | `sign in to publish` | No sign-in. |
+| 401 | `your GitHub sign-in expired — sign in again` | A web sign-in more than 8 hours old. |
+| 401 | `GitHub did not accept that token — <reason>` | GitHub refused the token, or an id token was refused. The reasons include `only the agents repository's main branch publishes from CI` and `send the job's GITHUB_TOKEN as X-GitHub-Token, to read the repository`. |
+| 403 | `CI in <repo> publishes only <repo>` | An id token sent for another repository. |
+| 422 | `you do not have write access to <repo>` | Your account cannot push to it. |
+| 422 | `that is not a folder in the repository` | `path` is not a plain folder path. |
+| 422 | `nothing to publish at <folder> in <repo>` | The folder is empty or missing. |
+| 422 | `a plugin may have at most 200 files`, `a plugin folder may be at most 8 MB`, `<file> is larger than 2 MB` | Over a [limit](#limits). |
+| 422 | `no agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder` | No manifest. |
+| 422 | A manifest problem, such as `widget.json needs a "version", like "1.0.0"` | The manifest is one Hivemind would refuse. |
+| 422 | `cannot publish this: <reason>` | The id is not in your account, is the wrong shape, or an agent is not from `dip497/hivemind-plugins`. |
+| 422 | `"<id>" is published by someone else` | The id is taken. |
+| 422 | `"<id>" is already a <kind>` | The id is listed as another kind. |
+| 502 | `could not read that repository — <reason>` | GitHub could not be read, the commit does not exist, or the repository has too many files to list. |
+
+What to do about each: [If it didn't](/publish-to-hivehub#if-it-didnt).
+
+## Limits
+
+| What | Limit |
+|---|---|
+| Files in a plugin's folder | 200. Files whose name starts with `.` are left out. |
+| One file | 2 MB |
+| The whole folder | 8 MB |
+| `README.md` kept | 64 KB. The rest is cut off. |
+| An SVG icon kept inline | 16 KB. A larger one is left out. |
+| The one line on a card | 400 characters |
+| A name | 80 characters |
+| A path in the folder | Under 300 characters, letters, digits, `_`, `.` and `-`; no `..` |
+| The index | 500 plugins |
+| A search | 500 plugins; 100 unless `limit` says otherwise |
+| Search words | 80 characters |
+
+The repository must be public: HiveHub reads its files from `raw.githubusercontent.com` without a
+token.
+
+## Sign-in for the command
+
+`GET /api/v1/cli`. What `hivehub login` needs to start a sign-in with GitHub.
+
+```bash
+curl -s https://hivehub.griiken.workers.dev/api/v1/cli
+```
+
+It returns `{"clientId": "<the GitHub app's public id>", "scope": "read:user"}`. If sign-in is not
+set up on that registry: 503, `sign-in is not set up on this registry`.
+
+## Renew a login
+
+`POST /api/cli/refresh`. Renews a `hivehub login` token. HiveHub adds the GitHub app's secret,
+which the command never holds.
+
+```bash
+curl -s https://hivehub.griiken.workers.dev/api/cli/refresh \
+  -H 'content-type: application/json' -d '{"refresh_token": "<refresh token>"}'
+```
+
+It returns GitHub's answer as GitHub sent it: `access_token`, `refresh_token`, `expires_in` and
+`refresh_token_expires_in` (seconds).
+
+| Status | `error` |
+|---|---|
+| 400 | `expected JSON`, or `give a refresh_token` |
+| 401 | GitHub's reason, or `GitHub refused the refresh` |
+
+## The command itself
+
+`GET /hivehub.mjs`. The `hivehub` command, as JavaScript for Node 20 or newer:
+[The `hivehub` command](/hivehub-command).
+
+```bash
+curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub
+```
+
+## Pages on the site
+
+| Path | What it shows |
+|---|---|
+| `/` | Every kind, grouped by category. |
+| `/agents`, `/views`, `/widgets`, `/tools` | One kind. Search, category and sort are in the address. |
+| `/p/<id>` | One plugin: its README, what it asks for, its files and who published it. |
+| `/u/<login>` | Everything one account published. |
+| `/publish` | The [web form](/publish-to-hivehub#from-the-web-form). |
+
+<LastValidated />

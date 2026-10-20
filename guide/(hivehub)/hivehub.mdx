@@ -1,0 +1,125 @@
+---
+title: "What HiveHub is"
+sidebarTitle: "Overview"
+description: "Find agents, views, widgets and tools other people made, see what each one asks for, and install it with every file checked."
+---
+
+HiveHub is where Hivemind's agents, views, widgets and tools are listed. You find one there,
+read what it does and what it asks for, and install it from **Settings → Plugins**. The files stay
+in the author's GitHub repository. HiveHub keeps where they are and a hash of each one.
+
+You can browse it on the web at [hivehub.griiken.workers.dev](https://hivehub.griiken.workers.dev/).
+
+<AgentPrompt description="Paste this into your coding agent to look up a plugin on HiveHub and see what it would add, without installing it." page="hivehub">{`
+Look up a Hivemind plugin on HiveHub for me. Do not install anything.
+
+1. Get the \`hivehub\` command if \`command -v hivehub\` finds nothing: \`curl -fsSL https://hivehub.griiken.workers.dev/hivehub.mjs -o ~/.local/bin/hivehub && chmod +x ~/.local/bin/hivehub\`. It needs Node 20 or newer.
+2. Run \`hivehub search\` with a few words for what I want. Add \`--type agent\`, \`view\`, \`widget\` or \`tool\` if I named a kind.
+3. Run \`hivehub info <id>\` on the best match, with the id \`hivehub search\` printed.
+4. Tell me its kind, version, who published it, the GitHub repository and commit its files come from, and every line under "does": what it asks for.
+
+At the end, tell me to install it from Settings → Plugins, on the HiveHub tab, where Hivemind shows the same review before it adds anything.
+`}</AgentPrompt>
+
+<Diagram name="hivehub-install" caption="Where a plugin's files come from" />
+
+- **Your repository** → **HiveHub**: when you publish, HiveHub reads your repository at one commit and lists each file's path with its SHA-256 hash.
+- HiveHub → **Hivemind**: the listing, with that commit and those hashes.
+- Your repository → Hivemind: the files, downloaded from that commit. Hivemind checks each one against its hash.
+- A file that does not match its hash stops the install, and nothing is added.
+
+## What a listing holds
+
+| Field | What it is |
+|---|---|
+| Id | The name it installs by. A view or widget is `@owner/name`, a tool is `owner/name`, an agent is one name such as `gemini`. |
+| Kind | Agent, view, widget or tool. |
+| Name and one line | What the card shows. The author writes the line when publishing. |
+| Version | From the manifest. Hivemind offers an update when a newer one is listed. |
+| Repository and commit | The GitHub repository and the exact commit the files come from. |
+| Files | Every file's path in the folder, with its SHA-256 hash. |
+| Manifest | The plugin's own file (`agent.yaml`, `hivemind-view.json`, `widget.json` or `hivemind-tool.json`), as published. |
+| README | The folder's `README.md`, shown as text and never run. |
+| What it asks for | Read from the manifest, in the words Hivemind shows before it installs. |
+| Category | Where it is grouped, here and in Hivemind. |
+| Published by | The GitHub account that published it. |
+| Installs | How many times it was installed. |
+
+## Files stay in the author's repository
+
+HiveHub never holds a plugin's files. It holds the commit and a hash of every file. When you
+install, Hivemind downloads each file from the author's repository at that commit and checks it
+against its hash. If any file changed after it was listed, the install stops with
+`<file> does not match the catalog: it changed after it was listed`, and nothing is added.
+
+A commit cannot change, so what you review is what you get. The list itself is not signed, so
+install only what you trust. What HiveHub learns when you install: [Trust, permissions and privacy](/security-and-privacy#what-you-install-from-hivehub).
+
+## Install from HiveHub
+
+<Steps>
+  <Step title="Find it">
+    Open **Settings → Plugins** and choose the **HiveHub** tab. Search, or pick a kind. Plugins
+    are grouped by category.
+  </Step>
+  <Step title="Review it">
+    Press **Install**. Hivemind downloads the files and checks each against its hash. Then, before
+    anything is added, it shows what the plugin adds and what it asks for, read from its manifest.
+    For an agent, it shows the command each launch runs. If the plugin needs a newer Hivemind, it
+    says so here and downloads nothing.
+  </Step>
+  <Step title="Install it">
+    Press **Install** again, or **Cancel**.
+
+    Check: it says the plugin is installed, with **Open its page** (or **Use this view**).
+  </Step>
+</Steps>
+
+- **A tool arrives switched off**, and so does every update to one. It runs inside Hivemind with
+  your access, so switch it on from its page once you trust who wrote it. Why:
+  [Tools start switched off](/security-and-privacy#tools-start-switched-off).
+- **Views, widgets and tools are installed only when you choose them.** Only agents are added on
+  their own: when Hivemind finds an agent's program on your `PATH`, it adds that agent and shows a
+  notice of what it can do. Switch off **Add agents found on this machine** to stop it.
+- Each plugin's page has **Read me** and **What it can do**, and says who published it.
+- From a terminal, each kind has its own command: [widgets](/widgets),
+  [views](/extension-authoring), [tools](/tool-plugins) and [agents](/agents#add-an-agent).
+
+## Categories
+
+Every view, widget and tool says what it is for in its manifest's `category` field. Hivemind's
+**Add** menu and **Settings → Plugins** group them by it, and so does HiveHub. A manifest without
+one is `other`. Agents are always **Agents**.
+
+| Category | `category` |
+|---|---|
+| Code | `code` |
+| Git | `git` |
+| Agents | `agents` |
+| Productivity | `productivity` |
+| Monitoring | `monitoring` |
+| Team | `team` |
+| Web | `web` |
+| Fun | `fun` |
+| Other | `other` |
+
+A value not on this list is refused, by HiveHub when you publish and by Hivemind when it loads.
+
+## Next
+
+<CardGroup cols={2}>
+  <Card title="Publish a plugin" icon="rocket" href="/publish-to-hivehub">
+    List your widget, view, tool or agent so anyone can install it.
+  </Card>
+  <Card title="Plugins" icon="puzzle-piece" href="/plugins">
+    The four kinds, where each sits on screen, and how to make one.
+  </Card>
+  <Card title="The hivehub command" icon="terminal" href="/hivehub-command">
+    Every command and flag, to publish and find plugins from a terminal.
+  </Card>
+  <Card title="HiveHub API" icon="code" href="/hivehub-api">
+    The index, search, install and publish routes, with their limits and errors.
+  </Card>
+</CardGroup>
+
+<LastValidated />

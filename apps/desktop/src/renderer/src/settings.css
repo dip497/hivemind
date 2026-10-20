@@ -343,6 +343,7 @@
 .plugins-scope > button { padding: 0 10px; border-radius: 4px; font-size: var(--text-label); color: var(--color-fg2); }
 .plugins-scope > button:hover { color: var(--color-fg); }
 .plugins-scope > button[aria-selected=true] { background: var(--color-bg); color: var(--color-fg); box-shadow: var(--hm-shadow-1); }
+.plugins-kind-count { margin-left: 4px; color: var(--color-fg3); }
 .plugins-group { display: flex; flex-direction: column; gap: 8px; }
 .plugins-group-heading { display: flex; align-items: baseline; gap: 6px; font-size: var(--text-body); font-weight: 600; color: var(--color-fg); }
 .plugins-group-heading > span { font-size: var(--text-label); font-weight: 400; color: var(--color-fg3); }

@@ -8,8 +8,9 @@ import { useCommunityReport } from "./workspace/views/community/registry";
 import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
 import { SvgMark } from "./agents";
 import { rescan } from "./settings-views";
-import { permissionWords, type PluginKind } from "./plugins/library";
-import { CategoryGroups, PluginRow } from "./plugins/PluginList";
+import { permissionWords } from "./plugins/library";
+import { KIND_LABEL, rowsInKindTab, type PluginKind } from "./plugins/kinds";
+import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./plugins/PluginList";
 import { useWidgetPackages } from "./board-objects/widget-runtime";
 import { useToolPackages } from "./tiles/tool-plugins";
 import { useSettingsNavigate } from "./settings-panels";
@@ -49,9 +50,9 @@ export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
   return <span className="catalog-monogram" style={{ "--mark-hue": hue } as CSSProperties}>{entry.id[0]?.toUpperCase()}</span>;
 }
 
-/** What HiveHub lists, filtered by the Plugins page's search and kind and under its categories;
- *  each one installed after its review, here or on its own page. */
-export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | PluginKind }) {
+/** What HiveHub lists, found by the Plugins page's search, the open tab's kind under its
+ *  categories; each one installed after its review, here or on its own page. */
+export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: PluginKind; onTab: (tab: PluginKind) => void }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [review, setReview] = useState<{ key: string; data: Review } | null>(null);
@@ -84,8 +85,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     : e.type === "tool" ? (tools.some((t) => t.id === e.id && t.source === "you") ? tools.find((t) => t.id === e.id && t.source === "you")!.version ?? "0.0.0" : null)
     : agents.some((a) => a.id === e.id && a.source === "user") ? "installed" : null;
   const q = query.trim().toLowerCase();
-  const shown = (entries ?? []).filter((e) => (kind === "all" || e.type === kind)
-    && (!q || `${e.name} ${e.description} ${e.author}`.toLowerCase().includes(q)));
+  const shown = (entries ?? []).filter((e) => !q || `${e.name} ${e.description} ${e.author}`.toLowerCase().includes(q));
   const key = (e: Entry) => `${e.type}:${e.id}`;
   // A view says which version it is; an agent does not, so what it has is compared by content
   // instead — the same hash the catalog pins it by.
@@ -147,6 +147,20 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     </div>
   </section>;
 
+  const { counts, groups } = rowsInKindTab(shown.map((e): ListedRow => {
+    const have = installed(e);
+    const update = outdatedOf(e);
+    const open = review?.key === key(e) ? review.data : null;
+    return { key: key(e), kind: e.type, category: e.category ?? "other", row: <div className="catalog-item" data-catalog-plugin={key(e)}>
+      <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
+        badge={have && !update ? "Installed" : undefined}
+        action={(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
+          {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined} />
+      {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
+      {open && reviewOf(e, open)}
+    </div> };
+  }), tab);
+
   return <div className="settings-stack">
     {done && <div role="status" className="settings-message catalog-done">
       <span>{done.entry.name} is installed.</span>
@@ -159,23 +173,11 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       <div className="settings-actions"><Button variant="outline" onClick={load}>Try again</Button></div>
     </div>}
     {!entries && !loadError && <Loading label="Loading the catalog" />}
-    {entries && !shown.length && <p className="settings-empty">
-      {q ? <>No plugins on HiveHub match “{query}”.</>
-        : kind !== "all" ? `No ${kind} plugins have been published yet.` : "Nothing has been published yet."}
+    {entries && <KindTabs counts={counts} tab={tab} onChange={onTab} />}
+    {entries && !groups.length && <p className="settings-empty">
+      {q ? <>No {KIND_LABEL[tab].toLowerCase()}s on HiveHub match “{query}”.</> : `No ${KIND_LABEL[tab].toLowerCase()}s have been published yet.`}
     </p>}
-    <CategoryGroups rows={shown.map((e) => {
-      const have = installed(e);
-      const update = outdatedOf(e);
-      const open = review?.key === key(e) ? review.data : null;
-      return { key: key(e), kind: e.type, category: e.category ?? "other", row: <div className="catalog-item" data-catalog-plugin={key(e)}>
-        <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
-          badge={have && !update ? "Installed" : undefined}
-          action={(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
-            {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined} />
-        {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
-        {open && reviewOf(e, open)}
-      </div> };
-    })} />
+    <CategoryGroups groups={groups} />
     <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
 }

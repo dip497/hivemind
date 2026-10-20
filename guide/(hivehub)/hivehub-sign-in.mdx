@@ -1,0 +1,132 @@
+---
+title: "Signing in to HiveHub"
+sidebarTitle: "Signing in"
+description: "Every way to sign in to HiveHub to publish: on the web, with hivehub login, with a token in CI, or from GitHub Actions. What each lets you do, how long it lasts, and how to end it."
+---
+
+You need no sign-in to browse, search or install. You sign in only to publish, and always with
+GitHub. HiveHub asks GitHub who you are, and whether you can push to the repository you publish
+from. It keeps your GitHub account's id, login and picture, and no password.
+
+## The ways to sign in
+
+| Way | Where you use it | How long it lasts | What it lets you do |
+|---|---|---|---|
+| [On the web](#on-the-web) | The HiveHub site | 30 days signed in. Publishing works for 8 hours after you sign in. | Publish from the [web form](https://hivehub.griiken.workers.dev/publish). |
+| [`hivehub login`](#hivehub-login) | Your terminal | As long as GitHub's token lasts. The command renews it on its own. | `hivehub publish` and `hivehub whoami`. |
+| [A token for CI](#a-token-for-ci) | CI, or any shell, as `HIVEHUB_TOKEN` | Until you delete the token or it expires on GitHub. | `hivehub publish` and `hivehub whoami`, as the token's account. |
+| [GitHub Actions](#github-actions) | A job in `dip497/hivemind-plugins`, on `main` | One job. | Publish agents from that repository. |
+
+Every way publishes only from a repository its account can push to. A view's, widget's or tool's
+id must start with that account's login. An agent comes only from `dip497/hivemind-plugins`. The
+rules: [Before you start](/publish-to-hivehub#before-you-start).
+
+## On the web
+
+Press **Sign in** at the top of any page, or **Sign in with GitHub** on the publish page. GitHub
+asks you to let HiveHub read your public profile (the `read:user` scope). Then it sends you back
+to the page you started from.
+
+| Step | Address | What happens |
+|---|---|---|
+| Start | `GET /auth/github?to=<path>` | Sends you to GitHub with a one-time check value, kept in a cookie. `to` must be a path on HiveHub, or you return to `/`. |
+| Return | `GET /auth/callback` | Checks the value, asks GitHub who you are, sets the cookies below and sends you back. If the check fails: `Sign-in could not be verified. Start again from the sign-in link.` |
+| Sign out | `POST /auth/signout` | The **Sign out** button. Deletes both cookies and sends you to `/`. |
+
+| Cookie | What it holds | How long it lasts |
+|---|---|---|
+| `hh_session` | Your HiveHub account and when the cookie expires, signed by HiveHub. Nothing about it is stored on the server. | 30 days |
+| `hh_gh` | The GitHub token from your sign-in. HiveHub uses it only to ask GitHub whether you can push to the repository you publish. | 8 hours |
+| `hh_state` | The one-time check value. | 10 minutes, deleted when you return |
+
+Every cookie is `HttpOnly`, `Secure` and `SameSite=Lax`. After 8 hours the site still shows you
+signed in, but publishing says `your GitHub sign-in expired — sign in again`. Sign out and sign
+in again.
+
+## `hivehub login`
+
+`hivehub login` signs in with GitHub's device code. It does not open a browser.
+
+1. It asks HiveHub for its GitHub app's public id, at [`GET /api/v1/cli`](/hivehub-api#sign-in-for-the-command).
+2. It prints `Open https://github.com/login/device and enter <code>`, then `Waiting for GitHub…`.
+3. You open the link, type the code and approve. The app asks only for `read:user`.
+4. It prints `Signed in as <login>.` and saves the token.
+
+The token is saved in `$XDG_CONFIG_HOME/hivehub/auth.json`, or `~/.config/hivehub/auth.json` when
+`XDG_CONFIG_HOME` is not set. The file's mode is `600` and its folder's is `700`: only you can
+read them. It holds your login, the GitHub token, and when GitHub gives them, a refresh token and
+both expiry times.
+
+When the token is a minute from expiring, the next command renews it through HiveHub's
+[`POST /api/cli/refresh`](/hivehub-api#renew-a-login), which holds the app's secret so the
+command does not. If the refresh token has expired too, run `hivehub login` again.
+
+Every message `hivehub login` can print: [The `hivehub` command](/hivehub-command#hivehub-login).
+
+## A token for CI
+
+`HIVEHUB_TOKEN` is a GitHub token. Set it, and the `hivehub` command uses it in place of your
+login. HiveHub asks GitHub which account it belongs to, and that account publishes.
+
+HiveHub calls GitHub with it for three things: who you are (`GET /user`), whether you can push to
+the repository (`GET /repos/<owner>/<name>`), and the repository's list of files at the commit. It
+reads the files themselves from `raw.githubusercontent.com` without a token, so the repository
+must be public.
+
+Make one on GitHub, under **Settings ▸ Developer settings ▸ Personal access tokens**:
+
+| Kind of token | What to choose |
+|---|---|
+| Fine-grained | **Only select repositories**: the repository you publish from. It needs no permission beyond the read access to metadata every token has. |
+| Classic | No scopes. A public repository needs none. |
+
+The account that owns the token must be able to push to the repository. Store it as a secret
+named `HIVEHUB_TOKEN`, never in the repository. A workflow that uses it:
+[From GitHub Actions](/publish-to-hivehub#from-github-actions).
+
+The command picks the first of these it finds:
+
+| Order | Token | `hivehub whoami` says |
+|---|---|---|
+| 1 | `HIVEHUB_TOKEN` | `HIVEHUB_TOKEN` |
+| 2 | Your `hivehub login`, renewed if it has run out | `login` |
+| 3 | A GitHub Actions id token, when the job may ask for one and `GITHUB_TOKEN` is set | `GitHub Actions` |
+| 4 | `GITHUB_TOKEN`, then `GH_TOKEN` | `GITHUB_TOKEN` or `GH_TOKEN` |
+
+A token GitHub gives a person, such as the one `gh auth token` prints, works as `GH_TOKEN`. The
+token GitHub Actions gives a job as `GITHUB_TOKEN` does not, on its own: GitHub does not say
+which account it is, so HiveHub refuses it with
+`GitHub did not accept that token — …`.
+
+## GitHub Actions
+
+A job can sign in as its own repository, with no token stored anywhere. Today HiveHub accepts this
+only from **`dip497/hivemind-plugins`, on its `main` branch**: that is how agents are published.
+Any other repository or branch is refused with
+`only the agents repository's main branch publishes from CI`. Everyone else uses
+[a token for CI](#a-token-for-ci).
+
+How it works:
+
+1. The job has `permissions: id-token: write`. It asks GitHub for a token made for the audience
+   `hivehub`, signed by GitHub, which names the repository, branch and commit.
+2. It sends that token as `Authorization: Bearer <token>`, and its own `GITHUB_TOKEN` as
+   `X-GitHub-Token`, which HiveHub uses to read the repository.
+3. HiveHub checks GitHub's signature, the audience, the expiry, the repository and the branch.
+   The repository's owner is the publisher.
+4. It publishes only that repository, at the commit the job runs on. A `ref` in the request is
+   ignored.
+
+The `hivehub` command does steps 1 and 2 when the job may ask for an id token and `GITHUB_TOKEN`
+is set in its environment.
+
+## Signing out and revoking
+
+| Way | Sign out | Revoke it on GitHub |
+|---|---|---|
+| On the web | **Sign out**, at the top of any page. | **Settings ▸ Applications** on GitHub: find HiveHub under **Authorized OAuth Apps** or **Authorized GitHub Apps**, and revoke it. This ends every HiveHub sign-in of yours, the `hivehub login` ones too. |
+| `hivehub login` | `hivehub logout`. It deletes `auth.json` and prints `Signed out.`, or `Not signed in.` if there was none. | The same as on the web. `hivehub logout` alone leaves the token valid on GitHub until it expires. |
+| `HIVEHUB_TOKEN` | Unset it, or delete the secret. | Delete the token under **Settings ▸ Developer settings ▸ Personal access tokens**. |
+| GitHub Actions | Remove `id-token: write` from the job. | Nothing to revoke: each token lasts one job. |
+
+<LastValidated />

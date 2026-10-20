@@ -3,13 +3,13 @@
  * as the Add menu groups them, with its count, and one row per plugin with the same parts. What a row's plugin can be set to
  * is on its own page; the row says only its state.
  */
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight } from "../components/icons";
 import { Badge } from "../components/ui/badge";
 import { MenuItem } from "../components/ui/menu-item";
 import { useSettingsNavigate } from "../settings-panels";
-import { CATEGORY_LABELS, PLUGIN_CATEGORIES, groupByCategory, type PluginCategory } from "@hivemind/view-sdk/category";
-import type { PluginKind } from "./library";
+import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
+import { KIND_LABEL, PLUGIN_KINDS, type PluginKind } from "./kinds";
 
 export type RowState = "on" | "off" | "missing" | "unavailable";
 
@@ -56,10 +56,25 @@ function PluginGroup({ category, count, foot, children }: { category: PluginCate
   );
 }
 
+/** One tab per kind, each with how many rows it has. */
+export function KindTabs({ counts, tab, onChange }: { counts: Record<PluginKind, number>; tab: PluginKind; onChange: (tab: PluginKind) => void }) {
+  const step = (e: KeyboardEvent<HTMLDivElement>) => {
+    const by = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!by) return;
+    const next = PLUGIN_KINDS[(PLUGIN_KINDS.indexOf(tab) + by + PLUGIN_KINDS.length) % PLUGIN_KINDS.length]!;
+    onChange(next);
+    e.currentTarget.querySelector<HTMLElement>(`[data-plugins-kind="${next}"]`)?.focus();
+  };
+  return <div role="tablist" aria-label="Kind" className="plugins-scope self-start" onKeyDown={step} data-plugins-kinds>
+    {PLUGIN_KINDS.map((k) => <button key={k} type="button" role="tab" aria-selected={tab === k} tabIndex={tab === k ? 0 : -1}
+      data-plugins-kind={k} onClick={() => onChange(k)}>{KIND_LABEL[k]}s <span className="plugins-kind-count">{counts[k]}</span></button>)}
+  </div>;
+}
+
 /** Rows under their category's heading, in the Add menu's order. A category with a foot is shown
  *  even with no rows, so what it does by itself stays reachable. */
-export function CategoryGroups({ rows, feet = {} }: { rows: ListedRow[]; feet?: Partial<Record<PluginCategory, ReactNode>> }) {
-  const groups = new Map(groupByCategory(rows, (r) => r.category));
+export function CategoryGroups({ groups: listed, feet = {} }: { groups: [PluginCategory, ListedRow[]][]; feet?: Partial<Record<PluginCategory, ReactNode>> }) {
+  const groups = new Map(listed);
   return <>
     {PLUGIN_CATEGORIES.filter((c) => groups.has(c) || feet[c]).map((c) => {
       const list = groups.get(c) ?? [];

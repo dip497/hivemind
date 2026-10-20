@@ -15,7 +15,7 @@ Build a Hivemind tool plugin, a new kind of tile drawn by React code inside the 
 5. Open it: \`hive ctl open-tool @owner/name\`. Look at it with \`hive ctl tile look <tile>\`: check the picture shows what I asked for and its console has no error.
 6. Give it one command in the manifest's "commands", answered with \`hm.onCommand\`, that reports what the tile shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, the manifest has a one-line description, a "category" and only the permissions it uses, and \`README.md\` says what it does and what it runs.
-8. Publish only if I say so. Follow the "Publish to HiveHub" page: push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
+8. Publish only if I say so. Follow the "Publish a plugin" page (https://hivemind.griiken.com/guide/publish-to-hivehub.md): push the folder to a GitHub repository I name, then \`hivehub publish <folder>\`. If I must sign in, ask me to open the link and type the code myself.
 
 At the end, tell me the tool's id, the command that installs it (\`hive plugins install @owner/name\`), and anything you could not check.
 `}</AgentPrompt>
@@ -147,7 +147,7 @@ Every tool on HiveHub is listed on the **HiveHub** tab; pick **Tools** to see on
 | The app misbehaves after you turned a tool on | Start it with `HIVEMIND_SAFE_MODE=1 hivemind`, then switch the tool off on its page. |
 | Something else | [Troubleshooting](/troubleshooting) |
 
-Next: [Publish to HiveHub](/publish-to-hivehub).
+Next: [Publish a plugin](/publish-to-hivehub) on HiveHub.
 
 ## Tool reference
 

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Settings ▸ Plugins has a tab per kind, as HiveHub does: Agents, Views, Widgets and Tools, each with its count, in place of the kind menu; a tab lists only its kind, under its categories, and the page remembers the last tab.
 - `hive ctl agents --session <id>` finds the agent in that session, as its hooks said it or as the app tracks its tile's session to resume it; none is exit 5. The CLI reference documents the `{seq, agents}` shape, and says `read` gives an agent's clean reply while `stream --snapshot` gives the raw lines its terminal printed.
 - `hive ctl whoami [--json]` says which app it reaches (`hivemind` or `hivemind-dev`, from its data folder), the drive and control sockets, and who you are there: the person, an agent (its workspace folder, tile and session) or a program. `hive ctl list-workspaces` prints each workspace's prefix, title and folder, one a line. An agent or a program refused another workspace or tile is told the folder its token drives and that another needs the person or a grant (`hive grant create`); `--repo` help says so too.
 - Agents: a worker whose session exits or restarts (a crash, a reboot, a restart in its tile) still reports to the agent that started it, and its parent's restart no longer cuts it off; only closing a tile forgets who started it. The `hivemind` skill tells agents to reach other tiles with `hive ctl send`, `report`, `inbox` and `read`.
