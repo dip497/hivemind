@@ -142,13 +142,15 @@ const owner = () => `${process.pid}:${Date.now()}:${Math.random().toString(36).s
  * was killed mid-write leaves a file that every later `hive` command refuses to write past
  * until someone deletes it by hand.
  */
-async function acquire(lock: string): Promise<string> {
-  const deadline = Date.now() + LOCK_WAIT_MS;
+async function acquire(lock: string, waitMs = LOCK_WAIT_MS, onWaiting?: () => void): Promise<string> {
+  const deadline = Date.now() + waitMs;
   const token = owner();
   let broke = false;
+  let told = false;
   for (;;) {
     if (await createLock(lock, token)) return token;
     if (!broke && await isStale(lock)) { broke = await clearStale(lock); continue; }
+    if (!told) { told = true; onWaiting?.(); }
     if (Date.now() >= deadline) {
       let holder: { pid: number; heldForMs: number } | undefined;
       try {
@@ -289,6 +291,16 @@ export async function patchSettingsExtras(
     await writeBoth(await readSettings(file), extras, file);
     return extras;
   });
+}
+
+/** Hold the lock file `lock` while `work` runs, waiting up to `waitMs` for another process's,
+ *  without the in-process queue: for a job that itself writes files under `withLock`.
+ *  `onWaiting` hears once that another holder is being waited for. */
+export async function holdLock<T>(lock: string, work: () => Promise<T>, waitMs: number, onWaiting?: () => void): Promise<T> {
+  await fs.mkdir(path.dirname(lock), { recursive: true });
+  const token = await acquire(lock, waitMs, onWaiting);
+  try { return await work(); }
+  finally { await release(lock, token); }
 }
 
 /** Queue + lock + release, shared by every mutator, and by any other file of the app's that

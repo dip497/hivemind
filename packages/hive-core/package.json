@@ -31,6 +31,8 @@
     "./plugin-catalog": "./src/plugin-catalog.ts",
     "./ipc": "./src/ipc.ts",
     "./app-data": "./src/app-data.ts",
+    "./migrations": "./src/migrations/runner.ts",
+    "./migrations/ledger": "./src/migrations/ledger.ts",
     "./plugin-settings": "./src/plugin-settings.ts",
     "./widget-api": "./src/widget-api.ts",
     "./widget-format": "./src/widget-format.ts",

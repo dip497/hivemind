@@ -39,6 +39,7 @@ import { killCmd } from "./commands/kill.js";
 import { pushCmd } from "./commands/push.js";
 import { joinCmd, peopleCmd, shareCmd } from "./commands/share.js";
 import { grantCmd } from "./commands/grant.js";
+import { migrateOnStart } from "./migrate-on-start.js";
 
 /**
  * Intercept `hive @ID` BEFORE citty sees argv — citty treats unknown
@@ -100,4 +101,5 @@ const main = defineCommand({
 });
 
 preprocessArgv();
+await migrateOnStart(process.argv.slice(2), pkg.version);
 await runMain(main);
