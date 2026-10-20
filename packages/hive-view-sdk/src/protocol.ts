@@ -94,6 +94,11 @@ export interface ViewTile {
   agent?: string;
   /** 1.11: its mark as the app draws it, one `<svg>` element in `currentColor`; size it with CSS. */
   icon?: string;
+  /** 1.14 (feature `sleep`): the agent is asleep. Its process ended; its tile keeps its last screen
+   *  and its conversation until it is woken (`commands.wakeAgent`), and a prompt to it is refused
+   *  `ASLEEP`. `since`: when it was put to sleep (ms since epoch), when the host knows. Absent while
+   *  it is awake. */
+  asleep?: { since?: number };
 }
 /** Agents driving agents (protocol 1.2): `pipes` carry one agent's replies into another's input;
  *  `spawns` record which agent opened which (`hive ctl spawn`). Tile ids at both ends. */
@@ -138,7 +143,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -234,7 +239,8 @@ export interface ViewHistoryDay {
   gaps: { from: number; to: number; tileId?: string }[];
 }
 
-export type RequestErrorCode = "UNSUPPORTED" | "BAD_REQUEST" | "BUSY" | "DECLINED" | "INTERNAL";
+/** `ASLEEP` (1.14): the agent asked of is asleep; wake it first (`commands.wakeAgent`). */
+export type RequestErrorCode = "UNSUPPORTED" | "BAD_REQUEST" | "BUSY" | "DECLINED" | "INTERNAL" | "ASLEEP";
 export type ShareOutcome = "copied" | "saved" | "cancelled";
 
 // ── protocol 1.10 (additive) ────────────────────────────────────────────────
@@ -416,6 +422,11 @@ export interface ViewCommands {
   renameTile: (id: string, name: string) => void;
   /** 1.2, permission `workspace:edit`: ask the user for a folder to bind this frame to. */
   openFolder: (frameId: string) => void;
+  /** 1.14, permission `workspace:spawn`: wake the agent asleep in a tile, in its conversation. */
+  wakeAgent: (tileId: string) => void;
+  /** 1.14, permission `workspace:spawn`: put the agent in a tile to sleep. One working or waiting on
+   *  someone is put to sleep only if the person says so. */
+  sleepAgent: (tileId: string) => void;
 }
 export type CommandName = keyof ViewCommands;
 export const COMMAND_PERMISSION: Record<CommandName, ViewPermission | null> = {
@@ -423,6 +434,7 @@ export const COMMAND_PERMISSION: Record<CommandName, ViewPermission | null> = {
   closeTile: "workspace:close",
   spawnTile: "workspace:spawn", spawnVis: "workspace:spawn", spawnClaude: "workspace:spawn", addFrame: "workspace:spawn",
   spawnAgent: "workspace:spawn", renameTile: "workspace:edit", openFolder: "workspace:edit",
+  wakeAgent: "workspace:spawn", sleepAgent: "workspace:spawn",
 };
 
 export type PluginMessage =
@@ -468,7 +480,8 @@ export type PluginMessage =
   | { type: "request"; requestId: number; name: "agents"; args: [Record<string, never>] }
   /** 1.4, `workspace:sessions`: result `{ sessions: ViewSession[] }`, newest first. */
   | { type: "request"; requestId: number; name: "sessions"; args: [{ agent: string; frameId: string }] }
-  /** 1.4, `workspace:prompt`: result `{ outcome: PromptOutcome }` once the user chose. */
+  /** 1.4, `workspace:prompt`: result `{ outcome: PromptOutcome }` once the user chose. 1.14: a tile
+   *  asleep is refused `ASLEEP` before the user is asked, as `hive ctl send` refuses it. */
   | { type: "request"; requestId: number; name: "prompt"; args: [{ tileId: string; text: string }] }
   /** 1.9: one of the workspace's issue methods; a writing one needs `workspace:issues`. Result: what it returns. */
   | { type: "request"; requestId: number; name: "issue"; args: [{ call: IssueCall; args: unknown[] }] };
@@ -584,6 +597,8 @@ const COMMAND_ARGS: Record<CommandName, (args: unknown[]) => boolean> = {
       && (a[2].resume === undefined || (typeof a[2].resume === "string" && SESSION_ID_RE.test(a[2].resume))))),
   renameTile: (a) => a.length === 2 && isId(a[0]) && typeof a[1] === "string" && a[1].length <= NAME_MAX,
   openFolder: (a) => a.length === 1 && isId(a[0]),
+  wakeAgent: (a) => a.length === 1 && isId(a[0]),
+  sleepAgent: (a) => a.length === 1 && isId(a[0]),
 };
 
 /** Host side: validate a message received from a plugin. */
@@ -762,7 +777,7 @@ function refused(m: PluginMessage, host: HostScope): string | null {
       const tile = (id: unknown) => (id === null || host.hasTile(id as string) ? null : `${m.name}: unknown tile ${String(id)}`);
       const frame = (id: unknown) => (id === null || host.hasFrame(id as string) ? null : `${m.name}: unknown frame ${String(id)}`);
       switch (m.name) {
-        case "selectTile": case "focusTile": case "closeTile": case "renameTile": return tile(a0);
+        case "selectTile": case "focusTile": case "closeTile": case "renameTile": case "wakeAgent": case "sleepAgent": return tile(a0);
         case "selectFrame": case "openFolder": return frame(a0);
         case "spawnTile": return frame(a1);
         case "spawnAgent": {

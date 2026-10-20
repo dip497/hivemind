@@ -69,7 +69,7 @@ test("no button on any Settings page is wider than its label", async () => {
   // A plugin's own page, one of each kind.
   for (const kind of ["agent", "view", "widget", "tool"]) {
     await open("plugins");
-    const first = page.locator(`[data-plugins-kind="${kind}"] [data-plugin-open]`).first();
+    const first = page.locator(`[data-plugin-open^="${kind}:"]`).first();
     await expect(first).toBeVisible();
     const name = await first.getAttribute("data-plugin-open");
     await first.click();
