@@ -113,7 +113,7 @@ test("started in a folder: in the frame there, else one opened for it; photos ke
   const repo = fs.realpathSync(fs.mkdtempSync(path.join(tmp, "api-")));
   fs.mkdirSync(path.join(repo, "src"));
   const d = device(repo);
-  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   await d.call("agent.start", repo, { program: "claude", folder: repo });
   await d.call("agent.start", repo, { program: "claude", folder: path.join(repo, "src"), prompt: "what is wrong here?", images: [{ type: "image/png", data: png.toString("base64") }] });
   await d.call("agent.start", repo, { program: "claude", folder: path.join(repo, "src"), images: [{ type: "image/png", data: png.toString("base64") }] });

@@ -31,6 +31,11 @@ icon:
         0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848
         0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446
         6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z
+# A message typed while it works is read after its next tool call, in that turn: codex 0.163.0
+# shows "Messages to be submitted after next tool call".
+steer: true
+# An image whose path is pasted alone is attached: codex 0.163.0 shows "[Image #1]".
+pastedImages: true
 options:
 - id: model
   label: Model

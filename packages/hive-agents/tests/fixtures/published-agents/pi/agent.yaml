@@ -24,6 +24,9 @@ icon:
         Z
   - path:
       d: M517.36 400 H634.72 V634.72 H517.36 Z
+# A message typed while it works steers that turn: pi 1.3.0 shows "Steering: <message>"
+# (Alt+Enter would queue it for after the turn instead).
+steer: true
 options:
 - id: model
   label: Model

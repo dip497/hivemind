@@ -146,8 +146,9 @@ export interface MethodDeps {
    *  back at its prompt. A message typed into a mid-turn TUI lands in the composer
    *  unsubmitted and is never read — see hcp/mailbox.ts. `onSent` fires when the
    *  text actually reaches the terminal (which is when an approval's answer-clock
-   *  should start). Returns false only if the tile's pty is dead. */
-  deliverToTile: (ptyId: string, text: string, onSent?: () => void) => boolean;
+   *  should start). `photos`: the paths of photos given with it, which its agent is handed as its
+   *  manifest says it takes them. Returns false only if the tile's pty is dead. */
+  deliverToTile: (ptyId: string, text: string, onSent?: () => void, photos?: string[]) => boolean;
   /** What other agents have for an agent (by bare id), until it reads them. */
   inbox: Pick<Inbox, "post" | "wait" | "given" | "forget">;
   /** A tile's session was put to sleep: its turn is over. Its exit says so too, when something here
@@ -246,9 +247,10 @@ const MAX_INBOX_WAIT_MS = 10 * 60 * 1000;
  *  None records itself: the API records each effect, as its caller's. `caller`: the agent's
  *  tile that asks (bare); none for the person or a program. */
 export interface ControlWork {
-  /** Hand `text` to the agent of `tile` as its next prompt, held while it is in a turn; the read
-   *  that follows waits for the turn it causes. False: no agent runs there. */
-  send(tile: string, text: string): boolean;
+  /** Hand `text` to the agent of `tile` as its next prompt, held while it is in a turn unless it
+   *  reads one there; the read that follows waits for the turn it causes. `sent` false: no agent
+   *  runs there; `held`: it waits for the turn to end. */
+  send(tile: string, text: string, photos?: string[]): { sent: boolean; held: boolean };
   /** Type `keys` into the terminal of `tile`, one by one: how many. */
   keys(tile: string, keys: string[]): number;
   /** The reply of the turn after the last prompt sent to `tile`, waiting up to `timeoutMs`. */
@@ -975,16 +977,18 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const api: ControlWork = {
     sleep: sleepTiles,
     wake: wakeTiles,
-    send(tile, text) {
+    send(tile, text, photos) {
       refuseAsleep(tile);
       // Delivered through the mailbox, which types text-then-Enter as separate writes (a bundled
       // newline is dropped by claude's TUI) and HOLDS it while the agent is mid-turn, where it
       // would strand in the composer unread.
       const pid = ptyId(tile);
       const sent = holdUntilSent(pid);
-      const ok = deps.deliverToTile(pid, text, () => { armRead(tile); sent(); });
+      // Typed in at once, it is sent before deliverToTile returns.
+      let typed = false;
+      const ok = deps.deliverToTile(pid, text, () => { typed = true; armRead(tile); sent(); }, photos);
       if (!ok) sent();
-      return ok;
+      return { sent: ok, held: ok && !typed };
     },
 
     keys(tile, keys) {

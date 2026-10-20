@@ -69,6 +69,8 @@ function isDraft(data: string): boolean {
  *  request held 8 minutes for a busy parent must not then time out in 1. */
 interface Held {
   text: string;
+  /** Photo paths pasted, each alone, before the text. */
+  pasted?: string[];
   onSent?: () => void;
   /** Asked just before it is typed: false drops it. */
   wanted?: () => boolean;
@@ -79,6 +81,8 @@ export interface Delivery {
   wanted?: () => boolean;
   /** Only ever at its prompt: never typed into a turn, even for an agent that reads mid-turn. */
   atPrompt?: boolean;
+  /** Paths pasted, each alone, before the text: how an agent that attaches a photo so is given one. */
+  pasted?: string[];
 }
 
 export class Mailbox {
@@ -200,13 +204,13 @@ export class Mailbox {
     if (!held && (steer || (!this.managed.has(ptyId) && !this.draft.has(ptyId)))) {
       // Hookless (or not-yet-seen-a-turn) → immediate, matching the pre-mailbox path.
       if (o.wanted && !o.wanted()) return true;
-      const ok = this.send(ptyId, text);
+      const ok = this.send(ptyId, text, o.pasted);
       if (ok) onSent?.();
       return ok;
     }
     const q = this.queued.get(ptyId) ?? [];
     if (q.length >= MAX_QUEUED) q.shift(); // drop the stalest, keep the newest
-    q.push({ text, ...(onSent ? { onSent } : {}), ...(o.wanted ? { wanted: o.wanted } : {}) });
+    q.push({ text, ...(o.pasted ? { pasted: o.pasted } : {}), ...(onSent ? { onSent } : {}), ...(o.wanted ? { wanted: o.wanted } : {}) });
     this.queued.set(ptyId, q);
     this.onHeld(ptyId, q.length);
     if (!this.busy.has(ptyId)) this.scheduleRelease(ptyId);
@@ -255,7 +259,7 @@ export class Mailbox {
       if (!next) return;
       // A hookless tile reports no turn end to wait for: the rest follow at once.
       if (!this.managed.has(ptyId)) {
-        if (this.send(ptyId, next.text)) next.onSent?.();
+        if (this.send(ptyId, next.text, next.pasted)) next.onSent?.();
         this.scheduleRelease(ptyId);
         return;
       }
@@ -265,7 +269,7 @@ export class Mailbox {
       // un-hold so the queue doesn't wedge — forget() on exit is the real backstop.
       // ponytail: relies on "submitted prompt ⇒ a turn"; true for every managed agent.
       this.busy.add(ptyId);
-      if (this.send(ptyId, next.text)) next.onSent?.();
+      if (this.send(ptyId, next.text, next.pasted)) next.onSent?.();
       else {
         this.busy.delete(ptyId);
         this.scheduleRelease(ptyId);
@@ -275,11 +279,13 @@ export class Mailbox {
     this.releaseTimer.set(ptyId, t);
   }
 
-  private send(ptyId: string, text: string): boolean {
+  private send(ptyId: string, text: string, pasted: string[] = []): boolean {
     // The message is a paste (a newline in it must not submit half of it); the Enter that
-    // follows is the keystroke that sends it.
-    const ok = this.write(ptyId, text, true);
-    if (!ok) return false;
+    // follows is the keystroke that sends it. A path pasted alone is one paste of its own, and the
+    // words after it are set apart by a space, whether it was attached or stayed a path.
+    const pastes = [...pasted, ...(text ? [pasted.length ? ` ${text}` : text] : [])];
+    if (!pastes.length) return false;
+    for (const p of pastes) if (!this.write(ptyId, p, true)) return false;
     const t = setTimeout(() => this.write(ptyId, "\r"), this.submitDelayMs);
     t.unref?.();
     return true;

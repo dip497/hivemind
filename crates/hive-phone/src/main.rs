@@ -791,7 +791,9 @@ async fn run(args: Args) -> Result<()> {
                 });
                 let sending = async {
                     while let Some(text) = messages.recv().await {
-                        let sent = workspace::send(&connection, ws, tile, &text).await?;
+                        let sent = workspace::send(&connection, ws, tile, &text, &[])
+                            .await?
+                            .is_some();
                         if json {
                             println!("{}", json!({ "sent": sent }));
                         } else if !sent {
@@ -1040,7 +1042,11 @@ async fn run(args: Args) -> Result<()> {
             let (endpoint, devices) = reaching(&phone).await?;
             let sent = async {
                 let connection = workspace::holder(&endpoint, &devices, ws).await?;
-                workspace::send(&connection, ws, tile, text).await
+                Ok::<_, anyhow::Error>(
+                    workspace::send(&connection, ws, tile, text, &[])
+                        .await?
+                        .is_some(),
+                )
             };
             let sent = sent.await;
             endpoint.close().await;

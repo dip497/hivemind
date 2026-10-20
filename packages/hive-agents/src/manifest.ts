@@ -78,6 +78,9 @@ export interface AgentManifest {
   /** It reads a message typed while it works, at its next step, instead of leaving it unsent in
    *  its composer. Claim it only from the real binary. */
   steer?: boolean;
+  /** It attaches an image whose path is pasted alone into its prompt, so a message's images are
+   *  pasted so, one by one, before its text. Claim it only from the real binary. */
+  pastedImages?: boolean;
   session?: unknown;
   assets?: unknown;
   launch?: unknown;
@@ -678,6 +681,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   req(m.interrupt === undefined || keyTokens(m.interrupt), "interrupt must be 1-4 key tokens");
   req(m.choose === undefined || (keyTokens(m.choose) && m.choose.some((k) => k.includes("{n}"))), "choose must be 1-4 key tokens, one naming the option, {n}");
   req(m.steer === undefined || typeof m.steer === "boolean", "steer must be true or false");
+  req(m.pastedImages === undefined || typeof m.pastedImages === "boolean", "pastedImages must be true or false");
 
   const aliases = m.aliases;
   req(aliases === undefined || (Array.isArray(aliases) && aliases.every((a) => typeof a === "string")),
@@ -730,6 +734,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.interrupt ? { interrupt: m.interrupt } : {}),
     ...(m.choose ? { choose: m.choose } : {}),
     ...(m.steer ? { steer: true } : {}),
+    ...(m.pastedImages ? { pastedImages: true } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),
