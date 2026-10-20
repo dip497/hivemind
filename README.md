@@ -18,8 +18,7 @@
 </p>
 
 > [!NOTE]
-> **Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, and the plugins your agents
-> write are web code anyway. Hate mail goes to `/dev/null`.
+> **Yes, it's Electron. Please don't kill me.** 🙏 I'm a backend guy, Hate mail goes to `/dev/null`.
 
 <p align="center">
   <a href="https://hivemind.griiken.com/"><img alt="Claude Code, Codex, OpenCode and Pi in their own terminals on one board, over Raphael's School of Athens, with butterflies flying across and Biscuit the dog asleep on a tile" src="site/public/shots/hero/school-of-agents.webp" /></a>
