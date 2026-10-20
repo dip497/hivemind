@@ -1,0 +1,89 @@
+---
+// The hero: Claude Code, Codex, OpenCode and Pi on one board, the picture the README opens with.
+// A still paints first; the moving version is fetched only after the page has loaded, and never
+// when less motion is asked for.
+import { heroStill, HERO_SIZES } from '../lib/hero-images';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const still = await heroStill();
+---
+
+<figure class="school" data-school data-webm={`${base}/shots/hero/school-of-agents.webm`} data-mp4={`${base}/shots/hero/school-of-agents.mp4`}>
+  <div class="school-frame">
+    <picture>
+      <source type="image/avif" srcset={still.avif} sizes={HERO_SIZES} />
+      <img src={still.src} srcset={still.webp} sizes={HERO_SIZES} width={still.width} height={still.height}
+        alt="Claude Code, Codex, OpenCode and Pi, each in its own terminal on one Hivemind board, over Raphael's School of Athens, with butterflies and Biscuit the dog asleep on a tile."
+        fetchpriority="high" loading="eager" decoding="async" />
+    </picture>
+    <video muted playsinline loop preload="none" aria-hidden="true" tabindex="-1" width={still.width} height={still.height}></video>
+  </div>
+  <figcaption>
+    <span>The School of Agents. Wallpaper: Raphael, <i>The School of Athens</i>, public domain.</span>
+    <button type="button" class="school-pause" aria-pressed="false" data-pause hidden>Pause</button>
+  </figcaption>
+</figure>
+
+<style is:global>
+  .school{position:relative;margin:0}
+  .school-frame{position:relative;aspect-ratio:1280/784;border-radius:14px;overflow:hidden;background:var(--bg2);
+    border:1px solid var(--line2);box-shadow:0 32px 80px -36px oklch(0 0 0 / .7),inset 0 1px 0 oklch(1 0 0 / .06)}
+  .school-frame picture,.school-frame img,.school-frame video{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover}
+  .school-frame video{opacity:0;transition:opacity .4s var(--ease)}
+  .school[data-playing] video{opacity:1}
+  .school figcaption{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px;
+    font-size:13px;line-height:1.4;color:var(--fg3)}
+  .school-pause{flex-shrink:0;font:500 12px/1 var(--f-m);color:var(--fg3);background:transparent;cursor:pointer;
+    border:1px solid var(--line2);border-radius:5px;padding:8px 10px;transition:color .15s ease,border-color .15s ease}
+  .school-pause:focus-visible{outline:2px solid var(--fg2);outline-offset:2px}
+  @media (hover:hover) and (pointer:fine){ .school-pause:hover{color:var(--fg);border-color:var(--fg3)} }
+  @media (max-width:640px){
+    .school-frame{border-radius:10px}
+    .school figcaption{font-size:12px;margin-top:10px}
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-school]');
+  if (root) {
+    const video = root.querySelector('video')!;
+    const pause = root.querySelector<HTMLButtonElement>('[data-pause]')!;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    let loaded = false, ready = false, inView = false, paused = false;
+
+    const load = () => {
+      if (loaded) return;
+      loaded = true;
+      for (const [src, type] of [[root.dataset.webm!, 'video/webm; codecs="av01.0.05M.08"'], [root.dataset.mp4!, 'video/mp4']]) {
+        const s = document.createElement('source');
+        s.src = src; s.type = type;
+        video.append(s);
+      }
+      video.preload = 'auto';
+      video.load();
+    };
+    const play = () => {
+      if (reduce.matches || paused || !ready || !inView) return;
+      load();
+      video.play().catch(() => {});
+    };
+    const setPaused = (on: boolean) => {
+      paused = on;
+      pause.setAttribute('aria-pressed', String(on));
+      pause.textContent = on ? 'Play' : 'Pause';
+      if (on) video.pause(); else play();
+    };
+    video.addEventListener('playing', () => root.setAttribute('data-playing', ''));
+    pause.addEventListener('click', () => setPaused(!paused));
+    new IntersectionObserver(([e]) => { inView = e.isIntersecting; if (inView) play(); else video.pause(); }, { rootMargin: '120px' }).observe(root);
+    const showPause = () => { pause.hidden = reduce.matches; };
+    showPause();
+    reduce.addEventListener('change', () => {
+      showPause();
+      if (reduce.matches) { video.pause(); root.removeAttribute('data-playing'); } else play();
+    });
+    // The moving version waits until the page has painted and gone quiet.
+    const start = () => { ready = true; play(); };
+    const idle = () => ('requestIdleCallback' in window ? requestIdleCallback(start, { timeout: 2500 }) : setTimeout(start, 600));
+    if (document.readyState === 'complete') idle(); else addEventListener('load', idle, { once: true });
+  }
+</script>
