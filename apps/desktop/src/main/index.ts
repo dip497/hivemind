@@ -13,6 +13,7 @@ import { appKeyMessage, isQuitKey } from "../shared/shortcuts.js";
 import { askToQuit, installQuitIpc, stopEverything, stopsEverything } from "./quit.js";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
+import { migrateOnStart, takeMigrationNotices } from "./migrations.js";
 import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
@@ -312,6 +313,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   });
   workspaceIpc.connect(win.webContents);
   launchTargets.set(wc, target);
+  const notices = takeMigrationNotices();
+  if (notices.length) wc.once("did-finish-load", () => setTimeout(() => { for (const n of notices) pushAppError(n, "migrations"); }, 2_000));
 
   attachWinStateSaver(win);
   // Maximize AFTER the window is mapped, not before. The window is created with
@@ -1585,6 +1588,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
+    await migrateOnStart();
     // A daemon of another protocol is replaced before anything connects to it: each connection
     // waits for this, the window does not.
     ptyDaemon.ensureFreshDaemon().catch((e: unknown) => {

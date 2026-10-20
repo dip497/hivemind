@@ -1,0 +1,66 @@
+---
+title: "When an update changes your data"
+description: "How a new version moves the files on your computer to the shape it reads, once, with a backup, and how to put them back."
+---
+
+Sometimes a new version keeps your data in a new shape: the views, widgets and tools you
+installed moved into packages, for example. The first time the new version starts, it moves your
+data to that shape, once. Nothing for you to do.
+
+<AgentPrompt description="Paste this into your coding agent to see what an update changed on this computer." page="data-updates">{`
+Show me what Hivemind updates changed in my data on this computer, using the "When an update changes your data" page.
+
+1. Run \`hive migrations --json\` and list, for each data folder, the changes that ran, which version ran each and when, and whether its backup is still kept.
+2. If anything is still to run or failed, say what and why, and what the page says to do about it.
+3. Do not run \`hive migrations restore\` unless I ask for it.
+`}</AgentPrompt>
+
+## What happens on the first start
+
+The app, a `hive` command or `hive host`, whichever starts first, runs each change this version
+has that your data has not had yet, in order:
+
+1. It copies the files that change will touch into `migrations/backups/<change>/`.
+2. It makes the change.
+3. It writes the change into `migrations/ledger.json`, with the version that made it and when.
+
+Each data folder keeps its own ledger: the config folder and the app data folder
+([Data and where it is stored](/data-and-storage)), which are one folder on Linux. If a second
+Hivemind process starts meanwhile, it waits up to two minutes for the first to finish, and says so.
+A change that was cut off (a crash, a power cut) runs again on the next start, from where it was.
+
+A `hive` command started while an older app still runs leaves the files that app reads where they
+are, and says `quit Hivemind to finish updating your data`. Quit the app and start it again.
+
+## See what changed
+
+```bash
+hive migrations
+```
+
+It lists each change that ran, by which version, how long it took and where its backup is; any
+change still to run; and the last one that failed, with why. `--json` gives the same for a script
+or an agent. A plugin a change could not keep (its files no longer pass the checks) is named in
+that change's result, and its folder stays in the backup.
+
+## Put it back
+
+```bash
+hive migrations restore 0001-adopt-plugins-as-packages
+```
+
+This puts back the files as they were before that change, and before every change after it, and
+takes them out of the ledger. Quit the app and stop `hive host` first: it refuses while either
+runs, and changes nothing. The next start makes the changes again, so use it with the version you
+want to stay on (see [Update and roll back](/update-and-roll-back)).
+
+The backups of the last three changes, and of any made in the last 90 days, are kept. A change is
+dropped from Hivemind six months after it shipped.
+
+## A version older than your data
+
+If you go back to an older version after a newer one changed your data, the older one says once
+that your data was updated by the newer one, and starts anyway. `hive migrations restore` names
+the change to put back.
+
+<LastValidated />

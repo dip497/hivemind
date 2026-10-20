@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { agentSettingFields, disabledPlugins, isPluginEnabled, parsePluginStates, pluginStatesFromLegacy, serviceWorkspaces, toolSettingFields, withPluginState } from "./plugin-settings.js";
+import { agentSettingFields, disabledPlugins, isPluginEnabled, parsePluginStates, serviceWorkspaces, toolSettingFields, withPluginState } from "./plugin-settings.js";
 
 describe("what is stored for each plugin", () => {
   test("a record under a key that is not a plugin of a known kind is dropped", () => {
@@ -48,19 +48,6 @@ describe("what is stored for each plugin", () => {
     const picked = withPluginState({}, "tool", "@acme/ci", (s) => ({ ...s, workspaces: ["/work/api"] }));
     expect(picked).toEqual({ "tool:@acme/ci": { workspaces: ["/work/api"] } });
     expect(withPluginState(picked, "tool", "@acme/ci", ({ workspaces: _, ...s }) => s)).toEqual({});
-  });
-
-  test("the keys of a version before plugin state are read into records", () => {
-    expect(pluginStatesFromLegacy({
-      agents: { disabled: ["codex", 3], options: { claude: { model: "opus", effort: 2 } } },
-      plugins: { disabled: ["@someone/notes"] },
-      tools: { enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser", "noslash"] },
-    })).toEqual({
-      "agent:codex": { enabled: false },
-      "agent:claude": { options: { model: "opus" } },
-      "view:@someone/notes": { enabled: false },
-      "tool:@hivemind/web": { enabled: true, options: { browser: false } },
-    });
   });
 });
 

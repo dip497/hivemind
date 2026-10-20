@@ -1,4 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export const CLI = path.join(import.meta.dir, "..", "src", "index.ts");
@@ -20,7 +22,19 @@ type Opts = { cwd?: string; env?: Record<string, string | undefined> };
 /** The environment a run starts from: this process's, but never the tile it may run in, so no
  *  test reaches the app this suite was started from; a test names the sockets it means. */
 const TILE_ENV = ["HIVE_HCP_SOCK", "HIVE_DRIVE_SOCK", "HCP_TOKEN", "HIVEMIND_TILE", "HIVE_AGENT_ID", "HIVE_AGENT_DEPTH"];
-export const sealedEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !TILE_ENV.includes(k)));
+export const sealedEnv = (): NodeJS.ProcessEnv => ({
+  ...ownRoots(),
+  ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !TILE_ENV.includes(k))),
+});
+
+/** A run that names no data root of its own gets the suite's, so `hive` never moves forward
+ *  (migrates) the data of the person running the tests. */
+let suiteRoot: string | null = null;
+function ownRoots(): NodeJS.ProcessEnv {
+  if (process.env.XDG_CONFIG_HOME) return {};
+  suiteRoot ??= fs.mkdtempSync(path.join(os.tmpdir(), "hive-suite-"));
+  return { XDG_CONFIG_HOME: suiteRoot };
+}
 
 /** Run `hive …` as a real subprocess (like an agent would); blocking flavour. */
 export function hive(args: string[], opts: Opts = {}): Run {

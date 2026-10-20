@@ -12,7 +12,7 @@
  */
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
-import { parsePluginStates, pluginStatesFromLegacy, type PluginState } from "./plugin-settings.js";
+import { parsePluginStates, type PluginState } from "./plugin-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -471,12 +471,6 @@ const TOOLBAR_MAX_ACTIONS = 32;
  *  Two callers share this function: a LOAD (a file just parsed from disk, no base — the
  *  defaults fill the gaps) and a PATCH (a partial object merged onto the settings already in
  *  hand, base given). */
-/** Whether a settings.json holds plugin state in the keys a version before `plugins.state` used. */
-export function hasLegacyPluginKeys(p: Record<string, unknown>): boolean {
-  const has = (o: unknown, k: string) => isObj(o) && o[k] !== undefined;
-  return has(p.agents, "disabled") || has(p.agents, "options") || has(p.plugins, "disabled") || isObj(p.tools);
-}
-
 /** What the tool registry takes, from the tool plugins' stored state: the plugins switched on,
  *  and the tools switched off inside them (each a plugin option set to false). */
 export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
@@ -530,11 +524,8 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   }
   const plugins = isObj(p.plugins) ? p.plugins : {};
   const agents = isObj(p.agents) ? p.agents : {};
-  // Plugin state as stored; else, from a settings.json written before it, made from the keys
-  // that held it then; else (a partial merge) as `base` has it.
-  const state = isObj(plugins.state) ? parsePluginStates(plugins.state)
-    : hasLegacyPluginKeys(p) ? pluginStatesFromLegacy(p)
-    : base.plugins.state;
+  // Plugin state as stored; else (a partial merge) as `base` has it.
+  const state = isObj(plugins.state) ? parsePluginStates(plugins.state) : base.plugins.state;
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
