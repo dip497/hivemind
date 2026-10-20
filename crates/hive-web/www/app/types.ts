@@ -70,6 +70,11 @@ export interface Piece {
   session: string;
 }
 
+/** A message the computer took for an agent (`agent.send`): `held` until its turn ends, or typed in. */
+export interface Sent {
+  held: boolean;
+}
+
 /** The person's answer to a wait. */
 export type Reply = { text: string } | { allow: boolean } | { approve: boolean; feedback?: string } | { answers: QuestionAnswer[] };
 

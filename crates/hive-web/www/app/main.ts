@@ -31,7 +31,7 @@ let opened = false;
 /** A pairing link the page was opened with, waiting on a tap. */
 let offered = false;
 
-const act = async <T extends boolean | null>(done: () => Promise<T>, notLanded: string): Promise<T | false> => {
+const act = async <T extends boolean | null | object>(done: () => Promise<T>, notLanded: string): Promise<T | false> => {
   try {
     if (!phone) throw new Error("Still starting");
     const landed = await done();
@@ -75,7 +75,7 @@ const app: App = {
     else location.hash = "home";
   },
   answer: (agent, reply) => act(() => phone!.answer(agent, reply), NOTICES.answered),
-  send: (agent, text) => act(() => phone!.send(agent, text), NOTICES.notRunning),
+  send: (agent, text, photos) => act(() => phone!.send(agent, text, photos), NOTICES.notRunning),
   stop: (agent) => act(() => phone!.stop(agent), NOTICES.notStopped),
   close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
   conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? (() => {}),

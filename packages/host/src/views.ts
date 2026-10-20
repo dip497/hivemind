@@ -305,7 +305,7 @@ export function views(o: ViewsOptions): Domain<"view.list" | "view.file" | "view
   return {
     answers: {
       "view.list": async (_from, workspace, screen): Promise<ViewListing[]> =>
-        (await (screen === "desktop" ? availableViews(typeof workspace === "string" ? workspace : undefined) : phoneViews())).map(({ id, manifest: m }) => ({ id, name: m.name, version: m.version, entry: m.entry, page: pageOf(m.entry), ...(screen === "desktop" ? { manifest: m } : {}) })),
+        (await (screen === "desktop" ? availableViews(typeof workspace === "string" ? workspace : undefined) : phoneViews())).map(({ id, manifest: m, icon }) => ({ id, name: m.name, version: m.version, entry: m.entry, page: pageOf(m.entry), ...(screen === "desktop" ? { manifest: m, ...(icon ? { icon } : {}) } : {}) })),
       "view.file": async (_from, id, at, workspace): Promise<ViewFile> => {
         const view = await viewNamed(id, typeof workspace === "string" ? workspace : undefined);
         const rel = text(at, "path");

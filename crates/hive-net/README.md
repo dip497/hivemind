@@ -1,74 +1,32 @@
 # hive-net
 
-hivemind's network (`docs/design/multiplayer-2026-09-28.md`, R10): an [iroh](https://www.iroh.computer)
-endpoint that is this machine's device, and the server roles anyone can run for their own
-devices. It never uses iroh's default presets, so it reaches no server you did not name.
+Hivemind's network: this machine's device on it, and the servers (relay, lookup, access, push) you
+run so your devices, guests and phone reach each other from different networks. It uses no server
+you did not name.
+
+How to run your own server: https://hivemind.griiken.com/guide/self-hosting/. Every option, port
+and file to back up: https://hivemind.griiken.com/guide/hive-net/. The release installer puts
+`hive-net` beside `hive`; `infra/` has a Docker stack.
 
 ```bash
-hive-net id                                  # this device's id: the one Settings → Profile shows
-hive-net run                                 # answer pings (local network: found by mDNS)
-hive-net ping <id>                           # from another machine on the same network
-hive-net serve --relay --bind 0.0.0.0:3340   # a relay, on a machine both can reach
-hive-net run --relay http://<relay>:3340     # a device reached through it
-hive-net ping <id> --relay http://<relay>:3340
+hive-net serve --all --domain net.example.com --data /var/lib/hive-net   # every role, one port
+hive-net id                                  # this device's id
+hive-net ping <id>                           # from another machine
+hive-net doctor                              # whether the network's servers answer, as JSON
 ```
 
-The device key is the app's (`device.key` in `identity` in its data folder; `--identity <dir>`
-names another). hive-net reads it and never makes one: the app makes it when it first starts.
+The rest are on the reference page, and every option in the comment at the top of `src/main.rs`.
 
-## Network profiles
+## Contributing
 
-Which servers a device uses is its network profile (`spec/network-profile.md`, R16): `local`, the
-default, uses none; `hosted` is hivemind's; any other is a file its network's admin signed.
+The design is `docs/design/multiplayer-2026-09-28.md` (R10, R13, R16). The contracts it follows:
+[`spec/network-profile.md`](../../spec/network-profile.md),
+[`spec/network-access.md`](../../spec/network-access.md) and [`spec/push.md`](../../spec/push.md).
 
-```bash
-hive-net profile sign profile.json --admin admin.key > network.json   # as the network's admin
-hive-net profile link network.json          # hivemind://network/… for the people on it
-hive-net profile verify <local|hosted|file|link>   # the profile, if it is one to use, as JSON
-hive-net run --profile network.json         # reach and be reached through its relays
-hive-net doctor --profile network.json      # which of its relays answer, as JSON
-```
-
-## Running a network
-
-A network's relay admits the devices its access role allows (`spec/network-access.md`): on a
-`closed` network, the devices its admin enrolled (or an enrolled device did) and those vouched
-for; on an `open-pow` one, any device that registers its key with a little work.
+The server roles and the `hive-net` command are behind the `server` feature, on by default. A crate
+that is only ever a device, as the phone's is, depends on hive-net with `default-features = false`.
 
 ```bash
-hive-net serve --relay --access --admin-id <admin key id> --policy closed --data ./access
-hive-net access voucher --kind enrol --uses 5 --admin admin.key   # an enrolment voucher
-hive-net access redeem http://<host>:3341 '<voucher>'             # enrol this device with it
-hive-net access vouch http://<host>:3341 \
-  "$(hive-net access voucher --kind visit --device <id> --expires-in 86400)"   # a visitor, for a day
-hive-net access revoke http://<host>:3341 <id> --admin admin.key
-```
-
-A phone that cannot be reached at an address of its own is told through the network's push server
-(`spec/push.md` 0.3): it registers there, naming the devices that may tell it, and they post it
-notices encrypted to it and signed by them, which the server passes on unread to a UnifiedPush
-distributor (with its VAPID token), or through Apple's or Google's service given their
-credentials. It posts into none of its own networks but those `--push-allow` names. Its code is
-`src/push/` (`wire`: what a phone signs to register; `client`: the phone's side; `service`: the
-role; `posted`: what it reads; `store`: the registrations; `apns`, `fcm`, `unifiedpush`: one route
-each), on `egress/` (where it may post, and the clients that do), `limit.rs`, `signed.rs`,
-`state_file.rs` and `jwt.rs`.
-
-The server roles (relay, lookup, access, push) and the `hive-net` command are behind the `server`
-feature, on by default. A crate that is only ever a device, as the phone's is, depends on hive-net
-with `default-features = false` and links its device's side alone: the endpoint, pairing, the
-network profile, and the clients of the access and push roles.
-
-```bash
-hive-net serve --push --data ./push                                  # UnifiedPush, on the internet
-hive-net serve --push --push-allow 192.168.1.0/24 --data ./push      # …and in this building
-hive-net serve --push --data ./push --apns-key AuthKey_ABC123.p8 --apns-key-id ABC123 \
-  --apns-team TEAM123456 --apns-topic com.example.hivemind           # iPhones of that app
-hive-net serve --push --data ./push --fcm service-account.json       # Android, through Google
-```
-
-```bash
-cargo test --locked        # the CLI end to end: the key's id against conformance/identity.json,
-                           # the local network by mDNS, and through a relay it serves; profiles
-                           # against conformance/network-profile.json; the app's daemon
+cargo test --locked   # the CLI end to end, profiles against conformance/network-profile.json,
+                      # the key's id against conformance/identity.json, and the app's daemon
 ```

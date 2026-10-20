@@ -21,7 +21,7 @@ test.skipIf(process.platform !== "linux")("install writes a user unit that runs 
 
   const installed = hive(["host", "install", "--json"], { env });
   expect(installed.code).toBe(0);
-  const done = (installed.json as { data: { unit: string; started: boolean; todo: string[] } }).data;
+  const done = (installed.json as { unit: string; started: boolean; todo: string[] });
   expect(done.unit).toBe(unitFile);
   const unit = fs.readFileSync(unitFile, "utf8");
   // This hive (the binary, or bun and the source), running the host.
@@ -38,7 +38,7 @@ test.skipIf(process.platform !== "linux")("install writes a user unit that runs 
   expect(done.started).toBe(false);
   expect(done.todo.some((t) => t.startsWith("systemctl --user daemon-reload && systemctl --user enable --now hive-host.service"))).toBe(true);
 
-  expect((hive(["host", "uninstall", "--json"], { env }).json as { data: { removed: boolean } }).data.removed).toBe(true);
+  expect((hive(["host", "uninstall", "--json"], { env }).json as { removed: boolean }).removed).toBe(true);
   expect(fs.existsSync(unitFile)).toBe(false);
-  expect((hive(["host", "uninstall", "--json"], { env }).json as { data: { removed: boolean } }).data.removed).toBe(false);
+  expect((hive(["host", "uninstall", "--json"], { env }).json as { removed: boolean }).removed).toBe(false);
 });

@@ -33,7 +33,7 @@ async function until<T>(get: () => T | null | undefined | false, what: string, m
   throw new Error(`timed out waiting for ${what}; log:\n${log()}`);
 }
 const log = () => { try { return fs.readFileSync(path.join(data, "services", "acme--watcher.log"), "utf8"); } catch { return ""; } };
-const ours = () => ((run("grant", "list").json as { data?: Array<{ plugin?: string; repos: string[]; role: string }> }).data ?? []).filter((g) => g.plugin === "@acme/watcher");
+const ours = () => ((run("grant", "list").json as { grants?: Array<{ plugin?: string; repos: string[]; role: string }> }).grants ?? []).filter((g) => g.plugin === "@acme/watcher");
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
 afterAll(() => {
@@ -61,17 +61,17 @@ describe.skipIf(!unix)("a tool plugin's service under hive host", () => {
     `);
     expect(run("plugins", "install", plugin).code).toBe(0);
     expect(run("plugins", "enable", "tool:@acme/watcher").code).toBe(0);
-    expect(run("plugins", "workspaces", "tool:@acme/watcher").json).toMatchObject({ data: { workspaces: [] } });
+    expect(run("plugins", "workspaces", "tool:@acme/watcher").json).toMatchObject({ workspaces: [] });
 
     host = spawn(...cmd(["host", "run"]), { env: { ...sealedEnv(), ...env }, stdio: "ignore" });
-    await until(() => (run("host", "status").json as { data?: { running?: boolean } })?.data?.running, "the host to answer");
+    await until(() => (run("host", "status").json as { running?: boolean })?.running, "the host to answer");
     expect(run("host", "add", repo).code).toBe(0);
     // Switched on with no workspace picked, it waits.
     await new Promise((r) => setTimeout(r, 2_500));
     expect(ours()).toEqual([]);
 
     const picked = run("plugins", "workspaces", "tool:@acme/watcher", repo);
-    expect(picked.json).toMatchObject({ data: { workspaces: [repo] } });
+    expect(picked.json).toMatchObject({ workspaces: [repo] });
     await until(() => log().includes("hello "), "the service's hello");
     expect(log()).toContain(`hello ${JSON.stringify({ client: "Watcher service", role: "view", workspace: repo })}`);
     expect(ours()).toMatchObject([{ repos: [repo], role: "view" }]);

@@ -368,7 +368,8 @@ test("a phone opens a workspace to watch and type into its terminals and answer 
   await until(() => phone.heard.get("api")!.length >= 8);
   const answers = Object.fromEntries(phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; result?: unknown; error?: { code: string } }).map((a) => [a.id, a]));
   assert.deepEqual(answers[1]!.result, { pid: 1, joined: true });
-  assert.deepEqual([2, 3, 4, 6, 8].map((id) => answers[id]?.error?.code), ["FORBIDDEN", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN", "FORBIDDEN"]);
+  // A tile in no workspace here is not found.
+  assert.deepEqual([2, 3, 4, 6, 8].map((id) => answers[id]?.error?.code), ["FORBIDDEN", "FORBIDDEN", "NOT_FOUND", "NOT_FOUND", "NOT_FOUND"]);
   const asPhone = { kind: "peer", person: c.person, device: c.phone, access: "owner" };
   assert.deepEqual(c.watched, [{ by: asPhone, opts: { ...watch, cwd: c.repo } }]);
   assert.deepEqual(answers[5]!.result, { answered: true });
@@ -459,7 +460,7 @@ test("a phone asks on several `device` streams at once, and follows every agent 
   assert.deepEqual([ts(following), ts(again)], [["agents"], ["agents", "agents"]]);
 });
 
-test("a phone drives the workspace's agents as the owner's device: sees what may be started, starts one, interrupts its turn, closes it and reads what it changed; an agent of another workspace is refused", async () => {
+test("a phone drives the workspace's agents as the owner's device: sees what may be started, starts one, interrupts its turn, closes it and reads what it changed; a tile in no workspace is not found", async () => {
   const c = computer();
   const phone = c.connect(c.phone);
   phone.send("api", { t: "open", workspace: c.workspace });
@@ -473,7 +474,7 @@ test("a phone drives the workspace's agents as the owner's device: sees what may
   await until(() => phone.heard.get("api")!.length >= 6);
   const answers = Object.fromEntries(phone.heard.get("api")!.map((m) => JSON.parse(m) as { id: number; error?: { code: string } }).map((a) => [a.id, a]));
   assert.deepEqual([1, 2, 3, 4, 5].map((id) => answers[id]?.error), [undefined, undefined, undefined, undefined, undefined]);
-  assert.equal(answers[6]?.error?.code, "FORBIDDEN");
+  assert.equal(answers[6]?.error?.code, "NOT_FOUND");
   const asPhone = { kind: "peer", person: c.person, device: c.phone, access: "owner" };
   assert.deepEqual(c.driven, [
     { what: "agent.startable", by: asPhone, at: c.repo },

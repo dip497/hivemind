@@ -67,7 +67,7 @@ const listCmd = defineCommand({
     try {
       const status = args.status === "resolved" || args.status === "all" ? args.status : "open";
       const list = await listComments(await storeRoot(), { file: args.file || undefined, status });
-      return ok(ctx, list, () =>
+      return ok(ctx, { comments: list }, () =>
         list.length === 0 ? "no comments" : list.map(oneLine).join("\n"));
     } catch (e) { return fail(ctx, e, "list_failed"); }
   },
@@ -154,10 +154,10 @@ const watchCmd = defineCommand({
       const deadline = Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds : WATCH_DEFAULT_S) * 1000;
       for (;;) {
         const fresh = (await listComments(root, filter)).filter((c) => !seen.has(c.id));
-        if (fresh.length > 0) return ok(ctx, fresh, () => fresh.map(detail).join("\n\n"));
+        if (fresh.length > 0) return ok(ctx, { comments: fresh }, () => fresh.map(detail).join("\n\n"));
         if (Date.now() >= deadline) {
           process.exitCode = 4;
-          return ok(ctx, [], () => "no new comments");
+          return ok(ctx, { comments: [] }, () => "no new comments");
         }
         await new Promise((r) => setTimeout(r, WATCH_POLL_MS));
       }

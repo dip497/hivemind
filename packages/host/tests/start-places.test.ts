@@ -11,7 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentProviderDef } from "@hivemind/agents";
 import type { CoreLayout, FrameRecord } from "@hivemind/workspace-doc/shapes";
-import { FOLDERS_MAX, IMAGE_BYTES, IMAGES_MAX, StartPlaces, imagesOf, localFs, type MachineFs } from "../src/start-places.ts";
+import { FOLDERS_MAX, IMAGE_BYTES, IMAGES_MAX, PHOTOS_KEPT_DAYS, StartPlaces, imagesOf, localFs, type MachineFs } from "../src/start-places.ts";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-start-places-")));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -231,12 +231,30 @@ test("photos are kept on the machine the folder is on, under names of their own,
   assert.deepEqual(fs.readFileSync(path.join(d.box, there[0])), png);
 });
 
-test(`photos asked for, checked: at most ${IMAGES_MAX}, each a png, jpeg, webp or gif in base64 of at most ${IMAGE_BYTES} bytes`, () => {
-  const one = { type: "image/png", data: "iVBORw==" };
+test("a message's photos are kept in a folder of the tile's own, and photos kept more than a week ago go when another is kept", async () => {
+  const d = device();
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const [first] = await d.places.keep(d.repo, [{ type: "image/png", data: png.toString("base64") }], "../../t1");
+  const [other] = await d.places.keep(d.repo, [{ type: "image/png", data: png.toString("base64") }], "t2");
+  assert.match(first!, new RegExp(`^${d.photos}/[0-9a-f]{16}/[0-9a-f]{16}\\.png$`));
+  assert.notEqual(path.dirname(first!), path.dirname(other!));
+  assert.equal(fs.statSync(path.dirname(first!)).mode & 0o777, 0o700);
+  const old = (Date.now() - (PHOTOS_KEPT_DAYS + 1) * 86_400_000) / 1000;
+  fs.utimesSync(first!, old, old);
+  const recent = (Date.now() - (PHOTOS_KEPT_DAYS - 1) * 86_400_000) / 1000;
+  fs.utimesSync(other!, recent, recent);
+  await d.places.keep(d.repo, [{ type: "image/png", data: png.toString("base64") }], "t3");
+  assert.equal(fs.existsSync(first!), false);
+  assert.equal(fs.existsSync(path.dirname(first!)), false, "the folder it leaves empty goes too");
+  assert.deepEqual(fs.readFileSync(other!), png);
+});
+
+test(`photos asked for, checked: at most ${IMAGES_MAX}, each a png, jpeg, webp or gif in base64 of at most ${IMAGE_BYTES} bytes, its bytes beginning as that type's do`, () => {
+  const one = { type: "image/png", data: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]).toString("base64") };
   assert.equal(imagesOf(undefined), undefined);
   assert.deepEqual(imagesOf([one]), [one]);
   assert.deepEqual(imagesOf(Array(IMAGES_MAX).fill(one)), Array(IMAGES_MAX).fill(one));
-  const big = "A".repeat(Math.ceil(IMAGE_BYTES / 3) * 4);
+  const big = Buffer.from("GIF89a").toString("base64") + "A".repeat(Math.ceil(IMAGE_BYTES / 3) * 4 - 8);
   assert.equal(imagesOf([{ type: "image/gif", data: big }])?.[0].data.length, big.length);
   for (const [bad, said] of [
     [Array(IMAGES_MAX + 1).fill(one), /at most 4 photos/],
@@ -246,5 +264,8 @@ test(`photos asked for, checked: at most ${IMAGES_MAX}, each a png, jpeg, webp o
     [[null], /png, jpeg, webp or gif/],
     [[{ type: "image/png", data: "not base64!" }], /base64 of at most/],
     [[{ type: "image/png", data: `${big}AAAA` }], /base64 of at most/],
+    [[{ type: "image/png", data: Buffer.from("<svg onload=x>").toString("base64") }], /not a png, as it says/],
+    [[{ type: "image/jpeg", data: one.data }], /not a jpg, as it says/],
+    [[{ type: "image/webp", data: Buffer.from("RIFF\0\0\0\0WAVE").toString("base64") }], /not a webp, as it says/],
   ] as const) assert.throws(() => imagesOf(bad), (e: Error & { code?: string }) => e.code === "BAD_REQUEST" && said.test(e.message));
 });

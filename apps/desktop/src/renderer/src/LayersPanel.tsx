@@ -19,6 +19,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor, Moon, Play } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
+import { isOpenedUnread } from "./worker-tiles";
 import { FrameMenu, type FrameActions } from "./FrameMenu";
 import { getAnAgent, useReadyAgents } from "./agent-choice";
 import {
@@ -485,7 +486,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     setMine((m) => {
       const seen = { ...m.seen };
       const at = Date.now();
-      for (const t of unseen) seen[t.id] = t.activity ?? at;
+      // One an agent opened that the window did not go to is unread from its first change.
+      for (const t of unseen) seen[t.id] = isOpenedUnread(t.id) ? 0 : t.activity ?? at;
       if (sel) seen[sel.id] = Math.max(at, sel.activity ?? 0);
       const snoozed = { ...m.snoozed };
       if (sel) delete snoozed[sel.id];

@@ -5,9 +5,8 @@
  * Socket + token come from env (HIVE_HCP_SOCK / HCP_TOKEN — injected into every
  * agent hivemind spawns) else the app's data folder (app-data.ts).
  *
- * Errors are structured: `HcpCliError { code, message, exit }` so every ctl
- * subcommand prints `{ ok:false, code, message }` and exits with a meaningful
- * status an agent can branch on (see EXIT).
+ * Errors are structured: `HcpCliError { code, message, exit, fix? }`, printed and exited with as
+ * exit-codes.ts says.
  */
 import net from "node:net";
 import fs from "node:fs";
@@ -15,48 +14,12 @@ import { randomUUID } from "node:crypto";
 import { defaultToken } from "hivemind-api";
 import type { Where } from "@hivemind/core/app-data";
 import { appSocket } from "./app-data.js";
-
-/** Exit codes — stable, documented in the hivemind skill. */
-export const EXIT = {
-  ok: 0,
-  /** Unexpected failure / server FAILED. */
-  error: 1,
-  /** Bad arguments (client-side) or BAD_REQUEST / UNKNOWN_METHOD from the server. */
-  usage: 2,
-  /** The desktop app is not running / socket unreachable / renderer not up. */
-  unavailable: 3,
-  /** The wait (read / open-review / workflow) ran out of time. */
-  timeout: 4,
-  /** NOT_FOUND: a tile, frame, issue or workspace that is not there. */
-  notFound: 5,
-  /** FORBIDDEN — a bad or missing token, or a call the caller may not make. */
-  unauthorized: 6,
-  /** RATE_LIMITED / DEPTH_EXCEEDED — the control plane refused for now — or
-   *  UNSUPPORTED: the provider lacks the capability (no turn signal, no
-   *  permission system) so the verb cannot succeed for it; OCCLUDED: something
-   *  covers the tile `tile look` would picture. */
-  refused: 7,
-  /** The agent stopped to wait on an answer (a question, a permission): `read` says on what. */
-  waiting: 8,
-} as const;
+import { EXIT, exitCodeFor } from "./exit-codes.js";
 
 export class HcpCliError extends Error {
-  constructor(public code: string, message: string, public exit: number) {
+  constructor(public code: string, message: string, public exit: number, public fix?: string) {
     super(message);
     this.name = "HcpCliError";
-  }
-}
-
-/** Map a server error code to a CLI exit status. */
-export function exitCodeFor(code: string): number {
-  switch (code) {
-    case "BAD_REQUEST": case "UNKNOWN_METHOD": case "USAGE": return EXIT.usage;
-    case "UNAVAILABLE": return EXIT.unavailable;
-    case "TIMEOUT": return EXIT.timeout;
-    case "NOT_FOUND": return EXIT.notFound;
-    case "FORBIDDEN": return EXIT.unauthorized;
-    case "RATE_LIMITED": case "DEPTH_EXCEEDED": case "UNSUPPORTED": case "OCCLUDED": return EXIT.refused;
-    default: return EXIT.error;
   }
 }
 

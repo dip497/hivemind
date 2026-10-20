@@ -32,6 +32,47 @@
    ]
   },
   {
+   "about": "a message the person typed while Claude Code worked, taken into that turn (claude 2.1.303: a queued_command attachment whose commandMode is prompt), is theirs, where the turn took it; its queue operations, and a queued task notification, say nothing",
+   "lines": [
+    "{\"type\": \"user\", \"uuid\": \"u1\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": \"sleep 10 then say done\"}}",
+    "{\"type\": \"queue-operation\", \"operation\": \"enqueue\", \"timestamp\": \"2026-10-02T08:00:03.000Z\", \"sessionId\": \"s1\", \"content\": \"also check the logout page\"}",
+    "{\"type\": \"user\", \"uuid\": \"r1\", \"timestamp\": \"2026-10-02T08:00:10.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", \"tool_use_id\": \"t1\", \"content\": \"\", \"is_error\": false}]}}",
+    "{\"type\": \"queue-operation\", \"operation\": \"remove\", \"timestamp\": \"2026-10-02T08:00:10.000Z\", \"sessionId\": \"s1\", \"content\": \"also check the logout page\", \"reason\": \"absorbed_mid_turn\", \"commandUuid\": \"c1\", \"deliveryId\": \"d1\"}",
+    "{\"parentUuid\": \"r1\", \"isSidechain\": false, \"attachment\": {\"type\": \"queued_command\", \"prompt\": \"also check the logout page\", \"source_uuid\": \"c1\", \"delivery_id\": \"d1\", \"commandMode\": \"prompt\", \"origin\": {\"kind\": \"human\"}, \"timestamp\": \"2026-10-02T08:00:03.000Z\", \"humanTurn\": true}, \"type\": \"attachment\", \"uuid\": \"q1\", \"timestamp\": \"2026-10-02T08:00:10.000Z\", \"sessionId\": \"s1\"}",
+    "{\"parentUuid\": \"q1\", \"isSidechain\": false, \"attachment\": {\"type\": \"queued_command\", \"prompt\": \"<task-notification>a task ended</task-notification>\", \"commandMode\": \"task-notification\", \"origin\": {\"kind\": \"task-notification\", \"producer\": \"session-task\"}}, \"type\": \"attachment\", \"uuid\": \"q2\", \"timestamp\": \"2026-10-02T08:00:11.000Z\", \"sessionId\": \"s1\"}",
+    "{\"type\": \"assistant\", \"uuid\": \"a1\", \"timestamp\": \"2026-10-02T08:00:12.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"text\", \"text\": \"Done, and the logout page is fine.\"}]}}"
+   ],
+   "entries": [
+    {
+     "id": "u1",
+     "at": 1790928000000,
+     "who": "person",
+     "text": "sleep 10 then say done"
+    },
+    {
+     "id": "r1",
+     "at": 1790928010000,
+     "who": "tool",
+     "result": {
+      "of": "t1",
+      "text": ""
+     }
+    },
+    {
+     "id": "q1",
+     "at": 1790928010000,
+     "who": "person",
+     "text": "also check the logout page"
+    },
+    {
+     "id": "a1",
+     "at": 1790928012000,
+     "who": "agent",
+     "text": "Done, and the logout page is fine."
+    }
+   ]
+  },
+  {
    "about": "a tool the agent used, about the first of its input's file_path, path, command, pattern, url, query, description that is text, its first line, at most 120 characters; none of them, no about; a record of several blocks names each by its index; thinking says nothing",
    "lines": [
     "{\"type\": \"assistant\", \"uuid\": \"a3\", \"timestamp\": \"2026-10-02T08:00:00.000Z\", \"sessionId\": \"s1\", \"isSidechain\": false, \"message\": {\"role\": \"assistant\", \"content\": [{\"type\": \"thinking\", \"thinking\": \"hmm\", \"signature\": \"x\"}, {\"type\": \"tool_use\", \"id\": \"t1\", \"name\": \"Edit\", \"input\": {\"file_path\": \"src/Nav.tsx\", \"old_string\": \"a\", \"new_string\": \"b\"}}]}}",

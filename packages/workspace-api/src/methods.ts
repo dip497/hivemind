@@ -7,7 +7,7 @@ import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
-import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
+import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
 import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { GuestAnswer } from "@hivemind/workspace-host/connect";
@@ -116,7 +116,9 @@ export interface WorkspaceMethods {
   "agent.answer": (tile: string, since: number, answer: AgentAnswer) => { answered: boolean; by?: Answerer };
   /** A message for the agent in `tile`, one line: typed in as its next prompt once it is at its
    *  prompt, Enter after it (M5). `sent` false: no agent runs there. */
-  "agent.send": (tile: string, text: string) => { sent: boolean };
+  /** `held` (0.33): it waits for the agent's turn to end; `photos` (0.33): where the photos given
+   *  with it were kept. */
+  "agent.send": (tile: string, text: string, given?: { images?: StartImage[] }) => { sent: boolean; held?: true; photos?: string[] };
   /** What may be started in the workspace at `repo` (M5, spec/agents.md "Starting"): the agents
    *  this device starts, with their model and mode choices, and the workspace's frames. */
   "agent.startable": (repo: string) => Startable;
@@ -158,7 +160,8 @@ export interface WorkspaceMethods {
    *  text, each a moment after the last, as answering a picker on its screen takes. */
   "agent.keys": (tile: string, keys: string[]) => { keys: number };
   /** (0.23) The agent's reply to the turn after the last message it was sent, waiting for it up to
-   *  `timeoutMs` (2 minutes when not given). `UNSUPPORTED` for an agent that says no turn end. */
+   *  `timeoutMs` (2 minutes when not given). `UNSUPPORTED` for an agent that says no turn end;
+   *  `NO_AGENT` for a tile that runs none (0.33). */
   "agent.read": (tile: string, timeoutMs?: number) => AgentRead;
   /** (0.23) The last `lines` lines (40 when not given) of what it printed, its terminal's escapes
    *  taken out: as much as the host keeps. */

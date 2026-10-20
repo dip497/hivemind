@@ -38,7 +38,7 @@ async function until<T>(get: () => T | null | undefined | false, what: string, m
   throw new Error(`timed out waiting for ${what}`);
 }
 const ctl = (...args: string[]) => hive(["ctl", ...args, "--json"], { env });
-interface Listed { tile: string; agent: string; state: string; program?: { id: string }; parent?: string }
+interface Listed { tile: string; name: string; agent?: string; state: string; parent?: string }
 const listed = (): Listed[] => (ctl("agents").json as { agents: Listed[] }).agents;
 /** The processes running for a tile: an agent and what it starts carry the tile's id. */
 const processesOf = (tileId: string): string[] => fs.readdirSync("/proc").filter((pid) => {
@@ -70,7 +70,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
 
     const host = spawn(...cmd(["host", "run"]), { env: { ...sealedEnv(), ...env }, stdio: "ignore" });
     running.push(host);
-    await until(() => (hive(["host", "status", "--json"], { env }).json as { data?: { running?: boolean } })?.data?.running, "the host to answer");
+    await until(() => (hive(["host", "status", "--json"], { env }).json as { running?: boolean })?.running, "the host to answer");
     expect(hive(["host", "add", repo, "--json"], { env }).code).toBe(0);
     // Another device watching this machine's daemon, as one with a frame here does.
     const watcher = net.connect(path.join(data, "pty-daemon.sock"));
@@ -97,7 +97,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     await until(() => heard.some((e) => e.topic === "agent.event" && e.data.tileId === `hm:${worker}` && e.data.event === "turn.ended"), "the daemon to tell its watchers");
     // The host hears it on its own socket: the turn it ended is the state it lists.
     await until(() => listed().find((t) => t.tile === worker)?.state === "done", "the host to hear the turn end");
-    expect(listed().find((t) => t.tile === worker)).toMatchObject({ agent: "worker", program: { id: "droid" } });
+    expect(listed().find((t) => t.tile === worker)).toMatchObject({ name: "worker", agent: "droid" });
     // Its output is recorded, whoever shows it.
     const tail = hive(["ctl", "stream", worker, "--lines", "40", "--snapshot", "--json"], { env });
     expect(tail.stdout, tail.stderr).toContain(`hello from ${repo}`);
@@ -109,7 +109,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     expect(ctl("send", worker, "hive ctl spawn --agent droid --name helper --prompt 'echo helping' --json").code).toBe(0);
     const said = ctl("read", worker, "--timeout", "40000").json as { text: string };
     const helper = JSON.parse(said.text) as { tile: string };
-    expect(await until(() => listed().find((t) => t.tile === helper.tile), "the helper to be listed")).toMatchObject({ agent: "helper", parent: worker });
+    expect(await until(() => listed().find((t) => t.tile === helper.tile), "the helper to be listed")).toMatchObject({ name: "helper", parent: worker });
     expect(ctl("close", helper.tile).code).toBe(0);
 
     // An unnamed one is called by what it says it is doing, as the daemon reads its title: its task
@@ -117,7 +117,7 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     const unnamed = (ctl("spawn", "--agent", "droid", "--prompt", "echo titled").json as { tile: string }).tile;
     expect(ctl("read", unnamed, "--timeout", "40000").json).toMatchObject({ text: "titled", finalStatus: "turn" });
     expect(ctl("send", unnamed, "echo retitled").code).toBe(0);
-    await until(() => listed().find((t) => t.tile === unnamed)?.agent === "echo retitled", "the title to name the tile");
+    await until(() => listed().find((t) => t.tile === unnamed)?.name === "echo retitled", "the title to name the tile");
 
     // An agent that opens a startup screen its launch flags answered (a stand-in whose manifest
     // says so): the host skips it, reading the screen in the daemon, and the task then goes in.
@@ -144,13 +144,13 @@ describe.skipIf(!unix)("hive ctl on a headless host", () => {
     expect(listed().map((t) => t.tile)).not.toContain(busy);
 
     // Nobody sits at it: a verb that needs a window is refused.
-    expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE" } });
+    expect(ctl("focus", worker)).toMatchObject({ code: 3, json: { error: { code: "UNAVAILABLE" } } });
 
     watcher.destroy();
     // Stopped, the host gives the socket back: the daemon answers there again, as it does with no
     // control plane on the machine.
     expect(hive(["host", "stop", "--json"], { env }).code).toBe(0);
     await until(() => host.exitCode !== null || host.signalCode !== null, "the host to exit");
-    expect(ctl("agents")).toMatchObject({ code: 3, json: { ok: false, code: "UNAVAILABLE" } });
+    expect(ctl("agents")).toMatchObject({ code: 3, json: { error: { code: "UNAVAILABLE" } } });
   });
 });

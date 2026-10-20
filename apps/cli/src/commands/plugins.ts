@@ -34,6 +34,7 @@ import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
+import { personOnly } from "../person-only.js";
 import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
 import { stageFromRegistry } from "../registry.js";
 import { checkPlugin, DRAW_ALONE } from "../check/check.js";
@@ -120,7 +121,7 @@ const listCmd = defineCommand({
         settings: resolveSettings(p.fields, pluginOptions(states, p.kind, p.id)), problem: p.problem,
         ...(p.opens ? { opens: p.opens } : {}), ...(p.dir ? { dir: p.dir } : {}),
       }));
-      return ok(ctx, rows, () => rows.map((r) => [`${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.problem ? `  (${r.problem})` : ""}`,
+      return ok(ctx, { plugins: rows }, () => rows.map((r) => [`${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.problem ? `  (${r.problem})` : ""}`,
         ...(r.opens ?? []).map((t) => `       open-tool ${t}`)].join("\n")).join("\n") || "no plugins");
     } catch (e) { return fail(ctx, e, "list_failed"); }
   },
@@ -148,6 +149,7 @@ const switchCmd = (on: boolean) => defineCommand({
   args: { plugin: { type: "positional", required: true, description: "its id, or <kind>:<id>" }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    personOnly(ctx, on ? "switch plugins on" : "switch plugins off", `hive plugins ${on ? "enable" : "disable"} ${String(args.plugin)}`);
     try {
       const p = await find(String(args.plugin));
       const { reloaded } = await change(p, (s) => ({ ...s, enabled: on }));
@@ -166,6 +168,7 @@ const setCmd = defineCommand({
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    personOnly(ctx, "change a plugin's settings", `hive plugins set ${String(args.plugin)} ${String(args.setting)} ${String(args.value)}`);
     try {
       const p = await find(String(args.plugin));
       const field = p.fields.find((f) => f.id === args.setting);
@@ -182,6 +185,7 @@ const resetCmd = defineCommand({
   args: { plugin: { type: "positional", required: true, description: "its id, or <kind>:<id>" }, setting: { type: "positional", required: false }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    personOnly(ctx, "change a plugin's settings", `hive plugins reset ${String(args.plugin)}${args.setting ? ` ${String(args.setting)}` : ""}`);
     try {
       const p = await find(String(args.plugin));
       const one = args.setting ? String(args.setting) : null;
@@ -218,6 +222,7 @@ const workspacesCmd = defineCommand({
         const workspaces = serviceWorkspaces((await readSettings()).plugins.state, p.id);
         return ok(ctx, { key: p.key, workspaces }, () => (workspaces.length ? workspaces.join("\n") : `none: ${p.key}'s service waits for one`));
       }
+      personOnly(ctx, "choose the workspaces a plugin's service drives", `hive plugins workspaces ${p.key} ${args.none ? "--none" : folders.join(" ")}`);
       const { state, reloaded } = await change(p, ({ workspaces: _, ...s }) => (folders.length ? { ...s, workspaces: [...new Set(folders)] } : s));
       const workspaces = state.workspaces ?? [];
       return ok(ctx, { key: p.key, workspaces, reloaded }, () => `${p.key}'s service drives ${workspaces.length ? workspaces.join(", ") : "nothing"}; ${note(reloaded)}`);
@@ -366,7 +371,8 @@ const checkCmd = defineCommand({
     ].join("\n");
     // The plugin's code may have left timers or sockets open: what it did is known, so stop here.
     if (!report.problems.length) { ok(ctx, report, text); process.exit(0); }
-    if (ctx.json) console.log(JSON.stringify({ ok: false, code: "check_failed", error: `${report.problems.length} problems`, data: report }, null, 2));
+    // With problems it is still the report, on stdout as a result is, and the exit says it failed.
+    if (ctx.json) console.log(JSON.stringify(report));
     else process.stderr.write(text() + "\n");
     process.exit(1);
   },

@@ -1,6 +1,8 @@
 # Conformance
 
-Cases every implementation must pass, as data. A runner per language reads them.
+Cases every implementation must pass, as data. A runner per language reads them. Each file checks
+a contract in [`spec/`](../spec/README.md). For contributors; using Hivemind is in the guide,
+https://hivemind.griiken.com/guide/.
 
 | File | Checks | Runner (TypeScript) |
 |---|---|---|
@@ -11,7 +13,9 @@ Cases every implementation must pass, as data. A runner per language reads them.
 | `agents.json` | a device's boards, statuses and plans, and what its manifests say of each tile → every agent there, and what a phone shows of several devices' lists (`spec/agents.md`); written by hand from the spec | `packages/host/tests/agent-list.test.ts` (a device's side), `crates/hive-phone/tests/agents.rs` (Rust, the phone's side) |
 | `conversation.json` | an agent's session-file records → the entries a device sends, as its manifest maps them (`claude`: Claude Code's file and its manifest's mapping; `mapped`: the mapping rules themselves), and what a phone reads of them (`spec/agents.md` "Conversation"); written by hand from the spec, Claude Code's records shaped as 2.1.287 writes them | `packages/hive-agents/tests/transcript.test.ts` (a device's side), `crates/hive-phone/tests/conversation.rs` (Rust, the phone's side) |
 | `needs.json` | a device's boards, statuses and plans → what waits on the person, and what a phone shows of several devices' answers (`spec/needs.md`); written by hand from the spec | `packages/host/tests/needs.test.ts` (a device's side), `crates/hive-phone/tests/needs.rs` (Rust, the phone's side) |
+| `home.json` | what a computer holds → the rows of the phone's Home, and how a phone groups and orders them (`spec/home.md`) | `packages/host/tests/home.test.ts` (a computer's side), `crates/hive-phone/tests/home.rs` (Rust, the phone's side) |
 | `markdown.json` | what an agent says, in markdown → the blocks the apps draw (`spec/markdown.md`); written by hand from the spec | `crates/hive-phone/tests/markdown.rs` (Rust, the phone's core) |
+| `layers.json` | tiles and the Layers panel's View choices → the same lists on the desktop and the phone | `packages/hive-core/src/layers.conformance.test.ts`, `crates/hive-phone/tests/layers.rs` (Rust) |
 | `pairing.json` | proofs, codes and links, a phone pairing with an app message by message, and the networks an app's answer may give a phone (`spec/pairing.md` 0.5); made with Python's hmac and OpenSSL's Ed25519, the networks taken from `network-profile.json` | `packages/workspace-host/tests/pairing-conformance.test.ts` (the app's side), `crates/hive-phone/tests/conformance.rs` (Rust, the phone's side) |
 | `push.json` | RFC 8291's example, which a device encrypts byte for byte and a phone decrypts, and bodies a phone refuses though they decrypt (`spec/push.md`); taken from the RFC's text, the refusals made with node:crypto apart from the code | `packages/host/tests/web-push.test.ts` (a device's side), `crates/hive-phone/tests/push.rs` (Rust, the phone's side) |
 | `view-commands.json` | the view protocol's commands and the permission each needs, and of what a view's page posts on a phone, what starts or closes something on the board, so the phone asks its lock first (docs/design/phone-app-2026-10-02.md §6.1); written by hand from the SDK's `COMMAND_PERMISSION` | `packages/hive-view-sdk/tests/conformance.test.ts` (the commands), `crates/hive-phone/tests/viewing.rs` (Rust, the phone's side) |

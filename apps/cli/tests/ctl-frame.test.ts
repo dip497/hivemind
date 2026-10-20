@@ -65,10 +65,10 @@ describe.skipIf(!unix)("hive ctl frame add", () => {
     const before = store.getCore(repo)!.frames.length;
     const twin = await hive(["ctl", "frame", "add", "--machine", "twin", "--folder", "/srv", "--json"], { env: asAgent });
     expect(twin.code).not.toBe(0);
-    expect(twin.json).toMatchObject({ ok: false, code: "BAD_REQUEST" });
-    expect((twin.json as { message: string }).message).toContain("twin (m-2), Twin (m-3)");
+    expect(twin.json).toMatchObject({ error: { code: "BAD_REQUEST" } });
+    expect((twin.json as { error: { message: string } }).error.message).toContain("twin (m-2), Twin (m-3)");
     const none = await hive(["ctl", "frame", "add", "--machine", "nowhere", "--folder", "/srv", "--json"], { env: asAgent });
-    expect(none.json).toMatchObject({ ok: false, code: "NOT_FOUND" });
+    expect(none.json).toMatchObject({ error: { code: "NOT_FOUND" } });
     expect(store.getCore(repo)!.frames.length).toBe(before);
   });
 });

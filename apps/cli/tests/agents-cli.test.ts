@@ -90,16 +90,16 @@ describe("hive agents", () => {
 
     const inst = hive(["agents", "install", src, "--json"], { env });
     expect(inst.code).toBe(0);
-    expect((inst.json as { data: { id: string } }).data.id).toBe("acme");
+    expect((inst.json as { id: string }).id).toBe("acme");
 
     const list = hive(["agents", "list", "--json"], { env });
-    const rows = (list.json as { data: Array<{ id: string; source: string; error: string | null }> }).data;
+    const rows = (list.json as { agents: Array<{ id: string; source: string; error: string | null }> }).agents;
     expect(rows.find((a) => a.id === "acme")).toMatchObject({ source: "user", error: null });
     expect(rows.every((a) => a.source !== "builtin")).toBe(true); // nothing is compiled in
 
     const rm = hive(["agents", "remove", "acme", "--json"], { env });
     expect(rm.code).toBe(0);
-    const after = (hive(["agents", "list", "--json"], { env }).json as { data: Array<{ id: string }> }).data;
+    const after = (hive(["agents", "list", "--json"], { env }).json as { agents: Array<{ id: string }> }).agents;
     expect(after.find((a) => a.id === "acme")).toBeUndefined();
   });
 
@@ -163,14 +163,14 @@ describe("validating an agent package before you publish it", () => {
   test("it answers with what a user will be told, not just pass or fail", () => {
     const r = hive(["agents", "validate", pkg(ACME), "--json"], { env: profile() });
     expect(r.code).toBe(0);
-    expect(r.json.data).toMatchObject({ id: "acme", bin: "acme-coder", worker: false, does: [], warnings: [] });
+    expect(r.json).toMatchObject({ id: "acme", bin: "acme-coder", worker: false, does: [], warnings: [] });
   });
 
   test("an asset it names but does not ship is a warning, because it loads and then disappoints", () => {
     const withAsset = `${ACME}assets:\n- { name: hooks.json, file: hooks.json }\nlaunch:\n  env: { ACME_HOOKS: "{asset:hooks.json}" }\n`;
-    expect(hive(["agents", "validate", pkg(withAsset), "--json"], { env: profile() }).json.data.warnings)
+    expect(hive(["agents", "validate", pkg(withAsset), "--json"], { env: profile() }).json.warnings)
       .toEqual([expect.stringContaining("hooks.json is declared but not in this folder")]);
-    expect(hive(["agents", "validate", pkg(withAsset, { "hooks.json": "{}" }), "--json"], { env: profile() }).json.data.warnings)
+    expect(hive(["agents", "validate", pkg(withAsset, { "hooks.json": "{}" }), "--json"], { env: profile() }).json.warnings)
       .toEqual([]);
   });
 
@@ -197,10 +197,10 @@ describe("hive agents install <name>", () => {
     fs.mkdirSync(path.join(cwd, "acme")); // a same-named folder that is not an agent
     const env = { ...profile(), HIVEMIND_PLUGIN_INDEX: `file://${path.join(reg, "index.json")}` };
     let r = hive(["agents", "install", "acme", "--json"], { cwd, env });
-    expect(r.json).toMatchObject({ ok: false, code: "install_unconfirmed" });
-    expect((r.json as { error: string }).error).toContain("matches the hash HiveHub recorded");
+    expect(r.json).toMatchObject({ error: { code: "INSTALL_UNCONFIRMED" } });
+    expect((r.json as { error: { message: string } }).error.message).toContain("matches the hash HiveHub recorded");
     r = hive(["agents", "install", "acme", "--yes", "--json"], { cwd, env });
-    expect(r.json).toMatchObject({ ok: true, data: { id: "acme" } });
+    expect(r.json).toMatchObject({ id: "acme" });
     // A scope is a view's, never an agent's.
     r = hive(["agents", "install", "@dip497/acme", "--yes", "--json"], { cwd, env });
     expect(r.code).not.toBe(0);

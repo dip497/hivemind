@@ -1,5 +1,6 @@
 /** Remote filesystem over the system ssh; remote paths are always POSIX. */
 import { shScript } from "@hivemind/core";
+import { PHOTOS_KEPT_DAYS } from "../start-places.js";
 
 export interface ExecResult {
   stdout: Buffer;
@@ -67,9 +68,12 @@ export class RemoteFs {
     return out.split("\n").flatMap((l) => (l.startsWith("HIVEFOUND ") ? [l.slice(10)] : []));
   }
 
-  /** Keep `data` as `name` in its person's photos folder: where it is. */
-  async keep(name: string, data: Buffer): Promise<string> {
-    return (await this.ok(shScript('d="$HOME/.hivemind/photos" && mkdir -p "$d" && cat > "$d/$1" && printf %s "$d/$1"', name), data)).toString("utf8");
+  /** Keep `data` as `name` in its person's photos folder, in its folder `under` when given: where
+   *  it is. Photos kept there more than PHOTOS_KEPT_DAYS ago go first. */
+  async keep(name: string, data: Buffer, under = ""): Promise<string> {
+    const script = 'd="$HOME/.hivemind/photos"; find "$d" -type f -mtime +$3 -delete 2>/dev/null; find "$d" -mindepth 1 -type d -empty -delete 2>/dev/null; '
+      + 't="$d${2:+/$2}" && mkdir -p -m 700 "$t" && (umask 077 && cat > "$t/$1") && printf %s "$t/$1"';
+    return (await this.ok(shScript(script, name, under, String(PHOTOS_KEPT_DAYS - 1)), data)).toString("utf8");
   }
 
   /** Truncates in place (not replace-by-rename) so the file keeps its mode and owner. */

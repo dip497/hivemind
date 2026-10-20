@@ -18,6 +18,8 @@ export interface ViewListing {
   page: string;
   /** Desktop callers need the manifest to render the host's view in their sandbox. */
   manifest?: ViewManifest;
+  /** Desktop callers: its manifest's .svg icon, as a data URL. */
+  icon?: string;
 }
 
 /** One of a view's files: its bytes, base64, its type, and the Content-Security-Policy to serve it

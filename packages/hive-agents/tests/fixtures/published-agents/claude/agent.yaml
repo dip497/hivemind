@@ -323,6 +323,12 @@ session:
       item: { type: text }
       text: text
       who: person
+    # A message typed while it works, taken into that turn at its next step, read from claude
+    # 2.1.303: not a prompt record but a queued_command attachment. A task's notification, queued
+    # the same way, is not the person's.
+    - require: { type: attachment, attachment.type: queued_command, attachment.commandMode: prompt }
+      text: attachment.prompt
+      who: person
     - require: { type: user }
       each: message.content
       item: { type: tool_result }

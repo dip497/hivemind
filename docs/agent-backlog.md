@@ -1,11 +1,8 @@
 # Agent backlog
 
-Pains seen in sessions that were real but not yet worth fixing. Seen again: build it.
+Real slowdowns not worth a fix yet. One seen again moves up to a fix.
 
-- 2026-10-10 — CLI tests are not typechecked (`apps/cli` typecheck skips `tests/`): a test kept
-  `serveDrive`'s removed `holds` option, and the call hung instead of failing to compile. Fix:
-  include `tests/` in the CLI's typecheck; size the existing errors first.
-
-- 2026-10-11 — How long opening a thing takes (Settings, a view, a terminal) was measured with a
-  throwaway Playwright spec: page-side timing from the event to the selector, plus a CDP CPU
-  profile. Fix: `apps/desktop/scripts/open-latency.mjs`, like `perf-canvas-effects.mjs`.
+- 2026-10-20: the laptop disk filled to 100% mid-round and stopped every agent's build (27 GB
+  of film renders and Remotion bundles in the session scratchpad and `/tmp`). Seen at 96% in an
+  earlier session too. Candidate fix: check `df /` before starting heavy agents, and delete your
+  own scratch output when its job ends.

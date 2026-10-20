@@ -389,6 +389,7 @@ export class PeerLinks {
             workspace,
             repo,
             holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
+            elsewhere: (tile) => store.workspaceOf(toBareId(tile)) !== null,
             places: () => frameWorktrees(store.getCore(repo)),
             allows: phoneMay,
           });
@@ -453,6 +454,7 @@ export class PeerLinks {
         repo,
         // A terminal is named by its session (`hm:<tile>`), the document by the tile.
         holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
+        elsewhere: (tile) => store.workspaceOf(toBareId(tile)) !== null,
         places: () => frameWorktrees(store.getCore(repo)),
         ...(terminals === null ? {} : { hears: (event: string) => event.startsWith("terminal.") === terminals }),
       }));

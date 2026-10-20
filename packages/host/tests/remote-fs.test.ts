@@ -81,3 +81,17 @@ test("keep: a photo kept in its person's photos folder, bytes intact, where it i
   assert.equal(at, path.join(root, ".hivemind", "photos", "a1.png"));
   assert.deepEqual(fs.readFileSync(at), data);
 });
+
+test("keep: a photo kept in a folder of its own, private; one kept more than a week ago goes when another is kept", { skip: !unix }, async () => {
+  const data = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  const old = await rfs.keep("b1.png", data, "0123abcd");
+  assert.equal(old, path.join(root, ".hivemind", "photos", "0123abcd", "b1.png"));
+  assert.equal(fs.statSync(old).mode & 0o777, 0o600);
+  assert.equal(fs.statSync(path.dirname(old)).mode & 0o777, 0o700);
+  const week = (Date.now() - 8 * 86_400_000) / 1000;
+  fs.utimesSync(old, week, week);
+  const now = await rfs.keep("b2.png", data, "4567cdef");
+  assert.equal(fs.existsSync(old), false);
+  assert.equal(fs.existsSync(path.dirname(old)), false);
+  assert.deepEqual(fs.readFileSync(now), data);
+});

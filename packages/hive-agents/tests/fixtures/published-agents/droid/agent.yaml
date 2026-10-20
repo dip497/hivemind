@@ -43,6 +43,11 @@ icon:
       rx: '10'
       ry: '2.6'
       transform: rotate(135 12 12)
+# A message typed while it works steers that turn: droid 0.161.0 says "Enter to steer" while it
+# works, and lists it under "Steering messages".
+steer: true
+# An image whose path is pasted alone is attached: droid 0.161.0 lists it as "[Image 1] <name>".
+pastedImages: true
 options:
 - id: mode
   label: Autonomy

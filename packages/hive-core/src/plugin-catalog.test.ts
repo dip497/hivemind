@@ -139,6 +139,17 @@ test("an agent may carry its own mark, bounded but not understood here", () => {
   }
 });
 
+test("a view, widget or tool carries its published .svg icon, up to the size HiveHub keeps", () => {
+  const base = { type: "view", name: "Board", description: "Your issues as columns.", author: "a", version: "1.0.0",
+    path: "views/board", files: [{ path: "hivemind-view.json", sha256: "0".repeat(64) }] };
+  const icon = { image: `data:image/svg+xml;base64,${Buffer.from(`<svg>${" ".repeat(16_000)}</svg>`).toString("base64")}` };
+  const [view, widget] = parseCatalog({ version: 1, plugins: [{ ...base, id: "@a/board", icon }, { ...base, id: "@a/clock", type: "widget", icon }] });
+  expect([view!.icon, view!.description, widget!.icon]).toEqual([icon, "Your issues as columns.", icon]);
+  for (const bad of [{ image: `data:text/html;base64,${"A".repeat(5000)}` }, { image: `data:image/svg+xml;base64,${"A".repeat(40_000)}` }]) {
+    expect(() => parseCatalog({ version: 1, plugins: [{ ...base, id: "@a/board", icon: bad }] })).toThrow(/icon must be a small object/);
+  }
+});
+
 describe("telling the registry an install happened", () => {
   const entry = (id: string): CatalogEntry => ({
     id, type: "view", name: "N", description: "d", author: "a", version: "1.0.0",

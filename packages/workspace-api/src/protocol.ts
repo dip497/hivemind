@@ -14,6 +14,10 @@ export type ErrorCode =
   | "FORBIDDEN"
   /** What it names is not there: a tile, a frame, a workspace. */
   | "NOT_FOUND"
+  /** The agent it names is asleep: `hive ctl wake` it first. */
+  | "ASLEEP"
+  /** The tile names no agent: a tool, a browser, a shell. What asks an agent's reply has none. */
+  | "NO_AGENT"
   /** The agent cannot do what it asks: no turn signal to read a reply by, no permission system to
    *  supervise, no session to resume. */
   | "UNSUPPORTED"
@@ -31,7 +35,7 @@ export type ErrorCode =
 
 /** Every code, so that one added to the type must be added here. */
 const ERROR_CODES: Record<ErrorCode, true> = {
-  BAD_REQUEST: true, UNKNOWN_METHOD: true, FORBIDDEN: true, NOT_FOUND: true, UNSUPPORTED: true,
+  BAD_REQUEST: true, UNKNOWN_METHOD: true, FORBIDDEN: true, NOT_FOUND: true, NO_AGENT: true, ASLEEP: true, UNSUPPORTED: true,
   RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, OCCLUDED: true, FAILED: true,
 };
 /** Whether `code` is one of the codes a call fails with: what crossed a boundary untyped. */

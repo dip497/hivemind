@@ -16,6 +16,7 @@ import {
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
+import { personOnly } from "../person-only.js";
 
 async function reloadApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
@@ -37,7 +38,7 @@ const getCmd = defineCommand({
     const s = await readSettings();
     const v = args.path ? getPath(s, String(args.path)) : s;
     if (v === undefined) return err(ctx, "not_found", `no setting at "${args.path}"`);
-    return ok(ctx, v, () => JSON.stringify(v, null, 2));
+    return ok(ctx, { path: args.path ? String(args.path) : null, value: v }, () => JSON.stringify(v, null, 2));
   },
 });
 
@@ -46,6 +47,8 @@ const setCmd = defineCommand({
   args: { path: { type: "positional", required: true }, value: { type: "positional", required: true }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    // Which plugins run is the person's to say, here as in `hive plugins`.
+    if (String(args.path).split(".")[0] === "plugins") personOnly(ctx, "change which plugins run and their settings", `hive config set ${String(args.path)} ${String(args.value)}`);
     let value: unknown;
     try { value = JSON.parse(String(args.value)); } catch { return err(ctx, "usage", `value must be JSON (a string needs quotes: '"nord"'); got ${JSON.stringify(args.value)}`); }
     try {
@@ -70,7 +73,7 @@ const listCmd = defineCommand({
   async run({ args }) {
     const cur = (await readSettings()).appearance.preset;
     const rows = Object.values(PRESETS).map((p) => ({ id: p.id, label: p.label, mode: p.mode, active: p.id === cur }));
-    return ok({ json: !!args.json }, rows, () => rows.map((r) => `${r.active ? "*" : " "} ${r.id.padEnd(16)} ${r.label}`).join("\n"));
+    return ok({ json: !!args.json }, { themes: rows }, () => rows.map((r) => `${r.active ? "*" : " "} ${r.id.padEnd(16)} ${r.label}`).join("\n"));
   },
 });
 

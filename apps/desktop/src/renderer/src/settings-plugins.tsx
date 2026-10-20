@@ -7,6 +7,7 @@ import { Loading } from "./components/ui/loading";
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
 import { SvgMark } from "./agents";
+import { MaskIcon, catalogImage } from "./plugins/mask-icon";
 import { rescan } from "./settings-views";
 import { permissionWords } from "./plugins/library";
 import { KIND_LABEL, rowsInKindTab, type PluginKind } from "./plugins/kinds";
@@ -40,10 +41,12 @@ function newer(a: string, b: string): boolean {
  * identical glyphs tells you nothing, and drawing someone's logo for them is worse.
  */
 export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
+  const image = catalogImage(entry.icon);
   const icon = useMemo(() => {
-    try { return entry.icon ? iconFromManifest(entry.icon as Parameters<typeof iconFromManifest>[0]) : null; }
+    try { return entry.icon && !catalogImage(entry.icon) ? iconFromManifest(entry.icon as Parameters<typeof iconFromManifest>[0]) : null; }
     catch { return null; } // a mark we cannot read is a mark we do not draw
   }, [entry.icon]);
+  if (image) return <MaskIcon url={image} size={20} />;
   if (icon) return <SvgMark icon={icon} size={20} />;
   let hue = 0;
   for (const c of entry.id) hue = (hue * 31 + c.charCodeAt(0)) % 360;
@@ -152,7 +155,7 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
     const update = outdatedOf(e);
     const open = review?.key === key(e) ? review.data : null;
     return { key: key(e), kind: e.type, category: e.category ?? "other", row: <div className="catalog-item" data-catalog-plugin={key(e)}>
-      <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
+      <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" || catalogImage(e.icon) ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
         badge={have && !update ? "Installed" : undefined}
         action={(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
           {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined} />

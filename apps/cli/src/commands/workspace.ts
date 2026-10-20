@@ -23,7 +23,7 @@ const listCmd = defineCommand({
     const ctx = { json: !!args.json };
     try {
       const ws = await listWorkspaces({ persistPrune: true });
-      return ok(ctx, ws, () =>
+      return ok(ctx, { workspaces: ws }, () =>
         ws.length === 0
           ? "no workspaces registered yet — run `hive workspace register` in a repo"
           : ws.map((w) => `${w.prefix.padEnd(12)} ${w.title.padEnd(24)} ${w.repo}`).join("\n"),
