@@ -38,7 +38,8 @@ import { readTurn, runWorkflow } from "../workflow.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 import type { InboxMessage } from "@hivemind/workspace-api/agents";
-import { PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList } from "@hivemind/workspace-api/plugins";
+import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
+import os from "node:os";
 
 const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
@@ -192,11 +193,18 @@ async function frameIn(d: Drive, repo: string, given: string): Promise<string> {
 }
 
 const openTool = sub("open-tool", "Open an enabled tool plugin", {
-  tool: { type: "positional", required: true, description: "tool id (for example hivemind/web/browser)" },
+  tool: { type: "positional", required: true, description: "tool id, as `hive plugins list` prints it (@hivemind/web/browser), or its package id when the package has one tool (@hivemind/web)" },
   frame: { type: "string", description: "target frame (id, repo name, or title; default: beside the calling agent, else the one selected); exit 5 when none answers to it" },
   url: { type: "string", description: "Browser URL: http, https, or about:blank" },
+  state: { type: "string", description: "the tile's first state, a JSON object: what the tool's useTileState(hm, key, …) reads under each key" },
   ...repoArg,
-}, (a) => onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}) }])));
+}, (a) => {
+  let state: unknown;
+  if (a.state) {
+    try { state = JSON.parse(String(a.state)); } catch { throw new UsageError(`--state must be JSON: ${String(a.state).slice(0, 80)}`); }
+  }
+  return onDrive(async (d) => d.call("tool.open", [await workspaceOf(d, a.repo), { tool: a.tool, ...(a.frame ? { frame: a.frame } : {}), ...(a.url ? { url: a.url } : {}), ...(state !== undefined ? { state } : {}) }]));
+});
 
 const spawn = sub("spawn", "Spawn an agent tile; prints { tile }", {
   // Named, not listed: help is built before the agents on this machine are loaded, so a
@@ -601,7 +609,7 @@ const pluginCall = defineCommand({
 const pluginOpen = defineCommand({
   meta: { name: "open", description: "Get a plugin running so its commands can be called: open a tool's tile, add a widget to the board, switch to a view" },
   args: {
-    plugin: { type: "positional", required: true, description: "tool:owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
+    plugin: { type: "positional", required: true, description: "tool:@owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
     frame: { type: "string", description: "frame to open a tool's tile in (default: beside you)" },
     ...JSON_ARG,
   },
@@ -609,6 +617,8 @@ const pluginOpen = defineCommand({
     const json = !!args.json;
     try {
       const r = await onDrive((d) => d.call("plugin.open", [String(args.plugin), ...(args.frame ? [String(args.frame)] : [])])) as { tile?: string; widget?: string; view?: string } & Partial<PluginInstance>;
+      // Open but failed is a failure to branch on; what it opened is still printed, to look at or close.
+      if (r.state === "failed") process.exitCode = EXIT.error;
       if (json) { console.log(JSON.stringify(r)); return; }
       const what = r.tile ? `opened tile ${r.tile}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`;
       // A plugin with code says whether it can be called yet.
@@ -638,9 +648,25 @@ const pluginList = defineCommand({
 });
 
 const pluginClose = sub("close", "Close a plugin: close a tool's tile, take a widget off the board (one drawn without code too), leave a view for the canvas", {
-  instance: { type: "positional", required: true, description: "which one: its instance, as `hive ctl plugin list` names it, a widget's id on the board, or the plugin as `plugin open` takes it (widget:@owner/name, tool:owner/name, view:id) when one copy is open" },
+  instance: { type: "positional", required: true, description: "which one: its instance, as `hive ctl plugin list` names it, a widget's id on the board, or the plugin as `plugin open` takes it (widget:@owner/name, tool:@owner/name, view:id) when one copy is open" },
   plugin: { type: "string", description: "the plugin it must be (refused when another runs as that instance)" },
 }, (args) => onDrive((d) => d.call("plugin.close", [String(args.instance), ...(args.plugin ? [String(args.plugin)] : [])])));
+
+const tileLook = sub("look", "Bring a tile into view, wait for it to draw, and save a picture of it with its plugin's state and console", {
+  ...tileArg,
+  out: { type: "string", description: "where the PNG goes (default: a new file in the temp folder)" },
+}, async (a) => {
+  const seen = await onDrive((d) => d.call("tile.look", [a.tileId], LOOK_MS + 10_000)) as TileLook;
+  const file = path.resolve(a.out ? String(a.out) : path.join(os.tmpdir(), `hive-look-${seen.tile.replace(/[^\w-]/g, "_")}-${Date.now()}.png`));
+  fs.writeFileSync(file, Buffer.from(seen.png, "base64"));
+  const { png: _, ...rest } = seen;
+  return { ...rest, png: file };
+});
+
+const tile = defineCommand({
+  meta: { name: "tile", description: "Look at a tile as the person sees it" },
+  subCommands: { look: tileLook },
+});
 
 const plugin = defineCommand({
   meta: { name: "plugin", description: "Drive the plugins in the app: list what runs, open one, list and call their commands, close one" },
@@ -651,7 +677,7 @@ export const ctlCmd = defineCommand({
   meta: { name: "ctl", description: "Drive the running hivemind app (spawn/send/read/stream/workflow/report) and the issue verbs agents use" },
   subCommands: {
     agents, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
-    focus, close, sleep, wake, rename, connect, disconnect, view, plugin,
+    focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
     "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
   },

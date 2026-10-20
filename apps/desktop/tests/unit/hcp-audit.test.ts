@@ -31,7 +31,7 @@ function dispatcher() {
     recorder: new OutputRecorder(),
     callRenderer: async () => { throw new Error("no window"); },
     reloadSettings: async () => ({ ok: true }),
-    toolsSettings: () => ({ enabledPlugins: ["hivemind/web"], disabledTools: [] }),
+    toolsSettings: () => ({ enabledPlugins: ["@hivemind/web"], disabledTools: [] }),
     writeToTile: write,
     deliverToTile: (id: string, t: string, onSent?: () => void) => mailbox.deliver(id, t, onSent),
     inbox,

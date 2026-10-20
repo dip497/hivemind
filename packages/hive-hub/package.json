@@ -33,6 +33,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
+  "dependencies": {
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",

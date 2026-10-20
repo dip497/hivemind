@@ -4,7 +4,7 @@
  * the app's access, so one installed is off until the person switches it on.
  *
  *   {
- *     "id": "acme/prs", "name": "Pull requests", "version": "1.0.0", "apiVersion": 1,
+ *     "id": "@acme/prs", "name": "Pull requests", "version": "1.0.0", "apiVersion": 1,
  *     "description": "…", "entry": "index.js", "permissions": ["workspace:spawn"], "settings": [],
  *     "tools": [{ "key": "prs", "label": "Pull requests", "description": "…",
  *                 "tileKind": "acme-prs", "size": { "width": 1100, "height": 760 },
@@ -25,15 +25,20 @@ import { parseSettingFields, type SettingField } from "@hivemind/view-sdk/settin
 import { isToolId, type ToolPluginContribution } from "./tool-registry.js";
 
 /** The version of the contract a tool plugin's module is written against. */
+import type { PackageOf } from "./plugin-settings.js";
+/** The file that makes a folder a tool plugin. */
+export const TOOL_MANIFEST = "hivemind-tool.json";
 export const TOOL_API_VERSION = 1;
 
 /** Tool plugin ids that only the app's own plugins may have. */
-const RESERVED_OWNER = "hivemind";
+const RESERVED_OWNER = "@hivemind";
 const TILE_KIND = /^[a-z][a-z0-9-]{1,40}$/;
 
 export { isToolId };
-/** The folder a tool plugin lives in under the tools folder: `owner/name` as `owner--name`. */
-export const toolFolder = (id: string): string => id.replace("/", "--");
+/** The folder a tool plugin lives in under the tools folder: `@owner/name` as `owner--name`. */
+export const toolFolder = (id: string): string => id.slice(1).replace("/", "--");
+/** The id of the tool plugin in folder `owner--name`. */
+export const toolOfFolder = (folder: string): string => `@${folder.replace("--", "/")}`;
 
 /** What one tool of a package opens as. */
 export interface ToolTile {
@@ -69,7 +74,7 @@ export interface ToolPackage extends ToolPluginContribution {
   /** What it is for; the Add menu groups tools by it. */
   category: PluginCategory;
   /** What an agent may ask one of its open tiles to do (`hm.onCommand`): the manifest's
-   *  `commands`. (A built-in plugin's `commands` are the CLI's, described for `hive tools list`.) */
+   *  `commands`. (A built-in plugin's `commands` are the CLI's, described for `hive plugins list`.) */
   pluginCommands: PluginCommand[];
   /** What the person can set it to, read as `hm.settings`. */
   settings: SettingField[];
@@ -81,6 +86,8 @@ export interface ToolPackage extends ToolPluginContribution {
   dir: string;
   /** Why it cannot load here; null when it can. */
   problem: string | null;
+  /** The package it was installed with; none for one that comes with the app. */
+  package?: PackageOf;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -93,7 +100,7 @@ const text = (v: unknown, max: number): string | undefined => (typeof v === "str
 export function parseToolManifest(raw: unknown, dir: string, folderId: string | null, source: "app" | "you" = "you"): ToolPackage {
   if (!isObj(raw)) throw new Error("hivemind-tool.json is not an object");
   const id = typeof raw.id === "string" ? raw.id : "";
-  if (!isToolId(id)) throw new Error(`"${id}" is not a tool plugin id: it is owner/name, like acme/prs`);
+  if (!isToolId(id)) throw new Error(`"${id}" is not a tool plugin id: it is @owner/name, like @acme/prs`);
   if (id.startsWith(`${RESERVED_OWNER}/`) !== (source === "app")) throw new Error(source === "app" ? `a plugin that comes with the app is ${RESERVED_OWNER}/<name>` : `${RESERVED_OWNER}/ is kept for the plugins that come with the app`);
   if (folderId !== null && folderId !== id) throw new Error(`its hivemind-tool.json says it is ${id}, not ${folderId}`);
   const entry = typeof raw.entry === "string" ? raw.entry : "index.js";
@@ -102,7 +109,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   if (listed.length === 0) throw new Error("it lists no tools");
   const service = raw.service === undefined ? undefined : parseService(raw.service);
   if (listed.length > 16) throw new Error("it lists more than 16 tools");
-  const tools: { key: string; label: string; description?: string; tileKind: string }[] = [];
+  const tools: { key: string; label: string; description?: string; tileKind: string; singleton?: boolean }[] = [];
   const tiles: Record<string, ToolTile> = {};
   for (const t of listed) {
     if (!isObj(t)) throw new Error("a tool is not an object");
@@ -113,7 +120,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
     if (tiles[kind]) throw new Error(`tile kind "${kind}" is listed twice`);
     const label = text(t.label, 60) ?? key;
     const description = text(t.description, 200);
-    tools.push({ key, label, ...(description ? { description } : {}), tileKind: kind });
+    tools.push({ key, label, ...(description ? { description } : {}), tileKind: kind, ...(t.singleton === true ? { singleton: true } : {}) });
     const size = isObj(t.size) ? t.size : {};
     const n = (v: unknown, d: number) => (typeof v === "number" && v >= 160 && v <= 4000 ? Math.round(v) : d);
     const glyph = text(t.glyph, 2);

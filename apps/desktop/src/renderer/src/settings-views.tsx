@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { ArrowDown, ArrowUp, ChevronDown, ExternalLink, Puzzle, Trash } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { PluginRow, type ListedRow } from "./plugins/PluginList";
@@ -7,7 +7,7 @@ import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { useHubDescription } from "./plugins/library";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
-import { getSettings, patchSettings, useSettings, setPluginEnabled } from "./settings-store";
+import { getSettings, patchSettings, useSettings, switchPlugin } from "./settings-store";
 import { getView, resolveChrome, resolveViewId, useViews } from "./workspace/workspace-view";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
@@ -55,13 +55,13 @@ export function ViewMark({ id, size = 22 }: { id: string; size?: number }) {
 export function ViewActions({ id }: { id: string }) {
   const view = useViews().find((v) => v.id === id);
   const mode = resolveViewId(useViewMode()) ?? "canvas";
-  const on = isPluginEnabled(useSettings().plugins.state, "view", id);
   const pkg = useCommunityReport().packages.find((p) => p.id === id);
+  const on = isPluginOn(useSettings().plugins.state, "view", pkg ?? { id });
   const name = view?.label ?? pkg?.manifest?.name ?? id;
   return <>
     {view && (mode === id ? <span className="agent-badge">In use</span> : <Button variant="outline" onClick={() => setViewMode(id)}>Use this view</Button>)}
     {pkg && <Switch aria-label={`Enable ${name}`} checked={on} disabled={!view && !!pkg.error}
-      onCheckedChange={() => { setPluginEnabled("view", id, !on); rescan(); }} />}
+      onCheckedChange={() => void switchPlugin("view", pkg, !on).then(rescan)} />}
   </>;
 }
 
@@ -74,7 +74,7 @@ export function ViewPage({ id }: { id: string }) {
   // Every hook runs first: switching this view off unregisters it while the page is still mounted.
   const pkg = report.packages.find((p) => p.id === id);
   if (!view && pkg) {
-    const on = isPluginEnabled(settings.plugins.state, "view", id);
+    const on = isPluginOn(settings.plugins.state, "view", pkg);
     const name = pkg.manifest?.name ?? id;
     return <div className="plugin-page" data-view-page={id}>
       <p className={on ? "settings-note error" : "settings-note"}>{on ? report.refused[id] ?? pkg.error : "Switch it on to choose it as your workspace view."}</p>

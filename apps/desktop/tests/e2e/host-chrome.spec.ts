@@ -36,7 +36,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(path.join(repo, "a.ts"), "export const a = 1;\n");
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo });
   git("init", "-q"); git("config", "user.email", "e2e@test.dev"); git("config", "user.name", "e2e"); git("add", "-A"); git("commit", "-q", "-m", "seed");
-  execFileSync("bun", [CLI, "views", "install", TILE_LIST_DIR, "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
+  execFileSync("bun", [CLI, "plugins", "install", TILE_LIST_DIR, "--json"], { cwd: repo, env: ENV, stdio: "ignore" });
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
   page = await app.firstWindow();
   page.on("console", (m) => { if (m.type() === "error" && !/Content Security Policy/.test(m.text())) console.log("[r.error]", m.text()); });

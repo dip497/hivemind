@@ -11,13 +11,14 @@ The index is `{ "version": 1, "plugins": [...] }`. Each entry names one plugin:
 
 | Field | What it says |
 |---|---|
-| `id`, `type` | the plugin's id and its kind: `agent`, `view`, `widget` or `tool` |
+| `id`, `type` | the plugin's id and its kind: `agent`, `view`, `widget`, `tool` or `package` |
 | `name`, `description`, `author`, `version` | what the list shows |
 | `path`, `source` | the folder of its files, and the https address they are under |
 | `files` | every file, each with its SHA-256 |
 | `minAppVersion` | the oldest Hivemind it runs on |
 | `bin`, `icon` | an agent's program and its mark |
 | `category` | where it is listed |
+| `members` | a package's plugins: each one's kind, id, name and permissions |
 
 How each file is checked before it installs: [What you install from HiveHub](/security-and-privacy#what-you-install-from-hivehub).
 
@@ -41,13 +42,14 @@ The index format and its reader are one package in the Hivemind repository, the 
 The kit also holds the checks a plugin folder must pass. A hub built on the kit runs them before it lists a plugin. The app runs the same checks on the files it downloaded, before it installs them:
 
 - at most 200 files, 2 MB per file and 8 MB in all, each a plain relative path;
-- one manifest Hivemind accepts: `agent.yaml`, `hivemind-view.json`, `widget.json` or `hivemind-tool.json`;
+- one manifest Hivemind accepts: `hivemind-package.json`, `agent.yaml`, `hivemind-view.json`, `widget.json` or `hivemind-tool.json`;
+- in a package, every member checked as that kind is checked alone, and owned by the package's owner;
 - an id that fits its kind, and a category Hivemind knows;
 - a view's entry file, a widget's code or drawing, and a version on widgets and tools.
 
 A folder that fails, or that says it is another plugin than the one listed, is not installed, and the install says why.
 
-Each Hivemind release carries the kit as `hivemind-hub-<version>.tgz`, with nothing else to install. It runs in Node, Bun and a Cloudflare Worker. A hub depends on it by its address on the release, for example:
+Each Hivemind release carries the kit as `hivemind-hub-<version>.tgz`. Its one dependency, `zod`, comes from npm. It runs in Node, Bun and a Cloudflare Worker. A hub depends on it by its address on the release, for example:
 
 ```bash
 npm install https://github.com/dip497/hivemind/releases/download/v<version>/hivemind-hub-<version>.tgz

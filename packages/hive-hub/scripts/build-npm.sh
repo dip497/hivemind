@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # The kit as a hub installs it: dist/index.js, the kit with the workspace packages it uses bundled
-# in, and dist/index.d.ts, their types in one file. It runs in Node, Bun and a Worker. The release
+# in (zod stays a dependency), and dist/index.d.ts, their types in one file. It runs in Node, Bun and a Worker. The release
 # workflow runs this, then `pnpm pack`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 rm -rf dist
-bun build src/index.ts --target=browser --format=esm --outfile dist/index.js
+bun build src/index.ts --target=browser --format=esm --external zod --outfile dist/index.js
 
 # The declarations bundler runs on TypeScript 5's API, apart from the repo's TypeScript.
 tools="$(mktemp -d)"
@@ -18,6 +18,7 @@ export default {
   input: "$PWD/src/index.ts",
   output: { file: "$PWD/dist/index.d.ts", format: "es" },
   plugins: [dts({ respectExternal: true, compilerOptions: { module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, target: ts.ScriptTarget.ES2022, lib: ["lib.es2023.d.ts", "lib.dom.d.ts"], types: [], strict: true } })],
+  external: (id) => id === "zod",
 };
 CONFIG
 node "$tools/node_modules/rollup/dist/bin/rollup" -c "$tools/rollup.config.mjs" --silent

@@ -23,7 +23,7 @@ test("a view shows who else is here, the tile they point at and the one they sel
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
   const { host, guest } = await sharedWorkspace(root, apps, "edit", { names: { host: "Adarsh", guest: "Priya" } });
   // The host installs the view (their views live under their own profile) and switches to it.
-  const installed = spawnSync("bun", [CLI, "views", "install", VIEW, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "host") } });
+  const installed = spawnSync("bun", [CLI, "plugins", "install", VIEW, "--json"], { encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "host") } });
   expect(installed.status, installed.stdout + installed.stderr).toBe(0);
   await host.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:reload-views")));
   await host.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "people" } })));

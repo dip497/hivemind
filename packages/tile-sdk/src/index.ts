@@ -94,6 +94,9 @@ export interface HostSdk {
   Markdown: (props: { text: string; className?: string }) => unknown;
   /** A spinner in the middle of the space it fills, with what it waits for ("Loading" when unsaid). */
   Loading: (props: { label?: string; className?: string }) => unknown;
+  /** A page from a server on this machine (`http://127.0.0.1:<port>` or `http://localhost:<port>`)
+   *  in a sandboxed frame: scripts, forms and popups run; it cannot navigate the app's window. */
+  Frame: (props: { src: string; title?: string; className?: string; style?: Record<string, unknown> }) => unknown;
   /** `useState` kept with the tile: the value is saved under `key` in the tile's own state
    *  (`hm.setLayout`) and is there again when the app starts. Keys of one tile are kept together. */
   useTileState: <T>(hm: unknown, key: string, initial: T) => [T, (value: T) => void];

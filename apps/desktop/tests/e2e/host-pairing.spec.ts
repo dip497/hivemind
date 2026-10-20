@@ -306,7 +306,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
   fs.mkdirSync(board);
   fs.writeFileSync(path.join(board, "hivemind-view.json"), JSON.stringify({ id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html", protocol: 1, phone: true }));
   fs.writeFileSync(path.join(board, "index.html"), "<!doctype html><title>Priya's board</title>");
-  const installed = spawnSync(HIVE, ["views", "install", board, "--json"], { env: onHost, encoding: "utf8", timeout: 60_000 });
+  const installed = spawnSync(HIVE, ["plugins", "install", board, "--json"], { env: onHost, encoding: "utf8", timeout: 60_000 });
   expect(installed.status, installed.stdout + installed.stderr).toBe(0);
   const workspace = waiting!.workspace as string;
   expect(JSON.parse((await run(HIVE_PHONE, ["views", workspace, "--identity", phone, "--json"], { timeout: 30_000 })).stdout))

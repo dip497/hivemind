@@ -56,25 +56,34 @@ describe("reading an index", () => {
     expect(one({ ...widget, id: "pet" })).toBe("its id is not a widget id — it must be @owner/name");
   });
 
-  test("a tool is listed under the id the app gives it, owner/name with no @", () => {
-    const tool = { ...view, id: "dip497/worktrees", type: "tool", path: "tools/worktrees" };
-    expect(one(tool)).toMatchObject({ type: "tool", id: "dip497/worktrees" });
-    expect(one({ ...tool, id: "@dip497/worktrees" })).toBe("its id is not a tool id — it must be owner/name");
+  test("a tool is listed under its @owner/name, and its folder name rules out --", () => {
+    const tool = { ...view, id: "@dip497/worktrees", type: "tool", path: "tools/worktrees" };
+    expect(one(tool)).toMatchObject({ type: "tool", id: "@dip497/worktrees" });
+    expect(one({ ...tool, id: "dip497/worktrees" })).toBe("its id is not a tool id — it must be @owner/name");
     // Its folder on disk is owner--name, so a `--` in the id could stand for two tools.
-    expect(one({ ...tool, id: "dip497/work--trees" })).toMatch(/a tool id/);
+    expect(one({ ...tool, id: "@dip497/work--trees" })).toMatch(/a tool id/);
+  });
+
+  test("a package is listed under its @owner/name with what it holds; only a package has members", () => {
+    const members = [{ kind: "view", id: "@ada/island", name: "Island", permissions: ["workspace:issues"] }, { kind: "tool", id: "@ada/prs", name: "PRs", permissions: [] }];
+    const pkg = { ...view, id: "@ada/kit", type: "package", path: "kit", members };
+    expect(one(pkg)).toMatchObject({ type: "package", id: "@ada/kit", members });
+    expect(one({ ...pkg, members: [] })).toBe("its members must list 1-64 members of a package");
+    expect(one({ ...pkg, members: [{ kind: "view", id: "island", name: "Island", permissions: [] }] })).toBe("members[0] needs a kind, an @owner/name id, a name and its permissions");
+    expect(one({ ...view, members })).toBe("its members must list 1-64 members of a package");
   });
 
   test("each entry has the category its manifest gave it: other when it gave none the app knows, agents for an agent", () => {
     const { plugins } = parseHubIndex({ version: 1, plugins: [
       { ...view, id: "@a/git-graph", category: "git" },
       { ...view, id: "@a/pet", type: "widget", category: "fun" },
-      { ...view, id: "dip497/ports", type: "tool", category: "monitoring" },
+      { ...view, id: "@dip497/ports", type: "tool", category: "monitoring" },
       { ...view, id: "@a/none", type: "widget" },
       { ...view, id: "@a/odd", type: "widget", category: "games" },
       { ...view, id: "gemini", type: "agent" },
     ] });
     expect(plugins.map((e) => [e.id, e.category])).toEqual([
-      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
+      ["@a/git-graph", "git"], ["@a/pet", "fun"], ["@dip497/ports", "monitoring"], ["@a/none", "other"], ["@a/odd", "other"], ["gemini", "agents"],
     ]);
   });
 
@@ -107,8 +116,8 @@ describe("reading an index", () => {
 });
 
 test("a hub writes only the entries the app reads, and names the rest", () => {
-  const { index, skipped } = writeHubIndex([view, { ...view, id: "@a/old", type: "tool" }]);
+  const { index, skipped } = writeHubIndex([view, { ...view, id: "a/old", type: "tool" }]);
   expect(index.plugins.map((e) => e.id)).toEqual(["@a/x"]);
-  expect(skipped).toEqual([{ position: 1, id: "@a/old", reason: "its id is not a tool id — it must be owner/name" }]);
+  expect(skipped).toEqual([{ position: 1, id: "a/old", reason: "its id is not a tool id — it must be @owner/name" }]);
   expect(parseHubIndex(JSON.parse(JSON.stringify(index))).skipped).toEqual([]);
 });

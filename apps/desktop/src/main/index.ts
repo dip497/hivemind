@@ -1,4 +1,5 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { installPluginSwitchIpc } from "./plugin-switch.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
 import { toolPreferences } from "@hivemind/core/settings-schema";
@@ -22,6 +23,8 @@ import { ViewShare } from "./view-share.js";
 import path from "node:path";
 import { promises as fsp, statSync, readFileSync, writeFileSync, existsSync, cpSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { keepOnAppPage } from "./app-navigation.js";
+import { APP_PAGE_ARG } from "../shared/app-page.js";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
@@ -253,6 +256,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // when the CDP enabler is off; the file just lists tiles with no endpoint.
   process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
+  const devUrl = process.env["ELECTRON_RENDERER_URL"];
+  const appPage = devUrl ?? pathToFileURL(path.join(__dirname, "../renderer/index.html")).href;
   const win = new BrowserWindow({
     width: state.width,
     height: state.height,
@@ -276,6 +281,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
       // here silently breaks production because the file doesn't exist →
       // window.hive is undefined → app loads as if in browser mode.
       preload: path.join(__dirname, "../preload/index.mjs"),
+      additionalArguments: [`${APP_PAGE_ARG}${appPage}`],
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
@@ -295,6 +301,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // Capture webContents up front — after `closed`, accessing
   // win.webContents throws "Object has been destroyed".
   const wc = win.webContents;
+  keepOnAppPage(wc, appPage);
   registerWindow(win);
   // Closing the last window quits, so it is a person's quit and asks first.
   win.on("close", (e) => {
@@ -409,7 +416,6 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     });
   });
 
-  const devUrl = process.env["ELECTRON_RENDERER_URL"];
   if (devUrl) {
     win.loadURL(devUrl);
     win.webContents.openDevTools({ mode: "right" });
@@ -1056,6 +1062,17 @@ const control: ControlPlane = new ControlPlane({
   methods: () => ({
     reported: (tile, message) => agentFeed()?.report(toBareId(tile), message),
     callRenderer: hcpCallRenderer,
+    captureWindow: async (rect) => {
+      const win = userWindow();
+      if (!win) throw new ApiError("UNAVAILABLE", "hivemind window not open");
+      const zoom = win.webContents.getZoomFactor();
+      const { width: w, height: h } = win.getContentBounds();
+      const x = Math.max(0, Math.round(rect.x * zoom)), y = Math.max(0, Math.round(rect.y * zoom));
+      const box = { x, y, width: Math.max(1, Math.min(w - x, Math.round(rect.width * zoom))), height: Math.max(1, Math.min(h - y, Math.round(rect.height * zoom))) };
+      const image = await win.webContents.capturePage(box);
+      const size = image.getSize();
+      return { png: image.toPNG().toString("base64"), width: size.width, height: size.height };
+    },
     toolsSettings: () => toolPreferences(getAppSettings()),
     reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
     widgetsChanged,
@@ -1603,6 +1620,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installViewManagementIpc();
     installWidgetIpc();
     installToolPackageIpc();
+    installPluginSwitchIpc();
     installServicesIpc();
     installPluginCatalogIpc();
     installQuitIpc({
@@ -1878,7 +1896,7 @@ function startPlanReviewBridge(): void {
 // (twin of plan-review). Main verbs (agent.send/read) run here against the
 // recorder + turn tracker. The injected Stop hook reports finished turns.
 const pendingHcp = new Map<string, { resolve: (v: unknown) => void; reject: (e: unknown) => void; timer: NodeJS.Timeout }>();
-/** Verbs every window carries out, each for its own workspace and lists (`hive views install`,
+/** Verbs every window carries out, each for its own workspace and lists (`hive plugins install`,
  *  `hive agents install`); the rest are for the window the user is at, which answers. */
 const EVERY_WINDOW = new Set(["views.rescan", "agents.rescan"]);
 function hcpCallRenderer(method: string, params: unknown, timeoutMs: number): Promise<unknown> {

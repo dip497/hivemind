@@ -8,7 +8,7 @@
  */
 import { Loading } from "../components/ui/loading";
 import { useEffect, useRef, useSyncExternalStore, type ComponentType } from "react";
-import { isPluginEnabled, pluginOptions } from "@hivemind/core/plugin-settings";
+import { isPluginEnabled, isPluginOn, pluginOptions } from "@hivemind/core/plugin-settings";
 import { toolFolder, type ToolPackage } from "@hivemind/core/tool-format";
 import { toolModuleProblem, type TileProps, type ToolModule } from "@hivemind/tile-sdk";
 import { useSettings } from "../settings-store";
@@ -89,15 +89,17 @@ export function loadToolModule(pkg: ToolPackage): Promise<ToolModule> {
 /** Whether a plugin is on: one that comes with the app is, until switched off; one you added is
  *  not, until switched on. */
 export const toolOn = (state: Parameters<typeof isPluginEnabled>[0], pkg: ToolPackage): boolean =>
-  isPluginEnabled(state, "tool", pkg.id, pkg.source === "app");
+  isPluginOn(state, "tool", pkg, pkg.source === "app");
 
 function register(pkg: ToolPackage, off: Set<string>): void {
   const tools = pkg.tools.filter((t) => t.tileKind && !off.has(t.key));
   if (!tools.length) return;
   const body = async () => {
-    const [{ ToolTile }, module] = await Promise.all([import("./tool-tile"), loadToolModule(pkg)]);
-    const tiles = module.tiles as Record<string, ComponentType<TileProps>>;
-    return { default: ({ data, selected }: TileBodyArgs<ToolTileData>) => <ToolTile data={data} selected={selected} Draw={tiles[data.kind]!} /> };
+    const { ToolTile } = await import("./tool-tile");
+    // Code that does not load is a tile that failed, listed with why, not a crash nothing can see.
+    const loaded = await loadToolModule(pkg).then((m) => ({ tiles: m.tiles as Record<string, ComponentType<TileProps>> }), (e: unknown) => ({ failed: e instanceof Error ? e.message : String(e) }));
+    if ("failed" in loaded) return { default: ({ data, selected }: TileBodyArgs<ToolTileData>) => <ToolTile data={data} selected={selected} failed={loaded.failed} /> };
+    return { default: ({ data, selected }: TileBodyArgs<ToolTileData>) => <ToolTile data={data} selected={selected} Draw={loaded.tiles[data.kind]!} /> };
   };
   registerTile<ToolTileData>({
     surface: surfaceOf(pkg.id),

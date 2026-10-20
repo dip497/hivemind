@@ -3,8 +3,8 @@ import { FileCode, Earth, ListTodo, Puzzle, Trash } from "./components/icons";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { toolPreferences } from "@hivemind/core/settings-schema";
-import { isPluginEnabled, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
-import { patchPluginState, setPluginOption, useSettings } from "./settings-store";
+import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
+import { patchPluginState, setPluginOption, switchPlugin, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";
 import { useSettingsNavigate } from "./settings-panels";
@@ -27,8 +27,8 @@ function useToolEnabled(pluginId: string): [boolean, () => void] {
   const settings = useSettings();
   const added = useAdded(pluginId);
   if (added) {
-    const on = isPluginEnabled(settings.plugins.state, "tool", pluginId, false);
-    return [on, () => patchPluginState("tool", pluginId, (s) => ({ ...s, enabled: !on }))];
+    const on = isPluginOn(settings.plugins.state, "tool", added, false);
+    return [on, () => void switchPlugin("tool", added, !on).catch((e: unknown) => toast.error(cleanError(e)))];
   }
   return bundledEnabled(pluginId, settings);
 }

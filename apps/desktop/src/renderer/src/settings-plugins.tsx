@@ -77,8 +77,12 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
   useEffect(load, []);
   useEffect(rescan, []);
 
+  // A package is installed when one of its members is, under it.
+  const packageVersion = (id: string): string | null =>
+    [...views.map((v) => v.package), ...widgets.map((w) => w.package), ...tools.map((t) => t.package)].find((p) => p?.id === id)?.version ?? null;
   const installed = (e: Entry): string | null =>
-    e.type === "view" ? views.find((v) => v.id === e.id)?.manifest?.version ?? null
+    e.type === "package" ? packageVersion(e.id)
+    : e.type === "view" ? views.find((v) => v.id === e.id)?.manifest?.version ?? null
     // A widget that says no version is older than any listed one.
     : e.type === "widget" ? (widgets.some((w) => w.id === e.id) ? widgets.find((w) => w.id === e.id)!.version ?? "0.0.0" : null)
     : e.type === "tool" ? (tools.some((t) => t.id === e.id && t.source === "you") ? tools.find((t) => t.id === e.id && t.source === "you")!.version ?? "0.0.0" : null)
@@ -109,6 +113,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       if (r.type === "view") { await window.hive.installViewPackage(r.token); rescan(); }
       else if (r.type === "widget") await window.hive.installCatalogWidget(r.token);
       else if (r.type === "tool") await window.hive.installCatalogTool(r.token);
+      else if (r.type === "package") { await window.hive.installCatalogPackage(r.token); rescan(); }
       else { await window.hive.installCatalogAgent(r.token); await syncAgentPlugins(); }
       setReview(null);
       setDone({ entry: e });
@@ -128,7 +133,8 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       <p>{open.permissions.length ? <>Its tiles may also: {permissionWords(open.permissions).join("; ")}.</> : "Its tiles ask for nothing more."}</p>
       {open.service && <p>While it is on, it keeps this running: <code className="catalog-flag">{open.service}</code></p>}
       {open.replacesVersion && <p className="settings-note">Replaces version {open.replacesVersion}. Like any update to a tool, it is switched off until you switch it on again.</p>}
-    </> : open.type === "view" ? <>
+    </> : open.type === "package" ? <PackageReview review={open} />
+    : open.type === "view" ? <>
       <p>This view can show workspace names and agent status, and open your existing tools.</p>
       <p>{open.package.manifest?.permissions.length ? `Additional access: ${open.package.manifest.permissions.join(", ")}` : "No additional access requested."}</p>
       {open.replacesVersion && <p className="settings-note">Replaces version {open.replacesVersion}. Your saved layout is kept.</p>}
@@ -150,7 +156,8 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
   return <div className="settings-stack">
     {done && <div role="status" className="settings-message catalog-done">
       <span>{done.entry.name} is installed.</span>
-      {done.entry.type === "view"
+      {done.entry.type === "package" ? null
+        : done.entry.type === "view"
         ? <Button onClick={() => { setViewMode(done.entry.id); go(`plugin:view:${done.entry.id}`); }}>Use this view</Button>
         : <Button onClick={() => go(`plugin:${done.entry.type}:${done.entry.id}`)}>Open its page</Button>}
     </div>}
@@ -163,7 +170,32 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       {q ? <>No plugins on HiveHub match “{query}”.</>
         : kind !== "all" ? `No ${kind} plugins have been published yet.` : "Nothing has been published yet."}
     </p>}
-    <CategoryGroups rows={shown.map((e) => {
+    {(() => {
+      const list = kind === "all" ? shown.filter((e) => e.type === "package") : [];
+      if (!list.length) return null;
+      return <section className="plugins-group" aria-label="Packages" data-plugins-kind="package">
+        <h3 className="plugins-group-heading">Packages<span>{list.length}</span></h3>
+        <div className="plugin-rows">{list.map((e) => {
+          const have = installed(e);
+          const update = outdatedOf(e);
+          const open = review?.key === key(e) ? review.data : null;
+          return <div key={key(e)} className="catalog-item" data-catalog-plugin={key(e)}>
+            <div className="plugin-row" data-plugin-row={key(e)}>
+              <span className="plugin-row-mark" aria-hidden="true"><LayoutGrid size={16} /></span>
+              <span className="plugin-row-text">
+                <span className="plugin-row-name">{e.name}</span>
+                <span className="plugin-row-detail">{e.description}{e.members ? ` · ${e.members.length} plugins` : ""}</span>
+              </span>
+              {(!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
+                {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : have && !update ? <span className="settings-note">Installed</span> : null}
+            </div>
+            {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
+            {open && reviewOf(e, open)}
+          </div>;
+        })}</div>
+      </section>;
+    })()}
+    <CategoryGroups rows={shown.flatMap((e) => e.type === "package" ? [] : [{ ...e, type: e.type }]).map((e) => {
       const have = installed(e);
       const update = outdatedOf(e);
       const open = review?.key === key(e) ? review.data : null;
@@ -178,4 +210,27 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
     })} />
     <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
+}
+
+const RUNS_WORDS: Record<string, string> = {
+  sandboxed: "runs in a sandbox, held to what it asks for",
+  "in the app": "runs inside Hivemind, with the app's access to your files and network",
+  "as an agent's instructions": "instructions an agent follows",
+};
+
+/** What a package holds, each member with where it runs and what it asks for, and what an update
+ *  changes; installed as one. */
+function PackageReview({ review }: { review: Extract<Review, { type: "package" }> }) {
+  return <>
+    <p>Adds {review.name} {review.version}, a package of {review.members.length}. They are installed, updated and removed together.</p>
+    <ul className="catalog-does" data-package-members>
+      {review.members.map((m) => <li key={`${m.kind}:${m.id}`} data-package-member={`${m.kind}:${m.id}`}>
+        <strong>{m.name}</strong> ({m.kind}, {RUNS_WORDS[m.runs] ?? m.runs}){m.permissions.length ? `: may ${permissionWords(m.permissions).join("; ")}` : ""}
+      </li>)}
+    </ul>
+    {review.replacesVersion && <p className="settings-note">Replaces version {review.replacesVersion}. {review.changes.length
+      ? `Changed: ${review.changes.map((c) => `${c.id} (${c.change}${c.newPermissions.length ? `, now asks for ${c.newPermissions.join(", ")}` : ""})`).join("; ")}.`
+      : "Nothing in it changed."}</p>}
+    <p>{review.on ? "It is on once installed." : "It is installed switched off. Switch it on from Settings → Plugins once you trust who wrote it."}</p>
+  </>;
 }

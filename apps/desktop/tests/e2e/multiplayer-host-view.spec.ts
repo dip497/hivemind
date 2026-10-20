@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { hiveNetBuilt, join, person, share } from "./helpers/multiplayer";
+import { installPlugin } from "./helpers/install";
 
 let root: string;
 const apps: ElectronApplication[] = [];
@@ -63,13 +64,11 @@ test("the host's view opens for a guest; switching stays personal; following tra
 
 test("a view-role guest opens the host's community view without installing it", async () => {
   test.skip(!hiveNetBuilt(), "build hive-net first: cargo build in crates/hive-net");
-  const dir = path.join(root, "host", "hivemind", "views", "people");
-  fs.mkdirSync(path.dirname(dir), { recursive: true });
-  fs.cpSync(path.resolve("tests/e2e/fixtures/views/people"), dir, { recursive: true });
+  installPlugin(path.join(root, "host"), path.resolve("tests/e2e/fixtures/views/people"));
   const { guest } = await connect("view", "people");
   await expect(guest.locator('[data-community-view="people"]')).toHaveAttribute("data-community-ready", "1", { timeout: 20_000 });
   await expect.poll(() => guest.frame({ name: "hm-view:people" })?.evaluate(() => document.body.dataset.ready ?? null)).toBe("1");
-  expect(fs.existsSync(path.join(root, "guest", "hivemind", "views", "people"))).toBe(false);
+  expect(fs.existsSync(path.join(root, "guest", "hivemind", "packages", "store", "people"))).toBe(false);
   await select(guest, "canvas");
   await expect(guest.locator("[data-active-view]")).toHaveAttribute("data-active-view", "canvas");
 });

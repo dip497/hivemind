@@ -10,8 +10,8 @@ import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category"
 
 export { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 
-export type CatalogType = "agent" | "view" | "widget" | "tool";
-const TYPES: readonly string[] = ["agent", "view", "widget", "tool"];
+export type CatalogType = "agent" | "view" | "widget" | "tool" | "package";
+const TYPES: readonly string[] = ["agent", "view", "widget", "tool", "package"];
 export interface CatalogFile { path: string; sha256: string }
 export interface CatalogEntry {
   id: string;
@@ -39,7 +39,11 @@ export interface CatalogEntry {
   /** What it is for, as its manifest says; an agent is always `agents`, and one the app does not
    *  know is `other`. */
   category?: PluginCategory;
+  /** Packages only: what it holds, as the hub read it, so it can be shown before anything is
+   *  downloaded. The install checks every member again from the files. */
+  members?: CatalogMember[];
 }
+export interface CatalogMember { kind: string; id: string; name: string; permissions: string[] }
 
 /** An entry left out of the index, and why. `position` is its place in the index's `plugins`. */
 export interface SkippedEntry { position: number; id: string | null; reason: string }
@@ -51,11 +55,11 @@ export const MAX_INDEX_ENTRIES = 2000;
 /** The most bytes one index may be. */
 export const MAX_INDEX_BYTES = 4 << 20;
 
-// A view or a widget carries its publisher's scope; an agent is one name for one CLI, settled in
-// the plugins repository; a tool is the app's own tool id, owner/name, whose folder is owner--name.
+// A view, a widget, a tool or a package carries its publisher's scope; an agent is one name for one
+// CLI, settled in the plugins repository. A tool's folder is owner--name, so no id holds "--".
 const SCOPED = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 const TOOL = new RegExp(`^(?!.*--)${TOOL_ID_RE.source.slice(1)}`);
-const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, tool: TOOL, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
+const ID_RE: Record<CatalogType, RegExp> = { view: SCOPED, widget: SCOPED, package: SCOPED, tool: TOOL, agent: /^[a-z0-9][a-z0-9-]{0,31}$/ };
 const SEGMENT_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 const SHA_RE = /^[0-9a-f]{64}$/;
 
@@ -72,7 +76,8 @@ const refuse = (reason: string): never => { throw new Unreadable(reason); };
 
 const idRule: Record<CatalogType, string> = {
   agent: "an agent id — it must be one name",
-  tool: "a tool id — it must be owner/name",
+  tool: "a tool id — it must be @owner/name",
+  package: "a package id — it must be @owner/name",
   view: "a view id — it must be @owner/name",
   widget: "a widget id — it must be @owner/name",
 };
@@ -112,6 +117,7 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
   if (p.bin !== undefined && (type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {
     refuse("its bin must be the bare name of an agent's CLI");
   }
+  const members = p.members === undefined ? undefined : readMembers(p.members, type);
   const said = parseCategory(p.category);
   const category: PluginCategory = type === "agent" ? "agents" : "category" in said ? said.category : "other";
   return { id: p.id as string, type, name: p.name as string, description: p.description as string, author: p.author as string,
@@ -119,7 +125,18 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
     ...(homepage ? { homepage } : {}), ...(typeof p.source === "string" ? { source: p.source } : {}),
     ...(typeof p.bin === "string" ? { bin: p.bin } : {}),
     ...(typeof p.minAppVersion === "string" ? { minAppVersion: p.minAppVersion } : {}),
-    ...(p.icon !== undefined ? { icon: p.icon } : {}), category };
+    ...(p.icon !== undefined ? { icon: p.icon } : {}), category, ...(members ? { members } : {}) };
+}
+
+function readMembers(raw: unknown, type: CatalogType): CatalogMember[] {
+  if (type !== "package" || !Array.isArray(raw) || !raw.length || raw.length > 64) refuse("its members must list 1-64 members of a package");
+  return (raw as Record<string, unknown>[]).map((m, j) => {
+    if (!m || !text(m.kind, 40) || typeof m.id !== "string" || !SCOPED.test(m.id) || !text(m.name, 120)
+      || !Array.isArray(m.permissions) || m.permissions.length > 32 || !m.permissions.every((x) => text(x, 80))) {
+      refuse(`members[${j}] needs a kind, an @owner/name id, a name and its permissions`);
+    }
+    return { kind: m.kind as string, id: m.id as string, name: m.name as string, permissions: m.permissions as string[] };
+  });
 }
 
 /** A version 1 index: every entry this app can read, and each one it cannot with the reason.

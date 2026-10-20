@@ -12,7 +12,7 @@ import path from "node:path";
 import { speaksFor } from "@hivemind/agent-host/hooks/token";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import { PLUGIN_CALL_HOST_MS, type PluginList } from "@hivemind/workspace-api/plugins";
+import { LOOK_MS, PLUGIN_CALL_HOST_MS, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
 import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
@@ -114,6 +114,9 @@ function summarizeTool(tool: string, inp: Record<string, unknown>): string {
   try { return JSON.stringify(inp).slice(0, 200); } catch { return "(unprintable input)"; }
 }
 
+/** A box in a window's page, in CSS pixels. */
+export interface TileRect { x: number; y: number; width: number; height: number }
+
 export interface MethodDeps {
   /** Settled main-process tool preferences; absent means no optional tools enabled. */
   toolsSettings?: () => ToolsSettings;
@@ -126,11 +129,14 @@ export interface MethodDeps {
   /** Run a renderer verb (returns its result); rejects/throws ApiError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
+  /** A picture of the window `callRenderer` reaches, of `rect` in its page's CSS pixels; absent
+   *  where no window shows tiles (a headless host). */
+  captureWindow?: (rect: TileRect) => Promise<{ png: string; width: number; height: number }>;
   /** Re-read settings.json (edited by the CLI) and broadcast it. */
   reloadSettings: () => Promise<unknown>;
-  /** Re-list the installed widgets (`hive widgets install|remove`) and tell every window. */
+  /** Re-list the installed widgets (`hive plugins install|remove`) and tell every window. */
   widgetsChanged?: () => void;
-  /** Re-list the installed tool plugins (`hive tools install|remove`) and tell every window. */
+  /** Re-list the installed tool plugins (`hive plugins install|remove`) and tell every window. */
   toolsChanged?: () => void;
   /** Write to a tile's pty RIGHT NOW. Returns false if the tile has no live pty.
    *  Raw bytes only (key sequences) — for anything the agent must READ, use
@@ -183,7 +189,7 @@ export interface MethodDeps {
   waits: Waits;
   /** The workspaces main has open. The canvas verbs read them, and write them as `control`;
    *  their windows follow. */
-  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "setCore" | "addTile" | "renameTile" | "removeTile" | "repos" | "ownership" | "setSleeping">;
+  workspaces: Pick<WorkspaceStore, "workspaceOf" | "getCore" | "setCore" | "addTile" | "setView" | "renameTile" | "removeTile" | "repos" | "ownership" | "setSleeping">;
   /** The workspace the window the user is at shows, and the frame the user is in there, if
    *  any: what a caller in no tile (a terminal, a script) acts on. */
   shownWorkspace: () => { repo: string; frame: string | null } | null;
@@ -223,6 +229,8 @@ const isClient = (parent: string): boolean => parent.startsWith("client:");
 /** How the control plane writes a workspace: its windows hear of it, and it hears of none. */
 const CONTROL = { writer: "control" };
 
+/** The most a tile's state opened with it may hold, as JSON. */
+const TILE_STATE_MAX = 64 * 1024;
 const RENDERER_TIMEOUT = 15_000;
 const DEFAULT_READ_TIMEOUT = 120_000;
 /** The longest a timer waits (about 24.8 days): a longer one fires at once. */
@@ -249,7 +257,7 @@ export interface ControlWork {
   rename(tile: string, name: string): string;
   sessions(program: string, cwd: string, limit?: number): Promise<AgentSessions>;
   /** Open the tool `tool` in the workspace at `repo`: its tile. */
-  openTool(caller: string | undefined, repo: string, tool: string, at: { frame?: unknown; url?: unknown }): Promise<string>;
+  openTool(caller: string | undefined, repo: string, tool: string, at: { frame?: unknown; url?: unknown; state?: unknown }): Promise<string>;
   connect(src: string, dst: string): void;
   disconnect(src: string, dst?: string): void;
   viewEmit(caller: string | undefined, name: unknown, data: unknown, view: unknown): Promise<unknown>;
@@ -259,6 +267,7 @@ export interface ControlWork {
   pluginCall(plugin: unknown, command: unknown, args: unknown, tile: unknown): Promise<unknown>;
   pluginClose(instance: string, plugin: string | undefined): Promise<{ closed: string; plugin: string; kind: string }>;
   focus(tile: string): Promise<unknown>;
+  look(tile: string): Promise<TileLook>;
   rescan(what: "views" | "agents" | "widgets" | "tools"): Promise<unknown>;
   reloadSettings(): Promise<unknown>;
   hostStatus(): { workspaces: Array<{ repo: string; workspace: string | null }> };
@@ -722,12 +731,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
 
   /** Open a tool plugin's tile: the tool `pick` chooses among the registered ones. */
   type RegisteredTool = ReturnType<typeof createToolRegistry>["tools"][number];
-  async function openTool(at: { caller?: string; repo?: string; frame?: unknown; url?: unknown }, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<string> {
-    let registry;
-    try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
-    catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+  /** The tools there are: the app's own and those added here; the app's own alone if those clash. */
+  async function toolRegistry() {
+    try { return createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
+    catch { return createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+  }
+  async function openTool(at: { caller?: string; repo?: string; frame?: unknown; url?: unknown; state?: unknown }, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<string> {
+    const registry = await toolRegistry();
     const tool = pick(registry.tools.filter((t) => t.tileKind));
-    if (!tool?.tileKind) throw new ApiError("UNSUPPORTED", `${badId}; \`hive tools list\` shows them`);
+    if (!tool?.tileKind) throw new ApiError("UNSUPPORTED", `${badId}; \`hive plugins list --kind tool\` shows them`);
     const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
     if (!availability.available) throw new ApiError("FORBIDDEN", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
     const kind = tool.tileKind;
@@ -738,10 +750,25 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       try { url = new URL(at.url); } catch { throw new ApiError("BAD_REQUEST", "Invalid URL"); }
       if (!["http:", "https:"].includes(url.protocol) && at.url !== "about:blank") throw new ApiError("BAD_REQUEST", "URL must use http or https, or be about:blank");
     }
+    if (at.state != null) {
+      let size = Infinity;
+      try { size = JSON.stringify(at.state).length; } catch { /* not JSON */ }
+      if (typeof at.state !== "object" || Array.isArray(at.state) || size > TILE_STATE_MAX) throw new ApiError("BAD_REQUEST", `state must be a JSON object of at most ${TILE_STATE_MAX} bytes, its keys what the tool's useTileState reads`);
+    }
+    const place = placeTile(at.caller, at.frame, at.repo);
+    // One of a kind per frame: the tile there is brought forward, crashed or not, instead of another piling up.
+    const open = tool.singleton ? place.ws.core.tiles.find((t) => t.kind === kind && place.ws.core.frameOf?.[t.id] === place.frame?.id) : undefined;
+    if (open) {
+      await deps.callRenderer("tile.focus", { tileId: open.id }, RENDERER_TIMEOUT).catch(() => {});
+      return open.id;
+    }
     if (!deps.spawnAllowed(rootOf(at.caller))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
     const url = typeof at.url === "string" ? at.url : undefined;
-    return openTile(placeTile(at.caller, at.frame, at.repo), (ws) => ({
-      id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
+    const id = mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`);
+    // Kept before the tile is there, so its first draw reads it (`hm.hello.layout`).
+    if (at.state != null) deps.workspaces.setView(place.ws.repo, `tile:${id}`, { v: 1, data: at.state }, CONTROL);
+    return openTile(place, (ws) => ({
+      id, kind,
       label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
       ...(url ? { url } : {}),
     }), { background: false });
@@ -1033,7 +1060,12 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       return { agent: def.id, resumable: !!def.session?.resume, sessions };
     },
 
-    openTool: (caller, repo, tool, at) => openTool({ caller, repo, ...at }, (tools) => tools.find((t) => t.id === tool), "Unknown tool id"),
+    // A tool's full id, or its package's id when that package has one tool.
+    openTool: (caller, repo, tool, at) => openTool({ caller, repo, ...at }, (tools) => {
+      const inPackage = tools.filter((t) => t.pluginId === tool);
+      if (inPackage.length > 1) throw new ApiError("BAD_REQUEST", `${tool} has ${inPackage.length} tools; name one: ${inPackage.map((t) => t.id).join(", ")}`);
+      return tools.find((t) => t.id === tool) ?? inPackage[0];
+    }, "Unknown tool id"),
 
     connect(src, dst) {
       if (!deps.connect(src, dst)) throw new ApiError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
@@ -1049,17 +1081,20 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     // Every plugin running in the window, with its state; and what the ready ones let an agent run.
     pluginList: async () => await deps.callRenderer("plugin.list", {}, RENDERER_TIMEOUT) as PluginList,
     pluginCommands: () => deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT),
-    // Get a plugin running, so its commands can be called: a tool's tile opened (`tool:owner/name`,
-    // its first tool, or `tool:owner/name/tool`), a widget added to the board, a view switched to.
+    // Get a plugin running, so its commands can be called: a tool's tile opened (`@owner/name`, its
+    // first tool, or `@owner/name/tool`), a widget added to the board, a view switched to. The id
+    // alone is enough; `<kind>:` names one where two kinds have it.
     async pluginOpen(caller, plugin, frame) {
-      const m = typeof plugin === "string" && plugin.length <= 200 ? /^(tool|widget|view):(.+)$/.exec(plugin) : null;
-      if (!m) throw new ApiError("BAD_REQUEST", "plugin must be a record: tool:owner/name, widget:@owner/name or view:id, as `hive plugins list` shows it");
-      const [, kind, id] = m as unknown as [string, "tool" | "widget" | "view", string];
-      if (kind === "tool") {
-        const tile = await openTool({ caller, frame }, (tools) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id), `${id} has no tool to open`);
+      const m = typeof plugin === "string" && plugin && plugin.length <= 200 ? /^(?:(tool|widget|view):)?(.+)$/.exec(plugin) : null;
+      if (!m) throw new ApiError("BAD_REQUEST", "plugin must be its id, as `hive plugins list` shows it");
+      const [, named, id] = m as unknown as [string, "tool" | "widget" | "view" | undefined, string];
+      const pick = (tools: RegisteredTool[]) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id);
+      if (named === "tool" || (!named && pick((await toolRegistry()).tools.filter((t) => t.tileKind)))) {
+        const tile = await openTool({ caller, frame }, pick, `${id} has no tool to open`);
         // Answered once its tile's plugin can be called, as a widget's and a view's are.
         return { tile, ...(await deps.callRenderer("plugin.settle", { instance: tile }, RENDERER_TIMEOUT) as object) };
       }
+      const kind = named ?? "any";
       if (kind === "widget" && !deps.spawnAllowed(rootOf(caller))) throw new ApiError("RATE_LIMITED", "spawn rate limit exceeded");
       return await deps.callRenderer("plugin.open", { kind, id }, RENDERER_TIMEOUT);
     },
@@ -1073,6 +1108,16 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     },
     pluginClose: async (instance, plugin) => await deps.callRenderer("plugin.close", { instance, ...(plugin ? { plugin } : {}) }, RENDERER_TIMEOUT) as { closed: string; plugin: string; kind: string },
     focus: (tile) => deps.callRenderer("tile.focus", { tileId: tile }, RENDERER_TIMEOUT),
+    // The window brings it into view and waits for it to draw; the picture is cropped to its box.
+    async look(tile) {
+      if (!deps.captureWindow) throw new ApiError("UNSUPPORTED", "no window shows tiles here: look at a tile in the app");
+      const seen = await deps.callRenderer("tile.look", { tileId: bareOf(tile) }, LOOK_MS + 2_000) as Omit<TileLook, "png" | "width" | "height"> & { rect: TileRect };
+      const { rect, ...rest } = seen;
+      if (![rect?.x, rect?.y, rect?.width, rect?.height].every((n) => typeof n === "number" && Number.isFinite(n)) || rect.width < 1 || rect.height < 1) {
+        throw new ApiError("FAILED", `${bareOf(tile)} is not on the screen`);
+      }
+      return { ...rest, ...(await deps.captureWindow(rect)) };
+    },
     // A plugins folder changed (`hive … install|remove`): a running app picks it up without a
     // restart. Views and agents are scanned by the window, which owns the workspace root; widgets
     // and tools are listed again here, and every window told.

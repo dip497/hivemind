@@ -22,6 +22,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
+import { installPackage } from "@hivemind/core/package-install";
 import { views } from "../src/views.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-views-"));
@@ -30,14 +31,16 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let made = 0;
 setCatalog([{ id: "claude", label: "Claude Code", bin: "claude", enabled: true } as unknown as AgentProviderDef]);
 
-/** A view package in this device's views, its manifest `manifest` and its files `files`. */
-function installed(id: string, manifest: object, files: Record<string, string | Buffer> = {}) {
-  const dir = path.join(process.env.XDG_CONFIG_HOME!, "hivemind", "views", id);
+/** A view installed on this device, as `hive plugins install` installs one, its manifest
+ *  `manifest` and its files `files`; the folder it is installed in. One that cannot be installed
+ *  is not there. */
+async function installed(id: string, manifest: object, files: Record<string, string | Buffer> = {}): Promise<string> {
+  const dir = path.join(process.env.XDG_CONFIG_HOME!, "sources", id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "hivemind-view.json"), JSON.stringify({ id, version: "1.0.0", entry: "index.html", protocol: 1, ...manifest }));
   fs.writeFileSync(path.join(dir, "index.html"), `<!doctype html><title>${id}</title>`);
   for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
-  return dir;
+  return installPackage(dir).then((p) => p.members[0]!.dir, () => dir);
 }
 beforeEach(() => { process.env.XDG_CONFIG_HOME = path.join(tmp, `xdg-${made++}`); });
 
@@ -127,13 +130,13 @@ const code = async (p: Promise<unknown>) => { try { await p; return "ok"; } catc
 
 test("the views here that say they work on a phone are offered with the page to load, and their files as the app serves them: inside the package, 4 MiB at most, base64 with their type and their policy", async () => {
   const c = computer();
-  const dir = installed("priya-board", { name: "Priya's board", phone: true }, { "main.js": "export {};", "big.bin": Buffer.alloc(4 * 1024 * 1024 + 1), "big.html": "<p>".padEnd(4 * 1024 * 1024 + 1, "x"), "whole.bin": Buffer.alloc(4 * 1024 * 1024) });
+  const dir = await installed("priya-board", { name: "Priya's board", phone: true }, { "main.js": "export {};", "big.bin": Buffer.alloc(4 * 1024 * 1024 + 1), "big.html": "<p>".padEnd(4 * 1024 * 1024 + 1, "x"), "whole.bin": Buffer.alloc(4 * 1024 * 1024) });
   fs.writeFileSync(path.join(tmp, "secret.txt"), "not the view's");
   fs.symlinkSync(path.join(tmp, "secret.txt"), path.join(dir, "leak.txt"));
   // A view whose entry is its script: shown through the page that runs it.
-  installed("priya-queue", { name: "Priya's queue", phone: true, entry: "view.js" }, { "view.js": "export {};" });
-  installed("desk-only", { name: "Desk only" });
-  installed("bad", { name: "Bad", phone: "yes" });
+  await installed("priya-queue", { name: "Priya's queue", phone: true, entry: "view.js" }, { "view.js": "export {};" });
+  await installed("desk-only", { name: "Desk only" });
+  await installed("bad", { name: "Bad", phone: "yes" });
   const phone = c.caller();
   assert.deepEqual(await c.call("view.list", [], phone), [
     { id: "priya-board", name: "Priya's board", version: "1.0.0", entry: "index.html", page: "index.html" },
@@ -167,7 +170,7 @@ test("the views here that say they work on a phone are offered with the page to 
 
 test("a guest desktop can load the host's desktop view without installing it, with view-role commands withheld", async () => {
   const c = computer();
-  installed("desk-only", { name: "Desk only", permissions: ["workspace:spawn", "workspace:edit"] }, { "scene.js": "export const scene = true;" });
+  await installed("desk-only", { name: "Desk only", permissions: ["workspace:spawn", "workspace:edit"] }, { "scene.js": "export const scene = true;" });
   const guest = c.caller(() => false, { ...PHONE, access: "view" });
   const listed = await c.call("view.list", [c.repo, "desktop"], guest) as Array<{ id: string; manifest?: { permissions: string[] } }>;
   assert.deepEqual(listed.map((v) => v.id), ["desk-only"]);
@@ -186,7 +189,7 @@ test("a guest desktop can load the host's desktop view without installing it, wi
 
 test("a view opened on a workspace here is told, once ready, where it is (a phone's screen) and what the board holds, as the window tells a view: its caller alone", async () => {
   const c = computer();
-  installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions"] });
+  await installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn", "workspace:close", "workspace:edit", "workspace:prompt", "workspace:sessions"] });
   const [phone, other] = [c.caller(), c.caller()];
   assert.equal(await code(c.call("view.open", ["priya-board", path.join(tmp, "elsewhere")], phone)), "NOT_FOUND");
   const { session } = (await c.call("view.open", ["priya-board", c.repo], phone)) as { session: string };
@@ -225,7 +228,7 @@ test("a view opened on a workspace here is told, once ready, where it is (a phon
 
 test("a screen that places live surfaces itself says so, and its view is told it may ask for them; a screen that does not is not, and `surfaces` is true or false", async () => {
   const c = computer();
-  installed("priya-board", { name: "Priya's board", phone: true });
+  await installed("priya-board", { name: "Priya's board", phone: true });
   const phone = c.caller();
   const features = async (...surfaces: unknown[]) => {
     const { session } = (await c.call("view.open", ["priya-board", c.repo, null, ...surfaces], phone)) as { session: string };
@@ -240,7 +243,7 @@ test("a screen that places live surfaces itself says so, and its view is told it
 
 test("a view is shown on its caller's screen: told its size and look once ready, the newest, and after only what of them changes; a screen not as the protocol has it is refused", async () => {
   const c = computer();
-  installed("priya-board", { name: "Priya's board", phone: true });
+  await installed("priya-board", { name: "Priya's board", phone: true });
   const phone = c.caller();
   const dark = { colors: { bg: "#101418", fg: "#E8EAED" }, mode: "dark", accent: "#3a7bd5", fonts: { ui: "system-ui", mono: "ui-monospace" }, status: { working: "#4caf50" } };
   const light = { ...dark, mode: "light", colors: { bg: "#ffffff", fg: "#202124" } };
@@ -265,7 +268,7 @@ test("a view is shown on its caller's screen: told its size and look once ready,
 
 test("what the view does is done on the board as its caller, and recorded; what its caller may not do, it may not either", async () => {
   const c = computer();
-  installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn", "workspace:close", "workspace:edit"] });
+  await installed("priya-board", { name: "Priya's board", phone: true, permissions: ["workspace:spawn", "workspace:close", "workspace:edit"] });
   // The person's phone: it may start an agent and nothing else of these.
   const phone = c.caller((method) => method === "agent.start");
   const { session } = (await c.call("view.open", ["priya-board", c.repo], phone)) as { session: string };
@@ -340,7 +343,7 @@ test("an agent asleep is shown asleep with when it slept, never where; the view 
 
 test("a tile's status follows the view that asks: its bucket and its agent's, now and as it changes, until it stops asking", async () => {
   const c = computer();
-  installed("priya-board", { name: "Priya's board", phone: true });
+  await installed("priya-board", { name: "Priya's board", phone: true });
   const phone = c.caller();
   const { session } = (await c.call("view.open", ["priya-board", c.repo], phone)) as { session: string };
   c.post(phone, session, { type: "ready", v: 1 });
@@ -354,7 +357,7 @@ test("a tile's status follows the view that asks: its bucket and its agent's, no
 
 test("a session ends when its caller closes it or goes, or when its host disables the view, told why: nothing is said in it after", async () => {
   const c = computer();
-  installed("priya-board", { name: "Priya's board", phone: true });
+  await installed("priya-board", { name: "Priya's board", phone: true });
   const phone = c.caller();
   const open = async () => {
     const { session } = (await c.call("view.open", ["priya-board", c.repo], phone)) as { session: string };
@@ -386,8 +389,8 @@ test("a session ends when its caller closes it or goes, or when its host disable
 
 test("a widget pressed through a view is the opener's press, held to its role: one who may only look presses nothing", async () => {
   const c = computer();
-  installed("widgets", { name: "Widgets", phone: true, permissions: ["workspace:widgets"] });
-  installed("lookout", { name: "Look only", phone: true });
+  await installed("widgets", { name: "Widgets", phone: true, permissions: ["workspace:widgets"] });
+  await installed("lookout", { name: "Look only", phone: true });
   const open = async (who: ReturnType<typeof c.caller>) => {
     const { session } = await c.call("view.open", ["widgets", c.repo, { w: 400, h: 800, theme: { colors: {} } }], who) as { session: string };
     c.post(who, session, { type: "ready", v: 1 });

@@ -1,0 +1,14 @@
+{
+  "id": "@example/broken",
+  "name": "Broken",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "other",
+  "description": "A test tool whose code does not load.",
+  "entry": "index.js",
+  "permissions": [],
+  "settings": [],
+  "tools": [
+    { "key": "broken", "label": "Broken", "description": "Never draws.", "tileKind": "broken", "size": { "width": 400, "height": 300 }, "needsRepo": false, "singleton": true }
+  ]
+}

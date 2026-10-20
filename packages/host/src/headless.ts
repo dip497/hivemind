@@ -34,7 +34,8 @@ import { agentForCmd, preferredAgent, setCatalog, spawnableAgents } from "@hivem
 import { findBin } from "@hivemind/agents/discover";
 import { loadAgents, userAgentsDir } from "@hivemind/agents/load";
 import { readSettings, settingsPath } from "@hivemind/core/settings";
-import { listToolPackages, userToolsDir } from "@hivemind/core/tool-packages";
+import { listToolPackages } from "@hivemind/core/tool-packages";
+import { recordsFile } from "@hivemind/core/installed-packages";
 import { appearance } from "./appearance.js";
 import { DEFAULT_APPEARANCE, type Appearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
@@ -448,7 +449,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     syncing = syncing.then(async () => s.sync(wantedServices(await listToolPackages(), (await readSettings(settingsFile)).plugins.state, process.env.HIVEMIND_SAFE_MODE === "1")))
       .catch((e: unknown) => o.onWarn(`tool plugins' services: ${e instanceof Error ? e.message : String(e)}`));
   };
-  const servicesWatched = [settingsFile, userToolsDir()];
+  const servicesWatched = [settingsFile, recordsFile()];
   void drive.serving.then((mine) => {
     if (!mine) return;
     services = new Services({ driveSock, grants, logDir: path.join(o.dir, "services") });

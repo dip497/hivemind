@@ -7,6 +7,7 @@ import { parseToolManifest, type ToolPackage } from "@hivemind/core/tool-format"
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import { idProblem, safeRelative, type CatalogFile, type CatalogType } from "./index-format.js";
+import { checkPackageManifest, entriesOf, MEMBER_FORMATS, ownedBy, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, type MemberFormat, type MemberRuns } from "./package-format.js";
 
 export const MAX_PLUGIN_FILES = 200;
 export const MAX_PLUGIN_FILE_BYTES = 2 << 20;
@@ -48,7 +49,12 @@ export interface CheckedPlugin {
   icon: unknown;
   /** A widget's icon when it is a picture file in the folder, for the hub to link to. */
   iconFile: string | null;
+  /** A package's members; null for one plugin. */
+  members: CheckedMember[] | null;
 }
+
+/** A package's member as a hub lists it: its kind, where its code runs, and what it asks for. */
+export interface CheckedMember { kind: MemberFormat["kind"]; id: string; name: string; runs: MemberRuns; permissions: string[]; does: string[] }
 
 export type FolderCheck = { plugin: CheckedPlugin } | { problem: string };
 
@@ -95,11 +101,17 @@ async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
   }
   if (total > MAX_PLUGIN_BYTES) refuse("a plugin folder may be at most 8 MB");
   files.sort((a, b) => a.path.localeCompare(b.path));
-  const has = (p: unknown) => typeof p === "string" && files.some((f) => f.path === p);
+  const pkg = text.get(PACKAGE_MANIFEST);
+  if (pkg !== undefined) return readPackage(pkg, files, text);
+  return readPlugin(files, text) ?? refuse(`no ${PACKAGE_MANIFEST}, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder`);
+}
 
+/** The one plugin a folder holds, read by its manifest; null when it holds none. */
+function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlugin | null {
+  const has = (p: unknown) => typeof p === "string" && files.some((f) => f.path === p);
   // Every kind may say what it is in a README.md; it is shown as text, never run.
   const readmeName = [...text.keys()].find((f) => /^readme\.md$/i.test(f));
-  const common = { files, readme: readmeName ? text.get(readmeName)!.slice(0, MAX_README) : null, iconFile: null };
+  const common = { files, readme: readmeName ? text.get(readmeName)!.slice(0, MAX_README) : null, iconFile: null, members: null };
 
   const yaml = text.get("agent.yaml") ?? text.get("agent.yml");
   if (yaml !== undefined) {
@@ -197,18 +209,75 @@ async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
     };
   }
 
-  return refuse("no agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder");
+  return null;
 }
 
-/** Why `login` may not publish this id, or null. A view's, a widget's or a tool's owner must be
- *  the account publishing it. Agents are not owned by an account: a hub decides where they come from. */
+/** What a member's code may do, said before it installs: where it runs, then what it asks for. */
+const RUNS: Record<MemberRuns, string> = {
+  sandboxed: "Runs in a sandbox that holds it to what it asks for",
+  "in the app": "Runs inside Hivemind, with the app's access to your files and network, once you switch it on",
+  "as an agent's instructions": "Instructions an agent follows",
+};
+
+/** Whether dotted version `a` is later than `b`. */
+const later = (a: string, b: string) => {
+  const pa = a.split(/[.-]/).map(Number), pb = b.split(/[.-]/).map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+  return false;
+};
+
+/** A package: its `hivemind-package.json`, and every member in its folder read as that kind is
+ *  read alone. Every member is the package owner's. Its files are the package's, checked as one. */
+function readPackage(json: string, files: CatalogFile[], text: Map<string, string>): CheckedPlugin {
+  let raw: unknown;
+  try { raw = JSON.parse(json); } catch { return refuse(`${PACKAGE_MANIFEST} is not valid JSON`); }
+  const checked = checkPackageManifest(raw);
+  if ("problem" in checked) return refuse(`${PACKAGE_MANIFEST}: ${checked.problem}`);
+  const m = checked.manifest;
+  const owner = m.id.slice(0, m.id.indexOf("/"));
+  const members: CheckedMember[] = [];
+  let minAppVersion: string | null = null;
+  for (const format of MEMBER_FORMATS) {
+    for (const entry of entriesOf(m, format)) {
+      if (!format.manifest) {
+        // Written in the package's manifest itself: an agent preset.
+        const p = entry as AgentPreset;
+        members.push({ kind: format.kind, id: p.id, name: p.name, runs: format.runs, permissions: [],
+          does: [`${RUNS[format.runs]}: starts ${p.provider}${p.model ? ` (${p.model})` : ""} with the prompt in ${PACKAGE_MANIFEST}`] });
+        continue;
+      }
+      const at = (entry as FolderEntry).path.replace(/\/$/, "");
+      const prefix = at === "." ? "" : `${at}/`;
+      const inside = files.filter((f) => f.path.startsWith(prefix)).map((f) => ({ ...f, path: f.path.slice(prefix.length) }));
+      const sub = new Map([...text].filter(([f]) => f.startsWith(prefix)).map(([f, t]) => [f.slice(prefix.length), t]));
+      let d: CheckedPlugin | null;
+      try { d = readPlugin(inside, sub); } catch (e) { return refuse(`${at}: ${(e as Error).message}`); }
+      if (!d || d.type !== format.kind) return refuse(`${at}: ${format.list} names a folder holding no ${format.manifest}`);
+      const permissions = (() => { try { return (JSON.parse(d.manifest) as { permissions?: unknown }).permissions; } catch { return []; } })();
+      members.push({ kind: format.kind, id: d.id, name: d.name, runs: format.runs,
+        permissions: Array.isArray(permissions) ? permissions.filter((x): x is string => typeof x === "string") : [],
+        does: format.runs === "sandboxed" ? [RUNS[format.runs], ...d.does] : d.does });
+      if (d.minAppVersion && (!minAppVersion || later(d.minAppVersion, minAppVersion))) minAppVersion = d.minAppVersion;
+    }
+  }
+  for (const x of members) if (!ownedBy(m.id, x.id)) refuse(`${x.kind} ${x.id} is not ${owner}'s: every member of ${m.id} is ${owner}/<name>`);
+  const ids = members.map((x) => `${x.kind}:${x.id}`);
+  if (new Set(ids).size !== ids.length) refuse("a member is named twice");
+  const readmeName = [...text.keys()].find((f) => /^readme\.md$/i.test(f));
+  return {
+    id: m.id, type: "package", name: m.name.slice(0, 80), category: "other", files,
+    readme: readmeName ? text.get(readmeName)!.slice(0, MAX_README) : null,
+    description: `A package of ${members.length}: ${members.map((x) => x.name).join(", ")}.`.slice(0, 400),
+    version: m.version, bin: null, homepage: null, icon: null, iconFile: null, manifest: json,
+    does: [...new Set(members.flatMap((x) => x.does))], traits: null, note: null, minAppVersion, members,
+  };
+}
+
+/** Why `login` may not publish this id, or null. A view's, a widget's, a tool's or a package's
+ *  owner must be the account publishing it. Agents are not owned by an account: a hub decides where they come from. */
 export function ownerProblem(type: CatalogType, id: string, login: string): string | null {
   const owner = login.toLowerCase();
   if (type === "agent") return null;
-  if (type === "tool") {
-    if (!id.startsWith(`${owner}/`)) return `its id is "${id}", but you are publishing as ${login}; the owner must be ${owner}`;
-    return null;
-  }
   const want = `@${owner}/`;
   if (!SCOPED_ID_RE.test(id)) {
     const name = id.includes("/") ? id.slice(id.lastIndexOf("/") + 1) : id;

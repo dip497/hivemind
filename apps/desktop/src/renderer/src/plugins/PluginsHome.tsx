@@ -6,7 +6,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronDown, FolderPlus, Plus, Sparkles } from "../components/icons";
-import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -96,7 +96,7 @@ function useWidgetRows(matches: (text: string) => boolean): ListedRow[] {
   const state = useSettings().plugins.state;
   const hub = useHubDescription();
   return widgets.map((w) => {
-    const on = isPluginEnabled(state, "widget", w.id);
+    const on = isPluginOn(state, "widget", w);
     return { key: `widget:${w.id}`, kind: "widget", category: w.category ?? "other",
       row: <PluginRow kind="widget" id={w.id} name={w.name} mark={<WidgetIcon pkg={w} />}
         line={w.description || hub("widget", w.id)} state={on ? "on" : "off"} badge={on ? undefined : "Off"} /> };

@@ -1,7 +1,8 @@
 # Packages, marketplace, and startup
 
-Status: design + read-only inspection prototype. No remote installer or package runner
-ships in this phase. Visual design comes after the runtime and trust boundaries.
+Status: every installed plugin is a package (`packages/hive-core/src/package-install.ts`,
+records in `installed-packages.ts`); the build order is in
+`reports/Packages that own tools widgets views.md`. No package runner ships in this phase. Visual design comes after the runtime and trust boundaries.
 The priority order, configurable views, and target agent-plugin lifecycle are defined
 in [plugin-configuration.md](plugin-configuration.md).
 
@@ -30,8 +31,10 @@ by proxy; they need content review and explicit workspace scope before support i
 change the working view SDK. The strict schema and limits live in
 `packages/hive-core/src/packages.ts`.
 
-- `apiVersion: 1`, publisher/name id, display name, immutable version.
-- Up to 8 embedded view directories and 16 agent presets.
+- `apiVersion: 2`, `@owner/name` id, display name, immutable version.
+- Member lists come from the kind table (`packages/hive-core/src/package-kinds.ts`): up to 16
+  tool, 16 widget and 8 view directories, each with its own manifest, and 16 agent presets.
+  Every member id is `@owner/<name>` with the package's owner.
 - Optional startup: one included view, up to 8 distinct preset ids, concurrency 1–4.
 - Presets reference the host's enabled provider catalog. Unsupported model overrides
   fail; omitting a model keeps the provider's default.
@@ -52,7 +55,12 @@ an archive extractor or a hardened importer for a concurrently hostile local tre
 `examples/packages/review-room` combines the existing Orbit view with Pi and Claude
 presets. It builds an inspectable package without installing or starting it.
 
-## Installation and updates: next boundary
+## Installation and updates
+
+Built: `hive plugins install` copies a folder into a private staging folder, hashing each file as
+it reads it, checks every member there, moves the copy to `store/<package>/<version>-<digest>/`
+and only then rewrites `installed.json` with one rename. A folder of one plugin is a package of
+one. The rest of this section is the boundary still to build.
 
 Use a content-addressed immutable store. Verify an archive into a private staging
 directory before exposing it to a renderer or parsing its startup plan for execution.

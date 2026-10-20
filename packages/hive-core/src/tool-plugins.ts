@@ -18,7 +18,7 @@ import { createToolRegistry, type RegisteredCommand, type RegisteredTool, type T
 import type { ToolsSettings } from "./settings-schema.js";
 
 /** The bundled web plugin: the Browser tile, off unless enabled. */
-export const BROWSER_PLUGIN_ID = "hivemind/web";
+export const BROWSER_PLUGIN_ID = "@hivemind/web";
 export const BROWSER_TOOL_ID = `${BROWSER_PLUGIN_ID}/browser`;
 
 /** What a managed tool needs beyond its registry entry: the tile kind it spawns. */
@@ -29,8 +29,8 @@ export interface ToolTileBinding {
 
 export const BROWSER_TOOL: ToolTileBinding = Object.freeze({ toolId: BROWSER_TOOL_ID, tileKind: "browser" });
 
-export const CODE_PLUGIN_ID = "hivemind/code";
-export const ISSUES_PLUGIN_ID = "hivemind/issues";
+export const CODE_PLUGIN_ID = "@hivemind/code";
+export const ISSUES_PLUGIN_ID = "@hivemind/issues";
 
 export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.freeze([
   Object.freeze({
@@ -41,7 +41,7 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     id: ISSUES_PLUGIN_ID,
     builtin: true,
     tools: Object.freeze([
-      Object.freeze({ key: "issues", label: "Issues", description: "The workspace's issue list.", tileKind: "issues" }),
+      Object.freeze({ key: "issues", label: "Issues", description: "The workspace's issue list.", tileKind: "issues", singleton: true }),
       Object.freeze({ key: "plan-review", label: "Plan review", description: "A plan waiting for your decision.", tileKind: "planReview" }),
     ]),
     commands: Object.freeze([
@@ -60,7 +60,7 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     id: CODE_PLUGIN_ID,
     builtin: true,
     tools: Object.freeze([
-      Object.freeze({ key: "editor", label: "Code", description: "The workspace's files and what changed in them: edit, review, and leave comments.", tileKind: "editor" }),
+      Object.freeze({ key: "editor", label: "Code", description: "The workspace's files and what changed in them: edit, review, and leave comments.", tileKind: "editor", singleton: true }),
     ]),
     // The review loop an agent cannot reach from a shell: comments live in the app.
     commands: Object.freeze([

@@ -1,0 +1,14 @@
+{
+  "id": "@example/look",
+  "name": "Look",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "other",
+  "description": "A test tool: draws a coloured box and says so on the console.",
+  "entry": "index.js",
+  "permissions": [],
+  "settings": [],
+  "tools": [
+    { "key": "look", "label": "Look", "description": "A coloured box.", "tileKind": "look", "size": { "width": 400, "height": 300 }, "needsRepo": false, "singleton": true }
+  ]
+}

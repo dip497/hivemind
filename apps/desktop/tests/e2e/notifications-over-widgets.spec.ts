@@ -7,6 +7,7 @@ import path from "node:path";
 import { person } from "./helpers/multiplayer";
 import { chooserAgent } from "./helpers/chooser";
 import { stopDaemons } from "./helpers/daemons";
+import { installPlugin } from "./helpers/install";
 
 // A tall card that parks itself in the bottom-right corner, where notifications show.
 const TALL = `
@@ -33,10 +34,11 @@ test("an agent's notification draws over a widget card in the same spot", async 
   const home = path.join(root, "home");
   fs.mkdirSync(home);
   const env = chooserAgent(root);
-  const widget = path.join(root, "desktop", "hivemind", "widgets", "tall");
+  const widget = path.join(root, "src", "tall");
   fs.mkdirSync(widget, { recursive: true });
   fs.writeFileSync(path.join(widget, "widget.json"), JSON.stringify({ name: "Tall" }));
   fs.writeFileSync(path.join(widget, "widget.js"), TALL);
+  installPlugin(path.join(root, "desktop"), widget);
   const page = await person(root, "desktop", repo, apps, { ...env, HIVEMIND_SHELL_ENV: "0", HOME: home });
 
   await page.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "chooser"));

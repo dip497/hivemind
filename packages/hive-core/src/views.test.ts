@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { installView, listInstalledViews, readViewPackage, removeView, userViewsDir } from "./views.js";
+import { listInstalledViews, readViewPackage } from "./views.js";
+import { installPackage, removePlugin } from "./package-install.js";
+import { packagesDir } from "./installed-packages.js";
+
+const installView = async (dir: string) => (await installPackage(dir)).members[0]!;
 
 let tmp: string;
 const savedXdg = process.env.XDG_CONFIG_HOME;
@@ -32,40 +36,36 @@ describe("view packages", () => {
     expect((await readViewPackage(path.join(tmp, "noentry"), "user")).error).toMatch(/entry "index.html" not found/);
   });
 
-  test("install copies into the user dir, list finds it, remove deletes it", async () => {
+  test("install copies it into a package, list finds it, remove deletes it", async () => {
     pkg(path.join(tmp, "src", "orbit"), good("orbit"));
     fs.mkdirSync(path.join(tmp, "src", "orbit", "node_modules", "x"), { recursive: true });
     const v = await installView(path.join(tmp, "src", "orbit"));
-    expect(v.dir).toBe(path.join(userViewsDir(), "orbit"));
+    expect(v.dir.startsWith(path.join(packagesDir(), "store", "orbit") + path.sep)).toBe(true);
     expect(fs.existsSync(path.join(v.dir, "index.html"))).toBe(true);
     expect(fs.existsSync(path.join(v.dir, "node_modules"))).toBe(false);
     expect((await listInstalledViews()).map((x) => [x.id, x.source, x.error])).toEqual([["orbit", "user", null]]);
-    await removeView("orbit");
+    await removePlugin("view", "orbit");
     expect(await listInstalledViews()).toEqual([]);
-    await expect(removeView("orbit")).rejects.toMatchObject({ code: "not_found" });
-    await expect(removeView("../etc")).rejects.toMatchObject({ code: "invalid_view" });
+    await expect(removePlugin("view", "orbit")).rejects.toThrow("no view orbit is installed");
   });
 
   test("a view from the registry installs as @owner/name, beside a bare one of the same name", async () => {
     pkg(path.join(tmp, "src", "notes"), good("notes"));
     pkg(path.join(tmp, "src", "hub-notes"), good("@someone/notes"));
     await installView(path.join(tmp, "src", "notes"));
-    const scoped = await installView(path.join(tmp, "src", "hub-notes"));
-    expect(scoped.dir).toBe(path.join(userViewsDir(), "@someone", "notes"));
-    expect((await listInstalledViews()).map((x) => [x.id, x.error])).toEqual([["@someone/notes", null], ["notes", null]]);
-    await removeView("@someone/notes");
+    await installView(path.join(tmp, "src", "hub-notes"));
+    expect((await listInstalledViews()).map((x) => [x.id, x.error]).sort()).toEqual([["@someone/notes", null], ["notes", null]]);
+    await removePlugin("view", "@someone/notes");
     expect((await listInstalledViews()).map((x) => x.id)).toEqual(["notes"]);
-    // The nested form is the only one: no other path may reach `rm -rf`.
-    for (const bad of ["someone/notes", "@someone/../notes", "@someone/notes/x"]) {
-      await expect(removeView(bad)).rejects.toMatchObject({ code: "invalid_view" });
-    }
   });
 
-  test("a scoped folder whose manifest names someone else is refused", async () => {
-    pkg(path.join(userViewsDir(), "@someone", "notes"), good("@alice/notes"));
-    const [v] = await listInstalledViews();
-    expect(v.id).toBe("@someone/notes");
-    expect(v.error).toMatch(/does not match manifest id "@alice\/notes"/);
+  test("an installed view whose manifest was changed to name someone else does not load", async () => {
+    pkg(path.join(tmp, "src", "notes"), good("@someone/notes"));
+    const v = await installView(path.join(tmp, "src", "notes"));
+    fs.writeFileSync(path.join(v.dir, "hivemind-view.json"), JSON.stringify(good("@alice/notes")));
+    const [listed] = await listInstalledViews();
+    expect(listed!.id).toBe("@someone/notes");
+    expect(listed!.error).toMatch(/says it is "@alice\/notes", not "@someone\/notes"/);
   });
 
   test("install refuses an invalid package", async () => {
@@ -87,20 +87,23 @@ describe("view packages", () => {
     expect(fs.existsSync(path.join(installed[0]!.dir, "index.html"))).toBe(true);
   });
 
-  test("replacement publishes the new version and removes staging files", async () => {
+  test("replacement publishes the new version, keeps the one before it, and leaves no staging behind", async () => {
     const source = path.join(tmp, "source");
     pkg(source, good("orbit"));
     await installView(source);
     fs.writeFileSync(path.join(source, "hivemind-view.json"), JSON.stringify({ ...good("orbit"), version: "2.0.0" }));
-    expect((await installView(source)).manifest?.version).toBe("2.0.0");
-    expect(fs.readdirSync(userViewsDir())).toEqual(["orbit"]);
+    await installView(source);
+    expect((await listInstalledViews())[0]!.manifest?.version).toBe("2.0.0");
+    expect(fs.readdirSync(packagesDir()).filter((f) => f.startsWith("."))).toEqual([]);
+    expect(fs.readdirSync(path.join(packagesDir(), "store", "orbit")).map((f) => f.split("-")[0]).sort()).toEqual(["1.0.0", "2.0.0"]);
   });
 
   test("repo-local views are listed after user ones; a duplicate id is shadowed", async () => {
     const repo = path.join(tmp, "repo");
     pkg(path.join(repo, ".hivemind", "views", "orbit"), good("orbit"));
     pkg(path.join(repo, ".hivemind", "views", "ring"), good("ring"));
-    pkg(path.join(userViewsDir(), "orbit"), good("orbit"));
+    pkg(path.join(tmp, "src", "orbit"), good("orbit"));
+    await installView(path.join(tmp, "src", "orbit"));
     const all = await listInstalledViews(repo);
     expect(all.map((x) => [x.id, x.source, x.error])).toEqual([
       ["orbit", "user", null],
@@ -113,12 +116,18 @@ describe("view packages", () => {
     const own = path.join(tmp, "app-views");
     pkg(path.join(own, "windows"), good("windows"));
     pkg(path.join(own, "dock"), good("dock"));
-    pkg(path.join(userViewsDir(), "windows"), good("windows"));
+    pkg(path.join(tmp, "src", "dock"), good("dock"));
+    await installView(path.join(tmp, "src", "dock"));
     const all = await listInstalledViews(null, own);
     expect(all.map((x) => [x.id, x.source, x.error])).toEqual([
-      ["dock", "app", null],
-      ["windows", "app", 'replaced by the installed view "windows"'],
-      ["windows", "user", null],
+      ["dock", "app", 'replaced by the installed view "dock"'],
+      ["windows", "app", null],
+      ["dock", "user", null],
     ]);
+  });
+
+  test("a view cannot be installed under the id of a view the app is built around", async () => {
+    pkg(path.join(tmp, "src", "windows"), good("windows"));
+    await expect(installView(path.join(tmp, "src", "windows"))).rejects.toThrow("windows is the id of a view that comes with the app");
   });
 });

@@ -51,13 +51,13 @@ test.afterAll(async () => {
   await fs.rm(workspace, { recursive: true, force: true }).catch(() => {/*ignored*/});
 });
 
-const issuesTile = () => page.locator('[data-tool-plugin="hivemind/issues"]');
+const issuesTile = () => page.locator('[data-tool-plugin="@hivemind/issues"]');
 
 test("the Issues plugin's tile opens, with New in it", async () => {
   // The Issues plugin registers its tile a moment after the window loads: ask until it is there.
   await expect.poll(async () => {
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "issues" })));
-    return page.locator('[data-tool-plugin="hivemind/issues"]').count();
+    return page.locator('[data-tool-plugin="@hivemind/issues"]').count();
   }, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect(issuesTile().getByRole("button", { name: /New issue/ })).toBeVisible({ timeout: 10_000 });
 });

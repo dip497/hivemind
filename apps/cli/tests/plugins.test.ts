@@ -10,7 +10,7 @@ import { fixtureXDG } from "./agents-fixtures.js";
 describe("hive plugins", () => {
   test("lists every kind, switches one on and off, and sets what its settings take", () => {
     const xdg = fixtureXDG(["claude"]);
-    const view = path.join(xdg, "hivemind", "views", "board");
+    const view = path.join(xdg, "board-source");
     fs.mkdirSync(view, { recursive: true });
     fs.writeFileSync(path.join(view, "index.html"), "<p>board</p>");
     fs.writeFileSync(path.join(view, "hivemind-view.json"), JSON.stringify({
@@ -22,16 +22,17 @@ describe("hive plugins", () => {
     const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: xdg, env });
     const stored = () => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind", "settings.json"), "utf8")).plugins.state;
     try {
+      expect(run("install", view).json).toMatchObject({ ok: true, data: { id: "board" } });
       const list = (run("list").json as { data: { key: string; enabled: boolean }[] }).data;
       const keys = list.map((p) => p.key);
-      for (const k of ["agent:claude", "view:board", "widget:note", "tool:hivemind/web"]) expect(keys).toContain(k);
+      for (const k of ["agent:claude", "view:board", "widget:note", "tool:@hivemind/web"]) expect(keys).toContain(k);
       // A tool that is not built in is off until switched on; everything else is on.
-      expect(list.find((p) => p.key === "tool:hivemind/web")?.enabled).toBe(false);
+      expect(list.find((p) => p.key === "tool:@hivemind/web")?.enabled).toBe(false);
       expect(list.find((p) => p.key === "agent:claude")?.enabled).toBe(true);
 
       expect(run("disable", "agent:claude").json).toMatchObject({ ok: true, data: { enabled: false, reloaded: false } });
-      expect(run("enable", "tool:hivemind/web").json).toMatchObject({ ok: true });
-      expect(stored()).toEqual({ "agent:claude": { enabled: false }, "tool:hivemind/web": { enabled: true } });
+      expect(run("enable", "tool:@hivemind/web").json).toMatchObject({ ok: true });
+      expect(stored()).toEqual({ "agent:claude": { enabled: false }, "tool:@hivemind/web": { enabled: true } });
 
       expect(run("set", "view:board", "columns", "all").json).toMatchObject({ ok: true, data: { value: "all" } });
       expect(run("set", "view:board", "max", "500").json).toMatchObject({ ok: true, data: { value: 50 } }); // clamped to its range
@@ -44,7 +45,9 @@ describe("hive plugins", () => {
       expect(run("reset", "view:board").json).toMatchObject({ ok: true });
       expect(stored()["view:board"]).toBeUndefined();
 
-      expect(run("enable", "board").json).toMatchObject({ ok: false, error: expect.stringContaining("write <kind>:<id>") });
+      // A bare id is enough when one kind has it.
+      expect(run("enable", "board").json).toMatchObject({ ok: true, data: { key: "view:board", enabled: true } });
+      expect(run("enable", "nope").json).toMatchObject({ ok: false, error: expect.stringContaining("there is no plugin \"nope\"") });
       expect(run("enable", "view:nope").json).toMatchObject({ ok: false, error: expect.stringContaining("there is no view \"nope\"") });
     } finally {
       fs.rmSync(xdg, { recursive: true, force: true });

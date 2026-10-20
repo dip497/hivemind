@@ -291,8 +291,9 @@ export async function patchSettingsExtras(
   });
 }
 
-/** Queue + lock + release, shared by every mutator. */
-function withLock<T>(file: string, work: () => Promise<T>): Promise<T> {
+/** Queue + lock + release, shared by every mutator, and by any other file of the app's that
+ *  more than one process writes (`<file>.lock`, the same rules). */
+export function withLock<T>(file: string, work: () => Promise<T>): Promise<T> {
   const run = queue.then(async () => {
     await fs.mkdir(path.dirname(file), { recursive: true });
     const lock = `${file}.lock`;

@@ -25,10 +25,11 @@ const tree = (pid) => {
   return { procs: mine.length, rssMB: Math.round(mine.reduce((a, r) => a + Number(r[3]), 0) / 1024) };
 };
 
-// Install the bundled example view into this run's config dir first.
-const viewsDir = path.join(root, "config", "hivemind", "views", "orbit");
-fs.mkdirSync(viewsDir, { recursive: true });
-for (const f of fs.readdirSync(process.argv[3])) fs.copyFileSync(path.join(process.argv[3], f), path.join(viewsDir, f));
+// Install the bundled example view into this run's config dir first, as `hive plugins install` does.
+execFileSync("bun", [path.join(appDir, "../cli/src/index.ts"), "plugins", "install", process.argv[3], "--json"], {
+  env: { ...process.env, XDG_CONFIG_HOME: path.join(root, "config"), HIVE_HCP_SOCK: path.join(root, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(root, "no-drive.sock") },
+  stdio: "ignore",
+});
 
 const app = await electron.launch({ args: [path.join(appDir, "out/main/index.js"), "--no-sandbox"], cwd: root, env });
 const page = await app.firstWindow();

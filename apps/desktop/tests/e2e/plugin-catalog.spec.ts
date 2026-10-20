@@ -7,6 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { buildRegistry, SCOPE } from "./helpers/registry";
 import { pick } from "./helpers/select";
+import { installedFile } from "./helpers/install";
 
 let app: ElectronApplication;
 let page: Page;
@@ -77,10 +78,10 @@ test("a view installs only after review, and lands in the user's views", async (
   await entry("view", TILE_LIST).getByRole("button", { name: "Install" }).click();
   const review = page.getByRole("region", { name: "Review Tile list" });
   await expect(review).toContainText("matches the checksum");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", TILE_LIST))).toBe(false);
+  expect(installedFile(xdg, TILE_LIST)).toBeNull();
   await review.getByRole("button", { name: "Install" }).click();
   await expect(entry("view", TILE_LIST)).toContainText("Installed");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", TILE_LIST, "main.js"))).toBe(true);
+  expect(installedFile(xdg, TILE_LIST, "main.js")).not.toBeNull();
   await yours();
   await expect(page.locator(`[data-plugin-row="view:${TILE_LIST}"]`)).toBeVisible();
 });
@@ -115,7 +116,7 @@ test("a file that changed after it was listed is refused", async () => {
   await hub();
   await entry("view", PEOPLE).getByRole("button", { name: "Install" }).click();
   await expect(entry("view", PEOPLE).getByRole("alert")).toContainText("changed after it was listed");
-  expect(fs.existsSync(path.join(xdg, "hivemind/views", PEOPLE))).toBe(false);
+  expect(installedFile(xdg, PEOPLE)).toBeNull();
 });
 
 test("HiveHub opened again lists what it fetched a moment ago, without waiting on the index", async () => {

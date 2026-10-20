@@ -978,7 +978,7 @@ jobs:
           node_dir=$(mktemp -d)
           (cd "$node_dir" && npm init -y >/dev/null && npm install --silent "$tgz" \
             && node --input-type=module -e 'import { connect, ApiError } from "hivemind-api"; if (typeof connect !== "function" || typeof ApiError !== "function") process.exit(1)')
-          # The kit installs with no other package and reads an index, as a hub's build does.
+          # The kit installs with only zod from npm and reads an index, as a hub's build does.
           hub_tgz="$PWD/release-assets/hivemind-hub-$version.tgz"
           hub_dir=$(mktemp -d)
           (cd "$hub_dir" && npm init -y >/dev/null && npm install --silent "$hub_tgz" \

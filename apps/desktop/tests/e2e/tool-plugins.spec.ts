@@ -2,7 +2,7 @@
 // app as a kind of tile, drawn by the plugin's own code with the app's React. A tile's `hm` is the
 // client a view has, so its settings reach it live, and what it keeps with its tile is there after
 // a restart; switched off, its code is not served and its tiles show what they need. In safe mode
-// none loads. The tool is a test fixture, `example/commits`, written against the tool API.
+// none loads. The tool is a test fixture, `@example/commits`, written against the tool API.
 import { test, expect, _electron as electron, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -49,12 +49,12 @@ test.beforeAll(async () => {
   // An agent to send to: what the app starts as `claude`, waiting on its input.
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, "claude"), "#!/bin/sh\nexec cat\n", { mode: 0o755 });
-  expect(hive("tools", "install", fixture).status).toBe(0);
+  expect(hive("plugins", "install", fixture).status).toBe(0);
   await launch();
 });
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
-const tile = () => page.locator('[data-tool-plugin="example/commits"]');
+const tile = () => page.locator('[data-tool-plugin="@example/commits"]');
 // Whether the window can import its module: a fresh URL each time, as a failed import is remembered.
 const served = () => page.evaluate(() => import(/* @vite-ignore */ `hm-plugin://example--commits/index.js?probe=${Math.random()}`).then(() => "served", () => "refused"));
 /** Bring a tile into view, as clicking it in Layers does. */
@@ -65,17 +65,17 @@ const focus = async (el: Locator) => {
 };
 
 test("an added tool is off: it cannot be opened and its code is not served; switched on, it opens and runs", async () => {
-  expect(hive("ctl", "open-tool", "example/commits/commits").data.code).toBe("FORBIDDEN");
+  expect(hive("ctl", "open-tool", "@example/commits/commits").data.code).toBe("FORBIDDEN");
   expect(await served()).toBe("refused");
-  expect(hive("plugins", "enable", "tool:example/commits").status).toBe(0);
-  await expect.poll(() => hive("ctl", "open-tool", "example/commits/commits").status).toBe(0);
+  expect(hive("plugins", "enable", "tool:@example/commits").status).toBe(0);
+  await expect.poll(() => hive("ctl", "open-tool", "@example/commits/commits").status).toBe(0);
   await expect(tile()).toContainText("second change", { timeout: 20_000 });
   expect(await served()).toBe("served");
 });
 
 test("it is drawn by its own code, linked with its permissions, and its settings reach it live", async () => {
   await expect(tile()).toContainText("first change");
-  expect(hive("plugins", "set", "tool:example/commits", "match", "second").status).toBe(0);
+  expect(hive("plugins", "set", "tool:@example/commits", "match", "second").status).toBe(0);
   await expect(tile()).not.toContainText("first change");
   await expect(tile()).toContainText("second change");
   // Its `hm` is linked with the permissions its manifest declares: it offers to start an agent.
@@ -153,7 +153,7 @@ test("text sent to an agent asks which one: agents by frame, searchable, a new o
 });
 
 test("what a tool keeps with its tile is there after the app restarts", async () => {
-  expect(hive("ctl", "open-tool", "example/commits/commits").status).toBe(0);
+  expect(hive("ctl", "open-tool", "@example/commits/commits").status).toBe(0);
   await focus(tile());
   await tile().locator('[data-commit="second change"]').click();
   await expect(tile().locator('[data-commit="second change"]')).toHaveAttribute("aria-current", "true");
@@ -164,7 +164,7 @@ test("what a tool keeps with its tile is there after the app restarts", async ()
 });
 
 test("switched off, its open tiles stay on the board and say what they need", async () => {
-  expect(hive("plugins", "disable", "tool:example/commits").status).toBe(0);
+  expect(hive("plugins", "disable", "tool:@example/commits").status).toBe(0);
   await expect(page.locator('[data-missing-plugin="commits"]')).toBeVisible({ timeout: 10_000 });
   await expect(tile()).toHaveCount(0);
   expect(await served()).toBe("refused");
@@ -172,9 +172,9 @@ test("switched off, its open tiles stay on the board and say what they need", as
 
 test("in safe mode no added tool loads, even one switched on", async () => {
   await app.close();
-  expect(hive("plugins", "enable", "tool:example/commits").status).toBe(0);
+  expect(hive("plugins", "enable", "tool:@example/commits").status).toBe(0);
   await launch({ HIVEMIND_SAFE_MODE: "1" });
   await expect(page.locator('[data-missing-plugin="commits"]')).toBeVisible({ timeout: 20_000 });
-  expect(hive("ctl", "open-tool", "example/commits/commits").data.code).toBe("UNSUPPORTED");
+  expect(hive("ctl", "open-tool", "@example/commits/commits").data.code).toBe("UNSUPPORTED");
   expect(await served()).toBe("refused");
 });

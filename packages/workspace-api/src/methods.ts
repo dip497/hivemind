@@ -15,7 +15,7 @@ import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
 import type { ClientGrant, NewGrant } from "./grants.js";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
-import type { PluginList } from "./plugins.js";
+import type { PluginList, TileLook } from "./plugins.js";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -167,8 +167,9 @@ export interface WorkspaceMethods {
    *  worktrees), newest first, `limit` of them at most. */
   "agent.sessions": (place: string, program: string, limit?: number) => AgentSessions;
   /** (0.23) Open a tool's tile in the workspace at `repo`: the tool by its id
-   *  (`owner/name/tool`), in `frame` if given, at `url` for one that shows a page. */
-  "tool.open": (repo: string, tool: { tool: string; frame?: string; url?: string }) => { tile: string };
+   *  (`@owner/name/tool`, or `@owner/name` when the package has one tool), in `frame` if given, at
+   *  `url` for one that shows a page, with `state` (0.32) as the tile's first saved state. */
+  "tool.open": (repo: string, tool: { tool: string; frame?: string; url?: string; state?: Record<string, unknown> }) => { tile: string };
   /** (0.23) Pipe the replies of the agent in `src` to the one in `dst`, as its next prompts. */
   "link.connect": (src: string, dst: string) => void;
   /** (0.23) Stop piping `src`'s replies to `dst`, or to every agent when none is named. */
@@ -192,6 +193,9 @@ export interface WorkspaceMethods {
   "plugin.close": (instance: string, plugin?: string) => { closed: string; plugin: string; kind: string };
   /** Bring a tile into view and give it the keyboard. */
   "tile.focus": (tile: string) => null;
+  /** (0.32) Bring a tile into view, wait for its plugin to draw, and answer a picture of it with its
+   *  plugin's state and the last lines its code wrote (`plugins.ts`). */
+  "tile.look": (tile: string) => TileLook;
   /** The installed views, agents, widgets or tools changed on disk: read them again. */
   "views.rescan": () => null;
   "agents.rescan": () => null;

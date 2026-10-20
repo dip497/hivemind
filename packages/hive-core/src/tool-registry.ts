@@ -6,6 +6,8 @@ export interface ToolContribution {
   readonly description?: string;
   /** Tile kind this tool spawns. Omitted by a tool that is only commands. */
   readonly tileKind?: string;
+  /** One tile of it per workspace: opening it again brings that one forward. */
+  readonly singleton?: boolean;
 }
 /** A verb a plugin exposes to agents (as an MCP tool) and to the CLI. */
 export interface CommandContribution {
@@ -58,8 +60,8 @@ export interface ToolRegistry {
   };
 }
 
-/** A tool plugin's id: `owner/name`. */
-export const TOOL_ID_RE = /^[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/;
+/** A tool plugin's id: `@owner/name`, as every plugin's is. */
+export const TOOL_ID_RE = /^@[a-z0-9][a-z0-9-]{1,39}\/[a-z0-9][a-z0-9-]{1,39}$/;
 export const isToolId = (id: string): boolean => TOOL_ID_RE.test(id);
 
 /** Call after package validation, when the installed catalog changes. Invalid
@@ -89,7 +91,7 @@ export function createToolRegistry(plugins: readonly ToolPluginContribution[]): 
         if (kindOwners.has(tileKind)) throw new Error(`Tile kind already contributed: ${tileKind}`);
         kindOwners.set(tileKind, id);
       }
-      byId.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, label: contribution.label, description: contribution.description, tileKind }));
+      byId.set(id, Object.freeze({ id, pluginId: plugin.id, key: contribution.key, label: contribution.label, description: contribution.description, tileKind, ...(contribution.singleton ? { singleton: true } : {}) }));
     }
     const commands = plugin.commands ?? [];
     if (commands.length > 32) throw new Error("Too many commands in a plugin");

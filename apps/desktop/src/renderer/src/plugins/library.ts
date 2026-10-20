@@ -13,7 +13,7 @@ import { useCommunityReport } from "../workspace/views/community/registry";
 import { useViews } from "../workspace/workspace-view";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useToolPackages } from "../tiles/tool-plugins";
-import { isPluginEnabled } from "@hivemind/core/plugin-settings";
+import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { useSettings } from "../settings-store";
 
 export type PluginKind = "agent" | "view" | "widget" | "tool";
@@ -134,7 +134,7 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
     for (const t of tools.filter((x) => x.source === "you")) {
       out.push({
         kind: "tool", id: t.id, name: t.name, description: t.description, origin: "you", installed: true,
-        enabled: isPluginEnabled(state, "tool", t.id, false), ...(t.version ? { version: t.version } : {}),
+        enabled: isPluginOn(state, "tool", t, false), ...(t.version ? { version: t.version } : {}),
         can: [
           "Runs inside the app, with the access it has: your files, your programs and your logins.",
           ...(t.service ? [`Keeps ${t.service.command.join(" ")} running while it is on, which drives the workspaces you pick for it.`] : []),

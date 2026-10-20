@@ -37,14 +37,14 @@ describe("checking a plugin folder", () => {
     expect(await plugin({ "agent.yaml": AGENT })).toMatchObject({ id: "gemini", type: "agent", bin: "gemini", category: "agents", description: "Runs gemini." });
     expect(await plugin({ "hivemind-view.json": JSON.stringify({ id: "@ada/graph", entry: "index.html", category: "git" }), "index.html": "<p>" }))
       .toMatchObject({ id: "@ada/graph", type: "view", category: "git" });
-    expect(await plugin({ "hivemind-tool.json": JSON.stringify({ id: "ada/ports", name: "Ports", version: "1.0.0", entry: "tool.js", tools: [{ key: "ports", label: "Ports", tileKind: "ports" }], apiVersion: 1 }), "tool.js": "" }))
-      .toMatchObject({ id: "ada/ports", type: "tool", version: "1.0.0" });
+    expect(await plugin({ "hivemind-tool.json": JSON.stringify({ id: "@ada/ports", name: "Ports", version: "1.0.0", entry: "tool.js", tools: [{ key: "ports", label: "Ports", tileKind: "ports" }], apiVersion: 1 }), "tool.js": "" }))
+      .toMatchObject({ id: "@ada/ports", type: "tool", version: "1.0.0" });
   });
 
   test("a folder Hivemind would refuse is refused with a sentence that says why", async () => {
     const cases: [Record<string, string | Uint8Array>, string | RegExp][] = [
       [{}, "the folder is empty"],
-      [{ "notes.txt": "" }, "no agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder"],
+      [{ "notes.txt": "" }, "no hivemind-package.json, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder"],
       [{ ...widget(), "../x": "" }, "../x is not a plain relative path"],
       [{ ...widget(), "big.bin": new Uint8Array((2 << 20) + 1) }, "big.bin is larger than 2 MB"],
       [{ ...widget(), ...Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`f${i}.bin`, new Uint8Array(2 << 20)])) }, "a plugin folder may be at most 8 MB"],
@@ -58,8 +58,8 @@ describe("checking a plugin folder", () => {
       [{ "agent.yaml": AGENT.replace("id: gemini", "id: claude") }, /"claude" is Hivemind's agent for `claude`, but this manifest launches `gemini`/],
       [{ "agent.yaml": AGENT.replace("id: gemini", "id: gem--ini") }, `agent.yaml's id is "gem--ini" — an agent's id is one name, like "gemini"`],
       [{ "agent.yaml": "id: x\n" }, /the manifest is not one Hivemind would accept/],
-      [{ "hivemind-tool.json": JSON.stringify({ id: "ada/work--trees", name: "W", version: "1.0.0", entry: "tool.js", tools: [{ key: "w", label: "W", tileKind: "work-trees" }], apiVersion: 1 }), "tool.js": "" },
-        "hivemind-tool.json: its id is not a tool id — it must be owner/name"],
+      [{ "hivemind-tool.json": JSON.stringify({ id: "@ada/work--trees", name: "W", version: "1.0.0", entry: "tool.js", tools: [{ key: "w", label: "W", tileKind: "work-trees" }], apiVersion: 1 }), "tool.js": "" },
+        "hivemind-tool.json: its id is not a tool id — it must be @owner/name"],
     ];
     for (const [files, want] of cases) {
       const got = await problem(files);
@@ -69,11 +69,39 @@ describe("checking a plugin folder", () => {
   });
 });
 
-test("a view's, widget's or tool's owner is the account that publishes it; an agent has none", () => {
+describe("checking a package", () => {
+  const manifest = (extra: object = {}) => JSON.stringify({ apiVersion: 2, id: "@ada/kit", name: "Kit", version: "1.0.0",
+    widgets: [{ path: "pet" }], agents: [{ id: "@ada/reviewer", name: "Reviewer", provider: "claude", prompt: "Review." }], ...extra });
+  const pet = (id = "@ada/pet") => ({ "pet/widget.json": JSON.stringify({ id, name: "Pet", version: "1.0.0", permissions: ["workspace:issues"] }), "pet/widget.js": "" });
+
+  test("each member is read as its kind is read alone, and listed with where it runs and what it asks", async () => {
+    const kit = await plugin({ "hivemind-package.json": manifest(), ...pet() });
+    expect(kit).toMatchObject({ id: "@ada/kit", type: "package", version: "1.0.0", description: "A package of 2: Pet, Reviewer." });
+    expect(kit.members).toEqual([
+      { kind: "widget", id: "@ada/pet", name: "Pet", runs: "sandboxed", permissions: ["workspace:issues"], does: expect.arrayContaining(["Runs in a sandbox that holds it to what it asks for"]) },
+      { kind: "agent-preset", id: "@ada/reviewer", name: "Reviewer", runs: "as an agent's instructions", permissions: [],
+        does: ["Instructions an agent follows: starts claude with the prompt in hivemind-package.json"] },
+    ]);
+    const { id, type, name, description, version, category, members } = kit;
+    const listed = parseHubIndex({ version: 1, plugins: [{ id, type, name, description, version, category, files: kit.files, author: "ada", path: "kit",
+      members: members!.map(({ kind, id, name, permissions }) => ({ kind, id, name, permissions })) }] });
+    expect(listed.skipped).toEqual([]);
+  });
+
+  test("a package is refused for its manifest, a member its kind refuses, or a member of another owner", async () => {
+    expect(await problem({ "hivemind-package.json": manifest({ apiVersion: 1 }), ...pet() })).toMatch(/^hivemind-package\.json: apiVersion/);
+    expect(await problem({ "hivemind-package.json": manifest(), "pet/widget.json": JSON.stringify({ id: "@ada/pet", version: "1.0.0" }) }))
+      .toBe("pet: a widget needs a widget.js, or a draw in its widget.json");
+    expect(await problem({ "hivemind-package.json": manifest(), "pet/notes.txt": "" })).toBe("pet: widgets names a folder holding no widget.json");
+    expect(await problem({ "hivemind-package.json": manifest(), ...pet("@bob/pet") })).toBe("widget @bob/pet is not @ada's: every member of @ada/kit is @ada/<name>");
+  });
+});
+
+test("a view's, widget's, tool's or package's owner is the account that publishes it; an agent has none", () => {
   expect(ownerProblem("view", "@dip497/board", "Dip497")).toBeNull(); // GitHub logins are case-blind
   expect(ownerProblem("widget", "@alice/board", "dip497")).toMatch(/the scope must be @dip497/);
   expect(ownerProblem("view", "board", "dip497")).toMatch(/set it to "@dip497\/board"/);
-  expect(ownerProblem("tool", "dip497/worktrees", "dip497")).toBeNull();
-  expect(ownerProblem("tool", "alice/worktrees", "dip497")).toMatch(/owner must be dip497/);
+  expect(ownerProblem("tool", "@dip497/worktrees", "dip497")).toBeNull();
+  expect(ownerProblem("package", "@alice/kit", "dip497")).toMatch(/the scope must be @dip497/);
   expect(ownerProblem("agent", "gemini", "anyone")).toBeNull();
 });
