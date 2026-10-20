@@ -248,7 +248,7 @@ export interface UpdateStatus {
 }
 
 import type { Appearance, Settings } from "@hivemind/core/settings-schema";
-import type { CatalogEntry } from "@hivemind/hub";
+import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
 export interface ViewPackageInfo {
@@ -359,6 +359,8 @@ export interface HiveIpc {
   previewViewInstall?(): Promise<{ token: string; package: ViewPackageInfo; replacesVersion: string | null } | null>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
+  /** The catalog's entries this app cannot read, each with why; the rest are listed. */
+  pluginCatalogSkipped(): Promise<SkippedEntry[]>;
   /** A plugin's README: from its folder here (`dir`), or from the catalog for one not installed. */
   pluginReadme(from: { dir: string } | { catalog: { type: CatalogEntry["type"]; id: string } }): Promise<string | null>;
   /** The widget packages installed on this machine. */

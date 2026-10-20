@@ -149,6 +149,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     verifyAgent: (id) => port.invoke("agents:verify", id),
     previewViewInstall: local("views:preview-install", invoke("views:preview-install")),
     pluginCatalog: () => port.invoke("plugins:catalog"),
+    pluginCatalogSkipped: () => port.invoke("plugins:catalog-skipped"),
     pluginReadme: (from) => port.invoke("plugins:readme", from),
     listWidgets: () => port.invoke("widgets:list"),
     installWidget: local("widgets:install", invoke("widgets:install")),

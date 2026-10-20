@@ -4,6 +4,7 @@ import { LayoutGrid } from "./components/icons";
 import { iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
 import { Loading } from "./components/ui/loading";
+import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { syncAgentPlugins, useAgentEntries } from "./agent-plugins";
 import { SvgMark } from "./agents";
@@ -20,6 +21,7 @@ export const cleanError = (e: unknown): string =>
   e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': Error: /, "") : "The plugin could not be updated.";
 
 type Entry = Awaited<ReturnType<typeof window.hive.pluginCatalog>>[number];
+type Skipped = Awaited<ReturnType<typeof window.hive.pluginCatalogSkipped>>[number];
 type Review = Awaited<ReturnType<typeof window.hive.reviewCatalogPlugin>>;
 
 /** Numeric dotted compare; anything unparsable counts as equal. */
@@ -59,6 +61,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [done, setDone] = useState<{ entry: Entry } | null>(null);
   const [outdated, setOutdated] = useState<string[]>([]);
+  const [skipped, setSkipped] = useState<Skipped[]>([]);
   const reviewRef = useRef<HTMLElement | null>(null);
   const views = useCommunityReport().packages;
   const agents = useAgentEntries();
@@ -72,6 +75,7 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
       // Only meaningful once the catalog is loaded — it is what the installed copies are
       // compared against.
       window.hive.outdatedAgents().then(setOutdated, () => setOutdated([]));
+      window.hive.pluginCatalogSkipped().then(setSkipped, () => setSkipped([]));
     }, (e) => setLoadError(cleanError(e)));
   };
   useEffect(load, []);
@@ -208,8 +212,23 @@ export function BrowsePlugins({ query, kind }: { query: string; kind: "all" | Pl
         {open && reviewOf(e, open)}
       </div> };
     })} />
+    {entries && skipped.length > 0 && <SkippedEntries skipped={skipped} />}
     <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
+}
+
+/** What HiveHub lists that this Hivemind cannot read, one line each with why, so a missing plugin
+ *  is not a mystery. A newer Hivemind may read them. */
+function SkippedEntries({ skipped }: { skipped: Skipped[] }) {
+  return <Alert data-catalog-skipped>
+    <AlertTitle>{skipped.length === 1 ? "1 plugin on HiveHub is not shown" : `${skipped.length} plugins on HiveHub are not shown`}</AlertTitle>
+    <AlertDescription>
+      <p>This Hivemind cannot read their entries. A newer Hivemind may.</p>
+      {skipped.map((s) => <p key={`${s.position}:${s.id ?? ""}`} data-catalog-skipped-entry={s.id ?? s.position}>
+        {s.id ?? `Entry ${s.position + 1}`}: {s.reason}
+      </p>)}
+    </AlertDescription>
+  </Alert>;
 }
 
 const RUNS_WORDS: Record<string, string> = {

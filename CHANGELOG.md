@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Settings ▸ Plugins ▸ HiveHub names each plugin it cannot show, one line each with why (a kind this Hivemind does not know, an entry it cannot read), under the ones it lists.
 - The package format (`hivemind-package.json`, its member kinds) and package entries in the index live in the hub kit, so the app and every hub check a package with the same code: `checkPluginFolder` reads each member as its kind is read alone. The kit tarball depends on `zod` from npm.
 - Each release carries the hub kit, `hivemind-hub-<version>.tgz`: the plugin index reader and the plugin checks, with nothing else to install, for a hub to depend on by the release's address.
 - A plugin published from the root of its repository installs from HiveHub: its entry, whose folder is empty, was refused by the app.

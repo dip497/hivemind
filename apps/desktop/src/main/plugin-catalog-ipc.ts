@@ -6,7 +6,7 @@ import path from "node:path";
 import { app } from "electron";
 import { handle, handleEffect } from "./app-ipc.js";
 import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, stageEntry } from "@hivemind/core/plugin-catalog";
-import type { CatalogEntry } from "@hivemind/hub";
+import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
 import { getSettings, patchSettingsPath } from "./settings-store.js";
@@ -44,6 +44,8 @@ export interface AgentReview {
  *  a fetch is out wait on that one. What review and the update check compare against. */
 const CATALOG_FRESH_MS = 5 * 60_000;
 let catalog: CatalogEntry[] = [];
+/** The index entries this app could not read in that fetch, each with why. */
+let skippedEntries: SkippedEntry[] = [];
 let fetchedAt = -Infinity;
 let fetching: Promise<CatalogEntry[]> | null = null;
 /** Each listed plugin's README, fetched once for the catalog that lists it. */
@@ -54,6 +56,7 @@ function catalogNow(): Promise<CatalogEntry[]> {
   fetching ??= fetchCatalog().then(({ plugins, skipped }) => {
     for (const s of skipped) console.warn(`[plugins] the index's entry ${s.id ?? `#${s.position}`} is skipped: ${s.reason}`);
     catalog = plugins;
+    skippedEntries = skipped;
     fetchedAt = Date.now();
     return plugins;
   }).finally(() => { fetching = null; });
@@ -90,6 +93,7 @@ export function installPluginCatalogIpc(): void {
   let pendingTool: { token: string; dir: string; id: string } | null = null;
   let pendingPackage: { token: string; dir: string; id: string } | null = null;
   handle("plugins:catalog", () => catalogNow());
+  handle("plugins:catalog-skipped", async () => { await catalogNow(); return skippedEntries; });
 
   // Which installed agents are no longer what the catalog lists. Agents carry no version of
   // their own, so "is there an update" was unanswerable for them and the button never
