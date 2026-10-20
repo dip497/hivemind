@@ -11,7 +11,7 @@ Build a Hivemind view (a sandboxed web page that draws the whole workspace its o
 1. Ask me what the view should show and do, and its name (lowercase letters, digits and dashes).
 2. Start it: \`hive plugins new view <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Then run \`npm install\` in the new folder (it needs Node).
 3. Read \`PROMPT.md\` in full: it is the whole contract (the SDK, permissions, the sandbox). Write what I asked for under its "What I want", and build only from it. The view has no network, no files and no \`window.hive\`. It uses \`@hivemind/view-sdk\`, which the app serves, so do not bundle it.
-4. Build and install, again after each change: \`npm run dev\`. Check it prints "installed @owner/name".
+4. Check it, then build and install it, again after each change: \`hive plugins check .\` must say ok (it names the file and line of each problem), then \`npm run dev\`. Check it prints "installed @owner/name".
 5. Show it: \`hive ctl plugin open view:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable view:@owner/name\` first.
 6. Declare one command in \`hivemind-view.json\` under "commands", answered with \`hm.onCommand\`, that reports what the view shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it follows the light and the dark theme (\`applyThemeVars\`), the manifest has a one-line description, a "category" and only the permissions it uses, and \`README.md\` says what it does.
@@ -209,6 +209,7 @@ the session and return you to the canvas.
 
 ```bash
 hive plugins new view <name> [--dir folder]   # a starter, with PROMPT.md
+hive plugins check <folder>                   # its types, its manifest, and its page built and loaded once, with file:line
 hive plugins install <folder>|@owner/name
 hive plugins list --kind view                 # installed views, and why any fails to load
 hive plugins remove <id>

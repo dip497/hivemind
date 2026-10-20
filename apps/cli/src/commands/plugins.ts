@@ -8,6 +8,7 @@
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
  *                                                  (@owner/name is HiveHub's: write a folder as ./x)
  *   hive plugins remove <plugin>                   one you added; what shows it stays, saying it is missing
+ *   hive plugins check <folder> [--json]           its types, its manifest, and its code drawn once
  *   hive plugins api --kind <tool|widget|view>     what its code is given, as type declarations
  *   hive plugins list [--kind agent|view|widget|tool] [--json]
  *   hive plugins show <plugin> [--json]            its settings: each field, its value and what it takes
@@ -35,6 +36,8 @@ import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
 import { stageFromRegistry } from "../registry.js";
+import { checkPlugin } from "../check/check.js";
+import { where } from "../check/problem.js";
 
 interface Plugin {
   key: string;
@@ -274,7 +277,7 @@ const newCmd = defineCommand({
       else await rm(dir, { recursive: true, force: true });
       return fail(ctx, e, "new_failed");
     }
-    const next = [...k.build(shown), ...(k.onByDefault ? [] : [`hive plugins enable ${k.kind}:${id}`]), ...k.see(id)];
+    const next = [...k.prepare(shown), `hive plugins check ${shown}`, ...k.add(shown), ...(k.onByDefault ? [] : [`hive plugins enable ${k.kind}:${id}`]), ...k.see(id)];
     return ok(ctx, { kind: k.kind, id, dir, next, prompt: path.join(dir, "PROMPT.md"), guide: k.guide }, () => [
       `started ${k.noun} ${id} in ${dir}`, "Next:", steps(next),
       `Want an agent to build it? Write your idea into ${shown}/PROMPT.md and hand it that file.`,
@@ -339,6 +342,29 @@ const removeCmd = defineCommand({
   },
 });
 
+const checkCmd = defineCommand({
+  meta: { name: "check", description: "Check a plugin's folder: its types, its manifest, and its code loaded and drawn once against a fake app" },
+  args: { folder: { type: "positional", required: true, description: "the plugin's folder" }, json: { type: "boolean" } },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    const dir = path.resolve(String(args.folder));
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return err(ctx, "not_found", `there is no folder ${dir}`);
+    const k = KINDS.find((x) => fs.existsSync(path.join(dir, x.manifest)));
+    if (!k) return err(ctx, "not_a_plugin", `${dir} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
+    const report = await checkPlugin(k, dir).catch((e: unknown) => fail(ctx, e, "check_failed"));
+    const text = () => [
+      ...report.problems.map((p) => `${p.step.padEnd(8)} ${where(p) ? `${where(p)}  ` : ""}${p.message}`),
+      `${report.problems.length ? `${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}` : "ok"}: ${k.noun} in ${dir}`,
+      ...Object.entries(report.steps).map(([step, s]) => `  ${step.padEnd(9)} ${s}`),
+    ].join("\n");
+    // The plugin's code may have left timers or sockets open: what it did is known, so stop here.
+    if (!report.problems.length) { ok(ctx, report, text); process.exit(0); }
+    if (ctx.json) console.log(JSON.stringify({ ok: false, code: "check_failed", error: `${report.problems.length} problems`, data: report }, null, 2));
+    else process.stderr.write(text() + "\n");
+    process.exit(1);
+  },
+});
+
 const apiCmd = defineCommand({
   meta: { name: "api", description: "What a plugin's code is given: the declarations its starter's types hold, for this version" },
   args: { kind: { type: "string", required: true, description: KIND_NAMES } },
@@ -351,5 +377,5 @@ const apiCmd = defineCommand({
 
 export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
-  subCommands: { new: newCmd, install: installCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
+  subCommands: { new: newCmd, check: checkCmd, install: installCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });

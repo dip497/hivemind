@@ -1,10 +1,13 @@
 /** The kinds of plugin you write and install, each as data: what makes a folder one, its id, its
  *  starter, how it is copied in and taken out, and the steps to see it. `hive plugins new|install|
  *  remove` is one path over this table. */
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { installView, removeView } from "@hivemind/core";
-import { installToolPackage, removeToolPackage, TOOL_MANIFEST } from "@hivemind/core/tool-packages";
-import { installWidget, removeWidget } from "@hivemind/core/widgets";
-import { MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/view-sdk/manifest";
+import { installToolPackage, readToolPackage, removeToolPackage, TOOL_MANIFEST } from "@hivemind/core/tool-packages";
+import { installWidget, readWidget, removeWidget } from "@hivemind/core/widgets";
+import { MANIFEST_FILE as VIEW_MANIFEST, validateViewManifest } from "@hivemind/view-sdk/manifest";
+import type { Problem } from "./check/problem.js";
 import { toolStarter, widgetStarter } from "./starters.js";
 import { starterFiles as viewStarter } from "./view-starter.js";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
@@ -28,14 +31,22 @@ export interface AuthoredKind {
   rescan: string[];
   /** On once installed, or off until you switch it on. */
   onByDefault: boolean;
-  /** From a new starter at `dir` to installed. */
-  build(dir: string): string[];
+  /** What a new starter at `dir` needs before it can be checked. */
+  prepare(dir: string): string[];
+  /** From checked to installed. */
+  add(dir: string): string[];
   /** From on to seeing it in the app. */
   see(id: string): string[];
   guide: string;
   /** What its code is given, as the declarations of the types its starter ships. */
   api(): string;
+  /** Why the manifest in `dir` is not one this kind loads; empty when it is. */
+  validate(dir: string): Promise<string[]>;
+  /** Its code loaded and drawn once, as the app would: what went wrong. */
+  draw(dir: string): Promise<Problem[]>;
 }
+
+const why = (e: unknown) => [e instanceof Error ? e.message : String(e)];
 
 /** The named declarations, each from its `<package>/<file>`, one after another. */
 const declarations = (wanted: Array<[string, string[]]>): string => {
@@ -54,10 +65,13 @@ export const KINDS: readonly AuthoredKind[] = [
     remove: removeToolPackage,
     rescan: ["settings.reload", "tools.rescan"],
     onByDefault: false,
-    build: (dir) => [`hive plugins install ${dir}`],
+    prepare: () => [],
+    add: (dir) => [`hive plugins install ${dir}`],
     see: (id) => [`hive ctl plugin open tool:${id}`, "hive ctl tile look <tile>    # what it drew, and what its code logged"],
     guide: `${GUIDE}/tool-plugins/`,
     api: () => declarations([["tile-sdk/index.ts", ["TileProps", "TileInfo", "TileHost", "RunResult", "HostSdk", "ToolModule"]], ["view-sdk/client.ts", ["ViewClient"]]]),
+    validate: (dir) => readToolPackage(dir, null).then((p) => (p.problem ? [p.problem] : []), why),
+    draw: async (dir) => (await import("./check/tool-draw.js")).drawTool(await readToolPackage(dir, null)),
   },
   {
     kind: "widget", noun: "widget", manifest: "widget.json",
@@ -67,10 +81,13 @@ export const KINDS: readonly AuthoredKind[] = [
     remove: removeWidget,
     rescan: ["widgets.rescan"],
     onByDefault: true,
-    build: (dir) => [`hive plugins install ${dir}`],
+    prepare: () => [],
+    add: (dir) => [`hive plugins install ${dir}`],
     see: (id) => [`hive ctl plugin open widget:${id}`],
     guide: `${GUIDE}/widgets/`,
     api: () => WIDGET_TYPES,
+    validate: (dir) => readWidget(dir).then(() => [], why),
+    draw: async (dir) => (await import("./check/widget-draw.js")).drawWidget(await readWidget(dir), dir),
   },
   {
     kind: "view", noun: "view", manifest: VIEW_MANIFEST,
@@ -80,10 +97,18 @@ export const KINDS: readonly AuthoredKind[] = [
     remove: removeView,
     rescan: ["views.rescan"],
     onByDefault: true,
-    build: (dir) => [`cd ${dir} && npm install && npm run dev    # builds dist/ and installs it`],
+    prepare: (dir) => [`cd ${dir} && npm install`],
+    add: (dir) => [`cd ${dir} && npm run dev    # builds dist/ and installs it`],
     see: (id) => [`hive ctl plugin open view:${id}`],
     guide: `${GUIDE}/extension-authoring/`,
     api: () => declarations([["view-sdk/client.ts", ["ConnectOptions", "ViewClient"]]]),
+    validate: async (dir) => {
+      try {
+        const m = validateViewManifest(JSON.parse(await readFile(path.join(dir, VIEW_MANIFEST), "utf8")));
+        return m.ok ? [] : m.errors;
+      } catch (e) { return why(e); }
+    },
+    draw: async (dir) => (await import("./check/view-draw.js")).drawView(dir),
   },
 ];
 

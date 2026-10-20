@@ -31,7 +31,8 @@ import { cpSync, rmSync } from "node:fs";
 rmSync("dist", { recursive: true, force: true });
 await build({
   entryPoints: ["src/main.ts"], outfile: "dist/main.js",
-  bundle: true, format: "esm", target: "es2022", minify: true,
+  // The map lets \`hive plugins check\` say which line of src/ threw.
+  bundle: true, format: "esm", target: "es2022", minify: true, sourcemap: true,
   // Served by the app; bundling a copy would pin an old one.
   external: ["@hivemind/view-sdk"],
 });

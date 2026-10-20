@@ -11,7 +11,7 @@ Build a Hivemind tool plugin, a new kind of tile drawn by React code inside the 
 1. Ask me what the tile should show and do, and its name (lowercase letters, digits and dashes).
 2. Start it: \`hive plugins new tool <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`hivemind-tool.json\`, \`index.js\`, \`README.md\` and \`PROMPT.md\`.
 3. Read \`PROMPT.md\` in full: it is the whole contract (manifest, what a tile gets, the \`hm-plugin://host/\` modules, commands). Write what I asked for under its "What I want". Build only from it; never use \`window.hive\`.
-4. Install it, again after each change: \`hive plugins install <folder>\`. A tool runs with my access, so new or changed code arrives switched off; the same code stays as it was. Ask me before you switch it on with \`hive plugins enable tool:@owner/name\`.
+4. Check it, then install it, again after each change: \`hive plugins check <folder>\` must say ok (it names the file and line of each problem), then \`hive plugins install <folder>\`. A tool runs with my access, so new or changed code arrives switched off; the same code stays as it was. Ask me before you switch it on with \`hive plugins enable tool:@owner/name\`.
 5. Open it: \`hive ctl open-tool @owner/name\`. Look at it with \`hive ctl tile look <tile>\`: check the picture shows what I asked for and its console has no error.
 6. Give it one command in the manifest's "commands", answered with \`hm.onCommand\`, that reports what the tile shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, the manifest has a one-line description, a "category" and only the permissions it uses, and \`README.md\` says what it does and what it runs.
@@ -325,7 +325,8 @@ computer of the person looking at it.
 ### Commands
 
 ```bash
-hive plugins new tool <name> [--dir folder]   # a starter, with PROMPT.md and its types (tsc -p jsconfig.json)
+hive plugins new tool <name> [--dir folder]   # a starter, with PROMPT.md and its types
+hive plugins check <folder>                    # its types, its manifest, and each tile drawn once, with file:line
 hive plugins api --kind tool                   # tile, host and hm, as declared
 hive plugins install <folder>|@owner/name       # new or changed code off: hive plugins enable @owner/name
 hive plugins list --kind tool                  # each tool, and the full id of each of its tiles

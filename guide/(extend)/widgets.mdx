@@ -11,7 +11,7 @@ Build a Hivemind widget (a small live card on the canvas, drawn by its own code 
 1. Ask me what the widget should show and do, and its name (lowercase letters, digits and dashes).
 2. Start it: \`hive plugins new widget <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Check the folder has \`widget.json\`, \`widget.js\`, \`hive.d.ts\`, \`README.md\` and \`PROMPT.md\`.
 3. Read \`PROMPT.md\` in full: it is the whole contract. Write what I asked for under its "What I want". The widget has no network and no files. What it draws and its state are each up to 16 KB.
-4. Install it, again after each change: \`hive plugins install <folder>\`. Check it prints "app updated".
+4. Check it, then install it, again after each change: \`hive plugins check <folder>\` must say ok (it names the file and line of each problem), then \`hive plugins install <folder>\`. Check it prints "app updated".
 5. Put one on the canvas: \`hive ctl plugin open widget:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable widget:@owner/name\`.
 6. Declare one command in \`widget.json\` under "commands", answered with \`hive.hm.onCommand\`, that reports what the widget shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
 7. Done means: \`hive plugins list\` shows it on with no problem, it reads well in the light and the dark theme, and \`README.md\` says what it does.
@@ -230,6 +230,7 @@ Nobody else's computer runs your code. On your phone, a view that shows widgets 
 
 ```bash
 hive plugins new widget <name> [--dir folder]   # a starter, with PROMPT.md
+hive plugins check <folder>                     # its types, its widget.json, and its first drawing, with file:line
 hive plugins install <folder>|@owner/name
 hive plugins list --kind widget                 # the app's own widgets and the ones you added
 hive plugins remove <id>                        # what each placed one holds stays on its canvas

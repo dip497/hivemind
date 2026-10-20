@@ -17,15 +17,15 @@ const WHAT: Record<PluginKind, string> = {
 /** How its code is checked, installed and shown again after each change. */
 function loop(kind: PluginKind, id: string): string {
   const record = `${kind}:${id}`;
+  const check = "hive plugins check .               # its types, its manifest, and its code drawn once; file:line for each problem";
   if (kind === "view") {
     return `npm install                       # once
-npm run typecheck                 # its code against the SDK it is given
+${check}
 npm run dev                       # build, and install into the app (again after each change)
 hive plugins enable ${record}     # once
 hive ctl plugin open ${record}    # switch the app to it`;
   }
-  const tsc = "npx -p typescript tsc -p jsconfig.json";
-  return `${tsc}   # its code against what it is given (types in ${kind === "widget" ? "hive.d.ts" : "types/"})
+  return `${check}
 hive plugins install .            # again after each change
 hive plugins enable ${record}     # once
 hive ctl plugin open ${record}    # ${kind === "widget" ? "put one on the board" : "open its tile"}${kind === "tool" ? `
@@ -93,7 +93,7 @@ Give it at least one command that reports what it shows, so you can see that it 
 
 ## Done means
 
-1. Its code checks against what it is given, with no error (the first line of the loop).
+1. \`hive plugins check .\` says ok: its types, its manifest, and its code drawn once.
 2. It installs and switches on cleanly: \`hive plugins list\` shows it on, with no problem.
 3. \`hive ctl plugin open\` shows it, in the light and the dark theme: colours come from the theme.${kind === "tool" ? "\n   \`hive ctl tile look\` shows it drew what was asked, and its console has no error." : ""}
 4. Its commands answer as described, and what it shows follows them.

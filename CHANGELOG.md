@@ -110,6 +110,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A new tool starter carries its types: the tile SDK, the `hm` client and the app's host modules, with a `jsconfig.json` that checks `index.js` (`tsc -p jsconfig.json`). `hive plugins api --kind tool|widget|view` prints what a plugin's code is given, as declared in this version.
 - A widget whose code draws a node the app has no drawing for (`{ type: "chart" }`), or throws, is failed in `hive ctl plugin list` with why (`children[1] is a "chart", which the app does not draw; it draws: …`), instead of an empty card that says ready.
 - A new plugin's PROMPT.md is plain Markdown for the agent (the guide without its page components, pictures or the prompt meant for pasting, links made whole), and its loop checks the code against its types first; for a tool it ends with `hive ctl tile look`.
+- `hive plugins check <folder> [--json]` checks a tool, widget or view in three steps, naming the file and line of each problem: its types (its own `tsconfig.json` or `jsconfig.json`), its manifest, and its code loaded and drawn once against a fake app (each tile of a tool, a widget's first drawing, a view built and its page loaded). `hive plugins new` prints it as the step before installing, and PROMPT.md's loop starts with it. A new view builds with a source map, so a problem points into `src/`.
 
 ## [2026.10.3] — 2026-10-18
 

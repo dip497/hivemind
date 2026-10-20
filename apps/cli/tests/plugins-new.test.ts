@@ -12,9 +12,9 @@ const tsc = path.join(import.meta.dir, "../../../node_modules/.bin/tsc");
 const typeErrors = (config: string): string => { try { execFileSync(tsc, ["-p", config], { encoding: "utf8" }); return ""; } catch (e) { return String((e as { stdout?: string }).stdout); } };
 
 const KINDS = [
-  { kind: "tool", id: "@ada/tally", manifest: "hivemind-tool.json", next: ["hive plugins install ./work/tally", "hive plugins enable tool:@ada/tally", "hive ctl plugin open tool:@ada/tally", "hive ctl tile look <tile>    # what it drew, and what its code logged"], guide: "https://hivemind.griiken.com/guide/tool-plugins/" },
-  { kind: "widget", id: "@ada/tally", manifest: "widget.json", next: ["hive plugins install ./work/tally", "hive ctl plugin open widget:@ada/tally"], guide: "https://hivemind.griiken.com/guide/widgets/" },
-  { kind: "view", id: "@ada/tally", manifest: "hivemind-view.json", next: ["cd ./work/tally && npm install && npm run dev    # builds dist/ and installs it", "hive ctl plugin open view:@ada/tally"], guide: "https://hivemind.griiken.com/guide/extension-authoring/" },
+  { kind: "tool", id: "@ada/tally", manifest: "hivemind-tool.json", next: ["hive plugins check ./work/tally", "hive plugins install ./work/tally", "hive plugins enable tool:@ada/tally", "hive ctl plugin open tool:@ada/tally", "hive ctl tile look <tile>    # what it drew, and what its code logged"], guide: "https://hivemind.griiken.com/guide/tool-plugins/" },
+  { kind: "widget", id: "@ada/tally", manifest: "widget.json", next: ["hive plugins check ./work/tally", "hive plugins install ./work/tally", "hive ctl plugin open widget:@ada/tally"], guide: "https://hivemind.griiken.com/guide/widgets/" },
+  { kind: "view", id: "@ada/tally", manifest: "hivemind-view.json", next: ["cd ./work/tally && npm install", "hive plugins check ./work/tally", "cd ./work/tally && npm run dev    # builds dist/ and installs it", "hive ctl plugin open view:@ada/tally"], guide: "https://hivemind.griiken.com/guide/extension-authoring/" },
 ] as const;
 
 describe("hive plugins new", () => {
@@ -65,7 +65,7 @@ describe("hive plugins new", () => {
       hive(["plugins", "new", "tool", "tally", "--owner", "ada"], { cwd: tmp });
       const prompt = fs.readFileSync(path.join(tmp, "tally", "PROMPT.md"), "utf8");
       expect(prompt).toContain([
-        "npx -p typescript tsc -p jsconfig.json   # its code against what it is given (types in types/)",
+        "hive plugins check .               # its types, its manifest, and its code drawn once; file:line for each problem",
         "hive plugins install .            # again after each change",
         "hive plugins enable tool:@ada/tally     # once",
         "hive ctl plugin open tool:@ada/tally    # open its tile",
