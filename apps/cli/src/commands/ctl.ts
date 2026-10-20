@@ -31,6 +31,7 @@ import {
 import { EXIT, HcpCliError, exitCodeFor, hcpCall, ownTile, sockPath } from "../hcp.js";
 import { driveSocketPath } from "hivemind-api";
 import { appData } from "@hivemind/core/app-data";
+import { readTrackedSession, TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import { stripAnsi } from "@hivemind/host/control/output-recorder";
 import { openDrive, type Drive } from "../drive.js";
 import { notServed, registered, workspaceNamed, type HostWorkspace } from "../workspace-named.js";
@@ -142,10 +143,13 @@ interface WhoAmI {
 /** The app data folder a socket is in; null for a named pipe, which names none. */
 const folderOfSocket = (sock: string): string | null => (sock.startsWith("\\\\.\\pipe\\") ? null : path.dirname(sock));
 
+/** The data folder of the app `hive ctl` reaches: where its drive socket is, else the default. */
+const appDataReached = (): string => folderOfSocket(driveSocketPath()) ?? appData();
+
 async function whoAmI(): Promise<WhoAmI> {
   const driveSocket = driveSocketPath();
   const hcpSocket = sockPath();
-  const folder = folderOfSocket(driveSocket) ?? appData();
+  const folder = appDataReached();
   const tile = ownTile()?.replace(/^hm:/, "") ?? null;
   const here = { instance: path.basename(folder), appData: folder, driveSocket, hcpSocket };
   let d: Drive;
@@ -191,7 +195,7 @@ const whoami = defineCommand({
   },
 });
 
-type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string } };
+type FeedAgent = { tile: string; agent: string; state: string; waiting?: { kind: string }; session?: string };
 type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };
 
 /** One agent as a line: its tile, name, state, and what it waits on. */
@@ -203,11 +207,13 @@ const agents = defineCommand({
   args: {
     ...repoArg,
     watch: { type: "boolean", description: "keep going: print each turn ended, wait and answer as it happens (one JSON per line with --json)" },
+    session: { type: "string", description: "only the agent in this session (its id, as `hive ctl sessions` or its hooks give it); exit 5 when none is" },
     ...JSON_ARG,
   },
   async run({ args }) {
     const json = !!args.json;
     try {
+      if (args.session && args.watch) throw new UsageError("--session lists once: it does not go with --watch");
       const d = await openDrive();
       const repo = await workspaceOf(d, args.repo);
       // Heard from before the list, so nothing that happens meanwhile is missed.
@@ -215,6 +221,14 @@ const agents = defineCommand({
       let show = (e: FeedEvent) => { heard.push(e); };
       d.on("agent.event", (at, e) => { if (at === repo) show(e as FeedEvent); });
       let listed = await d.call("agent.list", [repo]) as { seq: number; agents: FeedAgent[] };
+      if (args.session) {
+        const id = String(args.session);
+        // What its hooks last said, or the session the app tracks for its tile to resume.
+        const tracked = path.join(appDataReached(), TILE_SESSIONS_DIR);
+        const inIt = listed.agents.filter((a) => a.session === id || readTrackedSession(tracked, `hm:${a.tile}`) === id);
+        if (!inIt.length) { d.close(); throw new HcpCliError("NOT_FOUND", `no agent of the workspace at ${repo} is in session ${id}`, EXIT.notFound); }
+        listed = { ...listed, agents: inIt };
+      }
       if (!args.watch) {
         d.close();
         if (json) return console.log(JSON.stringify(listed));
