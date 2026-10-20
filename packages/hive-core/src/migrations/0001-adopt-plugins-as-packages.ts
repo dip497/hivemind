@@ -96,6 +96,7 @@ export const m0001: Migration = {
   id: "0001-adopt-plugins-as-packages",
   root: "config",
   backsUp: ["views", "widgets", "tools", "settings.json"],
+  movesFilesAnOlderAppReads: true,
   async run(ctx) {
     if (path.resolve(path.dirname(packagesDir())) !== path.resolve(ctx.root)) throw new Error(`the packages of ${ctx.root} are not kept in it`);
     const renamed = await toolStatesRenamed(settingsPath());

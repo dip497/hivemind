@@ -5,6 +5,10 @@
  */
 import { MigrationsLockedError, runMigrations } from "@hivemind/core/migrations";
 import { LedgerUnreadableError } from "@hivemind/core/migrations/ledger";
+import { readRunningApp } from "@hivemind/core/migrations/manage";
+import { appData } from "@hivemind/core/app-data";
+import { appMeetsMinVersion } from "@hivemind/agents";
+import { appRunning } from "./host-control.js";
 
 const TOUCHES_NOTHING = new Set(["--version", "-v", "--help", "-h", "migrations"]);
 
@@ -13,7 +17,7 @@ export async function migrateOnStart(argv: readonly string[], app: string): Prom
   const by = argv[0] === "host" && argv[1] === "run" ? "host" : "cli";
   const say = (line: string) => process.stderr.write(`hive: ${line}\n`);
   try {
-    for (const r of await runMigrations({ by, app, say })) {
+    for (const r of await runMigrations({ by, app, say, olderAppRunning: () => olderAppRunning(app) })) {
       for (const a of r.applied) say(`updated your data: ${a.id}${summary(a.result)}`);
     }
   } catch (e) {
@@ -23,6 +27,15 @@ export async function migrateOnStart(argv: readonly string[], app: string): Prom
     }
     throw e;
   }
+}
+
+/** An app runs on this machine's data, and it is not one that said it is this version or newer:
+ *  one from before it said so is older. */
+async function olderAppRunning(version: string): Promise<boolean> {
+  const pid = appRunning(appData());
+  if (!pid) return false;
+  const said = await readRunningApp(appData());
+  return !(said && said.pid === pid && appMeetsMinVersion(said.version, version));
 }
 
 /** `adopted 16, could not keep 1 (widgets/agents: no widget.json)` from what a migration did. */

@@ -18,6 +18,9 @@ export interface AppliedMigration {
   ms: number;
   /** Where its backup is, inside `<root>/migrations/`; none when it backed nothing up. */
   backup?: string;
+  /** The paths under the root its backup holds as they were; one that was not there is absent
+   *  from the backup and is removed again on a restore. */
+  backedUp?: string[];
   result?: unknown;
 }
 

@@ -5,6 +5,7 @@
  */
 import { app } from "electron";
 import { runMigrations } from "@hivemind/core/migrations";
+import { recordRunningApp } from "@hivemind/core/migrations/manage";
 
 const notices: string[] = [];
 
@@ -17,6 +18,7 @@ export async function migrateOnStart(): Promise<void> {
   } catch (e) {
     say(e instanceof Error ? e.message : String(e));
   }
+  await recordRunningApp(app.getPath("userData"), app.getVersion()).catch((e: unknown) => console.warn("[migrations] could not record this app's version:", e));
 }
 
 /** The lines for the person, once: the first window to load takes them. */
