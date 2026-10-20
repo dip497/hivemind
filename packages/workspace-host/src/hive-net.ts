@@ -329,11 +329,23 @@ export class HiveNet {
       child.once("error", reject);
       child.once("exit", (code) => reject(new Error(`hive-net exited (${code}): ${stderr.trim()}`)));
     });
-    const socket = await Promise.race([new Promise<net.Socket>((resolve) => server.once("connection", resolve)), exited]);
-    const frames = readFrames(socket);
-    const first = await Promise.race([frames.next(), exited]);
     exited.catch(() => {});
-    if (first.done || (first.value as Message).t !== "ready") throw new Error("hive-net did not say it was ready");
+    let socket: net.Socket | undefined;
+    let frames: AsyncGenerator<Message>;
+    let first: IteratorResult<Message>;
+    // A daemon that ends before it is ready leaves nothing listening, and says why it ended.
+    try {
+      socket = await Promise.race([new Promise<net.Socket>((resolve) => server.once("connection", resolve)), exited]);
+      frames = readFrames(socket);
+      first = await Promise.race([frames.next(), exited]);
+      if (first.done) await Promise.race([exited, new Promise((r) => setTimeout(r, 2000))]);
+      if (first.done || first.value.t !== "ready") throw new Error("hive-net did not say it was ready");
+    } catch (e) {
+      child.kill();
+      socket?.destroy();
+      server.close();
+      throw e;
+    }
     const r = first.value as unknown as Ready & { v?: unknown };
     // One of another release speaks another protocol: said so, and stopped, rather than half heard.
     if (r.v !== PROTOCOL) {

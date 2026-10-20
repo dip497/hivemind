@@ -9,6 +9,7 @@
 // so, though one big frame alone does not.
 import { test, expect, afterEach } from "bun:test";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { HiveNet, LINK_ROOM, MAX_FRAME, PROTOCOL, WAITING_AT_MOST, type Link } from "../src/hive-net.ts";
@@ -341,6 +342,35 @@ test.each([
     fs.mkdirSync(path.join(root, "identity"));
     const started = HiveNet.start({ bin, identity: path.join(root, "identity"), socket: path.join(root, "net.sock"), onIncoming: () => {}, onPairRequest: async () => ({}) });
     await expect(started).rejects.toThrow(`hive-net speaks the daemon's protocol ${speaks}, and this app ${PROTOCOL}`);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("a daemon that ends before it is ready is refused with what it said, and leaves nothing listening", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hn-ended-"));
+  try {
+    // It connects where it is told to, says why it cannot go on, and ends, as one that cannot open
+    // its network does.
+    fs.writeFileSync(path.join(root, "ending-daemon.mjs"), [
+      "import net from 'node:net';",
+      "const s = net.connect(process.argv[process.argv.indexOf('--socket') + 1], () => {",
+      "  process.stderr.write('hive-net: no network to look on\\n');",
+      "  s.end(() => process.exit(1));",
+      "});",
+    ].join("\n"));
+    const bin = path.join(root, "hive-net");
+    fs.writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${path.join(root, "ending-daemon.mjs")}" "$@"\n`, { mode: 0o755 });
+    fs.mkdirSync(path.join(root, "identity"));
+    const socket = path.join(root, "net.sock");
+    const started = HiveNet.start({ bin, identity: path.join(root, "identity"), socket, onIncoming: () => {}, onPairRequest: async () => ({}) });
+    await expect(started).rejects.toThrow("hive-net: no network to look on");
+    const reached = await new Promise<boolean>((resolve) => {
+      const c = new net.Socket();
+      c.once("error", () => resolve(false));
+      c.connect(socket, () => { c.destroy(); resolve(true); });
+    });
+    expect(reached).toBe(false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

@@ -197,12 +197,15 @@ test("the subscriptions are read once; a file that cannot be read for now is rea
   const file = path.join(tmp, `push-${made++}.json`);
   const a = phone("https://push.example/a");
   new PushSubscriptions(file).set("a".repeat(64), a.sub);
-  fs.chmodSync(file, 0o000);
+  // A folder where the file is cannot be read, not even as root.
+  fs.renameSync(file, `${file}.kept`);
+  fs.mkdirSync(file);
   const subscriptions = new PushSubscriptions(file);
   try {
     assert.deepEqual(subscriptions.list(), []);
   } finally {
-    fs.chmodSync(file, 0o600);
+    fs.rmdirSync(file);
+    fs.renameSync(`${file}.kept`, file);
   }
   assert.deepEqual(subscriptions.list(), [{ device: "a".repeat(64), ...a.sub }]);
 });
