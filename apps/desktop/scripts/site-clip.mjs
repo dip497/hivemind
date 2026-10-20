@@ -181,7 +181,7 @@ fs.writeFileSync(path.join(HOME, ".print-as-agent.mjs"), `(${printAsAgent})();\n
 const asAgent = `"${process.execPath}" ~/.print-as-agent.mjs`;
 const say = (t) => `echo; ${asAgent} bullet 37 "${t}"`;
 /** One real command as the agent runs it, with the first lines of what it printed. */
-const run = (c, lines = 2) => `echo; ${asAgent} bullet 32 "Bash(${c.replace(/"/g, '\\"')})"; (${c}) 2>&1 | tee -a "$CLIP_CUE/printed" | ${asAgent} shown ${lines}`;
+const run = (c, lines = 2) => `echo; ${asAgent} bullet 32 "Bash(${c.replace(/[\\"]/g, "\\$&")})"; (${c}) 2>&1 | tee -a "$CLIP_CUE/printed" | ${asAgent} shown ${lines}`;
 const spin = (task, ms) => `spin "${task}" ${ms}`;
 const STEP = [
   // Printed once the window and the terminal have their filmed size, so it wraps to that size.
