@@ -27,8 +27,9 @@ const START_TIMEOUT_MS = 30_000;
 /** How long a sleeping session's saved screen is waited for. */
 const SAVED_TIMEOUT_MS = 10_000;
 
-/** What an attach came to: `pid` -1 when nothing runs, `asleep` when that is because it sleeps. */
-export interface Attached { pid: number; asleep?: true }
+/** What an attach came to: `pid` -1 when nothing runs, `asleep` when that is because it sleeps,
+ *  `error` why it did not open when something went wrong. */
+export interface Attached { pid: number; asleep?: true; error?: string }
 export interface Callbacks {
   /** `replay`: a redraw of output already seen, not new output. */
   onData: (data: string, replay?: boolean) => void;
@@ -100,6 +101,11 @@ export class DaemonEndpoint {
   private handle(msg: ServerMsg): void {
     switch (msg.t) {
       case "attached": {
+        // The answer to an attach this side gave up on: its tile was told it failed, so nothing may stream into it.
+        if (msg.reqId.startsWith("a") && !this.pending.has(msg.reqId)) {
+          if (msg.pid > 0 && !this.cbs.has(msg.id)) this.fire({ t: "detach", id: msg.id });
+          break;
+        }
         if (msg.asleep) {
           const cb = this.cbs.get(msg.id);
           this.forget(msg.id);
@@ -304,12 +310,7 @@ export class DaemonEndpoint {
     this.specs.set(opts.tileId, spec);
     if (opts.noSpawn) this.live.add(opts.tileId);
     const reqId = `a${++this.seq}`;
-    const result = new Promise<Attached & { error?: string; gone?: true }>((resolve) => {
-      this.pending.set(reqId, resolve);
-      // Only showing a session is quick; a start or a wake begins a process, given as long as a sleep.
-      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, Math.max(this.o.attachTimeoutMs ?? 6000, opts.noSpawn ? 0 : START_TIMEOUT_MS));
-      t.unref?.();
-    });
+    const result = new Promise<Attached & { error?: string; gone?: true }>((resolve) => { this.pending.set(reqId, resolve); });
     try {
       const agent = opts.noSpawn ? undefined : agentPackageFor(spec.cmd);
     await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(agent ? { agent } : {}), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}), ...(opts.wake ? { wake: true } : {}) });
@@ -320,13 +321,26 @@ export class DaemonEndpoint {
       if (!this.o.isFatal?.(msg)) this.scheduleReattach();
       if (this.pending.delete(reqId)) return { pid: -1 };
     }
-    const r = await result;
+    // Timed from when the daemon has the request: connecting may wait on a daemon being replaced.
+    // With many sessions coming back at once, even showing one waits its turn for its screen.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const r = await Promise.race([result, new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), this.o.attachTimeoutMs ?? START_TIMEOUT_MS);
+      timer.unref?.();
+    })]);
+    clearTimeout(timer);
+    if (!r) {
+      // Given up: let go of it, so a late answer does not stream into a tile that says it failed.
+      this.pending.delete(reqId);
+      this.detach(opts.tileId);
+      return { pid: -1, error: "its daemon did not answer in time" };
+    }
     // Refused (nothing asleep there, or what it saved cannot be read): nothing to bring back later.
     if (opts.wake && r.error) {
       this.forget(opts.tileId);
       throw r.gone ? new NothingAsleep(r.error) : new Error(r.error);
     }
-    return r.asleep ? { pid: r.pid, asleep: true } : { pid: r.pid };
+    return { pid: r.pid, ...(r.asleep ? { asleep: true as const } : {}), ...(r.error && !r.asleep && !r.gone ? { error: r.error } : {}) };
   }
 
   has(tileId: string): boolean { return this.specs.has(tileId); }
