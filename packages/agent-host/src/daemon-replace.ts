@@ -1,7 +1,8 @@
 /**
- * Moving a machine's sessions to a new daemon when the one running speaks another protocol: every
- * agent finishes the turn it is in, is put to sleep (its conversation and screen kept), the old
- * daemon stops, and each is woken in the new one. A daemon of the same protocol is never replaced.
+ * Stopping a machine's daemon, and moving its sessions to a new daemon when the one running speaks
+ * another protocol: every agent finishes the turn it is in, is put to sleep (its conversation and
+ * screen kept), the old daemon stops, and each is woken in the new one. A daemon of the same
+ * protocol is never replaced.
  */
 import net from "node:net";
 import type { Duplex } from "node:stream";
@@ -70,6 +71,41 @@ export async function daemonProtocol(connect: () => Promise<Duplex>, timeoutMs =
   }
 }
 
+/** The sessions of the daemon `connect` reaches; none when no daemon answers, and none is started. */
+export async function daemonSessions(connect: () => Promise<Duplex>, timeoutMs = 2000): Promise<SessionInfo[]> {
+  let s: Duplex;
+  try { s = await connect(); } catch { return []; }
+  const l = line(s);
+  try {
+    return await l.ask({ t: "list", reqId: "sessions", detail: true }, (m) => (m.t === "sessions" ? m.detail ?? [] : undefined), timeoutMs);
+  } catch {
+    return [];
+  } finally {
+    l.end();
+  }
+}
+
+/** Ask the daemon on `l` to stop, and wait until it has: it saves every session's screen first. */
+async function shutDown(l: Line, ms: number): Promise<boolean> {
+  l.send({ t: "shutdown" });
+  return Promise.race([l.closed.then(() => true), new Promise<false>((r) => setTimeout(() => r(false), ms).unref?.())]);
+}
+
+/** Stop the daemon `connect` reaches, as `hive daemon stop` does: its sessions end, their screens
+ *  saved, and the next daemon brings them back. False when no daemon answers; throws when it is
+ *  still running after `ms`. */
+export async function stopDaemon(connect: () => Promise<Duplex>, ms = 10_000): Promise<boolean> {
+  let s: Duplex;
+  try { s = await connect(); } catch { return false; }
+  const l = line(s);
+  try {
+    if (!(await shutDown(l, ms))) throw new Error(`the terminal daemon is still running after ${Math.round(ms / 1000)}s`);
+    return true;
+  } finally {
+    l.end();
+  }
+}
+
 /** What a stopped daemon was running: the sessions put to sleep for the next one to wake, and
  *  those it could not put to sleep, which ended with it and come back from their saved screens. */
 export interface Retired {
@@ -109,8 +145,7 @@ export async function retireDaemon(connect: () => Promise<Duplex>, o: { waiting:
       const r = await l.ask({ t: "sleep", reqId: `sleep:${s.id}`, id: s.id }, (m) => (m.t === "slept" && m.id === s.id ? m : undefined)).catch(() => null);
       if (r && !r.error) asleep.push(s); else ended.push(s.id);
     }));
-    l.send({ t: "shutdown" });
-    await Promise.race([l.closed, new Promise((r) => setTimeout(r, ANSWER_MS).unref?.())]);
+    await shutDown(l, ANSWER_MS);
     return { asleep, ended };
   } finally {
     l.end();

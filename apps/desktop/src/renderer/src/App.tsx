@@ -1,5 +1,7 @@
 import * as SettingsDialog from "@radix-ui/react-dialog";
 import { ThemePanel } from "./ThemePanel";
+import { QuitDialog } from "./QuitDialog";
+import { QuitSetting } from "./quit-setting";
 import { RecentProjects } from "./RecentProjects";
 import { WorkspaceActions } from "./multiplayer/workspace-actions";
 import { AppControls } from "./workspace/app-controls";
@@ -399,6 +401,7 @@ export function App() {
         </div>
 
         <FolderPathDialog />
+        <QuitDialog />
         <RecentProjects
           open={!!recentOpen}
           joining={recentOpen === "join"}
@@ -721,6 +724,7 @@ function SettingsModal({
             )}
           </div> : <p className="settings-note" data-update-elsewhere>Updates are made in the app on the computer it runs on.</p>}
           <UpdateCheckSwitch onTurnedOn={() => onCheck({ force: true })} />
+          <QuitSetting />
           <div className="settings-row">
             <span className="text-[var(--color-fg2)]">License</span>
             <span className="font-mono text-[var(--color-fg2)]">MIT</span>
