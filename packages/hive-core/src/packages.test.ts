@@ -7,17 +7,17 @@ import { inspectPackage, parsePackageManifest, PACKAGE_LIMITS } from "./packages
 let dir: string;
 const providers = [{ id: "test-agent", enabled: true, modelFlag: false, supervision: "none" }];
 const manifest = () => ({
-  apiVersion: 1, id: "@example/review-room", name: "Review room", version: "1.0.0",
+  apiVersion: 2, id: "@example/review-room", name: "Review room", version: "1.0.0",
   views: [{ path: "views/room" }],
-  agents: [{ id: "reviewer", name: "Reviewer", provider: "test-agent", prompt: "Review the diff." }],
-  startup: { view: "room", agents: ["reviewer"], maxConcurrent: 1 },
+  agents: [{ id: "@example/reviewer", name: "Reviewer", provider: "test-agent", prompt: "Review the diff." }],
+  startup: { view: "@example/room", agents: ["@example/reviewer"], maxConcurrent: 1 },
 });
 const write = (name: string, value: unknown) => fs.writeFile(path.join(dir, name), JSON.stringify(value));
 beforeEach(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), "hive-package-"));
   await fs.mkdir(path.join(dir, "views/room"), { recursive: true });
   await write("hivemind-package.json", manifest());
-  await write("views/room/hivemind-view.json", { id: "room", name: "Room", version: "1.0.0", entry: "main.js", protocol: 1, permissions: [] });
+  await write("views/room/hivemind-view.json", { id: "@example/room", name: "Room", version: "1.0.0", entry: "main.js", protocol: 1, permissions: [] });
   await fs.writeFile(path.join(dir, "views/room/main.js"), `throw new Error("package code must not execute");`);
 });
 afterEach(async () => { await fs.rm(dir, { recursive: true, force: true }); });
@@ -26,7 +26,7 @@ describe("workspace package inspection", () => {
   test("reviews a view and agent together without executing or installing them", async () => {
     const r = await inspectPackage(dir, providers);
     expect(r.mode).toBe("inspect-only");
-    expect(r.views.map((v) => v.id)).toEqual(["room"]);
+    expect(r.members.map((v) => [v.kind, v.id])).toEqual([["view", "@example/room"], ["agent-preset", "@example/reviewer"]]);
     expect(r.startup?.agents[0]?.prompt).toBe("Review the diff.");
     expect(r.startup?.requiresExplicitStart).toBe(true);
     expect(r.files).toHaveLength(3);
@@ -53,8 +53,8 @@ describe("workspace package inspection", () => {
   test("rejects missing startup references, duplicates, and unbounded bursts", async () => {
     expect(() => parsePackageManifest({ ...manifest(), startup: { agents: ["missing"] } })).toThrow("unknown startup agent");
     expect(() => parsePackageManifest({ ...manifest(), agents: [...manifest().agents, ...manifest().agents] })).toThrow("duplicate");
-    expect(() => parsePackageManifest({ ...manifest(), startup: { agents: ["reviewer", "reviewer"] } })).toThrow("duplicate");
-    expect(() => parsePackageManifest({ ...manifest(), startup: { agents: ["reviewer"], maxConcurrent: 50 } })).toThrow();
+    expect(() => parsePackageManifest({ ...manifest(), startup: { agents: ["@example/reviewer", "@example/reviewer"] } })).toThrow("duplicate");
+    expect(() => parsePackageManifest({ ...manifest(), startup: { agents: ["@example/reviewer"], maxConcurrent: 50 } })).toThrow();
     await write("hivemind-package.json", { ...manifest(), startup: { view: "missing" } });
     await expect(inspectPackage(dir, providers)).rejects.toThrow("unknown startup view");
   });
@@ -93,8 +93,8 @@ describe("workspace package inspection", () => {
     await expect(inspectPackage(dir, providers)).rejects.toThrow("too many entries");
   });
   test("refuses reserved view ids, future protocols, unknown permissions, and missing entries", async () => {
-    const base = { id: "room", name: "Room", version: "1.0.0", entry: "main.js", permissions: [] };
-    for (const [extra, error] of [[{ id: "canvas" }, "reserved"], [{ protocol: 999 }, "protocol"], [{ permissions: ["fs:read"] }, "permission"], [{ entry: "missing.js" }, "missing view entry"]] as const) {
+    const base = { id: "@example/room", name: "Room", version: "1.0.0", entry: "main.js", permissions: [] };
+    for (const [extra, error] of [[{ id: "canvas" }, "comes with the app"], [{ protocol: 999 }, "protocol"], [{ permissions: ["fs:read"] }, "permission"], [{ entry: "missing.js" }, "not found"]] as const) {
       await write("views/room/hivemind-view.json", { ...base, ...extra });
       await expect(inspectPackage(dir, providers)).rejects.toThrow(error);
     }

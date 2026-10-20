@@ -78,6 +78,27 @@ to stays in your settings, so installing it again finds it.
 A package's files are copied in and checked before anything you use changes. If an install
 fails halfway, the version you had stays in use.
 
+A package that holds several is a folder with a `hivemind-package.json`. It names a folder for
+each tool, widget and view, each with its own manifest, and the agent presets it brings:
+
+```json
+{
+  "apiVersion": 2,
+  "id": "@you/kit",
+  "name": "Kit",
+  "version": "1.0.0",
+  "tools": [{ "path": "tools/prs" }],
+  "widgets": [{ "path": "widgets/dog" }],
+  "views": [{ "path": "views/island" }],
+  "agents": [{ "id": "@you/reviewer", "name": "Reviewer", "provider": "claude", "prompt": "Review the diff." }]
+}
+```
+
+Every member's id has the package's owner (`@you/…`). Installing checks each member as its kind
+is checked, and refuses one whose id another installed package holds. A package that holds a tool
+or an agent preset arrives switched off. `hive plugins list` shows which package each plugin
+belongs to.
+
 <Frame caption="Settings → Plugins">
   <img src="/images/app/settings-plugins.dark.webp" alt="Settings → Plugins: the Installed and HiveHub tabs, a search box, and the installed agents, views and widgets, each with its count." />
 </Frame>

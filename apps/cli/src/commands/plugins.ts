@@ -31,6 +31,7 @@ import {
   serviceWorkspaces, toolSettingFields, withPluginState, type PackageOf, type PluginKind, type PluginState, type SettingField,
 } from "@hivemind/core/plugin-settings";
 import { installPackage, removePlugin, switchPlugin, type InstalledPackage } from "@hivemind/core/package-install";
+import { memberKind } from "@hivemind/core/package-kinds";
 import { BUILTIN_WIDGETS } from "@hivemind/core/widget-format";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { listWidgets } from "@hivemind/core/widgets";
@@ -125,7 +126,7 @@ const listCmd = defineCommand({
         settings: resolveSettings(p.fields, pluginOptions(states, p.kind, p.id)), problem: p.problem,
         ...(p.opens ? { opens: p.opens } : {}), ...(p.dir ? { dir: p.dir } : {}), ...(p.package ? { package: p.package } : {}),
       }));
-      return ok(ctx, rows, () => rows.map((r) => [`${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.problem ? `  (${r.problem})` : ""}`,
+      return ok(ctx, rows, () => rows.map((r) => [`${r.enabled ? "on " : "off"}  ${r.key.padEnd(30)} ${r.name}${r.package && r.package.members > 1 ? `  [${r.package.id} ${r.package.version}${r.package.on ? "" : ", off"}]` : ""}${r.problem ? `  (${r.problem})` : ""}`,
         ...(r.opens ?? []).map((t) => `       open-tool ${t}`)].join("\n")).join("\n") || "no plugins");
     } catch (e) { return fail(ctx, e, "list_failed"); }
   },
@@ -325,7 +326,7 @@ const installCmd = defineCommand({
       const report = installReport(installed, rescanned);
       return ok(ctx, report, () => [
         `installed ${installed.record.id} (${installed.record.name}), version ${installed.record.version}${installed.replaced ? `, replacing ${installed.replaced.version}` : ""}; ${appNote(rescanned)}`,
-        ...installed.members.map((m) => `  ${kindNamed(m.kind)?.noun ?? m.kind} ${m.id} → ${m.dir}`),
+        ...installed.members.map((m) => `  ${memberKind(m.kind)?.noun ?? m.kind} ${m.id}${m.permissions.length ? ` (asks for ${m.permissions.join(", ")})` : ""}`),
         installed.record.on ? "It is on." : "It is off until you switch it on, if you trust who wrote it.",
         "Next:", steps(report.next),
       ].join("\n"));

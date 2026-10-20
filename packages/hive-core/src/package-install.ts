@@ -1,6 +1,7 @@
 /**
  * Installing, removing and switching packages: the one way a plugin you add gets onto this
- * machine, and off it. A folder holding one plugin is a package of one.
+ * machine, and off it. A package is a folder with a `hivemind-package.json` naming its members; a
+ * folder holding one plugin is a package of one. Each member belongs to one package only.
  *
  * An install copies the folder into a private staging folder, checks every member there (never
  * the folder it came from, which can change meanwhile), moves the copy into the store, and only
@@ -10,8 +11,8 @@
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
-import { copyPackage } from "./packages.js";
-import { MEMBER_KINDS, memberKind, type CheckedMember } from "./package-kinds.js";
+import { copyPackage, readPackage } from "./packages.js";
+import { memberKind, type CheckedMember } from "./package-kinds.js";
 import {
   changeInstalledPackages, packageFolderName, packageHolding, packagesDir, readInstalledPackages, versionFolder,
   type PackageMember, type PackageRecord, type PackageVersion,
@@ -27,19 +28,6 @@ export interface InstalledPackage {
   members: InstalledMember[];
   /** The version it replaced, if one was installed. */
   replaced: PackageVersion | null;
-}
-
-const VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
-
-/** What a checked copy holds: a package of one plugin, found by its kind's manifest. */
-async function readPackageFolder(dir: string, given: { id?: string; folder: string }) {
-  const k = MEMBER_KINDS.find((x) => existsSync(path.join(dir, x.manifest)));
-  if (!k) throw new Error(`it holds no ${MEMBER_KINDS.map((x) => x.manifest).join(", ")}`);
-  const m = await k.check(dir, given);
-  return {
-    id: m.id, name: m.name, version: m.version && VERSION.test(m.version) ? m.version : "0.0.0",
-    members: [{ ...m, kind: k.kind, path: "." }],
-  };
 }
 
 const versionOf = (r: PackageVersion): PackageVersion => ({ version: r.version, digest: r.digest, name: r.name, members: r.members });
@@ -68,11 +56,15 @@ export async function installPackage(src: string, given: { id?: string } = {}): 
   try {
     const files = path.join(staging, "files");
     const { digest } = await copyPackage(from, files);
-    const read = await readPackageFolder(files, { ...given, folder: path.basename(from) });
+    const read = await readPackage(files, { ...given, folder: path.basename(from) });
     const next: PackageVersion = { version: read.version, digest, name: read.name, members: read.members.map(({ kind, id, path: p }) => ({ kind, id, path: p })) };
     const dest = versionFolder(read.id, next);
     const installed = await changeInstalledPackages(async (records) => {
       const old = records.find((r) => r.id === read.id);
+      for (const m of read.members) {
+        const owner = packageHolding(records, m.kind, m.id);
+        if (owner && owner.id !== read.id) throw new Error(`${memberKind(m.kind)?.noun ?? m.kind} ${m.id} belongs to the package ${owner.id}: remove ${owner.id} first, or install ${owner.id} again to update it`);
+      }
       if (!existsSync(dest)) {
         await mkdir(path.dirname(dest), { recursive: true });
         await rename(files, dest);

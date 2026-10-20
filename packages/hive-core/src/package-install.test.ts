@@ -89,3 +89,50 @@ test("switching a package of one switches the package, and an old switch of the 
   // What the person set it to stays.
   expect(states["widget:counter"]).toEqual({ options: { start: 3 } });
 });
+
+/** A package holding one of each kind, written as `hivemind-package.json` names them. */
+function bundle(name = "kit", owner = "acme", overrides: Record<string, unknown> = {}): string {
+  const root = folder(name, {});
+  const put = (rel: string, files: Record<string, string>) => {
+    fs.mkdirSync(path.join(root, rel), { recursive: true });
+    for (const [f, text] of Object.entries(files)) fs.writeFileSync(path.join(root, rel, f), text);
+  };
+  put("tools/prs", {
+    "hivemind-tool.json": JSON.stringify({ id: `@${owner}/prs`, name: "PRs", version: "1.0.0", apiVersion: 1, entry: "index.js", tools: [{ key: "prs", label: "PRs", tileKind: `${owner}-prs` }] }),
+    "index.js": "export default { tiles: {} };",
+  });
+  put("widgets/dog", { "widget.json": JSON.stringify({ id: `@${owner}/dog`, name: "Dog", draw: { type: "text", text: "woof" } }) });
+  put("views/island", { "hivemind-view.json": JSON.stringify({ id: `@${owner}/island`, name: "Island", version: "1.0.0", entry: "index.html", permissions: ["workspace:issues"] }), "index.html": "<!doctype html>" });
+  fs.writeFileSync(path.join(root, "hivemind-package.json"), JSON.stringify({
+    apiVersion: 2, id: `@${owner}/${name}`, name: "Kit", version: "1.0.0",
+    tools: [{ path: "tools/prs" }], widgets: [{ path: "widgets/dog" }], views: [{ path: "views/island" }],
+    agents: [{ id: `@${owner}/reviewer`, name: "Reviewer", provider: "claude", prompt: "Review the diff." }],
+    ...overrides,
+  }));
+  return root;
+}
+
+test("a package with one of each kind installs as one, each member where the app reads its kind", async () => {
+  const { record } = await installPackage(bundle());
+  expect(record.members.map((m) => `${m.kind}:${m.id}`).sort()).toEqual(["agent-preset:@acme/reviewer", "tool:@acme/prs", "view:@acme/island", "widget:@acme/dog"]);
+  // It holds code that runs in the app and an agent's instructions: off until the person switches it on.
+  expect(record.on).toBe(false);
+  expect((await listToolPackages()).map((t) => [t.id, t.problem, t.package?.id])).toEqual([["@acme/prs", null, "@acme/kit"]]);
+  expect((await listWidgets()).find((w) => w.id === "@acme/dog")?.package?.id).toBe("@acme/kit");
+  const { listInstalledViews } = await import("./views.js");
+  expect((await listInstalledViews()).map((v) => [v.id, v.error, v.package?.id])).toEqual([["@acme/island", null, "@acme/kit"]]);
+});
+
+test("a member whose id has another owner is refused, and nothing is installed", async () => {
+  const src = bundle();
+  fs.writeFileSync(path.join(src, "widgets/dog/widget.json"), JSON.stringify({ id: "@mallory/dog", name: "Dog", draw: { type: "text", text: "woof" } }));
+  await expect(installPackage(src)).rejects.toThrow("widget @mallory/dog is not @acme's: every member of @acme/kit is @acme/<name>");
+  expect(await readInstalledPackages()).toEqual([]);
+  expect(fs.readdirSync(packagesDir()).filter((f) => f !== "installed.json.lock")).toEqual([]);
+});
+
+test("a member another installed package holds is refused, naming that package", async () => {
+  await installPackage(bundle());
+  await expect(installPackage(bundle("pets"))).rejects.toThrow("tool plugin @acme/prs belongs to the package @acme/kit");
+  expect((await readInstalledPackages()).map((r) => r.id)).toEqual(["@acme/kit"]);
+});
