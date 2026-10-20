@@ -45,7 +45,7 @@ describe("checking a plugin folder", () => {
     const cases: [Record<string, string | Uint8Array>, string | RegExp][] = [
       [{}, "the folder is empty"],
       [{ "notes.txt": "" }, "no hivemind-package.json, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder"],
-      [{ ...widget(), "../x": "" }, "../x is not a plain relative path"],
+      [{ ...widget(), "../x": "" }, "\"../x\" is not a plain relative path"],
       [{ ...widget(), "big.bin": new Uint8Array((2 << 20) + 1) }, "big.bin is larger than 2 MB"],
       [{ ...widget(), ...Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`f${i}.bin`, new Uint8Array(2 << 20)])) }, "a plugin folder may be at most 8 MB"],
       [Object.fromEntries(Array.from({ length: 201 }, (_, i) => [`f${i}.js`, ""])), "a plugin may have at most 200 files"],
@@ -66,6 +66,20 @@ describe("checking a plugin folder", () => {
       if (typeof want === "string") expect(got).toBe(want);
       else expect(got).toMatch(want);
     }
+  });
+});
+
+describe("what a folder holds is never printed as it is", () => {
+  test("a name or description that could rewrite a terminal is refused, and a quoted value is escaped", async () => {
+    expect(await problem(widget({ name: "Pet\u001b[2J" }))).toBe("widget.json: its name has a control character in it");
+    expect(await problem(widget({ description: "\u202eevil" }))).toBe("widget.json: its description has a control character in it");
+    expect(await problem({ "widget.json": JSON.stringify({ id: "\u001b]0;x\u0007", version: "1.0.0" }), "widget.js": "" }))
+      .toBe("widget.json's id is \"\\u001b]0;x\\u0007\" — a published widget says its id, @owner/name, in its widget.json");
+  });
+
+  test("two files that would land on one another are refused", async () => {
+    expect(await problem({ ...widget(), "Widget.js": "x" })).toBe("Widget.js is listed twice");
+    expect(await problem({ ...widget(), "a": "", "a/b.js": "" })).toBe("a/b.js is inside a, which is a file");
   });
 });
 
@@ -94,6 +108,10 @@ describe("checking a package", () => {
       .toBe("pet: a widget needs a widget.js, or a draw in its widget.json");
     expect(await problem({ "hivemind-package.json": manifest(), "pet/notes.txt": "" })).toBe("pet: widgets names a folder holding no widget.json");
     expect(await problem({ "hivemind-package.json": manifest(), ...pet("@bob/pet") })).toBe("widget @bob/pet is not @ada's: every member of @ada/kit is @ada/<name>");
+    // A member's folder inside another's would be listed as one kind and installed as part of the other.
+    const tool = { "pet/inner/hivemind-tool.json": JSON.stringify({ apiVersion: 1, id: "@ada/inner", name: "Inner", version: "1.0.0", entry: "tool.js", tools: [{ key: "i", label: "I", tileKind: "inner" }] }), "pet/inner/tool.js": "" };
+    expect(await problem({ "hivemind-package.json": manifest({ tools: [{ path: "pet/inner" }] }), ...pet(), ...tool })).toBe("pet/inner is inside pet, another member's folder");
+    expect(await problem({ "hivemind-package.json": manifest({ tools: [{ path: "pet" }] }), ...pet() })).toBe("two members share a folder");
   });
 });
 

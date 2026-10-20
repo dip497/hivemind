@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Security: the hub kit refuses a plugin, or skips an index entry, whose name or description holds characters that can rewrite a terminal, whose files would land on one another (named twice in any letter case, or one inside another), or whose package members' folders overlap; a value it quotes from a folder is escaped; and one entry nested too deep to read no longer empties the whole catalog.
 - Settings ▸ Plugins ▸ HiveHub names each plugin it cannot show, one line each with why (a kind this Hivemind does not know, an entry it cannot read), under the ones it lists.
 - The package format (`hivemind-package.json`, its member kinds) and package entries in the index live in the hub kit, so the app and every hub check a package with the same code: `checkPluginFolder` reads each member as its kind is read alone. The kit tarball depends on `zod` from npm.
 - Each release carries the hub kit, `hivemind-hub-<version>.tgz`: the plugin index reader and the plugin checks, with nothing else to install, for a hub to depend on by the release's address.

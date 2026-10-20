@@ -7,11 +7,12 @@
 import { z } from "zod";
 import { isSafeRelativePath, MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/view-sdk/manifest";
 import { TOOL_MANIFEST } from "@hivemind/core/tool-format";
+import { UNSAFE_TEXT_RE } from "./index-format.js";
 
 /** The file holding a package's own manifest. */
 export const PACKAGE_MANIFEST = "hivemind-package.json";
 
-export const label = z.string().min(1).max(120).refine((s) => !/[\x00-\x1f\x7f]/.test(s), "control characters are not allowed");
+export const label = z.string().min(1).max(120).refine((s) => !UNSAFE_TEXT_RE.test(s), "control characters are not allowed");
 const relative = z.string().refine((s) => isSafeRelativePath(s) && !/[\x00-\x1f\x7f]/.test(s), "expected a relative path inside the package");
 /** An agent a preset names: built in, or `@owner/name` from HiveHub. */
 const agentId = z.string().regex(/^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{1,63}$/);
@@ -66,7 +67,7 @@ const schema = z.strictObject({
   replaces: z.array(z.string().regex(MEMBER_ID, "is @owner/name")).max(16).default([]),
   ...Object.fromEntries(MEMBER_FORMATS.map((k) => [k.list, z.array(k.entry).max(k.most).default([])])),
   startup: z.strictObject({
-    view: z.string().optional(),
+    view: z.string().max(200).optional(),
     agents: z.array(z.string()).max(8).default([]),
     maxConcurrent: z.number().int().min(1).max(4).default(1),
   }).optional(),

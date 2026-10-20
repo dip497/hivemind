@@ -6,7 +6,7 @@ import { agentDisclosures, defFromManifest, RESERVED_AGENTS, type AgentProviderD
 import { parseToolManifest, type ToolPackage } from "@hivemind/core/tool-format";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
-import { idProblem, safeRelative, type CatalogFile, type CatalogType } from "./index-format.js";
+import { idProblem, pathsProblem, safeRelative, smallJson, UNSAFE_TEXT_RE, type CatalogFile, type CatalogType } from "./index-format.js";
 import { checkPackageManifest, entriesOf, MEMBER_FORMATS, ownedBy, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, type MemberFormat, type MemberRuns } from "./package-format.js";
 
 export const MAX_PLUGIN_FILES = 200;
@@ -61,6 +61,16 @@ export type FolderCheck = { plugin: CheckedPlugin } | { problem: string };
 class Refused extends Error {}
 const refuse = (problem: string): never => { throw new Refused(problem); };
 
+/** A value from the folder, as a reason quotes it: cut short, with anything that could rewrite a
+ *  terminal written as an escape. */
+const shown = (v: unknown): string =>
+  JSON.stringify(String(v).slice(0, 100)).replace(new RegExp(UNSAFE_TEXT_RE.source, "g"), (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+
+/** Text the app shows, from a manifest: refused when it holds a character that could rewrite a
+ *  terminal or reorder what is read. */
+const plain = (file: string, field: string, v: string): string =>
+  UNSAFE_TEXT_RE.test(v) ? refuse(`${file}: its ${field} has a control character in it`) : v;
+
 const hex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 const sha256 = async (bytes: Uint8Array) => hex(await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>));
 const svgData = (svg: string) => `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
@@ -81,8 +91,8 @@ export async function checkPluginFolder(folder: readonly PluginFile[]): Promise<
   try {
     return { plugin: await check(folder) };
   } catch (e) {
-    if (e instanceof Refused) return { problem: e.message };
-    throw e;
+    // A folder is someone else's bytes: whatever it holds is a reason to refuse it, never a crash.
+    return { problem: e instanceof Refused ? e.message : `the folder could not be read: ${shown((e as Error)?.message ?? e)}` };
   }
 }
 
@@ -93,13 +103,15 @@ async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
   const files: CatalogFile[] = [];
   const text = new Map<string, string>();
   for (const f of folder) {
-    if (!safeRelative(f.path)) refuse(`${f.path} is not a plain relative path`);
+    if (!safeRelative(f.path)) refuse(`${shown(f.path)} is not a plain relative path`);
     if (f.bytes.byteLength > MAX_PLUGIN_FILE_BYTES) refuse(`${f.path} is larger than 2 MB`);
     total += f.bytes.byteLength;
     files.push({ path: f.path, sha256: await sha256(f.bytes) });
     if (f.bytes.byteLength < MAX_TEXT) text.set(f.path, new TextDecoder().decode(f.bytes));
   }
   if (total > MAX_PLUGIN_BYTES) refuse("a plugin folder may be at most 8 MB");
+  const clash = pathsProblem(folder.map((f) => f.path));
+  if (clash) refuse(clash);
   files.sort((a, b) => a.path.localeCompare(b.path));
   const pkg = text.get(PACKAGE_MANIFEST);
   if (pkg !== undefined) return readPackage(pkg, files, text);
@@ -123,13 +135,14 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     } catch (e) {
       return refuse(`the manifest is not one Hivemind would accept — ${(e as Error).message}`);
     }
-    if (!AGENT_ID_RE.test(def.id)) refuse(`agent.yaml's id is "${def.id}" — an agent's id is one name, like "gemini"`);
+    if (!AGENT_ID_RE.test(def.id)) refuse(`agent.yaml's id is ${shown(def.id)} — an agent's id is one name, like "gemini"`);
+    if (raw.icon !== undefined && (typeof raw.icon !== "object" || raw.icon === null || !smallJson(raw.icon, 4096))) refuse("agent.yaml: its icon must be a small block");
     if (RESERVED_AGENTS[def.id] && RESERVED_AGENTS[def.id] !== def.bin) {
       refuse(`the id "${def.id}" is reserved for the agent that runs ${RESERVED_AGENTS[def.id]}`);
     }
     return {
-      ...common, id: def.id, type: "agent", name: def.label ?? def.id, category: "agents",
-      description: (def.note || `Runs ${def.bin}.`).slice(0, 400),
+      ...common, id: def.id, type: "agent", name: plain("agent.yaml", "label", (def.label ?? def.id).slice(0, 80)), category: "agents",
+      description: plain("agent.yaml", "note", (def.note || `Runs ${def.bin}.`).slice(0, 400)),
       version: "1.0.0", bin: def.bin, homepage: def.install?.url ?? null,
       // The manifest's own shapes, not rendered markup: clients draw it from a closed vocabulary.
       icon: raw.icon ?? null, manifest: yaml,
@@ -143,12 +156,12 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     let v: Record<string, unknown>;
     try { v = JSON.parse(viewJson); } catch { return refuse("hivemind-view.json is not valid JSON"); }
     const id = String(v.id ?? "");
-    if (!SCOPED_ID_RE.test(id)) refuse(`hivemind-view.json's id is "${id}" — a published view's id is @owner/name`);
+    if (!SCOPED_ID_RE.test(id)) refuse(`hivemind-view.json's id is ${shown(id)} — a published view's id is @owner/name`);
     if (!has(v.entry)) refuse("hivemind-view.json names an entry file that is not in the folder");
     return {
-      ...common, id, type: "view", name: String(v.name ?? id).slice(0, 80), category: categoryOf("hivemind-view.json", v.category),
-      description: String(v.description ?? "A workspace view.").slice(0, 400),
-      version: String(v.version ?? "0.1.0").slice(0, 40),
+      ...common, id, type: "view", name: plain("hivemind-view.json", "name", String(v.name ?? id).slice(0, 80)), category: categoryOf("hivemind-view.json", v.category),
+      description: plain("hivemind-view.json", "description", String(v.description ?? "A workspace view.").slice(0, 400)),
+      version: plain("hivemind-view.json", "version", String(v.version ?? "0.1.0").slice(0, 40)),
       bin: null, homepage: null, icon: null, manifest: viewJson,
       does: asks(v.permissions), traits: null, note: null, minAppVersion: null,
     };
@@ -159,7 +172,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     let w: Record<string, unknown>;
     try { w = JSON.parse(widgetJson); } catch { return refuse("widget.json is not valid JSON"); }
     const id = String(w.id ?? "");
-    if (!SCOPED_ID_RE.test(id)) refuse(`widget.json's id is "${id || "missing"}" — a published widget says its id, @owner/name, in its widget.json`);
+    if (!SCOPED_ID_RE.test(id)) refuse(`widget.json's id is ${id ? shown(id) : "missing"} — a published widget says its id, @owner/name, in its widget.json`);
     // The same rule the app applies to a folder: code, or a drawing without code.
     if (!has("widget.js") && w.draw === undefined) refuse("a widget needs a widget.js, or a draw in its widget.json");
     // What the app compares an installed copy against to offer an update.
@@ -169,8 +182,8 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     const iconFile = has(w.icon) ? (w.icon as string) : null;
     const svg = iconFile && /\.svg$/i.test(iconFile) ? text.get(iconFile) : undefined;
     return {
-      ...common, id, type: "widget", name: String(w.name ?? id).slice(0, 80), category: categoryOf("widget.json", w.category),
-      description: String(w.description ?? "A widget.").slice(0, 400),
+      ...common, id, type: "widget", name: plain("widget.json", "name", String(w.name ?? id).slice(0, 80)), category: categoryOf("widget.json", w.category),
+      description: plain("widget.json", "description", String(w.description ?? "A widget.").slice(0, 400)),
       version: w.version as string,
       bin: null, homepage: null, manifest: widgetJson,
       icon: svg && svg.length <= 16 << 10 ? { image: svgData(svg) } : null,
@@ -188,14 +201,14 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     if (t.problem) refuse(t.problem);
     const badId = idProblem("tool", t.id);
     if (badId) refuse(`hivemind-tool.json: ${badId}`);
-    if (!has(t.entry)) refuse(`hivemind-tool.json names an entry file, ${t.entry}, that is not in the folder`);
+    if (!has(t.entry)) refuse(`hivemind-tool.json names an entry file, ${shown(t.entry)}, that is not in the folder`);
     if (!t.version) refuse('hivemind-tool.json needs a "version", like "1.0.0"');
     // Its first tool's icon as the app shows it: a one-colour SVG from its folder, kept in the listing.
     const iconFile = Object.values(t.tiles).map((tile) => tile.icon).find((f) => has(f));
     const svg = iconFile ? text.get(iconFile) : undefined;
     return {
-      ...common, id: t.id, type: "tool", name: t.name.slice(0, 80), category: t.category,
-      description: (t.description || "A tool.").slice(0, 400),
+      ...common, id: t.id, type: "tool", name: plain("hivemind-tool.json", "name", t.name.slice(0, 80)), category: t.category,
+      description: plain("hivemind-tool.json", "description", (t.description || "A tool.").slice(0, 400)),
       version: t.version!,
       bin: null, homepage: null, manifest: toolJson,
       icon: svg && svg.length <= 16 << 10 ? { image: svgData(svg) } : null,
@@ -203,7 +216,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       does: [
         "Runs inside Hivemind, with the app's access to your files and network, once you switch it on",
         ...asks(t.permissions),
-        ...(t.service ? [`Keeps a program running while it is on: ${t.service.command.join(" ")}`] : []),
+        ...(t.service ? [`Keeps a program running while it is on: ${plain("hivemind-tool.json", "service command", t.service.command.join(" "))}`] : []),
       ],
       traits: null, note: null, minAppVersion: t.minAppVersion ?? null,
     };
@@ -237,6 +250,13 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   const owner = m.id.slice(0, m.id.indexOf("/"));
   const members: CheckedMember[] = [];
   let minAppVersion: string | null = null;
+  // Each member's files are its own: a folder inside another member's would be shown as one kind
+  // and installed as part of the other.
+  const folders = MEMBER_FORMATS.filter((f) => f.manifest).flatMap((f) => entriesOf(m, f).map((e) => (e as FolderEntry).path.replace(/\/$/, "")));
+  for (const a of folders) for (const b of folders) {
+    if (a !== b && (a === "." || b.startsWith(`${a}/`))) refuse(`${b} is inside ${a}, another member's folder`);
+  }
+  if (new Set(folders).size !== folders.length) refuse("two members share a folder");
   for (const format of MEMBER_FORMATS) {
     for (const entry of entriesOf(m, format)) {
       if (!format.manifest) {

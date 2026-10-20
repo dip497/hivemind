@@ -28,6 +28,29 @@ describe("reading an index", () => {
     expect(bad({ name: "" })).toMatch(/needs a name, description, author and version/);
   });
 
+  test("text that could rewrite a terminal is skipped, and a skipped entry's id is named only when it is plain", () => {
+    const bad = (patch: object) => one({ ...view, ...patch });
+    expect(bad({ name: "X\u001b]0;owned\u0007" })).toMatch(/in plain text/);
+    expect(bad({ description: "safe \u009b2J" })).toMatch(/in plain text/);
+    expect(bad({ author: "\u202eevil" })).toMatch(/in plain text/);
+    const read = parseHubIndex({ version: 1, plugins: [{ ...view, id: "@a/x\u001b[2J", type: "theme" }] });
+    expect(read.skipped[0]).toMatchObject({ id: null });
+  });
+
+  test("files that would land on one another are skipped: named twice, in any letter case, or one inside another", () => {
+    const sha = "0".repeat(64);
+    expect(one({ ...view, files: [{ path: "widget.js", sha256: sha }, { path: "Widget.js", sha256: "1".repeat(64) }] })).toBe("its files: Widget.js is listed twice");
+    expect(one({ ...view, files: [{ path: "a", sha256: sha }, { path: "a/b.js", sha256: sha }] })).toBe("its files: a/b.js is inside a, which is a file");
+  });
+
+  test("an entry nested too deep to read costs only itself", () => {
+    let icon: unknown = [];
+    for (let i = 0; i < 200_000; i++) icon = [icon];
+    const read = parseHubIndex({ version: 1, plugins: [{ ...view, type: "agent", id: "deep", icon }, view] });
+    expect(read.plugins.map((e) => e.id)).toEqual(["@a/x"]);
+    expect(read.skipped).toEqual([{ position: 0, id: "deep", reason: "its icon must be a small object" }]);
+  });
+
   test("a document that is not a version 1 index is refused whole", () => {
     expect(() => parseHubIndex({ version: 2, plugins: [] })).toThrow(/version 1/);
     expect(() => parseHubIndex({ version: 1 })).toThrow(/version 1/);

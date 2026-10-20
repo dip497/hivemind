@@ -69,7 +69,35 @@ const DEVICE_RE = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
 export const safeRelative = (p: unknown): p is string =>
   typeof p === "string" && p.length > 0 && p.length < 300
   && p.split("/").every((s) => SEGMENT_RE.test(s) && s !== ".." && !DEVICE_RE.test(s));
-const text = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max;
+/** Characters that can rewrite a terminal or reorder what is read: C0 and C1 controls, DEL, and
+ *  the bidirectional overrides. Nothing a plugin shows needs them. */
+export const UNSAFE_TEXT_RE = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+/** Text a person reads: 1 to `max` characters, none of them unsafe. */
+export const plainText = (v: unknown, max: number): v is string => typeof v === "string" && v.length > 0 && v.length <= max && !UNSAFE_TEXT_RE.test(v);
+const text = plainText;
+
+/** Why these file paths cannot sit in one folder, or null: one named twice (letter case aside,
+ *  as macOS and Windows see it), or one that is also the folder of another. */
+export function pathsProblem(paths: readonly string[]): string | null {
+  const seen = new Set<string>();
+  for (const p of paths) {
+    const key = p.toLowerCase();
+    if (seen.has(key)) return `${p} is listed twice`;
+    seen.add(key);
+  }
+  for (const p of paths) {
+    const parts = p.toLowerCase().split("/");
+    for (let i = 1; i < parts.length; i++) {
+      if (seen.has(parts.slice(0, i).join("/"))) return `${p} is inside ${parts.slice(0, i).join("/")}, which is a file`;
+    }
+  }
+  return null;
+}
+
+/** Whether `v` is JSON of at most `max` characters; nesting too deep to write is not. */
+export const smallJson = (v: unknown, max: number): boolean => {
+  try { return JSON.stringify(v).length <= max; } catch { return false; }
+};
 
 class Unreadable extends Error {}
 const refuse = (reason: string): never => { throw new Unreadable(reason); };
@@ -92,7 +120,7 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
   const badId = idProblem(type, p.id);
   if (badId) refuse(badId);
   if (!text(p.name, 80) || !text(p.description, 400) || !text(p.author, 80) || !text(p.version, 40)) {
-    refuse("it needs a name, description, author and version");
+    refuse("it needs a name, description, author and version, in plain text");
   }
   if (p.path !== "" && !safeRelative(p.path)) refuse("its path must be a relative folder");
   if (!Array.isArray(p.files) || !p.files.length || p.files.length > 200) refuse("its files must list 1-200 files");
@@ -102,6 +130,8 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
     }
     return { path: f.path as string, sha256: f.sha256 as string };
   });
+  const clash = pathsProblem(files.map((f) => f.path));
+  if (clash) refuse(`its files: ${clash}`);
   const homepage = typeof p.homepage === "string" && /^https:\/\/\S+$/.test(p.homepage) ? p.homepage : undefined;
   // A plugin may keep its own repository; the hash still decides whether its files are
   // the ones that were listed, so where they came from changes nothing about trust.
@@ -111,7 +141,7 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
   if (p.minAppVersion !== undefined && (typeof p.minAppVersion !== "string" || !MIN_APP_VERSION_RE.test(p.minAppVersion))) {
     refuse("its minAppVersion must look like 1.2.3");
   }
-  if (p.icon !== undefined && (typeof p.icon !== "object" || p.icon === null || JSON.stringify(p.icon).length > 4096)) {
+  if (p.icon !== undefined && (typeof p.icon !== "object" || p.icon === null || !smallJson(p.icon, 4096))) {
     refuse("its icon must be a small object");
   }
   if (p.bin !== undefined && (type !== "agent" || typeof p.bin !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(p.bin))) {
@@ -131,7 +161,7 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
 function readMembers(raw: unknown, type: CatalogType): CatalogMember[] {
   if (type !== "package" || !Array.isArray(raw) || !raw.length || raw.length > 64) refuse("its members must list 1-64 members of a package");
   return (raw as Record<string, unknown>[]).map((m, j) => {
-    if (!m || !text(m.kind, 40) || typeof m.id !== "string" || !SCOPED.test(m.id) || !text(m.name, 120)
+    if (!m || typeof m !== "object" || !text(m.kind, 40) || typeof m.id !== "string" || !SCOPED.test(m.id) || !text(m.name, 120)
       || !Array.isArray(m.permissions) || m.permissions.length > 32 || !m.permissions.every((x) => text(x, 80))) {
       refuse(`members[${j}] needs a kind, an @owner/name id, a name and its permissions`);
     }
@@ -149,7 +179,8 @@ export function parseHubIndex(raw: unknown): HubIndexReading {
   const seen = new Set<string>();
   doc.plugins.slice(0, MAX_INDEX_ENTRIES).forEach((p: unknown, position) => {
     const record = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
-    const id = typeof record.id === "string" ? record.id : null;
+    // Named only when it can be shown as it is: it is printed in terminals and logs.
+    const id = plainText(record.id, 200) ? record.id : null;
     try {
       if (!TYPES.includes(record.type as string)) refuse(`its type, ${JSON.stringify(record.type ?? null)}, is not a kind this Hivemind knows`);
       const entry = readEntry(record);
@@ -158,8 +189,8 @@ export function parseHubIndex(raw: unknown): HubIndexReading {
       seen.add(key);
       plugins.push(entry);
     } catch (e) {
-      if (!(e instanceof Unreadable)) throw e;
-      skipped.push({ position, id, reason: e.message });
+      // Whatever an entry holds, it costs only itself.
+      skipped.push({ position, id, reason: e instanceof Unreadable ? e.message : "it cannot be read" });
     }
   });
   if (doc.plugins.length > MAX_INDEX_ENTRIES) {
