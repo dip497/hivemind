@@ -1,10 +1,10 @@
 /** Writing a package: its starter, and its members added to `hivemind-package.json`, each in a
  *  folder of its own inside it. Which kinds it can hold, and how each is read, are the package
- *  format's (`@hivemind/core/package-format`, `package-kinds`); this names no kind. */
+ *  format's (`@hivemind/hub`, `package-kinds`); this names no kind. */
 import fs from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MEMBER_FORMATS, MEMBER_ID, memberFormat, PACKAGE_MANIFEST } from "@hivemind/core/package-format";
+import { MEMBER_FORMATS, MEMBER_ID, memberFormat, PACKAGE_MANIFEST } from "@hivemind/hub";
 import { memberKind } from "@hivemind/core/package-kinds";
 import type { AuthoredKind } from "./plugin-kinds.js";
 import { packageBrief } from "./plugin-brief.js";

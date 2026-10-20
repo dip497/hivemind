@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { setViewMode } from "./workspace/view-mode-store";
 import { Blocks, ChevronDown, ChevronRight, LayoutGrid } from "./components/icons";
+import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { iconFromManifest } from "@hivemind/agents";
 import { Button } from "./components/ui/button";
 import { Loading } from "./components/ui/loading";
@@ -11,7 +12,7 @@ import { rescan } from "./settings-views";
 import { permissionWords } from "./plugins/library";
 import { rowsInKindTab, TAB_LABEL, type PluginTab } from "./plugins/kinds";
 import { MemberIcon, MEMBER_KIND, PackageReview, RUNS_LABEL, askedFor } from "./plugins/PackageReview";
-import { memberFormat } from "@hivemind/core/package-format";
+import { memberFormat } from "@hivemind/hub";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./plugins/PluginList";
 import { useWidgetPackages } from "./board-objects/widget-runtime";
 import { useToolPackages } from "./tiles/tool-plugins";
@@ -24,6 +25,8 @@ type Entry = Awaited<ReturnType<typeof window.hive.pluginCatalog>>[number];
 type Review = Awaited<ReturnType<typeof window.hive.reviewCatalogPlugin>>;
 
 /** Numeric dotted compare; anything unparsable counts as equal. */
+type Skipped = Awaited<ReturnType<typeof window.hive.pluginCatalogSkipped>>[number];
+
 function newer(a: string, b: string): boolean {
   const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
@@ -54,6 +57,7 @@ export function CatalogMark({ entry }: { entry: Pick<Entry, "id" | "icon"> }) {
  *  categories; each one installed after its review, here or on its own page. */
 export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: PluginTab; onTab: (tab: PluginTab) => void }) {
   const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [skipped, setSkipped] = useState<Skipped[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [review, setReview] = useState<{ key: string; data: Review } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -74,6 +78,7 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
       // Only meaningful once the catalog is loaded — it is what the installed copies are
       // compared against.
       window.hive.outdatedAgents().then(setOutdated, () => setOutdated([]));
+      window.hive.pluginCatalogSkipped().then(setSkipped, () => setSkipped([]));
     }, (e) => setLoadError(cleanError(e)));
   };
   useEffect(load, []);
@@ -188,8 +193,23 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
       {q ? <>No {TAB_LABEL[tab].toLowerCase()} on HiveHub match “{query}”.</> : `No ${TAB_LABEL[tab].toLowerCase()} have been published yet.`}
     </p>}
     <CategoryGroups groups={groups} />
+    {entries && skipped.length > 0 && <SkippedEntries skipped={skipped} />}
     <p className="settings-note">Every file is checked against HiveHub's checksum.</p>
   </div>;
+}
+
+/** What HiveHub lists that this Hivemind cannot read, one line each with why, so a missing plugin
+ *  is not a mystery. A newer Hivemind may read them. */
+function SkippedEntries({ skipped }: { skipped: Skipped[] }) {
+  return <Alert data-catalog-skipped>
+    <AlertTitle>{skipped.length === 1 ? "1 plugin on HiveHub is not shown" : `${skipped.length} plugins on HiveHub are not shown`}</AlertTitle>
+    <AlertDescription>
+      <p>This Hivemind cannot read their entries. A newer Hivemind may.</p>
+      {skipped.map((s) => <p key={`${s.position}:${s.id ?? ""}`} data-catalog-skipped-entry={s.id ?? s.position}>
+        {s.id ?? `Entry ${s.position + 1}`}: {s.reason}
+      </p>)}
+    </AlertDescription>
+  </Alert>;
 }
 
 /** A package HiveHub lists: one row, opened to what it holds as HiveHub read it, before anything

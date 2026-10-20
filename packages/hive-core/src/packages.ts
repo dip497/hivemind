@@ -10,9 +10,8 @@ import { createHash } from "node:crypto";
 import { isSafeRelativePath } from "@hivemind/view-sdk/manifest";
 import { HiveError } from "./storage.js";
 import { MEMBER_KINDS, type CheckedMember } from "./package-kinds.js";
-import { checkPackageManifest, entriesOf, memberFormat, ownedBy, PACKAGE_MANIFEST, PACKAGE_VERSION, type AgentPreset, type PackageManifest } from "./package-format.js";
+import { checkPackageManifest, entriesOf, memberFormat, ownedBy, PACKAGE_MANIFEST, PACKAGE_VERSION, type AgentPreset, type PackageManifest } from "@hivemind/hub";
 
-export { PACKAGE_MANIFEST, type PackageManifest } from "./package-format.js";
 export const PACKAGE_LIMITS = { files: 4096, bytes: 128 * 1024 * 1024, fileBytes: 16 * 1024 * 1024, jsonBytes: 64 * 1024, depth: 16 } as const;
 export interface PackageProvider { id: string; enabled: boolean; modelFlag: boolean; supervision: string }
 const fail = (message: string): never => { throw new HiveError("invalid_package", message); };

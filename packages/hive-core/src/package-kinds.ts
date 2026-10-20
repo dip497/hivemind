@@ -1,5 +1,5 @@
 /**
- * The kinds of member a package can hold: each kind's data (`./package-format.ts`) with how a
+ * The kinds of member a package can hold: each kind's data (the hub kit's `package-format.ts`) with how a
  * member of it is read and checked on this machine. Reading, installing, removing and switching
  * packages read this table and never name a kind.
  */
@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/view-sdk/manifest";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
-import { memberFormat, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, type MemberFormat } from "./package-format.js";
+import { memberFormat, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, type MemberFormat } from "@hivemind/hub";
 import { readToolPackage } from "./tool-packages.js";
 import { widgetToInstall } from "./widgets.js";
 import { viewToInstall } from "./views.js";
@@ -25,7 +25,6 @@ export interface CheckedMember {
   digest?: string;
 }
 
-export { PACKAGE_MANIFEST, MEMBER_ID, label, type AgentPreset } from "./package-format.js";
 
 export interface MemberKind extends MemberFormat {
   /** Read and check one entry of its list, in the package at `root`: the member, and its path

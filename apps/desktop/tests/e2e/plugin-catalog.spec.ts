@@ -47,6 +47,9 @@ test.beforeAll(async () => {
   registry = path.join(root, "registry");
   const hub = buildRegistry(registry);
   hub.add({ id: CODER, type: "agent", name: "Catalog Coder", files: { "agent.yaml": AGENT } });
+  // From a hub newer than this app: a kind it does not know, and an entry it cannot read.
+  hub.list({ id: `${SCOPE}/sky`, type: "theme", name: "Sky", description: "d", author: "e2e", version: "1.0.0", path: "themes/sky", files: [{ path: "theme.json", sha256: "0".repeat(64) }] });
+  hub.list({ id: `${SCOPE}/broken`, type: "view", name: "Broken", description: "d", author: "e2e", version: "1.0.0", path: "views/broken", files: [] });
   execFileSync("git", ["init", "-q", root]);
   const env = {
     ...process.env, XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: path.join(xdg, "hivemind", "settings.json"),
@@ -72,6 +75,16 @@ test("the catalog lists the published plugins, and search and type filters narro
   await expect(page.locator("[data-catalog-plugin]")).toHaveCount(1);
   await expect(entry("view", PEOPLE)).toBeVisible();
   await page.getByLabel("Search plugins").fill("");
+});
+
+test("an entry this app cannot read is named with why, and the rest are listed", async () => {
+  await hub();
+  await expect(entry("view", TILE_LIST)).toBeVisible();
+  const skipped = page.locator("[data-catalog-skipped]");
+  await expect(skipped).toContainText("2 plugins on HiveHub are not shown");
+  await expect(skipped.locator(`[data-catalog-skipped-entry="${SCOPE}/sky"]`)).toHaveText(`${SCOPE}/sky: its type, "theme", is not a kind this Hivemind knows`);
+  await expect(skipped.locator(`[data-catalog-skipped-entry="${SCOPE}/broken"]`)).toHaveText(`${SCOPE}/broken: its files must list 1-200 files`);
+  if (process.env.SHOT) { await skipped.scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT }); }
 });
 
 test("a view installs only after review, and lands in the user's views", async () => {

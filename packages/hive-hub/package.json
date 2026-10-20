@@ -1,0 +1,50 @@
+{
+  "name": "@hivemind/hub",
+  "version": "2026.10.3",
+  "description": "The hub kit: the plugin index format every Hivemind hub serves and the app reads, and the checks a plugin folder passes before a hub lists it or the app installs it.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "homepage": "https://hivemind.griiken.com/guide/hub-index",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dip497/hivemind.git",
+    "directory": "packages/hive-hub"
+  },
+  "scripts": {
+    "build:npm": "bash scripts/build-npm.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@hivemind/agents": "workspace:*",
+    "@hivemind/core": "workspace:*",
+    "@hivemind/tsconfig": "workspace:*",
+    "@hivemind/view-sdk": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "yaml": "catalog:"
+  }
+}

@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { checkPackageManifest, entriesOf, ownedBy, PACKAGE_MANIFEST } from "@hivemind/core/package-format";
+import { checkPackageManifest, entriesOf, ownedBy, PACKAGE_MANIFEST } from "@hivemind/hub";
 import { MEMBER_KINDS } from "@hivemind/core/package-kinds";
 import { kindNamed } from "../plugin-kinds.js";
 import { sourceOf } from "../package-authoring.js";

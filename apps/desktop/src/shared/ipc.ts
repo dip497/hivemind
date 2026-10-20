@@ -106,7 +106,7 @@ import type { WidgetPackage } from "@hivemind/core/widget-format";
 export type { ToolPackage } from "@hivemind/core/tool-format";
 import type { ToolPackage } from "@hivemind/core/tool-format";
 import type { MemberChange } from "@hivemind/core/package-install";
-import type { MemberRuns } from "@hivemind/core/package-format";
+import type { MemberRuns } from "@hivemind/hub";
 import type { PackageOf } from "@hivemind/core/plugin-settings";
 /** A tool plugin's tile running a program in its folder: found on PATH, no shell. `maxAgeMs`
  *  shares one answer that young between tiles asking the same thing. */
@@ -248,7 +248,7 @@ export interface UpdateStatus {
 }
 
 import type { Appearance, Settings } from "@hivemind/core/settings-schema";
-import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
+import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
 
 /** An installed package, as the Plugins page lists it: each member with where its code runs, and
  *  the version before this one when there is one to roll back to. */
@@ -380,6 +380,8 @@ export interface HiveIpc {
   agentOptionChoices(id: string): Promise<Record<string, { values: string[]; from: "help" | "list" | null; error?: string }>>;
   /** The published plugin catalog (hash-pinned agents and views). */
   pluginCatalog(): Promise<CatalogEntry[]>;
+  /** The catalog's entries this app cannot read, each with why; the rest are listed. */
+  pluginCatalogSkipped(): Promise<SkippedEntry[]>;
   /** A plugin's README: from its folder here (`dir`), or from the catalog for one not installed. */
   pluginReadme(from: { dir: string } | { catalog: { type: CatalogEntry["type"]; id: string } }): Promise<string | null>;
   /** The widget packages installed on this machine. */

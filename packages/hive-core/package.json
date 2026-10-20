@@ -24,7 +24,6 @@
     "./installed-packages": "./src/installed-packages.ts",
     "./package-install": "./src/package-install.ts",
     "./package-kinds": "./src/package-kinds.ts",
-    "./package-format": "./src/package-format.ts",
     "./tool-plugins": "./src/tool-plugins.ts",
     "./toolbar": "./src/toolbar.ts",
     "./layers": "./src/layers.ts",
@@ -49,6 +48,7 @@
   },
   "dependencies": {
     "@hivemind/agents": "workspace:*",
+    "@hivemind/hub": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
     "yaml": "catalog:",

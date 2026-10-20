@@ -29,7 +29,7 @@ function kit(version = "1.0.0", files: Record<string, string> = {}): string {
     }),
     "tools/prs/hivemind-tool.json": JSON.stringify({ id: "@acme/prs", name: "PRs", version: "1.0.0", apiVersion: 1, entry: "index.js", tools: [{ key: "prs", label: "PRs", tileKind: "acme-prs" }] }),
     "tools/prs/index.js": "export default { tiles: {} };",
-    "widgets/dog/widget.json": JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "woof" } }),
+    "widgets/dog/widget.json": JSON.stringify({ id: "@acme/dog", name: "Dog", version: "1.0.0", draw: { type: "text", text: "woof" } }),
     "views/island/hivemind-view.json": JSON.stringify({ id: "@acme/island", name: "Island", version: "1.0.0", entry: "index.html", permissions: ["workspace:issues"] }),
     "views/island/index.html": "<!doctype html>",
     ...files,
@@ -107,7 +107,7 @@ describe("hive plugins, packages", () => {
     fs.writeFileSync(index, JSON.stringify({ version: 1, plugins: [entry("@acme/kit"), entry("@acme/other")] }));
     const hub = (...args: string[]) => hive(["plugins", ...args], { cwd: tmp, env: { XDG_CONFIG_HOME: path.join(tmp, "config"), HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: pathToFileURL(index).href } });
 
-    expect(hub("install", "@acme/other", "--json")).toMatchObject({ code: 1, json: { ok: false, error: expect.stringContaining("says it is @acme/kit, not @acme/other") } });
+    expect(hub("install", "@acme/other", "--json")).toMatchObject({ code: 1, json: { ok: false, error: expect.stringContaining(`says it is "@acme/kit", not @acme/other`) } });
     const got = hub("install", "@acme/kit", "--json");
     expect(got.json).toMatchObject({ ok: true, data: { id: "@acme/kit", version: "1.0.0" } });
     expect((got.json as { data: { members: Array<{ kind: string }> } }).data.members.map((m) => m.kind).sort()).toEqual(["agent-preset", "tool", "view", "widget"]);

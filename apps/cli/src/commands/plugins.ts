@@ -50,7 +50,7 @@ import { stageFromRegistry } from "../registry.js";
 import { checkPlugin, DRAW_ALONE } from "../check/check.js";
 import { checkPackage } from "../check/package.js";
 import { where } from "../check/problem.js";
-import { PACKAGE_MANIFEST, memberFormat } from "@hivemind/core/package-format";
+import { PACKAGE_MANIFEST, memberFormat } from "@hivemind/hub";
 import { addEntry, arrivesOff, memberId, memberPath, packageStarter, readPackageFolder, type PackageFolder } from "../package-authoring.js";
 
 interface Plugin {
