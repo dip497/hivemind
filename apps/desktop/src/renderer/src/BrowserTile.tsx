@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot,
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
+import { useScaleOnScreen } from "./workspace/tile-scale";
 
 interface Props {
   tileId: string;
@@ -46,6 +47,10 @@ function toUrl(input: string): string {
 }
 
 const DEFAULT_URL = "https://duckduckgo.com";
+
+/** The page zoom Chromium can draw at. */
+const LOWEST_PAGE_ZOOM = 0.25;
+const HIGHEST_PAGE_ZOOM = 5;
 
 /** One tab = one out-of-process <webview> (own webContents). Hidden tabs stay
  *  alive (background-tab semantics). Reports nav/title/favicon/loading up; the
@@ -143,6 +148,15 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
   const [zoom, setZoom] = useState(1);
   const [cdpMsg, setCdpMsg] = useState<string | null>(null);
 
+  // The page is drawn at the scale the tile shows on screen, then shrunk back by the same amount,
+  // so the canvas zoom lands it on screen pixels one for one instead of stretching a 100% image.
+  const guestsRef = useRef<HTMLDivElement>(null);
+  const scaleOnScreen = useScaleOnScreen(guestsRef);
+  const pageZoomFactor = Math.min(HIGHEST_PAGE_ZOOM, Math.max(LOWEST_PAGE_ZOOM, scaleOnScreen * zoom));
+  const drawScale = pageZoomFactor / zoom;
+  const pageZoomFactorRef = useRef(pageZoomFactor);
+  pageZoomFactorRef.current = pageZoomFactor;
+
   const wvMap = useRef(new Map<string, WebviewTag>());
   const activeIdRef = useRef(activeId);
   const addrFocused = useRef(false);
@@ -163,9 +177,15 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
 
   const onReady = useCallback((id: string, wv: WebviewTag) => {
     wvMap.current.set(id, wv);
-    try { wv.setZoomFactor(zoom); } catch { /* ignore */ }
+    try { wv.setZoomFactor(pageZoomFactorRef.current); } catch { /* ignore */ }
     if (id === activeIdRef.current) registerActive();
-  }, [registerActive, zoom]);
+  }, [registerActive]);
+
+  useEffect(() => {
+    for (const wv of wvMap.current.values()) {
+      try { wv.setZoomFactor(pageZoomFactor); } catch { /* not ready: dom-ready sets it */ }
+    }
+  }, [pageZoomFactor]);
 
   const onGone = useCallback((id: string) => { wvMap.current.delete(id); }, []);
   const onUpdate = useCallback((id: string, patch: Partial<TabMeta>) => {
@@ -182,11 +202,9 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, active?.url, registerActive]);
 
-  // Re-register CDP + sync zoom on tab switch.
+  // Re-register CDP on tab switch.
   useEffect(() => {
     registerActive();
-    const wv = wvMap.current.get(activeId);
-    try { wv?.setZoomFactor(zoom); } catch { /* ignore */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
@@ -241,7 +259,6 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
   const applyZoom = (z: number) => {
     const clamped = Math.min(3, Math.max(0.3, Math.round(z * 10) / 10));
     setZoom(clamped);
-    try { activeWv()?.setZoomFactor(clamped); } catch { /* ignore */ }
   };
 
   const runFind = (text: string) => {
@@ -413,7 +430,16 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
       )}
 
       {/* Guests. All tabs mounted; only the active one is shown. */}
-      <div className="flex-1 bg-white relative">
+      <div ref={guestsRef} className="flex-1 bg-white relative overflow-hidden">
+        <div
+          className="absolute left-0 top-0"
+          style={{
+            width: `${drawScale * 100}%`,
+            height: `${drawScale * 100}%`,
+            transform: drawScale === 1 ? undefined : `scale(${1 / drawScale})`,
+            transformOrigin: "0 0",
+          }}
+        >
         {tabs.map((t) => (
           <div key={t.id} className="absolute inset-0" style={{ display: t.id === activeId ? "block" : "none" }}>
             <TabView
@@ -426,6 +452,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
             />
           </div>
         ))}
+        </div>
       </div>
     </div>
   );
