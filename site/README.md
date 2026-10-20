@@ -1,6 +1,6 @@
 # Website and guide
 
-The website (hivemind.griiken.com) is Astro, built as static HTML. Its guide, at `/guide`, is a
+The website (https://hivemind.griiken.com/) is Astro, built as static HTML. Its guide, at `/guide`, is a
 separate app in `docs/`: [Fumadocs](https://www.fumadocs.dev) on Next.js, exported as static
 files. The guide's pages live outside `site/`, in `guide/` at the top of the repository; see
 `guide/AGENTS.md` for how to write them.

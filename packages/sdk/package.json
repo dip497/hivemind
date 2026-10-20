@@ -18,6 +18,8 @@
       }
     }
   },
+  "homepage": "https://hivemind.griiken.com/guide/api-connect/",
+  "bugs": "https://github.com/dip497/hivemind/issues",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dip497/hivemind.git",

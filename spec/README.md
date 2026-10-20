@@ -5,6 +5,9 @@ these; the cases in `../conformance/` decide whether they do. Design:
 `docs/design/agent-host-oss-2026-09-25.md` (agent host), `docs/design/multiplayer-2026-09-28.md`
 (workspace API).
 
+For users, the same ground in plain words: https://hivemind.griiken.com/guide/architecture/ and,
+for a program's messages, https://hivemind.griiken.com/guide/api-protocol/.
+
 | File | What | Version |
 |---|---|---|
 | `agent-event.schema.json` | One canonical event, as a hook reports it | 0.1 |
@@ -12,18 +15,18 @@ these; the cases in `../conformance/` decide whether they do. Design:
 | `status.md` | How events and host facts fold into that status | 0.1 |
 | `hook-protocol.md` | What a hook sends the host, and the environment it gets | 0.2 |
 | `wire-protocol.md` | What any client speaks to the host (JSON-RPC 2.0) | 2 |
-| `workspace-api.md` | What a workspace's host is asked for, over any transport; a community view shown on another device's screen; the drive socket programs use | 0.25 |
-| `identity.md` | Device, person and workspace keys, and device certificates | 0.1 |
+| `workspace-api.md` | What a workspace's host is asked for, over any transport; a community view shown on another device's screen; the drive socket programs use | 0.32 |
+| `identity.md` | Device, person and workspace keys, and device certificates | 0.2 |
 | `network-profile.md` | Where a network's servers are, signed by its admin | 0.1 |
 | `network-access.md` | Who may use a network's relays: enrolment, vouchers, registration | 0.1 |
-| `pairing.md` | Two devices of one person: the code (and the way onto its network), the proofs, the person key handed over (a phone: a certificate and its network), the person's other devices learning of a phone, whose a phone is (their name and colour), and unpairing | 0.8 |
+| `pairing.md` | Two devices of one person: the code (and the way onto its network), the proofs, the person key handed over (a phone: a certificate and its network), the person's other devices learning of a phone, whose a phone is (their name and colour), and unpairing | 0.10 |
 | `host-record.md` | Which device hosts a workspace now, signed by the workspace's key | 0.1 |
 | `hosting.md` | Moving a workspace's hosting between the owner's devices, and who follows it | 0.4 |
 | `agents.md` | Every agent of the person's, live, as their phone follows it; starting one from the phone, in a folder here or on a saved machine, with photos; interrupting its turn with its agent's keys, closing it, what it changed, and what it and the person said to each other, a tool it used unfolded whole; a supervised agent's wait on its starter, and who that is; the tool a wait is about, and a question's options | 0.9 |
 | `needs.md` | What waits on the person, on which machine, how their phone asks for it, answers it (a permission allowed or denied with the agent's own keys, below the tool and what it is about; each of its questions answered, by options chosen or a line) and sends an agent a message; a supervised tool use answered by its starter; an answer typed as the person, never into another screen, only once the agent's chooser is drawn, said to land only once it moved on, and sent once; or answered through the agent's own hook where its manifest says it can carry the answer | 0.11 |
 | `home.md` | What the person's phone shows first: every workspace's frames and tiles as the desktop's Layers panel lists them, followed as two numbered sequences of keyed rows and last lines, caught up from where a phone was; how the phone groups and orders them | 0.4 |
 | `markdown.md` | What an agent says, read by the phone's core for every app: blocks and styled runs, links only to https, raw HTML as text | 0.1 |
-| `push.md` | What a phone is told while the person is away, encrypted to it, a permission it may allow or deny said so; that a device it found away is back; and the network's push server, which passes on what the devices a phone named sign | 0.4 |
+| `push.md` | What a phone is told while the person is away, encrypted to it, a permission it may allow or deny said so; that a device it found away is back; and the network's push server, which passes on what the devices a phone named sign | 0.5 |
 
 Versions are `major.minor`: a minor adds optional fields or enum values a reader may ignore; a
 major changes or removes something. Until 1.0 anything may change.

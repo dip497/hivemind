@@ -68,4 +68,6 @@ Windows x64, in PowerShell:
 irm https://hivemind.griiken.com/install.ps1 | iex
 ```
 
+Other ways to install, and what it puts where: https://hivemind.griiken.com/guide/install/.
+
 [Contributing](./CONTRIBUTING.md) · [MIT licence](./LICENSE)
