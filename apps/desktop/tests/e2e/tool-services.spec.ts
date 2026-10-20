@@ -77,6 +77,7 @@ const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catc
 test("switched on, it waits for a workspace; picked, it drives that one as its own grant and no more", async () => {
   await page.locator('[aria-label="settings"]').click();
   await page.locator('[data-settings-page="plugins"]').click();
+  await page.locator('[data-plugins-kind="tool"]').click();
   await page.locator('[data-plugin-open="tool:acme/watcher"]').click();
   await page.locator('[data-plugin-tab="about"]').click();
   await expect(page.getByText("Keeps node service.js running while it is on")).toBeVisible();

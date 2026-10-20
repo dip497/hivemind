@@ -1,6 +1,6 @@
 /**
- * Settings ▸ Plugins: every plugin of every kind on one page, the ones you have or the ones on
- * HiveHub, found by one search and one kind filter in one row of controls. Each category, as the
+ * Settings ▸ Plugins: every plugin on one page, the ones you have or the ones on HiveHub, found by
+ * one search, one tab per kind as HiveHub has them. Each category, as the
  * Add menu has them, is a group of rows alike; a row opens the plugin's page, where it is set up, switched off or removed. Adding
  * one that is not on HiveHub, made by an agent or from a folder, is one menu at the top.
  */
@@ -9,7 +9,6 @@ import { ChevronDown, FolderPlus, Plus, Sparkles } from "../components/icons";
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../components/ui/dropdown-menu";
 import { useSettings } from "../settings-store";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
@@ -18,21 +17,22 @@ import { useAgentRows } from "../settings-agents";
 import { useViewRows, rescan } from "../settings-views";
 import { useToolRows } from "../settings-tools";
 import { BrowsePlugins, cleanError, type Preview } from "../settings-plugins";
-import { KIND_LABEL, PLUGIN_KINDS, useHubDescription, type PluginKind } from "./library";
-import { CategoryGroups, PluginRow, type ListedRow } from "./PluginList";
+import { useHubDescription } from "./library";
+import { rowsInKindTab, type PluginKind } from "./kinds";
+import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./PluginList";
 import { WidgetIcon } from "./WidgetIcon";
-import { pluginsScope, setPluginsScope, type PluginsScope } from "./scope";
+import { pluginsScope, pluginsTab, setPluginsScope, setPluginsTab, type PluginsScope } from "./scope";
 
 const SCOPES: [PluginsScope, string][] = [["installed", "Installed"], ["hub", "HiveHub"]];
 
 export function PluginsHome() {
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<"all" | PluginKind>("all");
+  const [tab, setTabState] = useState<PluginKind>(pluginsTab);
+  const setTab = (t: PluginKind) => { setTabState(t); setPluginsTab(t); };
   const [scope, setScopeState] = useState<PluginsScope>(pluginsScope);
   const setScope = (s: PluginsScope) => { setScopeState(s); setPluginsScope(s); };
   const q = query.trim().toLowerCase();
   const matches = (text: string) => !q || text.toLowerCase().includes(q);
-  const show = (k: PluginKind) => kind === "all" || kind === k;
   const fromFolder = useAddFromFolder();
   // Read again whenever the window comes back: a plugin added from a terminal shows up.
   useEffect(() => {
@@ -47,7 +47,7 @@ export function PluginsHome() {
         <DropdownMenuTrigger asChild><Button variant="outline" disabled={fromFolder.busy} data-add-plugin><Plus />Add<ChevronDown /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-56">
           {/* Not on HiveHub nor here: an agent makes it. */}
-          <DropdownMenuItem data-make-plugin-open onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: kind === "tool" || kind === "view" ? kind : "widget" } }))}><Sparkles />Make your own</DropdownMenuItem>
+          <DropdownMenuItem data-make-plugin-open onSelect={() => window.dispatchEvent(new CustomEvent("hivemind:make-plugin", { detail: { kind: tab === "tool" || tab === "view" ? tab : "widget" } }))}><Sparkles />Make your own</DropdownMenuItem>
           {fromFolder.items.length > 0 && <DropdownMenuSeparator />}
           {fromFolder.items}
         </DropdownMenuContent>
@@ -58,35 +58,29 @@ export function PluginsHome() {
         {SCOPES.map(([s, label]) => <button key={s} type="button" role="tab" aria-selected={scope === s} data-plugins-scope={s} onClick={() => setScope(s)}>{label}</button>)}
       </div>
       <Input type="search" placeholder="Search plugins" aria-label="Search plugins" value={query} onChange={(e) => setQuery(e.target.value)} className="flex-1 min-w-[140px]" />
-      <Select value={kind} onValueChange={(v) => setKind(v as "all" | PluginKind)}>
-        <SelectTrigger aria-label="Kind" className="min-w-32"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All kinds</SelectItem>
-          {PLUGIN_KINDS.map((k) => <SelectItem key={k} value={k}>{KIND_LABEL[k]}s</SelectItem>)}
-        </SelectContent>
-      </Select>
     </div>
     {fromFolder.panel}
     {scope === "hub"
-      ? <BrowsePlugins query={query} kind={kind} />
+      ? <BrowsePlugins query={query} tab={tab} onTab={setTab} />
       : <>
-        <InstalledPlugins matches={matches} show={show} />
+        <InstalledPlugins matches={matches} tab={tab} onTab={setTab} />
         <p className="settings-empty plugins-none">Nothing you have matches. <button type="button" className="settings-link" onClick={() => setScope("hub")}>Look on HiveHub</button></p>
       </>}
   </div>;
 }
 
-/** The plugins you have, of the kinds shown, under their categories. */
-function InstalledPlugins({ matches, show }: { matches: (text: string) => boolean; show: (k: PluginKind) => boolean }) {
+/** The plugins you have, the open tab's kind under its categories. */
+function InstalledPlugins({ matches, tab, onTab }: { matches: (text: string) => boolean; tab: PluginKind; onTab: (tab: PluginKind) => void }) {
   const agents = useAgentRows(matches);
   const views = useViewRows(matches);
   const widgets = useWidgetRows(matches);
   const tools = useToolRows(matches);
-  const rows = [...(show("agent") ? agents.rows : []), ...(show("view") ? views : []), ...(show("widget") ? widgets : []), ...(show("tool") ? tools.rows : [])];
+  const { counts, groups } = rowsInKindTab([...agents.rows, ...views, ...widgets, ...tools.rows], tab);
   return <>
-    {show("tool") && tools.warning && <p role="status" className="settings-message">{tools.warning}</p>}
-    <CategoryGroups rows={rows} feet={show("agent") && agents.foot ? { agents: agents.foot } : {}} />
-    {show("view") && views.length > 0 && <p className="settings-note">⌘E switches between the views that are on.</p>}
+    <KindTabs counts={counts} tab={tab} onChange={onTab} />
+    {tab === "tool" && tools.warning && <p role="status" className="settings-message">{tools.warning}</p>}
+    <CategoryGroups groups={groups} feet={tab === "agent" && agents.foot ? { agents: agents.foot } : {}} />
+    {tab === "view" && views.length > 0 && <p className="settings-note">⌘E switches between the views that are on.</p>}
   </>;
 }
 
