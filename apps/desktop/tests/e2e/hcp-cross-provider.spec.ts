@@ -47,10 +47,13 @@ function lastJson(stdout: string): any {
   try { return JSON.parse(stdout.trim().split("\n").pop() || ""); } catch { return undefined; }
 }
 
+/** What `hive … --json` answered: its result on stdout, or the failure it printed on stderr. */
+const answer = (stdout: string, stderr: string) => lastJson(stdout) ?? lastJson(stderr)?.error;
+
 /** Run `hive …` as the person at this machine would, or as an agent with `asAgent`. */
 function hive(args: string[], env: Record<string, string> = {}) {
   const r = spawnSync(onPath("bun"), [CLI, ...args], { encoding: "utf8", timeout: 120_000, env: hiveEnv(env) });
-  return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: lastJson(r.stdout) };
+  return { code: r.status, stdout: r.stdout, stderr: r.stderr, json: answer(r.stdout, r.stderr) };
 }
 
 /** `hive …` left running, for a call that waits on what the test does next. */
@@ -67,9 +70,10 @@ function inboxTexts(tile: string): string[] {
 function hiveLater(args: string[]): Promise<{ code: number | null; json: any }> {
   return new Promise((resolve) => {
     const child = spawn(onPath("bun"), [CLI, ...args], { env: hiveEnv({}) });
-    let out = "";
+    let out = ""; let err = "";
     child.stdout.on("data", (d) => { out += d; });
-    child.on("close", (code) => resolve({ code, json: lastJson(out) }));
+    child.stderr.on("data", (d) => { err += d; });
+    child.on("close", (code) => resolve({ code, json: answer(out, err) }));
   });
 }
 
@@ -195,7 +199,7 @@ test("a droid worker reports back to the claude orchestrator with `hive ctl repo
   const again = hive(["ctl", "read", worker, "--timeout", "40000", "--json"]);
   expect(again.json).toMatchObject({ text: "second turn from droid", finalStatus: "turn" });
 
-  expect(agents().find((a) => a.tile === worker)).toMatchObject({ agent: "reporter", parent: orchestrator });
+  expect(agents().find((a) => a.tile === worker)).toMatchObject({ name: "reporter", agent: "droid", parent: orchestrator });
   expect(processesOf(worker)).not.toEqual([]);
   await expect.poll(placed).toContain(worker);
   expect(hive(["ctl", "close", worker, "--json"]).json).toEqual({ closed: true });
@@ -260,7 +264,7 @@ test("a tile the control plane closes straight after spawning it leaves the wind
 });
 
 test("a worker spawned into a frame by its name opens there, and the window lays it out; a name no frame answers to is refused", async () => {
-  const [frame] = hive(["ctl", "frames", "--json"]).json;
+  const [frame] = hive(["ctl", "frames", "--json"]).json.frames;
   const spawned = hive(["ctl", "spawn", "--agent", "claude", "--frame", frame.name.toUpperCase(), "--name", "framed", "--prompt", "echo framed", "--json"]);
   expect(spawned.code, spawned.stderr).toBe(0);
   const tile: string = spawned.json.tile;
@@ -308,12 +312,12 @@ test("an agent's past sessions are listed for its folder, and one can be continu
 test("structured failures: bad token exits 6, missing tile or frame exits 5", async () => {
   const bad = hive(["ctl", "agents", "--json"], { HCP_TOKEN: "nope" });
   expect(bad.code).toBe(6);
-  expect(bad.json).toMatchObject({ ok: false, code: "FORBIDDEN" });
+  expect(bad.json).toMatchObject({ code: "FORBIDDEN" });
   const gone = hive(["ctl", "send", "tile-does-not-exist", "hi", "--json"]);
   expect(gone.code).toBe(5);
-  expect(gone.json).toMatchObject({ ok: false, code: "NOT_FOUND" });
+  expect(gone.json).toMatchObject({ code: "NOT_FOUND" });
   const started = Date.now();
-  expect(hive(["ctl", "read", "tile-does-not-exist", "--timeout", "30000", "--json"])).toMatchObject({ code: 5, json: { ok: false, code: "NOT_FOUND" } });
+  expect(hive(["ctl", "read", "tile-does-not-exist", "--timeout", "30000", "--json"])).toMatchObject({ code: 5, json: { code: "NOT_FOUND" } });
   expect(Date.now() - started).toBeLessThan(10_000); // at once, not at the timeout
 });
 
@@ -321,7 +325,7 @@ test("a runtime without a turn signal is refused up front, not timed out (exit 7
   // Client-side: `workflow` needs gatherable replies — refused before any tile is spawned.
   const wf = hive(["ctl", "workflow", "--shape", "fanout", "--agent", "cursor", "--items", "a", "--prompt", "echo {item}", "--json"], asAgent(orchestrator));
   expect(wf.code).toBe(7);
-  expect(wf.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
+  expect(wf.json).toMatchObject({ code: "UNSUPPORTED" });
   expect(String(wf.json.message)).toContain("cursor");
   // An unknown runtime is a usage error listing the spawnable ids.
   const unknown = hive(["ctl", "spawn", "--agent", "nope", "--prompt", "x", "--json"]);
@@ -332,7 +336,7 @@ test("a runtime without a turn signal is refused up front, not timed out (exit 7
   expect(spawn.code, spawn.stderr).toBe(0);
   const read = hive(["ctl", "read", spawn.json.tile, "--poll", "--json"]);
   expect(read.code).toBe(7);
-  expect(read.json).toMatchObject({ ok: false, code: "UNSUPPORTED" });
+  expect(read.json).toMatchObject({ code: "UNSUPPORTED" });
   expect(String(read.json.message)).toMatch(/cursor has no turn signal/);
   expect(hive(["ctl", "close", spawn.json.tile, "--json"]).json).toEqual({ closed: true });
 });

@@ -15,8 +15,9 @@ const cli = path.resolve(process.cwd(), "../cli/src/index.ts");
 let hcp: Record<string, string> = {};
 const hive = (...args: string[]) => {
   const result = spawnSync("bun", [cli, ...args, "--json"], { cwd: root, env: { ...env, ...hcp }, encoding: "utf8" });
-  if (!result.stdout.trim()) throw new Error(result.stderr);
-  return { status: result.status, data: JSON.parse(result.stdout) };
+  // What it answers on stdout; a failure, `{ error: { code, message } }`, on stderr.
+  if (result.stdout.trim()) return { status: result.status, data: JSON.parse(result.stdout) };
+  try { return { status: result.status, data: JSON.parse(result.stderr).error }; } catch { throw new Error(result.stderr); }
 };
 const browsers = () => page.locator(".react-flow__node-browser");
 
@@ -56,7 +57,7 @@ test("Browser opt-in is shared by Settings, shortcuts, CLI, and view commands; d
   await page.locator('[data-plugins-kind="tool"]').click();
   await page.locator('[data-plugin-row="tool:@hivemind/web"]').click();
   await page.getByRole("switch", { name: "Enable Browser", exact: true }).click();
-  await expect.poll(() => hive("config", "get", "plugins.state").data.data).toEqual({ "tool:@hivemind/web": { enabled: true } });
+  await expect.poll(() => hive("config", "get", "plugins.state").data.value).toEqual({ "tool:@hivemind/web": { enabled: true } });
   await page.screenshot({ path: "/tmp/hivemind-browser-plugin-settings.png" });
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByTitle(/^Browser  /)).toHaveCount(1);

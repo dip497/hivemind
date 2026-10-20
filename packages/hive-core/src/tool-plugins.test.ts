@@ -70,6 +70,17 @@ describe("tile-kind availability", () => {
       .toEqual({ available: false, reason: "tool-disabled" });
   });
 
+  test("an installed tool opens when its package is on, and not when the package or the tool is off", () => {
+    const tool = (on: boolean) => ({ id: "@ada/prs", source: "you" as const, package: { id: "@ada/prs", name: "PRs", version: "1.0.0", on, members: 1 } });
+    const registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, { id: "@ada/prs", tools: [{ key: "list", label: "PRs", tileKind: "adaPrs" }] }]);
+    const opens = (state: Record<string, unknown>, on: boolean) =>
+      registry.resolve(toolPreferences(mergeSettings({ v: 1, plugins: { state } }), [tool(on)])).availability("@ada/prs/list").available;
+    expect(opens({}, true)).toBe(true);
+    expect(opens({}, false)).toBe(false);
+    expect(opens({ "tool:@ada/prs": { enabled: true } }, false)).toBe(false);
+    expect(opens({ "tool:@ada/prs": { enabled: false } }, true)).toBe(false);
+  });
+
   test("an unknown tool id is never enabled, whatever the preferences claim", () => {
     // A stale/hand-edited enabledPlugins entry cannot conjure a tool.
     expect(bundledToolRegistry.resolve(prefs(["@someone/else"])).availability("@someone/else/ghost"))

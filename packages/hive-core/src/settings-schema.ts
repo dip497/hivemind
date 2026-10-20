@@ -12,7 +12,7 @@
  */
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
-import { parsePluginStates, type PluginState } from "./plugin-settings.js";
+import { isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -471,15 +471,20 @@ const VIEW_ID_RE = /^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{0,
 /** No toolbar can name more actions than the catalog holds. */
 const TOOLBAR_MAX_ACTIONS = 32;
 
+/** A tool plugin installed here: the app's own (`source: "app"`) or one you added, in its package. */
+export interface InstalledTool { id: string; source?: "app" | "you"; package?: PackageOf }
+
 /** What the tool registry takes, from the tool plugins' stored state: the plugins switched on,
- *  and the tools switched off inside them (each a plugin option set to false). */
-export function toolPreferences(s: Pick<Settings, "plugins">): ToolsSettings {
-  const enabledPlugins: string[] = [];
+ *  and the tools switched off inside them (each a plugin option set to false). An installed tool
+ *  is on as `isPluginOn` says, its package's switch included. */
+export function toolPreferences(s: Pick<Settings, "plugins">, installed: readonly InstalledTool[] = []): ToolsSettings {
+  const enabledPlugins = installed.filter((t) => isPluginOn(s.plugins.state, "tool", t, t.source === "app")).map((t) => t.id);
   const disabledTools: string[] = [];
+  const isInstalled = new Set(installed.map((t) => t.id));
   for (const [key, st] of Object.entries(s.plugins.state)) {
     if (!key.startsWith("tool:")) continue;
     const id = key.slice(5);
-    if (st.enabled === true) enabledPlugins.push(id);
+    if (st.enabled === true && !isInstalled.has(id)) enabledPlugins.push(id);
     for (const [tool, v] of Object.entries(st.options ?? {})) if (v === false) disabledTools.push(`${id}/${tool}`);
   }
   return { enabledPlugins, disabledTools };

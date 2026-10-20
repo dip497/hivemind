@@ -119,7 +119,7 @@ test("the CLI offers and validates it; `hive agent detect` probes its binary", a
   fs.cpSync(AGENT_DIR, path.join(ws, "xdg", "hivemind", "agents", "faux"), { recursive: true });
   spawnSync(onPath("bun"), [CLI, "init", "--prefix", "SX", "--no-agentic"], { cwd: ws, encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
   const r = spawnSync(onPath("bun"), [CLI, "agent", "detect", "--json"], { cwd: ws, encoding: "utf8", env: { ...process.env, PATH: `${fakeBin}:${path.dirname(process.execPath)}:/usr/bin:/bin`, XDG_CONFIG_HOME: path.join(ws, "xdg") } });
-  expect(JSON.parse(r.stdout).data["faux-agent"]).toBeTruthy();
+  expect(JSON.parse(r.stdout)["faux-agent"]).toBeTruthy();
   fs.rmSync(ws, { recursive: true, force: true });
 });
 

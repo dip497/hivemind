@@ -183,7 +183,7 @@ test("toolbar Off is per-view, persists through restart, and Settings restores i
   await expect(page.locator('[data-host-island="bottom"]')).toBeVisible();
   await toView("canvas");
   await expect(page.locator("[data-host-island], [data-host-island-handle]")).toHaveCount(0);
-  const config = () => JSON.parse(execFileSync("bun", [CLI, "config", "get", "views.chrome", "--json"], { env: ENV, encoding: "utf8" })).data;
+  const config = () => JSON.parse(execFileSync("bun", [CLI, "config", "get", "views.chrome", "--json"], { env: ENV, encoding: "utf8" })).value;
   await expect.poll(config).toMatchObject({ canvas: { island: "off" } });
   await app.close();
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });

@@ -78,7 +78,7 @@ test("the catalog lists the published plugins, and search and type filters narro
 });
 
 test("an entry this app cannot read is named with why, and the rest are listed", async () => {
-  await hub();
+  await hub("view");
   await expect(entry("view", TILE_LIST)).toBeVisible();
   const skipped = page.locator("[data-catalog-skipped]");
   await expect(skipped).toContainText("2 plugins on HiveHub are not shown");

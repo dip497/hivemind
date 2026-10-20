@@ -22,8 +22,9 @@ const fixture = path.resolve(process.cwd(), "tests/e2e/fixtures/tools/commits");
 let hcp: Record<string, string> = {};
 const hive = (...args: string[]) => {
   const result = spawnSync("bun", [cli, ...args, "--json"], { cwd: repo, env: { ...env, ...hcp }, encoding: "utf8" });
-  if (!result.stdout.trim()) throw new Error(result.stderr);
-  return { status: result.status, data: JSON.parse(result.stdout) };
+  // What it answers on stdout; a failure, `{ error: { code, message } }`, on stderr.
+  if (result.stdout.trim()) return { status: result.status, data: JSON.parse(result.stdout) };
+  try { return { status: result.status, data: JSON.parse(result.stderr).error }; } catch { throw new Error(result.stderr); }
 };
 
 let app: ElectronApplication;

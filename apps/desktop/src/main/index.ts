@@ -1078,7 +1078,7 @@ const control: ControlPlane = new ControlPlane({
       const size = image.getSize();
       return { png: image.toPNG().toString("base64"), width: size.width, height: size.height };
     },
-    toolsSettings: () => toolPreferences(getAppSettings()),
+    toolsSettings: (installed) => toolPreferences(getAppSettings(), installed),
     reloadSettings: () => reloadSettings().then((s) => ({ ok: true, preset: s.appearance.preset })),
     widgetsChanged,
     toolsChanged,

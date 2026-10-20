@@ -44,11 +44,11 @@ test("a comment left in the app is one an agent can list, answer and resolve", a
   // It is workspace state, not renderer state.
   expect(fs.existsSync(path.join(repo, ".hivemind/review.json"))).toBe(true);
 
-  expect(hive("review", "list").data.map((c: { id: string }) => c.id)).toEqual(["c-ui"]);
-  expect(hive("review", "reply", "c-ui", "fixed in abc123").ok).toBe(true);
-  expect(hive("review", "resolve", "c-ui", "--summary", "fixed").data.resolved).toBe(true);
+  expect(hive("review", "list").comments.map((c: { id: string }) => c.id)).toEqual(["c-ui"]);
+  expect(hive("review", "reply", "c-ui", "fixed in abc123").id).toBe("c-ui");
+  expect(hive("review", "resolve", "c-ui", "--summary", "fixed").resolved).toBe(true);
   // Resolved drops out of the default list, and the reply is visible to the app.
-  expect(hive("review", "list").data).toEqual([]);
+  expect(hive("review", "list").comments).toEqual([]);
   const seen = await page.evaluate((repoPath) => window.hive.reviewList(repoPath), repo);
   expect(seen[0]?.replies?.[0]?.body).toBe("fixed in abc123");
   expect(seen[0]?.resolved).toBe(true);

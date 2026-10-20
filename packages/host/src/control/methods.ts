@@ -119,7 +119,7 @@ export interface TileRect { x: number; y: number; width: number; height: number 
 
 export interface MethodDeps {
   /** Settled main-process tool preferences; absent means no optional tools enabled. */
-  toolsSettings?: () => ToolsSettings;
+  toolsSettings?: (installed: readonly ToolPluginContribution[]) => ToolsSettings;
   /** The tool plugins added on this machine that can load (none in safe mode). */
   addedTools?: () => Promise<readonly ToolPluginContribution[]>;
   /** Provider id of a (user-spawned) tile, from its command — for the
@@ -747,14 +747,16 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   type RegisteredTool = ReturnType<typeof createToolRegistry>["tools"][number];
   /** The tools there are: the app's own and those added here; the app's own alone if those clash. */
   async function toolRegistry() {
-    try { return createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...(await deps.addedTools?.() ?? [])]); }
-    catch { return createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+    const added = await deps.addedTools?.() ?? [];
+    let registry: ReturnType<typeof createToolRegistry>;
+    try { registry = createToolRegistry([...BUNDLED_TOOL_PLUGINS, ...added]); } catch { registry = createToolRegistry(BUNDLED_TOOL_PLUGINS); }
+    return { registry, preferences: deps.toolsSettings?.(added) ?? { enabledPlugins: [], disabledTools: [] } };
   }
   async function openTool(at: { caller?: string; repo?: string; frame?: unknown; url?: unknown; state?: unknown }, pick: (tools: RegisteredTool[]) => RegisteredTool | undefined, badId: string): Promise<string> {
-    const registry = await toolRegistry();
+    const { registry, preferences } = await toolRegistry();
     const tool = pick(registry.tools.filter((t) => t.tileKind));
     if (!tool?.tileKind) throw new ApiError("UNSUPPORTED", `${badId}; \`hive plugins list --kind tool\` shows them`);
-    const availability = registry.resolve(deps.toolsSettings?.() ?? { enabledPlugins: [], disabledTools: [] }).availability(tool.id);
+    const availability = registry.resolve(preferences).availability(tool.id);
     if (!availability.available) throw new ApiError("FORBIDDEN", `${tool.label} is disabled; switch it on in Settings ▸ Plugins, or \`hive plugins enable tool:${tool.pluginId}\``);
     const kind = tool.tileKind;
     if (at.frame != null && (typeof at.frame !== "string" || !at.frame || at.frame.length > 256)) throw new ApiError("BAD_REQUEST", "frame must be an id");
@@ -1126,7 +1128,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (!m) throw new ApiError("BAD_REQUEST", "plugin must be its id, as `hive plugins list` shows it");
       const [, named, id] = m as unknown as [string, "tool" | "widget" | "view" | undefined, string];
       const pick = (tools: RegisteredTool[]) => tools.find((t) => t.id === id) ?? tools.find((t) => t.pluginId === id);
-      if (named === "tool" || (!named && pick((await toolRegistry()).tools.filter((t) => t.tileKind)))) {
+      if (named === "tool" || (!named && pick((await toolRegistry()).registry.tools.filter((t) => t.tileKind)))) {
         const tile = await openTool({ caller, frame }, pick, `${id} has no tool to open`);
         // Answered once its tile's plugin can be called, as a widget's and a view's are.
         return { tile, ...(await deps.callRenderer("plugin.settle", { instance: tile }, RENDERER_TIMEOUT) as object) };
