@@ -318,8 +318,9 @@ export class ControlPlane {
     };
   }
 
-  /** The session of `tileId` ended (crash, kill, a close): everything kept for it goes, and
-   *  whatever waits on it (a parent's read, an approval) is answered now. */
+  /** The session of `tileId` ended (crash, kill, a close): everything kept for that session goes,
+   *  and whatever waits on it (a parent's read, an approval) is answered now. Who started it and
+   *  whom it started stay until its tile is closed (`forget`): a restart is not a removal. */
   exited(tileId: string): void {
     const bare = toBareId(tileId);
     this.reaper.cancel(bare);
@@ -327,8 +328,7 @@ export class ControlPlane {
     this.inbox.forget(bare);
     this.inTurn.delete(bare);
     this.status.exited(bare);
-    this.spawnRecords.forget(bare);
-    this.made?.forgetTile(tileId);
+    this.made?.sessionEnded(tileId);
   }
 
   /** The session of `tileId` was put to sleep: it runs nothing, but is not gone. A turn it was in is
@@ -350,13 +350,20 @@ export class ControlPlane {
     this.inbox.remind(toBareId(tileId));
   }
 
-  /** The tile `tileId` is gone for good: nothing more is asked of its status or its agent. */
+  /** The tile `tileId` is gone for good (closed): nothing more is asked of its status or its agent,
+   *  and its pipes, spawn wires and who started it go. */
   forget(tileId: string): void {
     const bare = toBareId(tileId);
     this.status.forget(bare);
     this.agentOf.delete(bare);
     this.lines.delete(bare);
     this.forgetRecorded(bare);
+    this.spawnRecords.forget(bare);
+    if (this.made) this.made.forgetTile(tileId);
+    else {
+      this.pipes.forget(bare);
+      for (const [child, parent] of this.spawnWires) if (child === bare || parent === bare) this.spawnWires.delete(child);
+    }
   }
 
   /** An event from a machine's daemon (here or another device's, R6): a session's status as it

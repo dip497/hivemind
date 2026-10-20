@@ -1,7 +1,8 @@
 /**
  * Restarting the app keeps who started each worker: it is still drawn and nested under the agent
  * that spawned it, still reports to it, still counts its spawn depth and still has its
- * supervision. A worker whose session ended is forgotten for good.
+ * supervision. Its session ending (a crash, a restart) keeps all that; only closing its tile forgets
+ * it for good.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -46,11 +47,31 @@ test("a worker spawned before a restart is still its spawner's: wired, reporting
   assert.deepEqual(inbox.messages.map((m) => [m.from, m.text]), [[worker, "auth reviewed"]]);
   await assert.rejects(after.start(REPO, { program: "claude", parent: deeper }), (e: unknown) => e instanceof ApiError && e.code === "DEPTH_EXCEEDED");
 
-  // A worker whose session ended is not brought back by the next start.
+  // A worker whose tile was closed is not brought back by the next start.
   after.exited(`hm:${worker}`);
+  after.forget(`hm:${worker}`);
   assert.deepEqual(start().links().spawns, [{ parent: deep, child: deeper }]);
   assert.equal(start().supervise.get(worker), undefined);
-  // Nor one whose session ended before anything was asked of the app after it started.
-  start().exited(`hm:${deep}`);
+  // Nor one closed before anything was asked of the app after it started.
+  start().forget(`hm:${deep}`);
   assert.deepEqual(start().links().spawns, []);
+});
+
+test("a session's exit, the worker's or its parent's, keeps the worker reporting to its parent", async () => {
+  const plane = start();
+  const worker = await plane.start(REPO, { program: "claude", parent: "tile-sla-lead" });
+  const report = (message: string) =>
+    plane.agentChannel("agent.report", { callerTile: `hm:${worker}`, message }, { actor: { kind: "tile", tile: worker } });
+  const leadInbox = async () =>
+    ((await plane.agentChannel("agent.inbox", {}, { actor: { kind: "tile", tile: "tile-sla-lead" } })) as { messages: Array<{ text: string }> })
+      .messages.map((m) => m.text);
+
+  plane.exited(`hm:${worker}`);
+  await report("after my restart");
+  assert.deepEqual(await leadInbox(), ["after my restart"]);
+
+  plane.exited("hm:tile-sla-lead");
+  await report("after yours");
+  assert.deepEqual(await leadInbox(), ["after yours"]);
+  assert.deepEqual(plane.links().spawns.filter((s) => s.child === worker), [{ parent: "tile-sla-lead", child: worker }]);
 });

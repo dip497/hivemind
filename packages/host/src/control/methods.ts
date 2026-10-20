@@ -279,12 +279,11 @@ export interface Dispatcher {
   /** One call on the agent channel (hcp.sock), made by `call.actor`. */
   agentChannel: (method: string, params: unknown, call: HcpCall) => Promise<unknown>;
   api: ControlWork;
-  /** Drop ALL per-tile HCP state for a tile that has gone away, WITHOUT closing it
-   *  as `close` does. MUST be called on every pty-exit and
-   *  user-close path — otherwise the records (spawnRecords/sendSeq/approveCache)
-   *  and its wait leak, a blocked agent.read/approval on the dead worker hangs
-   *  its full timeout instead of resolving, and its UI "awaiting" status lingers.
-   *  Idempotent — safe to call twice (e.g. close then the resulting pty-exit). */
+  /** The session of a tile ended (crash, exit, restart): what waits on it is answered now, and
+   *  what was kept for that session goes. Its parent, its workers and its pipes stay. Idempotent. */
+  sessionEnded: (tileId: string) => void;
+  /** The tile is gone for good (closed): everything above, and its pipes, spawn wires and parent
+   *  records. Idempotent. */
   forgetTile: (tileId: string) => void;
   /** What the control plane's messages call a tile (names.ts). */
   labelOf: (tileId: string) => string;
@@ -479,26 +478,30 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   // exits or it is put to sleep instead.
   const readers = new Map<string, Set<(state: "waiting" | "exited" | "asleep") => void>>();
 
-  // Drop ALL per-tile HCP state (pid-keyed: turns/recorder/epochs; bare-keyed:
-  // pipes/parent/depth/supervision/approvals). Runs on EVERY teardown path — the
-  // close, and (via forgetTile below) every pty-exit/user-close. Wakes
-  // anything blocked on the dead tile (readers via turns.forget → seq -1; approvals
-  // resolved "worker closed") so a crash doesn't hang a parent for the full timeout.
-  // Idempotent: every op is a delete/forget that no-ops when already gone.
-  const forgetTileState = (tileId: string): void => {
+  // What a session's end drops: its turns, its sends, its waits and its inbox. Wakes anything
+  // blocked on it (readers via turns.forget → seq -1; approvals resolved "worker closed") so a
+  // crash doesn't hang a parent for the full timeout. Its links to other tiles stay: a restart is
+  // not a removal. Idempotent: every op is a delete/forget that no-ops when already gone.
+  const forgetSessionState = (tileId: string): void => {
     const pid = ptyId(tileId);
     const bare = bareOf(tileId);
     deps.turns.forget(pid);
     deps.recorder.forget(pid);
-    deps.forgetPipes(bare);
-    deps.spawnEdge(bare, null, false); // drop spawn wires where this tile is parent OR child
     sendSeq.delete(pid);
     sendMark.delete(pid);
     pendingSend.delete(pid);
-    deps.spawnRecords.forget(bare);
     deps.waits.forget(bare);
     waitTold.delete(bare);
     deps.inbox.forget(bare);
+  };
+
+  // A tile gone for good: its session's state, and its pipes, spawn wires and parent records.
+  const forgetTileState = (tileId: string): void => {
+    const bare = bareOf(tileId);
+    forgetSessionState(tileId);
+    deps.forgetPipes(bare);
+    deps.spawnEdge(bare, null, false); // drop spawn wires where this tile is parent OR child
+    deps.spawnRecords.forget(bare);
   };
 
   /** What `bare` waits on, said to the agent that started it, while it still waits on that. */
@@ -1099,7 +1102,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   };
 
   return {
-    agentChannel, api, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
+    agentChannel, api, sessionEnded: forgetSessionState, forgetTile: forgetTileState, labelOf: label, spawn: doSpawn, close: closeTile,
     parentOf, onStatus, conversationAsleep,
     asleep: (tileId) => { for (const told of readers.get(bareOf(tileId)) ?? []) told("asleep"); },
   };

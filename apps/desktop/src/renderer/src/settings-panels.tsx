@@ -117,6 +117,7 @@ const SHORTCUTS_ANYWHERE: [string, string][] = [
   ["⌘/Ctrl + .", "Focus the selected tile"],
   ["⌘/Ctrl + ⇧ + F", "Fit the selected terminal to the screen"],
   ["F11", "Full screen"],
+  ["⌘/Ctrl + Q", "Quit, asking first while agents or terminals run"],
 ];
 const SHORTCUTS_CANVAS: [string, string][] = [
   ["⌘/Ctrl + B", "Show or hide Layers (⌘ works in a terminal too)"],

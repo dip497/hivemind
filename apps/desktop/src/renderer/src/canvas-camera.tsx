@@ -34,8 +34,9 @@ export function snapViewportCrisp(vp: { x: number; y: number; zoom: number }): {
 // (centered; sharp). Non-text tiles (issues/browser/planReview) zoom-to-fill.
 // (A full-screen-CRISP maximize would have to grow the tile's rows/cols rather
 // than zoom — that fought the frame layout and is deferred.)
-// A browser tile is an out-of-process <webview>: the page draws at 100% and the canvas
-// scales the finished image, so any other zoom blurs it — focus pins it too.
+// A browser tile is an out-of-process <webview>: once the canvas is still, the tile redraws its
+// page at the canvas zoom and shrinks it back by the same amount (BrowserTile), so it is sharp at
+// any zoom. While the canvas moves it shows the last drawing, stretched.
 /** One camera move between tiles: a straight, short ease-out. The default "smooth" path zooms
  *  out mid-flight and back in, so going terminal to terminal at 100% dipped, blurred every
  *  terminal and took 400ms. Reduced motion jumps. */
