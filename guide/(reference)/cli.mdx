@@ -10,7 +10,7 @@ Using the hive commands on this page and \`hive <command> --help\`, write a shel
 
 1. Check the setup: \`hive --version\` works, and \`hive ctl agents --json\` exits 0 inside my project. Exit 3 means neither the app nor \`hive host\` runs: ask me to open the project with \`hivemind <folder>\`. See which agents can start with \`hive agents list --found\`.
 2. Ask me for the task, the list of items (files, packages, questions), and which agent to use.
-3. For each item: \`hive ctl spawn --agent <agent> --prompt "<task> for <item>" --name "<item>" --json\` prints \`{"tile": …}\`; keep the tile ids. Then for each tile: \`hive ctl read <tile> --timeout 10m --json\`. Handle the exit codes in the table on this page: 4 read again; 5 the tile was closed; 7 the agent is asleep or cannot say when it finishes; 8 it waits on an answer (show me its question from \`hive ctl agents --json\` and stop).
+3. For each item: \`hive ctl spawn --agent <agent> --prompt "<task> for <item>" --name "<item>" --json\` prints \`{"tile": …}\`; keep the tile ids. Then for each tile: \`hive ctl read <tile> --timeout 10m --json\`. Handle the exit codes in the table on this page: 4 read again; 5 the tile was closed; 7 the agent is idle or cannot say when it finishes; 8 it waits on an answer; 9 it is asleep (wake it with \`hive ctl wake <tile>\`) (show me its question from \`hive ctl agents --json\` and stop).
 4. Print each item with its reply, then close the tiles with \`hive ctl close <tile>\` unless I ask to keep them.
 5. Run it on two small items first and show me the output.
 
@@ -36,8 +36,9 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED` | refused — the runtime cannot do this, or not now; `read` of an agent that is asleep; `sleep` or `wake` that did nothing |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
+| 9 | `ASLEEP` | the agent is asleep: `send`, `keys`, `read`, `connect` and `report` to it are refused; the fix is `hive ctl wake <tile>` |
 | 1 | `FAILED` | other |
 
 ### `hive ctl read`
@@ -49,8 +50,9 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 0 | The agent replied. | Use the reply it printed. |
 | 4 | It is still working. | Run `read` again. |
 | 5 | Its tile was closed. | Start it again if you still need it. |
-| 7 | It is asleep. | Wake it with `hive ctl wake <tile>`. |
+| 7 | It was sent nothing new, and is idle. | Send it a task. |
 | 8 | It stopped to ask you something. | Answer it, then `read` again. |
+| 9 | It is asleep. | Wake it with `hive ctl wake <tile>`. |
 
 ## Issues
 
@@ -124,14 +126,14 @@ hive ctl sessions [agent] [--cwd dir] [--limit 100]
 hive ctl send <tileId> "text" [--interrupt]   # after its turn; --interrupt: stop the turn first
 hive ctl keys <tileId> Down,Enter       # Esc, Tab, digits, …
 hive ctl read <tileId> [--timeout 90s] [--poll]   # default wait 100 s; --poll: no wait; idle with nothing new: exit 7
-                                        # exit 4 timeout, 5 closed, 7 asleep, 8 waits on an answer
+                                        # exit 4 timeout, 5 closed, 7 idle, 8 waits on an answer, 9 asleep
 hive ctl inbox [--wait 90s] [--tile id] # what other agents sent you, each once (--wait at most 10m)
 hive ctl stream <tileId> [--lines 40] [--timeout 30s]
                        [--snapshot] [--json]        # what it prints, live; --lines: the last N first
 hive ctl focus <tileId>
 hive ctl close <tileId>                 # ends what runs in it; exit 5 if it is not open
 hive ctl sleep [tile|frame] [--force]   # its process ends, its screen and conversation kept; none: every agent
-hive ctl wake [tile|frame]              # back in its conversation; exit 7 if nothing woke
+hive ctl wake [tile|frame]              # back in its conversation; awake already is exit 0; exit 7 if nothing woke for another reason
 hive ctl rename <tileId> ["name"]       # no name: back to what its agent says it is doing
 hive ctl connect <src> <dst>            # src's finished replies go to dst's inbox; dst is told by one line typed into it, which starts a turn
 hive ctl disconnect <src> [<dst>]

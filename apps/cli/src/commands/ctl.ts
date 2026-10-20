@@ -65,7 +65,10 @@ function print(result: unknown, json: boolean): void {
 function failureOf(e: unknown): Failure & { exit: number } {
   const message = String((e as Error)?.message ?? e);
   if (e instanceof HcpCliError) {
-    const fix = e.fix ?? (e.exit === EXIT.usage ? helpFor() : e.code === "UNAVAILABLE" ? "start the hivemind app, or run `hive host`" : undefined);
+    const fix = e.fix ?? (e.exit === EXIT.usage ? helpFor()
+      : e.code === "UNAVAILABLE" ? "start the hivemind app, or run `hive host`"
+      : e.code === "ASLEEP" ? (/hive ctl wake \S+/.exec(message)?.[0] ?? "hive ctl wake <tile>")
+      : undefined);
     return { code: e.code, message, ...(fix ? { fix } : {}), exit: e.exit };
   }
   if (e instanceof UsageError) return { code: "USAGE", message, fix: helpFor(), exit: EXIT.usage };
@@ -393,7 +396,7 @@ const keys = sub("keys", "Send key tokens to a tile's TUI (comma-separated, e.g.
 
 const READ_DEFAULT_MS = 100_000; // under Claude Code's 120 s Bash default
 
-const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes or the tile runs no agent, 7 if it is asleep or idle with nothing new, 8 if it stops to wait on an answer)", {
+const read = sub("read", "Wait for an agent's turn to finish and print its reply (exit 4 on timeout, 5 if it closes or the tile runs no agent, 7 if it is idle with nothing new, 8 if it stops to wait on an answer, 9 if it is asleep)", {
   ...tileArg,
   timeout: { type: "string", description: `total wait, e.g. 90s or 5m (default ${READ_DEFAULT_MS / 1000}s); made of short HCP polls, never one long request` },
   poll: { type: "boolean", description: "don't wait: say now whether it has a new reply, is working, idle, waiting, asleep or closed (exit 0)" },
@@ -402,9 +405,9 @@ const read = sub("read", "Wait for an agent's turn to finish and print its reply
   return onDrive(async (d) => {
     const r = await readTurn(d, String(a.tileId), total);
     if (r.finalStatus === "turn" || a.poll) return r;
-    // Closed while we waited: no turn is coming. Waiting: none comes until it is answered; asleep,
-    // until it is woken; idle, until it is sent a task.
-    const exit = { closed: EXIT.notFound, waiting: EXIT.waiting, asleep: EXIT.refused, idle: EXIT.refused, timeout: EXIT.timeout, working: EXIT.ok } as const;
+    // Closed while we waited: no turn is coming. Waiting: none comes until it is answered; idle,
+    // until it is sent a task.
+    const exit = { closed: EXIT.notFound, waiting: EXIT.waiting, idle: EXIT.refused, timeout: EXIT.timeout, working: EXIT.ok } as const;
     return { __exit: exit[r.finalStatus], result: r };
   });
 });
@@ -420,11 +423,12 @@ const close = sub("close", "Close an agent: its session ends and its tile goes",
 }));
 /** A tile or a frame of the workspace, by its id or name; none: all of it. */
 const targetArg = { target: { type: "positional", required: false, description: "a tile or a frame, by its id or name (none: every agent of the workspace)" } } as const;
-type Skipped = Array<{ tile: string; why: string }>;
-/** Refused when nothing was done and something was left, so a script can tell. */
-const doneOrRefused = (done: string[], skipped: Skipped, result: unknown) => (done.length === 0 && skipped.length > 0 ? { __exit: EXIT.refused, result } : result);
+type Skipped = Array<{ tile: string; why: string; already?: true }>;
+/** Refused when nothing was done and something was left for a reason other than being so already,
+ *  so a script can tell; asleep or awake already is what was asked. */
+const doneOrRefused = (done: string[], skipped: Skipped, result: unknown) => (done.length === 0 && skipped.some((s) => !s.already) ? { __exit: EXIT.refused, result } : result);
 
-const sleep = sub("sleep", "Put agents to sleep: each one's process ends, and its last screen and conversation wait for `hive ctl wake`",
+const sleep = sub("sleep", "Put agents to sleep: each one's process ends, and its last screen and conversation wait for `hive ctl wake`. With no target, every agent but the one asking",
   { ...targetArg, force: { type: "boolean", description: "also those working or waiting on someone" }, ...repoArg },
   (a) => onDrive(async (d) => {
     const r = await d.call("agent.sleep", [await workspaceOf(d, a.repo), a.target ?? "", !!a.force]) as { slept: string[]; skipped: Skipped };

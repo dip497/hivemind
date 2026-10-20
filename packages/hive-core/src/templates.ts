@@ -284,10 +284,10 @@ hive ctl read <tileId> --timeout 90s --json
 # still working → exit 4 and {"text":null,"finalStatus":"timeout",…}; call again, nothing is lost.
 # stopped to wait on an answer → exit 8 and {"finalStatus":"waiting","waiting":{"kind","asks",…}}; answer it, then read again.
 # closed, or its agent exited → exit 5 and {"text":null,"finalStatus":"closed",…}; do not read it again.
-# asleep → exit 7 and {"text":null,"finalStatus":"asleep",…}; hive ctl wake <tileId> first.
+# asleep → exit 9 and {"error":{"code":"ASLEEP",…,"fix":"hive ctl wake <tileId>"}}, as send, keys and connect to it are.
 # idle, sent nothing since you last read it → exit 7 and {"text":null,"finalStatus":"idle",…}; send it a task.
 # a tile that runs no agent (a tool, a browser) → exit 5 and {"error":{"code":"NO_AGENT",…}}.
-hive ctl read <tileId> --poll --json              # never blocks, exit 0: a new reply, or "working", "idle", "waiting", "asleep", "closed"
+hive ctl read <tileId> --poll --json              # never blocks, exit 0: a new reply, or "working", "idle", "waiting", "closed"
 hive ctl stream <tileId> --snapshot               # the last 40 lines it printed (ANSI-stripped)
 \`\`\`
 Durations take units (\`90s\`, \`10m\`); a bare number is milliseconds, and one under 1000 is refused. Keep \`--timeout\` below your tool's own limit (Claude Code's Bash default is 120 s) or pass a matching tool timeout. It is always safe to interrupt and retry. A reply you read is not also put in your inbox.

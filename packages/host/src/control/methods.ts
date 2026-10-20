@@ -266,7 +266,7 @@ export interface ControlWork {
   hostStatus(): { workspaces: Array<{ repo: string; workspace: string | null }> };
   /** Put to sleep the agents of `target` in the workspace of `repo` (a tile or a frame, by id or
    *  name; none: all of them), leaving one working or waiting on someone unless `force`. */
-  sleep(repo: string, target: string | undefined, force: boolean): Promise<SleepAnswer>;
+  sleep(repo: string, target: string | undefined, force: boolean, caller?: string): Promise<SleepAnswer>;
   /** Wake the sleeping agents of `target` in the workspace of `repo` (none: all of them). */
   wake(repo: string, target: string | undefined): Promise<WakeAnswer>;
   join(link: string): Promise<unknown>;
@@ -603,7 +603,6 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   const why = (e: unknown): string => (e instanceof Error ? e.message : String(e));
   /** Why `tile` is not put to sleep; null when it is. */
   const keptAwake = (tile: TileRecord, force: boolean): string | null => {
-    if (tile.sleeping) return "asleep already";
     if (tile.session) return "it shows a session started elsewhere, which is theirs";
     const def = agentForCmd(tile.cmd);
     if (!def) return "not an agent: only an agent comes back where it was";
@@ -612,11 +611,14 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     if (!force && (state === "working" || state === "waiting")) return `${state}: --force puts it to sleep anyway`;
     return null;
   };
-  const sleepTiles = async (repo: string, target: string | undefined, force: boolean): Promise<SleepAnswer> => {
+  const sleepTiles = async (repo: string, target: string | undefined, force: boolean, caller?: string): Promise<SleepAnswer> => {
     const { core, tiles } = tilesOf(repo, target);
     const slept: string[] = [];
     const skipped: Skipped[] = [];
     await Promise.all(tiles.filter((t) => isTerminalKind(t.kind)).map(async (tile) => {
+      // Asked to put every agent to sleep, an agent does not put itself to sleep: it names itself.
+      if (!target && caller && tile.id === bareOf(caller)) return void skipped.push({ tile: tile.id, why: "it is the one asking: name it to put it to sleep" });
+      if (tile.sleeping) return void skipped.push({ tile: tile.id, why: "asleep already", already: true });
       const kept = keptAwake(tile, force);
       if (kept) return void skipped.push({ tile: tile.id, why: kept });
       const folder = folderOf({ repo, core }, tile.id);
@@ -626,6 +628,9 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           await deps.sleepSession(ptyId(tile.id), folder).catch(() => deps.sleepSession(ptyId(tile.id), folder));
           deps.workspaces.setSleeping(tile.id, folder, CONTROL);
           deps.slept(tile.id);
+          // Asleep, what it said before is done with: a read after the wake waits for what comes next.
+          sendSeq.set(ptyId(tile.id), deps.turns.currentSeq(ptyId(tile.id)));
+          sentSinceRead.delete(ptyId(tile.id));
         });
         slept.push(tile.id);
       } catch (e) {
@@ -656,8 +661,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (session) wakingIn.set(session, tile.id);
       try {
         const { pid } = await oneAtATime(tile.id, async () => {
-          // A sleep it waited for may have left it awake.
-          if (!named && !recordOf(tile.id)?.sleeping) return { pid: 0 };
+          // A sleep it waited for may have left it awake; one named that runs is awake already.
+          if (!recordOf(tile.id)?.sleeping && (!named || deps.sessionHeld(ptyId(tile.id)))) return { pid: 0 };
           // No answer in time is asked again: a wake of what runs now joins it.
           let r = await deps.wakeSession(start);
           if (r.pid === -1) r = await deps.wakeSession(start);
@@ -668,7 +673,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           }
           return r;
         });
-        if (pid === 0) skipped.push({ tile: tile.id, why: "awake: it did not go to sleep" });
+        if (pid === 0) skipped.push({ tile: tile.id, why: "awake already", already: true });
         else if (pid === -1) skipped.push({ tile: tile.id, why: "no answer from where it sleeps" });
         else woke.push(tile.id);
       } catch (e) {
@@ -782,6 +787,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
           const child = bareOf(String(p.callerTile ?? ""));
           const parent = parentOf(child);
           if (!parent) throw new ApiError("NOT_FOUND", "no parent agent to report to");
+          if (!isClient(parent)) refuseAsleep(parent);
           const message = String(p.message ?? "").trim();
           if (!message) throw new ApiError("BAD_REQUEST", "message required");
           // A program that started it hears it as an event of the agent feed.
@@ -927,11 +933,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     }
   };
 
+  /** Refused, the same for every verb that needs its agent running: it is asleep. */
+  const asleepError = (bare: string): ApiError => new ApiError("ASLEEP", `tile ${bare} is asleep: wake it with hive ctl wake ${bare}`);
   const refuseAsleep = (tile: string): void => {
-    if (recordOf(bareOf(tile))?.sleeping) throw new ApiError("FAILED", `tile ${bareOf(tile)} is asleep: wake it first`);
+    if (recordOf(bareOf(tile))?.sleeping) throw asleepError(bareOf(tile));
   };
-  const asleepRead = (bare: string): AgentRead =>
-    ({ text: null, finalStatus: "asleep", truncated: false, note: `it is asleep: no turn will come until hive ctl wake ${bare}` });
 
   // A tile no open workspace holds, running no session main holds, is gone.
   const requireOpen = (tile: string): void => {
@@ -975,7 +981,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (record && !providerOf(tile) && (record.kind !== AGENT_TILE_KIND || (record.cmd !== undefined && !agentForCmd(record.cmd)))) {
         throw new ApiError("NO_AGENT", `no agent runs in tile ${bare}, so no reply will come from it`);
       }
-      if (record?.sleeping) return asleepRead(bare);
+      if (record?.sleeping) throw asleepError(bare);
       // A send may still be queued behind the turn in flight; its epoch is armed when
       // it is typed, so wait for that before deciding which turn this read wants.
       // One budget for the whole read: waiting for a held send to be typed must not
@@ -1014,7 +1020,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       // A tile that died under us is not "still working" — say so, and keep the read's
       // shape so a caller parsing finalStatus does not have to special-case an error.
       if (rec === "exited") return { text: null, finalStatus: "closed", truncated: false, note: "its agent exited: no turn will come" };
-      if (rec === "asleep") return asleepRead(bare);
+      if (rec === "asleep") throw asleepError(bare);
       if (rec && rec.seq === -1) return { text: null, finalStatus: "closed", truncated: false, note: "tile closed while waiting" };
       // Consume this turn: without advancing the epoch the NEXT read returns the same
       // turn instantly, so a poll loop can never tell a new answer from the old one.
@@ -1057,6 +1063,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     connect(src, dst) {
       requireOpen(src);
       requireOpen(dst);
+      refuseAsleep(src);
+      refuseAsleep(dst);
       if (!deps.connect(src, dst)) throw new ApiError("BAD_REQUEST", "cannot pipe a tile to itself or create a cycle");
     },
     disconnect(src, dst) {

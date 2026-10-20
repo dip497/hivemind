@@ -124,7 +124,7 @@ test("a frame's agents sleep in the folders they run in, those of the frames in 
   assert.equal(asleepIn("a4"), undefined, "another frame's is left as it is");
 
   assert.deepEqual(await api.sleep(REPO, "a2", true), { slept: ["a2"], skipped: [] });
-  assert.deepEqual(await api.sleep(REPO, "a1", false), { slept: [], skipped: [{ tile: "a1", why: "asleep already" }] });
+  assert.deepEqual(await api.sleep(REPO, "a1", false), { slept: [], skipped: [{ tile: "a1", why: "asleep already", already: true }] });
 });
 
 test("named nothing, every agent of the workspace sleeps, in every frame; a tile that runs nothing is not even listed", async () => {
@@ -165,14 +165,14 @@ test("asleep, an agent keeps its name and is not counted as ended; nothing is ty
   p.event("agent.event", { tileId: "hm:a1", event: "turn.started" });
   p.status.title("a1", "Fix the login");
   const api = await p.api();
+  api.connect("a2", "a1");
+  api.connect("a2", "a3");
   await api.sleep(REPO, "a1", true);
   await api.sleep(REPO, "a3", false);
   assert.deepEqual([p.status.get("a1")?.state, p.status.get("a1")?.title], ["interrupted", "Fix the login"]);
 
-  assert.throws(() => api.send("a1", "next task"), /tile a1 is asleep: wake it first/);
-  assert.throws(() => api.keys("a1", ["Enter"]), /tile a1 is asleep: wake it first/);
-  api.connect("a2", "a1");
-  api.connect("a2", "a3");
+  assert.throws(() => api.send("a1", "next task"), /tile a1 is asleep: wake it with hive ctl wake a1/);
+  assert.throws(() => api.keys("a1", ["Enter"]), /tile a1 is asleep: wake it with hive ctl wake a1/);
   p.event("agent.event", { tileId: "hm:a2", event: "turn.started" });
   p.event("agent.reply", { tileId: "hm:a2", text: "done" });
   p.event("agent.event", { tileId: "hm:a2", event: "turn.ended" });
@@ -195,8 +195,8 @@ test("asleep, an agent keeps its name and is not counted as ended; nothing is ty
 test("one woken that neither says it is up nor settles is told what waited after a minute", async (t) => {
   const { p, typed } = plane();
   const api = await p.api();
-  await api.sleep(REPO, "a3", false);
   api.connect("a2", "a3");
+  await api.sleep(REPO, "a3", false);
   p.event("agent.event", { tileId: "hm:a2", event: "turn.started" });
   p.event("agent.reply", { tileId: "hm:a2", text: "done" });
   p.event("agent.event", { tileId: "hm:a2", event: "turn.ended" });
@@ -213,10 +213,8 @@ test("one woken that neither says it is up nor settles is told what waited after
 test("one asleep since before this host started is told, once woken and settled, what was sent it meanwhile", async () => {
   const { p, typed, settle } = plane({ asleep: { a5: "ssh://me@box/web" } });
   const api = await p.api();
-  api.connect("a2", "a5");
-  p.event("agent.event", { tileId: "hm:a2", event: "turn.started" });
-  p.event("agent.reply", { tileId: "hm:a2", text: "done" });
-  p.event("agent.event", { tileId: "hm:a2", event: "turn.ended" });
+  // A reply piped to it before the restart; no pipe to a sleeper is made now.
+  p.inbox.post("a5", { from: "a2", name: "a2", kind: "reply", turn: 1, text: "done" });
   await new Promise((r) => setTimeout(r, 300));
   assert.equal(typed("a5"), "");
   assert.deepEqual(await api.wake(REPO, "a5"), { woke: ["a5"], skipped: [] });
@@ -228,7 +226,7 @@ test("one asleep since before this host started is told, once woken and settled,
 });
 
 test("a wake brings back the workspace's sleepers where they slept and asks once more one given no answer; a tile named is woken whatever its layout says", async () => {
-  const { p, calls, asleepIn } = plane({ noAnswer: new Set(["hm:a3"]) });
+  const { p, calls, asleepIn, running } = plane({ noAnswer: new Set(["hm:a3"]) });
   p.event("agent.event", { tileId: "hm:a2", event: "turn.started" });
   const api = await p.api();
   await api.sleep(REPO, "api", false);
@@ -239,6 +237,7 @@ test("a wake brings back the workspace's sleepers where they slept and asks once
   assert.equal(asleepIn("a3"), undefined);
 
   calls.length = 0;
+  running.delete("hm:a4"); // asleep where it runs, though its layout lost the mark
   assert.deepEqual(await api.wake(REPO, "a4"), { woke: ["a4"], skipped: [] });
   assert.deepEqual(calls, ["wake hm:a4 ssh://me@box/web"]);
 });
@@ -255,7 +254,7 @@ test("a wake of a frame asked while one of its agents goes to sleep waits for th
   const failing = plane({ slowSleep: 200, sleepFails: new Set(["hm:a4"]) });
   const api2 = await failing.p.api();
   const failed = api2.sleep(REPO, "a4", false);
-  assert.deepEqual(await api2.wake(REPO, "web"), { woke: [], skipped: [{ tile: "a4", why: "awake: it did not go to sleep" }] });
+  assert.deepEqual(await api2.wake(REPO, "web"), { woke: [], skipped: [{ tile: "a4", why: "awake already", already: true }] });
   await failed;
   assert.deepEqual(failing.calls, ["sleep hm:a4 ssh://me@box/web", "sleep hm:a4 ssh://me@box/web"]);
 });
@@ -282,17 +281,16 @@ test("a sleeper's conversation is not started again in another tile, however it 
   assert.deepEqual(await api.wake(REPO, "a1"), { woke: [], skipped: [{ tile: "a1", why: "tile a2 runs this conversation now" }] });
 });
 
-test("a read of an agent's turn is answered at once that it is asleep, one already waiting as it is put to sleep too", async () => {
+test("a read of an agent's turn is refused at once that it is asleep, one already waiting as it is put to sleep too", async () => {
   const { p } = plane();
   const api = await p.api();
   const reading = api.read("a1", 10_000);
   await new Promise((r) => setTimeout(r, 50));
   await api.sleep(REPO, "a1", false);
-  const asleep = { text: null, finalStatus: "asleep", truncated: false, note: "it is asleep: no turn will come until hive ctl wake a1" };
   const started = Date.now();
-  assert.deepEqual(await reading, asleep);
+  await assert.rejects(reading, { code: "ASLEEP", message: "tile a1 is asleep: wake it with hive ctl wake a1" });
   assert.ok(Date.now() - started < 1000, "not left to run out of time");
-  assert.deepEqual(await api.read("a1", 10_000), asleep);
+  await assert.rejects(api.read("a1", 10_000), { code: "ASLEEP" });
 });
 
 test("two sleepers of one frame in one conversation: one is woken, the other is not, while it runs it", async () => {
@@ -325,4 +323,61 @@ test("a sleeper closed is ended where it sleeps", async () => {
   await api.sleep(REPO, "a4", false);
   await p.close("a4");
   assert.deepEqual(calls.at(-1), "end hm:a4 ssh://me@box/web");
+});
+
+/** The code a call failed with; "done" when it did not. */
+const outcome = async (run: () => unknown): Promise<string> => {
+  try { await run(); return "done"; } catch (e) { return (e as { code?: string }).code ?? String(e); }
+};
+
+test("every verb that needs its agent running is refused ASLEEP, saying the wake that fixes it: send, keys, read, a pipe from or to it, a report to it", async () => {
+  const { p } = plane();
+  const api = await p.api();
+  const child = await p.start(REPO, { program: "acme", parent: "a1" });
+  await api.sleep(REPO, "a1", true);
+  const verbs: Array<[string, () => unknown]> = [
+    ["send", () => api.send("a1", "next task")],
+    ["keys", () => api.keys("a1", ["Enter"])],
+    ["read", () => api.read("a1", 10_000)],
+    ["connect from it", () => api.connect("a1", "a2")],
+    ["connect to it", () => api.connect("a2", "a1")],
+    ["report to it", () => p.agentChannel("agent.report", { message: "done" }, { actor: { kind: "tile", tile: child } } as never)],
+  ];
+  for (const [verb, run] of verbs) assert.deepEqual([verb, await outcome(run)], [verb, "ASLEEP"]);
+  await assert.rejects(Promise.resolve().then(() => api.send("a1", "x")), /tile a1 is asleep: wake it with hive ctl wake a1/);
+});
+
+test("waking an agent that is awake answers awake already, as sleeping one asleep answers asleep already", async () => {
+  const { p, calls } = plane();
+  const api = await p.api();
+  await api.sleep(REPO, "a1", true);
+  assert.deepEqual(await api.sleep(REPO, "a1", true), { slept: [], skipped: [{ tile: "a1", why: "asleep already", already: true }] });
+  assert.deepEqual(await api.wake(REPO, "a1"), { woke: ["a1"], skipped: [] });
+  const wakes = calls.filter((c) => c.startsWith("wake")).length;
+  assert.deepEqual(await api.wake(REPO, "a1"), { woke: [], skipped: [{ tile: "a1", why: "awake already", already: true }] });
+  assert.equal(calls.filter((c) => c.startsWith("wake")).length, wakes, "nothing is started again");
+});
+
+test("an agent asking to put every agent to sleep is not put to sleep itself; named, it is", async () => {
+  const { p, running } = plane();
+  const api = await p.api();
+  const r = await api.sleep(REPO, undefined, true, "a2");
+  assert.ok(r.slept.includes("a1") && !r.slept.includes("a2"));
+  assert.deepEqual([r.skipped.find((s) => s.tile === "a2")?.why, running.has("hm:a2")], ["it is the one asking: name it to put it to sleep", true]);
+  assert.deepEqual((await api.sleep(REPO, "a2", true, "a2")).slept, ["a2"]);
+});
+
+test("a read after a wake does not hand back the reply from before the sleep, one never read either", async () => {
+  const { p } = plane();
+  const api = await p.api();
+  assert.equal(api.send("a1", "echo piped"), true);
+  await new Promise((r) => setTimeout(r, 600));
+  p.event("agent.event", { tileId: "hm:a1", event: "turn.started" });
+  p.event("agent.reply", { tileId: "hm:a1", text: "before the sleep" });
+  p.event("agent.event", { tileId: "hm:a1", event: "turn.ended" });
+  await api.sleep(REPO, "a1", false);
+  await api.wake(REPO, "a1");
+  const r = await api.read("a1", 0);
+  assert.notEqual(r.text, "before the sleep");
+  assert.equal(r.finalStatus, "idle");
 });

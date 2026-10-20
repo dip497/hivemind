@@ -117,7 +117,6 @@ export HIVE_DRIVE_SOCK=~/.config/hivemind/drive.sock   # the socket it printed
     | `working` | Read with `timeoutMs` 0: it is still working. |
     | `idle` | It was sent nothing since you last read it, and is not working. Send it a task. |
     | `waiting` | It asks you something. Answer with `agents.answer`: `allow` or `deny` a permission, or `{text}` for a question. |
-    | `asleep` | It is asleep. |
     | `closed` | Its tile was closed. |
 
     Check it worked: the agent's tile turns amber while it waits, then goes back to work after your answer.

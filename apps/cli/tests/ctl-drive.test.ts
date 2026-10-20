@@ -74,15 +74,20 @@ beforeAll(async () => {
     answer("agent.approval", () => ({ request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
     answer("agent.start", () => ({ tile: "w-2" })),
-    answer("agent.send", (tile, text) => { if (!text) throw new ApiError("BAD_REQUEST", "text required"); return { sent: tile !== "ghost" }; }),
+    answer("agent.send", (tile, text) => {
+      if (!text) throw new ApiError("BAD_REQUEST", "text required");
+      if (tile === "z-1") throw new ApiError("ASLEEP", "tile z-1 is asleep: wake it with hive ctl wake z-1");
+      return { sent: tile !== "ghost" };
+    }),
     answer("agent.close", (tile) => ({ closed: tile !== "ghost" })),
     answer("agent.sleep", (_repo, target) => (target === "busy" ? { slept: [], skipped: [{ tile: "w-1", why: "working: --force puts it to sleep anyway" }] } : { slept: ["w-1"], skipped: [{ tile: "s-1", why: "not an agent: only an agent comes back where it was" }] })),
     answer("agent.wake", (_repo, target) => {
       if (target === "ghost") throw new ApiError("NOT_FOUND", 'no tile or frame here answers to "ghost"');
+      if (target === "w-3") return { woke: [], skipped: [{ tile: "w-3", why: "awake already", already: true }] };
       return target === "w-2" ? { woke: [], skipped: [{ tile: "w-2", why: "tile w-1 runs this conversation now" }] } : { woke: ["w-1"], skipped: [] };
     }),
     answer("agent.read", async (tile) => {
-      if (tile === "z-1") return { text: null, finalStatus: "asleep", truncated: false, note: "it is asleep: no turn will come until hive ctl wake z-1" };
+      if (tile === "z-1") throw new ApiError("ASLEEP", "tile z-1 is asleep: wake it with hive ctl wake z-1");
       if (tile === "i-1") return { text: null, finalStatus: "idle", truncated: false, note: "nothing new since you last read it: send it a task with hive ctl send i-1" };
       if (tile === "web-1") throw new ApiError("NO_AGENT", "no agent runs in tile web-1, so no reply will come from it");
       if (++reads > turnAfterReads) return { text: `reply ${reads}`, finalStatus: "turn", truncated: false };
@@ -284,6 +289,18 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([ghost.code, (ghost.json as { error: { code: string } }).error.code]).toEqual([5, "NOT_FOUND"]);
   }, 30_000);
 
+  test("an agent asleep is ASLEEP, exit 9, for send and read alike, with the wake that fixes it; waking one awake already is what was asked, exit 0", async () => {
+    const asleep = { error: { code: "ASLEEP", message: "tile z-1 is asleep: wake it with hive ctl wake z-1", fix: "hive ctl wake z-1" } };
+    for (const verb of [["send", "z-1", "next"], ["read", "z-1", "--timeout", "5s"]]) {
+      const out = await hive(["ctl", ...verb, "--json"], { env: env() });
+      expect([verb[0], out.code, out.stdout, out.json]).toEqual([verb[0], 9, "", asleep]);
+    }
+    const text = await hive(["ctl", "send", "z-1", "next"], { env: env() });
+    expect(text.stderr).toBe("error [ASLEEP] tile z-1 is asleep: wake it with hive ctl wake z-1\nfix: hive ctl wake z-1\n");
+    const awake = await hive(["ctl", "wake", "w-3", "--repo", repoA, "--json"], { env: env() });
+    expect([awake.code, awake.json]).toEqual([0, { woke: [], skipped: [{ tile: "w-3", why: "awake already", already: true }] }]);
+  }, 60_000);
+
   test("approve answers the wait its request names, as agent.answer; always and never decide the tool from now on; one not waiting is not found, exit 5", async () => {
     for (const [decision, answer] of [["allow", { decision: "allow" }], ["never", { decision: "deny", always: true }], ["always", { decision: "allow", always: true }]] as const) {
       const r = await hive(["ctl", "approve", "req-1", decision, "--repo", repoA, "--json"], { env: env() });
@@ -350,9 +367,8 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([poll.code, slices()]).toEqual([0, [0]]);
   });
 
-  test("read stops at once when no turn will come, saying why: asleep or idle exit 7, a tile running no agent NO_AGENT exit 5", async () => {
+  test("read stops at once when no turn will come, saying why: idle exit 7, a tile running no agent NO_AGENT exit 5", async () => {
     const cases: Array<[string, number, unknown]> = [
-      ["z-1", 7, { text: null, finalStatus: "asleep", truncated: false, note: "it is asleep: no turn will come until hive ctl wake z-1" }],
       ["i-1", 7, { text: null, finalStatus: "idle", truncated: false, note: "nothing new since you last read it: send it a task with hive ctl send i-1" }],
       ["web-1", 5, { error: { code: "NO_AGENT", message: "no agent runs in tile web-1, so no reply will come from it" } }],
     ];
