@@ -9,10 +9,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-- A terminal or agent that fails to start says why ("its daemon did not answer in time", or the daemon's own error) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.
+- A terminal or agent that fails to start says why (the daemon's own error, or that it stopped answering) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.
 - Agents started while the computer is busy get your shell's PATH and keys: a login shell slow to answer at startup is asked again in the background instead of being replaced by another shell for the rest of the session.
 
-- Terminals and agents slow to start, as when the app comes back after an update with many open, now open instead of saying they are not running on their machine.
+- Terminals and agents slow to start, as when the app comes back after an update with many open, are waited for while their daemon is still there, instead of being marked exited after a fixed few seconds.
 
 ## [2026.10.4] — 2026-10-20
 
