@@ -5,12 +5,14 @@
 //   phone, which the site turns into AVIF and WebP at build time;
 //   site/src/data/hero-clip.json, when each step starts in the clip.
 //
-//   node scripts/site-clip-encode.mjs <recording> --keep 2-64 --speed 9-20=4 \
-//     --phone 0=640,560 --phone 12=1600,700
+//   node scripts/site-clip-encode.mjs <recording> \
+//     --phone view=1285,800 --phone island=1300,800 --phone widget+5.2=1930,800 --phone tool=1285,800 --phone tool+4.3=1335,800
 //
-// --keep is the stretch of the recording to use, in seconds: one take, never two joined.
+// --keep is the stretch of the recording to use, in seconds: one take, never two joined; all of it
+// when left out.
 // --speed a-b=n plays a stretch of waiting n times faster, so the take stays whole but short.
-// --phone t=x,y centres the phone's crop on (x, y), in recorded pixels, from t (recording seconds);
+// --phone t=x,y centres the phone's crop on (x, y), in recorded pixels, from t: recording seconds, or
+// a beat and an offset (island+0.5), which still fits when the scene is recorded again;
 // the crop eases from one centre to the next over 0.8 s.
 // CLIP_ENCODER names a program taking `<in> <out> <ffmpeg args>` that runs the encodes elsewhere;
 // without it they run here at low priority.
@@ -27,15 +29,23 @@ const OUT = path.join(ROOT, "site/public/shots/hero");
 const STILLS = path.join(ROOT, "site/src/assets/hero");
 const DATA = path.join(ROOT, "site/src/data/hero-clip.json");
 const SHOWN = ["view", "widget", "tool"];
-const PHONE = { w: 1000, h: 1250, outW: 720, outH: 900 };
+const PHONE = { w: 1200, h: 1500, outW: 720, outH: 900 };
 
 const dir = path.resolve(args[0]);
-const [keepA, keepB] = (all("keep")[0] ?? "").split("-").map(Number);
-if (!(keepB > keepA)) throw new Error("--keep a-b is needed");
 const beats = JSON.parse(fs.readFileSync(path.join(dir, "beats.json"), "utf8"));
+const [keepA, keepB] = (all("keep")[0] ?? `0-${beats.at(-1).at}`).split("-").map(Number);
+if (!(keepB > keepA)) throw new Error("--keep a-b is wrong");
 const fast = all("speed").map((s) => { const [r, n] = s.split("="); const [a, b] = r.split("-").map(Number); return { a, b, n: Number(n) }; })
   .sort((x, y) => x.a - y.a);
-const phoneKeys = all("phone").map((s) => { const [t, xy] = s.split("="); const [x, y] = xy.split(",").map(Number); return { t: Number(t), x, y }; })
+/** Seconds of the recording: a number, or a beat's name and an offset (`widget+1.5`). */
+const secondsOf = (t) => {
+  const m = /^([a-z]+)([+-][\d.]+)?$/.exec(t);
+  if (!m) return Number(t);
+  const b = beats.find((x) => x.key === m[1]);
+  if (!b) throw new Error(`no ${m[1]} beat`);
+  return b.at + Number(m[2] ?? 0);
+};
+const phoneKeys = all("phone").map((s) => { const [t, xy] = s.split("="); const [x, y] = xy.split(",").map(Number); return { t: secondsOf(t), x, y }; })
   .sort((p, q) => p.t - q.t);
 if (!phoneKeys.length) throw new Error("--phone t=x,y is needed");
 

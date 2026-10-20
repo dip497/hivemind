@@ -5,7 +5,7 @@
     "width": 720,
     "height": 900
   },
-  "duration": 41.5,
+  "duration": 31.7,
   "steps": [
     {
       "key": "view",
@@ -13,11 +13,11 @@
     },
     {
       "key": "widget",
-      "at": 9.5
+      "at": 12.73
     },
     {
       "key": "tool",
-      "at": 27.0
+      "at": 23.43
     }
   ]
 }
