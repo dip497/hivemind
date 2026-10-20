@@ -7,12 +7,17 @@
 //
 //   cd apps/desktop && env -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS XDG_SESSION_TYPE=x11 \
 //     xvfb-run -n 91 -s "-screen 0 2560x1600x24" node scripts/site-clip.mjs <out-dir> \
-//     --plugins <hivemind-plugins checkout> [--island <views/island/dist>]
+//     --plugins <hivemind-plugins checkout> [--island <views/island/dist>] [--phone]
+//
+// The site needs two takes, `<wide>` and `<phone>` (the second with --phone), then
+// `node scripts/site-clip-encode.mjs <wide> <phone>`. Re-running them re-shoots the whole clip,
+// the Island part with it.
 //
 // The Island view, the CI light widget and the Flaky tests tool are installed from folders, the way
-// an agent installs a plugin it just wrote. --probe draws the take without recording it.
+// an agent installs a plugin it just wrote. --phone records the same scene in a phone-shaped window
+// for the site's phone clip. --probe draws the take without recording it.
 // Out: raw.mkv (lossless), beats.json (when each step starts, in seconds of raw.mkv), a still of
-// each beat and poster.png. scripts/site-clip-encode.mjs turns one recording into what the site serves.
+// each beat and poster.png. scripts/site-clip-encode.mjs turns the two recordings into what the site serves.
 import { _electron as electron } from "@playwright/test";
 import { execFile, execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -28,7 +33,9 @@ const PUBLISHED_AGENTS = path.join(ROOT, "packages/hive-agents/tests/fixtures/pu
 const args = process.argv.slice(2);
 const OUT = path.resolve(args[0] ?? "site-clip");
 const opt = (name, fallback) => { const i = args.indexOf(`--${name}`); return i > 0 ? args[i + 1] : fallback; };
-const SIZE = { width: Number(opt("width", 1280)), height: Number(opt("height", 800)) };
+// --phone records the same scene in a window of a phone's shape (4:5), so the terminal wraps to fit.
+const PHONE = args.includes("--phone");
+const SIZE = PHONE ? { width: 448, height: 560 } : { width: Number(opt("width", 1280)), height: Number(opt("height", 800)) };
 const SCALE = Number(opt("scale", 2));
 const FPS = Number(opt("fps", 30));
 const PLUGINS = path.resolve(opt("plugins", path.join(ROOT, "../hivemind-plugins")));
@@ -137,7 +144,7 @@ for (const [k, v] of [
 const steps = path.join(HOME, "steps");
 fs.mkdirSync(steps, { recursive: true });
 fs.writeFileSync(path.join(HOME, ".clip.sh"), `clock() { cat "$CLIP_CUE/clock" 2>/dev/null || echo 0; }
-spin() { local start=$(clock) g=(✻ ✶ ✳ ✢); local end=$(( start + $2 )); while [ "$(clock)" -lt "$end" ]; do local c=$(( $(clock) - start )); printf '\\r\\e[?25l\\e[38;5;208m%s\\e[0m %s… (%ss · esc to interrupt)  ' "\${g[$(( c / 400 % 4 ))]}" "$1" $(( c / 1000 + 1 )); sleep 0.03; done; printf '\\r\\e[K'; }
+spin() { local start=$(clock) g=(✻ ✶ ✳ ✢); local end=$(( start + $2 )); local cols=$(stty size </dev/tty 2>/dev/null | cut -d' ' -f2); local more=" · esc to interrupt"; [ $(( \${#1} + 30 )) -gt "\${cols:-200}" ] && more=""; while [ "$(clock)" -lt "$end" ]; do local c=$(( $(clock) - start )); printf '\\r\\e[?25l\\e[38;5;208m%s\\e[0m %s… (%ss%s)\\e[K' "\${g[$(( c / 400 % 4 ))]}" "$1" $(( c / 1000 + 1 )) "$more"; sleep 0.03; done; printf '\\r\\e[K'; }
 `);
 const say = (t) => `printf '\\n\\e[37m⏺\\e[0m %s\\n' "${t}"`;
 /** One real command as the agent runs it, with the first lines of what it printed. */
@@ -202,6 +209,7 @@ await app.evaluate(({ app: a, ipcMain }) => {
 await app.evaluate(({ BrowserWindow }, s) => {
   const w = BrowserWindow.getAllWindows()[0];
   w.unmaximize();
+  w.setMinimumSize(1, 1);
   w.setPosition(0, 0);
   w.setContentSize(s.width, s.height);
 }, SIZE);
@@ -267,13 +275,67 @@ for (let round = 0; round < 4; round++) {
 for (const [, , name, task] of WORKERS.slice(0, 4)) cue(name, `work ${task}`);
 
 // The camera opens on the agent the person talks to, at 100%, so its text reads on the page.
+// On a phone's width the projects list would take half the screen: the canvas gets all of it.
+if (PHONE) { await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"))); await wait(1500); }
+// The window as the camera sees it; the app may have put back a size it remembered.
+for (let i = 0; i < 20; i++) {
+  const got = await app.evaluate(({ BrowserWindow }, s) => {
+    const w = BrowserWindow.getAllWindows()[0];
+    if (w.isMaximized()) w.unmaximize();
+    w.setMinimumSize(1, 1);
+    w.setContentSize(s.width, s.height);
+    return w.getContentSize();
+  }, SIZE);
+  if (got[0] === SIZE.width && got[1] === SIZE.height) break;
+  if (i === 19) throw new Error(`the window stays ${got.join("x")}`);
+  await wait(500);
+}
+// On a phone the agent's terminal is sized to the screen, so its lines wrap to fit, the way a
+// person drags its corner.
+async function resizeTile(id, width, height) {
+  const node = page.locator(`.react-flow__node[data-id="${id}"]`).first();
+  // Its corner shows only while it is selected: focusing it selects it and brings it to 100%, then
+  // the view steps out until the whole tile, corner and all, is on screen.
+  const selected = async () => (await node.locator(".hm-node-selected").count()) > 0;
+  cli("ctl", "focus", id);
+  await wait(1500);
+  for (let i = 0; i < 6 && !(await selected()); i++) {
+    const head = await node.locator(".tile-drag-handle").first().boundingBox();
+    if (head) await page.mouse.click(head.x + head.width / 2, head.y + head.height / 2);
+    await wait(1200);
+  }
+  if (!(await selected())) throw new Error(`${id} would not select`);
+  for (let i = 0; i < 8; i++) {
+    const b = await node.boundingBox();
+    if (b && b.x >= 0 && b.y >= 0 && b.x + b.width <= SIZE.width - 8 && b.y + b.height <= SIZE.height - 8) break;
+    const out = page.getByTitle("Zoom out (Ctrl -)").first();
+    if (await out.isVisible()) await out.click(); else await page.keyboard.press("Control+Minus");
+    await wait(400);
+  }
+  const zoom = await page.$eval(".react-flow__viewport", (e) => new DOMMatrix(getComputedStyle(e).transform).a);
+  const box = await node.boundingBox();
+  const corner = await node.locator(".react-flow__resize-control.handle.bottom.right").first().boundingBox({ timeout: 10_000 });
+  if (!box || !corner) throw new Error("no corner to drag");
+  const from = { x: corner.x + corner.width / 2, y: corner.y + corner.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + width * zoom, box.y + height * zoom, { steps: 12 });
+  await page.mouse.up();
+  await wait(1000);
+  const got = await node.evaluate((e) => [e.offsetWidth, e.offsetHeight]);
+  console.log(`${id} is ${got.join("x")}`);
+}
+if (PHONE) await resizeTile(lead, SIZE.width - 24, SIZE.height - 120);
+await wait(1500);
 const focused = cli("ctl", "focus", lead);
 if (focused.status !== 0) throw new Error(`focus ${lead}: ${focused.stdout}${focused.stderr}`);
 /** The pointer leaves what it clicked, so no tooltip stays in the shot. */
-const rest = () => page.mouse.move(SIZE.width * 0.5, SIZE.height * 0.6);
+// Not over the cards in the corner: a card under the pointer stays.
+const rest = () => page.mouse.move(SIZE.width * 0.4, SIZE.height * 0.3);
 await rest();
 // The finished turns' cards leave after 7 s.
 await wait(9000);
+for (const end = Date.now() + 30_000; Date.now() < end && await page.locator(".hm-toast").count(); ) await wait(500);
 
 // ── the camera ─────────────────────────────────────────────────────────────────────────────────
 const FRAME_MS = 1000 / FPS;
@@ -415,11 +477,28 @@ try {
   await filmUntilLeaving(async () => !!islandPage() || await page.evaluate(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Island")), 90);
   // The view loads off camera, so the film cuts from the terminal to the islands drawn.
   await offCamera(async () => {
-    const end = Date.now() + 90_000;
-    while (Date.now() < end && cli("ctl", "plugin", "call", "@dip497/island", "census").status !== 0) await wait(500);
-    await wait(3000);
-    // Close on the island the person works on, not the whole sea.
-    cli("ctl", "plugin", "call", "@dip497/island", "island", JSON.stringify({ name: "storefront" }));
+    // Close on the island the person works on, not the whole sea. On a slow machine the view can
+    // miss its start time and stop; it is opened again until the flight is taken.
+    const fly = () => cli("ctl", "plugin", "call", "@dip497/island", "island", JSON.stringify({ name: "storefront" }));
+    let flown;
+    for (const end = Date.now() + 180_000; Date.now() < end; ) {
+      const census = cli("ctl", "plugin", "call", "@dip497/island", "census");
+      if (census.status === 0) { await wait(3000); flown = fly(); if (flown.status === 0) break; }
+      const said = `${census.stdout}${census.stderr}${flown?.stdout ?? ""}${flown?.stderr ?? ""}`;
+      console.error(`island storefront, not yet: ${said.trim().slice(0, 300)}`);
+      // A view that missed its start time stays failed until it is closed and opened again.
+      if (/stopped|did not start/.test(said)) {
+        cli("ctl", "plugin", "close", "view:@dip497/island");
+        await wait(2000);
+        cli("ctl", "plugin", "open", "view:@dip497/island");
+      }
+      await wait(2000);
+    }
+    if (flown?.status !== 0) throw new Error("the Island view never flew to storefront");
+    // Once more when the first flight has landed: the view's opening descent can take the camera back.
+    await wait(2500);
+    const again = fly();
+    if (again.status !== 0) throw new Error(`island storefront: ${again.stdout}${again.stderr}`);
     await wait(5000);
   });
   await mark("island");
@@ -455,7 +534,20 @@ try {
   await mark("tool");
   await film(0.6);
   await ask("Find the flaky tests.");
-  await filmUntil(async () => (await cliAsync("ctl", "plugin", "call", "dip497/flaky-tests", "flaky")).status === 0, 120);
+  const flaky = async () => (await cliAsync("ctl", "plugin", "call", "dip497/flaky-tests", "flaky")).status === 0;
+  if (PHONE) {
+    // The tool opens wider than a phone: it is sized to the screen off camera, then filmed whole.
+    const toolTile = () => page.evaluate(() => [...document.querySelectorAll(".react-flow__node")].find((n) => n.textContent.includes("Flaky tests #"))?.getAttribute("data-id") ?? null);
+    await filmUntilLeaving(async () => !!(await toolTile()), 120);
+    await offCamera(async () => {
+      const id = await toolTile();
+      await resizeTile(id, SIZE.width - 24, SIZE.height - 120);
+      cli("ctl", "focus", id);
+      await rest();
+      for (const end = Date.now() + 120_000; Date.now() < end && !(await flaky()); ) await wait(500);
+      await wait(1500);
+    });
+  } else await filmUntil(flaky, 120);
   await film(4);
   await mark("end");
 } catch (e) {

@@ -1,11 +1,7 @@
 {
   "width": 2560,
   "height": 1600,
-  "phone": {
-    "width": 720,
-    "height": 900
-  },
-  "duration": 31.7,
+  "duration": 31.8,
   "steps": [
     {
       "key": "view",
@@ -13,11 +9,30 @@
     },
     {
       "key": "widget",
-      "at": 12.73
+      "at": 12.77
     },
     {
       "key": "tool",
-      "at": 23.43
+      "at": 23.5
     }
-  ]
+  ],
+  "phone": {
+    "width": 720,
+    "height": 900,
+    "duration": 33,
+    "steps": [
+      {
+        "key": "view",
+        "at": 0
+      },
+      {
+        "key": "widget",
+        "at": 13.2
+      },
+      {
+        "key": "tool",
+        "at": 24.3
+      }
+    ]
+  }
 }
