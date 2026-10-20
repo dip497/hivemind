@@ -367,3 +367,8 @@
 /* A scanner reads the code on white, whatever the theme. */
 .qr-large { --qr-paper: #fff; display: grid; place-items: center; width: min(92vw, 92vh); max-width: none; aspect-ratio: 1; background: var(--qr-paper); border-radius: 8px; overflow: hidden; }
 .qr-large > svg { display: block; }
+
+/* A package of several: one row switched as one, its members under it. */
+.package-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 8px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; border-radius: 6px; }
+.package-members { margin-left: 22px; border-left: 1px solid var(--color-line2); padding-left: 4px; }
+.package-members .plugin-row:not(:has(> button)) { padding: 8px; }

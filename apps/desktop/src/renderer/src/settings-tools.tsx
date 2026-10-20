@@ -14,6 +14,7 @@ import { SettingsForm } from "./plugins/SettingsForm";
 import { ServiceSection } from "./plugins/ServiceSection";
 import { cleanError } from "./settings-plugins";
 import { PluginGroup, PluginRow } from "./plugins/PluginList";
+import { underPackageRow } from "./plugins/package-rows";
 import type { ToolPackage } from "@hivemind/core/tool-format";
 
 /** A tool plugin you added, by id; undefined for one that comes with the app. */
@@ -82,7 +83,7 @@ function RemoveTool({ pkg }: { pkg: ToolPackage }) {
 export function ToolsSection({ matches }: { matches: (text: string) => boolean }) {
   const shown = BUNDLED_TOOL_PLUGINS.filter((p) => matches(`${toolLabel(p.id)} ${p.id} ${p.tools.map((t) => t.description ?? "").join(" ")}`));
   const { packages, safeMode } = useToolPackages();
-  const added = packages.filter((p) => p.source === "you" && matches(`${p.name} ${p.id} ${p.description}`));
+  const added = packages.filter((p) => p.source === "you" && !underPackageRow(p) && matches(`${p.name} ${p.id} ${p.description}`));
   const ids = [...shown.filter((p) => p.builtin), ...shown.filter((p) => !p.builtin), ...added].map((p) => p.id);
   if (!ids.length) return null;
   return <PluginGroup kind="tool" count={ids.length}

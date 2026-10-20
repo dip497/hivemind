@@ -251,6 +251,9 @@ import type { Appearance, Settings } from "@hivemind/core/settings-schema";
 import type { CatalogEntry } from "@hivemind/core/plugin-catalog";
 
 /** One community view package as the main process sees it (see main/view-packages.ts). */
+/** An installed package, as the Plugins page lists it. */
+export interface InstalledPackageInfo { id: string; name: string; version: string; on: boolean; members: Array<{ kind: string; id: string }> }
+
 export interface ViewPackageInfo {
   id: string;
   dir: string;
@@ -432,6 +435,10 @@ export interface HiveIpc {
   removeViewPackage(id: string): Promise<void>;
   /** Switch a plugin you added on or off: with its package, which a package of one is all of. */
   switchPlugin(kind: "view" | "widget" | "tool", id: string, on: boolean): Promise<void>;
+  /** The packages installed here, each with its switch and its members by kind and id. */
+  installedPackages(): Promise<InstalledPackageInfo[]>;
+  /** Switch a whole package on or off. */
+  switchPackage(id: string, on: boolean): Promise<void>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── identity (R3) ─────────────────────────────────────────

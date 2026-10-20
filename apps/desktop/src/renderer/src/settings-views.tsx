@@ -13,6 +13,7 @@ import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar, type ToolbarActionId, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { useSettingsNavigate } from "./settings-panels";
+import { underPackageRow } from "./plugins/package-rows";
 
 export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); };
 
@@ -23,8 +24,10 @@ export function ViewsSection({ matches }: { matches: (text: string) => boolean }
   const report = useCommunityReport();
   const hub = useHubDescription();
   useEffect(rescan, []);
-  const on = useViews().filter((v) => matches(`${v.label} ${v.id} ${v.hint}`));
-  const off = report.packages.filter((p) => report.refused[p.id] && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
+  // A view in a package of several is listed under its package.
+  const inPackage = new Set(report.packages.filter(underPackageRow).map((p) => p.id));
+  const on = useViews().filter((v) => !inPackage.has(v.id) && matches(`${v.label} ${v.id} ${v.hint}`));
+  const off = report.packages.filter((p) => report.refused[p.id] && !inPackage.has(p.id) && matches(`${p.manifest?.name ?? p.id} ${p.id}`));
   const count = on.length + off.length;
   // A package says what it does only through HiveHub; a built-in view says it in its hint.
   const about = (id: string): string | undefined => report.packages.some((x) => x.id === id) ? hub("view", id) : undefined;

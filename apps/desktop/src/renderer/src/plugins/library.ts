@@ -146,7 +146,8 @@ export function usePlugins(catalog: CatalogEntry[] | null): PluginRecord[] {
     }
     const have = new Set(out.map((p) => `${p.kind}:${p.id}`));
     for (const e of catalog ?? []) {
-      if (have.has(`${e.type}:${e.id}`)) continue;
+      // A package is listed on its own row, not as one plugin.
+      if (have.has(`${e.type}:${e.id}`) || e.type === "package") continue;
       out.push({
         kind: e.type as PluginKind, id: e.id, name: e.name, description: e.description, author: e.author, version: e.version,
         origin: "hub", installed: false, can: [], readme: { catalog: { type: e.type, id: e.id } }, catalog: e,

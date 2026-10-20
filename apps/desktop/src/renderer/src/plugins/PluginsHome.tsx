@@ -21,6 +21,8 @@ import { BrowsePlugins, cleanError, type Preview } from "../settings-plugins";
 import { KIND_LABEL, PLUGIN_KINDS, useHubDescription, type PluginKind } from "./library";
 import { PluginGroup, PluginRow } from "./PluginList";
 import { WidgetIcon } from "./WidgetIcon";
+import { PackagesSection } from "./PackagesSection";
+import { underPackageRow } from "./package-rows";
 import { pluginsScope, setPluginsScope, type PluginsScope } from "./scope";
 
 const SCOPES: [PluginsScope, string][] = [["installed", "Installed"], ["hub", "HiveHub"]];
@@ -70,6 +72,7 @@ export function PluginsHome() {
     {scope === "hub"
       ? <BrowsePlugins query={query} kind={kind} />
       : <>
+        {kind === "all" && <PackagesSection matches={matches} />}
         {show("agent") && <AgentsSection matches={matches} />}
         {show("view") && <ViewsSection matches={matches} />}
         {show("widget") && <WidgetsSection matches={matches} />}
@@ -81,7 +84,7 @@ export function PluginsHome() {
 
 /** The widgets you have; one that is off is not offered and does not run. */
 function WidgetsSection({ matches }: { matches: (text: string) => boolean }) {
-  const widgets = useWidgetPackages().filter((w) => matches(`${w.name} ${w.id} ${w.description ?? ""}`));
+  const widgets = useWidgetPackages().filter((w) => !underPackageRow(w) && matches(`${w.name} ${w.id} ${w.description ?? ""}`));
   const state = useSettings().plugins.state;
   const hub = useHubDescription();
   if (!widgets.length) return null;
