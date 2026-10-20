@@ -69,7 +69,7 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
   const cards = all.filter((c) => matches(`${c.def?.label ?? c.id} ${c.id} ${c.def?.bin ?? ""}`));
   const presence = useAgentPresence();
   const hub = useHubDescription();
-  const { defaultAgent: saved, autoInstall } = useSettings().agents;
+  const { defaultAgent: saved, autoInstall, whenAgentStartsAgent } = useSettings().agents;
   const defaultId = agentToStart(saved, presence)?.id;
   const missing = (c: Card) => notReady(presence, c.id);
   const savedCard = saved && saved !== defaultId ? all.find((c) => c.id === saved) : undefined;
@@ -99,6 +99,17 @@ export function AgentsSection({ matches }: { matches: (text: string) => boolean 
         <span>· one you remove stays removed</span>
         <Switch id="agents-auto-install" size="sm" checked={autoInstall} aria-label="Add agents found on this machine"
           onCheckedChange={() => patchSettings("agents.autoInstall", !autoInstall)} />
+      </div>
+      <div className="plugins-group-setting" data-when-agent-starts-agent>
+        <label htmlFor="when-agent-starts-agent">When an agent starts another agent</label>
+        <span>· one you start is always shown</span>
+        <Select value={whenAgentStartsAgent} onValueChange={(v) => patchSettings("agents.whenAgentStartsAgent", v)}>
+          <SelectTrigger id="when-agent-starts-agent" size="sm" aria-label="When an agent starts another agent"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="stay">Stay where I am</SelectItem>
+            <SelectItem value="go">Go to it</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
     </>}>
       {shown.map((c) => <PluginRow key={c.id} kind="agent" id={c.id} name={label(c)} line={line(c)} state={state(c)} badge={badge(c)}

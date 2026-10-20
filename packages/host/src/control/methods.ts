@@ -219,6 +219,8 @@ export interface MethodDeps {
 
 /** A parent that is a program on the drive socket, not an agent's tile. */
 const isClient = (parent: string): boolean => parent.startsWith("client:");
+/** Who opens a tile, by the tile or program that asks: none is the person. */
+const openedBy = (asker?: string): TileOpened["by"] => (!asker ? "person" : isClient(asker) ? "program" : "agent");
 
 /** How the control plane writes a workspace: its windows hear of it, and it hears of none. */
 const CONTROL = { writer: "control" };
@@ -455,7 +457,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const tileId = openTile(place, (ws) => ({
       id: mintId(`tile-${def.id}`), kind: AGENT_TILE_KIND,
       ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
-    }), { name, prompt, background: opts.report === false });
+    }), { name, prompt, background: opts.report === false, by: openedBy(opts.parent) });
     const res = { tileId };
     const spawner = tile && tile !== res.tileId ? tile : undefined;
     deps.spawnRecords.add(res.tileId, {
@@ -716,11 +718,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
   };
   // Open the tile there, and tell the windows so.
   const openTile = (
-    { ws, frame, caller }: Place, make: (ws: KeptCore) => TileRecord, at: { name?: string; prompt?: string; background: boolean },
+    { ws, frame, caller }: Place, make: (ws: KeptCore) => TileRecord, at: { name?: string; prompt?: string; background: boolean; by: TileOpened["by"] },
   ): string => {
     const tile = make(ws.core);
     const near = caller && frame && ws.core.frameOf?.[caller] === frame.id ? caller : undefined;
-    deps.announceSpawn({ tileId: tile.id, repo: ws.repo, prompt: at.prompt, background: at.background, ...(near ? { near } : {}) });
+    deps.announceSpawn({ tileId: tile.id, repo: ws.repo, prompt: at.prompt, background: at.background, by: at.by, ...(near ? { near } : {}) });
     deps.workspaces.addTile(ws.repo, tile, { frame: frame?.id, name: at.name }, CONTROL);
     return tile.id;
   };
@@ -749,7 +751,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       id: mintId(`tile-${kind.replace(/[^A-Za-z0-9-]/g, "")}`), kind,
       label: `${tool.label} #${nextOrdinal(ws.tiles.map((t) => t.label), (n) => `${tool.label} #${n}`)}`,
       ...(url ? { url } : {}),
-    }), { background: false });
+    }), { background: false, by: openedBy(at.caller) });
   }
 
   const label = (tileId: string): string => labelIn(tileId, deps.workspaces, deps.status);

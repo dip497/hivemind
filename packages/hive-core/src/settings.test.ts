@@ -548,3 +548,8 @@ describe("a lock left by a process that is gone", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }, 20_000);
 });
+
+test("when an agent starts another, the window stays unless the file says go; anything else is stay", () => {
+  const read = (v: unknown) => mergeSettings({ agents: { whenAgentStartsAgent: v } }).agents.whenAgentStartsAgent;
+  expect([mergeSettings({}).agents.whenAgentStartsAgent, read("go"), read("stay"), read("jump"), read(true)]).toEqual(["stay", "go", "stay", "stay", "stay"]);
+});

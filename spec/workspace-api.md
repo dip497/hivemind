@@ -376,7 +376,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `widget.pressed` | `repo`, `id`, `{action}` or `{click: true}` | to the window that runs the workspace's widgets, a press made elsewhere (0.19) |
 | `link.pipe` | `{src, dst, connected}` (`dst` null: every pipe from `src`) | to every client, as a pipe between agents is connected or cut |
 | `link.spawn` | `{child, parent, connected}` (`parent` null: every wire touching `child`) | to every client, as an agent spawns another, or the tile goes |
-| `tile.opened` | `{tileId, repo, background, near?}` | to every client, as the control plane opens a tile, before it reaches the layout: its host starts it, with its first task; a client showing `repo` lays it out |
+| `tile.opened` | `{tileId, repo, background, near?, by}` | to every client, as the control plane opens a tile, before it reaches the layout: its host starts it, with its first task; a client showing `repo` lays it out. `by` (0.33): `person`, `agent` or `program`, who opened it; a window goes to one the person opened, and to one an agent or program opened only when the person's `agents.whenAgentStartsAgent` is `go` |
 | `terminal.data` | `tile`, `data` | to each client that shows the terminal, its output in batches; a screen the host sends in place of what the client shows starts with `ESC c` |
 | `terminal.exit` | `tile`, `{code, signal?, slept?}` | to each client that showed it, as its session ends; `slept`: it was put to sleep, and is not gone (0.29) |
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |

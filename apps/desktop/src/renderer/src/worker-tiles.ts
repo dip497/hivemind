@@ -15,8 +15,21 @@ export function markBackgroundTile(tileId: string): void {
 
 export function unmarkBackgroundTile(tileId: string): void {
   backgroundTiles.delete(tileId);
+  openedUnread.delete(tileId);
 }
 
 export function isBackgroundTile(tileId: string): boolean {
   return backgroundTiles.has(tileId);
+}
+
+/** Tiles an agent or a program opened that the window did not go to (`agents.whenAgentStartsAgent`
+ *  is `stay`): Layers shows each unread from its first change until the person looks at it. */
+const openedUnread = new Set<string>();
+
+export function markOpenedUnread(tileId: string): void {
+  openedUnread.add(tileId);
+}
+
+export function isOpenedUnread(tileId: string): boolean {
+  return openedUnread.has(tileId);
 }

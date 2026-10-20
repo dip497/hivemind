@@ -30,13 +30,15 @@ export interface SpawnChange {
 }
 
 /** The control plane opened a tile, before it reaches the layout, and its host starts it: a client
- *  that shows `repo` brings it forward unless it is a `background` worker, and lays it out beside
- *  `near`, the agent tile that opened it, when both share a frame. */
+ *  that shows `repo` lays it out beside `near`, the agent tile that opened it, when both share a
+ *  frame. It brings forward one the person opened (`by` person, 0.33); one an agent or a program
+ *  opened as its person's setting says (`agents.whenAgentStartsAgent`); a `background` worker never. */
 export interface TileOpened {
   tileId: string;
   repo: string;
   background: boolean;
   near?: string;
+  by: "person" | "agent" | "program";
 }
 
 /** Who answered a wait: a person, by their id and name. */
