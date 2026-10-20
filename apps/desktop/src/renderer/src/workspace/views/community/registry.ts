@@ -11,6 +11,7 @@
  */
 import { isPluginEnabled } from "@hivemind/core/plugin-settings";
 import { Puzzle } from "../../../components/icons";
+import { maskIcon } from "../../../plugins/mask-icon";
 import { toast } from "sonner";
 import { PROTOCOL_VERSION } from "@hivemind/view-sdk/protocol";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
@@ -35,11 +36,11 @@ export interface CommunityLoadReport {
 }
 
 const disabled = new Map<string, string>();
-const registeredUrl = new Map<string, string>();
+const registeredRevision = new Map<string, string>();
 
 export function disableCommunityView(id: string, reason: string): void {
   disabled.set(id, reason);
-  registeredUrl.delete(id);
+  registeredRevision.delete(id);
   unregisterView(id);
   publish();
 }
@@ -87,12 +88,13 @@ export async function loadCommunityViews(repoRoot: string | null): Promise<Commu
     if (!why && keep.has(p.id)) why = "duplicate id";
     if (why) { refused[p.id] = why; continue; }
     keep.add(p.id);
-    if (registeredUrl.get(p.id) !== p.url) {
-      registerView({ id: p.id, label: p.manifest!.name, hint: p.source === "app" ? "Comes with the app" : `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`, icon: Puzzle, component: makeCommunityView(p), source: "community", chrome: { wallpaper: p.manifest!.wallpaper ?? true, ...(p.manifest!.toolbar ? { island: p.manifest!.toolbar } : {}) } });
-      registeredUrl.set(p.id, p.url!);
+    const revision = `${p.url}|${p.manifest!.description ?? ""}|${p.icon ?? ""}`;
+    if (registeredRevision.get(p.id) !== revision) {
+      registerView({ id: p.id, label: p.manifest!.name, hint: p.manifest!.description ?? (p.source === "app" ? "Comes with the app" : `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`), icon: p.icon ? maskIcon(p.icon) : Puzzle, component: makeCommunityView(p), source: "community", chrome: { wallpaper: p.manifest!.wallpaper ?? true, ...(p.manifest!.toolbar ? { island: p.manifest!.toolbar } : {}) } });
+      registeredRevision.set(p.id, revision);
     }
   }
-  for (const v of listViews()) if (v.source === "community" && !keep.has(v.id)) { unregisterView(v.id); registeredUrl.delete(v.id); }
+  for (const v of listViews()) if (v.source === "community" && !keep.has(v.id)) { unregisterView(v.id); registeredRevision.delete(v.id); }
   last = { packages, refused, registered: [] };
   publish();
   return last;
