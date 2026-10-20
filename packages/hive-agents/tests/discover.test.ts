@@ -86,3 +86,16 @@ test.skipIf(!posix)("a probe that hangs is killed with everything it started", a
   await new Promise((r) => setTimeout(r, 200));
   expect(running(Number(readFileSync(pidFile, "utf8").trim()))).toBe(false);
 }, 10000);
+
+test.skipIf(!posix)("a listing that timed out is asked again, not kept for the session", async () => {
+  process.env.HM_SLOWFILE = join(mkdtempSync(join(tmpdir(), "hm-slow-")), "first");
+  fakeAgent("hm-fake-slow", `
+case "$1" in
+  --version) echo '1.0.0';;
+  models) if [ -e "$HM_SLOWFILE" ]; then echo fast; else touch "$HM_SLOWFILE"; sleep 30; fi;;
+esac`);
+  const first = await discoverOptions(def("hm-fake-slow"));
+  expect(first.model!.error).toContain("did not finish");
+  const second = await discoverOptions(def("hm-fake-slow"));
+  expect(second.model).toEqual({ values: ["fast"], from: "list" });
+}, 15000);

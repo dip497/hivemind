@@ -106,7 +106,9 @@ export const daemonEndpoint: Pick<DaemonEndpoint, "control"> = local;
 export async function spawnPty(opts: SpawnOpts & { attachOnly?: boolean; liveOnly?: boolean; history?: number }, cb: Callbacks): Promise<{ pid: number; asleep?: true }> {
   const r = await local.spawn({ ...opts, noSpawn: opts.attachOnly, liveOnly: opts.attachOnly && opts.liveOnly, lines: opts.history }, cb);
   if (r.pid === -1 && opts.attachOnly) local.detach(opts.tileId);
-  return r;
+  // A start that failed says why; only showing a session that is not there is an answer, not a failure.
+  if (r.pid === -1 && r.error && !opts.attachOnly) { local.detach(opts.tileId); throw new Error(r.error); }
+  return r.asleep ? { pid: r.pid, asleep: true } : { pid: r.pid };
 }
 /** Every session in this computer's daemon (the session picker's "this computer"). */
 export function listSessions(): Promise<SessionInfo[]> {

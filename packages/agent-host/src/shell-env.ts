@@ -30,6 +30,8 @@ const SUCCESS_TTL_MS = 60_000;
 const FALLBACK_TTL_MS = 10_000;
 const TIMEOUT_TTL_MS = 60_000;
 const SHELL_TIMEOUT_MS = 8_000;
+/** The second, background ask of a login shell that was too slow at startup. */
+const SLOW_SHELL_TIMEOUT_MS = 60_000;
 
 interface CachedResult {
   env: Record<string, string>;
@@ -42,6 +44,7 @@ let inFlight: Promise<CachedResult> | null = null;
 
 // One-shot latch so concurrent ENOENT recoveries don't dogpile.
 let processPatched = false;
+let slowShellRetry: Promise<void> | null = null;
 
 /** Resolve once + patch process.env. Idempotent. Safe to await at startup
  *  AND inside an ENOENT retry — second call is a no-op when patched.
@@ -53,10 +56,12 @@ export async function applyShellEnvToProcess(): Promise<Record<string, string>> 
     return { ...process.env } as Record<string, string>;
   }
   const result = await resolveShellEnv();
-  if (!processPatched) {
+  if (!processPatched && result.source === "shell") {
     processPatched = true;
     mergeIntoProcessEnv(result.env);
   }
+  // Busy at startup, the person's own shell may answer late: ask it again, without making anything wait.
+  if (!processPatched && result.source === "timeout-fallback") slowShellRetry ??= askSlowShell();
   // The merge overwrote PATH with the shell's value — re-apply the rescue on
   // top of it (idempotent: dirs already present are left in place).
   rescueProcessEnv();
@@ -113,9 +118,17 @@ const ANSI_RE =
   // eslint-disable-next-line no-control-regex
   /[][[\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*|[a-zA-Z\d]+(?:;[-a-zA-Z\d/#&.:=?%@~_]*)*)?)|(?:(?:\d{1,4}(?:;\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g;
 
-async function tryShell(shell: string): Promise<Record<string, string> | null> {
-  const { stdout } = await raceWithTimeout(
-    execFileP(
+async function askSlowShell(): Promise<void> {
+  const env = await tryShell(process.env.SHELL || "/bin/bash", SLOW_SHELL_TIMEOUT_MS).catch(() => null);
+  if (!env || processPatched) return;
+  processPatched = true;
+  cache = { env, expires: Date.now() + SUCCESS_TTL_MS, source: "shell" };
+  mergeIntoProcessEnv(env);
+  rescueProcessEnv();
+}
+
+async function tryShell(shell: string, timeout = SHELL_TIMEOUT_MS): Promise<Record<string, string> | null> {
+  const { stdout } = await raceWithTimeout(execFileP(
       shell,
       // `command` prefix bypasses user-defined `env` aliases/functions.
       // `-0` (NUL-separated) tolerates values with newlines/equals.
@@ -127,10 +140,10 @@ async function tryShell(shell: string): Promise<Record<string, string> | null> {
         encoding: "buffer",
         maxBuffer: 4 * 1024 * 1024,
         env: { ...process.env, ...SPAWN_ENV },
+        // Killed when it takes too long, not left running.
+        timeout,
       },
-    ),
-    SHELL_TIMEOUT_MS,
-  );
+  ), timeout);
   const text = (stdout as Buffer).toString("utf8").replace(ANSI_RE, "");
   const m = text.match(/__HIVE_ENV_BEGIN__([\s\S]*?)__HIVE_ENV_END__/);
   if (!m || !m[1]) return null;
@@ -157,7 +170,8 @@ async function doResolve(): Promise<CachedResult> {
         return result;
       }
     } catch (e) {
-      if ((e as Error).message === "shell-env-timeout") timedOut = true;
+      // Another shell would answer without the person's PATH and keys: wait for theirs instead.
+      if ((e as Error).message === "shell-env-timeout") { timedOut = true; break; }
       // try next fallback shell
     }
   }
@@ -172,12 +186,13 @@ async function doResolve(): Promise<CachedResult> {
 }
 
 function raceWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     p,
-    new Promise<T>((_resolve, reject) =>
-      setTimeout(() => reject(new Error("shell-env-timeout")), ms),
-    ),
-  ]);
+    new Promise<T>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("shell-env-timeout")), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
 }
 
 /** Parse `env -0` output: NUL-separated KEY=VALUE entries. */

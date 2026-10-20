@@ -11,7 +11,7 @@ const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 /** What still runs, as the dialog says it. */
 function quitMessage(q: QuitQuestion): string {
-  const what = q.agents ? `${count(q.agents, "agent")} ${q.agents === 1 ? "is" : "are"} still working.` : `${count(q.terminals, "terminal")} ${q.terminals === 1 ? "is" : "are"} still running.`;
+  const what = q.uncounted ? "Agents or terminals may still be running: the background process did not say." : q.agents ? `${count(q.agents, "agent")} ${q.agents === 1 ? "is" : "are"} still working.` : `${count(q.terminals, "terminal")} ${q.terminals === 1 ? "is" : "are"} still running.`;
   const elsewhere = !q.elsewhere ? "" : q.elsewhere === 1 ? " The agent on another machine keeps running either way." : ` The ${q.elsewhere} agents on other machines keep running either way.`;
   return `${what} Keep them running in the background, or stop everything on this computer; each comes back where it was when Hivemind starts again.${elsewhere}`;
 }

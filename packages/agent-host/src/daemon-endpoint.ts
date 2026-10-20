@@ -21,14 +21,18 @@ export interface SpawnOpts {
   wake?: boolean;
 }
 
-/** How long a start, a sleep or a wake is waited for: with many sessions starting at once (an app
- *  coming back after an update), one may take far longer than an attach to begin, end or resume. */
-const START_TIMEOUT_MS = 30_000;
+/** How long a sleep or a wake is waited for: an agent may take seconds to end, or to resume. */
+const WAKE_TIMEOUT_MS = 30_000;
+/** While an attach waits for its answer, how often the daemon is asked whether it is still there,
+ *  and how long it has to say so. */
+const STILL_THERE_EVERY_MS = 5_000;
+const STILL_THERE_WAIT_MS = 10_000;
 /** How long a sleeping session's saved screen is waited for. */
 const SAVED_TIMEOUT_MS = 10_000;
 
-/** What an attach came to: `pid` -1 when nothing runs, `asleep` when that is because it sleeps. */
-export interface Attached { pid: number; asleep?: true }
+/** What an attach came to: `pid` -1 when nothing runs, `asleep` when that is because it sleeps,
+ *  `error` why it did not open when something went wrong. */
+export interface Attached { pid: number; asleep?: true; error?: string }
 export interface Callbacks {
   /** `replay`: a redraw of output already seen, not new output. */
   onData: (data: string, replay?: boolean) => void;
@@ -52,7 +56,6 @@ export interface EndpointOptions {
   env?: () => Record<string, string>;
   retryInitialMs?: number;
   retryMaxMs?: number;
-  attachTimeoutMs?: number;
   /** Agent hook events from a daemon that runs without the desktop. */
   onEvent?: (topic: string, data: unknown) => void;
   /** Transport state; `reconnecting` carries ssh's reason while tiles wait for it. */
@@ -100,6 +103,11 @@ export class DaemonEndpoint {
   private handle(msg: ServerMsg): void {
     switch (msg.t) {
       case "attached": {
+        // The answer to an attach this side gave up on: its tile was told it failed, so nothing may stream into it.
+        if (msg.reqId.startsWith("a") && !this.pending.has(msg.reqId)) {
+          if (msg.pid > 0 && !this.cbs.has(msg.id)) this.fire({ t: "detach", id: msg.id });
+          break;
+        }
         if (msg.asleep) {
           const cb = this.cbs.get(msg.id);
           this.forget(msg.id);
@@ -304,12 +312,7 @@ export class DaemonEndpoint {
     this.specs.set(opts.tileId, spec);
     if (opts.noSpawn) this.live.add(opts.tileId);
     const reqId = `a${++this.seq}`;
-    const result = new Promise<Attached & { error?: string; gone?: true }>((resolve) => {
-      this.pending.set(reqId, resolve);
-      // Only showing a session is quick; a start or a wake begins a process, given as long as a sleep.
-      const t = setTimeout(() => { if (this.pending.delete(reqId)) resolve({ pid: -1 }); }, Math.max(this.o.attachTimeoutMs ?? 6000, opts.noSpawn ? 0 : START_TIMEOUT_MS));
-      t.unref?.();
-    });
+    const result = new Promise<Attached & { error?: string; gone?: true }>((resolve) => { this.pending.set(reqId, resolve); });
     try {
       const agent = opts.noSpawn ? undefined : agentPackageFor(spec.cmd);
     await this.send({ t: "attach", reqId, id: opts.tileId, spec, ...(opts.noSpawn ? { noSpawn: true } : this.base()), ...(agent ? { agent } : {}), ...(opts.liveOnly ? { liveOnly: true } : {}), ...(opts.lines !== undefined ? { lines: opts.lines } : {}), ...(opts.wake ? { wake: true } : {}) });
@@ -320,13 +323,27 @@ export class DaemonEndpoint {
       if (!this.o.isFatal?.(msg)) this.scheduleReattach();
       if (this.pending.delete(reqId)) return { pid: -1 };
     }
-    const r = await result;
+    // Waited for as long as the daemon is alive: with many sessions starting at once, or a daemon
+    // being replaced, an answer may take long. Only a daemon that stops answering is given up on.
+    let r: (Attached & { error?: string; gone?: true }) | null = null;
+    while (!r) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      r = await Promise.race([result, new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), STILL_THERE_EVERY_MS); timer.unref?.(); })]);
+      clearTimeout(timer);
+      if (r || !this.pending.has(reqId)) break;
+      if (!(await this.ping(STILL_THERE_WAIT_MS).then(() => true, () => false)) && this.pending.delete(reqId)) {
+        // Let go of it, so an answer that comes after all does not stream into a tile that says it failed.
+        this.detach(opts.tileId);
+        return { pid: -1, error: "its daemon stopped answering" };
+      }
+    }
+    r ??= await result;
     // Refused (nothing asleep there, or what it saved cannot be read): nothing to bring back later.
     if (opts.wake && r.error) {
       this.forget(opts.tileId);
       throw r.gone ? new NothingAsleep(r.error) : new Error(r.error);
     }
-    return r.asleep ? { pid: r.pid, asleep: true } : { pid: r.pid };
+    return { pid: r.pid, ...(r.asleep ? { asleep: true as const } : {}), ...(r.error && !r.asleep && !r.gone ? { error: r.error } : {}) };
   }
 
   has(tileId: string): boolean { return this.specs.has(tileId); }
@@ -353,7 +370,7 @@ export class DaemonEndpoint {
 
   /** End the session's process but keep it, its screen saved, for an attach to bring back. Rejects
    *  with the daemon's reason. */
-  async sleep(tileId: string, timeoutMs = START_TIMEOUT_MS): Promise<void> {
+  async sleep(tileId: string, timeoutMs = WAKE_TIMEOUT_MS): Promise<void> {
     const r = await this.request<Extract<ServerMsg, { t: "slept" }>>({ t: "sleep", reqId: `z${++this.seq}`, id: tileId }, timeoutMs);
     if (r.error) throw new Error(r.error);
   }

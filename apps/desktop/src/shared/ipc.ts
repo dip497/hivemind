@@ -838,7 +838,13 @@ export interface HiveIpc {
 
 /** What runs as the person quits: agents and terminals on this computer, and agents on other
  *  machines, which keep running there whatever the answer. */
-export interface QuitQuestion { agents: number; terminals: number; elsewhere: number }
+export interface QuitQuestion {
+  agents: number;
+  terminals: number;
+  elsewhere: number;
+  /** The background process did not say what runs in it, so the counts are not known. */
+  uncounted?: true;
+}
 /** `remember`: keep the choice in settings and stop asking. */
 export interface QuitAnswer { choice: "keep-running" | "stop-everything" | "cancel"; remember: boolean }
 

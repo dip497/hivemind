@@ -369,22 +369,51 @@ test("an attach that may start a session carries the environment as it is now, a
   }
 });
 
-test("a start the daemon answers late still starts; only showing a session gives up at the attach timeout", async () => {
-  const sock = path.join(dir, "slow.sock");
-  // As a daemon busy starting many sessions at once: every answer comes after the attach timeout.
+/** A daemon stand-in that answers every attach `delay` ms late, answers pings while `alive`, and
+ *  records what it was sent. */
+async function slowDaemon(sock: string, delay: number, alive = true) {
+  const got: ClientMsg[] = [];
   const server = net.createServer((c) => {
     c.on("error", () => {});
     c.on("data", makeLineDecoder((line) => {
       const m = JSON.parse(line) as ClientMsg;
-      if (m.t === "attach") setTimeout(() => c.write(frame({ t: "attached", reqId: m.reqId, id: m.id, pid: 42, isNew: true, replay: "" })), 300);
+      got.push(m);
+      if (m.t === "ping" && alive) c.write(frame({ t: "pong", reqId: m.reqId, protocol: 1 }));
+      if (m.t === "attach") setTimeout(() => {
+        c.write(frame({ t: "attached", reqId: m.reqId, id: m.id, pid: 42, isNew: true, replay: "SCREEN" }));
+        c.write(frame({ t: "data", id: m.id, data: "late output" }));
+      }, delay);
     }));
   });
   await new Promise<void>((r) => server.listen(sock, () => { server.unref(); r(); }));
-  const ep = new DaemonEndpoint({ connect: () => new Promise((res, rej) => { const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); }), attachTimeoutMs: 100 });
-  const started = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: () => {}, onExit: () => {} });
-  assert.equal(started.pid, 42);
-  const shown = await ep.spawn({ tileId: "t2", cwd: "/", cmd: "sh", cols: 80, rows: 24, noSpawn: true }, { onData: () => {}, onExit: () => {} });
-  assert.equal(shown.pid, -1);
+  return { got, close: () => new Promise<void>((r) => server.close(() => r())) };
+}
+const connectTo = (sock: string) => () => new Promise<net.Socket>((res, rej) => { const s = net.connect(sock); s.once("connect", () => res(s)); s.once("error", rej); });
+
+test("a daemon slow to answer an attach is waited for as long as it is still there", { timeout: 30_000 }, async () => {
+  const sock = path.join(dir, "busy.sock");
+  // Longer than any fixed wait the endpoint used to give, as when many sessions start at once.
+  const d = await slowDaemon(sock, 7_000);
+  const ep = new DaemonEndpoint({ connect: connectTo(sock) });
+  let out = "";
+  const r = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24, noSpawn: true }, { onData: (x) => { out += x; }, onExit: () => {} });
+  assert.equal(r.pid, 42);
+  assert.ok(await until(() => out.includes("late output")));
   ep.close();
-  await new Promise<void>((r) => server.close(() => r()));
+  await d.close();
+});
+
+test("a daemon that stops answering is given up on, says so, and its late answer does not stream into the tile", { timeout: 40_000 }, async () => {
+  const sock = path.join(dir, "stuck.sock");
+  const d = await slowDaemon(sock, 18_000, false);
+  const ep = new DaemonEndpoint({ connect: connectTo(sock) });
+  let out = "";
+  const r = await ep.spawn({ tileId: "t1", cwd: "/", cmd: "sh", cols: 80, rows: 24 }, { onData: (x) => { out += x; }, onExit: () => {} });
+  assert.deepEqual(r, { pid: -1, error: "its daemon stopped answering" });
+  assert.equal(ep.has("t1"), false);
+  // The session it started after all is let go of, not watched by a tile that says it failed.
+  assert.ok(await until(() => d.got.filter((m) => m.t === "detach").length >= 2, 6_000), "detached when given up, and again when the late answer came");
+  assert.equal(out, "");
+  ep.close();
+  await d.close();
 });

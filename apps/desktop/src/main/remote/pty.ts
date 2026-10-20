@@ -103,7 +103,8 @@ export function hostFailure(hostId: string): string | undefined {
   return failure.get(hostId);
 }
 
-/** This host's daemon endpoint, or null when it has no daemon-capable `hive` (or cannot be probed right now). */
+/** This host's daemon endpoint, or null when it has no daemon-capable `hive` (or cannot be probed right now);
+ *  rejects when its `hive` needs the person (too old, a login refused), whose sessions plain ssh would start twice. */
 export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null> {
   if (paused.has(target.hostId)) return Promise.reject(new Error("this machine is turned off"));
   const cached = endpoints.get(target.hostId);
@@ -126,8 +127,6 @@ export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null
     const ep: DaemonEndpoint = new DaemonEndpoint({
       connect: bridge,
       retryInitialMs: 500,
-      // The bridge itself may take up to its own 20 s start budget.
-      attachTimeoutMs: 30_000,
       isFatal: needsAttention,
       isPaused: () => paused.has(target.hostId),
       onEvent: (topic, data) => remoteEvent(ep, topic, data),
@@ -142,13 +141,19 @@ export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null
   made.catch((e: unknown) => {
     if (endpoints.get(target.hostId) === made) endpoints.delete(target.hostId);
     const msg = e instanceof Error ? e.message : String(e);
-    const attention = msg.startsWith("[attention] ") || needsAttention(msg);
-    failure.set(target.hostId, msg.replace(/^\[attention\] /, ""));
-    report(target.hostId, attention ? "attention" : "offline", msg.replace(/^\[attention\] /, ""));
-    console.warn(`[remote] ${target.hostId}: no remote daemon (${msg}); using an in-app session`);
+    failure.set(target.hostId, withoutTag(msg));
+    report(target.hostId, isAttention(msg) ? "attention" : "offline", withoutTag(msg));
+    console.warn(`[remote] ${target.hostId}: no remote daemon (${msg})`);
   });
-  return made.catch(() => null);
+  return made.catch((e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (isAttention(msg)) throw new Error(withoutTag(msg));
+    return null;
+  });
 }
+
+const isAttention = (msg: string) => msg.startsWith("[attention] ") || needsAttention(msg);
+const withoutTag = (msg: string) => msg.replace(/^\[attention\] /, "");
 
 /** The daemon there kept when it speaks this app's protocol, as on this computer; else, when the
  *  `hive` there speaks it, replaced once no agent is mid-turn, each session woken in the new one. */
@@ -158,7 +163,7 @@ async function replaceOtherProtocol(target: RemoteTarget, hivePath: string, brid
   const r = await remoteConns.exec(target, `${shq(hivePath)} daemon status --json`, { timeoutMs: 30_000 });
   let speaks: unknown;
   try { speaks = (JSON.parse(String(r.stdout)) as { data?: { speaks?: unknown } }).data?.speaks; } catch { /* an older hive */ }
-  if (speaks !== DAEMON_PROTOCOL_VERSION) throw new Error(`[attention] the hive on this machine is older than this app: update it there (hivemind upgrade)`);
+  if (speaks !== DAEMON_PROTOCOL_VERSION) throw new Error(`[attention] the hive on this machine is older than this app: press Update hive in Machines, or run "hive upgrade" there`);
   const retired = await retireDaemon(bridge, {
     waiting: (ids) => report(target.hostId, "connecting", ids.length ? `updating its terminals once ${ids.length === 1 ? "an agent finishes its turn" : `${ids.length} agents finish their turns`}` : undefined),
     now: new Promise(() => {}),
