@@ -154,13 +154,15 @@ export interface ViewChrome {
    *  wallpaper would be invisible under it and its animation and glass blur
    *  would still cost every frame. */
   wallpaper: boolean;
+  /** The screen edge widget cards nobody has moved stack down over this view. */
+  widgets: "left" | "right";
 }
 
-/** A view's chrome with the defaults filled in: a compact bottom island, and the
- *  user's wallpaper behind it. A view that paints its own opaque scene opts out
+/** A view's chrome with the defaults filled in: a compact bottom island, the
+ *  user's wallpaper behind it, and widget cards down the right edge. A view that paints its own opaque scene opts out
  *  (`"wallpaper": false` in its manifest); the built-ins declare theirs. */
 export function resolveChrome(plugin: Pick<WorkspaceViewPlugin, "chrome"> | null | undefined): ViewChrome {
-  return { island: plugin?.chrome?.island ?? "bottom", wallpaper: plugin?.chrome?.wallpaper ?? true };
+  return { island: plugin?.chrome?.island ?? "bottom", wallpaper: plugin?.chrome?.wallpaper ?? true, widgets: plugin?.chrome?.widgets ?? "right" };
 }
 
 // ── registry ─────────────────────────────────────────────────────────────────

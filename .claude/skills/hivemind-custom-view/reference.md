@@ -105,6 +105,7 @@ is not something a view chooses. `spawnAgent` takes a catalog id, never a comman
   "permissions": [],        // unknown names refused at install AND at load
   "assets": "dist",         // optional: dir served alongside the entry
   "wallpaper": false,       // optional: refuse the user's wallpaper (default: you get it)
+  "widgets": "left",        // optional: start the app's widget cards down the left edge (default: right)
   "author": "Ada",          // optional provenance, shown where the user decides to trust you
   "homepage": "https://…",  // https only — the host opens it in the user's browser
   "license": "MIT"          // a short identifier, not a sentence
