@@ -15,6 +15,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A view can ask for widget cards down the left edge instead of the right, with `"widgets": "left"` in its `hivemind-view.json`, so they stay off a terminal it docks on the right. A card you moved stays where you put it.
 - A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
+- Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.
 ## [2026.10.5] — 2026-10-21
 
 - A terminal or agent that fails to start says why (the daemon's own error, or that it stopped answering) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.
