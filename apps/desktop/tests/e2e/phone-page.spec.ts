@@ -31,17 +31,18 @@ async function home(): Promise<Page> {
       const fonts = ["geist-400", "geist-500", "geist-600", "mono-400", "mono-500"].map((f) => `<link rel="preload" href="fonts/${f}.woff2" as="font" type="font/woff2" crossorigin>`).join("");
       return route.fulfill({ contentType: "text/html", body: `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="app.css">${fonts}<main id="app"></main>
 <script type="module">
-import init, { HomeView } from "./pkg/hive_web.js";
+import init, { Homes } from "./pkg/hive_web.js";
 import { Home } from "./js/home.js";
 await init();
-const view = new HomeView(null);
+const view = new Homes(null);
+const desk = [{ device: "d", name: "desk" }];
 window.opened = [];
 window.calls = [];
 const app = { open: (t) => window.calls.push(["open", t]), openTerminal: (...at) => window.opened.push(at), answer: async () => true, computer: () => "desk",
   stop: async (a) => { window.calls.push(["stop", a.tile]); return true; }, close: async (a) => { window.calls.push(["close", a.tile]); return true; } };
 const screen = new Home(app, () => show());
 document.getElementById("app").append(screen.el);
-const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, "desk", { ...screen.choices.view(), now: Date.now(), offset: 0 }), view.overview("d", "desk"));
+const show = () => screen.show(view.shown(screen.filter.query, screen.filter.machine ?? undefined, desk, { ...screen.choices.view(), now: Date.now(), offset: 0 }), view.overview(desk));
 const T = 1790000000000;
 window.snapshot = (n, answered) => {
   const rows = [["w:w0", { of: "workspace", workspace: "w0", name: "api" }],
@@ -57,8 +58,8 @@ window.snapshot = (n, answered) => {
   }
   return { t: "home", layout: { seq: 1, rows }, lines: { seq: 1, rows: lines } };
 };
-window.load = (n, answered) => { view.apply(JSON.stringify(window.snapshot(n, answered))); show(); };
-window.change = (m) => { if (view.apply(JSON.stringify(m))) show(); };
+window.load = (n, answered) => { view.apply("d", JSON.stringify(window.snapshot(n, answered))); show(); };
+window.change = (m) => { if (view.apply("d", JSON.stringify(m))) show(); };
 window.ready = true;
 </script>` });
     }

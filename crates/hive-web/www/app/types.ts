@@ -40,7 +40,8 @@ export interface Overview {
 /** What pairing gave: the computer paired with, and this browser's certificate from it. */
 export interface Paired {
   with: { device: string; name: string; relay: string | null; kind: string };
-  certificate: unknown;
+  /** Names the person whose devices both are. */
+  certificate: { person: string };
   network: unknown;
   admission: string;
 }
@@ -157,7 +158,7 @@ export interface Start {
 /** The person's other computers and hosts, as the computer tells of them, and whose they are. */
 export interface Others {
   whose: string | null;
-  devices: Array<{ device: string; name: string; kind: string }>;
+  devices: Array<{ device: string; name: string; kind: string; relay: string | null }>;
 }
 
 /** A tile as Home holds it (spec/home.md): where the desktop lists it and, for an agent, what the

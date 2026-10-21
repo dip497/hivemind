@@ -822,7 +822,9 @@ fn two_threads_keeping_what_devices_said_at_once_both_keep_it() {
             let phone = &phone;
             s.spawn(move || {
                 for at in 0..100 {
-                    phone.hear_workspaces(&format!("{thread}{at}"), &[], at).unwrap();
+                    phone
+                        .hear_workspaces(&format!("{thread}{at}"), &[], at)
+                        .unwrap();
                 }
             });
         }

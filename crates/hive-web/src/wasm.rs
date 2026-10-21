@@ -7,7 +7,7 @@ use hive_net::{
 use hive_phone::{
     agents, connect, control, conversation, devices,
     failure::Failure,
-    home,
+    home, homes,
     identity::DeviceCertificate,
     markdown, network, pairing, person,
     screen::{Screen, FIRST_HISTORY},
@@ -21,6 +21,7 @@ use iroh::{
 use serde_json::{json, Value};
 use std::{
     cell::{Cell, RefCell},
+    collections::BTreeMap,
     rc::Rc,
 };
 use tokio::sync::{mpsc, watch, Mutex};
@@ -435,7 +436,7 @@ impl Host {
     }
 
     /// Follow Home there (spec/home.md) from the positions `at` (`{layout, lines}`, or null for
-    /// none): `told` is called with each message the device sends, as its text, for a `HomeView`
+    /// none): `told` is called with each message the device sends, as its text, for `Homes`
     /// to apply. Done when the device ends it; an `Unpaired` error when it turned this browser away.
     pub async fn home(&self, at: JsValue, told: js_sys::Function) -> Result<(), JsValue> {
         let at: Option<home::At> = if at.is_null() || at.is_undefined() {
@@ -463,7 +464,7 @@ impl Host {
     }
 
     /// The person's other computers and hosts the device tells of, the person being the one this
-    /// browser's `certificate` names: `{whose?, devices: [{device, name, kind}]}`.
+    /// browser's `certificate` names: `{whose?, devices: [{device, name, kind, relay}]}`.
     pub async fn devices(&self, certificate: JsValue) -> Result<JsValue, JsError> {
         let mine: DeviceCertificate =
             serde_json::from_value(from_js(&certificate)?).map_err(err)?;
@@ -473,7 +474,9 @@ impl Host {
         let told = answer.get("devices").and_then(Value::as_array);
         let listed: Vec<Value> = devices::told_of(&mine.person, told.map_or(&[], Vec::as_slice))
             .into_iter()
-            .map(|d| json!({ "device": d.device, "name": d.name, "kind": d.kind }))
+            .map(
+                |d| json!({ "device": d.device, "name": d.name, "kind": d.kind, "relay": d.relay }),
+            )
             .collect();
         let whose = answer
             .get("profile")
@@ -793,63 +796,131 @@ impl ViewSession {
     }
 }
 
-/// What this browser holds of Home (hive-phone's `home::Home`), and how it shows it.
+/// What this browser holds of Home on each computer it reaches (hive-phone's `home::Home`, by the
+/// computer's id), and how it shows them as one (`homes`).
 #[wasm_bindgen]
-pub struct HomeView {
-    home: RefCell<home::Home>,
+pub struct Homes {
+    homes: RefCell<BTreeMap<String, home::Home>>,
+}
+
+/// The computers to show, `[{device, name}]`, in the order they are listed.
+struct Computer {
+    device: String,
+    name: String,
+}
+
+fn computers_of(given: &JsValue) -> Result<Vec<Computer>, JsError> {
+    let list = from_js(given)?;
+    Ok(list
+        .as_array()
+        .map(|all| {
+            all.iter()
+                .filter_map(|c| {
+                    Some(Computer {
+                        device: c.get("device")?.as_str()?.to_string(),
+                        name: c.get("name")?.as_str()?.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 #[wasm_bindgen]
-impl HomeView {
+impl Homes {
     /// What `kept` holds, as `kept()` gave it; nothing when it is not that.
     #[wasm_bindgen(constructor)]
-    pub fn new(kept: JsValue) -> HomeView {
-        let home = from_js(&kept)
+    pub fn new(kept: JsValue) -> Homes {
+        let homes = from_js(&kept)
             .ok()
             .and_then(|v| serde_json::from_value(v).ok())
             .unwrap_or_default();
-        HomeView {
-            home: RefCell::new(home),
+        Homes {
+            homes: RefCell::new(homes),
         }
     }
 
-    /// Take in a message the device sent (its text): whether it changed what is held.
-    pub fn apply(&self, text: &str) -> bool {
-        serde_json::from_str::<Value>(text).is_ok_and(|m| self.home.borrow_mut().apply(&m))
+    /// Take in a message `device` sent (its text): whether it changed what is held.
+    pub fn apply(&self, device: &str, text: &str) -> bool {
+        serde_json::from_str::<Value>(text).is_ok_and(|m| {
+            self.homes
+                .borrow_mut()
+                .entry(device.to_string())
+                .or_default()
+                .apply(&m)
+        })
     }
 
-    /// How far each sequence is followed, `{layout, lines}`; null before anything is held.
-    pub fn at(&self) -> Result<JsValue, JsError> {
-        to_js(&serde_json::to_value(self.home.borrow().at).map_err(err)?)
+    /// How far each sequence of `device` is followed, `{layout, lines}`; null before anything is
+    /// held.
+    pub fn at(&self, device: &str) -> Result<JsValue, JsError> {
+        let at = self.homes.borrow().get(device).and_then(|h| h.at);
+        to_js(&serde_json::to_value(at).map_err(err)?)
+    }
+
+    /// Hold nothing of `device` any more.
+    pub fn forget(&self, device: &str) {
+        self.homes.borrow_mut().remove(device);
     }
 
     /// What is held, to keep and give back to `new`.
     pub fn kept(&self) -> Result<JsValue, JsError> {
-        to_js(&serde_json::to_value(&*self.home.borrow()).map_err(err)?)
+        to_js(&serde_json::to_value(&*self.homes.borrow()).map_err(err)?)
     }
 
-    /// Home as it shows (`home::Shown`): what holds `query`, on `machine` when one is chosen, as
-    /// `view` (`home::HomeView`: `{prefs, folded, seen, now, offset}`) chooses; `computer` is what
-    /// the computer is called.
+    /// The computer that holds `workspace`, of those held.
+    #[wasm_bindgen(js_name = deviceOf)]
+    pub fn device_of(&self, workspace: &str) -> Option<String> {
+        let key = format!("w:{workspace}");
+        self.homes
+            .borrow()
+            .iter()
+            .find(|(_, h)| h.rows.contains_key(&key))
+            .map(|(d, _)| d.clone())
+    }
+
+    /// Home as it shows across `computers` (`[{device, name}]`): what holds `query`, on `machine`
+    /// when one is chosen, as `view` (`home::HomeView`) chooses.
     pub fn shown(
         &self,
         query: &str,
         machine: Option<String>,
-        computer: &str,
+        computers: JsValue,
         view: JsValue,
     ) -> Result<JsValue, JsError> {
         let view: home::HomeView = serde_json::from_value(from_js(&view)?).map_err(err)?;
-        let shown = self
-            .home
-            .borrow()
-            .shown(query, machine.as_deref(), computer, &view);
-        to_js(&serde_json::to_value(shown).map_err(err)?)
+        let computers = computers_of(&computers)?;
+        let held = self.homes.borrow();
+        let homes = Self::of(&held, &computers);
+        to_js(
+            &serde_json::to_value(homes::shown(&homes, query, machine.as_deref(), &view))
+                .map_err(err)?,
+        )
     }
 
-    /// The agents among it, `{agents, needs, working}`, told of by `device`, the computer called
-    /// `computer`.
-    pub fn overview(&self, device: &str, computer: &str) -> Result<JsValue, JsError> {
-        to_js(&serde_json::to_value(self.home.borrow().overview(device, computer)).map_err(err)?)
+    /// The agents across `computers`, `{agents, needs, working}`, each saying its computer.
+    pub fn overview(&self, computers: JsValue) -> Result<JsValue, JsError> {
+        let computers = computers_of(&computers)?;
+        let held = self.homes.borrow();
+        to_js(&serde_json::to_value(homes::overview(&Self::of(&held, &computers))).map_err(err)?)
+    }
+}
+
+impl Homes {
+    fn of<'a>(
+        held: &'a BTreeMap<String, home::Home>,
+        computers: &'a [Computer],
+    ) -> Vec<homes::Held<'a>> {
+        computers
+            .iter()
+            .filter_map(|c| {
+                held.get(&c.device).map(|home| homes::Held {
+                    device: &c.device,
+                    computer: &c.name,
+                    home,
+                })
+            })
+            .collect()
     }
 }
 

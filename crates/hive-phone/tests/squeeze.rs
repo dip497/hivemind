@@ -11,11 +11,21 @@ fn a_deflated_frame_reads_as_the_text_the_device_meant_and_any_other_as_it_is() 
     assert_eq!(c["offer"], OFFER);
     for case in c["squeezed"].as_array().unwrap() {
         let read = unsqueezed(case["frame"].as_str().unwrap().as_bytes().to_vec()).unwrap();
-        assert_eq!(String::from_utf8(read).unwrap(), case["text"].as_str().unwrap(), "{}", case["name"]);
+        assert_eq!(
+            String::from_utf8(read).unwrap(),
+            case["text"].as_str().unwrap(),
+            "{}",
+            case["name"]
+        );
     }
     for case in c["plain"].as_array().unwrap() {
         let frame = case["frame"].as_str().unwrap().as_bytes().to_vec();
-        assert_eq!(unsqueezed(frame.clone()).unwrap(), frame, "{}", case["name"]);
+        assert_eq!(
+            unsqueezed(frame.clone()).unwrap(),
+            frame,
+            "{}",
+            case["name"]
+        );
     }
 }
 

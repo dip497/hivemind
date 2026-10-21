@@ -79,7 +79,7 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   const page = await context.newPage();
   await page.goto(`${link}&name=${encodeURIComponent("Priya's phone")}`);
   await expect(page.locator('[data-screen="pair"] h1')).toHaveText(/^Connect to .+\?$/, { timeout: 30_000 });
-  await expect(page.locator("[data-pair-replaces]")).toBeHidden();
+  await expect(page.locator("[data-pair-adds]")).toBeHidden();
   const id = (await page.locator("[data-id]").getAttribute("data-id"))!;
   // Nothing to wait on when nothing happens: as long as a pairing takes here, several times over.
   await page.waitForTimeout(3_000);
@@ -89,23 +89,23 @@ test("a phone's browser opens the page the computer's QR code names and, asked a
   await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId, { timeout: 30_000 });
   const kept = await page.evaluate(() => new Promise((resolve, reject) => {
     const open = indexedDB.open("hive-web");
-    open.onsuccess = () => { const get = open.result.transaction("kept").objectStore("kept").get("paired"); get.onsuccess = () => resolve(get.result); get.onerror = reject; };
+    open.onsuccess = () => { const get = open.result.transaction("kept").objectStore("kept").get("accounts"); get.onsuccess = () => resolve(get.result); get.onerror = reject; };
     open.onerror = reject;
   }));
-  expect(kept).toMatchObject({ with: { device: me.deviceId, kind: "app" }, certificate: { person: me.personId, device: id }, admission: "vouched for by the app" });
+  expect(kept).toMatchObject({ active: me.personId, accounts: [{ person: me.personId, computers: [{ with: { device: me.deviceId, kind: "app" }, certificate: { person: me.personId, device: id }, admission: "vouched for by the app" }] }] });
   expect(await (await fetch(`${net.access}/allowed/${id}`)).text()).toBe("true");
   // The code, a secret, is gone from the page's address once read.
   expect(page.url()).not.toContain("connect=");
   await expect(desktop.locator(`[data-device="${id}"][data-device-kind="phone"]`)).toContainText("Priya's phone", { timeout: 10_000 });
   await desktop.keyboard.press("Escape");
 
-  // Opened with another link, paired already: it says what pairing would replace, and Keep leaves
-  // it as it was.
+  // Opened with another link, paired already: it says the computer it is paired with stays, and
+  // Cancel leaves it as it was.
   await page.goto(await inBrowser(await offerToConnect(desktop)));
   await page.reload();
-  await expect(page.locator("[data-pair-replaces]")).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator("[data-pair-replaces]")).toHaveText(/^This page is paired with .+; pairing replaces it\.$/);
-  await page.locator("[data-pair-keep]").click();
+  await expect(page.locator("[data-pair-adds]")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("[data-pair-adds]")).toHaveText(/^.+ stays paired\. Another computer of yours joins it; someone else's is an account of its own\.$/);
+  await page.locator("[data-pair-cancel]").click();
   await expect(page.locator('[data-screen="home"]')).toBeVisible();
   await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId);
   // Unused, the offer stays until the person cancels it.

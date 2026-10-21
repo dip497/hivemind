@@ -506,8 +506,8 @@ the workflows themselves, which need the branch on GitHub. Once it is pushed:
   Start. WebAuthn user verification could stand in for the lock later.
 - **The person's other devices.** Devices asks the computer (`{t:"devices"}`) and lists the
   computers and hosts it tells of, each whose certificate verifies and names the person, as the
-  phone learns them (`devices::told_of`, the one filter both use), titled with whose they are. They
-  are listed, not reached: the page keeps one connection, to the computer it paired with.
+  phone learns them (`devices::told_of`, the one filter both use), titled with whose they are. The
+  page reaches each of them too (§13).
 - **Forget tells the computer.** Forget this computer, once confirmed, asks it to forget this
   browser (`{t:"unpair"}` on the `device` stream), then forgets it here; when the computer is not
   reached the page says it was not told.
@@ -1449,3 +1449,32 @@ Before and after at 390×844 are the `ux-*.png` pairs of the rig's scratchpad.
   slower at 4x CPU on 200 tiles; a row now only carries `touch-action: pan-y`. Start is a 44 px
   +; the search a borderless `--panel` field, 36 px, corners of 10. Home opens without a layout
   shift.
+
+## 13. Several computers and accounts (2026-10-22)
+
+A person with a desktop and a laptop saw only the one the page paired with; someone who also helps
+a friend had to pair again each time, losing the first pairing. Now, as Tailscale does:
+
+- **One account per person.** The page keeps each person whose computer it paired with as an
+  account (`accounts.ts`, IndexedDB `accounts`): the computers, each under the key it paired with,
+  and what the person is called. One account is shown at a time; with two or more, Home has a chip
+  for each, and Devices lists the others with Switch. A page paired before keeps its computer as
+  its person's account, under the key it had.
+- **A link adds, never replaces.** A link from a computer paired before pairs again under its key;
+  any other pairs under a new key, and the certificate's person picks the account, or makes one.
+  The pair screen says the computer shown stays paired; Cancel goes back.
+- **Every computer of the account is reached.** The page dials each paired computer and each one
+  they tell of (`{t:"devices"}`), one connection each, under the key of the computer that told.
+  Home is the core's `homes::shown` over all of them: what waits on the person ordered by how long
+  it has waited across computers, each computer's tree under its name, a status grouping once
+  across them; with one computer it is that computer's Home, unchanged. An answer, a message, a
+  terminal or a view goes to the computer that holds the workspace.
+- **Forget forgets the account shown**: each of its computers is told, and the next account is
+  shown, or pairing. A computer that turns the page away leaves its account; the last one leaves
+  the pair screen saying why.
+- The page asks the browser to keep its storage (`navigator.storage.persist()`), as losing it
+  loses every pairing.
+
+The native apps keep one person (`crates/hive-phone/src/devices.rs`); they move to accounts next,
+on the same core.
+
