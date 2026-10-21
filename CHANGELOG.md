@@ -14,7 +14,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - The phone page in a browser reaches every computer of yours, not only the one it paired with: Home shows what waits on you across all of them. Pairing with someone else's computer adds an account instead of replacing yours; switch between accounts from a chip on Home or from Devices.
 - A view that draws its own toolbar (`"toolbar": "off"`) can open the app's own menus from its buttons (view protocol 1.15, feature `hostMenu`): `hm.commands.openHostMenu("views", rect)` lists the views to switch to beside its button, and `"add"`, `"appearance"` and `"settings"` open Add, the theme panel and Settings. No permission: the person chooses in the menu.
 - A view can ask for widget cards down the left edge instead of the right, with `"widgets": "left"` in its `hivemind-view.json`, so they stay off a terminal it docks on the right. A card you moved stays where you put it.
+- A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
+- Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.
 ## [2026.10.5] — 2026-10-21
 
 - A terminal or agent that fails to start says why (the daemon's own error, or that it stopped answering) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.

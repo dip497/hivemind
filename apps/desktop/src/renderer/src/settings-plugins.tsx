@@ -11,7 +11,7 @@ import { rescan } from "./settings-views";
 import { searchPlugins } from "@hivemind/core/plugin-search";
 import { rowsInKindTab, TAB_LABEL, type PluginTab } from "./plugins/kinds";
 import { MemberIcon, MEMBER_KIND, RUNS_LABEL, askedFor } from "./plugins/PackageReview";
-import { InstallReview, catalogKey, cleanError, useCatalogInstall, useInstalledVersion, type CatalogEntry } from "./plugins/catalog-install";
+import { catalogKey, cleanError, useCatalogInstall, useInstalledVersion, type CatalogEntry } from "./plugins/catalog-install";
 import { memberFormat } from "@hivemind/hub";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./plugins/PluginList";
 import { useSettingsNavigate } from "./settings-panels";
@@ -60,7 +60,7 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
   const [loadError, setLoadError] = useState<string | null>(null);
   const [outdated, setOutdated] = useState<string[]>([]);
   const [holding, setHolding] = useState<string | null>(null);
-  const { review, busy, error, done, reviewRef, startReview, install, cancel } = useCatalogInstall();
+  const { done, parts } = useCatalogInstall();
   const installed = useInstalledVersion();
   const go = useSettingsNavigate();
   const load = () => {
@@ -89,16 +89,14 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
   const { counts, groups } = rowsInKindTab(shown.map((e): ListedRow => {
     const have = installed(e);
     const update = outdatedOf(e);
-    const open = review?.key === key(e) ? review.data : null;
-    const action = (!have || update) && !open ? <Button size="xs" variant="outline" disabled={busy === key(e)} onClick={() => void startReview(e)}>
-      {busy === key(e) ? "Checking…" : update ? "Update" : "Install"}</Button> : undefined;
+    const install = parts(e, { update });
+    const action = !have || update ? install.action ?? undefined : undefined;
     return { key: key(e), kind: e.type, category: e.category ?? "other", row: <div className="catalog-item" data-catalog-plugin={key(e)}>
       {e.type === "package"
         ? <CatalogPackageRow entry={e} installed={!!have && !update} action={action} open={holding === e.id} toggle={() => setHolding(holding === e.id ? null : e.id)} />
         : <PluginRow kind={e.type} id={e.id} name={e.name} line={e.description} mark={e.type === "agent" || catalogImage(e.icon) ? <CatalogMark entry={e} /> : <LayoutGrid size={16} />}
           badge={have && !update ? "Installed" : undefined} action={action} />}
-      {error?.key === key(e) && <p role="alert" className="settings-note error">{error.message}</p>}
-      {open && <InstallReview entry={e} review={open} busy={busy === key(e)} update={outdatedOf(e)} reviewRef={reviewRef} onCancel={cancel} onInstall={() => void install(e, open)} />}
+      {install.below}
     </div> };
   }), tab);
 

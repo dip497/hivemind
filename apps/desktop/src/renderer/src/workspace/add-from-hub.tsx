@@ -11,7 +11,7 @@ import { useSettings } from "../settings-store";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useToolPackages } from "../tiles/tool-plugins";
 import { CatalogMark } from "../settings-plugins";
-import { InstallReview, catalogKey, useCatalogInstall, useInstalledVersion, type CatalogEntry } from "../plugins/catalog-install";
+import { catalogKey, useCatalogInstall, useInstalledVersion, type CatalogEntry } from "../plugins/catalog-install";
 import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { searchPlugins } from "@hivemind/core/plugin-search";
 
@@ -46,7 +46,7 @@ export function FromHiveHub({ query, tab, shelf, installedCount, close }: {
   const state = useSettings().plugins.state;
   const tools = useToolPackages().packages;
   const widgets = useWidgetPackages();
-  const { review, busy, error, done, reviewRef, startReview, install, cancel } = useCatalogInstall();
+  const { done, parts } = useCatalogInstall();
   const [limit, more] = useShowMore(HUB_FIRST, 10, `${q}\n${tab}\n${shelf}`);
   if (!q) return null;
 
@@ -76,7 +76,7 @@ export function FromHiveHub({ query, tab, shelf, installedCount, close }: {
     <div className={HEADING}>From HiveHub</div>
     {matches.slice(0, limit).map((e) => {
       const key = catalogKey(e);
-      const open = review?.key === key ? review.data : null;
+      const install = parts(e);
       const have = !!installed(e);
       const toPage = () => { close(); window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: `plugin:${e.type}:${e.id}` } })); };
       return <div key={key} data-add-hub-entry={key} data-state={have ? "off" : "not-installed"}>
@@ -88,11 +88,9 @@ export function FromHiveHub({ query, tab, shelf, installedCount, close }: {
           </span>
           {have
             ? <Button size="xs" variant="outline" onClick={toPage} data-add-hub-switch-on title="Its page in Settings has the switch">Switch on…</Button>
-            : !open && <Button size="xs" variant="outline" disabled={busy === key} onClick={() => void startReview(e)} data-add-hub-install>
-              {busy === key ? "Checking…" : "Install"}</Button>}
+            : install.action}
         </div>
-        {error?.key === key && <p role="alert" className="px-2 pb-1 text-count text-[var(--color-err)]">{error.message}</p>}
-        {open && <div className="px-2 pb-2"><InstallReview entry={e} review={open} busy={busy === key} update={false} reviewRef={reviewRef} onCancel={cancel} onInstall={() => void install(e, open)} /></div>}
+        <div className="px-2 empty:hidden">{install.below}</div>
       </div>;
     })}
     <ShowMore left={matches.length - limit} step={10} onClick={more} />

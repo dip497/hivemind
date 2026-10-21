@@ -68,11 +68,26 @@ export function useCatalogInstall() {
     } catch (err) { setError({ key: catalogKey(e), message: cleanError(err) }); }
     finally { setBusy(null); }
   };
-  return { review, busy, error, done, reviewRef, startReview, install, cancel: () => setReview(null) };
+  const cancel = () => setReview(null);
+  /** One entry's Install (or Update) button, and what goes under it: the error, or the review with
+   *  Cancel and Install. Every place that installs from HiveHub shows these two. */
+  const parts = (e: CatalogEntry, { update = false, size = "xs" }: { update?: boolean; size?: "xs" | "default" } = {}) => {
+    const key = catalogKey(e);
+    const open = review?.key === key ? review.data : null;
+    return {
+      action: open ? null : <Button size={size} variant={size === "xs" ? "outline" : "default"} disabled={busy === key} onClick={() => void startReview(e)} data-install-start={key}>
+        {busy === key ? "Checking…" : update ? "Update" : "Install"}</Button>,
+      below: <>
+        {error?.key === key && <p role="alert" className="settings-note error">{error.message}</p>}
+        {open && <InstallReview entry={e} review={open} busy={busy === key} update={update} reviewRef={reviewRef} onCancel={cancel} onInstall={() => void install(e, open)} />}
+      </>,
+    };
+  };
+  return { done, parts };
 }
 
 /** What installing it does, in plain words, with Cancel and Install. */
-export function InstallReview({ entry: e, review: open, busy, update, reviewRef, onCancel, onInstall }: {
+function InstallReview({ entry: e, review: open, busy, update, reviewRef, onCancel, onInstall }: {
   entry: CatalogEntry; review: CatalogReview; busy: boolean; update: boolean;
   reviewRef: RefObject<HTMLElement | null>; onCancel: () => void; onInstall: () => void;
 }) {

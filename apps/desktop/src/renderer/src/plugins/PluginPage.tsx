@@ -7,7 +7,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
 import { CatalogMark } from "../settings-plugins";
-import { cleanError } from "./catalog-install";
+import { cleanError, useCatalogInstall } from "./catalog-install";
 import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
@@ -22,7 +22,7 @@ import { catalogImage } from "./mask-icon";
 import { useWidgetPackages } from "../board-objects/widget-runtime";
 import { useCommunityReport } from "../workspace/views/community/registry";
 import { SettingsForm } from "./SettingsForm";
-import { setPluginsScope, showPackage } from "./scope";
+import { showPackage } from "./scope";
 import { heldOffByPackage, partOfPackage } from "./package-rows";
 import { useToolPackages } from "../tiles/tool-plugins";
 import { KIND_LABEL, ORIGIN_LABEL, useCatalog, usePlugins, type PluginRecord } from "./library";
@@ -55,12 +55,13 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
   const readme = useReadme(p);
   const go = useSettingsNavigate();
   const [chosen, setTab] = useState<Tab | null>(null);
+  const { parts } = useCatalogInstall();
   // One only HiveHub lists is known once its catalog is.
   if (!p && !catalog) return <Loading label="Loading HiveHub's catalog" />;
   if (!p) return <p className="settings-empty">This plugin is not here any more. <button type="button" className="settings-link" onClick={() => go("plugins")}>All plugins</button></p>;
+  const install = !p.installed && p.catalog ? parts(p.catalog, { size: "default" }) : null;
   const tabs: Tab[] = p.installed ? ["settings", "readme", "about"] : ["readme", "about"];
   const tab = chosen && tabs.includes(chosen) ? chosen : tabs[0]!;
-  const toHub = () => { setPluginsScope("hub"); go("plugins"); };
   return (
     <div className="settings-stack plugin-page" data-plugin-page={`${p.kind}:${p.id}`}>
       <Button variant="link" className="self-start" onClick={() => go("plugins")}><ArrowLeft />All plugins</Button>
@@ -75,9 +76,10 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
         </div>
         <div className="plugin-page-actions">
           {p.catalog?.homepage && <Button variant="ghost" asChild><a href={p.catalog.homepage} target="_blank" rel="noreferrer">Source<ExternalLink /></a></Button>}
-          {p.installed ? <PluginActions p={p} /> : <Button onClick={toHub}>Install from HiveHub</Button>}
+          {p.installed ? <PluginActions p={p} /> : install?.action}
         </div>
       </header>
+      {install?.below}
       {p.problem && <p role="status" className="settings-note error">{p.problem}</p>}
       <PartOf p={p} />
 
@@ -89,7 +91,7 @@ export function PluginPage({ kind, id }: { kind: string; id: string }) {
         {tab === "settings" && <PluginSettings p={p} />}
         {tab === "readme" && <section aria-label="Read me" className="plugin-readme">
           {readme.loading ? <Loading label="Loading its README" />
-            : readme.text ? <Suspense fallback={null}><MarkdownPreview source={readme.text} className="md-preview" /></Suspense>
+            : readme.text ? <Suspense fallback={<Loading label="Loading its README" />}><MarkdownPreview source={readme.text} className="md-preview" /></Suspense>
             : <p className="settings-empty">It has no README.</p>}
         </section>}
         {tab === "about" && <>
