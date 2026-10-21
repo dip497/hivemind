@@ -23,7 +23,7 @@ import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
   type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
-  type ViewAgent, type ViewAgentStatus, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary,
+  type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary,
 } from "@hivemind/view-sdk/protocol";
 import type { TileKind } from "@hivemind/workspace-doc/shapes";
 import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
@@ -51,6 +51,9 @@ export interface LinkCommands {
    *  A host that wires both says the feature `sleep`, and marks the tiles asleep in `structure`. */
   wakeAgent?: (tileId: string) => void;
   sleepAgent?: (tileId: string) => void;
+  /** Open one of the app's own menus, as its toolbar does, beside `at` (where the view's button
+   *  is, in the view's pixels). A host that wires it says the feature `hostMenu`. */
+  openHostMenu?: (menu: HostMenu, at?: ViewRect) => void;
   /** A tile's status: the last known one now, then each change, until the returned function is called. */
   subscribeTileStatus: (tileId: string, cb: (status: TileStatusKind) => void) => () => void;
 }
@@ -202,6 +205,7 @@ export class CommunityLink {
     this.schedule = deps.schedule ?? ((fn, ms) => setTimeout(fn, ms));
     this.features = linkFeatures(this.services, deps.onSurfaceRects !== undefined);
     if (deps.commands.wakeAgent && deps.commands.sleepAgent) this.features.push("sleep");
+    if (deps.commands.openHostMenu) this.features.push("hostMenu");
     this.scope = {
       capabilities: deps.capabilities, features: this.features,
       hasTile: (id) => deps.hasTile(id), hasFrame: (id) => deps.hasFrame(id), announced: (id) => this.announced.has(id),
@@ -629,6 +633,10 @@ export class CommunityLink {
       case "sleepAgent":
         if (!c.sleepAgent) { this.unsupported("sleepAgent"); return; }
         c.sleepAgent(args[0] as string);
+        return;
+      case "openHostMenu":
+        if (!c.openHostMenu) { this.unsupported("openHostMenu"); return; }
+        if (args.length > 1) c.openHostMenu(args[0] as HostMenu, args[1] as ViewRect); else c.openHostMenu(args[0] as HostMenu);
         return;
     }
   }

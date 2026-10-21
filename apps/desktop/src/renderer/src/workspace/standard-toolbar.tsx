@@ -93,11 +93,54 @@ function ViewSwitch({ compact }: { compact: boolean }) {
       <active.icon /><span className="text-label">{active.label}</span><ChevronDown />
     </Button>
     {open && <div role="menu" className={`hm-island absolute right-0 z-30 min-w-[180px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>
-      {views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint} role="menuitemradio" aria-checked={view.id === current}
-        onClick={() => { setViewMode(view.id); setOpen(false); trigger.current?.focus(); }}>
-        <view.icon /><span className="flex-1">{view.label}</span>{view.id === current && <Check />}
-      </MenuItem>)}
+      <ViewChoices onPicked={() => { setOpen(false); trigger.current?.focus(); }} />
     </div>}
+  </div>;
+}
+
+/** Every view to switch to, the current one ticked: the toolbar's list, and the one a view opens. */
+function ViewChoices({ onPicked }: { onPicked: () => void }) {
+  const views = useViews();
+  const current = resolveViewId(useViewMode());
+  return <>{views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint} role="menuitemradio" aria-checked={view.id === current}
+    onClick={() => { setViewMode(view.id); onPicked(); }}>
+    <view.icon /><span className="flex-1">{view.label}</span>{view.id === current && <Check />}
+  </MenuItem>)}</>;
+}
+
+const VIEW_MENU = "hivemind:view-menu";
+/** Opens the views to switch to beside `at` (window pixels): a view's own toolbar button asked. */
+export function openViewMenu(at?: { x: number; y: number; w: number; h: number }): void {
+  window.dispatchEvent(new CustomEvent(VIEW_MENU, { detail: at ?? null }));
+}
+
+/** The views list a view opened (`openViewMenu`), above its button when that is in the lower half
+ *  of the window, else below; it closes on a pick, an outside click or Escape. */
+export function ViewMenuAt() {
+  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | "middle" | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const opened = (e: Event) => setAt((e as CustomEvent<{ x: number; y: number; w: number; h: number } | null>).detail ?? "middle");
+    window.addEventListener(VIEW_MENU, opened);
+    return () => window.removeEventListener(VIEW_MENU, opened);
+  }, []);
+  useEffect(() => {
+    if (!at) return;
+    const outside = (e: MouseEvent) => { if (root.current && !root.current.contains(e.target as Node)) setAt(null); };
+    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") setAt(null); };
+    document.addEventListener("mousedown", outside);
+    window.addEventListener("blur", () => setAt(null), { once: true });
+    document.addEventListener("keydown", escape);
+    root.current?.querySelector<HTMLElement>("[aria-checked=true]")?.focus();
+    return () => { document.removeEventListener("mousedown", outside); document.removeEventListener("keydown", escape); };
+  }, [at]);
+  if (!at) return null;
+  const below = at === "middle" || at.y + at.h / 2 < window.innerHeight / 2;
+  const style: React.CSSProperties = at === "middle"
+    ? { left: "50%", top: "30%", transform: "translateX(-50%)" }
+    : { left: Math.max(8, Math.min(at.x, window.innerWidth - 196)), ...(below ? { top: at.y + at.h + 6 } : { bottom: window.innerHeight - at.y + 6 }) };
+  return <div ref={root} role="menu" aria-label="switch view" data-view-menu className="hm-island fixed z-(--layer-panels) min-w-[180px] rounded-lg p-1" style={style}>
+    <ViewChoices onPicked={() => setAt(null)} />
   </div>;
 }
 

@@ -16,6 +16,7 @@
  */
 import { useSyncExternalStore, type ComponentType } from "react";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
+import type { HostMenu, ViewRect } from "@hivemind/view-sdk/protocol";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
 import type { FrameActions } from "../FrameMenu";
@@ -90,6 +91,9 @@ export interface WorkspaceCommands {
   /** Wake the agent asleep in a tile; put one to sleep, asking first when it is busy. */
   wakeAgent: (tileId: string) => void;
   sleepAgent: (tileId: string) => void;
+  /** Open one of the app's own menus, as its toolbar does: the views beside `at` (window
+   *  pixels), Add, the theme panel or Settings. */
+  openHostMenu: (menu: HostMenu, at?: ViewRect) => void;
   /** Live agent status, PER TILE, off the awareness bus. Deliberately not on
    *  the model: a status transition (~1 Hz while agents work) reaches only the
    *  subscribers of that tile — a 3D view colours one object, a rail recolours

@@ -101,6 +101,8 @@ import { SayHere } from "./multiplayer/presence";
 import { joinedId } from "./multiplayer/shown";
 import { openAdd } from "./workspace/add-dialog";
 import { HostChrome } from "./workspace/host-chrome";
+import { openAppearanceSettings } from "./workspace/chrome-store";
+import { openViewMenu } from "./workspace/standard-toolbar";
 import { loadCommunityViews } from "./workspace/views/community/registry";
 import { agentScanProblems, syncAgentPlugins } from "./agent-plugins";
 import {
@@ -1263,6 +1265,13 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     openFolder: (frameId) => void bindWorkspace(frameId),
     wakeAgent: (tileId) => void sleepActions.wake(tileId),
     sleepAgent: (tileId) => void sleepActions.sleep(tileId),
+    // The toolbar's own menus, for a view that draws its own toolbar.
+    openHostMenu: (menu, at) => {
+      if (menu === "views") openViewMenu(at);
+      else if (menu === "add") openAdd();
+      else if (menu === "appearance") openAppearanceSettings();
+      else window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: {} }));
+    },
     // Module-level bus functions: stable identities, so status never enters the
     // memo deps — a status transition re-renders nothing here.
     subscribeTileStatus: (tileId, cb) => subscribeTileStatus(tileId, (e) => cb(e.status, e)),
