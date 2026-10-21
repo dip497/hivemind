@@ -36,6 +36,6 @@ test("a photo named in the shared settings loads in a run with its own profile",
     }), { timeout: 10_000 }).toBe(true);
   } finally {
     await Promise.race([app.close(), new Promise((r) => setTimeout(r, 5000))]);
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
 });
