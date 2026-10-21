@@ -159,7 +159,8 @@ export class Phone {
   /** Home as it shows across the computers, by `filter` and the person's View `choices`
    *  (hive-phone's `homes`). */
   shown(filter: Filter, choices: object = {}): Shown {
-    return this.homes.shown(filter.query, filter.machine ?? undefined, this.named(), choices) as Shown;
+    const view = { ...choices, now: Date.now(), offset: -new Date().getTimezoneOffset() };
+    return this.homes.shown(filter.query, filter.machine ?? undefined, this.named(), view) as Shown;
   }
 
   /** The agents across the computers, and what waits on the person. */
