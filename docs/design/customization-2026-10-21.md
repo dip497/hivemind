@@ -1,6 +1,9 @@
 # Customizing views, widgets and tools — design (2026-10-21)
 
-Status: proposal. Builds on `plugin-platform-2026-10-03.md` (the two runtimes and the kernel),
+Status: proposal; steps 1 and 2 built (2026-10-21): view tokens (protocol 1.16) and settings v2.
+The `image` setting type moved to step 5, with themes: it needs the same file serving as a theme's
+fonts and wallpaper. Tokens are declared by views only so far; widgets and tools get them with
+step 3, when widget nodes can reference them. Builds on `plugin-platform-2026-10-03.md` (the two runtimes and the kernel),
 `plugin-settings-2026-10-07.md` (one record and one settings vocabulary per plugin),
 `configurable-workspace-ui.md` (toolbar and panel preferences), `tool-plugins-2026-10-07.md` and
 `package-marketplace.md`. Out of scope: who may publish what (publisher identity, licences), and

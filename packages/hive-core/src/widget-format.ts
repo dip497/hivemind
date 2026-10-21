@@ -4,7 +4,7 @@
  * no code. One installed under the same id replaces a built-in. Pure, so the window has them from
  * its first frame; reading folders is `./widgets.ts`.
  */
-import { resolveSettings, type SettingField } from "@hivemind/view-sdk/settings";
+import { resolveSettings, type SettingField, type SettingValue } from "@hivemind/view-sdk/settings";
 import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import type { PluginCategory } from "@hivemind/view-sdk/category";
 import type { PluginCommand } from "@hivemind/view-sdk/commands";
@@ -97,7 +97,7 @@ export interface PlacedWidget {
 }
 
 /** A placed widget's options: what the person set, else each option's default. */
-export const widgetOptions = (pkg: WidgetPackage, w: PlacedWidget): Record<string, string | number | boolean> => resolveSettings(pkg.options, w.options);
+export const widgetOptions = (pkg: WidgetPackage, w: PlacedWidget): Record<string, SettingValue> => resolveSettings(pkg.options, w.options);
 
 /** `tree` with each "$options.<id>" string replaced by that option's value. */
 function withOptions(tree: unknown, options: Record<string, unknown>, depth = 0): unknown {

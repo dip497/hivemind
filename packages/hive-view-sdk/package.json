@@ -11,6 +11,7 @@
     "./protocol": "./src/protocol.ts",
     "./manifest": "./src/manifest.ts",
     "./settings": "./src/settings.ts",
+    "./tokens": "./src/tokens.ts",
     "./category": "./src/category.ts",
     "./commands": "./src/commands.ts",
     "./testing": "./src/testing.ts"

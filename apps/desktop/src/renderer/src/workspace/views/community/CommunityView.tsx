@@ -14,6 +14,7 @@ import { useChromeState } from "../../chrome-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PORT_HANDSHAKE, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
+import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import type { CommunityLink } from "@hivemind/view-host/link";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
 import type { WorkspaceViewProps } from "../../workspace-view";
@@ -42,7 +43,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const [rects, setRects] = useState<SurfaceRect[]>([]);
     const { link, ready, send, dialogs } = usePluginLink({
       pluginId: pkg.id, record: { kind: "view", id: pkg.id }, name: manifest.name, capabilities,
-      fields: manifest.settings ?? [], layoutId: pkg.id, personal: manifest.layout === "personal", props: { model, commands }, root: rootRef,
+      fields: viewSettingFields(manifest), tokens: manifest.tokens, layoutId: pkg.id, personal: manifest.layout === "personal", props: { model, commands }, root: rootRef,
       onSurfaceRects: setRects, commands: manifest.commands, instance: { id: pkg.id, label: manifest.name },
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
