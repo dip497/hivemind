@@ -119,7 +119,10 @@ static WRITTEN: Mutex<Option<HashMap<PathBuf, u64>>> = Mutex::new(None);
 
 fn writes(file: &Path) -> u64 {
     let written = WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
-    written.as_ref().and_then(|w| w.get(file).copied()).unwrap_or(0)
+    written
+        .as_ref()
+        .and_then(|w| w.get(file).copied())
+        .unwrap_or(0)
 }
 
 impl Identity {
@@ -149,7 +152,11 @@ impl Identity {
 
     /// What `name`, a file of its directory, holds as `read` makes it: read again only once this
     /// process wrote it or the file system says it changed.
-    pub(crate) fn kept<T: Clone + Send + Sync + 'static>(&self, name: &'static str, read: impl FnOnce(&Path) -> T) -> T {
+    pub(crate) fn kept<T: Clone + Send + Sync + 'static>(
+        &self,
+        name: &'static str,
+        read: impl FnOnce(&Path) -> T,
+    ) -> T {
         let file = self.dir.join(name);
         let (written, stamp) = (writes(&file), stamp(&file));
         let mut kept = self.kept.lock().unwrap_or_else(|e| e.into_inner());
@@ -161,7 +168,14 @@ impl Identity {
             }
         }
         let value = read(&file);
-        kept.insert(name, Kept { written, stamp, value: Arc::new(value.clone()) });
+        kept.insert(
+            name,
+            Kept {
+                written,
+                stamp,
+                value: Arc::new(value.clone()),
+            },
+        );
         value
     }
 
@@ -203,6 +217,9 @@ pub(crate) fn write_private(file: &Path, text: &str) -> Result<()> {
     )?;
     fs::rename(&tmp, file).with_context(|| format!("cannot write {}", file.display()))?;
     let mut written = WRITTEN.lock().unwrap_or_else(|e| e.into_inner());
-    *written.get_or_insert_with(HashMap::new).entry(file.to_path_buf()).or_default() += 1;
+    *written
+        .get_or_insert_with(HashMap::new)
+        .entry(file.to_path_buf())
+        .or_default() += 1;
     Ok(())
 }

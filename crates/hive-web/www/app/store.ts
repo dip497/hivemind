@@ -28,16 +28,20 @@ export const get = <T>(key: string) => kept<T | undefined>("readonly", (s) => s.
 export const put = (key: string, value: unknown) => kept<void>("readwrite", (s) => s.put(value, key));
 export const remove = (key: string) => kept<void>("readwrite", (s) => s.delete(key));
 
-/** This browser's device key, its 32-byte seed: made the first time, then kept sealed. */
-export async function deviceKey(): Promise<Uint8Array> {
-  const [sealing, sealed] = [await get<CryptoKey>("sealing"), await get<{ iv: Uint8Array<ArrayBuffer>; key: ArrayBuffer }>("device")];
+/** One of this browser's device keys, its 32-byte seed, kept sealed under `name`: made the first
+ *  time it is asked for. Each account pairs with keys of its own ("device" is the first one made). */
+export async function deviceKey(name: string): Promise<Uint8Array> {
+  const sealed = await get<{ iv: Uint8Array<ArrayBuffer>; key: ArrayBuffer }>(name);
+  let sealing = await get<CryptoKey>("sealing");
   if (sealing && sealed) {
     return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: sealed.iv }, sealing, sealed.key));
   }
-  const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  if (!sealing) {
+    sealing = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    await put("sealing", sealing);
+  }
   const seed = crypto.getRandomValues(new Uint8Array(32));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  await put("sealing", key);
-  await put("device", { iv, key: await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, seed) });
+  await put(name, { iv, key: await crypto.subtle.encrypt({ name: "AES-GCM", iv }, sealing, seed) });
   return seed;
 }

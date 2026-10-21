@@ -12,6 +12,7 @@ pub mod conversation;
 pub mod devices;
 pub mod failure;
 pub mod home;
+pub mod homes;
 pub mod identity;
 pub mod keys;
 pub mod layers;

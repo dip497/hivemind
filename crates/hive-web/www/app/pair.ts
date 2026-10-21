@@ -13,7 +13,7 @@ export class PairScreen {
   private readonly name = h("input", { class: "field", value: guessName(), "aria-label": "This device's name", "data-pair-name": "" });
   private readonly title = h("h1", {}, "Pair with hivemind");
   private readonly how = h("p", {}, "On your computer, open Settings → Connect, and scan its code, or paste here the link it shows.");
-  private readonly replaces = h("p", { class: "problem", hidden: true, "data-pair-replaces": "" });
+  private readonly adds = h("p", { hidden: true, "data-pair-adds": "" });
   private readonly refusedBy = h("p", { class: "problem", hidden: true, "data-pair-refused": "" });
   private readonly said = h("p", { hidden: true, "data-pairing": "" });
   private readonly error = h("p", { class: "problem", hidden: true, "data-pair-error": "" });
@@ -24,26 +24,26 @@ export class PairScreen {
   /** The person's answer to the question, while it is asked. */
   private answer: ((match: boolean) => void) | null = null;
   private readonly button: HTMLButtonElement;
-  private readonly keep: HTMLButtonElement;
+  private readonly cancel: HTMLButtonElement;
   private readonly scanner = new Scanner();
   private readonly scan: HTMLButtonElement;
 
-  /** `keep` leaves the pairing as it is, when a link was offered to a page already paired; a code
+  /** `cancel` goes back without pairing, when this page is paired already; a code
    *  scanned is `scanned`, once `read` (the wasm's, null until it is compiled) reads one. */
   constructor(
     pair: (link: string, name: string, shown: Connect) => Promise<void>,
-    keep: () => void,
+    cancel: () => void,
     read: () => ((rgba: Uint8Array, width: number, height: number) => string | null) | null,
     scanned: (text: string, name: string) => void,
   ) {
     this.button = pill("Pair", () => void this.run(pair, this.link.value.trim(), this.name.value.trim() || guessName()), "primary", { "data-pair": "" });
-    this.keep = pill("Keep", keep, "", { hidden: true, "data-pair-keep": "" });
+    this.cancel = pill("Cancel", cancel, "", { hidden: true, "data-pair-cancel": "" });
     this.yes = pill("Yes", () => this.answer?.(true), "primary", { hidden: true, "data-connect-yes": "" });
     this.no = pill("No", () => this.answer?.(false), "", { hidden: true, "data-connect-no": "" });
     this.scan = pill("Scan", () => void this.scanWith(read(), scanned), "", { "data-scan": "" });
     this.el.append(h("div", { class: "pair" },
-      mark(), this.title, this.refusedBy, this.how, this.replaces,
-      this.scan, this.scanner.el, this.link, this.name, this.button, this.keep, this.said, this.words, this.question, this.yes, this.no, this.error));
+      mark(), this.title, this.refusedBy, this.how, this.adds,
+      this.scan, this.scanner.el, this.link, this.name, this.button, this.cancel, this.said, this.words, this.question, this.yes, this.no, this.error));
   }
 
   /** The camera, until it reads a code; tapped again, it stops. */
@@ -99,10 +99,22 @@ export class PairScreen {
         : "Pair only with a host you just asked to pair with (`hive host pair` on it).";
     this.button.disabled = !computer;
     say(this.button, computer?.connect ? "Connect" : "Pair");
-    this.replaces.hidden = !now;
-    this.replaces.textContent = now ? `This page is paired with ${now.name}; pairing replaces it.` : "";
-    this.keep.hidden = !now;
-    this.keep.textContent = now ? `Keep ${now.name}` : "Keep";
+    this.added(now);
+  }
+
+  /** Asked to pair another computer, while `now`'s account is shown. */
+  adding(now: string): void {
+    if (!this.cancel.hidden) return;
+    this.clear();
+    this.title.textContent = "Pair another computer";
+    this.added({ name: now });
+  }
+
+  /** What pairing does while this page is paired with `now`: it stays, and Cancel goes back. */
+  private added(now: { name: string } | null): void {
+    this.adds.hidden = !now;
+    this.adds.textContent = now ? `${now.name} stays paired. Another computer of yours joins it; someone else's is an account of its own.` : "";
+    this.cancel.hidden = !now;
   }
 
   /** `computer` turned this browser away: unpaired there, it is to be paired again. */
@@ -121,8 +133,7 @@ export class PairScreen {
     this.how.textContent = "On your computer, open Settings → Connect, and scan its code, or paste here the link it shows.";
     this.button.disabled = false;
     say(this.button, "Pair");
-    this.replaces.hidden = true;
-    this.keep.hidden = true;
+    this.added(null);
   }
 
   /** Pair with `link`, or connect with it, saying so while it does. */

@@ -907,7 +907,7 @@ pub fn status_of(t: &TileRow) -> &'static str {
 }
 
 /// How much a tile's state wants a look, from 3 (it waits) down; 0 for none worth saying.
-fn wants_look(state: Option<&str>) -> u8 {
+pub(crate) fn wants_look(state: Option<&str>) -> u8 {
     match state {
         Some("waiting") => 3,
         Some("working") => 2,

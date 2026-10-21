@@ -1,6 +1,7 @@
 // Home (spec/home.md, the desktop's Layers panel): what waits on the person, with its answers;
 // what is at work; the pinned; then each machine's projects, frames and tiles, each tile with what
-// it last said. A search, the View menu and, with more than one machine, a chip for each. Each
+// it last said. With more than one account, a chip for each; a search, the View menu and, with more
+// than one machine, a chip for each. Each
 // list is kept by key, so one change redraws one row.
 
 import type { App } from "./app.js";
@@ -22,6 +23,7 @@ export class Home {
   private readonly count = h("span", { class: "count", hidden: true, "data-count": "" });
   private readonly search = h("input", { type: "search", class: "search", placeholder: "Search", "aria-label": "Search", enterkeyhint: "search", "data-search": "" });
   private readonly machines = h("div", { hidden: true, "data-machines": "" });
+  private readonly accountChips = h("div", { class: "find", hidden: true, "data-home-accounts": "" });
   private readonly needsList = h("div", { class: "list", "data-needs": "" });
   private readonly clear = h("p", { class: "quiet", hidden: true, "data-clear": "" });
   private readonly workingHead = h("h2", { class: "section", hidden: true }, "Working");
@@ -61,6 +63,7 @@ export class Home {
     this.scrim.addEventListener("click", () => this.closeView());
     this.el.append(
       h("h1", { class: "title" }, "Home", this.count, start),
+      this.accountChips,
       h("div", { class: "find" }, h("div", { class: "find-row" }, this.search, this.viewOpen), this.machines),
       this.needsList, this.clear,
       this.workingHead, this.workingList,
@@ -123,6 +126,12 @@ export class Home {
     // Each breathing dot is a layer the browser recomposes on every change: past a few, still.
     const still = o.working > STILL_PAST;
     if (this.el.hasAttribute("data-still") !== still) this.el.toggleAttribute("data-still", still);
+  }
+
+  /** A chip for each account this browser is paired with, `active` pressed; with one, none. */
+  accounts(accounts: Array<{ person: string; name: string }>, active: string | null, switchTo: (person: string) => void): void {
+    this.accountChips.hidden = accounts.length < 2;
+    this.accountChips.replaceChildren(...(accounts.length < 2 ? [] : [chips(accounts, (a) => a.name, (a) => a.person === active, (a) => switchTo(a.person), { "aria-label": "Accounts" })]));
   }
 
   private showMachines(machines: string[]): void {

@@ -1,7 +1,9 @@
 // The phone app in a browser (docs/design/phone-browser-2026-10-03.md, B3 to B5): Home, one agent,
-// starting one, Devices. The last Home kept in IndexedDB is shown before the wasm is even compiled;
+// starting one, Devices; one account shown at a time, each a person whose computers this browser
+// paired with. The last Home kept in IndexedDB is shown before the wasm is even compiled;
 // what the computer says replaces it, each list applied to what is on screen by key.
 
+import { type Account, type Computer, type Kept, accountName, forgetAccount, keep, load, pairedWith, save } from "./accounts.js";
 import type { App } from "./app.js";
 import { AgentScreen } from "./agent.js";
 import { Devices } from "./devices.js";
@@ -15,7 +17,7 @@ import { TermScreen } from "./term-screen.js";
 import { followViewport } from "./viewport.js";
 import { ViewScreen, Views } from "./views.js";
 import { get, put, remove } from "./store.js";
-import type { Overview, Paired, Shown } from "./types.js";
+import type { Overview, Shown } from "./types.js";
 import { NOTICES, ago, message } from "./words.js";
 
 type Tab = "home" | "views" | "devices" | "start";
@@ -25,7 +27,11 @@ const NOTHING: First = { shown: { needs: [], working: [], pinned: [], machines: 
 
 let phone: Phone | null = null;
 let overview: Overview | null = null;
-let paired: Paired | null = null;
+/** The wasm's side, once compiled. */
+let wasm: typeof import("./phone.js") | null = null;
+let kept: Kept = { accounts: [], active: null };
+/** The account shown. */
+let account: Account | null = null;
 /** An agent opened from a list, so Back goes back to it. */
 let opened = false;
 /** A pairing link the page was opened with, waiting on a tap. */
@@ -89,7 +95,7 @@ const app: App = {
     location.hash = new URLSearchParams({ terminal: tile, in: workspace, name }).toString();
     opened = true;
   },
-  computer: () => paired?.with.name ?? "your computer",
+  computer: () => account ? accountName(account) : "your computer",
   workspaces: async () => (await reachedNow()).workspaces(),
   places: async (workspace) => (await reachedNow()).places(workspace),
   folders: async (workspace, folder) => (await reachedNow()).folders(workspace, folder),
@@ -114,20 +120,25 @@ const home = new Home(app, () => render());
 const agent = new AgentScreen(app);
 const terminal = new TermScreen(app);
 const starting = new StartScreen(app);
-const devices = new Devices(() => void forget());
+const devices = new Devices({
+  forget: () => void forget(),
+  add: () => (location.hash = "add"),
+  switchTo: (person) => void switchTo(person),
+});
 const views = new Views(app);
 const viewing = new ViewScreen(app, views);
 const pairing = new PairScreen((link, name, shown) => pairWith(link, name, shown), () => {
   offered = false;
   pairing.clear();
-  route();
-}, () => phone && ((rgba, width, height) => phone!.readQr(rgba, width, height)), (text, name) => offer(text, name));
+  if (new URLSearchParams(location.hash.slice(1)).has("add")) history.back();
+  else route();
+}, () => wasm && wasm.scan, (text, name) => offer(text, name));
 
 /** A link given this page, opened with it or scanned: shown to pair with on a tap. */
 function offer(link: string, name: string): void {
-  if (!phone) return;
+  if (!wasm) return;
   offered = true;
-  pairing.offer(link, name, phone.read(link), paired?.with ?? null);
+  pairing.offer(link, name, wasm.read(link), account && { name: accountName(account) });
   route();
 }
 const screens = { home, agent, terminal, start: starting, views, view: viewing, devices, pair: pairing };
@@ -174,7 +185,9 @@ function route(): void {
   const view = asked.get("view");
   const term = asked.get("terminal");
   const tab: Tab = asked.has("start") ? "start" : (TABS.find(([t]) => asked.has(t))?.[0] ?? "home");
-  const shown = !paired || offered ? "pair" : tile ? "agent" : term ? "terminal" : view ? "view" : tab;
+  const adding = asked.has("add");
+  const shown = !account || offered || adding ? "pair" : tile ? "agent" : term ? "terminal" : view ? "view" : tab;
+  if (adding && account && !offered) pairing.adding(accountName(account));
   for (const [name, screen] of Object.entries(screens)) screen.el.hidden = name !== shown;
   tabs.hidden = shown === "pair" || shown === "agent" || shown === "terminal" || shown === "start" || shown === "view";
   if (shown === "start" && shownBefore !== "start") void starting.open(asked.get("workspace"), asked.get("frame"));
@@ -213,7 +226,7 @@ function apply(first: First): void {
 
 /** Home again, from what this browser holds, by what the person searched for; kept a moment after. */
 function render(): void {
-  if (!phone || !paired) return;
+  if (!phone || !account) return;
   const p = phone;
   const first = { shown: p.shown(home.filter, home.choices.view()), overview: p.overview() };
   apply(first);
@@ -221,49 +234,154 @@ function render(): void {
   if (saving) return;
   const keep = () => {
     saving = 0;
-    if (phone !== p || !paired) return;
+    if (phone !== p) return;
     savedAt = Date.now();
-    void put("home", p.kept());
-    void put("first", { shown: p.shown({ query: "", machine: null }, home.choices.view()), overview: p.overview() });
+    const person = p.account.person;
+    void put(`home:${person}`, p.kept());
+    void put(`first:${person}`, { shown: p.shown({ query: "", machine: null }, home.choices.view()), overview: p.overview() });
   };
   const wait = 500 - (Date.now() - savedAt);
   if (wait <= 0) keep();
   else saving = setTimeout(keep, wait);
 }
 
+/** Pair with the computer `link` names: under the key it knows this browser by, when it was paired
+ *  with before, else a new one. It joins its person's account, made when there is none, which is
+ *  shown; the other accounts stay paired. */
 async function pairWith(link: string, name: string, shown: Connect): Promise<void> {
-  if (!phone) throw new Error("Still starting");
-  const before = paired;
-  paired = phone.read(link)?.connect ? await phone.connectWith(link, name, shown) : await phone.pair(link, name);
-  offered = false;
-  if (before) {
-    void remove("first");
-    void remove(START_KEPT);
-    apply(NOTHING);
+  if (!wasm) throw new Error("Still starting");
+  const before = pairedWith(kept, wasm.read(link)?.device ?? "");
+  const key = before?.computer.key ?? unusedKey();
+  // Pairing again under a key the account shown dials with: one endpoint of it at a time.
+  const shared = phone && account?.computers.some((c) => c.key === key);
+  if (shared) {
+    phone!.disconnect();
+    phone = null;
   }
-  devices.show(phone.id, paired);
+  let paired;
+  try {
+    paired = await wasm.pairUnder(key, link, name, shown);
+  } catch (e) {
+    if (!before) void remove(key);
+    if (shared && account) await show(account);
+    throw e;
+  }
+  const joined = keep(kept, paired, key);
+  await save(kept);
+  offered = false;
+  await show(joined);
   location.hash = "home";
   route();
 }
 
+/** The key a computer not paired with before is paired under: "device", the key a browser pairs
+ *  with first, while no account uses it, so that the id shown before pairing is the one paired. */
+function unusedKey(): string {
+  return kept.accounts.some((a) => a.computers.some((c) => c.key === "device")) ? `key:${crypto.randomUUID()}` : "device";
+}
+
+/** Nothing paired: the id this browser pairs with next. */
+function showUnpaired(): void {
+  devices.show(null, [], []);
+  if (wasm && !account) void wasm.idOf(unusedKey()).then((id) => !account && devices.show(id, [], []));
+}
+
+/** Show `person`'s account in place of the one shown. */
+async function switchTo(person: string): Promise<void> {
+  const to = kept.accounts.find((a) => a.person === person);
+  if (!to || to === account) return;
+  kept.active = person;
+  await save(kept);
+  await show(to);
+  location.hash = "home";
+}
+
+/** Forget the account shown: each of its computers is told, and another account is shown. */
 async function forget(): Promise<void> {
-  const computer = app.computer();
-  const told = (await phone?.forget()) ?? false;
-  unpaired();
-  if (!told) notify(`${computer} was not told: unpair this browser on it too.`);
+  if (!phone || !account) return;
+  const gone = account;
+  const notTold = await phone.forget();
+  await drop(gone);
+  if (notTold.length) notify(`${notTold.join(", ")} ${notTold.length === 1 ? "was" : "were"} not told: unpair this browser there too.`);
+}
+
+/** Forget `gone` here, with what was kept for it, and show another account or pairing. */
+async function drop(gone: Account): Promise<void> {
+  const keys = forgetAccount(kept, gone.person);
+  await save(kept);
+  await Promise.all([...keys, `home:${gone.person}`, `first:${gone.person}`].map(remove));
+  const next = kept.accounts.find((a) => a.person === kept.active);
+  if (next) await show(next);
+  else unpaired();
 }
 
 /** Paired with nothing now: the pairing screen. */
 function unpaired(): void {
-  paired = null;
+  phone?.disconnect();
+  phone = null;
+  account = null;
   overview = null;
-  void remove("first");
   void remove(START_KEPT);
   apply(NOTHING);
-  if (phone) devices.show(phone.id, null);
+  showUnpaired();
+  home.accounts([], null, () => {});
   trouble.hidden = true;
   route();
 }
+
+/** `to`'s account on screen, its computers dialled; the one shown before let go of. */
+async function show(to: Account): Promise<void> {
+  phone?.disconnect();
+  phone = null;
+  account = to;
+  const last = await get<First>(`first:${to.person}`);
+  apply(last ?? NOTHING);
+  if (!wasm) return;
+  const p = await wasm.Phone.open(to, told);
+  if (account !== to) return p.disconnect();
+  phone = p;
+  showAccounts();
+  void wasm.idOf(to.computers[0]!.key).then((id) => account === to && devices.show(id, kept.accounts, p.computers(), to));
+  render();
+  p.connect();
+}
+
+function showAccounts(): void {
+  home.accounts(kept.accounts.map((a) => ({ person: a.person, name: accountName(a) })), account?.person ?? null, (person) => void switchTo(person));
+}
+
+const told = {
+  home: render,
+  status() {
+    if (!phone) return;
+    const computers = phone.computers();
+    devices.status(computers);
+    live = computers.some((c) => c.live);
+    const away = computers.filter((c) => c.paired && !c.live && c.error);
+    trouble.hidden = live || away.length === 0;
+    trouble.textContent = away.length ? `${away.map((c) => c.name).join(", ")} ${away.length === 1 ? "is" : "are"} not reached: ${away[0]!.error}` : "";
+    if (live) for (const r of [...reaching]) r();
+  },
+  named(name: string) {
+    if (!account || account.name === name) return;
+    account.name = name;
+    void save(kept);
+    showAccounts();
+    devices.named(name);
+  },
+  refused(computer: Computer) {
+    const of = account;
+    if (!of) return;
+    of.computers = of.computers.filter((c) => c.with.device !== computer.with.device);
+    if (of.computers.length) {
+      void save(kept);
+      notify(`${computer.with.name} no longer lets this browser in: it was unpaired there.`);
+      return;
+    }
+    pairing.refused(computer.with.name);
+    void drop(of);
+  },
+};
 
 // How long ago, kept true as time passes: only the text that changed is touched.
 setInterval(() => {
@@ -285,36 +403,27 @@ async function start(): Promise<void> {
     offered = true;
     pairing.starting(link, name);
   }
-  const [kept, last] = await Promise.all([get<Paired>("paired"), get<First>("first")]);
-  paired = kept ?? null;
-  if (paired && last) apply(last);
+  kept = await load();
+  const active = kept.accounts.find((a) => a.person === kept.active) ?? null;
+  if (active) {
+    account = active;
+    apply((await get<First>(`first:${active.person}`)) ?? NOTHING);
+  }
   route();
 
   navigator.serviceWorker?.register("sw.js").catch(() => {});
+  // Paired computers are kept only while the browser keeps this page's storage.
+  void navigator.storage?.persist?.().catch(() => {});
   // The wasm after the first screen, which does not need it.
-  const { Phone } = await import("./phone.js");
-  phone = await Phone.open(paired, {
-    home: render,
-    status(now, error) {
-      live = now;
-      devices.status(now, error);
-      trouble.hidden = now || error === null;
-      trouble.textContent = error ? `${paired?.with.name ?? "Your computer"} is not reached: ${error}` : "";
-      if (now) for (const r of [...reaching]) r();
-    },
-    others: (o) => devices.showOthers(o),
-    refused(computer) {
-      pairing.refused(computer);
-      unpaired();
-    },
-  });
-  devices.show(phone.id, paired);
-  render();
+  const loaded = await import("./phone.js");
+  await loaded.ready();
+  wasm = loaded;
+  if (active) await show(active);
+  else showUnpaired();
   warm();
   route();
-  addEventListener("online", () => phone!.retry());
-  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone!.retry());
-  phone.connect();
+  addEventListener("online", () => phone?.retry());
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && phone?.retry());
   if (link !== null) offer(link, name);
 }
 
