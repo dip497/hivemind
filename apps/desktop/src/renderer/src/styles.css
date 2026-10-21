@@ -1067,6 +1067,7 @@ html.content-glass .md-preview code {
   --wp-2: #14b8a6;
   --wp-3: #7c3aed;
   --wp-vignette: oklch(0 0 0 / 0.6);
+  --wp-dim: oklch(0 0 0 / calc(1 - var(--wp-brightness, 0.85)));
   --wp-sheen: oklch(1 0 0 / 0.06);
 }
 /* Embedded variant: fill the positioned parent (e.g. the fit-to-screen overlay)
@@ -1155,7 +1156,7 @@ html.content-glass .hm-term-fs-panel {
   inset: 0;
   background:
     radial-gradient(ellipse at center, transparent 40%, var(--wp-vignette)),
-    oklch(0 0 0 / calc(1 - var(--wp-brightness, 0.85)));
+    var(--wp-dim);
 }
 /* Video wallpaper — full-bleed, cover-fit. object-fit:cover preserves full
    resolution (no quality loss beyond scaling); brightness (--wp-brightness) is the
