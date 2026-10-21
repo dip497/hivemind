@@ -225,9 +225,9 @@ function fakeActivity() {
 
 test("1.3: hello features list only what is wired; status carries since", () => {
   const bare = harness();
-  assert.deepEqual(bare.link.features, ["invoke", "surfaces", "sleep"]);
+  assert.deepEqual(bare.link.features, ["invoke", "surfaces", "sleep", "hostMenu"]);
   const h = harness([], ["t1"], { sinceOf: (id) => (id === "t1" ? { since: 42, exact: false } : undefined), history: async () => ({}) as never });
-  assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces", "sleep"]);
+  assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces", "sleep", "hostMenu"]);
   h.link.handle({ type: "ready", v: 1 });
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("question", {});
@@ -321,7 +321,7 @@ test("1.4: features; a status carries the agent's own, and a change in it alone 
   let push: (s: unknown) => void = () => {};
   const h = harness([], ["t1"], { agentStatus: (_id, cb) => { push = cb as never; cb({ state: "working", subagents: 0, background: 0, compacting: false, source: "hooks" }); return () => {}; } });
   h.link.handle({ type: "ready", v: 1 });
-  assert.deepEqual(h.link.features, ["agentStatus", "invoke", "surfaces", "sleep"]);
+  assert.deepEqual(h.link.features, ["agentStatus", "invoke", "surfaces", "sleep", "hostMenu"]);
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("working", {});
   push({ state: "waiting", waitingFor: "permission", subagents: 0, background: 0, compacting: false, source: "hooks" });
@@ -418,6 +418,24 @@ test("1.14: wakeAgent and sleepAgent need workspace:spawn and a tile that is the
   h.link.handle({ type: "command", name: "wakeAgent", args: ["ghost"] });
   assert.deepEqual(h.calls, ['sleepAgent("t1")', 'wakeAgent("t1")']);
   assert.equal(h.link.stats.refused, 1);
+});
+
+test("1.15: a view opens the app's own menus with no permission; a menu there is none of, or a button with no place, is refused", () => {
+  const h = harness([]);
+  assert.ok(h.link.features.includes("hostMenu"), "a host that opens its menus says it does");
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "command", name: "openHostMenu", args: ["views", { x: 10, y: 900, w: 40, h: 32 }] });
+  h.link.handle({ type: "command", name: "openHostMenu", args: ["add"] });
+  h.link.handle({ type: "command", name: "openHostMenu", args: ["terminal"] });
+  h.link.handle({ type: "command", name: "openHostMenu", args: ["views", { x: "left" }] });
+  assert.deepEqual(h.calls, ['openHostMenu("views",{"x":10,"y":900,"w":40,"h":32})', 'openHostMenu("add")']);
+  assert.equal(h.link.stats.refused, 2);
+  // A host with no menus to open (the phone, a remote screen) does not say it has.
+  const bare = harness([], ["t1"], undefined, ["openHostMenu"]);
+  assert.ok(!bare.link.features.includes("hostMenu"));
+  bare.link.handle({ type: "ready", v: 1 });
+  bare.link.handle({ type: "command", name: "openHostMenu", args: ["settings"] });
+  assert.deepEqual(bare.calls, []);
 });
 
 test("1.14: a prompt to an agent the view was told is asleep is refused ASLEEP before the person is asked; woken, it goes", async () => {
