@@ -2,7 +2,8 @@
  * The workspace's widgets, over every view: cards the person drags anywhere on the screen, above
  * everything, staying put whatever the view does. Which widgets there are is the workspace's (and
  * everyone in it sees them); where each card sits, and whether they are hidden, is this person's
- * own, kept on this machine, since every screen differs. A new card starts at the right edge. They
+ * own, kept on this machine, since every screen differs. A new card starts at the right edge, or the
+ * left over a view that asks for it (`"widgets": "left"` in its manifest). They
  * are added from the toolbar's Add menu, in any view.
  */
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -15,7 +16,7 @@ import { widgetsOf } from "./board-model";
 import type { Board } from "./useBoard";
 import { WidgetContent, useWidgetLook } from "./WidgetBody";
 import { clickWidget, optionsOf, useDrawn } from "./widget-runtime";
-import { CARD_W, stackDownRightEdge, type Size, type Spot } from "./widget-stack";
+import { CARD_W, stackDownEdge, type Size, type Spot } from "./widget-stack";
 
 const posKey = (repo: string) => `hivemind:widget-spots:${repo}`;
 const HIDDEN = "hivemind:widgets-hidden";
@@ -32,8 +33,10 @@ const onScreen = (spot: Spot, size?: Size): Spot => ({
   y: Math.min(Math.max(spot.y, 0), Math.max(window.innerHeight - 48, 0)),
 });
 
-export function WidgetLayer({ repo, board, packages }: {
+export function WidgetLayer({ repo, board, packages, edge }: {
   repo: string | null;
+  /** The screen edge cards nobody has moved stack down: the active view's choice. */
+  edge: "left" | "right";
   board: Pick<Board, "objects" | "remove" | "update" | "edit">;
   packages: WidgetPackage[];
 }) {
@@ -62,7 +65,7 @@ export function WidgetLayer({ repo, board, packages }: {
     const was = all[id];
     return was && was.w === size.w && was.h === size.h ? all : { ...all, [id]: size };
   });
-  const stacked = stackDownRightEdge(widgets.map((w) => w.id), sizes, { w: window.innerWidth, h: window.innerHeight });
+  const stacked = stackDownEdge(widgets.map((w) => w.id), sizes, { w: window.innerWidth, h: window.innerHeight }, edge);
 
   if (!repo || widgets.length === 0) return null;
   return (

@@ -143,7 +143,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -427,14 +427,23 @@ export interface ViewCommands {
   /** 1.14, permission `workspace:spawn`: put the agent in a tile to sleep. One working or waiting on
    *  someone is put to sleep only if the person says so. */
   sleepAgent: (tileId: string) => void;
+  /** 1.15 (feature `hostMenu`), no permission: open one of the app's own menus, as its toolbar does,
+   *  for a view that draws a toolbar of its own (`"toolbar": "off"`). `views` lists the views to
+   *  switch to, beside `at` (where the view's button is, in its own pixels); `add` opens Add, for a
+   *  widget or a tool; `appearance` the theme panel; `settings` the app's Settings. The person
+   *  chooses in it: nothing changes until they do. */
+  openHostMenu: (menu: HostMenu, at?: ViewRect) => void;
 }
+/** The app menus a view may open (`commands.openHostMenu`, 1.15). */
+export const HOST_MENUS = ["views", "add", "appearance", "settings"] as const;
+export type HostMenu = (typeof HOST_MENUS)[number];
 export type CommandName = keyof ViewCommands;
 export const COMMAND_PERMISSION: Record<CommandName, ViewPermission | null> = {
   selectTile: null, selectFrame: null, focusTile: null,
   closeTile: "workspace:close",
   spawnTile: "workspace:spawn", spawnVis: "workspace:spawn", spawnClaude: "workspace:spawn", addFrame: "workspace:spawn",
   spawnAgent: "workspace:spawn", renameTile: "workspace:edit", openFolder: "workspace:edit",
-  wakeAgent: "workspace:spawn", sleepAgent: "workspace:spawn",
+  wakeAgent: "workspace:spawn", sleepAgent: "workspace:spawn", openHostMenu: null,
 };
 
 export type PluginMessage =
@@ -599,6 +608,7 @@ const COMMAND_ARGS: Record<CommandName, (args: unknown[]) => boolean> = {
   openFolder: (a) => a.length === 1 && isId(a[0]),
   wakeAgent: (a) => a.length === 1 && isId(a[0]),
   sleepAgent: (a) => a.length === 1 && isId(a[0]),
+  openHostMenu: (a) => (a.length === 1 || (a.length === 2 && isRect(a[1]))) && (HOST_MENUS as readonly unknown[]).includes(a[0]),
 };
 
 /** Host side: validate a message received from a plugin. */

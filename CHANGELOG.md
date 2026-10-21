@@ -9,6 +9,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+### Added
+
+- A view that draws its own toolbar (`"toolbar": "off"`) can open the app's own menus from its buttons (view protocol 1.15, feature `hostMenu`): `hm.commands.openHostMenu("views", rect)` lists the views to switch to beside its button, and `"add"`, `"appearance"` and `"settings"` open Add, the theme panel and Settings. No permission: the person chooses in the menu.
+- A view can ask for widget cards down the left edge instead of the right, with `"widgets": "left"` in its `hivemind-view.json`, so they stay off a terminal it docks on the right. A card you moved stays where you put it.
+
 ## [2026.10.5] — 2026-10-21
 
 - A terminal or agent that fails to start says why (the daemon's own error, or that it stopped answering) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.

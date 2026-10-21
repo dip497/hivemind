@@ -90,7 +90,7 @@ export async function loadCommunityViews(repoRoot: string | null): Promise<Commu
     keep.add(p.id);
     const revision = `${p.url}|${p.manifest!.description ?? ""}|${p.icon ?? ""}`;
     if (registeredRevision.get(p.id) !== revision) {
-      registerView({ id: p.id, label: p.manifest!.name, hint: p.manifest!.description ?? (p.source === "app" ? "Comes with the app" : `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`), icon: p.icon ? maskIcon(p.icon) : Puzzle, component: makeCommunityView(p), source: "community", chrome: { wallpaper: p.manifest!.wallpaper ?? true, ...(p.manifest!.toolbar ? { island: p.manifest!.toolbar } : {}) } });
+      registerView({ id: p.id, label: p.manifest!.name, hint: p.manifest!.description ?? (p.source === "app" ? "Comes with the app" : `Community view ${p.manifest!.version} (${p.source}) — runs sandboxed.`), icon: p.icon ? maskIcon(p.icon) : Puzzle, component: makeCommunityView(p), source: "community", chrome: { wallpaper: p.manifest!.wallpaper ?? true, ...(p.manifest!.toolbar ? { island: p.manifest!.toolbar } : {}), ...(p.manifest!.widgets ? { widgets: p.manifest!.widgets } : {}) } });
       registeredRevision.set(p.id, revision);
     }
   }
