@@ -65,7 +65,7 @@ test("a tool installed from the Add menu is reviewed first, arrives switched off
   await search("commits");
   const entry = menu().locator(`[data-add-hub-entry="tool:${COMMITS}"]`);
   await expect(menu().locator('[data-board-choice="tile:commits"]')).toHaveCount(0);
-  await entry.locator("[data-add-hub-install]").click();
+  await entry.locator("[data-install-start]").click();
   await expect(entry.locator("[data-install-review]")).toContainText("installed switched off");
   await entry.locator("[data-install-confirm]").click();
   await expect(entry).toHaveAttribute("data-state", "off");
