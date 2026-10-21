@@ -1147,16 +1147,19 @@ html.content-glass .hm-term-fs-panel {
   background-repeat: no-repeat, no-repeat, repeat;
   background-size: 100% 100%, 100% 100%, 160px 160px;
 }
-/* Vignette for the photo / video scenes (their media element sits underneath). */
+/* Vignette + brightness for the photo / video scenes (their media element sits
+   underneath). Brightness is a black layer, not a filter on the moving media: a
+   filtered layer that animates can be redrawn in blocks without its filter. */
 .hm-wp-vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, var(--wp-vignette));
+  background:
+    radial-gradient(ellipse at center, transparent 40%, var(--wp-vignette)),
+    oklch(0 0 0 / calc(1 - var(--wp-brightness, 0.85)));
 }
 /* Video wallpaper — full-bleed, cover-fit. object-fit:cover preserves full
-   resolution (no quality loss beyond scaling); brightness is user-controlled
-   (--wp-brightness, default 0.85) so frosted panels stay legible while keeping
-   the clip's vibrancy. high-quality scaling hint avoids any softening. */
+   resolution (no quality loss beyond scaling); brightness (--wp-brightness) is the
+   vignette layer above it. high-quality scaling hint avoids any softening. */
 .hm-wp-video {
   position: absolute;
   inset: 0;
@@ -1164,9 +1167,8 @@ html.content-glass .hm-term-fs-panel {
   height: 100%;
   object-fit: cover;
   image-rendering: auto;
-  filter: brightness(var(--wp-brightness, 0.85)) saturate(1.05);
 }
-/* Photo wallpaper — same cover-fit + brightness control as video. When motion is
+/* Photo wallpaper — same cover-fit + brightness layer as video. When motion is
    on, a slow Ken-Burns pan/zoom gives a static photo gentle life (transform-only,
    compositor-cheap). The .hm-wallpaper clips the overscan. */
 .hm-wp-image {
@@ -1175,7 +1177,6 @@ html.content-glass .hm-term-fs-panel {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: brightness(var(--wp-brightness, 0.85)) saturate(1.05);
   transform-origin: center;
   /* 24 steps/s, not the blooms' 4. The step trick documented below works because a
      bloom is 60px-blurred, so a ~1px move has no visible edge; a PHOTO has edges

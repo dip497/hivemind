@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
+
 ## [2026.10.5] — 2026-10-21
 
 - A terminal or agent that fails to start says why (the daemon's own error, or that it stopped answering) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.
