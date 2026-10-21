@@ -156,6 +156,7 @@ Check `hm.supports("<feature>")` before using a newer feature.
 | The canvas's widgets | `hm.onWidgets(cb)`, `hm.pressWidget(id, action)` (`widgets`) |
 | Issues | `hm.onIssues(cb)`, `hm.issues.read(id)`, `create`, `update`, … (`issues`) |
 | Its settings | `hm.settings`, `hm.on("settings", cb)` (`settings`) |
+| Draw your own toolbar | `"toolbar": "off"`, then `hm.commands.openHostMenu("views", rect)`, `"add"`, `"appearance"` or `"settings"` opens the app's own (`hostMenu`) |
 | Messages from your scripts | `hm.onCustom("ci.*", cb)`, sent by `hive ctl view emit ci.build '{…}'` |
 
 Each tile in `structure` carries its `icon` (an SVG in `currentColor`) and its `agent`. Each frame
@@ -193,6 +194,7 @@ Selection and focus need none.
 | `"settings"` | fields the app draws on the view's Settings page: `boolean`, `number`, `text`, `choice` |
 | `"commands"` | what an agent can run in it (`hm.onCommand(name, handler)`), optionally with `"keys": "mod+alt+k"` |
 | `"toolbar"` | `"top"`, `"bottom"` (the default), `"hidden"` or `"off"` |
+| `"widgets": "left"` | start widget cards down the left edge over the view instead of the right, for a view that keeps its own panels on the right; a card the person moved stays put |
 | `"layout": "personal"` | keep the layout per person instead of shared |
 | `"layers": true` | show the app's Layers panel beside the view |
 | `"phone": true` | offer it on the phone page; use `hm.device.compact` and `hm.device.touch` |

@@ -49,6 +49,10 @@ export interface ViewManifest {
   /** Where the app's toolbar sits over the view: "top", "bottom" (the default), "hidden" behind a
    *  handle, or "off" for a view that offers what the toolbar does itself or not at all. */
   toolbar?: ViewToolbar;
+  /** Which edge of the screen the app's widget cards start down over the view: "right", the
+   *  default, or "left" for a view that keeps its own panels on the right. A card the person
+   *  moved stays where they put it. */
+  widgets?: ViewWidgetEdge;
   /** It lays itself out for a phone (`hello.device.compact`, protocol 1.5): only a view that says
    *  so is offered on the person's phone. */
   phone?: boolean;
@@ -65,6 +69,7 @@ export interface ViewManifest {
 
 export type ViewToolbar = "top" | "bottom" | "hidden" | "off";
 const TOOLBARS: readonly ViewToolbar[] = ["top", "bottom", "hidden", "off"];
+export type ViewWidgetEdge = "left" | "right";
 
 // A bare name is built in or installed from a folder; `@owner/name` came from HiveHub. `--` is
 // refused because the scoped form becomes a hostname by turning `@owner/name` into `owner--name`,
@@ -170,6 +175,11 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.phone !== "boolean") errors.push(`"phone" must be true or false`);
     else phone = m.phone;
   }
+  let widgets: ViewWidgetEdge | undefined;
+  if (m.widgets !== undefined) {
+    if (m.widgets !== "left" && m.widgets !== "right") errors.push(`"widgets" must be "left" or "right"`);
+    else widgets = m.widgets;
+  }
   let layers: boolean | undefined;
   if (m.layers !== undefined) {
     if (typeof m.layers !== "boolean") errors.push(`"layers" must be true or false`);
@@ -195,8 +205,8 @@ export function validateViewManifest(raw: unknown): ManifestResult {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "description", "icon", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "description", "icon", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "widgets", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(description ? { description } : {}), ...(icon ? { icon } : {}), ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}),
+  return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(description ? { description } : {}), ...(icon ? { icon } : {}), ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}), ...(widgets ? { widgets } : {}),
     ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
 }

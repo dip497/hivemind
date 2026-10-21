@@ -54,10 +54,12 @@ test("re-registering an id replaces the plugin in place", () => {
 });
 
 test("resolveChrome: a view that says nothing gets a bottom island and the wallpaper; explicit prefs win; hidden is a valid placement", () => {
-  assert.deepEqual(resolveChrome(undefined), { island: "bottom", wallpaper: true });
-  assert.deepEqual(resolveChrome({ chrome: {} }), { island: "bottom", wallpaper: true });
+  assert.deepEqual(resolveChrome(undefined), { island: "bottom", wallpaper: true, widgets: "right" });
+  assert.deepEqual(resolveChrome({ chrome: {} }), { island: "bottom", wallpaper: true, widgets: "right" });
   // A view that paints an opaque scene of its own opts out.
-  assert.deepEqual(resolveChrome({ chrome: { wallpaper: false } }), { island: "bottom", wallpaper: false });
-  assert.deepEqual(resolveChrome({ chrome: { island: "top", wallpaper: false } }), { island: "top", wallpaper: false });
-  assert.deepEqual(resolveChrome({ chrome: { island: "hidden" } }), { island: "hidden", wallpaper: true });
+  assert.deepEqual(resolveChrome({ chrome: { wallpaper: false } }), { island: "bottom", wallpaper: false, widgets: "right" });
+  assert.deepEqual(resolveChrome({ chrome: { island: "top", wallpaper: false } }), { island: "top", wallpaper: false, widgets: "right" });
+  assert.deepEqual(resolveChrome({ chrome: { island: "hidden" } }), { island: "hidden", wallpaper: true, widgets: "right" });
+  // A view that keeps its own panels on the right has widget cards start on the left.
+  assert.deepEqual(resolveChrome({ chrome: { widgets: "left" } }), { island: "bottom", wallpaper: true, widgets: "left" });
 });

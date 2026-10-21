@@ -17,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Wrench } from "../components/icons";
 import { resolveToolbar, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
-import { StandardToolbar } from "./standard-toolbar";
+import { StandardToolbar, ViewMenuAt } from "./standard-toolbar";
 import { AddDialog } from "./add-dialog";
 import { useToolEnabled } from "../tool-availability";
 import { openAppearanceSettings, setBottomInset, setIslandShown, useChromeState } from "./chrome-store";
@@ -73,6 +73,7 @@ export function HostChrome({ chrome, toolbar, ...island }: HostChromeProps) {
   return (
     <>
       {/* Wherever it is asked for, with or without a toolbar. */}
+      <ViewMenuAt />
       {island.onBoard && <AddDialog repoPath={island.repoPath} onBoard={island.onBoard} onTile={island.onTile} boardItems={!!island.boardItems} />}
       {showIsland && (
         <div

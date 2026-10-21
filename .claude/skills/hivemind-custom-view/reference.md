@@ -32,7 +32,8 @@ one wins.
 
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
 `history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
-`participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run). A
+`participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run); 1.15
+adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
@@ -89,6 +90,7 @@ the host never named in a `structure` is one; the SDK (1.5) holds such a rect ba
 | `openFolder(frameId)` | `workspace:edit` |
 | `wakeAgent(tileId)` (1.14) | `workspace:spawn`; wakes the agent asleep there, in its conversation |
 | `sleepAgent(tileId)` (1.14) | `workspace:spawn`; puts the agent to sleep; one busy is put to sleep only if the person says so |
+| `openHostMenu(menu, at?)` (1.15) | none; opens the app's own menu, for a view with `"toolbar": "off"` that draws its own: `"views"` (the views to switch to, beside `at`, your button's `{x, y, w, h}` in your pixels), `"add"` (a widget or a tool), `"appearance"`, `"settings"` |
 
 `spawnTile`'s free-form options are deliberately not exposed: an agent's command line
 is not something a view chooses. `spawnAgent` takes a catalog id, never a command.
@@ -105,6 +107,7 @@ is not something a view chooses. `spawnAgent` takes a catalog id, never a comman
   "permissions": [],        // unknown names refused at install AND at load
   "assets": "dist",         // optional: dir served alongside the entry
   "wallpaper": false,       // optional: refuse the user's wallpaper (default: you get it)
+  "widgets": "left",        // optional: start the app's widget cards down the left edge (default: right)
   "author": "Ada",          // optional provenance, shown where the user decides to trust you
   "homepage": "https://…",  // https only — the host opens it in the user's browser
   "license": "MIT"          // a short identifier, not a sentence

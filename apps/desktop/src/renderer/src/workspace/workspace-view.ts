@@ -16,6 +16,7 @@
  */
 import { useSyncExternalStore, type ComponentType } from "react";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
+import type { HostMenu, ViewRect } from "@hivemind/view-sdk/protocol";
 import type { FrameState, TileInstance } from "../canvas-persistence";
 import type { LayerFrame, LayerTile } from "../LayersPanel";
 import type { FrameActions } from "../FrameMenu";
@@ -90,6 +91,9 @@ export interface WorkspaceCommands {
   /** Wake the agent asleep in a tile; put one to sleep, asking first when it is busy. */
   wakeAgent: (tileId: string) => void;
   sleepAgent: (tileId: string) => void;
+  /** Open one of the app's own menus, as its toolbar does: the views beside `at` (window
+   *  pixels), Add, the theme panel or Settings. */
+  openHostMenu: (menu: HostMenu, at?: ViewRect) => void;
   /** Live agent status, PER TILE, off the awareness bus. Deliberately not on
    *  the model: a status transition (~1 Hz while agents work) reaches only the
    *  subscribers of that tile — a 3D view colours one object, a rail recolours
@@ -154,13 +158,15 @@ export interface ViewChrome {
    *  wallpaper would be invisible under it and its animation and glass blur
    *  would still cost every frame. */
   wallpaper: boolean;
+  /** The screen edge widget cards nobody has moved stack down over this view. */
+  widgets: "left" | "right";
 }
 
-/** A view's chrome with the defaults filled in: a compact bottom island, and the
- *  user's wallpaper behind it. A view that paints its own opaque scene opts out
+/** A view's chrome with the defaults filled in: a compact bottom island, the
+ *  user's wallpaper behind it, and widget cards down the right edge. A view that paints its own opaque scene opts out
  *  (`"wallpaper": false` in its manifest); the built-ins declare theirs. */
 export function resolveChrome(plugin: Pick<WorkspaceViewPlugin, "chrome"> | null | undefined): ViewChrome {
-  return { island: plugin?.chrome?.island ?? "bottom", wallpaper: plugin?.chrome?.wallpaper ?? true };
+  return { island: plugin?.chrome?.island ?? "bottom", wallpaper: plugin?.chrome?.wallpaper ?? true, widgets: plugin?.chrome?.widgets ?? "right" };
 }
 
 // ── registry ─────────────────────────────────────────────────────────────────

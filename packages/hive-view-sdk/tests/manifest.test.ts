@@ -55,6 +55,12 @@ describe("what a view asks of the app around it", () => {
     expect(where("left")).toEqual(['"toolbar" must be "top", "bottom", "hidden" or "off"']);
     expect(where(undefined)).toBeUndefined();
   });
+  it("keeps the edge it wants the app's widget cards down, and refuses one there is none", () => {
+    const edge = (widgets: unknown) => { const r = validateViewManifest({ ...base, widgets }); return r.ok ? r.manifest.widgets : r.errors; };
+    expect(["left", "right"].map(edge)).toEqual(["left", "right"]);
+    expect(edge("top")).toEqual(['"widgets" must be "left" or "right"']);
+    expect(edge(undefined)).toBeUndefined();
+  });
   it("refuses a rail or a layout it cannot mean", () => {
     expect(read({ layers: "left" })).toEqual(['"layers" must be true or false']);
     expect(read({ layout: "mine" })).toEqual(['"layout" must be "shared" or "personal"']);

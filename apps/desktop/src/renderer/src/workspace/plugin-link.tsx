@@ -10,7 +10,7 @@ import { chordMatches, type PluginCommand } from "@hivemind/view-sdk/commands";
 import type { Running } from "@hivemind/view-host/instances";
 import { pluginInstances } from "./plugin-instances";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { PROTOCOL_VERSION, type HostMessage, type ShareOutcome, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
+import { PROTOCOL_VERSION, type HostMenu, type HostMessage, type ShareOutcome, type SurfaceRect, type ViewPermission, type ViewRect } from "@hivemind/view-sdk/protocol";
 import type { SettingField } from "@hivemind/view-sdk/settings";
 import { CommunityLink } from "@hivemind/view-host/link";
 import { viewStructure } from "@hivemind/view-host/structure";
@@ -160,6 +160,11 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
         if (name === "selectTile") return (id: string | null) => enqueue(() => {
           commandsRef.current.selectTile(id);
           if (id) window.dispatchEvent(new CustomEvent(TILE_KEYBOARD, { detail: id }));
+        });
+        // The view says where its button is in its own pixels: the menu opens there in the window's.
+        if (name === "openHostMenu") return (menu: HostMenu, at?: ViewRect) => enqueue(() => {
+          const r = optsRef.current.root.current?.getBoundingClientRect();
+          commandsRef.current.openHostMenu(menu, at && r ? { ...at, x: at.x + r.left, y: at.y + r.top } : at);
         });
         return (...args: unknown[]) => enqueue(() => (commandsRef.current[name] as (...a: unknown[]) => void)(...args));
       },

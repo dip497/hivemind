@@ -13,7 +13,8 @@
     "renameTile": "workspace:edit",
     "openFolder": "workspace:edit",
     "wakeAgent": "workspace:spawn",
-    "sleepAgent": "workspace:spawn"
+    "sleepAgent": "workspace:spawn",
+    "openHostMenu": null
   },
   "posted": [
     { "text": "{\"type\":\"command\",\"name\":\"spawnAgent\",\"args\":[null,null,{\"name\":\"Priya's reviewer\"}]}", "asksLock": true, "why": "starts an agent" },
@@ -23,6 +24,7 @@
     { "text": "{\"type\":\"command\",\"name\":\"wakeAgent\",\"args\":[\"t1\"]}", "asksLock": true, "why": "starts an agent asleep again" },
     { "text": "{\"type\":\"command\",\"name\":\"sleepAgent\",\"args\":[\"t1\"]}", "asksLock": true, "why": "ends an agent's process, its tile kept" },
     { "text": "{\"type\":\"command\",\"name\":\"selectTile\",\"args\":[\"t1\"]}", "asksLock": false, "why": "needs no permission" },
+    { "text": "{\"type\":\"command\",\"name\":\"openHostMenu\",\"args\":[\"views\"]}", "asksLock": false, "why": "opens a menu; the person chooses in it" },
     { "text": "{\"type\":\"command\",\"name\":\"renameTile\",\"args\":[\"t1\",\"Priya's agent\"]}", "asksLock": false, "why": "an edit, not a start or a close" },
     { "text": "{\"type\":\"command\",\"name\":\"launch\",\"args\":[]}", "asksLock": false, "why": "no such command: its host refuses it" },
     { "text": "{\"type\":\"ready\",\"v\":1}", "asksLock": false, "why": "not a command" },
