@@ -49,3 +49,11 @@ test("the same key is the canvas's zoom and the terminal's font", () => {
   assert.deepEqual(actionsFor(letter("c", { ctrl: true, shift: true }), "terminal", false), ["copy"]);
   assert.deepEqual(actionsFor(letter("r", { ctrl: true }), "terminal", false), [], "Ctrl+R is the shell's history search");
 });
+
+test("a letter is the one the layout types, its place only when the layout types no Latin letter", () => {
+  // Dvorak: the key typing "c" sits where QWERTY has I; the one at QWERTY's C types "j".
+  assert.deepEqual(on("terminal", "c", "KeyI", { ctrl: true }), ["copy"]);
+  assert.deepEqual(on("terminal", "j", "KeyC", { ctrl: true }), []);
+  // Russian: the key at C types "с", and Ctrl+C still copies.
+  assert.deepEqual(on("terminal", "с", "KeyC", { ctrl: true }), ["copy"]);
+});

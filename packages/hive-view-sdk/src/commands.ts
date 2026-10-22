@@ -103,7 +103,9 @@ export function pressIs(c: Chord, e: KeyPress, mac: boolean): boolean {
   const meta = c.meta || (c.mod && mac);
   if (e.ctrlKey !== ctrl || e.metaKey !== meta || e.altKey !== c.alt || e.shiftKey !== c.shift) return false;
   if (NAMED.has(c.key)) return c.key === "space" ? e.code === "Space" : e.key.toLowerCase() === c.key;
-  if (/^[a-z]$/.test(c.key)) return e.code === `Key${c.key.toUpperCase()}`;
+  // A letter is the one the layout types; its place only when the layout types no Latin letter
+  // there (Cyrillic, or Option on a Mac).
+  if (/^[a-z]$/.test(c.key)) return /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === c.key : e.code === `Key${c.key.toUpperCase()}`;
   if (/^[0-9]$/.test(c.key)) return e.code === `Digit${c.key}`;
   return CODE[c.key] ? e.code === CODE[c.key] : e.key === c.key;
 }
