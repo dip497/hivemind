@@ -145,7 +145,7 @@ export class StatusStore {
       this.apply(tileId, "hooks", (s) => ({ ...s, subagents: [] }));
       this.opts.onLostStops?.(tileId, left.length);
     }, SUBAGENT_GRACE_MS);
-    timer.unref?.();
+    (timer as { unref?: () => void }).unref?.();
     this.lostStops.set(tileId, timer);
   }
 
