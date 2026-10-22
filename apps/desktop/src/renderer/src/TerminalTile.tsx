@@ -45,6 +45,14 @@ import { useShown } from "./multiplayer/shown";
 // by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
 // DPR-driven (see terminal-dpr.ts); 15 is the default for comfortable reading.
 const DEFAULT_FONT = 15;
+/** The faces xterm measures for a font list: its first family, regular and bold. A generic name
+ *  (monospace) is the system's and is already there. */
+function measuredFaces(fontList: string): string[] {
+  const first = fontList.split(",")[0]?.trim() ?? "";
+  if (!first || /^(monospace|ui-monospace|sans-serif|serif|system-ui)$/.test(first)) return [];
+  const family = /^["']/.test(first) ? first : `"${first}"`;
+  return [`400 12px ${family}`, `700 12px ${family}`];
+}
 /**
  * Terminals whose host resized are fitted together, once per frame: every visibility read
  * first, then every fit. Reading visibility inside the ResizeObserver callback forced a
@@ -354,7 +362,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const host = hostRef.current;
     if (!host) return;
     const term = new Terminal({
-      fontFamily: '"JetBrains Mono", monospace',
+      fontFamily: getTheme().monoFont,
       fontSize: fontSizeRef.current,
       lineHeight: 1.3,
       // ONLY when Frost-tile-content is on at mount. allowTransparency disables
@@ -707,12 +715,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     let unsubAgentSend: (() => void) | undefined;
 
     // Rebuild the glyph atlas once the web font is truly loaded. xterm measures
-    // the font at open(); "JetBrains Mono" loads async (web font), so the first
-    // atlas is often built from FALLBACK metrics → permanently blurry glyphs that
-    // never self-correct. Force-load the exact faces, then re-fit + clear the
-    // WebGL texture atlas so glyphs re-rasterize at the right metrics + density.
+    // the font at open(); the terminal font (JetBrains Mono unless the person chose
+    // another) loads async, so the first atlas is often built from FALLBACK metrics
+    // → permanently blurry glyphs that never self-correct. Force-load the exact
+    // faces, then re-fit + clear the WebGL texture atlas so glyphs re-rasterize at
+    // the right metrics + density.
     if (typeof document !== "undefined" && document.fonts?.ready) {
-      const fams = ['400 12px "JetBrains Mono"', '700 12px "JetBrains Mono"'];
+      const fams = measuredFaces(getTheme().monoFont);
       Promise.all(fams.map((f) => document.fonts.load(f).catch(() => undefined)))
         .then(() => document.fonts.ready)
         .then(() => {
@@ -1214,6 +1223,26 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       term.refresh(0, term.rows - 1);
     } catch { /* torn down */ }
   }, [font.size]);
+
+  // The person's terminal font, applied as it changes: once its faces have loaded, the cells are
+  // measured again (the pty follows the new size) and the glyph atlas is drawn afresh.
+  const monoFont = useThemeField("monoFont");
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || term.options.fontFamily === monoFont) return;
+    term.options.fontFamily = monoFont;
+    let gone = false;
+    void Promise.all(measuredFaces(monoFont).map((f) => document.fonts.load(f).catch(() => undefined))).then(() => {
+      if (gone) return;
+      try {
+        fitRef.current?.fit();
+        syncSizeRef.current?.();
+        webglRef.current?.clearTextureAtlas();
+        term.refresh(0, term.rows - 1);
+      } catch { /* torn down */ }
+    });
+    return () => { gone = true; };
+  }, [monoFont]);
 
   // A workspace joined from elsewhere: once the connection to its host is back, the session is
   // shown again (the host let go of it as the connection went); until then it is not.

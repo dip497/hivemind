@@ -17,6 +17,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
 - Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.
+- Two presets, **Clean** and **Clean Light**: flat and quiet, in true greys, with glass and the background off and smaller corners. Clean Light is the first light look: the page, terminals, the editor, diffs, diagrams, notifications, the window behind the page and the system's own menus and scrollbars all turn light (`hive theme use clean-light`).
+- Settings → Appearance has **Corners**, **Interface font** and **Code font**. The corner and font settings now change the app: before, `appearance.radius`, `uiFont` and `monoFont` were saved but drawn nowhere.
 
 ### Changed
 
@@ -24,6 +26,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- A look that is no built-in preset (an imported theme file) shows as **Custom** in Settings → Appearance instead of as Ubuntu, and **Reset** puts the terminal back to Signal's colours. The Accent's description says what it colours.
 - An agent whose workers finish one after another is told "Your agents sent you messages" once, at its prompt, even before it has finished a turn since the app started; before, the line could be pasted into its prompt again for each worker.
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.
 - Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
