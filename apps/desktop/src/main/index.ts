@@ -9,7 +9,7 @@ import { listWidgets } from "@hivemind/core/widgets";
 import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
 import { installServicesIpc, startServices, stopServices } from "./services.js";
 import { listToolPackages } from "@hivemind/core/tool-packages";
-import { appKeyMessage, isQuitKey } from "../shared/shortcuts.js";
+import { actionsFor } from "../shared/keymap.js";
 import { askToQuit, installQuitIpc, stopEverything, stopsEverything } from "./quit.js";
 import { recoverOnProcessLoss } from "./recover";
 import desktopPkg from "../../package.json" with { type: "json" };
@@ -346,35 +346,17 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   // moment the user looks at the window.
   win.on("focus", () => { try { win.flashFrame(false); } catch { /* unsupported */ } });
 
-  // xterm's Terminal captures Ctrl+K (sends ^K / VT to the PTY) via
-  // preventDefault on its hidden textarea — so window-level keydown for
-  // Ctrl+K (palette) and Ctrl+N (new issue) never fire when a terminal has
-  // focus. before-input-event sees the key BEFORE the DOM, so we forward
-  // the intent over IPC and the renderer dispatches the same CustomEvents
-  // the existing handlers listen for.
+  // The app's keys that work from inside a terminal too (shared/keymap.ts), taken here before the
+  // page sees them. Every other key is the focused tile's.
   wc.on("before-input-event", (event, input) => {
-    if (input.type !== "keyDown") return;
-    if (wc.isDestroyed()) return;
-    if (isQuitKey(input, process.platform)) {
-      event.preventDefault();
-      void askToQuit(win);
-      return;
-    }
-    // F11 → native fullscreen. Hides the OS titlebar (and the desktop top bar on
-    // GNOME) so the canvas + wallpaper go edge-to-edge. Pair with the eye/zen
-    // toggle to also hide the in-app chrome for a pure-wallpaper view.
-    if (input.key === "F11" && !input.control && !input.meta && !input.shift && !input.alt) {
-      event.preventDefault();
-      try { win.setFullScreen(!win.isFullScreen()); } catch { /* window gone */ }
-      return;
-    }
-    // The app's keys (shared/shortcuts.ts), taken here before xterm so they work from inside a
-    // terminal too.
-    const message = appKeyMessage(input);
-    if (message) {
-      event.preventDefault();
-      try { wc.send(...message); } catch { /* destroyed mid-call */ }
-    }
+    if (input.type !== "keyDown" || wc.isDestroyed()) return;
+    const press = { key: input.key, code: input.code, ctrlKey: input.control, metaKey: input.meta, altKey: input.alt, shiftKey: input.shift };
+    const [action] = actionsFor(press, "anywhere", process.platform === "darwin");
+    if (!action) return;
+    event.preventDefault();
+    if (action === "quit") void askToQuit(win);
+    else if (action === "window-fullscreen") { try { win.setFullScreen(!win.isFullScreen()); } catch { /* window gone */ } }
+    else { try { wc.send("menu:shortcut", action); } catch { /* destroyed mid-call */ } }
   });
 
   const stopViewWatchdog = startViewWatchdog(win);

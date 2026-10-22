@@ -6,6 +6,7 @@
  * to the permissions its manifest was granted. Who holds the other end of the port is the
  * caller's: a frame's window, or a client in this window.
  */
+import { inEditable } from "../dom-focus";
 import { chordMatches, type PluginCommand } from "@hivemind/view-sdk/commands";
 import type { Running } from "@hivemind/view-host/instances";
 import { pluginInstances } from "./plugin-instances";
@@ -317,14 +318,14 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- declaredKey stands for `declared`
   }, [instanceLabel, declaredKey]);
 
-  // The active view's keys run wherever focus is in the app, a terminal too: caught before the
-  // terminal takes them. In its own frame its client runs them (`hello.keys`).
+  // The active view's keys run while nothing is typed into: in a terminal or a field the key is
+  // theirs. In its own frame its client runs them (`hello.keys`).
   useEffect(() => {
     const bound = declared.filter((c) => c.keys);
     if (!bound.length || !ready || o.record.kind !== "view") return;
     const mac = /mac/i.test(navigator.platform);
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as Element | null)?.closest?.('[role="dialog"]')) return;
+      if (inEditable(e.target) || (e.target as Element | null)?.closest?.('[role="dialog"]')) return;
       const c = bound.find((x) => chordMatches(x.keys!, e, mac));
       if (!c) return;
       e.preventDefault();

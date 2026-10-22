@@ -1,4 +1,4 @@
-// The VS Code keys. Which key means which action is main's job (unit-tested in shortcuts.test.ts);
+// The app keys. Which key means which action is the keymap's (unit-tested in keymap.test.ts);
 // Playwright's keys never pass through main's before-input-event, so these send the IPC main
 // sends and check the renderer acts on it — and that the keys a shell needs still reach it.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
@@ -14,8 +14,9 @@ const workbenches = () => page.locator(".react-flow__node-workbench").count();
 /** What main sends once it has resolved a key to an app action. */
 const shortcut = (action: string) => app.evaluate(({ BrowserWindow }, a) => BrowserWindow.getAllWindows()[0]!.webContents.send("menu:shortcut", a), action);
 const terminals = () => page.locator(".react-flow__node-terminal").count();
-const screen = () => page.evaluate(() => [...document.querySelectorAll(".xterm")]
-  .map((x) => (x.parentElement as (HTMLElement & { __hmScreen?: () => string }) | null)?.__hmScreen?.() ?? "").join("\n"));
+/** Every terminal's screen; a full-screen one has moved its xterm out of the tile that reads it. */
+const screen = () => page.evaluate(() => [...document.querySelectorAll(".react-flow__node-terminal *")]
+  .map((x) => (x as HTMLElement & { __hmScreen?: () => string }).__hmScreen?.() ?? "").join("\n"));
 
 test.beforeAll(async () => {
   dir = fs.mkdtempSync("/tmp/hm-sc-");
@@ -117,4 +118,35 @@ test("Ctrl+B reaches the program in a terminal (run in background, tmux); on the
   await expect.poll(layers).not.toBe(before);
   await page.keyboard.press("Control+b");
   await expect.poll(layers).toBe(before);
+});
+
+test("Shift+Enter reaches the program as its own key, not as Enter", async () => {
+  await shortcut("tile:1");
+  await page.locator(".hm-node-selected .xterm-helper-textarea").focus();
+  await page.keyboard.type("cat -v");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Shift+Enter"); // ESC CR: cat -v shows the ESC as ^[
+  await expect.poll(screen, { timeout: 5_000 }).toContain("^[");
+  await page.keyboard.press("Control+c");
+  await page.keyboard.type("clear");
+  await page.keyboard.press("Enter");
+});
+
+test("Esc in a full-screen terminal is the program's; Ctrl+Shift+F leaves", async () => {
+  const fullScreen = () => page.locator(".hm-term-fs-panel").count();
+  await shortcut("tile:1");
+  await shortcut("fit-to-screen");
+  await expect.poll(fullScreen, { timeout: 5_000 }).toBe(1);
+  await page.locator(".hm-term-fs-panel .xterm-helper-textarea").focus();
+  await page.keyboard.type("cat -v");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter");
+  await expect.poll(screen, { timeout: 5_000 }).toContain("^[");
+  expect(await fullScreen()).toBe(1);
+  await page.keyboard.press("Control+c");
+  await shortcut("fit-to-screen");
+  await expect.poll(fullScreen, { timeout: 5_000 }).toBe(0);
 });

@@ -330,7 +330,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
-  // ⌘/Ctrl+B toggles the panel (App's menu bridge; works over a focused terminal too).
+  // ⌘B anywhere, Ctrl+B on the canvas, toggles the panel (shared/keymap.ts).
   useEffect(() => {
     const onToggle = () => setHidden((h) => !h);
     window.addEventListener("hivemind:toggle-layers", onToggle);

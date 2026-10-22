@@ -37,6 +37,7 @@ import { getNotificationSettings, setNotificationSettingsCache, subscribeNotific
 import type { NotificationSettings } from "../../shared/ipc";
 import { tellRecentFolders } from "./recent-folders";
 import { chooseFolder, FolderPathDialog } from "./choose-folder";
+import { runShortcut } from "./shortcut";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
@@ -266,20 +267,6 @@ export function App() {
     return () => window.removeEventListener("hivemind:issues-set-up", onSetUp);
   });
 
-  // Ctrl+B Layers — only when nothing is typed into: a terminal's textarea keeps it.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      if (e.key.toLowerCase() !== "b") return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      e.preventDefault();
-      window.dispatchEvent(new CustomEvent("hivemind:toggle-layers"));
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   // Load the persisted notification preferences into the renderer cache once on
   // mount, so useAgentAwareness's in-app-toast gate reads the real values
   // (defaults until this resolves). The SettingsModal refreshes the cache on
@@ -330,47 +317,8 @@ export function App() {
     });
   }, [update.status, update.upgrade]);
 
-  // Main-process accelerator bridge: xterm swallows Ctrl+N to send it as a
-  // control code to the PTY (^N = SO), so window keydown never fires when a
-  // terminal has focus. Main intercepts ⌘N / ⌘B on macOS (and the VS Code keys) via before-input-event and
-  // forwards over IPC — we re-emit as the same CustomEvents the handlers use.
-  useEffect(() => {
-    const w = window as unknown as {
-      hive?: {
-        onMenuToggleLayers?: (cb: () => void) => () => void;
-        onMenuFitOverlay?: (cb: () => void) => () => void;
-        onMenuResetScale?: (cb: () => void) => () => void;
-        onMenuFocusTile?: (cb: () => void) => () => void;
-        onMenuShortcut?: (cb: (action: string) => void) => () => void;
-      };
-    };
-    if (!w.hive?.onMenuToggleLayers) return;
-    // ⌘/Ctrl+B toggles the Layers panel (LayersPanel listens for the event).
-    const offLayers = w.hive.onMenuToggleLayers?.(() =>
-      window.dispatchEvent(new CustomEvent("hivemind:toggle-layers")),
-    );
-    // Tile scaling: re-dispatch the forwarded accelerators as CustomEvents that
-    // TerminalTile (fit/reset, selected-only) and useCanvasShortcuts (focus) hear.
-    const offFit = w.hive.onMenuFitOverlay?.(() =>
-      window.dispatchEvent(new CustomEvent("hivemind:fit-overlay")),
-    );
-    const offResetScale = w.hive.onMenuResetScale?.(() =>
-      window.dispatchEvent(new CustomEvent("hivemind:reset-scale")),
-    );
-    const offFocusSel = w.hive.onMenuFocusTile?.(() =>
-      window.dispatchEvent(new CustomEvent("hivemind:focus-selected")),
-    );
-    const offShortcut = w.hive.onMenuShortcut?.((action) =>
-      window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: action })),
-    );
-    return () => {
-      offLayers?.();
-      offFit?.();
-      offResetScale?.();
-      offFocusSel?.();
-      offShortcut?.();
-    };
-  }, []);
+  // The keys main took before the page (they work from inside a terminal) run here as actions.
+  useEffect(() => window.hive?.onMenuShortcut?.((action) => { runShortcut(action); }), []);
 
   if (isLoading) {
     return <Loading className="h-screen" label="Opening the workspace" />;

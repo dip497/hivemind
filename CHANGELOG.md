@@ -17,6 +17,17 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
 - Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.
+
+### Changed
+
+- **Breaking:** a view's own keys (`keys` on a command) no longer act while you type in a terminal or a field: the key is the terminal program's there.
+
+### Fixed
+
+- Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it.
+- Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
+- An agent whose background subagents never reported their end no longer shows "working" forever: two minutes after the last subagent signal they stop counting, now on the daemon that runs the agent.
+
 ## [2026.10.5] — 2026-10-21
 
 - A terminal or agent that fails to start says why (the daemon's own error, or that it stopped answering) instead of "not running on the machine it belongs to", and a late answer no longer streams into a tile marked exited.
