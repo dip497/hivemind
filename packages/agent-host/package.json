@@ -15,7 +15,7 @@
     "@hivemind/agents": "workspace:*",
     "@hivemind/core": "workspace:*",
     "@lydell/node-pty": "catalog:",
-    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/addon-serialize": "catalog:",
     "@xterm/headless": "catalog:"
   },
   "devDependencies": {

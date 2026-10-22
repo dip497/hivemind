@@ -150,3 +150,15 @@ test("Esc in a full-screen terminal is the program's; Ctrl+Shift+F leaves", asyn
   await shortcut("fit-to-screen");
   await expect.poll(fullScreen, { timeout: 5_000 }).toBe(0);
 });
+
+test("a program that turns the kitty keyboard protocol on gets Shift+Enter as itself", async () => {
+  await shortcut("tile:1");
+  await page.locator(".hm-node-selected .xterm-helper-textarea").focus();
+  // Push flag 1 (disambiguate), read one line, pop, then show what was read.
+  await page.keyboard.type(`printf '\\033[>1u'; IFS= read -r x; printf '\\033[<u'; printf '%s\\n' "$x" | cat -v`);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Enter");
+  await expect.poll(screen, { timeout: 5_000 }).toContain("^[[13;2u");
+});

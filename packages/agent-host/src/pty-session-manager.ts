@@ -616,7 +616,7 @@ export class SessionManager {
     }
     const tail = this.ringSince(s, at);
     if (shot.text === null || tail === null) return null;
-    return { replay: shot.text + shot.mouse + tail, seq: s.seq };
+    return { replay: shot.text + shot.modes + tail, seq: s.seq };
   }
 
   /** A viewer's screen when the worker gave none: the output the ring holds, said in the log. */

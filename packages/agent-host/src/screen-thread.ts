@@ -14,7 +14,9 @@ function workerFile(): URL {
   return new URL("./screen-worker.js", import.meta.url);
 }
 
-export interface Shot { text: string | null; at: number; mouse: string }
+/** `modes`: what a client's terminal is told after the screen, which the screen cannot say: the
+ *  mouse encoding and the kitty keyboard flags its program asked for. */
+export interface Shot { text: string | null; at: number; modes: string }
 
 /** A worker that dies within this long of starting waits longer before the next start. */
 const SETTLED_MS = 60_000;
@@ -57,7 +59,7 @@ export class ScreenThread {
 
   screen(id: string, epoch: string, lines: number): Promise<Shot> {
     return this.ask((req) => ({ t: "screen", req, id, epoch, lines })).then((m) =>
-      m?.t === "screen" ? { text: m.text, at: m.at, mouse: m.mouse } : { text: null, at: 0, mouse: "" });
+      m?.t === "screen" ? { text: m.text, at: m.at, modes: m.modes } : { text: null, at: 0, modes: "" });
   }
 
   /** Null when the worker gave no answer: the rows are unknown, not empty. */
