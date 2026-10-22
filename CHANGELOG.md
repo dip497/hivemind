@@ -17,10 +17,14 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
 - Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.
+- An agent's status has a shape as well as a colour in the surface bar, Layers, a terminal's header and a frame's corner: working, needs you, finished, failed, idle and exited each look different, also with reduced motion on.
+- A screen reader hears "<name> needs you", "<name> finished" or "<name> failed" once when a tile comes to that state.
 
 ### Changed
 
 - **Breaking:** a view's own keys (`keys` on a command) no longer act while you type in a terminal or a field: the key is the terminal program's there.
+- Settings → Shortcuts is made from the app's own keymap, every key in it, and shows each key as your computer writes it (⇧⌘A on a Mac, Ctrl+Shift+A elsewhere). The key hints in tooltips, menus and the Browser, editor and commit boxes do the same instead of showing ⌘ on every computer.
+- Status words are one list: Layers says "approve?", "input?" and "review?" as a terminal's header does, and "needs you" for a frame.
 
 ### Fixed
 
@@ -28,6 +32,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.
 - Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
 - An agent whose background subagents never reported their end no longer shows "working" forever: two minutes after the last subagent signal they stop counting, now on the daemon that runs the agent.
+- A frame's corner, Layers and a terminal's header agree about an exit: only a failed one is red, and a clean one raises no mark. A frame's corner also shows a plan or an approval waiting on you.
+- Increased contrast (the system setting) strengthens faint text and lines with glass off too, not only with glass on.
+- Settings → Shortcuts and the guide showed ⌘Tab for the next tile, which is Ctrl+Tab on a Mac too; Settings → Agents named ⌘\ for starting the default agent, which is ⇧⌘A / Ctrl+Shift+A.
 
 ## [2026.10.5] — 2026-10-21
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "@xyflow/react";
 import { useCamera } from "./canvas-camera";
 import { Button } from "./components/ui/button";
+import { actionKey } from "./shortcut";
 
 /** Bottom-left zoom + nav island (Excalidraw footer). Uses react-flow's
  *  imperative camera API; lives inside <ReactFlow> so the hooks resolve. */
@@ -13,7 +14,7 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
   const pct = Math.round(zoom * 100);
   const [fpsOn, setFpsOn] = useState(false);
   const toolbar = useRovingToolbar();
-  // Ctrl 1 / Ctrl + / Ctrl − (bound in useCanvasShortcuts, which has no camera of its own).
+  // Zoom to 100%, in and out (bound in useCanvasShortcuts, which has no camera of its own).
   useEffect(() => {
     const onZoom = (e: Event) => {
       const d = (e as CustomEvent<"100" | "in" | "out">).detail;
@@ -27,16 +28,16 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
   return (
     <div className="flex items-center gap-1" role="toolbar" aria-label="Canvas controls" ref={toolbar.ref} onKeyDown={toolbar.onKeyDown}>
       <div className="hm-island flex items-center overflow-hidden">
-        <IslandBtn title="Zoom out (Ctrl -)" onClick={() => zoomOut({ duration: 150 })}>
+        <IslandBtn title={`Zoom out (${actionKey("zoom-out")})`} onClick={() => zoomOut({ duration: 150 })}>
           <svg width="13" height="13" viewBox="0 0 14 14"><path d="M3 7h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
         </IslandBtn>
         <Button font="mono"
           variant="ghost"
           onClick={() => zoomTo(1, { duration: 150 })}
-          title="Reset to 100% (Ctrl 0)"
+          title={`Reset to 100% (${actionKey("zoom-reset")})`}
           className="min-w-[3.2rem]"
         >{pct}%</Button>
-        <IslandBtn title="Zoom in (Ctrl +)" onClick={() => zoomIn({ duration: 150 })}>
+        <IslandBtn title={`Zoom in (${actionKey("zoom-in")})`} onClick={() => zoomIn({ duration: 150 })}>
           <svg width="13" height="13" viewBox="0 0 14 14"><path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
         </IslandBtn>
       </div>

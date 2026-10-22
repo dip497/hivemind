@@ -11,7 +11,8 @@
 import { resolveViewId, useViews } from "./workspace/workspace-view";
 import { openAdd } from "./workspace/add-dialog";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
-import { statusColor } from "./workspace/tile-status-bucket";
+import { exitFailed, groupLook, LOOKS, StatusGlyph, statusLook, statusWord, type StatusLook } from "./workspace/status-look";
+import { actionKey } from "./shortcut";
 import { MachineDot, MachineIcon, machineFacts, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
@@ -108,32 +109,10 @@ interface Props {
   sleepActions?: SleepActions;
 }
 
-// One status, one colour, shared with every other surface (workspace/tile-status-bucket).
-const STATUS_COLOR = Object.fromEntries(
-  (["working", "idle", "blocked", "permission", "question", "exited", "plan_review", "awaiting_approval"] as const)
-    .map((k) => [k, statusColor(k)]),
-) as Record<TileStatusKind, string>;
-
-/** Short pill label per status. */
-const STATUS_LABEL: Record<TileStatusKind, string> = {
-  working: "working",
-  idle: "idle",
-  blocked: "blocked",
-  permission: "needs you",
-  question: "needs you",
-  exited: "exited",
-  plan_review: "waiting: review",
-  awaiting_approval: "waiting: approval",
-};
-
-/** Priority for aggregating a frame's child statuses into one dot (t3code-style:
- *  a collapsed frame still shows its highest-priority state). needs-you wins. */
-const STATUS_RANK: Record<TileStatusKind, number> = {
-  blocked: 3, permission: 3, question: 3, plan_review: 3, awaiting_approval: 3,
-  working: 2, exited: 1, idle: 0,
-};
-const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
-  s === "blocked" || s === "permission" || s === "question" || s === "plan_review" || s === "awaiting_approval";
+// One status, one word, shape and colour, shared with every other surface (workspace/status-look).
+const NEEDS_YOU = (s: TileStatusKind | null): boolean => statusLook(s) === "needs";
+/** A status pill: the look's colour on a tint of it. */
+const pillStyle = (look: StatusLook) => ({ color: LOOKS[look].color, background: `color-mix(in srgb, ${LOOKS[look].color} 16%, transparent)` });
 
 /**
  * The panel's one type and icon scale: the title 15px semibold; a row (an action, a group, a tile)
@@ -142,8 +121,6 @@ const NEEDS_YOU = (s: TileStatusKind | null): boolean =>
  * 4.5:1 on the panel (see .u-eyebrow).
  */
 const ICON = 16;
-/** The key that jumps to a row with its number: ⌘ on macOS, Ctrl elsewhere. */
-const MOD = typeof window !== "undefined" && window.hive?.platform === "darwin" ? "⌘" : "Ctrl ";
 const LABEL = "text-label font-medium text-[var(--color-fg2)]";
 const COUNT = "text-count tabular-nums text-[var(--color-fg2)]";
 
@@ -223,10 +200,11 @@ interface RowActions {
 }
 
 /** One tile's row: its mark, its name, and its status when that is worth reading. */
-const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey, until, asleep = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number; until?: string; asleep?: boolean }) {
+const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey, until, asleep = false, failed = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number; until?: string; asleep?: boolean; failed?: boolean }) {
   const st = t.status;
   const unread = isUnread(t);
   const isPlan = !!tileKind(t.kind).waitsOnPerson;
+  const look = statusLook(st, { failed });
   return (
     <div
       role="button"
@@ -262,12 +240,12 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         <span aria-hidden className="grid place-items-center">
           {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
         </span>
-        {/* Working, or done since you last looked: a dot on its mark's corner, as a machine's link is. */}
+        {/* Working, or finished since you last looked: a mark on its icon's corner, as a machine's link is. */}
         {(st === "working" || unread) && (
           <span className={`absolute -bottom-0.5 -right-0.5 grid rounded-full p-px ${selected ? "bg-[var(--surface-4)]" : "bg-[var(--color-bg2)] group-hover:bg-[var(--surface-3)]"}`}>
             {st === "working"
-              ? <span aria-label="working" title="working" className="size-1.5 rounded-full" style={{ background: STATUS_COLOR[st] }} />
-              : <span aria-label="unread" title="Done since you last looked" data-layer-unread className="size-1.5 rounded-full bg-[var(--color-unread)]" />}
+              ? <span aria-label={LOOKS.working.word} title={LOOKS.working.word} className="grid"><StatusGlyph look="working" className="size-1.5" /></span>
+              : <span aria-label="unread" title={`${LOOKS.done.word} since you last looked`} data-layer-unread className="grid"><StatusGlyph look="done" className="size-1.5" /></span>}
           </span>
         )}
       </span>
@@ -276,19 +254,20 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (
         <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-keycap px-1 font-sans text-count leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
-          {MOD}{jumpKey}
+          {actionKey(`tile:${jumpKey}`)}
         </kbd>
       ) : until ? (
         <span className={`shrink-0 ${COUNT} group-hover:hidden`} data-layer-until>{until}</span>
       ) : asleep ? (
         <span aria-label="asleep" title="Asleep" data-layer-asleep className="shrink-0 grid place-items-center text-[var(--color-fg3)] group-hover:hidden"><Moon size={12} /></span>
-      ) : /* A word only for what you must act on; working is the dot on its mark. Only needs-you pulses. */ st !== "idle" && st !== "working" ? (
+      ) : /* A word only for what you must act on; working is the mark on its icon. Only needs-you pulses. */ st !== "idle" && st !== "working" ? (
         <span
-          className={`shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full ${NEEDS_YOU(st) ? "animate-pulse" : "group-hover:hidden"}`}
-          style={{ color: STATUS_COLOR[st], background: `color-mix(in srgb, ${STATUS_COLOR[st]} 16%, transparent)` }}
-          title={st}
+          className={`shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full ${LOOKS[look].pulse ? "animate-pulse" : "group-hover:hidden"}`}
+          style={pillStyle(look)}
+          title={LOOKS[look].word}
+          data-layer-status={look}
         >
-          {isPlan ? "review" : STATUS_LABEL[st]}
+          {statusWord(isPlan ? "plan_review" : st, { failed })}
         </span>
       ) : null}
       {actions.close && (st === "working" || st === "exited") && (
@@ -359,6 +338,8 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   // Live status per tile, and when it last changed: seeded from main's ledger (it outlives a
   // reload), then each change. The bus replays every status on subscribe; that is no activity.
   const [status, setStatus] = useState<Map<string, TileStatusKind>>(new Map());
+  // The tiles whose process exited with a failure: the one exit a row and a frame mark as failed.
+  const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
   const [activity, setActivity] = useState<Map<string, number>>(new Map());
   useEffect(() => {
     let live = true;
@@ -376,6 +357,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         if (m.get(e.tileId) === e.status) return m;
         const next = new Map(m);
         next.set(e.tileId, e.status);
+        return next;
+      });
+      const bad = exitFailed(e);
+      setFailed((s) => {
+        if (s.has(e.tileId) === bad) return s;
+        const next = new Set(s);
+        if (bad) next.add(e.tileId); else next.delete(e.tileId);
         return next;
       });
       if (!replaying) setActivity((m) => new Map(m).set(e.tileId, Date.now()));
@@ -577,27 +565,26 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
   // Collapsed → a small FLOATING button over the canvas's top-left; its dot still says
   // "an agent needs you" / "busy".
   if (hidden) {
-    const badge = needsYou > 0 ? "var(--color-warn)" : working > 0 ? "var(--color-brand)" : null;
+    const badge = needsYou > 0 ? "needs" : working > 0 ? "working" : null;
+    const show = `Show panel (${actionKey("toggle-layers")})`;
     return (
       <Button variant="secondary" size="icon" onClick={() => setHidden(false)} className="pointer-events-auto absolute left-2.5 top-2.5 z-30"
-        title={needsYou > 0 ? `Show panel (${MOD}B): ${needsYou} need you` : working > 0 ? `Show panel (${MOD}B): ${working} working` : `Show panel (${MOD}B)`}
+        title={needsYou > 0 ? `${show}: ${needsYou} need you` : working > 0 ? `${show}: ${working} working` : show}
         aria-label="show layers">
         <PanelLeftOpen />
-        {badge && <span aria-hidden className={`absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-[var(--color-bg)] ${needsYou > 0 ? "animate-pulse" : ""}`} style={{ background: badge }} />}
+        {badge && <span aria-hidden className="absolute -top-0.5 -right-0.5 grid size-2.5 place-items-center rounded-full bg-[var(--color-bg)] ring-2 ring-[var(--color-bg)]"><StatusGlyph look={badge} className="size-2.5" /></span>}
       </Button>
     );
   }
 
   const shownIn = (fid: string) => view.byFrame.get(fid) ?? [];
   const hasShown = (fid: string): boolean => shownIn(fid).length > 0 || childFramesOf(fid).some((k) => hasShown(k.id));
-  // Highest-priority status across a frame's listed tiles + sub-frames (a folded frame still signals).
-  const frameAgg = (fid: string): TileStatusKind | null => {
-    let best: TileStatusKind | null = null;
-    let bestRank = -1;
-    for (const t of shownIn(fid)) { const r = STATUS_RANK[t.status] ?? 0; if (r > bestRank) { bestRank = r; best = t.status; } }
-    for (const k of childFramesOf(fid)) { const s = frameAgg(k.id); if (s && (STATUS_RANK[s] ?? 0) > bestRank) { bestRank = STATUS_RANK[s] ?? 0; best = s; } }
-    return best;
-  };
+  // The look across a frame's listed tiles + sub-frames (a folded frame still signals).
+  const frameLooks = (fid: string): StatusLook[] => [
+    ...shownIn(fid).map((t) => statusLook(t.status, { failed: failed.has(t.id) })),
+    ...childFramesOf(fid).flatMap((k) => frameLooks(k.id)),
+  ];
+  const frameAgg = (fid: string) => groupLook(frameLooks(fid));
   const needsYouIn = (fid: string): number => shownIn(fid).filter((t) => t.needsYou).length + childFramesOf(fid).reduce((n, k) => n + needsYouIn(k.id), 0);
 
   const renderTile = (t: ModelTile, depth: number): ReactNode => {
@@ -616,10 +603,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     }
     const started = view.kids.get(t.id) ?? [];
     const folded = collapsed.has(`tile:${t.id}`);
-    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} jumpKey={key} asleep={asleep.has(t.id)} />;
+    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} jumpKey={key} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />;
     return (
       <div key={t.id} role="group" aria-label={`${t.name} and what it started`} data-layer-started={t.id}>
-        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} jumpKey={key} asleep={asleep.has(t.id)} />
+        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} jumpKey={key} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />
         {!folded && started.map((k) => renderTile(k, depth + 1))}
       </div>
     );
@@ -661,14 +648,13 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
               )}
               <span className="ml-auto flex items-center gap-1.5 min-w-0">
                 {/* A summary of what is hidden: when folded, or when a child needs a person. */}
-                {agg && agg !== "idle" && agg !== "exited" && (isCollapsed || NEEDS_YOU(agg)) && (
-                  NEEDS_YOU(agg) ? (
-                    <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse"
-                      style={{ color: STATUS_COLOR[agg], background: `color-mix(in srgb, ${STATUS_COLOR[agg]} 16%, transparent)` }} title={STATUS_LABEL[agg]}>
-                      {STATUS_LABEL[agg]}
-                    </span>
-                  ) : <span aria-label={STATUS_LABEL[agg]} title={STATUS_LABEL[agg]} className="shrink-0 size-1.5 rounded-full" style={{ background: STATUS_COLOR[agg] }} />
-                )}
+                {agg === "needs" ? (
+                  <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse" style={pillStyle(agg)} title={LOOKS[agg].word}>
+                    {LOOKS[agg].word}
+                  </span>
+                ) : agg && isCollapsed ? (
+                  <span aria-label={LOOKS[agg].word} title={LOOKS[agg].word} className="grid shrink-0"><StatusGlyph look={agg} className="size-1.5" /></span>
+                ) : null}
                 {items.length + kids.length > 0 && <span className={`shrink-0 ${COUNT} ${frameActions ? "group-hover/grp:hidden group-focus-within/grp:hidden" : ""}`}>{items.length + kids.length}</span>}
               </span>
             </button>
@@ -758,7 +744,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           <Bell size={ICON} className="size-4" />
           {needsYou > 0 && <span aria-hidden className="absolute -right-1 -top-1 grid min-w-3.5 h-3.5 place-items-center rounded-full px-0.5 text-chip font-semibold tabular-nums leading-none text-[var(--color-bg)]" style={{ background: "var(--color-warn)" }}>{needsYou}</span>}
         </Button>
-        <Button variant="ghost" size="icon-xs" aria-label="Hide panel" title={`Hide panel (${MOD}B)`} data-layers-close onClick={() => setHidden(true)}>
+        <Button variant="ghost" size="icon-xs" aria-label="Hide panel" title={`Hide panel (${actionKey("toggle-layers")})`} data-layers-close onClick={() => setHidden(true)}>
           <PanelLeftClose size={ICON} className="size-4" />
         </Button>
       </header>
@@ -824,7 +810,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
               <span className={`ml-auto ${COUNT}`}>{view.snoozed.length}</span>
             </button>
             {!collapsed.has("section:snoozed") && view.snoozed.map((t) => (
-              <TileRow key={t.id} t={t} depth={0} selected={t.id === selectedTileId} actions={rowActions} until={`until ${timeOf(t.snoozedUntil!, now)}`} asleep={asleep.has(t.id)} />
+              <TileRow key={t.id} t={t} depth={0} selected={t.id === selectedTileId} actions={rowActions} until={`until ${timeOf(t.snoozedUntil!, now)}`} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />
             ))}
           </section>
         )}
@@ -942,7 +928,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {card && <HoverCard tile={card.tile} top={card.top} left={card.left} now={now} frame={frames.find((f) => f.id === card.tile.frameId)} agent={agentLabel(card.tile)} />}
+      {card && <HoverCard tile={card.tile} top={card.top} left={card.left} now={now} frame={frames.find((f) => f.id === card.tile.frameId)} agent={agentLabel(card.tile)} failed={failed.has(card.tile.id)} />}
     </aside>
   );
 });
@@ -1089,7 +1075,7 @@ function PanelMenu({ title, workspaces, here, onHide, onRemoved, agents, sleepAc
         )}
         <ViewChoices />
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>{MOD}B</DropdownMenuShortcut></DropdownMenuItem>
+        <DropdownMenuItem onSelect={onHide} data-layers-hide><PanelLeftClose />Hide panel<DropdownMenuShortcut>{actionKey("toggle-layers")}</DropdownMenuShortcut></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
     <RemoveWorkspaceDialog workspace={removing} onClose={(removed) => { if (removed && removing) onRemoved(removing.repo); setRemoving(null); }} />
@@ -1207,14 +1193,14 @@ function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
 }
 
 /** What a row is, on hover: its name, when it last changed, and where it runs. */
-function HoverCard({ tile, top, left, now, frame, agent }: { tile: ModelTile; top: number; left: number; now: number; frame?: LayerFrame; agent: string }) {
+function HoverCard({ tile, top, left, now, frame, agent, failed }: { tile: ModelTile; top: number; left: number; now: number; frame?: LayerFrame; agent: string; failed: boolean }) {
   const when = ago(tile.activity, now);
   return (
     // `.hm-popover` brings its own 4px padding; the card's spacing is on the inner box.
     <div role="tooltip" data-layers-card className="hm-popover pointer-events-none fixed z-50 w-[256px] animate-in fade-in-0 slide-in-from-left-1 duration-150 ease-out" style={{ top, left }}>
       <div className="px-3 pt-2.5 pb-3">
         <p className="truncate text-row font-semibold leading-5 text-[var(--color-fg)]">{tile.name}</p>
-        <p className="mt-1 text-label leading-4 text-[var(--color-fg2)]">{[when, tile.needsYou ? "needs you" : STATUS_LABEL[tile.status]].filter(Boolean).join(" · ")}</p>
+        <p className="mt-1 text-label leading-4 text-[var(--color-fg2)]">{[when, tile.needsYou ? LOOKS.needs.word : statusWord(tile.status, { failed })].filter(Boolean).join(" · ")}</p>
         <div className="mt-3 flex flex-wrap gap-1.5 text-count leading-4 text-[var(--color-fg2)]">
           <span className="rounded-md bg-[var(--color-bg3)] px-2 py-0.5">{agent}</span>
           {frame && <span className="max-w-full truncate rounded-md bg-[var(--color-bg3)] px-2 py-0.5">{frame.title}</span>}

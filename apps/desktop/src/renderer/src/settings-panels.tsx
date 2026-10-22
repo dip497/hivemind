@@ -26,8 +26,10 @@ import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, TerminalColors,
 } from "./appearance-controls";
-import { createContext, useContext } from "react";
+import { createContext, Fragment, useContext } from "react";
 import { pluginPage } from "./settings-registry";
+import { doesWhat, KEYMAP, keysLabel, type KeyOS, type Where } from "../../shared/keymap";
+import { keyOS } from "./shortcut";
 
 // ── Appearance ──────────────────────────────────────────────────────────────
 // Everyday choices first (theme, accent, background, glass, how tools look in a
@@ -104,75 +106,50 @@ function AppearancePrefs() {
 
 // ── Shortcuts (read-only) ───────────────────────────────────────────────────
 
-// The keymap's rows (shared/keymap.ts), split by where they work.
-const SHORTCUTS_ANYWHERE: [string, string][] = [
-  ["⌘/Ctrl + ⇧ + `", "New terminal"],
-  ["⌘/Ctrl + ⇧ + A", "New agent"],
-  ["⌘/Ctrl + ⇧ + E", "File tree"],
-  ["⌘/Ctrl + ⇧ + N", "New frame"],
-  ["⌘/Ctrl + 1 … 9", "Go to tile 1 … 9"],
-  ["⌘/Ctrl + Tab", "Next tile (⇧ for previous)"],
-  ["⌘/Ctrl + ,", "Settings"],
-  ["⌘/Ctrl + .", "Focus the selected tile"],
-  ["⌘/Ctrl + ⇧ + F", "Fit the selected terminal to the screen, and back"],
-  ["⌘/Ctrl + ⇧ + 0", "Size the selected terminal's text to the screen"],
-  ["F11", "Full screen"],
-  ["⌘/Ctrl + Q", "Quit, asking first while agents or terminals run"],
-];
-const SHORTCUTS_CANVAS: [string, string][] = [
-  ["⌘/Ctrl + B", "Show or hide Layers (⌘B in a terminal too)"],
-  ["⌘/Ctrl + E", "Switch views, in any view"],
-  ["1", "New terminal"],
-  ["2", "New agent"],
-  ["3", "File tree"],
-  ["6", "New frame"],
-  ["7", "New browser"],
-  ["⌫", "Delete the selected widget or arrow on the board"],
-  ["⌘/Ctrl + D", "Duplicate the selected widget"],
-  ["⌘/Ctrl + Z / ⇧Z", "Undo / redo on the board"],
-  ["⌘/Ctrl + = / −", "Zoom in / out"],
-  ["⌘/Ctrl + 0", "Zoom to 100%"],
-  ["Esc", "Leave full screen, or fit everything in view"],
-  ["⌘/Ctrl + O", "Open a folder as the project"],
-  ["⌘/Ctrl + R", "Open a recent project"],
-  [".", "Focus the selected tile"],
-  ["⌘/Ctrl + W", "Close the selected tile"],
-  ["F2", "Rename the selected frame"],
-  ["⇧ Esc", "Undock a tile from a scene view"],
+const SHORTCUT_PLACES: Array<[Where, string, string]> = [
+  ["anywhere", "Anywhere", "Work even while a terminal has focus — everything else goes to the terminal"],
+  ["canvas", "On the canvas", "When no terminal or field has focus"],
+  ["terminal", "In a terminal", "Every other key goes to the program"],
 ];
 
-const SHORTCUTS_TERMINAL: [string, string][] = [
-  ["⇧ + Enter", "A new line in an agent's prompt"],
-  ["⌘/Ctrl + C", "Copy the selection; with none, the program's Ctrl+C"],
-  ["⌘/Ctrl + = / − / 0", "Text size"],
-  ["⌘/Ctrl + ⇧ + K", "Take back the keyboard from a guest"],
-];
-
-function ShortcutList({ items }: { items: [string, string][] }) {
-  return (
-    <dl className="settings-shortcuts">
-      {items.map(([k, what]) => (
-        <div className="settings-shortcut" key={k}>
-          <dt><kbd>{k}</kbd></dt>
-          <dd>{what}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+/** The keymap's rows for one place as this platform writes them (shared/keymap.ts), one row per
+ *  action: `tile:1` … `tile:9` are one, and actions on the same keys are one, in the order tried. */
+function shortcutRows(where: Where, os: KeyOS): Array<{ keys: string[]; does: string }> {
+  const byAction = new Map<string, { keys: string[]; does: string }>();
+  for (const b of KEYMAP) {
+    if (b.where !== where) continue;
+    const id = b.action.startsWith("tile:") ? "tile" : b.action;
+    const row = byAction.get(id) ?? { keys: [], does: doesWhat(b.action) };
+    byAction.set(id, row);
+    const label = keysLabel(b.keys, os);
+    if (!row.keys.includes(label)) row.keys.push(label);
+  }
+  const rows: Array<{ keys: string[]; does: string }> = [];
+  for (const [id, row] of byAction) {
+    if (id === "tile") row.keys = [`${row.keys[0]} … ${row.keys.at(-1)}`];
+    const same = rows.find((r) => r.keys.join("\n") === row.keys.join("\n"));
+    if (same) same.does += `, or ${row.does[0]!.toLowerCase()}${row.does.slice(1)}`;
+    else rows.push(row);
+  }
+  return rows;
 }
 
 function ShortcutPrefs() {
+  const os = keyOS();
   return (
     <div className="settings-stack">
-      <Section title="Anywhere" hint="Work even while a terminal has focus — everything else goes to the terminal">
-        <ShortcutList items={SHORTCUTS_ANYWHERE} />
-      </Section>
-      <Section title="On the canvas" hint="When no terminal or field has focus">
-        <ShortcutList items={SHORTCUTS_CANVAS} />
-      </Section>
-      <Section title="In a terminal" hint="Every other key goes to the program">
-        <ShortcutList items={SHORTCUTS_TERMINAL} />
-      </Section>
+      {SHORTCUT_PLACES.map(([where, title, hint]) => (
+        <Section key={where} title={title} hint={hint}>
+          <dl className="settings-shortcuts">
+            {shortcutRows(where, os).map((r) => (
+              <div className="settings-shortcut" key={r.keys.join(" ")}>
+                <dt>{r.keys.map((k, i) => <Fragment key={k}>{i > 0 && " "}<kbd>{k}</kbd></Fragment>)}</dt>
+                <dd>{r.does}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      ))}
     </div>
   );
 }

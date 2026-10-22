@@ -303,7 +303,7 @@ export function useSpawn(ctx: SpawnCtx) {
     [placeInFrame, ensureFrame, focusTile, openFileInTile, tilesRef],
   );
 
-  // Spawn from a global surface (ToolIsland / palette / hotkey). A current
+  // Spawn from a global surface (the toolbar or a key). A current
   // selection IS the target: a selected frame — or the frame holding the
   // selected tile — spawns straight in, no picker. Only ask when nothing is
   // selected to disambiguate AND 2+ frames exist.

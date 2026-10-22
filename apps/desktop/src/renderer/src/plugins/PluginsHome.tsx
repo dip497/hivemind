@@ -22,6 +22,7 @@ import { BrowsePlugins } from "../settings-plugins";
 import { cleanError } from "./catalog-install";
 import { textMatches } from "@hivemind/core/plugin-search";
 import { useHubDescription } from "./library";
+import { actionKey } from "../shortcut";
 import { rowsInKindTab, type PluginTab } from "./kinds";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./PluginList";
 import { WidgetIcon } from "./WidgetIcon";
@@ -89,7 +90,7 @@ function InstalledPlugins({ matches, tab, onTab }: { matches: (text: string) => 
     <KindTabs counts={counts} tab={tab} onChange={onTab} />
     {tab === "tool" && tools.warning && <p role="status" className="settings-message">{tools.warning}</p>}
     <CategoryGroups groups={groups} feet={tab === "agent" && agents.foot ? { agents: agents.foot } : {}} />
-    {tab === "view" && views.length > 0 && <p className="settings-note">⌘E switches between the views that are on.</p>}
+    {tab === "view" && views.length > 0 && <p className="settings-note">{actionKey("toggle-view-mode")} switches between the views that are on.</p>}
   </>;
 }
 

@@ -20,6 +20,7 @@ import { useFacesHere } from "./presence";
 import { joinedId, useShown } from "./shown";
 import { parseDeviceUri } from "@hivemind/core/remote-uri";
 import { useTyping } from "./typing";
+import { actionKey } from "../shortcut";
 
 interface Heard {
   /** Who holds it: null while the host does. */
@@ -157,7 +158,7 @@ export function KeyboardChip({ tile, name, kb }: { tile: string; name: string; k
       </span>
       {typing && <span className="animate-pulse text-[var(--color-fg2)]" data-typing={tile}>{typing} is typing</span>}
       {kb.mayTake && (
-        <Button variant="ghost" size="micro" onClick={() => window.hive.keyboardTake(tile)} title="Take the keyboard back (Ctrl/⌘⇧K)" data-keyboard-take>
+        <Button variant="ghost" size="micro" onClick={() => window.hive.keyboardTake(tile)} title={`Take the keyboard back (${actionKey("take-keyboard")})`} data-keyboard-take>
           Take back
         </Button>
       )}

@@ -36,7 +36,7 @@ import { terminalThemeFor } from "@hivemind/core/settings-schema";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
-import { statusColor } from "./workspace/tile-status-bucket";
+import { exitFailed, LOOKS, paintGlyph, StatusGlyph, statusLook, statusWord } from "./workspace/status-look";
 import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
 import { useShown } from "./multiplayer/shown";
@@ -261,7 +261,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // Agent/terminal status — driven by PTY activity, mutated imperatively via
   // refs (NOT React state) so high-frequency output never triggers re-renders.
   //   working = output within the last ~1.5s · idle = quiet · exited = PTY gone
-  const dotRef = useRef<HTMLSpanElement | null>(null);
+  const dotRef = useRef<SVGSVGElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** Wrapper around the status dot+label — hidden entirely while idle. */
@@ -285,20 +285,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
 
   useEffect(() => {
     if (!agentsScanned) return;
-    // [color, label, pulse]. permission/question = needs the human (from the
-    // real Claude-state scrape); working/idle from screen or PTY activity.
-    // Labels and pulse only; colours come from workspace/tile-status-bucket so this header
-    // agrees with the layers panel and every surface bar. Only actionable states pulse.
-    const STATUS: Record<string, [string, boolean]> = {
-      working: ["working", false],
-      idle: ["idle", false],
-      exited: ["exited", false],
-      permission: ["approve?", true],
-      question: ["input?", true],
-      blocked: ["blocked", true],
-      plan_review: ["review?", true],
-      awaiting_approval: ["approval?", true],
-    };
+    // permission/question = needs the human (from the real Claude-state scrape); working/idle
+    // from screen or PTY activity. The words, shape and colour are workspace/status-look's, so
+    // this header agrees with Layers and every surface bar.
     /** The header chip. An agent tile's follows the bus (the host's status); a shell's its own activity. */
     const paint = (s: TileStatusKind, extra?: { exitCode?: number; detail?: string }) => {
       const dot = dotRef.current;
@@ -307,21 +296,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // A shell calls this on every output chunk; rewriting an unchanged chip
       // replaced its text node and dirtied the header's layout each time.
       if (s === lastStatusRef.current && !extra) return;
-      const [text, pulse] = STATUS[s]!;
-      // The colour is the shared one for this state; only a failed exit is not neutral.
-      const color = statusColor(s, { failed: s === "exited" && !!extra?.exitCode });
+      // Only a failed exit is not neutral.
+      const failed = exitFailed({ status: s, ...extra });
+      const look = statusLook(s, { failed });
       // `idle` is the ABSENCE of a state, not a state — and it rendered as a green
       // dot, which reads as "success" when it means "nothing is happening". Hide the
       // whole chip so a quiet tile has a quiet header, and every chip that remains
       // (working / approve? / blocked / exited) is worth looking at. Matches
       // LayersPanel, which already skips idle rows.
       if (statusWrapRef.current) statusWrapRef.current.style.display = s === "idle" ? "none" : "inline-flex";
-      dot.style.background = color;
-      // No glow (box-shadow) — the pulsing-glow-on-dark dot is a textbook
-      // AI-slop tell. A solid dot + pulse on actionable states reads cleaner.
-      dot.classList.toggle("animate-pulse", pulse);
-      label.textContent = text;
-      label.style.color = color;
+      paintGlyph(dot, look);
+      label.textContent = statusWord(s, { failed });
+      label.style.color = LOOKS[look].color;
       lastStatusRef.current = s;
     };
     const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
@@ -450,7 +436,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // selected and focus landed on the CANVAS CHROME — body, the react-flow pane,
     // or ANY node wrapper (a re-render/selection steal) and NOT a real editable
     // field — take focus straight back next frame. Never fights a deliberate move
-    // into another tile's terminal, a rename box, or the command palette (all
+    // into another tile's terminal, a rename box, or a search field (all
     // editable elements), so it can't trap focus.
     const reclaimFocusIfStolen = () => {
       if (!selectedRef.current) return;
@@ -838,13 +824,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         e.preventDefault();
         return false;
       }
-      // Shift+Enter: a new line in the prompt, not a send. A program that turned the kitty protocol
-      // on is told Shift+Enter as itself; any other gets ESC CR, which agents read as Alt+Enter.
-      if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !kittyFlags(term)) {
-        term.input("\x1b\r", true);
-        e.preventDefault();
-        return false;
-      }
       for (const action of actionsFor(e, "terminal", IS_MAC)) {
         if (!runTerminalKey(action)) continue;
         e.preventDefault();
@@ -864,6 +843,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           term.clearSelection();
           return true;
         }
+        // Shift+Enter: a new line in the prompt, not a send. A program that turned the kitty protocol
+        // on is told Shift+Enter as itself; any other gets ESC CR, which agents read as Alt+Enter.
+        case "new-line":
+          if (kittyFlags(term)) return false;
+          term.input("\x1b\r", true);
+          return true;
         case "take-keyboard":
           if (!kbRef.current.mayTake) return false;
           window.hive.keyboardTake(ptyId);
@@ -1380,12 +1365,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           className="inline-flex items-center gap-1.5 text-chip"
           title="agent status — working / blocked / exited (idle is not shown)"
         >
-          <span
-            ref={dotRef}
-            aria-hidden
-            className="size-1.5 rounded-full"
-            style={{ background: "var(--color-fg3)" }}
-          />
+          <StatusGlyph ref={dotRef} look="idle" className="size-1.5" />
           <span ref={labelRef} style={{ color: "var(--color-fg3)" }}>
             starting
           </span>

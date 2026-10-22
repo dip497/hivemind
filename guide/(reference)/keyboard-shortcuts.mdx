@@ -3,7 +3,7 @@ title: "Keyboard shortcuts"
 description: "Every Hivemind key in one place: anywhere in the app, on the canvas, in the Layers panel and in the Windows view."
 ---
 
-Every key, Mac first. The app lists the same keys in **Settings → Shortcuts**.
+Every key: the Mac key first, then the key on Windows and Linux. The app lists the same keys in **Settings → Shortcuts**, for your computer.
 
 <AgentPrompt description="Paste this into your coding agent to get a cheat sheet of the keys you need." page="keyboard-shortcuts">{`
 Using the Hivemind keyboard shortcuts on this page, make me a one-screen cheat sheet.
@@ -14,7 +14,7 @@ Ask me whether I use a Mac, and whether I mostly work in the Canvas or the Windo
 The app lists the same keys in **Settings → Shortcuts**.
 
 <Frame caption="Settings → Shortcuts">
-  <img src="/images/app/settings-shortcuts.dark.webp" alt="Settings → Shortcuts: the keys that work anywhere, such as ⌘/Ctrl + ⇧ + A for a new agent." />
+  <img src="/images/app/settings-shortcuts.dark.webp" alt="Settings → Shortcuts: the keys that work anywhere, such as Ctrl+Shift+A for a new agent." />
 </Frame>
 
 ## Anywhere
@@ -23,16 +23,20 @@ These work even while a terminal has focus.
 
 | Keys | Does |
 |---|---|
-| ⌘⇧\` / Ctrl+Shift+\` | New terminal |
-| ⌘⇧A / Ctrl+Shift+A | New agent |
-| ⌘⇧E / Ctrl+Shift+E | The Code tile, on its files |
-| ⌘⇧N / Ctrl+Shift+N | New frame |
+| ⇧⌘\` / Ctrl+Shift+\` | New terminal |
+| ⇧⌘A / Ctrl+Shift+A | New agent, your default one |
+| ⇧⌘E / Ctrl+Shift+E | The Code tile, on its files |
+| ⇧⌘N / Ctrl+Shift+N | New frame |
 | ⌘1 … ⌘9 / Ctrl+1 … Ctrl+9 | Go to tile 1 … 9 |
-| ⌘Tab / Ctrl+Tab | Next tile (add ⇧ / Shift for the previous one) |
+| ⌃Tab / Ctrl+Tab | Next tile |
+| ⌃⇧Tab / Ctrl+Shift+Tab | Previous tile |
 | ⌘, / Ctrl+, | Settings |
 | ⌘. / Ctrl+. | Focus the selected tile |
-| ⌘⇧F / Ctrl+Shift+F | Fit the selected terminal to the screen |
+| ⇧⌘F / Ctrl+Shift+F | Fit the selected terminal to the screen, and back |
+| ⇧⌘0 / Ctrl+Shift+0 | Size the selected terminal's text to the screen |
+| ⌘B / Super+B | Show or hide the Layers panel. Super is the Windows key on Windows. |
 | F11 | Full screen |
+| ⌘Q / Ctrl+Q | Quit, asking first while agents or terminals run |
 
 ## On the canvas
 
@@ -40,27 +44,29 @@ These work when no terminal or editor has focus.
 
 | Keys | Does |
 |---|---|
-| ⌘B / Ctrl+B | Show or hide the Layers panel. ⌘B works inside a terminal too. |
 | ⌘E / Ctrl+E | Switch views, in any view |
+| ⌃B / Ctrl+B | Show or hide the Layers panel |
 | 1 | New terminal |
 | 2 | New agent, your default one, in the selected frame |
 | 3 | The Code tile, on its files |
 | 6 | New frame |
 | 7 | New browser |
-| ⌫ / Backspace | Delete the selected widget or arrow |
+| ⌫ / Backspace | Delete the selected widget or arrow. ⌦ / Delete does too. |
 | ⌘D / Ctrl+D | Duplicate the selected widget |
-| ⌘Z / Ctrl+Z, ⌘⇧Z / Ctrl+Shift+Z | Undo, redo |
-| ⌘= / Ctrl+=, ⌘− / Ctrl+− | Zoom in, zoom out |
+| ⌘Z / Ctrl+Z | Undo on the board |
+| ⇧⌘Z / Ctrl+Shift+Z | Redo on the board. ⌘Y / Ctrl+Y does too. |
+| ⌘= / Ctrl+= | Zoom in |
+| ⌘- / Ctrl+- | Zoom out |
 | ⌘0 / Ctrl+0 | Zoom to 100% |
-| Esc | Fit everything in view |
+| Esc | The first that applies: stop drawing an arrow, leave full screen, deselect on the board, or fit everything in view |
+| ⇧Esc / Shift+Esc | Undock a tile from a scene view |
 | ⌘O / Ctrl+O | Open a folder as the project |
 | ⌘R / Ctrl+R | Open a recent project |
 | . | Focus the selected tile |
 | ⌘W / Ctrl+W | Close the selected tile |
 | F2 | Rename the selected frame |
-| ⇧Esc / Shift+Esc | Undock a tile from a scene view |
 
-Inside a terminal or editor, ⌘= / Ctrl+=, ⌘− / Ctrl+− and ⌘0 / Ctrl+0 size its text instead.
+Inside an editor, ⌘= / Ctrl+=, ⌘- / Ctrl+- and ⌘0 / Ctrl+0 size its text instead, as in a terminal.
 
 ## In the Layers panel
 
@@ -80,7 +86,7 @@ With a row's ⋮ menu open:
 
 ## In the Windows view
 
-These work wherever focus is, inside a terminal too.
+These work when no terminal or field has focus: there the key is the program's.
 
 | Keys | Does |
 |---|---|
@@ -91,8 +97,18 @@ These work wherever focus is, inside a terminal too.
 
 ## In a terminal
 
+Every other key goes to the program.
+
 | Keys | Does |
 |---|---|
-| ⌘ + click / Ctrl + click | Open a link |
+| ⌘C / Ctrl+C | Copy the selection. With nothing selected, the key goes to the program. |
+| ⇧⌘C / Ctrl+Shift+C | Copy the selection |
+| ⇧Enter / Shift+Enter | A new line in an agent's prompt |
+| ⌘= / Ctrl+= | Bigger text |
+| ⌘- / Ctrl+- | Smaller text |
+| ⌘0 / Ctrl+0 | Text back to its size |
+| ⇧⌘K / Ctrl+Shift+K | Take back the keyboard from a guest |
+
+⌘ + click / Ctrl + click opens a link.
 
 <LastValidated />

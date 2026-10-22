@@ -42,6 +42,7 @@ import { tags as t } from "@lezer/highlight";
 import { unifiedMergeView } from "@codemirror/merge";
 import { resolveActive } from "./editor-active";
 import { htmlFileUrl, isHtmlPath } from "./browser-open";
+import { keyLabel } from "./shortcut";
 // Lazy: marked + DOMPurify (and, on demand, mermaid) load only when the user
 // actually opens Preview — opening an editor tile pulls in zero markdown code.
 const MarkdownPreview = lazy(() =>
@@ -605,7 +606,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
               </Button>
               </>
             )}
-            <span className="text-chip text-[var(--color-fg3)]">⌘S to save</span>
+            <span className="text-chip text-[var(--color-fg3)]">{keyLabel("mod+s")} to save</span>
             <FontStepper {...font} />
           </span>
           <Button

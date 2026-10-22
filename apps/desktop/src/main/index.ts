@@ -251,7 +251,7 @@ function attachWinStateSaver(win: BrowserWindow): void {
 async function createWindow(target: string | null = cliLaunchTarget): Promise<void> {
   // Remove the native File/Edit/View/Window/Help menu entirely (autoHideMenuBar
   // only hides it until Alt; this kills it outright). No app actions live there
-  // — everything is in the in-canvas chrome + ⌘K palette.
+  // — everything is in the in-app toolbar and the keymap (shared/keymap.ts).
   Menu.setApplicationMenu(null);
   // Export the browser-targets discovery path so spawned PTY agents inherit it
   // (set here — post-ready — because userData is only reliable now). Harmless
@@ -273,9 +273,9 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     icon: path.join(__dirname, "../renderer/icon.png"),
     titleBarStyle: "default",
     // Hide the native File/Edit/View/Window menu bar — it's redundant chrome
-    // (no app-specific actions live there; everything is in the in-app top bar
-    // + ⌘K palette) and it breaks the bespoke deep-navy frameless feel. Alt
-    // still reveals it on Linux/Windows if ever needed.
+    // (no app-specific actions live there; everything is in the in-app toolbar
+    // and the keymap). The window keeps the system's own frame and title bar.
+    // Alt still reveals the menu bar on Linux/Windows if ever needed.
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
