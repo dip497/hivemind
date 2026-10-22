@@ -6,6 +6,36 @@ each choice was made, with measurements and options, is in
 This file says what to build, in which files, what "done" means, and where the work stands.
 Update the status table in the same commit as the work it describes.
 
+## Read first: corrections from the 2026-10-22 gap review
+
+[`customization-gaps-2026-10-22.md`](../design/customization-gaps-2026-10-22.md) checked this plan
+against the code and found facts it was built on that do not hold. Do not start T1–T5 until these
+are folded in.
+
+1. **New `appearance` fields are not safe to add.**
+   - Every settings write rebuilds `appearance` from its 12 known keys (`settings-schema.ts:419-450`).
+     A write by an older app or `hive` erases `accentCustom`, `theme` and `fontFaces`, and turns
+     accent `custom` into `graphite`.
+   - The T2 forward-compatibility note and Definition of done row 9 ("No migration needed",
+     "nothing lost") are wrong.
+   - Settings must keep unknown keys first (gap review, build order step 1).
+2. **Notifications live in a second settings.json.**
+   - `notification-settings-store.ts:26-28` writes to `app.getPath("userData")`. On macOS, Windows
+     and dev runs that is not `~/.config/hivemind`.
+   - So `hive config get notifications` is NOT_FOUND today. S2's `hive notifications` would read
+     the wrong file unless S1 moves it.
+3. **T1 misses four font sites:** `TerminalTile.tsx:715` (the glyph-atlas wait, or a custom mono
+   font stays blurry), `pierre-codeview.ts:35,40`, `main.tsx:43`, and view frames (their CSP
+   cannot load the app's fonts).
+4. **T5's light audit misses dark-only sites:** the editor (`EditorTile.tsx:144`), the diff tile
+   and PatchView (`themeType: "dark"`), fullscreen chrome (`tile-fullscreen.tsx`), the window
+   background (`main/index.ts:270`), `<html class="dark">`, and the toaster (`main.tsx:56`).
+5. **Person-only must cover what exists, not just what is new.** `hive theme use|import` and
+   `hive config set appearance.*` / `profile.*` already run for agents. Only `plugins.*` is gated
+   (`config.ts:51`).
+6. **T2's field list is short of an edition**, and T3's single `before` cannot revert one part. The
+   gap review proposes parts and a look stack in their place (its sections 5 and 7).
+
 ## Status
 
 | Step | What | State |
