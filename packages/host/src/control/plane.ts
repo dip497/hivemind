@@ -138,6 +138,11 @@ export class ControlPlane {
       // Waiting on a prompt of its own, a message typed there would answer it (Enter allows).
       const bare = toBareId(ptyId);
       return this.status.get(bare)?.state === "working" && (o.steers?.(bare) ?? false);
+    }, undefined, (ptyId) => {
+      // A session running an agent that reports its turns: what is held for its prompt waits for it.
+      const bare = toBareId(ptyId);
+      const now = this.status.get(bare)?.state;
+      return now !== undefined && now !== "exited" && (o.signalsTurns?.(bare) ?? false);
     });
     this.inbox = new Inbox((to, wanted, rung) => this.mailbox.deliver(toPtyId(to), DOORBELL, rung, { wanted, atPrompt: true }));
     // However a turn is known to run (its hook, or the screen of an agent that reports its turns:

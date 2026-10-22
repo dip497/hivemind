@@ -107,6 +107,24 @@ test("a worker's reply waits in its leader's inbox, read once; the leader's term
   assert.deepEqual((await inbox("leader")).messages, []);
 });
 
+test("an agent that reports its turns is told once of replies that come before it has reported one, and the line waits for its prompt", async () => {
+  const { p, typed, hook, turn, inbox } = plane();
+  const api = await p.api();
+  for (const w of ["w1", "w2", "w3"]) api.connect(w, "leader");
+  // Its screen shows its prompt; no turn of it has been reported since this plane started.
+  p.event("agent.screen", { tileId: "hm:leader", state: "idle" });
+  turn("w1", "one");
+  turn("w2", "two");
+  await settle();
+  assert.equal(typed("leader").split("hive ctl inbox").length - 1, 1, "one line, though two replies came");
+
+  hook("leader", "turn.started");
+  turn("w3", "three");
+  await settle();
+  assert.equal(typed("leader").split("hive ctl inbox").length - 1, 1, "nothing is typed into the turn that line started");
+  assert.deepEqual((await inbox("leader")).messages.map((m) => m.text), ["one", "two", "three"]);
+});
+
 test("a reply that `hive ctl read` returned is not sent to the leader too, whenever the read came", async () => {
   const { p, typed, hook, turn, inbox } = plane();
   const api = await p.api();

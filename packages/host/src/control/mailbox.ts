@@ -24,8 +24,8 @@
  *    row release exactly one message.
  *  - HOOKLESS agents (codex, opencode) never emit turn events, so setBusy/setIdle
  *    never fire for them. They must keep delivering IMMEDIATELY, or their queue would
- *    never drain. A tile is only serialized once we've SEEN it emit a turn signal
- *    (`managed`); until then, delivery is immediate — exactly the old behavior.
+ *    never drain. A tile is serialized when its agent's file says it reports its turns, or
+ *    once we've SEEN it emit a turn signal (`managed`); until then, delivery is immediate.
  *
  * A PERSON'S DRAFT is the third thing typing can break: a message typed into a composer
  * the person is writing in is merged with their words and submitted as theirs. So a
@@ -113,7 +113,15 @@ export class Mailbox {
     private readonly steers: (ptyId: string) => boolean = () => false,
     /** How many messages a tile has waiting changed. */
     private readonly onHeld: (ptyId: string, held: number) => void = () => {},
+    /** Whether the tile's agent reports its turns (its file says `turnSignal`): held for its
+     *  prompt from the start, not only once a turn of it has been seen. */
+    private readonly signalsTurns: (ptyId: string) => boolean = () => false,
   ) {}
+
+  /** What comes for this tile is held for its prompt, not typed at once. */
+  private waitsForPrompt(ptyId: string): boolean {
+    return this.managed.has(ptyId) || this.signalsTurns(ptyId);
+  }
 
   /** Turn started (UserPromptSubmit / agent_start) — hold everything from here, and
    *  mark this tile as one that emits turn events (so it's serialized, not immediate). */
@@ -201,8 +209,8 @@ export class Mailbox {
     const steer = !o.atPrompt && this.busy.has(ptyId) && !this.queued.get(ptyId)?.length && this.steers(ptyId)
       && Date.now() - (this.typedAt.get(ptyId) ?? 0) >= TYPING_QUIET_MS;
     const held = this.asleep.has(ptyId) || this.waking.has(ptyId);
-    if (!held && (steer || (!this.managed.has(ptyId) && !this.draft.has(ptyId)))) {
-      // Hookless (or not-yet-seen-a-turn) → immediate, matching the pre-mailbox path.
+    if (!held && (steer || (!this.waitsForPrompt(ptyId) && !this.draft.has(ptyId)))) {
+      // Hookless (or not known to report its turns) → immediate, matching the pre-mailbox path.
       if (o.wanted && !o.wanted()) return true;
       const ok = this.send(ptyId, text, o.pasted);
       if (ok) onSent?.();
@@ -258,7 +266,7 @@ export class Mailbox {
       this.onHeld(ptyId, q.length);
       if (!next) return;
       // A hookless tile reports no turn end to wait for: the rest follow at once.
-      if (!this.managed.has(ptyId)) {
+      if (!this.waitsForPrompt(ptyId)) {
         if (this.send(ptyId, next.text, next.pasted)) next.onSent?.();
         this.scheduleRelease(ptyId);
         return;
