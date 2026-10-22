@@ -9,32 +9,55 @@ Update the status table in the same commit as the work it describes.
 ## Read first: corrections from the 2026-10-22 gap review
 
 [`customization-gaps-2026-10-22.md`](../design/customization-gaps-2026-10-22.md) checked this plan
-against the code and found facts it was built on that do not hold. Do not start T1–T5 until these
-are folded in.
+against the code. The plan stands: T0–T4 and Harbour still ship as copy-on-apply. These facts
+change how it is built, and go in before T1. The order is that review's section 7: Round 0 fixes,
+then Round 1, then this plan.
 
-1. **New `appearance` fields are not safe to add.**
+1. **New `appearance` values must go in new keys, and the theme record at the top level.**
    - Every settings write rebuilds `appearance` from its 12 known keys (`settings-schema.ts:419-450`).
      A write by an older app or `hive` erases `accentCustom`, `theme` and `fontFaces`, and turns
      accent `custom` into `graphite`.
+   - Builds that already shipped behave this way and stay installable, so fixing today's merge is
+     not enough.
+     - `appearance.accent` keeps a built-in id that old builds accept.
+     - The custom accent, the font faces and the theme record (with `before`) live in one
+       top-level key instead, which the new build reads on top of `appearance`. Every release
+       since 2026-09-21 keeps unknown top-level keys (`settings.ts:62-69`).
    - The T2 forward-compatibility note and Definition of done row 9 ("No migration needed",
      "nothing lost") are wrong.
-   - Settings must keep unknown keys first (gap review, build order step 1).
 2. **Notifications live in a second settings.json.**
    - `notification-settings-store.ts:26-28` writes to `app.getPath("userData")`. On macOS, Windows
      and dev runs that is not `~/.config/hivemind`.
-   - So `hive config get notifications` is NOT_FOUND today. S2's `hive notifications` would read
-     the wrong file unless S1 moves it.
-3. **T1 misses four font sites:** `TerminalTile.tsx:715` (the glyph-atlas wait, or a custom mono
-   font stays blurry), `pierre-codeview.ts:35,40`, `main.tsx:43`, and view frames (their CSP
-   cannot load the app's fonts).
-4. **T5's light audit misses dark-only sites:** the editor (`EditorTile.tsx:144`), the diff tile
-   and PatchView (`themeType: "dark"`), fullscreen chrome (`tile-fullscreen.tsx`), the window
-   background (`main/index.ts:270`), `<html class="dark">`, and the toaster (`main.tsx:56`).
-5. **Person-only must cover what exists, not just what is new.** `hive theme use|import` and
-   `hive config set appearance.*` / `profile.*` already run for agents. Only `plugins.*` is gated
-   (`config.ts:51`).
-6. **T2's field list is short of an edition**, and T3's single `before` cannot revert one part. The
-   gap review proposes parts and a look stack in their place (its sections 5 and 7).
+   - `hive config get notifications` is NOT_FOUND today. S1 moves the file, with a migration,
+     before S2's `hive notifications`.
+3. **T1 misses four font sites:**
+   - `TerminalTile.tsx:715`, the glyph-atlas wait (without it a custom mono font stays blurry);
+   - `pierre-codeview.ts:35,40`;
+   - `main.tsx:43`;
+   - view frames, whose CSP cannot load the app's bundled fonts.
+
+   Fonts reach views in `hello` and again on a digest change, never in the `theme` message, which
+   fires on every slider move.
+4. **T5's light audit misses dark-only sites:**
+   - the editor (`EditorTile.tsx:144`);
+   - the diff tile and PatchView (`themeType: "dark"`);
+   - mermaid (`markdown-preview.tsx:52`);
+   - fullscreen chrome (`tile-fullscreen.tsx`);
+   - the window background (`main/index.ts:270`) and `<html class="dark">`;
+   - the toaster (`main.tsx:56`);
+   - `nativeTheme.themeSource`, which is never set;
+   - agent TUIs, which read the background once at launch (OSC 11).
+5. **The person-only gate is advisory.** It reads environment variables (`person-only.ts`), and
+   today it covers `plugins.*` only (`config.ts:51`).
+   - Sounds and keys become person-only.
+   - Looks stay agent-drivable when the person asks, because the guide's AgentPrompt depends on it
+     and Revert is one step.
+   - An agent can always build, check and preview a theme.
+6. **T2 and T3 additions:**
+   - `format: 1`, with the other part slots reserved (icons, cursors, scene layers, mascot,
+     screens, words; review §5).
+   - A theme's wallpaper draws without glass. Glass stays the person's.
+   - The accent reaches buttons, switches and focus.
 
 ## Status
 
