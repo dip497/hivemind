@@ -13,6 +13,7 @@
  *     `hostRef.current` while open — switching the portal container preserves the
  *     component's state.
  */
+import { onShortcut } from "./shortcut";
 import { useEffect, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Wallpaper } from "./Wallpaper";
@@ -65,13 +66,12 @@ export function FullscreenShell({
    *  for imperative tiles that fill the panel via `useReparentFullscreen`. */
   children?: ReactNode;
 }) {
-  // Esc exits — capture phase so it wins before an inner editor/terminal eats it.
+  // Esc leaves when nothing inside is typed into (a terminal's program keeps its Esc); ⌘/Ctrl ⇧ F
+  // leaves from anywhere.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onClose(); }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    const offEsc = onShortcut("leave-fullscreen", onClose);
+    const offFit = onShortcut("fit-to-screen", onClose);
+    return () => { offEsc(); offFit(); };
   }, [onClose]);
 
   // Covers the workspace: its full-window wallpaper stops decoding underneath.

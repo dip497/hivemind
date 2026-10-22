@@ -948,13 +948,7 @@ export type HiveApi = HiveIpc & {
   newWindow?: () => Promise<void>;
   /** A second `hivemind <path>` invocation asks the running window to switch. */
   onOpenProject: (cb: (path: string) => void) => () => void;
-  onMenuToggleLayers?: (cb: () => void) => () => void;
-  /** Ctrl/Cmd+Shift+F → toggle the selected terminal's fit-to-screen overlay. */
-  onMenuFitOverlay?: (cb: () => void) => () => void;
-  /** Ctrl/Cmd+Shift+0 → reset the selected terminal's scale to the screen best. */
-  onMenuResetScale?: (cb: () => void) => () => void;
-  /** Ctrl/Cmd+. → focus the selected tile (plain `.` is eaten by xterm). */
-  onMenuFocusTile?: (cb: () => void) => () => void;
+  /** A key main took before the page, as its keymap action (shared/keymap.ts). */
   onMenuShortcut?: (cb: (action: string) => void) => () => void;
   /** Resolve a picked File's absolute path (persistent video wallpaper). */
   getPathForFile?: (file: File) => string;

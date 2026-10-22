@@ -75,7 +75,9 @@ test("keys are matched by the key pressed, whatever shift makes of it; mod is Cm
   expect(chordMatches("mod+\\", press("\\", "Backslash", { ctrl: true, shift: true }), false)).toBe(false);
   expect(chordMatches("mod+alt+arrowleft", press("ArrowLeft", "ArrowLeft", { ctrl: true, alt: true }), false)).toBe(true);
   expect(chordMatches("mod+alt+k", press("˚", "KeyK", { ctrl: true, alt: true }), false)).toBe(true);
-  expect(chordMatches("mod+alt+k", press("k", "KeyJ", { ctrl: true, alt: true }), false)).toBe(false);
+  // A letter is the one the layout types (Dvorak puts k where QWERTY has J).
+  expect(chordMatches("mod+alt+k", press("k", "KeyJ", { ctrl: true, alt: true }), false)).toBe(true);
+  expect(chordMatches("mod+alt+k", press("j", "KeyK", { ctrl: true, alt: true }), false)).toBe(false);
 });
 
 test("keys the host names in hello run their command while focus is in the view", async () => {

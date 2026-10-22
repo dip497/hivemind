@@ -12,7 +12,7 @@ import type { Settings } from "@hivemind/core/settings-schema";
 import type { HiveApi } from "../shared/ipc";
 import { hiveOverIpc, workspaceOver, type IpcPort } from "../shared/hive-ipc";
 import { tabUrl, type MainFrame, type TabFrame } from "../shared/browser-socket";
-import { appKeyMessage } from "../shared/shortcuts";
+import { actionsFor } from "../shared/keymap";
 
 export async function connectHive(url: string, token: string, onClose: (code: number) => void): Promise<HiveApi> {
   const ws = new WebSocket(url);
@@ -69,11 +69,12 @@ export async function connectHive(url: string, token: string, onClose: (code: nu
 
   if (typeof window !== "undefined") {
     window.addEventListener("keydown", (e) => {
-      const message = appKeyMessage({ key: e.key, control: e.ctrlKey, meta: e.metaKey, shift: e.shiftKey, alt: e.altKey });
-      if (!message) return;
+      // A tab has no app to quit and no window of its own to make full screen.
+      const action = actionsFor(e, "anywhere", /Mac/i.test(navigator.platform)).find((a) => a !== "quit" && a !== "window-fullscreen");
+      if (!action) return;
       e.preventDefault();
       e.stopPropagation();
-      deliver(message[0], message.slice(1));
+      deliver("menu:shortcut", [action]);
     }, true);
   }
 
