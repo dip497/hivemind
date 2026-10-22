@@ -11,7 +11,9 @@ import { oscColorReply } from "./osc-color";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
-import { useTileFont, FontScaleControl, handleFontKey } from "./tile-font";
+import { useTileFont, FontScaleControl } from "./tile-font";
+import { IS_MAC, onShortcut } from "./shortcut";
+import { actionsFor } from "../../shared/keymap";
 import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
 import { registerAgentTile, unregisterAgentTile, shouldDeliver, type SendToAgentDetail } from "./agent-send";
@@ -103,7 +105,6 @@ export function endTileSession(tileId: string, adopted: boolean): void {
   else if (!adopted) window.hive.ptyKill(toPtyId(tileId));
 }
 
-const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 const termThemeFor = (t: ThemeState) => withScrollbar(terminalThemeFor(t.terminal));
 
 /** xterm 6 colours its scrollbar from the theme, not CSS; follow the foreground. */
@@ -832,31 +833,42 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         e.preventDefault();
         return false;
       }
-      if (!(e.ctrlKey || e.metaKey)) return true;
-      // Ctrl/⌘⇧K: the host takes back the keyboard a guest has. Here, not among the app's keys:
-      // an editor keeps it for deleting a line.
-      if (e.shiftKey && !e.altKey && e.key.toLowerCase() === "k" && kbRef.current.mayTake) {
-        window.hive.keyboardTake(ptyId);
+      // Shift+Enter: a new line in the prompt, not a send. A program that reads keys by the kitty
+      // protocol is told Shift+Enter as itself; until then ESC CR, which agents read as Alt+Enter.
+      if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        term.input("\x1b\r", true);
         e.preventDefault();
         return false;
       }
-      // Font zoom: Ctrl/Cmd +/−/0 adjusts THIS tile's font (per-tile). The apply
-      // effect below pushes the new size into xterm.
-      if (handleFontKey(e, fontCtlRef.current)) {
+      for (const action of actionsFor(e, "terminal", IS_MAC)) {
+        if (!runTerminalKey(action)) continue;
+        e.preventDefault();
         return false;
-      }
-      if (e.key.toLowerCase() === "c") {
-        const sel = term.getSelection();
-        if (sel) {
-          e.preventDefault();
-          void navigator.clipboard.writeText(sel).catch(() => {});
-          term.clearSelection();
-          return false; // copied → don't send ^C
-        }
-        return true; // nothing selected → ^C / SIGINT
       }
       return true;
     });
+    /** The terminal's own keys (shared/keymap.ts). False: nothing to do, the key goes to the program. */
+    function runTerminalKey(action: string): boolean {
+      const font = fontCtlRef.current;
+      switch (action) {
+        case "copy": {
+          // Copy only with a selection; otherwise Ctrl+C is the program's interrupt.
+          const sel = term.getSelection();
+          if (!sel) return false;
+          void navigator.clipboard.writeText(sel).catch(() => {});
+          term.clearSelection();
+          return true;
+        }
+        case "take-keyboard":
+          if (!kbRef.current.mayTake) return false;
+          window.hive.keyboardTake(ptyId);
+          return true;
+        case "font-bigger": font.inc(); return true;
+        case "font-smaller": font.dec(); return true;
+        case "font-reset": font.reset(); return true;
+        default: return false;
+      }
+    }
     // Cross-tile bus: an agent session accepts ADDRESSED text (see agent-send.ts), whichever
     // agent it is. Registering makes this the latest agent tile so a bare/`latest` send lands
     // here only — no more broadcast to every agent.
@@ -1245,18 +1257,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     },
   });
 
-  // Global scale shortcuts (main → App → CustomEvent), targeting the SELECTED
-  // tile only — mirrors the per-tile font keys. Ctrl/Cmd+Shift+F toggles the fit
-  // overlay; Ctrl/Cmd+Shift+0 grows the font to the screen's best (auto-reset).
+  // The selected terminal's screen keys: fit it to the screen (and back), or size its text to fit.
   useEffect(() => {
-    const onFit = () => { if (selectedRef.current) setOverlay((v) => !v); };
-    const onReset = () => { if (selectedRef.current) fontCtlRef.current.best(); };
-    window.addEventListener("hivemind:fit-overlay", onFit);
-    window.addEventListener("hivemind:reset-scale", onReset);
-    return () => {
-      window.removeEventListener("hivemind:fit-overlay", onFit);
-      window.removeEventListener("hivemind:reset-scale", onReset);
-    };
+    const offFit = onShortcut("fit-to-screen", () => { if (!selectedRef.current) return false; setOverlay((v) => !v); });
+    const offReset = onShortcut("reset-scale", () => { if (!selectedRef.current) return false; fontCtlRef.current.best(); });
+    return () => { offFit(); offReset(); };
   }, []);
 
   useEffect(() => {

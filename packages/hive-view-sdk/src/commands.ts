@@ -9,7 +9,7 @@ export interface PluginCommand {
   /** What its JSON argument holds, in a line: `{ "text": string }`. Absent: it takes none. */
   args?: string;
   /** The keys that run it (`mod+shift+k`, `mod+alt+arrowleft`): while focus is in the plugin, and
-   *  for the active view anywhere in the app, a terminal too. `mod` is Cmd on a Mac, Ctrl elsewhere. */
+   *  for the active view while nothing is typed into: a terminal or a field keeps its keys. `mod` is Cmd on a Mac, Ctrl elsewhere. */
   keys?: string;
 }
 
@@ -36,7 +36,7 @@ export function parsePluginCommands(raw: unknown): { commands: PluginCommand[] }
   return { commands };
 }
 
-interface Chord { mod: boolean; ctrl: boolean; meta: boolean; alt: boolean; shift: boolean; key: string }
+export interface Chord { mod: boolean; ctrl: boolean; meta: boolean; alt: boolean; shift: boolean; key: string }
 
 /** The physical key a printable character names, so `shift` does not change what it is. */
 const CODE: Record<string, string> = {
@@ -63,6 +63,12 @@ function kept(c: Chord): boolean {
 /** `mod+shift+k` read, or null when it is not modifiers and one key, or is a key the terminals and
  *  the app keep (`kept`). */
 export function parseChord(raw: string): Chord | null {
+  const c = readChord(raw);
+  return c && !kept(c) ? c : null;
+}
+
+/** `mod+shift+k` read, any key: null when it is not modifiers and one key. */
+export function readChord(raw: string): Chord | null {
   const parts = raw.toLowerCase().split("+");
   // `+` itself is the key when the chord ends in it: "mod++".
   if (raw.endsWith("++")) { parts.splice(-2, 2, "+"); }
@@ -74,7 +80,7 @@ export function parseChord(raw: string): Chord | null {
     } else if (!c.key && (p.length === 1 || NAMED.has(p))) c.key = p;
     else return null;
   }
-  return c.key && !kept(c) ? c : null;
+  return c.key ? c : null;
 }
 
 function sameChord(a: string, b: string): boolean {
@@ -88,7 +94,11 @@ export interface KeyPress { key: string; code: string; ctrlKey: boolean; metaKey
 /** Whether this key press is the chord. `mac`: `mod` is Cmd, otherwise Ctrl. */
 export function chordMatches(chord: string, e: KeyPress, mac: boolean): boolean {
   const c = parseChord(chord);
-  if (!c) return false;
+  return !!c && pressIs(c, e, mac);
+}
+
+/** Whether this key press is the chord read. */
+export function pressIs(c: Chord, e: KeyPress, mac: boolean): boolean {
   const ctrl = c.ctrl || (c.mod && !mac);
   const meta = c.meta || (c.mod && mac);
   if (e.ctrlKey !== ctrl || e.metaKey !== meta || e.altKey !== c.alt || e.shiftKey !== c.shift) return false;

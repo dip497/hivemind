@@ -9,6 +9,7 @@
  * (plain Esc belongs to a focused TUI — claude interrupts on it). One capture
  * listener per mounted bar; the most recently mounted wins.
  */
+import { onShortcut } from "../shortcut";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, X } from "../components/icons";
 import { Button } from "../components/ui/button";
@@ -37,15 +38,7 @@ export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas
   // "unknown" forever. Same rule as LayersPanel: no entry on the bus = idle.
   const [status, setStatus] = useState<TileStatusKind | null>(() => commands.tileStatus(tileId));
   useEffect(() => commands.subscribeTileStatus(tileId, (s) => setStatus(s)), [tileId, commands]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || !e.shiftKey) return;
-      e.preventDefault(); e.stopPropagation();
-      onUndock();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onUndock]);
+  useEffect(() => onShortcut("undock", onUndock), [onUndock]);
   const popOut = () => {
     commands.selectTile(tileId);
     commands.focusTile(tileId, { exact: true });

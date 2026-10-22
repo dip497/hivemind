@@ -104,8 +104,7 @@ function AppearancePrefs() {
 
 // ── Shortcuts (read-only) ───────────────────────────────────────────────────
 
-// VS Code's keys, split by who sees them: "Anywhere" is intercepted before a terminal does
-// (main process), "On the canvas" only applies when nothing is being typed into.
+// The keymap's rows (shared/keymap.ts), split by where they work.
 const SHORTCUTS_ANYWHERE: [string, string][] = [
   ["⌘/Ctrl + ⇧ + `", "New terminal"],
   ["⌘/Ctrl + ⇧ + A", "New agent"],
@@ -115,12 +114,13 @@ const SHORTCUTS_ANYWHERE: [string, string][] = [
   ["⌘/Ctrl + Tab", "Next tile (⇧ for previous)"],
   ["⌘/Ctrl + ,", "Settings"],
   ["⌘/Ctrl + .", "Focus the selected tile"],
-  ["⌘/Ctrl + ⇧ + F", "Fit the selected terminal to the screen"],
+  ["⌘/Ctrl + ⇧ + F", "Fit the selected terminal to the screen, and back"],
+  ["⌘/Ctrl + ⇧ + 0", "Size the selected terminal's text to the screen"],
   ["F11", "Full screen"],
   ["⌘/Ctrl + Q", "Quit, asking first while agents or terminals run"],
 ];
 const SHORTCUTS_CANVAS: [string, string][] = [
-  ["⌘/Ctrl + B", "Show or hide Layers (⌘ works in a terminal too)"],
+  ["⌘/Ctrl + B", "Show or hide Layers (⌘B in a terminal too)"],
   ["⌘/Ctrl + E", "Switch views, in any view"],
   ["1", "New terminal"],
   ["2", "New agent"],
@@ -132,13 +132,20 @@ const SHORTCUTS_CANVAS: [string, string][] = [
   ["⌘/Ctrl + Z / ⇧Z", "Undo / redo on the board"],
   ["⌘/Ctrl + = / −", "Zoom in / out"],
   ["⌘/Ctrl + 0", "Zoom to 100%"],
-  ["Esc", "Fit everything in view"],
+  ["Esc", "Leave full screen, or fit everything in view"],
   ["⌘/Ctrl + O", "Open a folder as the project"],
   ["⌘/Ctrl + R", "Open a recent project"],
   [".", "Focus the selected tile"],
   ["⌘/Ctrl + W", "Close the selected tile"],
   ["F2", "Rename the selected frame"],
   ["⇧ Esc", "Undock a tile from a scene view"],
+];
+
+const SHORTCUTS_TERMINAL: [string, string][] = [
+  ["⇧ + Enter", "A new line in an agent's prompt"],
+  ["⌘/Ctrl + C", "Copy the selection; with none, the program's Ctrl+C"],
+  ["⌘/Ctrl + = / − / 0", "Text size"],
+  ["⌘/Ctrl + ⇧ + K", "Take back the keyboard from a guest"],
 ];
 
 function ShortcutList({ items }: { items: [string, string][] }) {
@@ -160,8 +167,11 @@ function ShortcutPrefs() {
       <Section title="Anywhere" hint="Work even while a terminal has focus — everything else goes to the terminal">
         <ShortcutList items={SHORTCUTS_ANYWHERE} />
       </Section>
-      <Section title="On the canvas" hint="When no terminal or editor has focus; inside one, ⌘/Ctrl + = / − / 0 size its text">
+      <Section title="On the canvas" hint="When no terminal or field has focus">
         <ShortcutList items={SHORTCUTS_CANVAS} />
+      </Section>
+      <Section title="In a terminal" hint="Every other key goes to the program">
+        <ShortcutList items={SHORTCUTS_TERMINAL} />
       </Section>
     </div>
   );

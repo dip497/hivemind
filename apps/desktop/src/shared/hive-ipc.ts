@@ -183,13 +183,9 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     onUpdateProgress: (cb) => port.on("update:progress", cb),
     onBrowserPopup: (cb) => port.on("browser:popup", cb),
 
-    // Main intercepts the app's keys before the DOM (xterm would otherwise eat them) and re-emits
-    // each as its own message.
-    onMenuToggleLayers: (cb) => port.on("menu:toggle-layers", () => cb()),
-    onMenuFitOverlay: (cb) => port.on("menu:fit-overlay", () => cb()),
-    onMenuResetScale: (cb) => port.on("menu:reset-scale", () => cb()),
+    // Main takes the app's keys before the page (a terminal would otherwise have them) and sends
+    // each as the keymap action it is.
     onMenuShortcut: (cb) => port.on("menu:shortcut", cb),
-    onMenuFocusTile: (cb) => port.on("menu:focus-tile", () => cb()),
 
     getLaunchTarget: local("getLaunchTarget", invoke("getLaunchTarget")),
     newWindow: local("window:new", invoke("window:new")),
