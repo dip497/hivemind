@@ -24,7 +24,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
-- Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it.
+- Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.
 - Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
 - An agent whose background subagents never reported their end no longer shows "working" forever: two minutes after the last subagent signal they stop counting, now on the daemon that runs the agent.
 

@@ -92,6 +92,11 @@ const liveMounts = new Map<string, number>();
 /** Each mounted terminal's "your tile is closing", by tile id. */
 const closing = new Map<string, Set<() => void>>();
 
+/** The kitty keyboard flags the program turned on; 0 while it reads keys the old way. */
+function kittyFlags(term: Terminal): number {
+  return (term as unknown as { _core?: { coreService?: { kittyKeyboard?: { flags?: number } } } })._core?.coreService?.kittyKeyboard?.flags ?? 0;
+}
+
 /**
  * A tile is closing, however it is closed: end what runs in it. A mounted terminal kills its
  * session as it unmounts, and kills what a spawn still in flight attaches to; with none mounted
@@ -364,6 +369,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       cursorBlink: false,
       scrollback: SCROLLBACK,
       allowProposedApi: true,
+      // A program may ask for keys by the kitty protocol: Shift+Enter, Ctrl+I and Tab stay apart.
+      vtExtensions: { kittyKeyboard: true },
       // Render perf + UX tuning
       fastScrollSensitivity: 5,           // Alt-wheel jumps 5x faster
       scrollSensitivity: 1,
@@ -380,8 +387,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       // Rescale glyphs that overflow their cell (powerline, wide Unicode,
       // ligature-ish forms) instead of letting them clip/smear — sharper edges.
       rescaleOverlappingGlyphs: true,
-      // box-drawing / block chars drawn as crisp vectors, not font bitmaps.
-      customGlyphs: true,
       // Atlas (glyph cache) — "dynamic" is the default; be explicit.
       // The WebGL renderer (loaded below) reuses the atlas across frames.
     });
@@ -833,9 +838,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         e.preventDefault();
         return false;
       }
-      // Shift+Enter: a new line in the prompt, not a send. A program that reads keys by the kitty
-      // protocol is told Shift+Enter as itself; until then ESC CR, which agents read as Alt+Enter.
-      if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Shift+Enter: a new line in the prompt, not a send. A program that turned the kitty protocol
+      // on is told Shift+Enter as itself; any other gets ESC CR, which agents read as Alt+Enter.
+      if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !kittyFlags(term)) {
         term.input("\x1b\r", true);
         e.preventDefault();
         return false;

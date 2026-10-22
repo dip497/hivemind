@@ -16,7 +16,7 @@ export type ToScreens =
 
 export type FromScreens =
   /** `at`: the output position the screen covers; `mouse`: the mouse encoding the screen omits. */
-  | { t: "screen"; req: number; text: string | null; at: number; mouse: string }
+  | { t: "screen"; req: number; text: string | null; at: number; modes: string }
   | { t: "rows"; req: number; rows: Array<[string, string]> }
   /** How far each session's terminal has taken in its output: id, epoch, position. */
   | { t: "parsed"; at: Array<[string, string, number]> }

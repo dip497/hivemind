@@ -27,13 +27,22 @@ const SerializeAddon = pick<SerializeCtor>(SerializeAddonNS, "SerializeAddon");
  * Sent after the screen so the client's terminal reports the way the app expects.
  */
 function mouseEncodingSeq(term: InstanceType<HeadlessCtor>): string {
-  const t = term as unknown as { modes: { mouseTrackingMode: string }; _core?: { coreMouseService?: { activeEncoding?: string } } };
+  const t = term as unknown as { modes: { mouseTrackingMode: string }; _core?: { mouseStateService?: { activeEncoding?: string } } };
   if (t.modes.mouseTrackingMode === "none") return "";
-  switch (t._core?.coreMouseService?.activeEncoding) {
+  switch (t._core?.mouseStateService?.activeEncoding) {
     case "SGR": return "\x1b[?1006h";
     case "SGR_PIXELS": return "\x1b[?1016h";
     default: return "";
   }
+}
+
+/**
+ * What it loses about the keyboard: the kitty protocol flags a program turned on (`CSI > flags u`).
+ * Without them the client's terminal sends keys the old way, and Shift+Enter is Enter again.
+ */
+function kittyFlagsSeq(term: InstanceType<HeadlessCtor>): string {
+  const flags = (term as unknown as { _core?: { coreService?: { kittyKeyboard?: { flags?: number } } } })._core?.coreService?.kittyKeyboard?.flags ?? 0;
+  return flags ? `\x1b[=${flags};1u` : "";
 }
 
 interface Screen {
@@ -84,7 +93,7 @@ function current(id: string, epoch: string): Screen | undefined {
 
 function open(m: Extract<ToScreens, { t: "open" }>): void {
   close(m.id);
-  const term = new Terminal({ cols: m.cols, rows: m.rows, scrollback: m.scrollback, allowProposedApi: true });
+  const term = new Terminal({ cols: m.cols, rows: m.rows, scrollback: m.scrollback, allowProposedApi: true, vtExtensions: { kittyKeyboard: true } });
   const serializer = new SerializeAddon();
   term.loadAddon(serializer);
   const s: Screen = { id: m.id, epoch: m.epoch, term, serializer, parsed: m.parsed, paste: false };
@@ -102,8 +111,8 @@ function write(s: Screen, data: string, end: number): void {
   });
 }
 
-/** Run `then` once the terminal has taken in everything sent before it: a resize, a screen, the
- *  rows or its end keep their place among the session's output. */
+/** Run `then` once the terminal has taken in everything sent before it: a screen, the rows or its
+ *  end keep their place among the session's output. */
 function inTurn(s: Screen, then: () => void): void {
   s.term.write("", then);
 }
@@ -129,13 +138,15 @@ port.on("message", (m: ToScreens) => {
     case "write": { const s = current(m.id, m.epoch); if (s) write(s, m.data, m.end); break; }
     case "resize": {
       const s = current(m.id, m.epoch);
-      if (s) inTurn(s, () => { s.last = undefined; s.term.resize(m.cols, m.rows); });
+      // A resize takes in everything written before it first, so it keeps its place in the output.
+      // From inside a write's callback that flush never ends, and nothing after it is answered.
+      if (s) { s.last = undefined; s.term.resize(m.cols, m.rows); }
       break;
     }
     case "screen": {
       const s = current(m.id, m.epoch);
-      if (!s) { post({ t: "screen", req: m.req, text: null, at: 0, mouse: "" }); break; }
-      inTurn(s, () => post({ t: "screen", req: m.req, text: screenOf(s, m.lines), at: s.parsed, mouse: mouseEncodingSeq(s.term) }));
+      if (!s) { post({ t: "screen", req: m.req, text: null, at: 0, modes: "" }); break; }
+      inTurn(s, () => post({ t: "screen", req: m.req, text: screenOf(s, m.lines), at: s.parsed, modes: mouseEncodingSeq(s.term) + kittyFlagsSeq(s.term) }));
       break;
     }
     case "rows": {
