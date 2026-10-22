@@ -1,5 +1,5 @@
-import { expect, test } from "bun:test";
-import { StatusStore, isSessionStatus, type SessionStatus, type StatusChange } from "../src/status-store.js";
+import { expect, jest, test } from "bun:test";
+import { StatusStore, SUBAGENT_GRACE_MS, isSessionStatus, type SessionStatus, type StatusChange } from "../src/status-store.js";
 
 const store = () => { let t = 1000; const s = new StatusStore({ now: () => ++t }); return s; };
 
@@ -260,5 +260,28 @@ test("only a status as a host sends it is taken from the wire", () => {
   for (const bad of [null, "working", { ...ok, state: "busy" }, { ...ok, kind: "coffee" }, { ...ok, subagents: [1] }, { ...ok, source: "guess" },
     { ...ok, since: "now" }, { ...ok, background: "2" }, { ...ok, compacting: 1 }, { ...ok, title: 7 }, { ...ok, says: 7 }, { ...ok, session: 7 }]) {
     expect(isSessionStatus(bad)).toBe(false);
+  }
+});
+
+test("subagents whose stop never came stop counting once no subagent edge has come for the grace window, on the store that hosts the session", () => {
+  jest.useFakeTimers();
+  try {
+    const s = new StatusStore();
+    s.event("a", { event: "turn.started" });
+    for (const agentId of ["x", "y", "z"]) s.event("a", { event: "subagent.started", agentId });
+    s.event("a", { event: "subagent.stopped", agentId: "x" });
+    s.event("a", { event: "turn.ended", outcome: "done" }); // y and z never report their stop
+    jest.advanceTimersByTime(SUBAGENT_GRACE_MS - 1);
+    expect(s.get("a")).toMatchObject({ state: "done", subagents: ["y", "z"] });
+    jest.advanceTimersByTime(1);
+    expect(s.get("a")).toMatchObject({ state: "done", subagents: [] });
+
+    // A mirror shows its host's subagents, never drained here.
+    const viewer = new StatusStore();
+    viewer.mirror("a", { ...s.get("a")!, subagents: ["y"] });
+    jest.advanceTimersByTime(SUBAGENT_GRACE_MS);
+    expect(viewer.get("a")?.subagents).toEqual(["y"]);
+  } finally {
+    jest.useRealTimers();
   }
 });

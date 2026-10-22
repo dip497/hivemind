@@ -71,6 +71,10 @@ export function isSessionStatus(x: unknown): x is SessionStatus {
     && (s.session === undefined || typeof s.session === "string");
 }
 
+/** Subagent starts and stops are not a matched pair: a stop is lost when a subagent errors, the
+ *  turn is interrupted or the process dies. A set that hears no edge for this long has lost them. */
+export const SUBAGENT_GRACE_MS = 120_000;
+
 export class StatusStore {
   private sessions = new Map<string, SessionStatus>();
   /** Sessions another machine hosts, whose status is that host's. */
@@ -87,7 +91,10 @@ export class StatusStore {
   private listeners = new Set<(c: StatusChange) => void>();
   private screenListeners = new Set<(tileId: string, reading: ScreenReading) => void>();
 
-  constructor(private readonly opts: { now?: () => number } = {}) {}
+  /** Each session's pending drain of subagents whose stop never came. */
+  private lostStops = new Map<string, ReturnType<typeof setTimeout>>();
+
+  constructor(private readonly opts: { now?: () => number; onLostStops?: (tileId: string, count: number) => void } = {}) {}
 
   private now(): number { return this.opts.now?.() ?? Date.now(); }
 
@@ -123,6 +130,29 @@ export class StatusStore {
     const session = "event" in input && input.sessionId ? { session: input.sessionId } : {};
     const running = cur?.state === "working" && !("event" in input && input.event.startsWith("session.")) ? { state: "working" as const } : {};
     this.apply(tileId, "hooks", (s) => ({ ...foldStatus(fromScreen ? { ...s, ...INITIAL_STATUS, kind: undefined, ...running } : s, input), ...session }));
+    if ("event" in input && (input.event.startsWith("subagent.") || input.event === "turn.ended")) this.watchSubagents(tileId);
+  }
+
+  /** Every subagent edge, and a turn's end, push the drain out; a set that empties cancels it. A
+   *  subagent still running in the background keeps sending edges, so it is never drained. */
+  private watchSubagents(tileId: string): void {
+    this.stopWatching(tileId);
+    if (!this.sessions.get(tileId)?.subagents.length) return;
+    const timer = setTimeout(() => {
+      this.lostStops.delete(tileId);
+      const left = this.sessions.get(tileId)?.subagents ?? [];
+      if (!left.length || this.mirrored.has(tileId)) return;
+      this.apply(tileId, "hooks", (s) => ({ ...s, subagents: [] }));
+      this.opts.onLostStops?.(tileId, left.length);
+    }, SUBAGENT_GRACE_MS);
+    timer.unref?.();
+    this.lostStops.set(tileId, timer);
+  }
+
+  private stopWatching(tileId: string): void {
+    const t = this.lostStops.get(tileId);
+    if (t !== undefined) clearTimeout(t);
+    this.lostStops.delete(tileId);
   }
 
   /** The screen, read by whoever renders it, and for a wait what screen it says it is: kept as
@@ -171,6 +201,7 @@ export class StatusStore {
 
   /** The process ended: nothing it was doing is still true. */
   exited(tileId: string): void {
+    this.stopWatching(tileId);
     const cur = this.sessions.get(tileId);
     this.apply(tileId, cur?.source ?? null, (s) => ({ ...foldStatus(s, { fact: "exited" }), title: undefined }));
   }
@@ -224,6 +255,7 @@ export class StatusStore {
   }
 
   forget(tileId: string): void {
+    this.stopWatching(tileId);
     this.hosted.delete(tileId);
     this.heldHere.delete(tileId);
     this.sessions.delete(tileId);

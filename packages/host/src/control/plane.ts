@@ -28,7 +28,6 @@ import { OutputRecorder } from "./output-recorder.js";
 import { PipeManager } from "./pipes.js";
 import { SpawnRecords } from "./spawn-records.js";
 import type { HcpCall } from "./protocol.js";
-import { SubagentReaper } from "./subagent-reaper.js";
 import { TurnTracker } from "./turn-tracker.js";
 import { Waits } from "../waits.js";
 import { socketIn } from "../socket-in.js";
@@ -76,10 +75,6 @@ export interface ControlPlaneOptions {
   waitingOf?(bareTile: string): AgentItem["waiting"];
 }
 
-/** A lost SubagentStop (the subagent errored, the turn was interrupted, the session compacted)
- *  would pin a tile's subagents forever: once the last subagent edge is this old, the plane
- *  reports the rest stopped. Every edge pushes the deadline out. */
-const SUBAGENT_REAP_MS = 120_000;
 /** Anti-fork-bomb: at most this many control-plane spawns a minute by each tree of callers… */
 const SPAWNS_A_MINUTE = 16;
 /** …and this many by all of them. */
@@ -97,7 +92,7 @@ export class ControlPlane {
   readonly turns = new TurnTracker();
   /** Every agent session's status, by bare tile id: hooks first, the screen for agents without
    *  them, exits and interrupt keys observed here. */
-  readonly status = new StatusStore();
+  readonly status: StatusStore;
   /** What agents wait on that an answer ends: plans, supervised tool uses. */
   readonly waits: Waits;
   /** Which agent runs in each tile (bare id → provider id), as it was started. */
@@ -116,7 +111,6 @@ export class ControlPlane {
   private readonly pipes = new PipeManager();
   /** Spawn links now (child → parent): what a client that opens late starts from. */
   private readonly spawnWires = new Map<string, string>();
-  private readonly reaper: SubagentReaper;
   /** Terminals an answer's keys are going into, and the writes held until its last is in. */
   private readonly typing = new Map<string, Array<() => void>>();
   private made: Dispatcher | null = null;
@@ -135,15 +129,11 @@ export class ControlPlane {
       this.spawnWires.set(child, r.spawner);
       if (r.reports) this.pipes.connect(child, r.spawner);
     }
+    this.status = new StatusStore({ onLostStops: (tileId, n) => o.diag?.(`[subagent-reap] tile=${tileId} drained ${n} with no subagent edge for the grace window`) });
     this.waits = new Waits({ status: this.status, changed: () => o.waitsChanged?.() });
     this.status.subscribe((change) => o.publish("status.changed", change));
     // A spawned worker that starts waiting is reported to its parent; no dispatcher yet, no workers.
     this.status.subscribe((change) => this.made?.onStatus(change.tileId, change.status));
-    this.reaper = new SubagentReaper(SUBAGENT_REAP_MS, (tileId) => {
-      const left = this.status.get(tileId)?.subagents ?? [];
-      for (const agentId of left) this.status.event(tileId, { event: "subagent.stopped", agentId });
-      if (left.length) o.diag?.(`[subagent-reap] tile=${tileId} drained ${left.length} ${SUBAGENT_REAP_MS}ms after the last edge`);
-    });
     this.mailbox = new Mailbox((ptyId, data, paste) => this.write(ptyId, data, paste), SUBMIT_DELAY_MS, (ptyId) => {
       // Waiting on a prompt of its own, a message typed there would answer it (Enter allows).
       const bare = toBareId(ptyId);
@@ -323,7 +313,6 @@ export class ControlPlane {
    *  whom it started stay until its tile is closed (`forget`): a restart is not a removal. */
   exited(tileId: string): void {
     const bare = toBareId(tileId);
-    this.reaper.cancel(bare);
     this.mailbox.forget(toPtyId(tileId));
     this.inbox.forget(bare);
     this.inTurn.delete(bare);
@@ -417,11 +406,6 @@ export class ControlPlane {
     }
     const pid = toPtyId(evt.tileId);
     this.status.event(bare, evt);
-    if (evt.event === "subagent.started" || evt.event === "subagent.stopped" || evt.event === "turn.ended") {
-      // Re-arm the lost-edge watchdog while subagents run; cancel it once they drain.
-      if (this.status.get(bare)?.subagents.length) this.reaper.arm(bare);
-      else this.reaper.cancel(bare);
-    }
     // Hold agent-to-agent messages while this tile is mid-turn (its TUI would swallow them),
     // release one at its prompt.
     if (evt.event === "turn.started") { this.mailbox.setBusy(pid); return; }

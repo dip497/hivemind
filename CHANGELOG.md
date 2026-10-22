@@ -26,6 +26,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it.
 - Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
+- An agent whose background subagents never reported their end no longer shows "working" forever: two minutes after the last subagent signal they stop counting, now on the daemon that runs the agent.
 
 ## [2026.10.5] — 2026-10-21
 
