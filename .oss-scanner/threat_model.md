@@ -29,12 +29,13 @@ product, and it shapes what counts as a boundary below.
 
 1. **Plugins from HiveHub or a folder.** Three kinds, three trust levels:
    - **Views** run untrusted. Each is a page on its own `hm-view:` origin, in an iframe with
-     `sandbox="allow-scripts"` and no `allow-same-origin`
+     `sandbox="allow-scripts allow-forms"` and no `allow-same-origin`
      (`apps/desktop/src/renderer/src/workspace/views/community/CommunityView.tsx`), served with a
-     CSP of `default-src 'none'`, `connect-src 'none'`, `frame-src 'none'`
-     (`pluginCsp` in `packages/hive-core/src/view-files.ts`). Files are confined to the package by
-     path and realpath (`resolvePackageFile`, same file). A view talks only over one
-     `MessageChannel`; every message is parsed and refused if malformed
+     CSP of `default-src 'none'`, `connect-src 'none'`, `frame-src 'none'`, `form-action 'none'`
+     (`pluginCsp` in `packages/hive-core/src/view-files.ts`): a form fires its `submit` event and
+     goes nowhere. Files are confined to the package by path and realpath (`resolvePackageFile`,
+     same file). A view talks only over one `MessageChannel`; every message is parsed and refused
+     if malformed
      (`parsePluginMessage` in `packages/hive-view-sdk/src/protocol.ts`), rate-limited and disabled
      for the session past its budget (`LIMITS` in `packages/view-host/src/link.ts`), and a view
      burning CPU is disabled by a watchdog (`startViewWatchdog` in
@@ -116,7 +117,13 @@ product, and it shapes what counts as a boundary below.
 11. **The Browser tile.** A `<webview>` showing any web page, with its preload removed and Node
     off (`will-attach-webview` in `apps/desktop/src/main/index.ts`), and a local browser server on
     127.0.0.1 behind a cookie traded for a token, same-origin and Host checks
-    (`apps/desktop/src/main/browser-server.ts`, `browser-gate.ts`).
+    (`apps/desktop/src/main/browser-server.ts`, `browser-gate.ts`). What a page may use (the
+    camera, the microphone, the location, notifications, another program for a link…) is decided
+    by the permission handlers on both sessions (`apps/desktop/src/main/permissions.ts`, rules in
+    `permissions-core.ts`), on the requesting frame's URL: a site in a Browser tile asks the
+    person on its tile, and the answer is kept per site and right until the app quits; a view's
+    frame and a tool's page get nothing; the app's own page gets only notifications and clipboard
+    writes.
 
 ## What matters most
 

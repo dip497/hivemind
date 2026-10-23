@@ -40,24 +40,58 @@ test("a view's frame, a tool's page or any other plugin page in the app's window
 test("a page in a Browser tile gets the harmless ones, is refused what the app cannot give, and asks for the rest", () => {
   const site = "https://maps.example.com/route?to=home";
   const rows: Array<[string, Decision]> = [
+    // What Chrome gives without asking.
     ["fullscreen", "allow"],
     ["clipboard-sanitized-write", "allow"],
     ["pointerLock", "allow"],
+    ["keyboardLock", "allow"],
+    ["persistent-storage", "allow"],
+    ["mediaKeySystem", "allow"],
+    ["screen-wake-lock", "allow"],
+    ["sensors", "allow"],
+    ["background-sync", "allow"],
     ["media", "ask"],
     ["geolocation", "ask"],
+    ["geolocation-approximate", "ask"],
     ["notifications", "ask"],
     ["midi", "ask"],
     ["midiSysex", "ask"],
     ["clipboard-read", "ask"],
     ["idle-detection", "ask"],
     ["window-management", "ask"],
+    ["fileSystem", "ask"],
+    ["local-fonts", "ask"],
+    ["local-network-access", "ask"],
+    ["local-network", "ask"],
+    ["loopback-network", "ask"],
     ["a-permission-chromium-adds-later", "ask"],
-    // A device needs a chooser and a screen a picker, and the app has neither: asking would
-    // promise what the person's Allow could not give.
+    // A device or a speaker needs a chooser and a screen a picker, and the app has neither: asking
+    // would promise what the person's Allow could not give.
     ["display-capture", "deny"],
+    ["captured-surface-control", "deny"],
     ["hid", "deny"],
     ["serial", "deny"],
     ["usb", "deny"],
+    ["speaker-selection", "deny"],
+    // What the app does not drive, or Chrome gives only to an installed web app.
+    ["ar", "deny"],
+    ["vr", "deny"],
+    ["hand-tracking", "deny"],
+    ["nfc", "deny"],
+    ["payment-handler", "deny"],
+    ["background-fetch", "deny"],
+    ["web-app-installation", "deny"],
+    ["web-printing", "deny"],
+    ["smart-card", "deny"],
+    ["system-wake-lock", "deny"],
+    ["periodic-background-sync", "deny"],
+    ["automatic-fullscreen", "deny"],
+    // Cookies across a pair of sites, which an answer per site cannot say.
+    ["storage-access", "deny"],
+    ["top-level-storage-access", "deny"],
+    // Reading the clipboard unasked, and a right with no name to tell the person.
+    ["deprecated-sync-clipboard-read", "deny"],
+    ["unknown", "deny"],
   ];
   for (const [permission, want] of rows) {
     assert.equal(decide({ permission, url: site, guest: true, appPage: APP }), want, permission);

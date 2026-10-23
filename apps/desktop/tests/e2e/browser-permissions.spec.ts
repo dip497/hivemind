@@ -13,13 +13,13 @@ import path from "node:path";
 let app: ElectronApplication;
 let page: Page;
 const servers: Server[] = [];
-/** Three servers' ports: three sites on one address. */
+/** Four servers' ports: four sites on each of two names for this computer. */
 const ports: number[] = [];
 let tileId = "";
 const root = mkdtempSync(path.join(tmpdir(), "hm-permissions-"));
 
 test.beforeAll(async () => {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const server = createServer((_q, r) => { r.setHeader("content-type", "text/html"); r.end("<!doctype html><title>asks</title><p>a site that asks</p>"); });
     await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
     servers.push(server);
@@ -128,6 +128,43 @@ test("the question shows over the page without moving it, and a click landing th
 
 const where = "new Promise((ok) => navigator.geolocation.getCurrentPosition(() => ok('granted'), (e) => ok(e.code === 1 ? 'denied' : 'unavailable')))";
 
+test("each question waits its own moment: a click landing as the next one takes its place answers nothing", async () => {
+  await visit(`http://localhost:${ports[3]}/`);
+  // Count the questions that reach the window: both are waiting before the first is answered.
+  await page.evaluate(() => {
+    const w = window as unknown as { asked: number; stopCounting: () => void };
+    w.asked = 0;
+    w.stopCounting = window.hive.onBrowserPermission((e) => { if (!("done" in e)) w.asked++; });
+  });
+  await inPage("window.first = undefined; Notification.requestPermission().then((r) => { window.first = r; }); 0");
+  await expect(ask()).toContainText("wants to show notifications");
+  await start(where);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { asked: number }).asked)).toBe(2);
+  // A click that arrives as the location question shows where the notifications one was.
+  await page.evaluate(() => {
+    const w = window as unknown as { clickedEarly?: boolean };
+    w.clickedEarly = false;
+    new MutationObserver((_, watch) => {
+      const question = document.querySelector("[data-permission-ask]");
+      if (!question?.getAttribute("aria-label")?.includes("know your location")) return;
+      const allow = [...question.querySelectorAll("button")].find((b) => b.textContent === "Allow");
+      if (!allow) return;
+      watch.disconnect();
+      allow.click();
+      w.clickedEarly = true;
+    }).observe(document.body, { childList: true, subtree: true, attributes: true, characterData: true });
+  });
+  // The first has been on screen a while: Playwright's click waits for its buttons to take one.
+  await ask().getByRole("button", { name: "Block" }).click();
+  await expect.poll(() => inPage("window.first ?? null")).toBe("denied");
+  await expect.poll(() => page.evaluate(() => (window as unknown as { clickedEarly?: boolean }).clickedEarly ?? false)).toBe(true);
+  await expect(ask()).toContainText("wants to know your location");
+  expect(await answer()).toBeNull();
+  await ask().getByRole("button", { name: "Block" }).click();
+  await expect.poll(answer).toBe("denied");
+  await page.evaluate(() => (window as unknown as { stopCounting: () => void }).stopCounting());
+});
+
 test("a question goes when its page leaves, and is asked again rather than kept as a no", async () => {
   await visit(`http://127.0.0.1:${ports[0]}/before`);
   await start(where);
@@ -197,8 +234,10 @@ test("the site's panel allows notifications to a site that only reads whether it
 });
 
 test("a Block is taken back in the site's panel: the site is asked again", async () => {
-  // Blocked by the first test.
-  await visit(`http://127.0.0.1:${ports[0]}/`);
+  await visit(`http://127.0.0.1:${ports[2]}/`);
+  await start("Notification.requestPermission()");
+  await ask().getByRole("button", { name: "Block" }).click();
+  await expect.poll(answer).toBe("denied");
   await panel();
   await expect(right("Notifications").getByRole("radio", { name: "Block" })).toHaveAttribute("aria-checked", "true");
   await right("Notifications").getByRole("radio", { name: "Ask" }).click();

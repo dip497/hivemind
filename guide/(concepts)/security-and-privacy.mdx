@@ -39,10 +39,12 @@ the microphone, the location, and anything else you answered. Choose **Allow**, 
 **Ask** for each. Allow a site that only checks whether it may and never asks, or take back a
 **Block**.
 
-A site never opens a link that runs code or opens files here (`file:`, `javascript:`,
-`search-ms:`), and never gets your USB, serial or input devices or your screen: the app has no
-chooser for them. A view, or a page a tool shows in its tile, never gets any of these. A tool's own
-code runs in the app's page and gets what the app uses: notifications and copying.
+As in Chrome, a site does not ask to go full screen, copy, hold the pointer or the keys (holding
+**Esc** gives them back), keep the screen on, or keep its data when the disk runs short. A site never
+opens a link that runs code or opens files here (`file:`, `javascript:`, `search-ms:`), and never
+gets your USB, serial or input devices, a speaker or your screen: the app has no chooser for them.
+A view, or a page a tool shows in its tile, never gets any of these. A tool's own code runs in the
+app's page and gets what the app uses: notifications and copying.
 
 <Warning>
 With **Agent browser control** on, an agent drives Browser tiles over the Chrome DevTools Protocol,

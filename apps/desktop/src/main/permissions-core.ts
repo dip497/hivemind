@@ -29,12 +29,32 @@ export interface PermissionRequest {
 /** What the app's page uses: notifications (a widget's `hive.notify`) and copying (the Copy
  *  buttons, a terminal's selection). */
 const APP_USES = new Set(["notifications", "clipboard-sanitized-write"]);
-/** What any site gets: full screen in its tile's window, copying what it was given, and holding
- *  the pointer (a game, a 3D view), which Esc gives back. */
-const SITE_MAY = new Set(["fullscreen", "clipboard-sanitized-write", "pointerLock"]);
-/** What no site gets, as the app could not carry it out: a device is picked in a chooser and a
- *  screen in a picker, and the app has neither. */
-const SITE_NEVER = new Set(["hid", "serial", "usb", "display-capture"]);
+/** What any site gets, as Chrome gives it without asking: full screen in its tile's window,
+ *  copying what it was given, holding the pointer (a game, a 3D view) and, in full screen, the keys,
+ *  until Esc (held, for the keys), keeping its data when the disk runs short, playing protected
+ *  video, keeping the screen on while it shows, the motion sensors, and finishing a send once the
+ *  network is back. */
+const SITE_MAY = new Set([
+  "fullscreen", "clipboard-sanitized-write", "pointerLock", "keyboardLock", "persistent-storage",
+  "mediaKeySystem", "screen-wake-lock", "sensors", "background-sync",
+]);
+/** What no site gets. */
+const SITE_NEVER = new Set([
+  // A device or a speaker is picked in a chooser, and a screen in a picker (then steered), and the
+  // app has neither.
+  "hid", "serial", "usb", "speaker-selection", "display-capture", "captured-surface-control",
+  // What the app does not drive: a headset, NFC (a phone's), a payment sheet, a download running in
+  // the background.
+  "ar", "vr", "hand-tracking", "nfc", "payment-handler", "background-fetch",
+  // What Chrome gives only to a web app installed on the computer, or to no site; the app installs
+  // no web app.
+  "web-app-installation", "web-printing", "smart-card", "system-wake-lock", "periodic-background-sync", "automatic-fullscreen",
+  // Another site's cookies inside this one: about a pair of sites, and an answer here is per site.
+  "storage-access", "top-level-storage-access",
+  // Reading the clipboard without asking (Electron refuses it too when no handler is set), and a
+  // right the person could not be told the name of.
+  "deprecated-sync-clipboard-read", "unknown",
+]);
 /** Links a site never opens in another program: they run code or open files on this computer
  *  rather than start an app (Chromium's own refusals, and Windows' search-ms and ms-msdt). */
 const NEVER_OPENS = new Set([
