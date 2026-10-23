@@ -133,7 +133,8 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           name={`hm-view:${pkg.id}`}
           title={manifest.name}
           src={url}
-          sandbox="allow-scripts"
+          // Forms fire their submit event; the view's CSP (form-action 'none') sends them nowhere.
+          sandbox="allow-scripts allow-forms"
           referrerPolicy="no-referrer"
           onLoad={onLoad}
           className="absolute inset-0 h-full w-full border-0 bg-transparent"

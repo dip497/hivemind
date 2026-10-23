@@ -161,6 +161,9 @@ If its terminals end whenever the connection drops, the machine has no `hive`. U
 | An agent cannot use the browser | Switch on the Browser tool and **Agent browser control** on its page, restart, and open a Browser tile. |
 | A view is missing | Its page in **Settings → Plugins** says why. `hive plugins list --kind view` shows load errors. |
 | A Browser tile reloads after you switch views | Expected: tabs and history stay, the scroll position does not. |
+| A site in a Browser tile cannot use the camera, microphone, location or notifications | You blocked it, did not answer, or it checks without asking. Open **Site permissions** by the address and choose **Allow**, or **Ask** to be asked again. See [Sites in a Browser tile](/security-and-privacy#sites-in-a-browser-tile). |
+| A `mailto:`, meeting or app link in a Browser tile does nothing | The site asked to open it in another program and you blocked it, or did not answer. Choose **Allow** in **Site permissions** by the address, then click the link again. |
+| A site cannot use a USB, serial or input device, choose a speaker, or share your screen | A Browser tile never gives these. Open the site in your own browser. |
 | `no PTY daemon on … — start one with hive daemon start` | Run `hive daemon start`. |
 
 <LastValidated />

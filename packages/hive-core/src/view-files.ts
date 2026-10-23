@@ -47,7 +47,9 @@ export function resolvePackageFile(dir: string, rel: string): FileResolution {
 }
 
 /** The CSP every plugin document gets. No network (connect-src 'none'), no
- *  frames, forms, objects, nothing from any other scheme. Scripts come from
+ *  frames, objects, nothing from any other scheme. A form fires its submit
+ *  event (the frame allows forms) and form-action 'none' sends it nowhere.
+ *  Scripts come from
  *  the package or carry THIS response's nonce — which only the bootstrap page
  *  we generate ever has, so an inline script in a plugin's own page does not
  *  run; ship it as a `.js` file instead. The package is the view's own origin

@@ -25,6 +25,33 @@ Tell me: which tool plugins are switched on (they run with my access), which API
 - Each message it sends is checked against them. With `workspace:prompt`, you also confirm each prompt it writes.
 - What each permission allows: [Permissions](/extension-authoring#permissions). What else the sandbox stops: [The sandbox](/extension-authoring#the-sandbox).
 
+## Sites in a Browser tile
+
+A site in a Browser tile asks before it uses your camera, microphone or location, shows
+notifications, or opens a link in another program (`mailto:`, `zoommtg:`, `slack:`). The question
+shows over the top of the page and names the site and what it wants, with **Block** and **Allow**.
+They take a click once the question has been on screen for half a second, so a click meant for the
+page cannot answer it. Your answer holds for that site until you quit the app. A question you leave
+for a minute, or whose tab you close, is a no.
+
+The **Site permissions** button by the address lists what the site you are on may use: notifications, the camera,
+the microphone, the location, and anything else you answered. Choose **Allow**, **Block** or
+**Ask** for each. Allow a site that only checks whether it may and never asks, or take back a
+**Block**.
+
+As in Chrome, a site does not ask to go full screen, copy, hold the pointer or the keys (holding
+**Esc** gives them back), keep the screen on, or keep its data when the disk runs short. A site never
+opens a link that runs code or opens files here (`file:`, `javascript:`, `search-ms:`), and never
+gets your USB, serial or input devices, a speaker or your screen: the app has no chooser for them.
+A view, or a page a tool shows in its tile, never gets any of these. A tool's own code runs in the
+app's page and gets what the app uses: notifications and copying.
+
+<Warning>
+With **Agent browser control** on, an agent drives Browser tiles over the Chrome DevTools Protocol,
+and through it can give a site any of these without asking you. Switch it on only for agents you
+trust with your browser.
+</Warning>
+
 ## Tools start switched off
 
 A tool you install starts switched off, and you turn it on yourself. The tools that ship with

@@ -482,8 +482,10 @@ message or a host behaviour below.
   `frame-src hm-view:` and nothing else, confines reads to the package dirs of
   the last scan (never a path from the URL — traversal is a 403), and lets
   main stamp a CSP on every response.
-- **Sandbox.** `<iframe sandbox="allow-scripts">` — no `allow-same-origin`
-  (opaque origin), no forms, popups, top navigation, pointer lock, downloads.
+- **Sandbox.** `<iframe sandbox="allow-scripts allow-forms">` — no
+  `allow-same-origin` (opaque origin), popups, top navigation, pointer lock,
+  downloads. A form fires its `submit` event; `form-action 'none'` sends it
+  nowhere.
   Electron runs the preload only in the main frame, so there is no
   `window.hive`, no `process`, no `require` (asserted by the e2e suite from
   inside the frame). `parent.document` throws.
@@ -637,9 +639,9 @@ frame counted. Plugin authors never touch `postMessage`.
 
 | | |
 |---|---|
-| sandbox flags | `allow-scripts` only. No same-origin, forms, popups, modals, top-navigation, pointer-lock, downloads. |
+| sandbox flags | `allow-scripts` and `allow-forms`. A form fires its `submit` event; the plugin CSP's `form-action 'none'` sends it nowhere. No same-origin, popups, modals, top-navigation, pointer-lock, downloads. |
 | origin | `hm-view://<id>` per package, opaque under the sandbox. `frame-src hm-view:` is the only frame source the app allows; the plugin CSP has `frame-src 'none'`, so it cannot embed anything. |
-| CSP (plugin doc) | `default-src 'none'`; `connect-src 'none'`; scripts only from its own scheme or with the per-response nonce (no `unsafe-inline` for scripts); styles/media from its scheme (+ inline styles, data/blob); no objects, forms, base. Stamped by main on every response. |
+| CSP (plugin doc) | `default-src 'none'`; `connect-src 'none'`; scripts only from its own scheme or with the per-response nonce (no `unsafe-inline` for scripts); styles/media from its scheme (+ inline styles, data/blob); no objects or base; `form-action 'none'`, so a form fires `submit` and is sent nowhere. Stamped by main on every response. |
 | filesystem | main serves only files under the package dirs of the last scan, checked on the realpath (`..` and symlinks that leave the package → 403); unknown id → 404. No other IPC reaches a frame (no preload). Unit-tested; the browser's enforcement of the nonce is not unit-testable here (Chromium applies it) — it is covered by the community e2e spec loading the fixtures' external scripts. |
 | host API | none. No `window.hive`, `process`, `require`; `parent.document` throws. |
 | protocol | every inbound message validated (shape, ids, sizes, permission); ≥ 8 refusals, a flood, or a runaway disables the plugin for the session. |
