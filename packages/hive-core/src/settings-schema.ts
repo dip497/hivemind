@@ -186,46 +186,39 @@ export const SIGNAL: ThemePreset = {
   },
 };
 
-/** Clean: flat and quiet. True greys, no glass and no wallpaper, smaller corners; colour only for
- *  what needs you. One dark and one light, the same in all but lightness. */
+/** Clean: Signal made flat. The same graphite, the same one warm colour for what waits on you, with
+ *  no glass and no wallpaper; corners and fonts stay the person's (apps/desktop/DESIGN.md). */
 export const CLEAN: ThemePreset = {
   id: "clean",
   label: "Clean",
   mode: "dark",
-  palette: {
-    bg: "#0b0b0c", bg2: "#111113", bg3: "#18181b", bg4: "#202024",
-    line: "#232326", line2: "#2f2f33",
-    fg: "#ededef", fg2: "#b4b4bb", fg3: "#8b8b94",
-    select: "#b4b4bb",
-    ok: "#5bb98c", warn: "#e0a43a", err: "#e5686a",
-  },
+  palette: { ...SIGNAL.palette },
   accent: "graphite",
-  terminal: {
-    background: "#0b0b0c", foreground: "#e4e4e7", cursor: "#e4e4e7", selection: "rgba(228,228,231,0.20)",
-    ansi: ["#27272a", "#e5686a", "#5bb98c", "#e0a43a", "#6c9ef8", "#b18cf2", "#5cc0c8", "#d4d4d8",
-           "#52525b", "#f08385", "#7ccfa4", "#ecbc63", "#8db4fa", "#c5a7f6", "#7fd2d8", "#fafafa"],
-  },
-  look: { glass: false, wallpaper: "none", radius: 8 },
+  terminal: { ...SIGNAL.terminal, ansi: [...SIGNAL.terminal.ansi] },
+  look: { glass: false, wallpaper: "none" },
 };
 
+/** Clean Light: Clean's light twin on the same graphite (hue 250), composed for light rather than
+ *  inverted: a cooler ground under near-white sheets, ink and pencil that read on both, the status
+ *  colours dark enough to read as text, and Signal's muted terminal hues darkened for a light ground. */
 export const CLEAN_LIGHT: ThemePreset = {
   id: "clean-light",
   label: "Clean Light",
   mode: "light",
   palette: {
-    bg: "#fafafa", bg2: "#ffffff", bg3: "#f4f4f5", bg4: "#e9e9ec",
-    line: "#e4e4e7", line2: "#d4d4d8",
-    fg: "#18181b", fg2: "#3f3f46", fg3: "#6b6b76",
-    select: "#3f3f46",
-    ok: "#16794a", warn: "#a35f00", err: "#c53030",
+    bg: "oklch(0.955 0.004 250)", bg2: "oklch(0.99 0.002 250)", bg3: "oklch(0.975 0.003 250)", bg4: "oklch(0.93 0.004 250)",
+    line: "oklch(0.9 0.004 250)", line2: "oklch(0.84 0.006 250)",
+    fg: "oklch(0.24 0.006 250)", fg2: "oklch(0.42 0.006 250)", fg3: "oklch(0.52 0.006 250)",
+    select: "oklch(0.42 0.006 250)",
+    ok: "oklch(0.5 0.08 155)", warn: "oklch(0.54 0.13 62)", err: "oklch(0.52 0.13 30)",
   },
   accent: "graphite",
   terminal: {
-    background: "#ffffff", foreground: "#27272a", cursor: "#27272a", selection: "rgba(24,24,27,0.14)",
-    ansi: ["#27272a", "#c53030", "#16794a", "#8a5a00", "#1f5fd1", "#7c3aed", "#0e7490", "#71717a",
-           "#52525b", "#e05252", "#1f9d5c", "#a36b00", "#3b82f6", "#9061f9", "#0891b2", "#a1a1aa"],
+    background: "#F6F7F8", foreground: "#2A2D32", cursor: "#2A2D32", selection: "rgba(42,45,50,0.16)",
+    ansi: ["#2A2D32", "#A6564B", "#4E7A5C", "#8A6A24", "#4D6B94", "#735F97", "#3F7A80", "#7A7E85",
+           "#5A5F66", "#B8665A", "#5E8C6C", "#9C7B33", "#5E7DA6", "#856FA9", "#4F8C92", "#A3A7AD"],
   },
-  look: { glass: false, wallpaper: "none", radius: 8 },
+  look: { glass: false, wallpaper: "none" },
 };
 
 export const PRESETS: Record<string, ThemePreset> = {
@@ -259,14 +252,15 @@ export const PRESETS: Record<string, ThemePreset> = {
   },
 };
 
-/** The faces the app ships with: Geist for the interface, JetBrains Mono for terminals and code.
- *  A font setting is a CSS font list, so the system's own faces follow when one is missing. */
-export const UI_FONT = "\"Geist Sans\", \"Geist\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif";
+/** The faces the app ships with (apps/desktop/DESIGN.md): the operating system's own UI font for the
+ *  interface, JetBrains Mono for terminals and code. A font setting is a CSS font list, so the
+ *  system's faces follow when one is missing. Geist, bundled, stays a choice. */
+export const UI_FONT = "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif";
 export const MONO_FONT = "\"JetBrains Mono\", monospace";
-/** The system's own faces, for a person who prefers them. */
-export const SYSTEM_UI_FONT = "system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif";
+export const GEIST_FONT = "\"Geist Sans\", \"Geist\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif";
+/** The system's own monospace, for a person who prefers it. */
 export const SYSTEM_MONO_FONT = "ui-monospace, \"SF Mono\", Menlo, Consolas, \"DejaVu Sans Mono\", monospace";
-/** What `uiFont` held before it was applied: never drawn, so it is not anyone's choice (migration 0005). */
+/** What `uiFont` held before it was drawn, and what most settings.json files hold: the system font. */
 export const OLD_UI_FONT_DEFAULT = "system-ui, sans-serif";
 
 export const DEFAULT_APPEARANCE: Appearance = {

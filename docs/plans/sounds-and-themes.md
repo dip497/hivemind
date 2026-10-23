@@ -69,13 +69,13 @@ then Round 1, then this plan.
 | S2 | The sound player, built-in sounds, Notifications ▸ Sounds, `hive notifications` | ☐ |
 | S3 | Pop-ups grouped in a burst ("10 agents finished") | ☐ (needs a yes, see Decisions) |
 | T0 | HiveHub works out "needs Hivemind X or newer" for packages and views | ☐ |
-| T1 | Fonts that apply (migration 0005, CSS, terminal, `@font-face` from `hivemedia:`) | ☑ 2026-10-22 except `@font-face` (comes with T2's font files): the settings drive the app, terminals (live, atlas redrawn), diffs and the editor; migration 0005; Settings ▸ Appearance has Interface font and Code font |
+| T1 | Fonts that apply (the system font by default, CSS, terminal, `@font-face` from `hivemedia:`) | ☑ 2026-10-22 except `@font-face` (comes with T2's font files): the settings drive the app, terminals (live, atlas redrawn), diffs and the editor; migration 0005; Settings ▸ Appearance has Interface font and Code font |
 | T2 | The theme member: `theme.json`, its checks, a custom accent | ☐ |
 | T3 | Apply, revert and update a theme: app, CLI, files copied | ☐ |
 | T4 | A theme's sounds | ☐ |
 | T5 | Light mode audited, a light preset, light themes allowed | ◐ 2026-10-22: the app's dark-only sites follow the mode (page, toaster, editor, diffs, PatchView, diagrams, fullscreen chrome), main sets `nativeTheme` and the window background, light tokens for shadows, grid and syntax; **Clean Light** ships. Light themes from packages come with T2 |
 | T6 | Archipelago ships the **Harbour** theme (hivemind-plugins) | ☐ (after a release with T0–T4) |
-| C | **Clean** and **Clean Light** presets; corners (`appearance.radius`) that apply; a preset `look` (glass, wallpaper, corners), put back on leaving it (`appearance.lookBefore`) | ☑ 2026-10-23 (branch `feat/round0-clean-look`) |
+| C | **Clean** and **Clean Light** presets; corners (`appearance.radius`) that apply; a preset `look` (glass, wallpaper, corners), put back on leaving it (`appearance.lookBefore`) | ☑ 2026-10-23 (branch `feat/round0-clean-look`). Rebuilt the same day to `apps/desktop/DESIGN.md` after a review with the design-taste-frontend, Impeccable and Hallmark skills read the first version (Tailwind zinc, Geist, 8px) as the stock generated look: Clean is Signal's palette made flat, Clean Light its light twin on the same hue-250 graphite, corners stay the person's |
 | W | Widget workers: measured, ceiling written, no build | ☑ (2026-10-22, design §4c) |
 | R0 | Round 0 of the [gap review](../design/customization-gaps-2026-10-22.md): permission handlers (Browser tile asks, views and tools get nothing), forms in views (app and phone page), status by shape with one word list and a screen-reader line, shortcuts made from the keymap, sections that keep unknown keys, `hive config set` refusing unknown paths, theme files without media, widget notices through main; the canvas box clipped, never scrolled, so a press on a tile past its edge lands where aimed | ☑ 2026-10-23 (branch `feat/round0-clean-look`) |
 
@@ -274,11 +274,12 @@ Hivemind X or newer" before downloading.
 - The fix:
   - `--font-sans` and `--font-mono` read the user variables first (`styles.css:164-165`);
   - terminals take `monoFont` (an option change on open terminals, never a remount).
-- **The trap.** The stored default `uiFont` is `"system-ui, sans-serif"`, but the app draws Geist,
-  so wiring it naively changes everyone's font. So:
-  - `DEFAULT_APPEARANCE.uiFont` becomes the Geist stack;
-  - **migration 0005** (`0005-ui-font-default.ts`) rewrites a stored `uiFont` that equals the old
-    default to the new one, and leaves any other value.
+- **Not a trap after all.** The stored default `uiFont` is `"system-ui, sans-serif"` while the app
+  drew Geist, and wiring it turns everyone's interface into the system font. That is what
+  `apps/desktop/DESIGN.md` decided ("the UI font moves from bundled Geist Sans to the operating
+  system's own UI font"), so `DEFAULT_APPEARANCE.uiFont` is the DESIGN.md system stack, the old
+  value reads as **System** in the font row, and no migration rewrites anything. (A migration 0005
+  that kept Geist was written and removed before release, 2026-10-23.)
 - **Fonts from files.**
   - `appearance.fontFaces`: up to 4 entries of `{family, src, weight?, style?}`, each `src` a
     `hivemedia://media/…` woff2.
@@ -439,7 +440,7 @@ install.
 | 6 | READMEs | hivemind-plugins README: packages can hold themes. Archipelago's README: Harbour. |
 | 7 | HiveHub | T0 (`since.ts`), the theme member checked and listed, deploy order in its `docs/operations.md`. |
 | 8 | hivemind-plugins | Harbour, the SDK copy refreshed, CI against main and the release. |
-| 9 | Local data | Migration 0005 (the UI font default). New fields are additive and read as defaults when absent: `notifications.sounds` and `volume`; `appearance.theme`, `fontFaces` and `accentCustom`. No migration needed for those, since no stored value changes meaning. |
+| 9 | Local data | No migration: the stored font default already names the system font. New fields are additive and read as defaults when absent: `notifications.sounds` and `volume`; `appearance.theme`, `fontFaces` and `accentCustom`. No migration needed for those, since no stored value changes meaning. |
 | 10 | Contracts | The package manifest gains `themes`; older apps are handled by T0. No protocol bump. The drive socket gains two methods, an API minor version. |
 | 11 | Security | Themes carry no code. Each file is typed and sized at install and copied into the media folder at apply. CSP adds `hivemedia:` to `font-src` and `connect-src` only. Sounds are capped for length and loudness. Notification and theme changes from the CLI are person-only. |
 | 12 | Tests | As each step's **Done when**. Each new test is shown failing with what it guards removed, and the e2e specs run once per round. |

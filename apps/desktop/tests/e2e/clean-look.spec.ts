@@ -9,7 +9,8 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { seedAgents } from "./helpers/agents";
-import { MONO_FONT, UI_FONT } from "@hivemind/core/settings-schema";
+import { CLEAN_LIGHT, MONO_FONT, UI_FONT } from "@hivemind/core/settings-schema";
+import { cssColorToHex } from "@hivemind/core/css-color";
 
 test.use({ trace: "off" });
 
@@ -77,6 +78,8 @@ test("the corner setting rounds tiles and controls", async () => {
 });
 
 test("the font settings change the interface and the terminals", async () => {
+  // The interface speaks in the system's own font until a person picks another (DESIGN.md).
+  expect(await style("body", "font-family")).toMatch(/^system-ui/);
   await set("appearance.uiFont", '"Clean Test Sans", serif');
   await expect.poll(() => style("body", "font-family")).toContain("Clean Test Sans");
   // An agent's terminal, told its width: a serif face's cells are wider than JetBrains Mono's, so
@@ -89,7 +92,7 @@ test("the font settings change the interface and the terminals", async () => {
   await expect.poll(() => columns().at(-1)!, { timeout: 15_000 }).toBeLessThan(before * 0.85);
   await set("appearance.uiFont", UI_FONT);
   await set("appearance.monoFont", MONO_FONT);
-  await expect.poll(() => style("body", "font-family")).toContain("Geist Sans");
+  await expect.poll(() => style("body", "font-family")).toMatch(/^system-ui/);
 });
 
 test("Clean Light: a light, flat app with no wallpaper, terminals and native chrome included", async () => {
@@ -104,13 +107,17 @@ test("Clean Light: a light, flat app with no wallpaper, terminals and native chr
   await page.getByRole("button", { name: "Close", exact: true }).click();
   expect(await page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(false);
   expect(await page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(false);
-  expect(await style("body", "background-color")).toBe("rgb(250, 250, 250)");
-  await expect.poll(() => page.getAttribute(".react-flow__node-terminal [data-term-bg]", "data-term-bg")).toBe("#ffffff");
+  // The page is Clean Light's graphite ground, read as the browser draws it.
+  const ground = await page.evaluate(() => { const c = document.createElement("canvas").getContext("2d")!; c.fillStyle = getComputedStyle(document.body).backgroundColor; c.fillRect(0, 0, 1, 1); return [...c.getImageData(0, 0, 1, 1).data.slice(0, 3)]; });
+  const want = cssColorToHex(CLEAN_LIGHT.palette.bg, "").match(/[0-9a-f]{2}/g)!.map((h) => parseInt(h, 16));
+  ground.forEach((v, i) => expect(Math.abs(v - want[i]!)).toBeLessThanOrEqual(1));
+  await expect.poll(() => page.getAttribute(".react-flow__node-terminal [data-term-bg]", "data-term-bg").then((v) => v?.toLowerCase())).toBe(CLEAN_LIGHT.terminal.background.toLowerCase());
   const a = onDisk().appearance;
-  expect([a.preset, a.mode, a.glass.enabled, a.wallpaper.kind, a.radius]).toEqual(["clean-light", "light", false, "none", 8]);
+  // Corners stay the person's: Clean changes the colours, the glass and the wallpaper only.
+  expect([a.preset, a.mode, a.glass.enabled, a.wallpaper.kind, a.radius]).toEqual(["clean-light", "light", false, "none", lookBefore[2]]);
   // What the operating system draws: native controls in light, and the window behind the page.
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe("light");
-  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBackgroundColor().toLowerCase())).toBe("#fafafa");
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBackgroundColor().toLowerCase())).toBe(cssColorToHex(CLEAN_LIGHT.palette.bg, ""));
   await shot("clean-light-canvas");
 });
 

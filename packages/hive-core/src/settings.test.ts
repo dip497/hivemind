@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, presetPatch, exportAppearance, flattenAppearance, getPath, importAppearance, mergeAppearance, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, GEIST_FONT, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, presetPatch, exportAppearance, flattenAppearance, getPath, importAppearance, mergeAppearance, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { cssColorToRgb } from "./css-color.js";
@@ -42,18 +42,18 @@ describe("settings schema", () => {
     }
   });
 
-  test("Clean and Clean Light are a whole look: glass off, no wallpaper, corners 8; a colour preset keeps the person's", () => {
+  test("Clean and Clean Light are a whole look: glass off and no wallpaper; corners and a colour preset's look stay the person's", () => {
     const mine = { ...DEFAULT_APPEARANCE, radius: 16, wallpaper: { kind: "aurora" as const, brightness: 0.7 } };
     for (const id of ["clean", "clean-light"]) {
       const a = applyPreset(mine, PRESETS[id]!);
-      expect([a.glass.enabled, a.wallpaper.kind, a.radius, a.mode]).toEqual([false, "none", 8, id === "clean" ? "dark" : "light"]);
+      expect([a.glass.enabled, a.wallpaper.kind, a.radius, a.mode]).toEqual([false, "none", 16, id === "clean" ? "dark" : "light"]);
       expect(a.wallpaper.brightness).toBe(0.7);
       expect(a.glass.blur).toBe(mine.glass.blur);
     }
     const nord = applyPreset(mine, PRESETS.nord!);
     expect([nord.glass.enabled, nord.wallpaper.kind, nord.radius]).toEqual([true, "aurora", 16]);
     // The same change, as the flat patch the Appearance page applies.
-    expect(presetPatch(PRESETS["clean-light"]!, flattenAppearance(mine))).toMatchObject({ glass: false, wallpaper: "none", radius: 8, mode: "light" });
+    expect(presetPatch(PRESETS["clean-light"]!, flattenAppearance(mine))).toMatchObject({ glass: false, wallpaper: "none", radius: 16, mode: "light" });
     expect(presetPatch(PRESETS.nord!, flattenAppearance(mine))).toMatchObject({ glass: true, wallpaper: "aurora", radius: 16 });
   });
 
@@ -77,7 +77,11 @@ describe("settings schema", () => {
     expect(importAppearance({ ...clean, lookBefore: { glass: false, wallpaper: "none", radius: 2 } }, mine).lookBefore).toBeUndefined();
   });
 
-  test("Clean's text is readable on its backgrounds, in both modes (WCAG 4.5:1)", () => {
+  test("Clean is Signal made flat, and Clean Light its light twin on the same graphite; text reads on every surface (WCAG 4.5:1)", () => {
+    // DESIGN.md: graphite tinted toward blue (hue 250). Clean is Signal's own palette and terminal.
+    expect(PRESETS.clean!.palette).toEqual(SIGNAL.palette);
+    expect(PRESETS.clean!.terminal).toEqual(SIGNAL.terminal);
+    for (const v of Object.values(PRESETS["clean-light"]!.palette)) expect(v).toMatch(/^oklch\([\d.]+ [\d.]+ (250|155|62|30)\)$/);
     const lum = (c: string) => {
       const [r, g, b] = cssColorToRgb(c)!.map((v) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
       return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
@@ -89,10 +93,12 @@ describe("settings schema", () => {
     }
   });
 
-  test("the interface font is the one the app draws: Geist, falling back to the system's", () => {
+  test("the interface font is the operating system's own, as DESIGN.md decided; Geist is a choice", () => {
     expect(DEFAULT_APPEARANCE.uiFont).toBe(UI_FONT);
-    expect(UI_FONT.startsWith('"Geist Sans"')).toBe(true);
-    expect(DEFAULT_APPEARANCE.uiFont).not.toBe(OLD_UI_FONT_DEFAULT);
+    expect(UI_FONT.startsWith("system-ui")).toBe(true);
+    // What settings.json has long held is the system font too: nothing on disk needs rewriting.
+    expect(OLD_UI_FONT_DEFAULT.startsWith("system-ui")).toBe(true);
+    expect(GEIST_FONT.startsWith('"Geist Sans"')).toBe(true);
   });
 
   test("a host's look as a guest gets it names no file on the host, and junk from a peer is dropped", () => {

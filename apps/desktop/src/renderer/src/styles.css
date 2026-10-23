@@ -4,9 +4,9 @@
 @import "tw-animate-css";
 @import "@xterm/xterm/css/xterm.css";
 @import "@xyflow/react/dist/style.css";
-/* Geist (sans body+display) and JetBrains Mono (code/paths/IDs + terminals) are bundled
-   via @fontsource (imported in main.tsx): the CSP allows no font CDN, and xterm must measure
-   the real face, not a fallback. */
+/* The interface speaks in the system's own UI font (DESIGN.md). JetBrains Mono (code, paths, IDs,
+   terminals) and Geist (a choice in Appearance) are bundled via @fontsource (imported in
+   main.tsx): the CSP allows no font CDN, and xterm must measure the real face, not a fallback. */
 /* The settings page's own sheet, LAST: an @import may not follow a rule, and inlining a
    whole stylesheet above would push the font @import past one (dropping the font). */
 @import "./settings.css";
@@ -167,7 +167,7 @@
 
   /* The person's fonts (appearance.uiFont / monoFont, painted as --font-*-user); the bundled
      faces until the theme store has painted. */
-  --font-sans: var(--font-ui-user, "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
+  --font-sans: var(--font-ui-user, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif);
   --font-mono: var(--font-mono-user, "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace);
 
   /* Elevation tokens — Plane uses layered translucent shadows; Linear uses a

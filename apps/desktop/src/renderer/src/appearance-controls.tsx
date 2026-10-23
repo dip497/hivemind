@@ -23,7 +23,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { MONO_FONT, PRESETS, SYSTEM_MONO_FONT, SYSTEM_UI_FONT, UI_FONT, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { GEIST_FONT, MONO_FONT, OLD_UI_FONT_DEFAULT, PRESETS, SYSTEM_MONO_FONT, UI_FONT, type TerminalPalette } from "@hivemind/core/settings-schema";
 import {
   ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, choosePreset, removeOverlay, setTheme, updateOverlay,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
@@ -136,15 +136,16 @@ export function AccentPicker({ t }: { t: ThemeState }) {
 
 // ── corners and fonts ───────────────────────────────────────────────────────
 
-const UI_FONTS = [{ id: "geist", label: "Geist", value: UI_FONT }, { id: "system", label: "System", value: SYSTEM_UI_FONT }];
+// The system font is the default (DESIGN.md); the font list most settings.json files hold reads as it.
+const UI_FONTS = [{ id: "system", label: "System", value: UI_FONT, also: [OLD_UI_FONT_DEFAULT] }, { id: "geist", label: "Geist", value: GEIST_FONT }];
 const MONO_FONTS = [{ id: "jetbrains", label: "JetBrains Mono", value: MONO_FONT }, { id: "system", label: "System", value: SYSTEM_MONO_FONT }];
 
 /** A font: one of the faces named here, or any CSS font list the person types (Custom). */
 function FontRow({ id, label, hint, value, fonts, onChange }: {
   id: string; label: string; hint: string; value: string;
-  fonts: { id: string; label: string; value: string }[]; onChange: (v: string) => void;
+  fonts: { id: string; label: string; value: string; also?: string[] }[]; onChange: (v: string) => void;
 }) {
-  const named = fonts.find((f) => f.value === value);
+  const named = fonts.find((f) => f.value === value || f.also?.includes(value));
   const [custom, setCustom] = useState(!named);
   return (
     <div className="settings-row">
