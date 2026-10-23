@@ -119,7 +119,14 @@ export interface SurfaceRect extends ViewRect {
 export interface CommandKeys { keys: string; command: string }
 /** The roundest a surface's corners may be. */
 export const MAX_SURFACE_RADIUS = 24;
-/** The host theme, resolved. `colors` are the `--color-*` tokens as `#rrggbb`;
+/** The colours every host sends a view in `ViewTheme.colors`, each `#rrggbb`, which
+ *  `applyThemeVars` sets as `--hm-color-<id>`. Frozen: a host may add one (and a view gives it a
+ *  fallback), but removing or renaming one is a **Breaking:** change to the protocol. */
+export const VIEW_THEME_COLORS = ["bg", "bg2", "bg3", "bg4", "fg", "fg2", "fg3", "line", "line2", "brand", "err", "ok", "warn", "info", "accent"] as const;
+export type ViewThemeColor = (typeof VIEW_THEME_COLORS)[number];
+
+/** The host theme, resolved. `colors` are the `--color-*` tokens as `#rrggbb`, every one of
+ *  `VIEW_THEME_COLORS` at least;
  *  the rest (protocol 1.1, additive — a 1.0 host sends only `colors`) is the
  *  user's appearance: mode, accent, radius, fonts, the surface + terminal
  *  backgrounds, and whether glass is on. `applyThemeVars` maps all of it to

@@ -132,6 +132,17 @@ translucent —
 is what the shipped examples use. Set `"wallpaper": false` only if you paint an opaque
 scene of your own: nothing would show through, and its animation still costs every frame.
 
+**Frozen.** The 15 colours of `ViewTheme.colors` (`VIEW_THEME_COLORS` in the protocol): `bg`,
+`bg2`, `bg3`, `bg4`, `fg`, `fg2`, `fg3`, `line`, `line2`, `brand`, `err`, `ok`, `warn`, `info`,
+`accent`, each `#rrggbb`, set as `--hm-color-<id>`. A tool plugin's tile runs in the app's page
+and reads the app's own variables; these 11 are frozen for it: `--color-bg`, `--color-bg3`,
+`--color-fg`, `--color-fg3`, `--color-line`, `--color-select`, `--color-ok`, `--color-warn`,
+`--color-err`, `--color-info`, `--font-mono`. Adding to either list is fine; removing or renaming
+one is a **Breaking:** CHANGELOG line and, for the view colours, a protocol version bump. Tests
+hold both: `packages/hive-view-sdk/tests/theme-colors.test.ts`,
+`apps/desktop/tests/unit/plugin-theme.test.ts`, `apps/desktop/tests/unit/tool-css-vars.test.ts`
+and e2e `plugin-contract.spec.ts`.
+
 An agent's state is drawn the way the app draws it, never as your own dots: `STATUS_MARKS`
 (each tone's word, its shape as an SVG path, and whether it pulses: only `attention` does) and
 `statusMarkSvg(tone, size)` from the SDK, in the host's `--hm-status-<tone>` colour. An older app

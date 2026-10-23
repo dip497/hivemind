@@ -205,6 +205,28 @@ built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the full
 
 Reach the app only through these, never `window.hive`.
 
+### Colours and type
+
+A tile paints with the app's own CSS variables, so it follows every theme, dark and light. These
+11 are the ones a tile may rely on: each keeps its name and has a value in every theme. Any other
+`--color-*` or `--font-*` in the app may change without notice.
+
+| Variable | What it is |
+|---|---|
+| `--color-bg` | the page |
+| `--color-bg3` | a card or a raised row |
+| `--color-fg` | text |
+| `--color-fg3` | quiet text: hints, counts, dates |
+| `--color-line` | borders and dividers |
+| `--color-select` | a selected row or text |
+| `--color-ok` | done, passed, added |
+| `--color-warn` | needs a look |
+| `--color-err` | failed, removed |
+| `--color-info` | a link or a neutral mark |
+| `--font-mono` | the code font |
+
+A release that removes or renames one says so with **Breaking:** in the CHANGELOG.
+
 A tile's code runs in the app's own page, so it gets the browser rights the app uses and no
 others: notifications and writing to the clipboard. The camera, the microphone, the location and
 reading the clipboard are refused. A page that needs them goes in a Browser tile, which asks you:

@@ -168,6 +168,15 @@ runs on another computer.
 A view never reads an agent's replies or terminal text, and never answers its permission
 questions. Every prompt a view writes opens a dialog showing the full text, with **Cancel** focused.
 
+### Colours
+
+`applyThemeVars(hm)` sets the app's theme on your page as CSS variables, and again each time it
+changes. These 15 colours come from the app and the phone page, each as `--hm-color-<name>`:
+`bg`, `bg2`, `bg3` and `bg4` (the page, panels, cards, hover), `fg`, `fg2` and `fg3` (text, from
+strongest to quietest), `line` and `line2` (borders), `brand` and `accent`, and `ok`, `warn`, `err`
+and `info`. A release that removes or renames one says so with **Breaking:** in the CHANGELOG. A
+colour added later reaches only newer apps, so give it a fallback: `var(--hm-color-new, #888)`.
+
 ### Permissions
 
 A view declares its permissions in `hivemind-view.json`. An unknown one is refused at install.
