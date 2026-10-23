@@ -13,7 +13,7 @@
 import { defineCommand } from "citty";
 import { promises as fs } from "node:fs";
 import {
-  DEFAULT_APPEARANCE, HiveError, PRESETS, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingPathProblem, settingsPath, updateSettings,
+  DEFAULT_APPEARANCE, HiveError, PRESETS, SETTINGS_VERSION, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingPathProblem, settingsPath, updateSettings,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
@@ -22,6 +22,7 @@ import { personOnly } from "../person-only.js";
 async function reloadApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
 }
+const PRESET_PATHS = ["preset", "mode", "palette", "accent", "terminal"].map((k) => `appearance.${k}`);
 const note = (r: boolean) => (r ? "app reloaded" : "app not running — applies on next start");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e));
 
@@ -37,6 +38,8 @@ const getCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     const s = await readSettings();
+    // Not on stdout, which is the value.
+    if (s.v > SETTINGS_VERSION) process.stderr.write(`settings.json is from a newer version of hivemind (format ${s.v}); this one shows what it knows, and its writes keep the rest.\n`);
     const v = args.path ? getPath(s, String(args.path)) : s;
     if (v === undefined) return err(ctx, "not_found", `no setting at "${args.path}"`);
     return ok(ctx, { path: args.path ? String(args.path) : null, value: v }, () => JSON.stringify(v, null, 2));
@@ -88,7 +91,9 @@ const useCmd = defineCommand({
     const ctx = { json: !!args.json };
     const p = PRESETS[String(args.preset)];
     if (!p) return err(ctx, "not_found", `unknown preset "${args.preset}" (known: ${Object.keys(PRESETS).join(", ")})`);
-    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, p) }));
+    // What a preset sets is written even where it reads the same here: an id this version does not
+    // know (a newer build's accent) reads as the default, and choosing a preset replaces it.
+    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, p) }), undefined, PRESET_PATHS);
     const rescanned = await reloadApp();
     return ok(ctx, { preset: p.id, rescanned }, () => `theme: ${p.label}; ${note(rescanned)}`);
   },
@@ -120,7 +125,7 @@ const importCmd = defineCommand({
     // A file that sets nothing of the look (a package.json picked by mistake) is refused before the
     // settings are touched; importAppearance says why.
     try { importAppearance(raw, DEFAULT_APPEARANCE); } catch (e) { return err(ctx, "invalid_theme", `cannot import ${args.file}: ${(e as Error).message}`); }
-    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }));
+    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }), undefined, ["appearance"]);
     const appearance = written.appearance;
     const rescanned = await reloadApp();
     return ok(ctx, { preset: appearance.preset, rescanned }, () => `imported ${args.file} (preset ${appearance.preset}); ${note(rescanned)}`);

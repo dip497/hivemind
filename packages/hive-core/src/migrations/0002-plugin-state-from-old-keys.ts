@@ -52,15 +52,13 @@ export async function writePluginStateFromOldKeys(file = settingsPath()): Promis
   try { raw = JSON.parse(await readFile(file, "utf8")); } catch { return false; }
   if (!isObj(raw) || !hasOldKeys(raw) || (isObj(raw.plugins) && isObj(raw.plugins.state))) return false;
   const state = statesFromOldKeys(raw);
-  await updateSettings((cur) => withoutOldKeys({ ...cur, plugins: { ...cur.plugins, state } }), file);
+  // The old keys are named so the write removes them: a write keeps what this build does not read.
+  await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state } }), file, OLD_KEYS);
   return true;
 }
 
-/** The settings without the old keys, which a section would otherwise keep as a newer build's. */
-function withoutOldKeys(s: Settings): Settings {
-  const omit = <T extends object>(o: T, keys: string[]): T => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k))) as T;
-  return { ...s, agents: omit(s.agents, ["disabled", "options"]), plugins: omit(s.plugins, ["disabled"]) };
-}
+/** The old keys inside a section, which a write would otherwise keep as a newer build's. */
+const OLD_KEYS = ["agents.disabled", "agents.options", "plugins.disabled"];
 
 export const m0002: Migration = {
   id: "0002-plugin-state-from-old-keys",

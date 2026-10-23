@@ -79,6 +79,7 @@ then Round 1, then this plan.
 | W | Widget workers: measured, ceiling written, no build | ☑ (2026-10-22, design §4c) |
 | R0 | Round 0 of the [gap review](../design/customization-gaps-2026-10-22.md): permission handlers (Browser tile asks, views and tools get nothing), forms in views (app and phone page), status by shape with one word list and a screen-reader line, shortcuts made from the keymap, sections that keep unknown keys, `hive config set` refusing unknown paths, theme files without media, widget notices through main; the canvas box clipped, never scrolled, so a press on a tile past its edge lands where aimed | ☑ 2026-10-23 (branch `feat/round0-clean-look`) |
 | L1 | The last line, slice 1 ([design](../design/last-line-2026-10-23.md) §6): the daemon's cursor-aware rule, `TileLines` in main with `tile.watchLines` / `tile.lines` (Workspace API 0.34), and a terminal's Layers row saying what its screen last showed, or in amber what its agent waits on; View ▸ Lines | ☑ 2026-10-23 (branch `feat/round0-clean-look`). Not done: steps 2–6 of the design (Allow / Deny in the row, toasts, "last said" and Home through `TileLines`, `detect.chrome`, view `lineSlots`, guests, the CLI); a two-row prompt the shell does not mark shows its top row; a command's question shows on Linux only; not measured on a real GPU |
+| R1 | Round 1 foundation ([gap review](../design/customization-gaps-2026-10-22.md) §7 items 6–7, branch `round1/foundation`): `feat/tokens-settings-v2` merged (plugin settings v2, a view's own colours, view protocol 1.16); settings.json written by one owner (`settings-write.ts`): a write applies only the paths it changed onto the file's own JSON and normalising happens on read, so every key and value a newer build wrote survives (top level, sections, every group), `v` read and never lowered; `hive config set` checks keys below a view or plugin id; the plugin contract frozen | ◐ 2026-10-23: items 1, 6 done; 7 in progress |
 
 ### Known gaps after Round 0
 
@@ -89,12 +90,8 @@ then Round 1, then this plan.
 - **Font keys in a terminal and on the canvas on other layouts.** The keymap matches `-`, `=` and `0`
   by their place on a US keyboard, so Ctrl+- on a German or French layout and the numpad's keys do not
   size a terminal's text (they always did not). Editors, diffs and plans take what the key types too.
-- **`hive config set` under an id.** A wrong key below a valid view id (`views.chrome.canvas.bogus`) still
-  prints "normalised" and exits 0.
 - **Agents and Browser tile permissions.** With Agent browser control on, an agent can grant a site a
   right over the DevTools protocol (said on the security page).
-- Settings keep unknown keys directly under a section only; groups this build rebuilds (`glass`,
-  `wallpaper`, `terminal`, `views.layers`) still drop keys a newer build added. Round 1 step 1.
 - **A diff's page.** The Diff tile, the Code Workbench's diff, a conflicted file and a tool's diff
   (`PatchView`) keep the diff library's own page: #0a0a0a on every dark preset, a black slab in a
   Dracula, Nord, Solarized Dark or One Dark tile, and white on the light one. Their lines, counts

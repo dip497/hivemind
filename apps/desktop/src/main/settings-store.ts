@@ -9,7 +9,7 @@
  */
 import { answer, handle, handleEffect } from "./app-ipc.js";
 import { readFileSync } from "node:fs";
-import { mergeSettings, type Settings } from "@hivemind/core/settings-schema";
+import { DEFAULT_SETTINGS, mergeSettings, type Settings } from "@hivemind/core/settings-schema";
 import { patchSettingsFile, readSettings, settingsPath, updateSettings } from "@hivemind/core/settings";
 import { createSettingsCoordinator } from "./settings-coordinator.js";
 
@@ -56,11 +56,12 @@ export function onSettingsChange(l: (s: Settings) => void): () => void {
   return () => { listeners.delete(l); };
 }
 
-/** Replace the whole object (a theme import). Still a locked read/modify/write
+/** Replace whole sections (a theme import). Still a locked read/modify/write
  *  so unknown keys and a concurrent writer's file are respected; the caller's
- *  object wins for the fields it carries. */
+ *  object wins for the sections it carries. */
 export async function replaceSettings(next: unknown): Promise<Settings> {
-  return coordinator.mutate(() => updateSettings((cur) => mergeSettings(next, cur), settingsFile()));
+  const sections = next && typeof next === "object" ? Object.keys(next).filter((k) => k !== "v" && k in DEFAULT_SETTINGS) : [];
+  return coordinator.mutate(() => updateSettings((cur) => mergeSettings(next, cur), settingsFile(), sections));
 }
 
 /** Apply dotted-path patches (`appearance.glass.blur`) to the file as it is on

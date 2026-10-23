@@ -17,6 +17,11 @@
  * instead of interleaving). Callers pass a mutation, never a snapshot —
  * `patchSettingsFile` is the dotted-path form.
  *
+ * WHAT A WRITE KEEPS. A write applies only what it changed onto the file's own JSON
+ * (`writtenOnto`, settings-write.ts); normalising happens on read. So a key or value
+ * this build does not read — a newer build's, anywhere in the file — survives it,
+ * and the file's `v` is never lowered.
+ *
  * The lock is OWNERSHIP-SAFE: each acquisition writes a unique token and only
  * ever deletes a lock carrying that token, and a writer that cannot take the
  * lock within `LOCK_WAIT_MS` FAILS (`SettingsLockError`) instead of removing
@@ -28,6 +33,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "./settings-schema.js";
+import { writtenOnto } from "./settings-write.js";
 
 export function settingsPath(): string {
   if (process.env.HIVE_SETTINGS?.trim()) return path.resolve(process.env.HIVE_SETTINGS.trim());
@@ -41,32 +47,27 @@ export async function readSettings(file: string = settingsPath()): Promise<Setti
   catch { return mergeSettings(DEFAULT_SETTINGS); }
 }
 
-/** Atomic write: temp file in the same dir, then rename. Top-level keys the
- *  schema does not know (the app's pre-2.0 `browserCdp` flag lives in the same
- *  file) are carried over, so writing the theme never drops them. */
+/** The sections a whole-object write names. */
+const SECTIONS = Object.keys(DEFAULT_SETTINGS).filter((k) => k !== "v");
+
+/** Write `next` whole: every setting it holds is written, even one equal to what the file reads
+ *  as. What this build does not read (top-level keys such as `browserCdp`, a newer build's keys
+ *  in any group) stays. */
 export async function writeSettings(next: Settings, file: string = settingsPath()): Promise<void> {
-  await withLock(file, async () => writeBoth(mergeSettings(next), await unknownKeys(file), file));
+  await updateSettings(() => next, file, SECTIONS);
 }
 
-/** The actual atomic write: schema settings + the file's non-schema top-level
- *  keys (`browserCdp`, `notifications`, …), which the app has always kept in the
- *  same file. Callers that CHANGED the extras pass their new value — re-reading
- *  them here would drop the change they just made. */
-async function writeBoth(settings: Settings, extras: Record<string, unknown>, file: string): Promise<void> {
+/** The file's JSON as it is, or undefined when it is missing or not JSON. */
+async function readRaw(file: string): Promise<unknown> {
+  try { return JSON.parse(await fs.readFile(file, "utf8")); } catch { return undefined; }
+}
+
+/** Atomic write: temp file in the same dir, then rename. */
+async function writeRaw(json: Record<string, unknown>, file: string): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify({ ...extras, ...settings }, null, 2) + "\n", "utf8");
+  await fs.writeFile(tmp, JSON.stringify(json, null, 2) + "\n", "utf8");
   await fs.rename(tmp, file);
-}
-
-/** Top-level keys of the file that are not part of `Settings`. */
-async function unknownKeys(file: string): Promise<Record<string, unknown>> {
-  try {
-    const raw: unknown = JSON.parse(await fs.readFile(file, "utf8"));
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-    const known = new Set(Object.keys(DEFAULT_SETTINGS));
-    return Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([k]) => !known.has(k)));
-  } catch { return {}; }
 }
 
 // ── serialized read/modify/write ────────────────────────────────────────────
@@ -233,16 +234,22 @@ export async function breakSettingsLock(file: string = settingsPath()): Promise<
 /**
  * Read the file, apply `mutate` to what is ACTUALLY on disk right now, write the
  * result — all while holding the lock, so a concurrent writer's change is never
- * overwritten by a stale snapshot. Returns the settings as written.
+ * overwritten by a stale snapshot. What the mutation changed is written onto the
+ * file's own JSON (`writtenOnto`), and each `touched` dotted path is written as
+ * `mutate` left it even where it reads the same (undefined removes the key, one
+ * this build does not read too). Returns the settings as the file now reads.
  */
 export async function updateSettings(
   mutate: (current: Settings) => Settings,
   file: string = settingsPath(),
+  touched: readonly string[] = [],
 ): Promise<Settings> {
   return withLock(file, async () => {
-    const next = mergeSettings(mutate(await readSettings(file)));
-    await writeBoth(next, await unknownKeys(file), file);
-    return next;
+    const raw = await readRaw(file);
+    const cur = mergeSettings(raw);
+    const json = writtenOnto(raw, cur, mergeSettings(mutate(cur)), touched);
+    await writeRaw(json, file);
+    return mergeSettings(json);
   });
 }
 
@@ -266,13 +273,14 @@ export async function patchSettingsExtras(
     }
   }
   return withLock(file, async () => {
-    const extras = { ...(await unknownKeys(file)) };
+    const raw = await readRaw(file);
+    const json = writtenOnto(raw, mergeSettings(raw), mergeSettings(raw));
     for (const [k, v] of Object.entries(patch)) {
-      if (v === undefined) delete extras[k];
-      else extras[k] = v;
+      if (v === undefined) delete json[k];
+      else json[k] = v;
     }
-    await writeBoth(await readSettings(file), extras, file);
-    return extras;
+    await writeRaw(json, file);
+    return Object.fromEntries(Object.entries(json).filter(([k]) => !known.has(k)));
   });
 }
 
@@ -308,5 +316,5 @@ export async function patchSettingsFile(
   patches: readonly { path: string; value: unknown }[],
   file: string = settingsPath(),
 ): Promise<Settings> {
-  return updateSettings((cur) => patches.reduce((acc, p) => setPath(acc, p.path, p.value) as Settings, cur), file);
+  return updateSettings((cur) => patches.reduce((acc, p) => setPath(acc, p.path, p.value) as Settings, cur), file, patches.map((p) => p.path));
 }

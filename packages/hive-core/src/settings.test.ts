@@ -148,7 +148,7 @@ describe("settings schema", () => {
     const pkg = importAppearance({ name: "app", version: "1.0.0", scripts: { build: "tsc" }, radius: 4 }, mine);
     const whole = importAppearance({ v: 1, appearance: { preset: "nord", later: true }, views: { defaultView: "orbit" }, agents: {} }, mine);
     expect([Object.keys(pkg).sort(), Object.keys(whole).sort()]).toEqual([keys, keys]);
-    expect([pkg.radius, whole.preset, (whole as unknown as Record<string, unknown>).someFutureKey]).toEqual([4, "nord", { id: "harbour" }]);
+    expect([pkg.radius, whole.preset]).toEqual([4, "nord"]);
     // A package.json picked by mistake, a settings.json whose appearance is not one, and what is not an object at all.
     for (const file of [{ name: "app", version: "1.0.0", scripts: { build: "tsc" } }, { v: 1, appearance: "nord" }, { v: 1, appearance: {} }, "nord", [], null]) {
       expect(() => importAppearance(file, mine), JSON.stringify(file)).toThrow("not a hivemind theme");
@@ -300,27 +300,9 @@ describe("settings schema", () => {
     expect(toolPreferences(s)).toEqual({ enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser"] });
   });
 
-  test("a key a newer build wrote is kept in every section, as JSON within a bound; known keys are checked as before", () => {
-    const future = { at: "2027", layers: [1, 2] };
-    const sections = ["appearance", "views", "plugins", "agents", "profile", "network", "browserApp", "quit"] as const;
-    const s = mergeSettings(Object.fromEntries(sections.map((k) => [k, { someFutureKey: future }])));
-    for (const k of sections) expect([k, (s[k] as unknown as Record<string, unknown>).someFutureKey]).toEqual([k, future]);
-    // A patch that does not name it keeps it, and the known keys beside it are still clamped.
-    const next = mergeSettings({ appearance: { accent: "ember", radius: 999 } }, s);
-    expect(next.appearance).toMatchObject({ someFutureKey: future, accent: "ember", radius: 24 });
-    // One that names it changes it, and undefined removes it.
-    const changed = (v: unknown) => mergeSettings({ appearance: { someFutureKey: v } }, s).appearance as unknown as Record<string, unknown>;
-    expect([changed(2).someFutureKey, Object.hasOwn(changed(undefined), "someFutureKey")]).toEqual([2, false]);
-    // What is not JSON, or too big, is dropped; the rest is kept.
-    // The bound is in bytes: 40,000 "é" are 80,000 bytes of UTF-8, though 40,000 characters.
-    const odd = mergeSettings({ appearance: { fn: () => 1, big: 1n, huge: "x".repeat(70_000), wide: "é".repeat(40_000), ok: [1] } });
-    const kept = odd.appearance as unknown as Record<string, unknown>;
-    expect([["fn", "big", "huge", "wide"].filter((k) => Object.hasOwn(kept, k)), kept.ok]).toEqual([[], [1]]);
-  });
-
   test("mergeSettings: junk falls back per field, values are clamped, an unknown top-level key is left to the file writer", () => {
     const s = mergeSettings({
-      v: 99, appearance: { preset: 7, glass: { opacity: 5, blur: "x", enabled: "yes" }, wallpaper: { kind: "lava", videoSrc: "blob:abc" }, terminal: { ansi: ["#000"] }, palette: { bg: "javascript:alert(1)" }, pluginSurfaces: "glass" },
+      v: "99", appearance: { preset: 7, glass: { opacity: 5, blur: "x", enabled: "yes" }, wallpaper: { kind: "lava", videoSrc: "blob:abc" }, terminal: { ansi: ["#000"] }, palette: { bg: "javascript:alert(1)" }, pluginSurfaces: "glass" },
       views: { defaultView: "orbit", chrome: { orbit: { island: "left" }, world: { island: "hidden" }, "../x": { island: "top" } } },
       plugins: { disabled: ["a", 3, "b"] }, agents: { defaultAgent: "" }, extra: true,
     });

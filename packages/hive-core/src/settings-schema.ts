@@ -13,6 +13,7 @@
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
 import { isPluginKey, isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
+import { FIELD_ID } from "@hivemind/view-sdk/settings";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -441,8 +442,22 @@ export interface QuitSettings {
    *  session saved to come back when it next starts. `ask`: the app asks each time. */
   whenRunning: QuitChoice;
 }
+/** The format of settings.json this build reads and writes (`v`). A file from a newer build says
+ *  more: it is read for what this build knows, and a write here never lowers it. */
+export const SETTINGS_VERSION = 1;
+
+/** The format version a file says it is: a whole number from 1, or 1 for anything else. Every
+ *  build so far wrote `v: 1`, so a file without one (written by hand) or with one below 1 (no build
+ *  wrote it) has the first shape. */
+export function settingsVersionOf(raw: unknown): number {
+  const v = isObj(raw) ? raw.v : undefined;
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 ? v : 1;
+}
+
 export interface Settings {
-  v: 1;
+  /** The file's format version as read (`settingsVersionOf`); above `SETTINGS_VERSION`, a newer
+   *  build wrote it. Not a setting: a write keeps the file's. */
+  v: number;
   appearance: Appearance;
   views: ViewsSettings;
   plugins: PluginsSettings;
@@ -480,32 +495,6 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|[a-z]{3,20})$/;
 const color = (v: unknown, def: string) => (typeof v === "string" && COLOR_RE.test(v.trim()) ? v.trim() : def);
 
-/** At most this many bytes (UTF-8) of JSON of the keys a section does not know, per section. */
-const UNKNOWN_MAX = 64 * 1024;
-const UTF8 = new TextEncoder();
-
-/** The keys of a section this build does not know, as a newer build wrote them: kept, so writing
- *  a setting here never erases them. A patch that leaves one out keeps `base`'s, and one set to
- *  undefined removes it. Each is copied as JSON (what is not JSON is dropped), and at most
- *  `UNKNOWN_MAX` bytes in all. Spread it before the checked fields, so those always win. */
-function keptUnknown(raw: Record<string, unknown>, known: ReadonlySet<string>, base: object): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  let size = 0;
-  for (const from of [raw, base as Record<string, unknown>]) {
-    for (const k in from) {
-      if (known.has(k) || !Object.hasOwn(from, k) || (from !== raw && Object.hasOwn(raw, k))) continue;
-      let json: string | undefined;
-      try { json = JSON.stringify(from[k]); } catch { continue; } // a cycle or a bigint
-      if (json === undefined) continue;
-      const bytes = UTF8.encode(k).length + UTF8.encode(json).length;
-      if (size + bytes > UNKNOWN_MAX) continue;
-      size += bytes;
-      out[k] = JSON.parse(json);
-    }
-  }
-  return out;
-}
-
 function mediaLayer(p: unknown, i: number): MediaLayer | null {
   if (!isObj(p)) return null;
   const url = typeof p.url === "string" && p.url.startsWith("hivemedia://") ? p.url : null;
@@ -524,7 +513,6 @@ function mediaLayer(p: unknown, i: number): MediaLayer | null {
 
 /** The keys of a look, as a theme file holds them. */
 const THEME_KEYS = new Set(Object.keys(DEFAULT_APPEARANCE));
-const APPEARANCE_KEYS = new Set([...THEME_KEYS, "lookBefore"]);
 
 function lookBeforeOf(v: unknown): LookBefore | undefined {
   if (!isObj(v) || typeof v.glass !== "boolean" || !WALLPAPERS.some((x) => x.id === v.wallpaper)) return undefined;
@@ -545,7 +533,6 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   // Only as `raw` has it: a write that drops it (leaving Clean) forgets it.
   const lookBefore = lookBeforeOf(p.lookBefore);
   return {
-    ...keptUnknown(p, APPEARANCE_KEYS, base),
     preset,
     mode: p.mode === "light" || p.mode === "dark" ? p.mode : base.mode,
     palette,
@@ -633,7 +620,7 @@ export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: st
 
 /** A theme file applied over the person's own appearance `cur`: a bare appearance, or a whole
  *  settings.json (its `appearance`). Only the keys this build knows are read from it, checked as
- *  settings are, and `cur`'s own other keys stay. What it leaves out is kept as `cur` has it, the
+ *  settings are. What it leaves out is kept as `cur` has it, the
  *  media too, so a file of `exportAppearance` never removes yours. A file that sets none of them
  *  (a package.json picked by mistake) is not a theme: it throws, and nothing changes. */
 export function importAppearance(raw: unknown, cur: Appearance): Appearance {
@@ -675,28 +662,38 @@ export function toolPreferences(s: Pick<Settings, "plugins">, installed: readonl
 }
 
 const VIEW_ID = { test: (id: string) => VIEW_ID_RE.test(id), what: "a view's id (lowercase letters, digits and dashes; @owner/name for one from HiveHub)" };
+/** Below a plugin's `options`, any field id is a setting, its value checked by the plugin's form. */
+const ANY_FIELD = Symbol("any field id");
 /** The maps whose keys are ids (a view's, a plugin's): any key in one that such an id can be is a
- *  setting. Merging drops any other, so it would be set to nothing. */
-const ID_MAPS = new Map<string, { test(id: string): boolean; what: string }>([
-  ["views.chrome", VIEW_ID],
-  ["views.toolbars", VIEW_ID],
-  ["plugins.state", { test: isPluginKey, what: "a plugin's key (kind:id, such as agent:claude)" }],
+ *  setting, and below it what one entry holds. Merging drops any other, so it would be set to
+ *  nothing. */
+const ID_MAPS = new Map<string, { test(id: string): boolean; what: string; entry: Record<string, unknown> }>([
+  ["views.chrome", { ...VIEW_ID, entry: { island: "top" } }],
+  ["views.toolbars", { ...VIEW_ID, entry: { actions: [], labels: true } }],
+  ["plugins.state", { test: isPluginKey, what: "a plugin's key (kind:id, such as agent:claude)", entry: { enabled: true, options: ANY_FIELD, workspaces: [] } }],
 ]);
 
 /** Why `hive config set` cannot set the dotted `path`, or null when it is a setting. The file
  *  keeps a key this build does not know (a newer build may have written it), so setting one would
  *  store a value nothing here reads. Inside a map of ids (`views.chrome.<view>`,
- *  `views.toolbars.<view>`, `plugins.state.<plugin>`) any key such an id can be is one, its value
- *  checked as usual. */
+ *  `views.toolbars.<view>`, `plugins.state.<plugin>`) any key such an id can be is one, and below
+ *  it the keys one entry holds, their values checked as usual. `v` is the file's format, not a
+ *  setting. */
 export function settingPathProblem(path: string): string | null {
   const keys = path.split(".").filter(Boolean);
   if (keys.length === 0) return "name a setting, such as appearance.glass.blur";
+  if (keys[0] === "v") return "v is the format of settings.json, which the app keeps; it is not a setting";
   const all = mergeSettings(undefined);
   let at: unknown = all;
   for (let i = 0; i < keys.length; i++) {
     const where = keys.slice(0, i).join(".");
     const ids = ID_MAPS.get(where);
-    if (ids) return ids.test(keys[i]!) ? null : `"${keys[i]}" is not ${ids.what}, and ${where} holds only those`;
+    if (ids) {
+      if (!ids.test(keys[i]!)) return `"${keys[i]}" is not ${ids.what}, and ${where} holds only those`;
+      at = ids.entry;
+      continue;
+    }
+    if (at === ANY_FIELD) return FIELD_ID.test(keys[i]!) ? (i === keys.length - 1 ? null : `${keys.slice(0, i + 1).join(".")} is one value: set it whole`) : `"${keys[i]}" is not a setting's id (letters, digits, dashes and underscores)`;
     if (!isObj(at)) return `${where} is ${Array.isArray(at) ? "a list" : "one value"}: set it whole`;
     if (!Object.hasOwn(at, keys[i]!)) {
       const near = settingPaths(all).filter((p) => p.endsWith(`.${keys[i]}`));
@@ -712,9 +709,6 @@ function settingPaths(o: unknown, at = ""): string[] {
   if (!isObj(o) || ID_MAPS.has(at)) return [at];
   return Object.entries(o).flatMap(([k, v]) => settingPaths(v, at ? `${at}.${k}` : k));
 }
-
-/** The keys each section checks; any other is kept as it is (`keptUnknown`). */
-const SECTION_KEYS = Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, new Set(isObj(v) ? Object.keys(v) : [])])) as Record<keyof Settings, Set<string>>;
 
 /** Validate + fill a parsed settings.json (any junk) into a Settings.
  *
@@ -762,15 +756,14 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   const agents = isObj(p.agents) ? p.agents : {};
   // Plugin state as stored; else (a partial merge) as `base` has it.
   const state = isObj(plugins.state) ? parsePluginStates(plugins.state) : base.plugins.state;
-  // Each section keeps the keys it does not know (a newer build's) beside the ones it checks.
-  const kept = (k: keyof Settings) => keptUnknown(isObj(p[k]) ? p[k] : {}, SECTION_KEYS[k], base[k] as object);
+  // Only what this build reads. What else the file holds (a newer build's keys and values) is
+  // the writer's to keep (settings-write.ts), never carried here.
   return {
-    v: 1,
+    v: p.v === undefined ? base.v : settingsVersionOf(p),
     appearance: mergeAppearance(p.appearance, base.appearance),
-    views: { ...kept("views"), defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
-    plugins: { ...kept("plugins"), state },
+    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
+    plugins: { state },
     agents: {
-      ...kept("agents"),
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
       autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
       declined: (Array.isArray(agents.declined) ? agents.declined : base.agents.declined)
@@ -780,11 +773,10 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
       whenAgentStartsAgent: WHEN_AGENT_STARTS_AGENT.includes(agents.whenAgentStartsAgent as WhenAgentStartsAgent)
         ? (agents.whenAgentStartsAgent as WhenAgentStartsAgent) : base.agents.whenAgentStartsAgent,
     },
-    // Here only: `profileOf` also reads what a peer sends, which keeps nothing it does not check.
-    profile: { ...kept("profile"), ...profileOf(p.profile, base.profile) },
-    network: { ...kept("network"), updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
-    browserApp: { ...kept("browserApp"), ...browserAppOf(p.browserApp, base.browserApp) },
-    quit: { ...kept("quit"), whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
+    profile: profileOf(p.profile, base.profile),
+    network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
+    browserApp: browserAppOf(p.browserApp, base.browserApp),
+    quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
   };
 }
 
