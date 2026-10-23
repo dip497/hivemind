@@ -130,6 +130,8 @@ function paintTheme(t: ThemeState): void {
   root.classList.toggle("wp-static", !t.animate);
   root.classList.toggle("content-glass", glass && t.contentGlass);
   root.dataset.themeMode = t.mode;
+  // shadcn's `dark:` variant and Sonner read the class; the page starts dark (index.html).
+  root.classList.toggle("dark", t.mode !== "light");
   root.dataset.preset = t.preset;
   root.style.setProperty("--glass-blur", `${t.blur}px`);
   root.style.setProperty("--glass-opacity", `${Math.round(t.opacity * 100)}%`);
@@ -150,14 +152,18 @@ function paintTheme(t: ThemeState): void {
   root.style.setProperty("--surface-4", t.palette.bg4);
   // The band around a terminal is the terminal: it takes the preset's background, not a fixed one.
   root.style.setProperty("--color-terminal-bg", t.terminal.background);
-  root.style.setProperty("--radius-panel", `${t.radius}px`);
+  // Corners and fonts: styles.css builds its radius scale and font stacks on these.
+  root.style.setProperty("--radius-user", `${t.radius}px`);
   root.style.setProperty("--font-ui-user", t.uiFont);
   root.style.setProperty("--font-mono-user", t.monoFont);
   const a = ACCENTS[t.accent];
+  const light = t.mode === "light";
   root.style.setProperty("--color-brand", a.brand);
-  root.style.setProperty("--color-status-working", a.working ?? a.brand);
-  root.style.setProperty("--color-accent", a.accent);
-  root.style.setProperty("--color-info", a.accent);
+  // The accents are pale tints made for a dark page; on a light one they would wash out, so text
+  // and marks take the deeper brand colour, and a near-white "working" becomes the second text.
+  root.style.setProperty("--color-status-working", a.working ? (light ? t.palette.fg2 : a.working) : a.brand);
+  root.style.setProperty("--color-accent", light ? a.brand : a.accent);
+  root.style.setProperty("--color-info", light ? a.brand : a.accent);
 }
 
 export function getTheme(): ThemeState { return state; }

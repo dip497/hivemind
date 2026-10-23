@@ -32,12 +32,12 @@ export const workerHighlighterOptions = {
 export const PIERRE_CSS_VARS: CSSProperties = {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
   ...({
-    "--diffs-font-family": '"JetBrains Mono", monospace',
+    "--diffs-font-family": "var(--font-mono)",
     "--diffs-font-size": "var(--text-body)",
     "--diffs-line-height": "1.6",
     "--diffs-tab-size": "2",
     "--diffs-min-number-column-width": "3ch",
-    "--diffs-header-font-family": '"Geist Sans", "Geist", sans-serif',
+    "--diffs-header-font-family": "var(--font-sans)",
 
     // ── Diff change colors ───────────────────────────────────────────────
     // These `*-color-override` vars feed Pierre's `--diffs-*-base`, which is a

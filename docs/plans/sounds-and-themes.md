@@ -57,7 +57,9 @@ then Round 1, then this plan.
    - `format: 1`, with the other part slots reserved (icons, cursors, scene layers, mascot,
      screens, words; review §5).
    - A theme's wallpaper draws without glass. Glass stays the person's.
-   - The accent reaches buttons, switches and focus.
+   - What the accent colours: decided 2026-10-22 to keep buttons in the text colour (the calm,
+     monochrome look Clean is built on) and to make the Accent's description say what it does
+     colour. A brand that needs coloured buttons is a T2 question.
 
 ## Status
 
@@ -67,12 +69,13 @@ then Round 1, then this plan.
 | S2 | The sound player, built-in sounds, Notifications ▸ Sounds, `hive notifications` | ☐ |
 | S3 | Pop-ups grouped in a burst ("10 agents finished") | ☐ (needs a yes, see Decisions) |
 | T0 | HiveHub works out "needs Hivemind X or newer" for packages and views | ☐ |
-| T1 | Fonts that apply (migration 0005, CSS, terminal, `@font-face` from `hivemedia:`) | ☐ |
+| T1 | Fonts that apply (migration 0005, CSS, terminal, `@font-face` from `hivemedia:`) | ☑ 2026-10-22 except `@font-face` (comes with T2's font files): the settings drive the app, terminals (live, atlas redrawn), diffs and the editor; migration 0005; Settings ▸ Appearance has Interface font and Code font |
 | T2 | The theme member: `theme.json`, its checks, a custom accent | ☐ |
 | T3 | Apply, revert and update a theme: app, CLI, files copied | ☐ |
 | T4 | A theme's sounds | ☐ |
-| T5 | Light mode audited, a light preset, light themes allowed | ☐ |
+| T5 | Light mode audited, a light preset, light themes allowed | ◐ 2026-10-22: the app's dark-only sites follow the mode (page, toaster, editor, diffs, PatchView, diagrams, fullscreen chrome), main sets `nativeTheme` and the window background, light tokens for shadows, grid and syntax; **Clean Light** ships. Light themes from packages come with T2 |
 | T6 | Archipelago ships the **Harbour** theme (hivemind-plugins) | ☐ (after a release with T0–T4) |
+| C | **Clean** and **Clean Light** presets; corners (`appearance.radius`) that apply; a preset `look` (glass, wallpaper, corners) | ☑ 2026-10-22 (branch `feat/round0-clean-look`) |
 | W | Widget workers: measured, ceiling written, no build | ☑ (2026-10-22, design §4c) |
 
 ## Rounds and PRs

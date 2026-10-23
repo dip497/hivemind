@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { getTheme, useThemeField } from "./theme-store";
 
 /**
  * Lightweight markdown viewer for the editor's Preview mode.
@@ -49,7 +50,7 @@ async function renderMermaid(container: HTMLElement, alive: () => boolean): Prom
     return; // mermaid failed to load — leave the raw code block as-is
   }
   if (!alive()) return;
-  mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "strict", fontFamily: "var(--font-sans)" });
+  mermaid.initialize({ startOnLoad: false, theme: getTheme().mode === "light" ? "default" : "dark", securityLevel: "strict", fontFamily: "var(--font-sans)" });
   let i = 0;
   for (const codeEl of Array.from(blocks)) {
     if (!alive()) return;
@@ -87,6 +88,8 @@ export function MarkdownPreview({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Diagrams are drawn in the mode's colours: a mode change draws them again.
+  const mode = useThemeField("mode");
 
   useEffect(() => {
     installHooks();
@@ -99,7 +102,7 @@ export function MarkdownPreview({
     return () => {
       alive = false;
     };
-  }, [source]);
+  }, [source, mode]);
 
   return <div ref={ref} className={className} />;
 }

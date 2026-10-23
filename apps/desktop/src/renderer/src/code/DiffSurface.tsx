@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CodeView } from "@pierre/diffs/react";
 import type { CodeViewItem } from "@pierre/diffs";
 import { Button } from "../components/ui/button";
+import { useThemeField } from "../theme-store";
 
 const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
 
@@ -26,6 +27,7 @@ export function DiffSurface({
    *  the Workbench closes via its tab bar and omits it). */
   onClose?: () => void;
 }) {
+  const mode = useThemeField("mode");
   const q = useQuery<string>({
     queryKey: ["git:file", repoPath, file, "WORKING"],
     queryFn: () => window.hive.gitFileContents(repoPath, file, "WORKING"),
@@ -78,7 +80,7 @@ export function DiffSurface({
           <CodeView
             className="h-full w-full overflow-y-auto"
             items={items}
-            options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, themeType: "dark", overflow: "scroll" }}
+            options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, themeType: mode, overflow: "scroll" }}
           />
         )}
       </div>

@@ -32,7 +32,9 @@
   --border: var(--color-line2);
   --input: var(--color-line2);
   --ring: var(--color-fg3);
-  --radius: 0.5rem;
+  /* Corners follow the person's corner setting (appearance.radius, painted as --radius-user):
+     12px, the default, keeps the corners the app has always had (controls 8, tiles 12). */
+  --radius: calc(var(--radius-user, 12px) * 2 / 3);
 
   /* ── Motion + tracking. Deliberately in :root, NOT in @theme: Tailwind v4
      treats `--ease-*` as a theme namespace, so defining `--ease-out` there
@@ -95,8 +97,10 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: max(0px, calc(var(--radius) - 2px));
+  --radius-sm: max(0px, calc(var(--radius) - 4px));
+  /* Tiles and panels: the setting itself. */
+  --radius-xl: var(--radius-user, 12px);
 }
 
 @theme {
@@ -161,8 +165,10 @@
   --color-state-done:      oklch(0.70 0.19 152);       /* green-700 */
   --color-state-cancelled: oklch(0.52 0.01 230);       /* neutral grey */
 
-  --font-sans: "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
+  /* The person's fonts (appearance.uiFont / monoFont, painted as --font-*-user); the bundled
+     faces until the theme store has painted. */
+  --font-sans: var(--font-ui-user, "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif);
+  --font-mono: var(--font-mono-user, "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace);
 
   /* Elevation tokens — Plane uses layered translucent shadows; Linear uses a
      4-level elevation ladder. Each step = outer drop + inner top highlight. */
@@ -194,8 +200,8 @@
 
   /* Corners beyond sm 4 / md 6 / lg 8 / xl 12. */
   --radius-keycap: 5px;
-  --radius-menu: 10px;
-  --radius-sheet: 14px;
+  --radius-menu: calc(var(--radius-user, 12px) * 5 / 6);
+  --radius-sheet: calc(var(--radius-user, 12px) * 7 / 6);
 
   /* Behind a modal, a sheet, the minimap's off-screen area. */
   --color-scrim: oklch(0 0 0 / 0.55);
@@ -498,7 +504,27 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
 
 /* The one focus ring. Native controls take the theme, not the operating system's colours. */
 :root { color-scheme: dark; accent-color: var(--color-brand); }
-:root[data-theme-mode="light"] { color-scheme: light; }
+:root[data-theme-mode="light"] {
+  color-scheme: light;
+  /* What the dark ladder draws in black or a pale tint, redrawn for a light page: softer
+     shadows, no top highlight, a darker grid dot and syntax colours that read on white. */
+  --hm-shadow-1: 0 1px 2px oklch(0.2 0.01 260 / 0.08), 0 1px 3px oklch(0.2 0.01 260 / 0.06);
+  --hm-shadow-2: 0 4px 12px oklch(0.2 0.01 260 / 0.10), 0 1px 3px oklch(0.2 0.01 260 / 0.07);
+  --hm-shadow-3: 0 12px 32px oklch(0.2 0.01 260 / 0.14), 0 4px 12px oklch(0.2 0.01 260 / 0.08);
+  --hm-shadow-float: 0 6px 18px oklch(0.2 0.01 260 / 0.12);
+  --hm-shadow-glass: 0 8px 28px oklch(0.2 0.01 260 / 0.14);
+  --hm-highlight: inset 0 0 0 0 transparent;
+  --hm-highlight-glass: inset 0 0 0 0 transparent;
+  --color-grid-dot: oklch(0.35 0.012 260 / 0.16);
+  --color-scrim: oklch(0.2 0.01 260 / 0.35);
+  --color-syntax-keyword: #8b3fd9;
+  --color-syntax-string: #16794a;
+  --color-syntax-number: #a35f00;
+  --color-syntax-function: #1f5fd1;
+  --color-syntax-type: #0e7490;
+  --color-syntax-property: #2563c9;
+  --color-syntax-tag: #c02679;
+}
 :focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;

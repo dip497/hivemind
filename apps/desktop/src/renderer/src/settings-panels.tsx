@@ -24,7 +24,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { getSettings, patchSettings } from "./settings-store";
 import { setTheme, useTheme } from "./theme-store";
 import {
-  AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, TerminalColors,
+  AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, ShapeAndTypeControls, TerminalColors,
 } from "./appearance-controls";
 import { createContext, Fragment, useContext } from "react";
 import { pluginPage } from "./settings-registry";
@@ -65,6 +65,7 @@ function AppearancePrefs() {
       <Section title="Theme">
         <PresetRow t={t} />
         <AccentPicker t={t} />
+        <ShapeAndTypeControls t={t} />
       </Section>
 
       <Section title="Workspace">

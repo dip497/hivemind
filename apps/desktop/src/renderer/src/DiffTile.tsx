@@ -67,6 +67,7 @@ import { DiffReviewPanel } from "./DiffReviewPanel";
 import { newCid, formatCommentMessage, formatReviewMessage, type ReviewComment } from "./diff-comments";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { loadComments, saveComments, deliverToAgent } from "./code/review-store";
+import { useThemeField } from "./theme-store";
 
 interface Props {
   repoPath: string;
@@ -512,10 +513,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   useEffect(() => { setChangeIdx(-1); }, [changes.length]);
 
   // ── CodeView options ────────────────────────────────────────────────────
+  const themeMode = useThemeField("mode");
   const options: CodeViewOptions<ReviewComment, undefined> = useMemo(
     () => ({
       theme: { dark: "pierre-dark", light: "pierre-light" },
-      themeType: "dark",
+      themeType: themeMode,
       diffStyle: layout,
       overflow,
       diffIndicators: "bars",
@@ -573,7 +575,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         openComposerAt(file, p.lineNumber, p.lineNumber, p.annotationSide ?? "additions", lineEl);
       },
     }),
-    [layout, overflow, expandUnchanged, headerH, openComposerAt],
+    [layout, overflow, expandUnchanged, headerH, openComposerAt, themeMode],
   );
 
   // ── header slot ───────────────────────────────────────────────────────
