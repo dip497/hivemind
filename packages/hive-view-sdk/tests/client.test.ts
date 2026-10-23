@@ -65,6 +65,27 @@ describe("view-sdk client", () => {
     expect(inbox.filter((m) => m.type === "surfaceRects")).toEqual([{ type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 3, w: 10, h: 10 }] }]);
   });
 
+  test("1.17: line slots go only to a host that draws them, once each, for tiles a structure named", async () => {
+    const tiles = { type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "shell", name: "sh" }] };
+    const older = await scriptedHost([], ["surfaces"]);
+    older.send(tiles);
+    await tick();
+    older.client.setLineRects([{ tileId: "t1", x: 0, y: 0, w: 200, h: 20 }]);
+    await tick();
+    expect(older.inbox.filter((m) => m.type === "lineRects")).toEqual([]);
+
+    const { client, inbox, send } = await scriptedHost([], ["lineSlots"]);
+    client.setLineRects([{ tileId: "t1", x: 0.4, y: 30, w: 200, h: 20 }, { tileId: "t9", x: 0, y: 60, w: 200, h: 20 }]);
+    await tick();
+    expect(inbox.filter((m) => m.type === "lineRects")).toEqual([]);
+    // Named, t1's slot goes; t9 is held back, and the same slots again send nothing.
+    send(tiles);
+    await tick();
+    client.setLineRects([{ tileId: "t1", x: 0, y: 30, w: 200, h: 20 }, { tileId: "t9", x: 0, y: 60, w: 200, h: 20 }]);
+    await tick();
+    expect(inbox.filter((m) => m.type === "lineRects")).toEqual([{ type: "lineRects", rects: [{ tileId: "t1", x: 0, y: 30, w: 200, h: 20 }] }]);
+  });
+
   test("layouts saved in a stream are sent once it settles; one saved now is sent at once", async () => {
     const { client, inbox } = await scriptedHost();
     client.setLayout({ n: 1 });

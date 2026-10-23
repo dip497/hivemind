@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: view protocol 1.17, `lineSlots`. A view leaves room for a tile's last line (`hm.setLineRects`), and the app draws it there: what its screen last showed or its agent last said, or what the agent waits on with the app's own Deny and Allow. The view never receives the text. Computer windows only; check `hm.supports("lineSlots")`.
 - Changed: a terminal's line in the Layers panel skips a two-row prompt such as starship's or powerlevel10k's, shows a command's question (`Overwrite b? [y/N]`) on macOS too, and skips an agent's own spinner, timer and status rows when its agent.yaml lists them (`detect.chrome`, additive).
 - Added: an agent that asks your permission to run a one-line command shows **Deny** and **Allow** on its Layers row and in its toast; a longer command shows **Review**, which shows the whole command first. Hovering a row shows its whole line or command. An agent's toast now says what it waits on, filled in as the app learns it, and goes once the wait ends; a finished agent's toast says its last line.
 - Changed: a Claude row in the Layers panel says what Claude last said, or the tool it last used, under its name, as your phone's Home does. What an agent said is read only for the rows and phones that show it, as it works, and only what it wrote since, so a board of agents no longer has its session files checked on every change your phone is told.

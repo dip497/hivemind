@@ -114,6 +114,24 @@ Three things authors get wrong:
   The tile is already released when the message arrives; drop the rect from your model
   or your UI will claim a surface that is gone.
 
+## Line slots: the host draws what a tile last said
+
+A view never gets the text a terminal showed or an agent wrote. To show a tile's last line (what
+its screen last showed, what its agent last said, or, while it waits on the person, what for), leave
+room for it and let the host draw it (protocol 1.17, feature `lineSlots`):
+
+```ts
+if (hm.supports("lineSlots")) hm.setLineRects([{ tileId, x: 16, y: 40, w: 480, h: 24 }]);
+```
+
+- At most 64 rects, each at least 20px high. Identical rects are not re-sent.
+- Check `supports` first: an older host counts the message against your view. A phone and a
+  remote screen do not draw lines, and do not say the feature.
+- The host draws the line in 11px mono, and for a permission it can answer, its own Deny and
+  Allow inside your rect. The pointer passes through the line to you; the buttons take it.
+- Never ask for the text by another road. The rule is the one for `invokeResult` and your saved
+  layout: what you hold, you can pass on.
+
 ## Theme: never hardcode a colour
 
 `applyThemeVars(hm)` writes the host theme onto your document as custom properties and

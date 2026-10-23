@@ -146,6 +146,7 @@ Check `hm.supports("<feature>")` before using a newer feature.
 | Need | Call |
 |---|---|
 | Put live terminals in your layout | `hm.setSurfaceRects(...)` (`surfaces`) |
+| Show what a tile last said, or what its agent waits on, with Allow and Deny | `hm.setLineRects([{ tileId, x, y, w, h }])` (`lineSlots`): the app draws it in the room you leave, at least 20px high; your view never gets the text |
 | Save your layout (64 KB, per workspace) | `hm.setLayout(blob)` |
 | An agent's status as it changes | `hm.subscribeStatus(tileId, (status, info) => …)` |
 | What happens: replies, waits, closes | `hm.onEvents(["turn", "needsInput"], cb)` |

@@ -13,7 +13,7 @@ import { isRemote } from "@hivemind/core/remote-uri";
 import { useChromeState } from "../../chrome-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { PORT_HANDSHAKE, type SurfaceRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
+import { PORT_HANDSHAKE, type SurfaceRect, type LineRect, type ViewPermission } from "@hivemind/view-sdk/protocol";
 import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import type { CommunityLink } from "@hivemind/view-host/link";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
@@ -24,6 +24,7 @@ import { disableCommunityView } from "./registry";
 import { edgeBandClip } from "./edge-band";
 import { RemoteCommunityView } from "./RemoteCommunityView";
 import { SurfaceSlots } from "./surface-slots";
+import { LineSlots } from "./line-slots";
 import { Loading } from "../../../components/ui/loading";
 
 /** The host for one package. Rendered through the lazy wrapper in registry.ts
@@ -41,10 +42,11 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const rootRef = useRef<HTMLDivElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [rects, setRects] = useState<SurfaceRect[]>([]);
+    const [lines, setLines] = useState<LineRect[]>([]);
     const { link, ready, send, dialogs } = usePluginLink({
       pluginId: pkg.id, record: { kind: "view", id: pkg.id }, name: manifest.name, capabilities,
       fields: viewSettingFields(manifest), tokens: manifest.tokens, layoutId: pkg.id, personal: manifest.layout === "personal", props: { model, commands }, root: rootRef,
-      onSurfaceRects: setRects, commands: manifest.commands, instance: { id: pkg.id, label: manifest.name },
+      onSurfaceRects: setRects, onLineRects: setLines, commands: manifest.commands, instance: { id: pkg.id, label: manifest.name },
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
         disableCommunityView(pkg.id, reason);
@@ -105,7 +107,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     // dock — the common case) the iframe is clipped with a rectangular
     // `inset()` so the two layers never overlap; a rect clip is free, unlike a
     // polygon mask. Floating rects stay plain overlays.
-    const hostBox = useMemo(() => box(), [rects]); // eslint-disable-line react-hooks/exhaustive-deps
+    const hostBox = useMemo(() => box(), [rects, lines]); // eslint-disable-line react-hooks/exhaustive-deps
     const { bottomInset } = useChromeState();
     const clip = useMemo(() => edgeBandClip(rects, hostBox), [rects, hostBox]);
 
@@ -143,6 +145,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           data-community-clip={clip ?? undefined}
         />
         <SurfaceSlots rects={rects} width={hostBox.w} names={nameOf} commands={commands} onUndock={undock} />
+        <LineSlots rects={lines} box={hostBox} />
         {dialogs}
         {!ready && <Loading className="pointer-events-none absolute inset-0" label={`Loading ${manifest.name}`} />}
       </div>

@@ -56,7 +56,13 @@ export function useCut(el: RefObject<HTMLElement | null>, text: string, on: bool
 
 /** Deny and Allow for `tile`'s wait, or Review when what it allows is not all in sight (`cut`, or
  *  more than one line). Compact 28px buttons; a press here never reaches the row or card beneath. */
-export function DecideButtons({ tile, waiting, cut, className = "" }: { tile: string; waiting: AgentWait; cut: boolean; className?: string }) {
+export function DecideButtons({ tile, waiting, cut, small = false, className = "" }: {
+  tile: string; waiting: AgentWait; cut: boolean;
+  /** 20px buttons, for a line slot a view made too low for 28px ones. */
+  small?: boolean;
+  className?: string;
+}) {
+  const size = small ? "2xs" : "sm";
   const [busy, setBusy] = useState(false);
   const review = useRef<HTMLButtonElement>(null);
   const [reviewing, setReviewing] = useState(false);
@@ -69,13 +75,13 @@ export function DecideButtons({ tile, waiting, cut, className = "" }: { tile: st
     <span className={`flex gap-1.5 ${className}`} data-layer-decide onClick={stop} onKeyDown={stop}>
       {cut || !oneLined(waiting) ? (
         <>
-          <Button ref={review} size="sm" variant="ghost" aria-expanded={reviewing} onClick={() => setReviewing((r) => !r)} data-decide="review">Review</Button>
+          <Button ref={review} size={size} variant="ghost" aria-expanded={reviewing} onClick={() => setReviewing((r) => !r)} data-decide="review">Review</Button>
           {reviewing && <WaitReview tile={tile} waiting={waiting} anchor={review} busy={busy} run={run} close={() => setReviewing(false)} />}
         </>
       ) : (
         <>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => run("deny")} data-decide="deny">Deny</Button>
-          <Button size="sm" disabled={busy} onClick={() => run("allow")} data-decide="allow">Allow</Button>
+          <Button size={size} variant="ghost" disabled={busy} onClick={() => run("deny")} data-decide="deny">Deny</Button>
+          <Button size={size} disabled={busy} onClick={() => run("allow")} data-decide="allow">Allow</Button>
         </>
       )}
     </span>

@@ -35,7 +35,9 @@ one wins.
 `participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run); 1.15
 adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone); 1.16 adds
 `tokens` (`theme.tokens`: the view's own colours from its manifest's `tokens`, resolved, set as
-`--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback). A
+`--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback); 1.17 adds `lineSlots`
+(the host draws each tile's last line in the rects `lineRects` reserves; the computer's windows,
+not the phone). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
@@ -57,6 +59,7 @@ compute one from a theme token yourself.
 | `command` | `name`, `args[]` | Permission-gated; see below |
 | `subscribeStatus` / `unsubscribeStatus` | `tileId` | `subscribeStatus()` handles both ends |
 | `surfaceRects` | `rects[]` | ≤ 16. Deduplicated by the client |
+| `lineRects` (1.17) | `rects[] {tileId, x, y, w, h}` | ≤ 64, each ≥ 20px high; replaces the last set. `hm.setLineRects()`, sent only to a host with `lineSlots`. The host draws the line there; you never get its text |
 | `revealed` | `requestId`, `rect \| null` | The answer to `reveal` |
 | `framesDrawn` | `count` | Monotonic, throttled to ~1/s by the SDK |
 | `layout` | `data` | ≤ 64 KB, debounced |

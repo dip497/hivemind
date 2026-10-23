@@ -17,7 +17,7 @@ import { chordMatches } from "./commands.js";
 import { tokenVar } from "./tokens.js";
 import {
   CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
-  type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
+  type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type LineRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
   ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
 } from "./protocol.js";
@@ -111,6 +111,11 @@ export interface ViewClient {
   /** The hole-punch — deduplicated: identical rects are not re-sent. A rect goes to the host once
    *  a `structure` has named its tile, and leaves when one no longer does. */
   setSurfaceRects(rects: SurfaceRect[]): void;
+  /** 1.17 (feature `lineSlots`): where the host draws each tile's last line, or what its agent
+   *  waits on with Allow and Deny (`LineRect`, at least 20px high), in place of those set before.
+   *  The view reserves the room; the text never reaches it. Deduplicated, held back for a tile no
+   *  `structure` named yet, as surfaces are; nothing is sent to a host without the feature. */
+  setLineRects(rects: LineRect[]): void;
   /** The host asked to reveal a tile; answer with where it is (or null). */
   onReveal(handler: (tileId: string) => ViewRect | null | Promise<ViewRect | null>): () => void;
   /** Count a drawn frame (reported to the host, throttled). */
@@ -219,6 +224,8 @@ class Client implements ViewClient {
   private revealHandler: ((tileId: string) => ViewRect | null | Promise<ViewRect | null>) | null = null;
   /** The rects the view asked for, and the tiles the host has named (the last `structure`). */
   private wantedRects: SurfaceRect[] = [];
+  private wantedLines: LineRect[] = [];
+  private lastLines = "[]";
   private tiles = new Set<string>();
   /** What the host was last told: nothing, at first. */
   private lastRects = "[]";
@@ -254,6 +261,7 @@ class Client implements ViewClient {
       case "structure":
         this.tiles = new Set(m.tiles.map((t) => t.id));
         this.sendRects();
+        this.sendLines();
         this.emit(m.type, m);
         break;
       case "names": case "selection": this.emit(m.type, m); break;
@@ -570,6 +578,20 @@ class Client implements ViewClient {
     this.wantedRects = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h),
       ...(r.chrome ? { chrome: r.chrome } : {}), ...(r.radius ? { radius: r.radius } : {}), ...(r.inert ? { inert: true as const } : {}) }));
     this.sendRects();
+  }
+
+  setLineRects(rects: LineRect[]) {
+    this.wantedLines = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }));
+    this.sendLines();
+  }
+
+  private sendLines() {
+    if (!this.supports("lineSlots")) return;
+    const rects = this.wantedLines.filter((r) => this.tiles.has(r.tileId));
+    const key = JSON.stringify(rects);
+    if (key === this.lastLines) return;
+    this.lastLines = key;
+    this.send({ type: "lineRects", rects });
   }
 
   // A tile the host has not named (one from a saved layout that is gone, or not heard of yet) is

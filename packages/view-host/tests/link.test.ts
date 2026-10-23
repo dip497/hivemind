@@ -7,7 +7,7 @@ import { CommunityLink, LIMITS, PROMPT_DECLINES_MAX, SHARE_DECLINES_MAX, type Li
 import type { ActivityLevel, ShareOutcome, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
 
 /** A link on a host with `tiles` and the frame `f1`. `lacks`: the commands this host leaves out,
- *  and `surfaceRects` when it places no surfaces. */
+ *  `surfaceRects` when it places no surfaces, and `lineRects` when it draws no lines. */
 function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], services?: LinkServices, lacks: string[] = []) {
   const calls: string[] = [];
   const events: string[] = [];
@@ -27,6 +27,7 @@ function harness(caps: LinkDeps["capabilities"] = [], tiles = ["t1", "t2"], serv
     hasTile: (id) => tiles.includes(id), hasFrame: (id) => id === "f1",
     onReady: () => events.push("ready"),
     ...(lacks.includes("surfaceRects") ? {} : { onSurfaceRects: (r: Array<{ tileId: string }>) => events.push(`rects:${r.map((x) => x.tileId).join(",")}`) }),
+    ...(lacks.includes("lineRects") ? {} : { onLineRects: (r: Array<{ tileId: string }>) => events.push(`lines:${r.map((x) => x.tileId).join(",")}`) }),
     onLayout: (d) => events.push(`layout:${JSON.stringify(d)}`),
     onFramesDrawn: (n) => events.push(`frames:${n}`),
     onError: (m) => events.push(`error:${m}`),
@@ -225,9 +226,9 @@ function fakeActivity() {
 
 test("1.3: hello features list only what is wired; status carries since", () => {
   const bare = harness();
-  assert.deepEqual(bare.link.features, ["invoke", "surfaces", "sleep", "hostMenu"]);
+  assert.deepEqual(bare.link.features, ["invoke", "surfaces", "sleep", "hostMenu", "lineSlots"]);
   const h = harness([], ["t1"], { sinceOf: (id) => (id === "t1" ? { since: 42, exact: false } : undefined), history: async () => ({}) as never });
-  assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces", "sleep", "hostMenu"]);
+  assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces", "sleep", "hostMenu", "lineSlots"]);
   h.link.handle({ type: "ready", v: 1 });
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("question", {});
@@ -321,7 +322,7 @@ test("1.4: features; a status carries the agent's own, and a change in it alone 
   let push: (s: unknown) => void = () => {};
   const h = harness([], ["t1"], { agentStatus: (_id, cb) => { push = cb as never; cb({ state: "working", subagents: 0, background: 0, compacting: false, source: "hooks" }); return () => {}; } });
   h.link.handle({ type: "ready", v: 1 });
-  assert.deepEqual(h.link.features, ["agentStatus", "invoke", "surfaces", "sleep", "hostMenu"]);
+  assert.deepEqual(h.link.features, ["agentStatus", "invoke", "surfaces", "sleep", "hostMenu", "lineSlots"]);
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("working", {});
   push({ state: "waiting", waitingFor: "permission", subagents: 0, background: 0, compacting: false, source: "hooks" });
@@ -506,14 +507,26 @@ test("1.5: a rect for a tile the view was told of and that has closed since is d
   assert.equal(h.events.at(-1), "rects:t2");
 });
 
+test("1.17: the host draws a line in each slot of a tile it has; a slot of one it has not is refused and the rest drawn", () => {
+  const h = harness();
+  h.link.handle({ type: "ready", v: 1 });
+  h.link.handle({ type: "lineRects", rects: [{ tileId: "t1", x: 0, y: 0, w: 200, h: 20 }, { tileId: "gone", x: 0, y: 24, w: 200, h: 20 }] });
+  assert.equal(h.events.at(-1), "lines:t1");
+  assert.equal(h.link.stats.refused, 1);
+  h.link.handle({ type: "lineRects", rects: [] });
+  assert.equal(h.events.at(-1), "lines:");
+});
+
 test("what a host cannot do at all (a remote screen: no surfaces, no folder picker, no tiles but agents' to start) is refused without being held against the view", () => {
-  const lacks = ["surfaceRects", "spawnTile", "spawnVis", "addFrame", "openFolder", "wakeAgent", "sleepAgent"];
+  const lacks = ["surfaceRects", "lineRects", "spawnTile", "spawnVis", "addFrame", "openFolder", "wakeAgent", "sleepAgent"];
   const h = harness(["workspace:spawn", "workspace:edit"], ["t1"], undefined, lacks);
   assert.ok(!h.link.features.includes("surfaces"), "a host that places no surfaces does not say it does");
+  assert.ok(!h.link.features.includes("lineSlots"), "a host that draws no lines does not say it does");
   assert.ok(!h.link.features.includes("sleep"), "a host that wakes no agents does not say it does");
   h.link.handle({ type: "ready", v: 1 });
   for (let i = 0; i < LIMITS.malformed; i++) {
     h.link.handle({ type: "surfaceRects", rects: [{ tileId: "t1", x: 0, y: 0, w: 10, h: 10 }] });
+    h.link.handle({ type: "lineRects", rects: [{ tileId: "t1", x: 0, y: 0, w: 100, h: 20 }] });
     h.link.handle({ type: "command", name: "openFolder", args: ["f1"] });
     h.link.handle({ type: "command", name: "spawnTile", args: ["shell", "f1"] });
     h.link.handle({ type: "command", name: "spawnVis", args: ["tree"] });
