@@ -76,8 +76,9 @@ export type Workflow = z.infer<typeof WorkflowZ>;
 const BUILTIN_NAMES: Record<IssueState, string> = {
   backlog: "Backlog",
   todo: "Todo",
-  in_progress: "In Progress",
-  in_review: "In Review",
+  // As the board has always labelled them, so a workspace without a workflow looks as it did.
+  in_progress: "In progress",
+  in_review: "In review",
   done: "Done",
   cancelled: "Cancelled",
 };
@@ -167,4 +168,114 @@ export function categoryOf(wf: Workflow, statusId: string): IssueState | undefin
 export function defaultStatus(wf: Workflow, category: IssueState, issueType?: string): WorkflowStatus | undefined {
   const allowed = issueType ? wf.issueTypes[issueType]?.statuses : undefined;
   return wf.statuses.find((s) => s.category === category && !s.retired && (!allowed || allowed.includes(s.id)));
+}
+
+/** The categories in the order every surface lists them. */
+export const CATEGORIES: readonly IssueState[] = IssueStateZ.options;
+
+/** True when the workspace has no `workflow.yaml`: statuses are the categories, and no issue file
+ *  carries a `status`. */
+export const isBuiltinWorkflow = (wf: Workflow): boolean => wf === BUILTIN_WORKFLOW;
+
+/**
+ * The issue type an issue's workflow is keyed by in `issueTypes`: its tracker type, prefixed with
+ * the provider (`jira:10004`), when the workflow has a list for it. Undefined for a local issue.
+ */
+export function issueTypeOf(wf: Workflow, issue: { external?: { provider: string; type?: { id: string } } }): string | undefined {
+  const t = issue.external?.type?.id;
+  if (!t) return undefined;
+  const key = `${issue.external!.provider}:${t}`;
+  if (wf.issueTypes[key]) return key;
+  // Several linked projects key by `<projectId>/<type>` (design §4.2): the issue's own project is
+  // not on it yet, so take the one key that ends in its type, if there is exactly one.
+  const keys = Object.keys(wf.issueTypes).filter((k) => k.endsWith(`/${key}`));
+  return keys.length === 1 ? keys[0] : undefined;
+}
+
+/** The status an issue is in: its own, else (an issue written before the workflow) the default of
+ *  its category. With no workflow file it is always the state. */
+export function statusOf(wf: Workflow, issue: { state: IssueState; status?: string; external?: { provider: string; type?: { id: string } } }): string {
+  if (isBuiltinWorkflow(wf)) return issue.state;
+  if (issue.status && categoryOf(wf, issue.status) === issue.state) return issue.status;
+  if (issue.status && !wf.statuses.some((s) => s.id === issue.status)) return issue.status;
+  return defaultStatus(wf, issue.state, issueTypeOf(wf, issue))?.id ?? defaultStatus(wf, issue.state)?.id ?? issue.state;
+}
+
+/** The status `idOrName` names: its id, else its name, either case-insensitive. */
+export function resolveStatus(wf: Workflow, idOrName: string): WorkflowStatus | undefined {
+  const lower = idOrName.trim().toLowerCase();
+  return findStatus(wf, idOrName.trim()) ?? wf.statuses.find((s) => s.id.toLowerCase() === lower);
+}
+
+/** Every status a person may name, for a refusal: `Code Review (jira:10003), …`. */
+export const statusChoices = (wf: Workflow): string =>
+  wf.statuses.filter((s) => !s.retired).map((s) => (s.id === s.name ? s.id : `${s.name} (${s.id})`)).join(", ");
+
+/** A status as every surface lists it. `color` is absent when the surface's own category colour applies. */
+export interface WorkflowStatusView {
+  id: string;
+  name: string;
+  category: IssueState;
+  color?: string;
+  source: string;
+  retired?: boolean;
+}
+
+/** The workflow as views, the CLI and services read it (`issue.workflow`): statuses in the order
+ *  every surface lists them — category order, then the workflow's own — and the board and the
+ *  per-type transitions when the workflow has them. */
+export interface WorkflowView {
+  /** False for a workspace with no `workflow.yaml` (its statuses are the categories). */
+  custom: boolean;
+  statuses: WorkflowStatusView[];
+  board?: { columns: { name: string; statuses: string[] }[] };
+  issueTypes: Record<string, { statuses: string[]; initial?: string; transitions: { id: string; name?: string; from: "*" | string[]; to: string }[] }>;
+}
+
+const views = new WeakMap<Workflow, WorkflowView>();
+
+export function workflowView(wf: Workflow): WorkflowView {
+  const hit = views.get(wf);
+  if (hit) return hit;
+  const rank = (c: IssueState) => CATEGORIES.indexOf(c);
+  const statuses = wf.statuses
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => rank(a.s.category) - rank(b.s.category) || a.i - b.i)
+    .map(({ s }) => ({
+      id: s.id,
+      name: s.name,
+      category: s.category,
+      source: s.source,
+      ...(s.color ? { color: s.color } : {}),
+      ...(s.retired ? { retired: true } : {}),
+    }));
+  const view: WorkflowView = {
+    custom: !isBuiltinWorkflow(wf),
+    statuses,
+    ...(wf.board ? { board: { columns: wf.board.columns.map((c) => ({ name: c.name, statuses: [...c.statuses] })) } } : {}),
+    issueTypes: Object.fromEntries(
+      Object.entries(wf.issueTypes).map(([k, t]) => [
+        k,
+        {
+          statuses: [...t.statuses],
+          ...(t.initial ? { initial: t.initial } : {}),
+          transitions: t.transitions.map((tr) => ({ id: tr.id, ...(tr.name ? { name: tr.name } : {}), from: tr.from === "*" ? "*" : [...tr.from], to: tr.to })),
+        },
+      ]),
+    ),
+  };
+  views.set(wf, view);
+  return view;
+}
+
+/** The one source of truth for the statuses of the workspace at `root`: their order, names and
+ *  colours (design §4.3). Cached with the workflow, so a caller per event gets the same object. */
+export const workflowStatuses = (root: string): WorkflowView => workflowView(loadWorkflow(root));
+
+/** The statuses a move from `from` can reach directly, by the issue type's transitions; undefined
+ *  when the workflow knows none for that type (every status is then a target). */
+export function transitionTargets(view: Pick<WorkflowView, "issueTypes">, issueType: string | undefined, from: string): string[] | undefined {
+  const t = issueType ? view.issueTypes[issueType] : undefined;
+  if (!t || t.transitions.length === 0) return undefined;
+  return [...new Set(t.transitions.filter((tr) => tr.from === "*" || tr.from.includes(from)).map((tr) => tr.to))].filter((s) => s !== from);
 }
