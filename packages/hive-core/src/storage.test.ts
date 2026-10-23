@@ -14,6 +14,7 @@ import {
   listIssues,
   parseSections,
   readConfig,
+  serializeSections,
   readIssue,
   serializeIssue,
   writeConfig,
@@ -318,36 +319,63 @@ describe("parseSections", () => {
       { done: false, text: "todo item" },
     ]);
   });
-  test("plain `Acceptance criteria:` label inside description is split out", () => {
-    // Agents (hive_create_issue) embed the checklist under a plain label line
-    // inside the free-text description — not a `## ` heading. It must still
-    // reach the acceptanceCriteria section, and the real description must NOT
-    // include the checklist lines.
-    const s = parseSections(
-      "## Description\n\nReal desc text.\n\nAcceptance criteria:\n- [ ] first\n- [x] second\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created",
-    );
-    expect(s.description).toBe("Real desc text.");
-    expect(s.acceptanceCriteria).toEqual([
-      { done: false, text: "first" },
-      { done: true, text: "second" },
-    ]);
-    expect(s.activity.length).toBe(1);
+  test("an \"Acceptance criteria\" line that isn't the `##` heading stays in the description, with every line under it", () => {
+    // Jira descriptions carry exactly this (jira-fake OPS-7: a bold paragraph over a plain bullet
+    // list). Splitting it out kept only checkbox lines and lost the rest on the next write.
+    for (const label of ["Acceptance criteria", "Acceptance criteria:", "**Acceptance criteria**", "**Acceptance criteria:**", "### Acceptance criteria"]) {
+      const desc = `Retry failed webhooks.\n\n${label}\n\n- Retries back off\n- [ ] a checkbox too`;
+      const s = parseSections(`## Description\n\n${desc}\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created`);
+      expect([label, s.description, s.acceptanceCriteria]).toEqual([label, desc, []]);
+    }
   });
-  test("bold `**Acceptance criteria:**` label is split out", () => {
-    const s = parseSections(
-      "## Description\n\nD.\n\n**Acceptance criteria:**\n- [ ] x",
-    );
-    expect(s.description).toBe("D.");
-    expect(s.acceptanceCriteria).toEqual([{ done: false, text: "x" }]);
-  });
-  test("an acceptance-criteria label line is found in linear time", () => {
-    const s = parseSections("Intro.\r\n\r\n  ### Acceptance  criteria : **\r\n- [ ] y\r\n");
-    expect(s.description).toBe("Intro.");
-    expect(s.acceptanceCriteria).toEqual([{ done: false, text: "y" }]);
+  test("finding sections stays linear on long lines", () => {
     const t = performance.now();
-    const long = parseSections(`acceptance criteria${" ".repeat(50_000)}x\n${"Acceptance criteria\t".repeat(5_000)}`);
+    const long = parseSections(
+      `## Acceptance criteria${" ".repeat(50_000)}x\n${"## Acceptance\tcriteria \t".repeat(5_000)}\n## Activity\n\n- a${" ·x".repeat(20_000)}`,
+    );
     expect(performance.now() - t).toBeLessThan(100);
-    expect(long.acceptanceCriteria).toEqual([]);
+    expect([long.acceptanceCriteria, long.activity]).toEqual([[], []]);
+  });
+  test("a body round-trips: lines that aren't entries, unknown sections and row details are written back as read", () => {
+    const bodies = {
+      "AC prose, `* [ ]`, nested bullets, an indented item": [
+        "## Description", "", "D.", "",
+        "## Acceptance criteria", "",
+        "Must hold for every source:", "", "- [x] retries back off", "  - at most 5 times", "  - [ ] jittered", "* [ ] star bullet", "", "Done when QA signs off.",
+      ],
+      "an unknown section between Acceptance criteria and Activity stays there": [
+        "## Acceptance criteria", "", "- [ ] one", "", "## Notes", "", "- [ ] not a criterion", "", "## Activity", "", "- 2026-05-17T10:00:00.000Z · ui · created",
+      ],
+      "an unknown section after Activity": [
+        "## Activity", "", "- 2026-05-17T10:00:00.000Z · ui · created", "", "## Links", "", "- https://example.com", "", "# Appendix", "", "text",
+      ],
+      "activity: who with spaces, a row id, a multi-line message, a line that isn't a row": [
+        "## Activity", "",
+        "- 2026-05-17T10:00:00.000Z · Jane Doe (jira) · Looks good<br>ship it <!-- id:jira-c-10023 -->",
+        "  a continuation an older build wrote",
+        "- 2026-05-17T11:00:00.000Z · claude · state: todo → in_progress · labels: [] → [x]",
+      ],
+    };
+    for (const [name, lines] of Object.entries(bodies)) {
+      const body = lines.join("\n") + "\n";
+      expect([name, serializeSections(parseSections(body))]).toEqual([name, body]);
+    }
+    const s = parseSections(bodies["activity: who with spaces, a row id, a multi-line message, a line that isn't a row"].join("\n"));
+    expect(s.activity).toEqual([
+      { at: "2026-05-17T10:00:00.000Z", who: "Jane Doe (jira)", message: "Looks good\nship it", id: "jira-c-10023" },
+      { at: "2026-05-17T11:00:00.000Z", who: "claude", message: "state: todo → in_progress · labels: [] → [x]" },
+    ]);
+    const ac = parseSections(bodies["AC prose, `* [ ]`, nested bullets, an indented item"].join("\n"));
+    expect(ac.acceptanceCriteria).toEqual([{ done: true, text: "retries back off" }, { done: false, text: "jittered" }]);
+    expect(parseSections(bodies["an unknown section between Acceptance criteria and Activity stays there"].join("\n")).acceptanceCriteria).toEqual([{ done: false, text: "one" }]);
+    expect(parseSections(bodies["an unknown section after Activity"].join("\n")).extra).toBe("## Links\n\n- https://example.com\n\n# Appendix\n\ntext");
+  });
+  test("entries added to a section with kept lines land after its entries, not inside an unknown section", () => {
+    const s = parseSections("## Acceptance criteria\n\nIntro.\n\n- [ ] one\n\n## Notes\n\nfree text\n");
+    s.acceptanceCriteria.push({ done: false, text: "two" });
+    const back = parseSections(serializeSections(s));
+    expect(back.acceptanceCriteria).toEqual([{ done: false, text: "one" }, { done: false, text: "two" }]);
+    expect(serializeSections(back)).toContain("- [ ] two\n\n## Notes\n\nfree text");
   });
   test("activity entries parsed", () => {
     const s = parseSections(
@@ -555,5 +583,17 @@ describe("createIssue / updateIssue (CLI + UI write path)", () => {
     const updated = await updateIssue(root, created.id, { github: null }, "ui");
     expect(updated.github).toBe(null);
     expect(updated.sections.activity.map((a) => a.message)).toContain("github: 7 → —");
+  });
+
+  test("activity rows keep their ids and multi-line messages through a write", async () => {
+    const root = await mkRoot();
+    const created = await createIssue(root, { title: "t" });
+    const issue = await readIssue(root, created.id);
+    appendActivity(issue, "Jane Doe (jira)", "Looks good.\nShip it.", new Date("2026-05-17T10:00:00Z"), "jira-c-10023");
+    await writeIssue(issue);
+    await updateIssue(root, created.id, { title: "t2" }, "cli:bob");
+    const rows = (await readIssue(root, created.id)).sections.activity;
+    expect(rows[1]).toEqual({ at: "2026-05-17T10:00:00.000Z", who: "Jane Doe (jira)", message: "Looks good.\nShip it.", id: "jira-c-10023" });
+    expect(rows.length).toBe(3);
   });
 });

@@ -29,6 +29,7 @@ import {
   type IssuePatch,
   type IssueSections,
   type IssueSummary,
+  type LayoutLine,
 } from "./types.js";
 
 const DIR = ".hivemind";
@@ -460,18 +461,17 @@ async function walk(dir: string, ext: string): Promise<string[]> {
 // without breaking parse. Serializer always emits `##`, so the file
 // normalises after one round-trip.
 const SEC_DESC = /^#{1,6}\s+Description\s*$/im;
-// Accept a real markdown heading (`## Acceptance criteria`) OR a plain/bold
-// label line (`Acceptance criteria:` / `**Acceptance criteria:**`). Agents
-// (via hive_create_issue, which only had a free-text `description`) routinely
-// embed the checklist under a plain `Acceptance criteria:` line inside the
-// description — those items then never reached the dedicated section and the
-// board showed an empty Acceptance Criteria panel. Matching the label line
-// splits them out; serializeSections rewrites it canonically on next save.
-// Tested one trimmed line at a time with no overlapping quantifiers, so it stays linear.
-const SEC_AC_LINE = /^(?:#{1,6}\s+|\*\*\s*)?Acceptance\s+criteria\s*(?::\s*)?\**$/i;
+// Only the real `## Acceptance criteria` heading. A plain or bold "Acceptance criteria" line is
+// description text: Jira descriptions hold exactly that line over a plain bullet list (jira-fake
+// OPS-7), and splitting it out dropped every line under it that wasn't a checkbox.
+const SEC_AC = /^##[ \t]+Acceptance[ \t]+criteria[ \t]*$/im;
 const SEC_ACT = /^#{1,6}\s+Activity\s*$/im;
+/** A `#` or `##` heading inside Acceptance criteria or Activity starts a section we don't model. */
+const OTHER_SECTION = /^#{1,2}[ \t]+\S/;
 
-/** Split the body into our three known sections + extra. Tolerant: missing sections become empty. */
+/** Split the body into our three known sections + extra. Tolerant: missing sections become empty.
+ *  Lossless: what a section holds beyond its entries is kept in its layout or in `extra`, so
+ *  `serializeSections` writes back what it read. */
 export function parseSections(body: string): IssueSections {
   const sections: IssueSections = {
     description: "",
@@ -489,14 +489,7 @@ export function parseSections(body: string): IssueSections {
     }
   };
   push("desc", SEC_DESC);
-  let lineStart = 0;
-  for (const line of body.split("\n")) {
-    if (SEC_AC_LINE.test(line.trim())) {
-      heads.push({ name: "ac", idx: lineStart, end: lineStart + line.length });
-      break;
-    }
-    lineStart += line.length + 1;
-  }
+  push("ac", SEC_AC);
   push("act", SEC_ACT);
   heads.sort((a, b) => a.idx - b.idx);
 
@@ -510,10 +503,19 @@ export function parseSections(body: string): IssueSections {
     const h = heads[i]!;
     const next = heads[i + 1];
     const sliceEnd = next ? next.idx : body.length;
-    const text = body.slice(h.end, sliceEnd).trim();
-    if (h.name === "desc") sections.description = text;
-    else if (h.name === "ac") sections.acceptanceCriteria = parseAcceptance(text);
-    else if (h.name === "act") sections.activity = parseActivity(text);
+    const slice = body.slice(h.end, sliceEnd);
+    if (h.name === "desc") {
+      sections.description = slice.trim();
+    } else if (h.name === "ac") {
+      const r = parseEntries(sectionLines(slice), parseTodo, "keep");
+      sections.acceptanceCriteria = r.entries;
+      if (r.layout) sections.acceptanceLayout = r.layout;
+    } else {
+      const r = parseEntries(sectionLines(slice), parseActivityRow, "cut");
+      sections.activity = r.entries;
+      if (r.layout) sections.activityLayout = r.layout;
+      sections.extra = r.rest;
+    }
   }
 
   // Text BEFORE the first known heading is also description.
@@ -525,23 +527,125 @@ export function parseSections(body: string): IssueSections {
   return sections;
 }
 
-const TODO_RE = /^- \[( |x|X)\]\s+(.*)$/;
-function parseAcceptance(text: string): AcceptanceItem[] {
-  const items: AcceptanceItem[] = [];
-  for (const line of text.split("\n")) {
-    const m = TODO_RE.exec(line.trim());
-    if (m) items.push({ done: m[1]!.toLowerCase() === "x", text: m[2]!.trim() });
-  }
-  return items;
+/** A section's lines without the blank lines around them (an indented first line keeps its indent). */
+function sectionLines(slice: string): string[] {
+  const lines = slice.split("\n").map((l) => l.replace(/\r$/, ""));
+  while (lines.length && !lines[0]!.trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1]!.trim()) lines.pop();
+  return lines;
 }
 
-// Activity line: `- <ISO-8601 timestamp> · <who> · <message>`.
-const ACT_RE = /^-\s+(\S+)\s+·\s+(\S+)\s+·\s+(.+)$/;
-function parseActivity(text: string): ActivityEntry[] {
-  const out: ActivityEntry[] = [];
-  for (const line of text.split("\n")) {
-    const m = ACT_RE.exec(line.trim());
-    if (m) out.push({ at: m[1]!, who: m[2]!, message: m[3]! });
+/** Read a section's entries. `layout` is returned only when the section holds anything that a
+ *  plain list of entries would not write back (a line that isn't an entry, an indented entry).
+ *  From a `#`/`##` heading on, lines are not entries: `"keep"` keeps them in the layout (they sit
+ *  before the next known section), `"cut"` returns them as `rest`. */
+function parseEntries<T>(
+  lines: string[],
+  parse: (trimmed: string) => T | null,
+  otherSection: "keep" | "cut",
+): { entries: T[]; layout?: LayoutLine[]; rest: string } {
+  const entries: T[] = [];
+  const layout: LayoutLine[] = [];
+  let plain = true;
+  let inOther = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (OTHER_SECTION.test(line)) {
+      if (otherSection === "cut") {
+        while (layout.length && typeof layout[layout.length - 1] === "string" && !(layout[layout.length - 1] as string).trim()) layout.pop();
+        return { entries, ...(plain ? {} : { layout }), rest: lines.slice(i).join("\n") };
+      }
+      inOther = true;
+    }
+    const entry = inOther ? null : parse(line.trim());
+    if (entry) {
+      const indent = line.slice(0, line.length - line.trimStart().length);
+      entries.push(entry);
+      layout.push({ indent });
+      if (indent) plain = false;
+    } else {
+      layout.push(line);
+      if (line.trim()) plain = false;
+    }
+  }
+  return { entries, ...(plain ? {} : { layout }), rest: "" };
+}
+
+const TODO_RE = /^- \[( |x|X)\]\s+(.*)$/;
+function parseTodo(line: string): AcceptanceItem | null {
+  const m = TODO_RE.exec(line);
+  return m ? { done: m[1]!.toLowerCase() === "x", text: m[2]!.trim() } : null;
+}
+
+// Activity row: `- <ISO-8601 timestamp> · <who> · <message>[ <!-- id:<row id> -->]`, one line.
+// `who` may hold spaces (`Jane Doe (jira)`) but not ` · `. A message's line breaks are written as
+// `<br>`, so a multi-line comment stays one row: an older build reads it as one longer line and
+// writes it back unchanged, and markdown renders the break. The trailing comment is the row's
+// stable id (a Jira comment's, say), invisible when rendered. Scanned by hand rather than with a
+// regex, so a long line stays linear.
+const ROW_ID_OPEN = "<!-- id:";
+const ROW_ID_CLOSE = " -->";
+function parseActivityRow(line: string): ActivityEntry | null {
+  if (!line.startsWith("-") || !/\s/.test(line[1] ?? "")) return null;
+  const sep1 = dotSeparator(line, 2);
+  if (!sep1) return null;
+  const sep2 = dotSeparator(line, sep1.end);
+  if (!sep2) return null;
+  const at = line.slice(2, sep1.start).trim();
+  const who = line.slice(sep1.end, sep2.start).trim();
+  let message = line.slice(sep2.end).trim();
+  if (!at || /\s/.test(at) || !who || !message) return null;
+  let id: string | undefined;
+  const open = message.lastIndexOf(ROW_ID_OPEN);
+  if (open >= 0 && message.endsWith(ROW_ID_CLOSE)) {
+    const candidate = message.slice(open + ROW_ID_OPEN.length, message.length - ROW_ID_CLOSE.length);
+    if (candidate && !/[\s<>]/.test(candidate)) {
+      id = candidate;
+      message = message.slice(0, open).trimEnd();
+    }
+  }
+  message = message.split("<br>").join("\n");
+  return id ? { at, who, message, id } : { at, who, message };
+}
+
+/** The next ` · ` (whitespace on both sides of the dot) at or after `from`. */
+function dotSeparator(line: string, from: number): { start: number; end: number } | null {
+  for (let i = line.indexOf("·", from); i >= 0; i = line.indexOf("·", i + 1)) {
+    if (i > from && /\s/.test(line[i - 1]!) && /\s/.test(line[i + 1] ?? "")) {
+      let end = i + 1;
+      while (end < line.length && /\s/.test(line[end]!)) end++;
+      return { start: i, end };
+    }
+  }
+  return null;
+}
+
+function formatActivityRow(e: ActivityEntry): string {
+  const who = e.who.replace(/\s+/g, " ");
+  const message = e.message.replace(/\r?\n/g, "<br>");
+  return `- ${e.at} · ${who} · ${message}${e.id ? ` ${ROW_ID_OPEN}${e.id}${ROW_ID_CLOSE}` : ""}`;
+}
+
+/** Write a section's entries into its layout: each slot takes the next entry (a slot left over
+ *  when entries were removed is dropped), and entries beyond the slots go at the end of the
+ *  section's own lines — before any unknown heading's block, which would swallow them. */
+function writeEntries<T>(entries: T[], layout: LayoutLine[] | undefined, fmt: (e: T) => string): string[] {
+  if (!layout) return entries.map(fmt);
+  const out: string[] = [];
+  let next = 0;
+  let insertAt = -1;
+  for (const l of layout) {
+    if (typeof l === "string") {
+      if (insertAt < 0 && OTHER_SECTION.test(l)) insertAt = out.length;
+      out.push(l);
+    } else if (next < entries.length) {
+      out.push(l.indent + fmt(entries[next++]!));
+    }
+  }
+  if (next < entries.length) {
+    let at = insertAt < 0 ? out.length : insertAt;
+    while (at > 0 && !out[at - 1]!.trim()) at--;
+    out.splice(at, 0, ...entries.slice(next).map(fmt));
   }
   return out;
 }
@@ -549,14 +653,10 @@ function parseActivity(text: string): ActivityEntry[] {
 export function serializeSections(s: IssueSections): string {
   const parts: string[] = [];
   if (s.description) parts.push(`## Description\n\n${s.description.trim()}`);
-  if (s.acceptanceCriteria.length > 0) {
-    const lines = s.acceptanceCriteria.map((a) => `- [${a.done ? "x" : " "}] ${a.text}`);
-    parts.push(`## Acceptance criteria\n\n${lines.join("\n")}`);
-  }
-  if (s.activity.length > 0) {
-    const lines = s.activity.map((e) => `- ${e.at} · ${e.who} · ${e.message}`);
-    parts.push(`## Activity\n\n${lines.join("\n")}`);
-  }
+  const ac = writeEntries(s.acceptanceCriteria, s.acceptanceLayout, (a) => `- [${a.done ? "x" : " "}] ${a.text}`);
+  if (ac.some((l) => l.trim())) parts.push(`## Acceptance criteria\n\n${ac.join("\n")}`);
+  const act = writeEntries(s.activity, s.activityLayout, formatActivityRow);
+  if (act.some((l) => l.trim())) parts.push(`## Activity\n\n${act.join("\n")}`);
   if (s.extra.trim()) parts.push(s.extra.trim());
   return parts.join("\n\n") + "\n";
 }
@@ -564,11 +664,11 @@ export function serializeSections(s: IssueSections): string {
 /** Append an activity line. Mutates the issue and returns it.
  *
  * `at` is stored as a full ISO-8601 timestamp WITH the `Z` (UTC) suffix, so every reader
- * parses it as UTC.
+ * parses it as UTC. `id` marks a row mirrored from elsewhere (see `ActivityEntry.id`).
  */
-export function appendActivity(issue: Issue, who: string, message: string, at?: Date): Issue {
+export function appendActivity(issue: Issue, who: string, message: string, at?: Date, id?: string): Issue {
   const ts = (at ?? new Date()).toISOString();
-  issue.sections.activity.push({ at: ts, who, message });
+  issue.sections.activity.push(id ? { at: ts, who, message, id } : { at: ts, who, message });
   issue.updated = new Date().toISOString();
   return issue;
 }
