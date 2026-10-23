@@ -228,7 +228,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, star
         ...(selected ? { background: "var(--surface-4)", boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)" } : {}),
       }}
       // `w-[calc(100%-1rem)] min-w-0`: without a width the row shrink-wraps its text and `truncate` never engages.
-      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 has-[[data-layer-line]]:h-11 has-[[data-layer-decide]]:h-20 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none cursor-pointer transition-colors ${
+      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 has-[[data-layer-line]]:not-has-[[data-layer-decide]]:h-11 has-[[data-layer-decide]]:h-20 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none cursor-pointer transition-colors ${
         selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg)] hover:bg-[var(--surface-3)]"
       }`}
     >

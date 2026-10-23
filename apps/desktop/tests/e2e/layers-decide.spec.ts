@@ -1,7 +1,7 @@
 // A permission is answered where it shows (docs/design/last-line-2026-10-23.md §2, §3): an agent
-// that waits on the person's permission to run a one-line command says it on its Layers row, in
-// amber, with Deny and Allow under it; and, seen from elsewhere, its toast says it too and offers
-// the same. Each answers `agent.answer` with the wait's `since`, and the hook that holds the wait
+// that waits on the person's permission to run a command says it on its Layers row, in amber, with
+// Deny and Allow under it, or Review when the row cuts it short; and, seen from elsewhere, its toast
+// says it too and offers the same. Each answers `agent.answer` with the wait's `since`, and the hook that holds the wait
 // prints that answer. A stand-in agent asks as Claude Code does (helpers/chooser.ts, `held`).
 import { test, expect, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync } from "node:child_process";
@@ -27,7 +27,7 @@ async function started(): Promise<{ desktop: Page; tile: string; log: () => stri
   execSync("git init -q", { cwd: repo });
   const home = path.join(root, "home");
   fs.mkdirSync(home);
-  const env = chooserAgent(root, { held: true });
+  const env = chooserAgent(root, { held: true, about: true });
   const desktop = await person(root, "desktop", repo, apps, { ...env, CHOOSER_LATE: "1", HIVEMIND_SHELL_ENV: "0", HOME: home });
   await desktop.evaluate(() => window.hive.settingsSet("agents.defaultAgent", "chooser"));
   await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:shortcut", { detail: "agent" })));
@@ -39,24 +39,30 @@ async function started(): Promise<{ desktop: Page; tile: string; log: () => stri
   return { desktop, tile, log, ask: () => desktop.evaluate((t) => window.hive.ptyWrite(`hm:${t}`, "perm\r"), tile) };
 }
 
-test("a permission to run one line says it on the agent's row in amber with Deny and Allow, the keyboard not on Allow; Allow answers its hook and the band goes", async () => {
+test("a permission says what it runs on the agent's row in amber; cut short there, the row offers Review, which shows it whole with the keyboard on Deny, and Allow answers its hook", async () => {
   test.setTimeout(120_000);
   const { desktop, log, ask } = await started();
   await ask();
   const row = desktop.locator('aside[aria-label="Layers"] [data-layer-tile]');
   await expect(row.locator('[data-layer-line="waiting"]')).toHaveText("Bash: rm -rf build", { timeout: 20_000 });
+  // The panel's row is narrower than the line beside its needs-you chip: none of it may be allowed
+  // unseen.
   const band = row.locator("[data-layer-decide]");
-  await expect(band.locator("[data-decide]")).toHaveText(["Deny", "Allow"]);
+  await expect(band.locator("[data-decide]")).toHaveText(["Review"]);
   await expect(row).toHaveCSS("height", "80px");
-  expect(await desktop.evaluate(() => document.activeElement?.getAttribute("data-decide") ?? null)).not.toBe("allow");
 
-  await band.locator('[data-decide="allow"]').click();
+  await band.locator('[data-decide="review"]').click();
+  const review = desktop.locator("[data-wait-review]");
+  await expect(review.locator("pre")).toHaveText("rm -rf build");
+  await expect(review.locator("[data-decide]")).toHaveText(["Deny", "Allow"]);
+  expect(await desktop.evaluate(() => document.activeElement?.getAttribute("data-decide") ?? null)).toBe("deny");
+  await review.locator('[data-decide="allow"]').click();
   await expect.poll(log, { timeout: 20_000 }).toContain("hook said");
   expect(log()).toMatch(/hook said .*allow/);
   await expect(band).toHaveCount(0, { timeout: 20_000 });
 });
 
-test("seen from elsewhere, the agent's toast says what it waits on and offers Deny and Allow, filled in place; Deny answers its hook and the toast goes", async () => {
+test("seen from elsewhere, the agent's toast says what it waits on and offers Deny and Allow, filled in place; Deny answers its hook and the toast stops asking", async () => {
   test.setTimeout(120_000);
   const { desktop, log, ask } = await started();
   // Nothing selected: the toast is for a tile the person is not looking at.
@@ -70,5 +76,8 @@ test("seen from elsewhere, the agent's toast says what it waits on and offers De
   await deny.click();
   await expect.poll(log, { timeout: 20_000 }).toContain("hook said");
   expect(log()).toMatch(/hook said .*deny/);
-  await expect(card).toHaveCount(0, { timeout: 20_000 });
+  // Its wait ended: the needs-you toast goes (the turn the denial ends may tell it finished, in
+  // its place).
+  await expect(card.locator("[data-decide]")).toHaveCount(0, { timeout: 20_000 });
+  await expect(card).not.toContainText("needs your input");
 });

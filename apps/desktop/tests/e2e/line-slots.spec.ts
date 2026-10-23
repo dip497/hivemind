@@ -1,12 +1,14 @@
 // A view reserves room for a tile's last line and the host draws it there (protocol 1.17,
 // `lineSlots`, docs/design/last-line-2026-10-23.md §4): the line a shell printed shows in the slot
 // the view left, drawn by the app over the view's frame, and nothing the view was sent carries it.
-import { test, expect, type ElectronApplication, type Frame, type Page } from "@playwright/test";
+import { test, expect, _electron as electron, type ElectronApplication, type Frame, type Page } from "@playwright/test";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, "../../../cli/src/index.ts");
 const VIEW = path.join(__dirname, "fixtures", "views", "line-slots");
 
