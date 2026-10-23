@@ -8,6 +8,30 @@ import { hive } from "./helpers.js";
 import { fixtureXDG } from "./agents-fixtures.js";
 
 describe("hive plugins", () => {
+  test("a view's own colours are among its settings, and a list it takes is kept as a list", () => {
+    const xdg = fixtureXDG(["claude"]);
+    const view = path.join(xdg, "isles-source");
+    fs.mkdirSync(view, { recursive: true });
+    fs.writeFileSync(path.join(view, "index.html"), "<p>isles</p>");
+    fs.writeFileSync(path.join(view, "hivemind-view.json"), JSON.stringify({
+      id: "isles", name: "Isles", version: "1.0.0", entry: "index.html",
+      settings: [{ id: "names", label: "Harbours", type: "list" }],
+      tokens: [{ id: "sea", label: "Sea", dark: "#123a5a", light: "=info" }],
+    }));
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock") };
+    const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: xdg, env });
+    try {
+      expect(run("install", view).json).toMatchObject({ id: "isles" });
+      expect(run("set", "view:isles", "token-sea", "#00FF88").json).toMatchObject({ value: "#00ff88" });
+      expect(run("set", "view:isles", "names", '["north, east", "south"]').json).toMatchObject({ value: ["north, east", "south"] });
+      // Read back from settings.json: the list came through as a list.
+      expect(run("show", "view:isles").json).toMatchObject({ values: { "token-sea": "#00ff88", names: ["north, east", "south"] } });
+      expect(run("set", "view:isles", "token-sea", "sea-green").json).toMatchObject({ error: { message: "token-sea is a colour like #1d4ed8, or theme for the theme's own" } });
+    } finally {
+      fs.rmSync(xdg, { recursive: true, force: true });
+    }
+  });
+
   test("lists every kind, switches one on and off, and sets what its settings take", () => {
     const xdg = fixtureXDG(["claude"]);
     const view = path.join(xdg, "board-source");

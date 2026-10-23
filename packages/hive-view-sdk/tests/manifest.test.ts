@@ -35,8 +35,8 @@ describe("the settings a view declares", () => {
     expect(ok.ok && ok.manifest.settings).toEqual([{ id: "columns", label: "Columns", type: "choice", values: ["todo", "all"], default: "todo" }]);
     const bad = validateViewManifest({ ...base, settings: [{ id: "max", type: "number", default: "lots" }, { id: "max", type: "boolean" }, { id: "max", type: "boolean" }] });
     expect(bad.ok ? [] : bad.errors).toEqual([
-      "settings[0] is not a field: an id, a type of boolean, number, text or choice, and a default that fits it",
-      "settings[2] is not a field: an id, a type of boolean, number, text or choice, and a default that fits it",
+      "settings[0] is not a field: an id, a type (boolean, number, text, choice, color, multi or list), a default that fits it, and a showIf that names a field before it",
+      "settings[2] is not a field: an id, a type (boolean, number, text, choice, color, multi or list), a default that fits it, and a showIf that names a field before it",
     ]);
     expect(validateViewManifest({ ...base, settings: {} }).ok).toBe(false);
   });
