@@ -95,6 +95,21 @@ then Round 1, then this plan.
   right over the DevTools protocol (said on the security page).
 - Settings keep unknown keys directly under a section only; groups this build rebuilds (`glass`,
   `wallpaper`, `terminal`, `views.layers`) still drop keys a newer build added. Round 1 step 1.
+- **A diff's page.** The Diff tile, the Code Workbench's diff, a conflicted file and a tool's diff
+  (`PatchView`) keep the diff library's own page: #0a0a0a on every dark preset, a black slab in a
+  Dracula, Nord, Solarized Dark or One Dark tile, and white on the light one. Their lines, counts
+  and font follow the preset already (`PIERRE_CSS_VARS`).
+  - Nothing outside can set the page. Pierre writes `--diffs-dark-bg` from its theme on `:host`
+    inside each shadow root, and reads `--diffs-bg-override` nowhere in 1.5.1, so the glass rule
+    that clears it (`styles.css`, `html.content-glass [data-pierre-tile]`) does nothing.
+  - Pierre's syntax colours are drawn for its page. On a preset's bg2 they fall below 4.5:1: the
+    keyword is 3.50:1 on Nord, comments 2.63 to 3.17:1.
+  - The change, in `pierre-codeview.ts` for all four: a CSS-variables theme
+    (`registerCustomCSSVariableTheme`, for both modes) whose page and syntax are the app's tokens
+    (`--color-bg2`, `--color-syntax-*`, comments in fg2, since fg3 is 3.4:1 on Solarized Dark's
+    bg2). Then retune `--color-diff-added` / `--color-diff-removed` for that page (−N needs L 0.72
+    for 4.5:1 on Nord's bg2) and the row tints, under which syntax already reads 3.7 to 4.6:1 on
+    Pierre's page (2.2 to 3.9:1 on a changed word).
 
 ## Rounds and PRs
 

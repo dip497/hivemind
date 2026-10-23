@@ -366,7 +366,8 @@ function AcEditor({
               onClick={() => toggle(i)}
               className="mt-0.5 size-3.5 shrink-0 rounded-sm border grid place-items-center cursor-pointer"
               style={{
-                color: "var(--color-fg)",
+                // The tick is cut in the page's colour, as the done state's own mark is: it reads on the green.
+                color: "var(--color-bg)",
                 background: c.done ? "var(--color-state-done)" : "transparent",
                 borderColor: c.done ? "var(--color-state-done)" : "var(--color-line2)",
               }}

@@ -107,21 +107,24 @@ export function StateChip({ state }: { state: IssueState }) {
   );
 }
 
+/** A colour token (styles.css) in a name's own hue: the token says how light, for the page it is on. */
+const inHue = (token: string, hue: number) => `oklch(from var(${token}) l c ${hue} / alpha)`;
+
 export function LabelChip({ label }: { label: string }) {
   const hue = Array.from(label).reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   return (
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-count font-medium"
       style={{
-        color: `oklch(0.82 0.10 ${hue})`,
-        background: `oklch(0.28 0.04 ${hue} / 0.5)`,
-        border: `1px solid oklch(${hue === 0 ? 0.34 : 0.34} 0.03 ${hue} / 0.4)`,
+        color: inHue("--color-label-text", hue),
+        background: inHue("--color-label-fill", hue),
+        border: `1px solid ${inHue("--color-label-edge", hue)}`,
       }}
     >
       <span
         aria-hidden
         className="inline-block size-1.5 rounded-full"
-        style={{ background: `oklch(0.72 0.15 ${hue})` }}
+        style={{ background: inHue("--color-label-dot", hue) }}
       />
       {label}
     </span>
@@ -138,7 +141,7 @@ export function Avatar({ id, size = 18 }: { id: string; size?: number }) {
         width: size,
         height: size,
         fontSize: Math.round(size * 0.5),
-        background: `oklch(0.78 0.13 ${hue})`,
+        background: inHue("--color-person", hue),
         color: "var(--color-bg)",
       }}
       title={`@${id}`}

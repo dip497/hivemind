@@ -167,12 +167,13 @@ const PALETTES: Record<string, string> = {
   "src/renderer/src/multiplayer/people.ts": "the colours a person picks for themselves",
   "src/renderer/src/components/qr-code.tsx": "a QR code is black on white for any scanner",
   "src/renderer/src/workspace/css-color.ts": "resolves a CSS colour on a canvas",
-  "tools/issues/src/StateMeta.tsx": "the issue states' own colours",
 };
 
 /** One literal in one file, where the value is handed to a library that needs a colour string. */
 const LITERALS: Record<string, string[]> = {
   "src/renderer/src/TerminalTile.tsx": ["rgba(0,0,0,0)"],
+  // A token in a name's own hue: the lightness is the token's, for the page it is on.
+  "tools/issues/src/StateMeta.tsx": ["oklch(from var(${token})"],
 };
 
 test("each check finds what it names, and passes the system's own spelling", () => {

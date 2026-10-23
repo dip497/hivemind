@@ -34,13 +34,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Settings → Shortcuts is made from the app's own keymap, every key in it, and shows each key as your computer writes it (⇧⌘A on a Mac, Ctrl+Shift+A elsewhere). The key hints in tooltips, menus and the Browser, editor and commit boxes do the same instead of showing ⌘ on every computer. An editor, a diff and a plan size their text with the terminal's font keys, the ones their buttons name.
 - Status words are one list: Layers says "approve?", "input?" and "review?" as a terminal's header does, and "needs you" for a frame.
 
-### Security
-
-- A site in a Browser tile asks before it uses your camera, microphone or location, shows notifications, or opens a link in another program (`mailto:`, `zoommtg:`, `slack:`): the question shows over the page, names the site, and its **Allow** and **Block** take a click only after half a second on screen. Your answer holds for the site until you quit the app. Before, every site got them without asking. **Site permissions**, by the address, allows a site ahead of asking (one that only checks never asks) or takes a **Block** back. Links that run code or open files (`file:`, `javascript:`, `search-ms:`) never open, and a site never gets USB, serial or input devices, a speaker or your screen. As in Chrome, a site does not ask to hold the keys in full screen (holding Esc gives them back), keep the screen on or keep its data; anything else it asks for is named in words (your computer's fonts, devices on your network, files you give it), and on a shared host the site's owner stays in its name (`alice.github.io`). A view, or a page a tool shows in its tile, never gets any of them.
-- Known gap: with **Agent browser control** on, an agent can give a site these rights over the Chrome DevTools Protocol without asking you.
-
 ### Fixed
 
+- A tool's diff (`PatchView`: Git history, Pull requests, Worktrees) draws added, removed and changed lines in the preset's own colours and its code in your code font, as the Diff tile does; before, it kept the diff library's green, red and blue and its own font in every preset. In both, a diff's +N and −N read at 4.5:1 on its dark page in every preset: a preset's red or green too dark for it is drawn lighter (Ubuntu's and Solarized Dark's −N were 4.1 and 4.3:1).
+- Issues reads in every preset. On Clean Light, label chips were pale text on a grey smudge and an assignee's initial a pale letter on a pastel disc; they are drawn for the page they are on. Each state's word reads at 4.5:1 on Clean Light and on every dark preset (on the state picker, Todo, In review, Backlog and Cancelled were 1.8 to 3.9:1 under Nord, Dracula, Solarized Dark and One Dark), and a done criterion's tick shows on its green. In progress is cyan, no longer amber, which is kept for what waits on you.
 - Focusing a button or box in a tile that runs past the canvas's edge no longer shifts the canvas for a moment, which could make a click land on something else (seen on a Browser tile's Block and Allow).
 - A form in a view submits, in the app and on the phone page: Enter in its text box fires the form's `submit` event, which did nothing before. The form still cannot leave the view's page.
 - A look that is no built-in preset (an imported theme file) shows as **Custom** in Settings → Appearance instead of as Ubuntu, and **Reset** puts the terminal back to Signal's colours. The Accent's description says what it colours.
@@ -55,6 +52,11 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A workflow's background workers no longer each raise a "finished" toast and notification when their turn ends, as was meant; one that needs you still does.
 - Increased contrast (the system setting) strengthens faint text and lines with glass off too, not only with glass on.
 - Settings → Shortcuts and the guide showed ⌘Tab for the next tile, which is Ctrl+Tab on a Mac too; Settings → Agents named ⌘\ for starting the default agent, which is ⇧⌘A / Ctrl+Shift+A. On Windows and Linux they no longer offer Super+B for Layers, which the system takes; the everyday keys come before Quit.
+
+### Security
+
+- A site in a Browser tile asks before it uses your camera, microphone or location, shows notifications, or opens a link in another program (`mailto:`, `zoommtg:`, `slack:`): the question shows over the page, names the site, and its **Allow** and **Block** take a click only after half a second on screen. Your answer holds for the site until you quit the app. Before, every site got them without asking. **Site permissions**, by the address, allows a site ahead of asking (one that only checks never asks) or takes a **Block** back. Links that run code or open files (`file:`, `javascript:`, `search-ms:`) never open, and a site never gets USB, serial or input devices, a speaker or your screen. As in Chrome, a site does not ask to hold the keys in full screen (holding Esc gives them back), keep the screen on or keep its data; anything else it asks for is named in words (your computer's fonts, devices on your network, files you give it), and on a shared host the site's owner stays in its name (`alice.github.io`). A view, or a page a tool shows in its tile, never gets any of them.
+- Known gap: with **Agent browser control** on, an agent can give a site these rights over the Chrome DevTools Protocol without asking you.
 
 ## [2026.10.5] — 2026-10-21
 
