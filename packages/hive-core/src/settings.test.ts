@@ -91,6 +91,9 @@ describe("settings schema", () => {
       const p = PRESETS[id]!.palette;
       for (const fg of [p.fg, p.fg2, p.fg3]) for (const bg of [p.bg, p.bg2, p.bg3]) expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
     }
+    // What waits on you, and what failed, read as words too: on every surface, the selected row's included.
+    const light = PRESETS["clean-light"]!.palette;
+    for (const fg of [light.warn, light.err]) for (const bg of [light.bg, light.bg2, light.bg3, light.bg4]) expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
   });
 
   test("the interface font is the operating system's own, as DESIGN.md decided; Geist is a choice", () => {

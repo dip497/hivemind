@@ -206,11 +206,11 @@ export const CLEAN_LIGHT: ThemePreset = {
   label: "Clean Light",
   mode: "light",
   palette: {
-    bg: "oklch(0.955 0.004 250)", bg2: "oklch(0.99 0.002 250)", bg3: "oklch(0.975 0.003 250)", bg4: "oklch(0.93 0.004 250)",
+    bg: "oklch(0.955 0.004 250)", bg2: "oklch(0.99 0.002 250)", bg3: "oklch(0.965 0.003 250)", bg4: "oklch(0.93 0.004 250)",
     line: "oklch(0.9 0.004 250)", line2: "oklch(0.84 0.006 250)",
     fg: "oklch(0.24 0.006 250)", fg2: "oklch(0.42 0.006 250)", fg3: "oklch(0.52 0.006 250)",
     select: "oklch(0.42 0.006 250)",
-    ok: "oklch(0.5 0.08 155)", warn: "oklch(0.54 0.13 62)", err: "oklch(0.52 0.13 30)",
+    ok: "oklch(0.5 0.08 155)", warn: "oklch(0.5 0.13 62)", err: "oklch(0.52 0.13 30)",
   },
   accent: "graphite",
   terminal: {
