@@ -72,12 +72,14 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     sshListDir: (uri, dir) => port.invoke("sshListDir", uri, dir),
 
     notifyAgent: local("notify:agent", send("notify:agent")),
+    onSound: local("notify:sound-result", (cb) => port.on("notify:sound", cb)),
+    soundResult: local("notify:sound-result", send("notify:sound-result")),
+    recentSounds: local("notify:recent-sounds", invoke("notify:recent-sounds")),
+    playSound: local("notify:play", invoke("notify:play")),
+    themeSoundBytes: local("notify:theme-sound", invoke("notify:theme-sound")),
     notifyWidget: local("notify:widget", send("notify:widget")),
     layersShown: (repo, shown) => port.send("layers:shown", repo, shown),
     recentFolders: (folders) => port.send("recent:folders", folders),
-
-    getNotificationSettings: () => port.invoke("getNotificationSettings"),
-    setNotificationSettings: (s) => port.invoke("setNotificationSettings", s),
 
     browserRegister: local("browser:register", send("browser:register")),
     browserCdp: local("browserCdp", invoke("browserCdp")),

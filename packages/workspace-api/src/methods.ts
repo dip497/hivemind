@@ -23,6 +23,7 @@ import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/lay
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
 import type { Appearance } from "@hivemind/core/settings-schema";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
+import type { RecentSound, SoundMoment, SoundResult } from "./notifications.js";
 
 /** A press on a widget: one of its buttons (its `action`), or its card. */
 export type WidgetPress = { action: unknown } | { click: true };
@@ -214,6 +215,11 @@ export interface WorkspaceMethods {
   "tools.rescan": () => null;
   /** `settings.json` changed on disk: read it again. */
   "settings.reload": () => null;
+  /** (0.35) Play `moment`'s sound now in the window the person is at, and answer what became of it.
+   *  The person's alone: refused to an agent's tile. The app answers it; `hive host` does not. */
+  "notifications.play": (moment: SoundMoment) => SoundResult;
+  /** (0.35) The last 10 bursts of agents' changes and what each sounded and showed, newest first. */
+  "notifications.recentSounds": () => RecentSound[];
   /** The workspaces this machine holds, with each one's id once it has one. */
   "host.status": () => { workspaces: Array<{ repo: string; workspace: string | null }> };
   /** Join a workspace someone shared, by its link. */

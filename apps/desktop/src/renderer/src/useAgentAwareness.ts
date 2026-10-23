@@ -1,5 +1,5 @@
-/** Agent status transitions → in-app toast (not for a selected tile) and OS
- *  notification (main suppresses it while the window is focused). `noticeOf` decides which
+/** Agent status transitions → in-app toast (not for a selected tile), and main's notice desk
+ *  (OS pop-up and sound, notice-desk.ts). `noticeOf` decides which
  *  transitions are told; the screen reader's line (workspace/announcer.ts) asks it too. */
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { subscribeStatus, type StatusEvent, type TileStatusKind } from "./agent-status-bus";
@@ -227,16 +227,17 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
         });
         if (kind === "done") sayLine(e.tileId);
       }
-      // Native OS notification for the SAME transitions, NOT gated on selection
-      // (if the whole window is unfocused you're away). Main suppresses it when
-      // the window IS focused AND applies the same prefs for the osPopups
-      // surface. One state machine, two surfaces. We still forward every event
-      // so the OS-surface pref is honored even when the in-app one is off.
+      // Main's notice desk hears every window's copy of the same change and makes it one event:
+      // the OS pop-up while no window has the focus, and the sound, under the same settings. Every
+      // change goes, so its pop-up and sound settings hold even with toasts off. `selected`: a
+      // finished sound is skipped while the person looks at that tile (main counts it only while
+      // this window has the focus).
       try {
         window.hive.notifyAgent?.({
           tileId: e.tileId,
           label: e.label,
           kind,
+          ...(selected ? { selected } : {}),
           ...(fr?.title ? { frame: fr.title } : {}),
           ...(repo ? { repo } : {}),
           ...(crashed

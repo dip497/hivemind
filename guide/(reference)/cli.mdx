@@ -367,6 +367,21 @@ hive push set https://ntfy.sh/<your-topic> [--events input.requested,turn.ended]
 hive push status | test | off
 ```
 
+### `hive notifications`
+
+The app's toasts, popups and sounds: the `notifications` settings ([Settings](/settings#notifications)). Guide: [Know who is waiting](/know-who-is-waiting#hear-it).
+
+```text
+hive notifications show [--json]
+hive notifications set <key> <value>      # sound on, sounds.done on, volume 0.4 (or 40%), dnd.start 22:30
+hive notifications play needs|done|error [--json]
+                                          # plays it in the app: {played, why?, pack?}
+hive notifications recent [--json]        # the last 10 moments: agents, sound, popups
+```
+
+`set` and `play` are the person's: an agent is refused them (`PERSON_ONLY`, exit 6). `play` and
+`recent` need the app running; without it they exit 3 (`UNAVAILABLE`). `set` reloads the app.
+
 ## Packages (preview)
 
 To check a package before anything installs it. Installing packages is not built yet.

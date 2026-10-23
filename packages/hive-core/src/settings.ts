@@ -255,7 +255,7 @@ export async function updateSettings(
 
 /**
  * Patch the file's NON-schema top-level keys — the app's own legacy blobs
- * (`browserCdp`, `notifications`) that have always lived in settings.json and
+ * (`browserCdp`) that have always lived in settings.json and
  * are the same file as the theme in a packaged app. They used to be written
  * with a plain read-then-write, which erases whatever the theme wrote in
  * between; this applies them to the file as it is, under the same lock, and

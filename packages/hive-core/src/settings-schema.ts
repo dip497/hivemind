@@ -15,6 +15,7 @@ import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from
 import { isPluginKey, isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
 import { accentColorsOf, appearanceExtraOf, type AccentColors, type AppearanceExtra, type FontFaces } from "./appearance-extra.js";
 import { FIELD_ID } from "@hivemind/view-sdk/settings";
+import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type NotificationSettings } from "./notification-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -470,6 +471,9 @@ export interface Settings {
   network: NetworkSettings;
   browserApp: BrowserAppSettings;
   quit: QuitSettings;
+  /** Toasts, OS pop-ups and sounds (`notification-settings.ts`). Before 2026-10 the app kept them
+   *  in a settings.json of its data folder; migration 0006 moved them here. */
+  notifications: NotificationSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -486,6 +490,7 @@ export const DEFAULT_SETTINGS: Settings = {
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
   quit: { whenRunning: "ask" },
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -801,6 +806,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
     browserApp: browserAppOf(p.browserApp, base.browserApp),
     quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
+    notifications: normalizeNotificationSettings(p.notifications, base.notifications),
   };
 }
 

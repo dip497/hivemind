@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createAnnouncer } from "../../src/renderer/src/workspace/announcer.ts";
 import { forgetStatus, publishStatus, subscribeStatus, type StatusEvent } from "../../src/renderer/src/agent-status-bus.ts";
 import { markBackgroundTile } from "../../src/renderer/src/worker-tiles.ts";
-import { setNotificationSettingsCache } from "../../src/renderer/src/notification-settings.ts";
+import { saveNotificationSettings } from "../../src/renderer/src/notification-settings.ts";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "../../src/shared/notification-settings.ts";
 
 mock.timers.enable({ apis: ["setTimeout", "Date"] });
@@ -23,7 +23,7 @@ function listen(t: TestContext): string[] {
   const said: string[] = [];
   const a = createAnnouncer((text) => said.push(text));
   const off = subscribeStatus(a.onStatus);
-  t.after(() => { off(); a.stop(); for (const id of tiles) forgetStatus(id); tiles.clear(); setNotificationSettingsCache(DEFAULT_NOTIFICATION_SETTINGS); });
+  t.after(() => { off(); a.stop(); for (const id of tiles) forgetStatus(id); tiles.clear(); saveNotificationSettings(DEFAULT_NOTIFICATION_SETTINGS); });
   return said;
 }
 
@@ -72,11 +72,11 @@ test("a background worker's end is not said, one by one; that it needs you is", 
 test("the notification settings mute it as they mute a toast", (t) => {
   const said = listen(t);
   ev("a4", "working"); ev("b4", "working");
-  setNotificationSettingsCache({ ...DEFAULT_NOTIFICATION_SETTINGS, kinds: { needs: true, done: false, error: true } });
+  saveNotificationSettings({ ...DEFAULT_NOTIFICATION_SETTINGS, kinds: { needs: true, done: false, error: true } });
   ev("a4", "idle"); ev("b4", "permission");
   mock.timers.tick(1000);
   assert.deepEqual(said, ["B4 needs you"], "finished is off");
-  setNotificationSettingsCache({ ...DEFAULT_NOTIFICATION_SETTINGS, inApp: false });
+  saveNotificationSettings({ ...DEFAULT_NOTIFICATION_SETTINGS, inApp: false });
   ev("b4", "working"); ev("b4", "permission");
   mock.timers.tick(1000);
   assert.equal(said.length, 1, "in-app notices are off");

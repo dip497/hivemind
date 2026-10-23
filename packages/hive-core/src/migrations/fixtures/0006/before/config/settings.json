@@ -1,0 +1,6 @@
+{
+  "v": 1,
+  "appearance": { "preset": "nord", "radius": 6 },
+  "views": { "defaultView": "windows" },
+  "profile": { "name": "Ada", "color": "#336699" }
+}

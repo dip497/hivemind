@@ -97,12 +97,41 @@ Press the bell again for the next one. Its tooltip says how many are left.
    also covers what a screen reader says.
 4. Check: the next agent that needs you shows a toast.
 
-**Do Not Disturb** mutes **Finished** and **Failed** between two times you set.
-**Needs you** still reaches you.
+With several windows open you get one popup per agent, not one per window. When several agents
+finish or need you at once, the first shows its own popup and the rest within a second and a half
+gather into one, such as **9 more agents finished**. Clicking it opens the first of them.
+
+**Show commands and questions** makes a popup say what the agent waits on (`Bash: npm test`) or
+the last line its terminal showed. It is off by default: a command on screen may hold a password,
+and a popup can show on a locked screen. A push to your phone never carries it.
+
+**Do Not Disturb** mutes **Finished** and **Failed**, popups and sounds, between two times you
+set. **Needs you** still reaches you.
 
 <Frame caption="Settings → Notifications">
   <img src="/images/app/settings-notifications.dark.webp" alt="Settings → Notifications: the Notifications switch, and Notify me about Needs you, Finished and Failed, each with its own switch." />
 </Frame>
+
+## Hear it
+
+1. Open **Settings → Notifications** and, under **Sounds**, switch on **Play a sound**.
+2. Choose the moments that play one: **Needs you** is on, **Finished** and **Failed** are off
+   until you switch them on. **Play** beside each lets you hear it.
+3. Set the **Volume**.
+4. Check: **Play** beside **Needs you** adds a line to **Recent** that says **played**.
+
+Agents that change together play one sound, the most urgent of them: needs you, then failed, then
+finished. At most one sound plays every 1.2 seconds, in the window you are at. A finished agent
+you are looking at plays nothing. An applied theme with its own sounds plays them instead, never
+louder or longer than the app's own, and **Recent** names the theme.
+
+**Recent** lists the last ten moments: how many agents, whether a sound played (or why not) and
+how many popups showed. If it says **blocked: suspended**, click or type in the window once: a
+window may not start a sound before you have used it.
+
+From a terminal, `hive notifications show`, `set`, `play` and `recent` do the same
+([CLI reference](/cli#hive-notifications)). Only you can change or play sounds: an agent that runs
+`hive notifications set` or `play` is refused.
 
 ## Snooze a row
 
@@ -146,6 +175,7 @@ A snoozed row waits under **Snoozed**. It comes back early as soon as its agent 
 |---|---|
 | An agent asks something but its tile never turns amber | See [Troubleshooting](/troubleshooting). |
 | No toast or popup | Check **Settings → Notifications** is on, and **Needs you** with it. |
+| No sound | Check **Play a sound** and the moment are on. **Recent** says why a sound was blocked or skipped. |
 | `hive push test` fails | The URL is wrong, or the computer cannot reach it. Run `hive push status`. |
 
 ## Related

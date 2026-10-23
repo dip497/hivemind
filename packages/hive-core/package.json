@@ -22,6 +22,7 @@
     "./appearance-extra": "./src/appearance-extra.ts",
     "./theme-format": "./src/theme-format.ts",
     "./theme-apply": "./src/theme-apply.ts",
+    "./notification-settings": "./src/notification-settings.ts",
     "./css-color": "./src/css-color.ts",
     "./settings": "./src/settings.ts",
     "./packages": "./src/packages.ts",

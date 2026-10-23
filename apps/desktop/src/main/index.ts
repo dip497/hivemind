@@ -63,9 +63,8 @@ const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
-import { registerAgentNotifications, registerWidgetNotifications } from "./agent-notify.js";
-import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
-import { normalizeNotificationSettings } from "../shared/notification-settings.js";
+import { registerWidgetNotifications } from "./agent-notify.js";
+import { noticeDeskDomain, registerNoticeDesk } from "./notice-desk.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
 import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
@@ -586,15 +585,6 @@ handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "o
   return { ok: true as const };
 }), { local: true });
 
-// ── notification preferences ──────────────────────────────────────────────
-// The persisted blob lives in settings.json; this module owns the read + the
-// in-memory cache the per-notice OS-popup gate reads. The renderer caches its
-// own snapshot on load + on every change here (pushed back via the setter).
-handle("getNotificationSettings", () => getNotificationSettings());
-handleEffect("setNotificationSettings", () => ({}), wrap(async (_e, s: unknown) => {
-  await setNotificationSettings(normalizeNotificationSettings(s));
-  return { ok: true as const };
-}));
 // The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
 // what makes "restart after update" land on the new version: the running
 // AppImage can't overwrite itself, so install.sh stages the new build to
@@ -1357,6 +1347,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   terminals.domain,
   tileLines.domain,
   ptyActivity.domain,
+  // The app's sounds by name, and Recent (0.35).
+  noticeDeskDomain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
   answers({
     plane: () => control,
@@ -1850,10 +1842,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       }
     }, { local: true });
     void createWindow();
-    // Native OS notifications for agents that need you — driven by the renderer's
-    // agent-status bus over IPC (multi-agent, transition-deduped). Reads
-    // The window the user is at, read lazily; gated on it not being focused inside the bridge.
-    registerAgentNotifications(userWindow);
+    // Every window's agent changes, once each: pop-ups, sounds and Recent (notice-desk.ts).
+    registerNoticeDesk({ waitingOf: (bare) => agentFeed()?.waitingOf(bare), lineOf: (bare) => tileLines.get(bare) });
     registerWidgetNotifications();
     startPlanReviewBridge();
     startHcpControlPlane();

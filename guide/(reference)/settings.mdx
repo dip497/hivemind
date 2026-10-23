@@ -142,6 +142,25 @@ The `views.layers` values are what the Layers panel's **View** menu sets.
 |---|---|
 | `plugins.state.<kind>:<id>` | whether that plugin is on, and the values of its settings. Change them on its page, or with `hive plugins enable`, `disable`, `set` and `reset`. |
 
+## notifications
+
+Change them on **Settings → Notifications** ([Know who is waiting](/know-who-is-waiting)), or with
+`hive notifications set`. Only the person changes them: an agent is refused.
+
+| Path | Default | Means |
+|---|---|---|
+| `notifications.enabled` | `true` | every toast, popup and sound |
+| `notifications.kinds.needs`, `.done`, `.error` | `true` | which changes notify you: needs you, finished, failed |
+| `notifications.inApp` | `true` | toasts in the window, and what a screen reader says |
+| `notifications.osPopups` | `true` | your system's popups, while no Hivemind window has the focus |
+| `notifications.popupText` | `false` | a popup says what the agent waits on, or its terminal's last line |
+| `notifications.sound` | `false` | play a sound |
+| `notifications.sounds.needs` | `true` | a sound when an agent needs you |
+| `notifications.sounds.done`, `.error` | `false` | a sound when an agent finishes, or fails |
+| `notifications.volume` | `0.6` | 0 to 1 |
+| `notifications.dnd.enabled` | `false` | Do Not Disturb: mutes finished and failed, never needs you |
+| `notifications.dnd.start`, `.end` | `22:00`, `07:00` | its times, as `HH:MM` in your local time |
+
 ## profile, network, browserApp, quit
 
 | Path | Default | Means |
