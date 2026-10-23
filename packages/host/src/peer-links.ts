@@ -71,6 +71,7 @@ import type { PairedWith } from "@hivemind/workspace-host/pairing";
 import type { GuestOf } from "@hivemind/workspace-host/devices";
 import { subscriptionOf, type Subscription } from "./web-push.js";
 import { linkDuplex } from "./device-sessions.js";
+import type { TileLines } from "./tile-lines.js";
 
 /** How long a phone that unpaired itself has to hang up before it is let go. */
 const LET_GO_MS = 2_000;
@@ -221,8 +222,9 @@ export interface PeerLinksOptions {
   linkState?(workspacePath: string): ViewFrameMachine["state"];
   /** What the window's Layers panel shows of the workspace in `repo` (Home's order and pins). */
   shown?(repo: string): LayersShown | undefined;
-  /** What the tile `tile` of `held` last said, or its screen last showed (Home's last line). */
-  line?(held: HeldBoard[], tile: string): string | undefined;
+  /** Each tile's last line (`TileLines`): what it last said, or its screen last showed; told while
+   *  Home is followed, so every tile's is kept. */
+  lines?: Pick<TileLines, "get" | "followAll">;
 }
 
 interface Served { workspace: string; person: string; link: Link; stop(): void }
@@ -525,8 +527,9 @@ export class PeerLinks {
       follower.behind = false;
       if (m.t === "home" || m.layout?.changes.length || m.lines?.changes.length) send(m);
     };
-    send(home.answer({ layout: follower.layout, lines: follower.lines }));
     this.homeFollowed.add(on);
+    this.o.lines?.followAll(true);
+    send(home.answer({ layout: follower.layout, lines: follower.lines }));
     const stop = home.follow((m) => {
       if (follower.behind) return;
       if (on.hasRoom()) return send(m);
@@ -536,6 +539,7 @@ export class PeerLinks {
     void on.closed.then(() => {
       stop();
       this.homeFollowed.delete(on);
+      if (this.homeFollowed.size === 0) this.o.lines?.followAll(false);
     });
   }
 
@@ -558,14 +562,17 @@ export class PeerLinks {
   }
 
   private homeLines() {
-    const held = heldBoards(this.o.store);
-    return homeLines(held, (tile) => this.o.line?.(held, tile));
+    return homeLines(heldBoards(this.o.store), (tile) => this.o.lines?.get(tile));
   }
 
-  /** Something Home shows changed that the boards and statuses do not say: a tile's last line, or
-   *  what the window shows. */
+  /** Something Home shows changed that the boards and statuses do not say: what the window shows. */
   homeChanged(): void {
     this.home?.changed();
+  }
+
+  /** A tile's last line changed: Home works out its lines alone. */
+  homeLinesChanged(): void {
+    this.home?.linesChanged();
   }
 
   /** The agents here changed: those following them are sent the list again, at once unless it went

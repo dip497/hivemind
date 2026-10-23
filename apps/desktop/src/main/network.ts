@@ -616,7 +616,7 @@ export interface NetworkSources {
   waits?: Pick<Waits, "of" | "answerOf" | "asked">;
   /** For Home (spec/home.md): the links between agents, how a remote frame's machine is linked,
    *  what the window's Layers panel shows of a workspace, and what a tile last said or showed. */
-  home?: Pick<PeerLinksOptions, "links" | "linkState" | "line">;
+  home?: Pick<PeerLinksOptions, "links" | "linkState" | "lines">;
 }
 
 /** What each workspace's Layers panel shows, as the window last said, by folder: Home's order. */
@@ -626,6 +626,11 @@ const ids = (v: unknown): v is string[] => Array.isArray(v) && v.length <= 10_00
 /** Something Home shows changed that the boards and statuses do not say. */
 export function homeChanged(): void {
   peers?.homeChanged();
+}
+
+/** A tile's last line changed: Home works out its lines alone. */
+export function homeLinesChanged(): void {
+  peers?.homeLinesChanged();
 }
 
 // The same invite can be submitted from two windows, or after the join dialog is reopened

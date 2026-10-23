@@ -106,7 +106,7 @@ export function homeRows(s: HomeSource): Map<string, HomeRow> {
   return rows;
 }
 
-/** What each tile of `held` last printed, by its row's key. */
+/** Each tile of `held`'s last line (`TileLines.get`), by its row's key. */
 export function homeLines(held: HeldBoard[], line: (tile: string) => string | undefined): Map<string, string> {
   const lines = new Map<string, string>();
   for (const h of held) {
@@ -129,7 +129,8 @@ export interface HomeFeedOptions {
 }
 
 /** Home's two sequences, worked out at most every `every` ms however often things change, each
- *  change told to every follower. */
+ *  change told to every follower. A line that changes works out the lines alone: never every
+ *  row of the layout. */
 export class HomeFeed {
   private readonly layout: KeyedFeed<HomeRow>;
   private readonly lines: KeyedFeed<string>;
@@ -138,6 +139,8 @@ export class HomeFeed {
   private lastAt = -Infinity;
   /** Changed while no one followed: worked out when someone next asks. */
   private stale = false;
+  /** What changed since Home was last worked out may change its layout, not only its lines. */
+  private layoutStale = false;
 
   constructor(private readonly o: HomeFeedOptions) {
     const caps = { ...(o.keep ? { keep: o.keep } : {}), ...(o.bytes ? { bytes: o.bytes } : {}) };
@@ -149,6 +152,12 @@ export class HomeFeed {
 
   /** Something Home shows changed: work it out again, soon. */
   changed(): void {
+    this.layoutStale = true;
+    this.linesChanged();
+  }
+
+  /** Only a tile's last line changed: its lines are worked out again, soon, and its layout not. */
+  linesChanged(): void {
     if (this.followers.size === 0) {
       this.stale = true;
       return;
@@ -166,7 +175,8 @@ export class HomeFeed {
     this.due = null;
     this.stale = false;
     this.lastAt = this.o.now?.() ?? Date.now();
-    const layout = this.layout.set(this.o.rows());
+    const layout = this.layoutStale ? this.layout.set(this.o.rows()) : [];
+    this.layoutStale = false;
     const lines = this.lines.set(this.o.lines());
     if (!layout.length && !lines.length) return;
     const m: HomeMessage = {

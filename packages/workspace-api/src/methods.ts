@@ -85,6 +85,10 @@ export interface WorkspaceMethods {
    *  it watches none). What each one's screen last showed with text, for those that showed one;
    *  each change after it is a `tile.lines` to the caller alone. */
   "tile.watchLines": (tiles: string[]) => { lines: LastLines };
+  /** (0.35) The last lines of `tiles` (at most 1024) now, once, for those that showed one: for an
+   *  agent that keeps a conversation, what it last said, read first when it is being read or never
+   *  was. Watches nothing. */
+  "tile.readLines": (tiles: string[]) => { lines: LastLines };
   /** (0.18) The agents in the workspace at `repo`, as a phone is told of them: name, program,
    *  state, what each waits on and where it runs; and the feed's position. Each change after it
    *  is an `agent.changed` and an `agent.event` numbered on from `seq`. */

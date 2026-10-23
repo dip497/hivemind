@@ -85,7 +85,7 @@ import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { agentFeed, dialDevice, homeChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { agentFeed, dialDevice, homeLinesChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { broadcast, openWindows, registerWindow, tabsOpen, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -115,7 +115,7 @@ import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
-import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "@hivemind/host/conversations";
+import { askingOf, conversationOf, conversations, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
@@ -1017,10 +1017,6 @@ function writeTile(tileId: string, data: string, paste?: boolean): boolean {
   return false; // dead/unknown tile → agent.send surfaces NOT_FOUND
 }
 
-/** What each agent here last said, for the rows of the person's phone's Home. */
-let said: LastSaid | null = null;
-const lastSaid = (): LastSaid => (said ??= new LastSaid({ tileSessionsDir: path.join(app.getPath("userData"), TILE_SESSIONS_DIR) }));
-
 /** How the host watches a session it starts or wakes. */
 function hostStarted() {
   return {
@@ -1031,9 +1027,13 @@ function hostStarted() {
   };
 }
 
-/** Each tile's last line, for the windows and devices that watch it (`tile.watchLines`), and for
- *  the person's phone's Home, told as one changes. */
-const tileLines = new TileLines({ server: () => workspaceServer, changed: () => homeChanged() });
+/** Each tile's last line (what its agent last said, or its screen last showed), for the windows and
+ *  devices that watch it (`tile.watchLines`), and for the person's phone's Home, told as one
+ *  changes. */
+const tileLines = new TileLines({
+  server: () => workspaceServer, changed: () => homeLinesChanged(),
+  transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
+});
 
 /** A session's screen and its cursor, wherever it runs. */
 function viewportOf(ptyId: string) {
@@ -1627,7 +1627,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       home: {
         links: () => control.links(),
         linkState,
-        line: (held, tile) => lastSaid().line(held, tile) ?? tileLines.get(tile),
+        lines: tileLines,
       },
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>

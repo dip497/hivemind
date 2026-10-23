@@ -48,6 +48,7 @@ const LEAST: Record<string, Role> = {
   "terminal.watchActivity": "view",
   // What a terminal's screen last showed, a line of what watching it shows.
   "tile.watchLines": "view",
+  "tile.readLines": "view",
   // Seeing what a sleeping agent last showed.
   "terminal.saved": "view",
   // Editing the board is the document's own sync (`doc-sync.ts`), where the host takes only what

@@ -69,7 +69,7 @@ import { PeerLinks, tellGuestOf } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder } from "./needs.js";
 import { agentControl } from "./agent-control.js";
 import { StartPlaces } from "./start-places.js";
-import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
+import { askingOf, conversationOf, conversations, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
@@ -285,7 +285,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const grants = new Grants(path.join(o.dir, "grants.json"));
   // Each tile's last line, for the devices that watch it, and for Home.
-  const tileLines = new TileLines({ server: () => api, changed: () => homeChanged() });
+  const tileLines = new TileLines({
+    server: () => api, changed: () => homeLinesChanged(),
+    transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
+  });
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
@@ -384,8 +387,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   appearanceNow = () => { try { return catalog.settings().appearance; } catch { return DEFAULT_APPEARANCE; } };
   await catalog.current();
   // A tile's last line changed: the person's phone's Home is told, once it is served.
-  let homeChanged = (): void => {};
-  const said = new LastSaid({ tileSessionsDir: path.join(o.dir, TILE_SESSIONS_DIR) });
+  let homeLinesChanged = (): void => {};
   // A session's screen and its cursor.
   const viewport = (ptyId: string) => (endpoint.has(ptyId) ? endpoint.viewport(ptyId) : Promise.resolve(null));
   // How the host watches a session it starts or wakes.
@@ -514,7 +516,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     machines,
     // Home's rows: the links between agents, and what each tile last said or showed.
     links: () => control.links(),
-    line: (held, tile) => said.line(held, tile) ?? tileLines.get(tile),
+    lines: tileLines,
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),
     // The phones one of the person's computers paired with are the person's here too
@@ -527,7 +529,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     },
     onWarn: o.onWarn,
   });
-  homeChanged = () => peers.homeChanged();
+  homeLinesChanged = () => peers.homeLinesChanged();
   // The person's phones are told what happens here, encrypted to each (M5), and that this host is
   // back as its network starts.
   const pushSubscriptions = new PushSubscriptions(path.join(identity, "push.json"));

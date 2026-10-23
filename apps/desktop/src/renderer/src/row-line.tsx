@@ -49,11 +49,11 @@ function useWait(tile: string | null): TileWait | undefined {
 export const lineId = (tile: string) => `layer-line-${tile}`;
 
 /** The second line of a terminal's row, as the View menu's Lines says (`show`): nothing at all
- *  when there is nothing to say, so the row stays one line high. An agent that keeps a conversation
- *  shows only what it waits on: the last line of its screen is its own chrome. */
+ *  when there is nothing to say, so the row stays one line high. For an agent that keeps a
+ *  conversation main's line is what it last said there, never its screen's chrome. */
 export const RowLine = memo(function RowLine({ tileId, show }: { tileId: string; show: LayersPrefs["lines"] }) {
   const agent = useWait(show === "off" ? null : tileId);
-  const line = useLine(show === "all" && !agent?.converses ? tileId : null);
+  const line = useLine(show === "all" ? tileId : null);
   const text = lineFor(agent?.waiting, line);
   if (!text) return null;
   const waits = !!agent?.waiting;

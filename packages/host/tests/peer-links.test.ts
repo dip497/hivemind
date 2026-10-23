@@ -248,7 +248,7 @@ function computer() {
     devices: () => [host],
     profile: async () => ({ name: "Priya", color: "#3b82f6" }),
     shown: (at) => shown.get(at),
-    line: (_held, tile) => lines.get(tile),
+    lines: { get: (tile) => lines.get(tile), followAll: () => {} },
   });
   /** `device` connects: what it hears on each stream, and its end of the link; and a stream of its
    *  own, opened beside them (`open`): what is sent on it, what it hears, and its end. */
@@ -680,11 +680,11 @@ test("an owner's device whose link has no room is sent nothing of Home, and once
 
   phone.room(false);
   c.lines.set("t2", "Compiling…");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await wait(300);
   c.lines.set("t2", "Compiled");
   c.lines.delete("t1");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await wait(300);
   assert.equal(heard().length, 1);
 
@@ -698,7 +698,7 @@ test("an owner's device whose link has no room is sent nothing of Home, and once
 
   await wait(300);
   c.lines.set("t1", "Done");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await until(() => heard().length === 3);
   assert.deepEqual(heard()[2], { t: "changes", lines: { seq: 5, changes: [{ seq: 5, key: t1, row: "Done" }] } });
 });
@@ -734,7 +734,7 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
 
   // t2 prints: only the lines move. t1 is answered: only its row is sent.
   c.lines.set("t2", "Compiling…");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await until(() => heard().length === 2);
   assert.deepEqual(heard()[1], { t: "changes", lines: { seq: 2, changes: [{ seq: 2, key: t2, row: "Compiling…" }] } });
   await wait(300);
@@ -746,7 +746,7 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
   phone.hangUp();
   await phone.closed;
   c.lines.delete("t1");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   const again = c.connect(c.phone);
   again.send("home", { t: "follow", layout: 4, lines: 2 });
   await until(() => again.heard.get("home")!.length === 1);

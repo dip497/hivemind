@@ -10,7 +10,7 @@ import type { Connection, Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import type { ToolAsked } from "@hivemind/workspace-api/agents";
 import fs from "node:fs";
-import { conversationStart, followConversation, lastSaid, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
+import { conversationStart, followConversation, lastSaidSince, pendingTool, readConversation, toolUse, type Said } from "./conversation.js";
 import { runsIn, tileOn, type HeldBoard } from "./needs.js";
 
 /** A session an agent keeps its conversation in: its id (empty while none is known), its file
@@ -81,37 +81,152 @@ export function askingOf(held: HeldBoard[], tile: string, tileSessionsDir: strin
  *  read again only once the agent wrote to it. */
 const asked = new Map<string, { file: string; format: AgentTranscript; size: number; mtimeMs: number; tool: ToolAsked | undefined }>();
 
-/** How long which session file an agent keeps is taken as known. */
-const SESSION_KNOWN_MS = 5000;
+/** One tile's agent's last words, as `LastSaid` keeps them: where its session file is (null: it
+ *  keeps no conversation), what it last said there, how far it was read, and its read now. */
+interface SaidOf {
+  t: Transcript | null;
+  line?: string;
+  cursor?: number;
+  /** Read once it is its turn, or being read (`reading`); `again`: asked for again meanwhile. */
+  queued: boolean;
+  reading: boolean;
+  again: boolean;
+  /** Which file it keeps is looked for again before its next read. */
+  resolve: boolean;
+  /** Called once no read of it is due. */
+  settled: Array<() => void>;
+}
 
-/** What each agent here that keeps a conversation last said (`lastSaid`), for Home: which file it
- *  keeps is looked for until found, then again after `SESSION_KNOWN_MS`, and the file read again
- *  only when it grew or shrank, so a board of agents costs a stat each. */
+export interface LastSaidOptions {
+  /** The session the agent of `bare` keeps its conversation in now, and its file; null when it
+   *  keeps none (`transcriptOf`). */
+  transcriptOf(bare: string): Transcript | null;
+  /** What the agent of `bare` last said changed to `line`. */
+  said(bare: string, line: string): void;
+}
+
+/**
+ * What each agent here that keeps a conversation last said (docs/design/last-line-2026-10-23.md
+ * §1), for its tile's line (`TileLines`, which says when to read). Read only when asked: its first
+ * read is from the end of its session file, wider until it says something; each one after reads
+ * only what was written since. Reads are asynchronous and one at a time for every tile here, so
+ * fifty agents are never parsed at once, and a tile asked for again while it is read is read once
+ * more after. Which file a tile's agent keeps is looked for once, then again when it reports
+ * another session or keeps none yet: never on a timer.
+ */
 export class LastSaid {
-  private files = new Map<string, { t: Transcript | null; at: number }>();
-  private said = new Map<string, { file: string; size: number; line: string | undefined }>();
+  private readonly tiles = new Map<string, SaidOf>();
+  private readonly queue: string[] = [];
+  private running = false;
 
-  constructor(private readonly o: { tileSessionsDir: string; home?: string; now?(): number }) {}
+  constructor(private readonly o: LastSaidOptions) {}
 
-  /** What the agent of `tile`, among `held`, last said; "" when it keeps a conversation but has
-   *  said nothing there yet, so nothing from its screen stands in; undefined when it keeps none. */
-  line(held: HeldBoard[], tile: string): string | undefined {
-    const now = this.o.now?.() ?? Date.now();
-    let known = this.files.get(tile);
-    if (!known?.t?.file || now - known.at >= SESSION_KNOWN_MS) {
-      known = { t: transcriptOf(held, tile, this.o.tileSessionsDir, this.o.home), at: now };
-      this.files.set(tile, known);
+  /** Whether the agent of `bare` keeps a conversation. */
+  keeps(bare: string): boolean {
+    return this.of(bare).t !== null;
+  }
+
+  /** What the agent of `bare` last said, once read: "" when it keeps a conversation but has said
+   *  nothing there yet; undefined when it keeps none, or before its first read. */
+  line(bare: string): string | undefined {
+    const s = this.of(bare);
+    return s.t ? s.line : undefined;
+  }
+
+  /** Whether `bare`'s agent keeps a session file whose words were never read. */
+  unread(bare: string): boolean {
+    const s = this.of(bare);
+    return !!s.t?.file && s.cursor === undefined && !s.queued;
+  }
+
+  /** Read what the agent of `bare` said since it was last read, soon; `session`: the session it
+   *  reports from, looked for again when another; `resolve`: look for which file it keeps first. */
+  refresh(bare: string, o: { session?: string; resolve?: boolean } = {}): void {
+    const s = this.of(bare);
+    if (o.resolve || !s.t?.file || (o.session && o.session !== s.t.session)) s.resolve = true;
+    if (s.resolve) this.resolve(bare, s);
+    if (!s.t) return;
+    if (s.queued) { if (s.reading) s.again = true; return; }
+    s.queued = true;
+    this.queue.push(bare);
+    void this.run();
+  }
+
+  /** Resolves once no read of `bare` is due: at once when none is. */
+  settled(bare: string): Promise<void> {
+    const s = this.tiles.get(bare);
+    if (!s?.queued) return Promise.resolve();
+    return new Promise((r) => s.settled.push(r));
+  }
+
+  /** `bare` is closed. */
+  forget(bare: string): void {
+    const s = this.tiles.get(bare);
+    this.tiles.delete(bare);
+    for (const r of s?.settled ?? []) r();
+  }
+
+  private of(bare: string): SaidOf {
+    let s = this.tiles.get(bare);
+    if (!s) {
+      s = { t: null, queued: false, reading: false, again: false, resolve: false, settled: [] };
+      this.tiles.set(bare, s);
+      this.resolve(bare, s);
     }
-    if (!known.t) return undefined;
-    const file = known.t.file;
-    if (!file) return "";
-    let size: number;
-    try { size = fs.statSync(file).size; } catch { return ""; }
-    const was = this.said.get(tile);
-    if (was?.file === file && was.size === size) return was.line ?? "";
-    const line = lastSaid(file, known.t.format);
-    this.said.set(tile, { file, size, line });
-    return line ?? "";
+    return s;
+  }
+
+  /** Look for which file `bare`'s agent keeps now: another one is read from its end. */
+  private resolve(bare: string, s: SaidOf): void {
+    s.resolve = false;
+    const t = this.o.transcriptOf(bare);
+    if (t?.file === s.t?.file && t?.format === s.t?.format) { s.t = t; return; }
+    s.t = t;
+    s.cursor = undefined;
+    if (!t?.file && s.line !== undefined && s.line !== "") this.tell(bare, s, "");
+    if (t && s.line === undefined) s.line = "";
+  }
+
+  private tell(bare: string, s: SaidOf, line: string): void {
+    if (s.line === line) return;
+    s.line = line;
+    this.o.said(bare, line);
+  }
+
+  private async run(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    try {
+      for (let bare = this.queue.shift(); bare !== undefined; bare = this.queue.shift()) {
+        const s = this.tiles.get(bare);
+        if (!s) continue;
+        if (s.resolve) this.resolve(bare, s);
+        const t = s.t;
+        if (t?.file) {
+          s.reading = true;
+          try {
+            const read = await lastSaidSince(t.file, t.format, s.cursor);
+            // Closed, or another file looked for, while it was read: what it read is not this tile's now.
+            if (this.tiles.get(bare) === s && s.t === t) {
+              s.cursor = read.cursor;
+              if (read.line !== undefined) this.tell(bare, s, read.line);
+              else if (s.line === undefined) this.tell(bare, s, "");
+            }
+          } catch { /* unreadable now: read again with its next report */ } finally {
+            s.reading = false;
+          }
+        }
+        if (s.again && this.tiles.get(bare) === s) {
+          s.again = false;
+          this.queue.push(bare);
+          continue;
+        }
+        s.queued = false;
+        for (const r of s.settled.splice(0)) r();
+      }
+    } finally {
+      this.running = false;
+    }
   }
 }
 
