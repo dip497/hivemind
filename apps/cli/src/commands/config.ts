@@ -6,13 +6,14 @@
  *
  *   hive config path
  *   hive config get [appearance.glass.blur]      whole file or one dotted path (JSON)
- *   hive config set appearance.glass.blur 12     value is JSON (strings need quotes: '"nord"')
+ *   hive config set appearance.glass.blur 12     value is JSON (strings need quotes: '"nord"'); a path
+ *                                                that is not a setting here is refused
  *   hive theme list | use <preset> | export [file] | import <file>
  */
 import { defineCommand } from "citty";
 import { promises as fs } from "node:fs";
 import {
-  HiveError, PRESETS, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingsPath, updateSettings,
+  HiveError, PRESETS, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingPathProblem, settingsPath, updateSettings,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
@@ -43,12 +44,15 @@ const getCmd = defineCommand({
 });
 
 const setCmd = defineCommand({
-  meta: { name: "set", description: "Set one dotted path to a JSON value and reload the app" },
+  meta: { name: "set", description: "Set one setting (a dotted path) to a JSON value and reload the app; a path that is not a setting is refused" },
   args: { path: { type: "positional", required: true }, value: { type: "positional", required: true }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
     // Which plugins run is the person's to say, here as in `hive plugins`.
     if (String(args.path).split(".")[0] === "plugins") personOnly(ctx, "change which plugins run and their settings", `hive config set ${String(args.path)} ${String(args.value)}`);
+    // The file keeps keys it does not know, so a mistyped path would be stored and never read.
+    const why = settingPathProblem(String(args.path));
+    if (why) return err(ctx, "not_found", why, undefined, "run `hive config get` to see every setting, or read the Settings reference in the guide");
     let value: unknown;
     try { value = JSON.parse(String(args.value)); } catch { return err(ctx, "usage", `value must be JSON (a string needs quotes: '"nord"'); got ${JSON.stringify(args.value)}`); }
     try {
@@ -107,7 +111,7 @@ const exportCmd = defineCommand({
 });
 
 const importCmd = defineCommand({
-  meta: { name: "import", description: "Replace the appearance with a JSON file (validated); your wallpaper media and overlays stay" },
+  meta: { name: "import", description: "Replace the appearance with a theme file or a whole settings.json's (validated); your wallpaper media and overlays stay" },
   args: { file: { type: "positional", required: true }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };

@@ -41,7 +41,8 @@ can do**.
 
 Everything is one file you own. The app and the `hive` command both read and write it, and it is
 checked each time. A value out of range is set to the nearest allowed one; an unknown value falls
-back to its default.
+back to its default. `hive config set` refuses a path that is not a setting, and lists the
+settings there.
 
 | | Where |
 |---|---|

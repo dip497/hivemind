@@ -112,6 +112,16 @@ describe("settings schema", () => {
     expect([got.preset, got.wallpaper.videoSrc, got.wallpaper.imageSrc, got.overlayMedia]).toEqual(["nord", "hivemedia://media/bo.mp4", undefined, theirs.overlayMedia]);
   });
 
+  test("an imported file gives only the look: a whole settings.json gives its appearance, and no file adds a key this build does not know", () => {
+    const mine = mergeAppearance({ preset: "signal", someFutureKey: { id: "harbour" } });
+    const keys = Object.keys(mine).sort();
+    // A package.json picked by mistake, and a whole settings.json whose appearance a newer build wrote.
+    const pkg = importAppearance({ name: "app", version: "1.0.0", scripts: { build: "tsc" }, radius: 4 }, mine);
+    const whole = importAppearance({ v: 1, appearance: { preset: "nord", later: true }, views: { defaultView: "orbit" }, agents: {} }, mine);
+    expect([Object.keys(pkg).sort(), Object.keys(whole).sort()]).toEqual([keys, keys]);
+    expect([pkg.radius, whole.preset, (whole as unknown as Record<string, unknown>).someFutureKey]).toEqual([4, "nord", { id: "harbour" }]);
+  });
+
   test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {
     expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" });
     const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"], recentsBy: "project" } as const;
@@ -260,9 +270,10 @@ describe("settings schema", () => {
     const changed = (v: unknown) => mergeSettings({ appearance: { someFutureKey: v } }, s).appearance as unknown as Record<string, unknown>;
     expect([changed(2).someFutureKey, Object.hasOwn(changed(undefined), "someFutureKey")]).toEqual([2, false]);
     // What is not JSON, or too big, is dropped; the rest is kept.
-    const odd = mergeSettings({ appearance: { fn: () => 1, big: 1n, huge: "x".repeat(70_000), ok: [1] } });
+    // The bound is in bytes: 40,000 "é" are 80,000 bytes of UTF-8, though 40,000 characters.
+    const odd = mergeSettings({ appearance: { fn: () => 1, big: 1n, huge: "x".repeat(70_000), wide: "é".repeat(40_000), ok: [1] } });
     const kept = odd.appearance as unknown as Record<string, unknown>;
-    expect([["fn", "big", "huge"].filter((k) => Object.hasOwn(kept, k)), kept.ok]).toEqual([[], [1]]);
+    expect([["fn", "big", "huge", "wide"].filter((k) => Object.hasOwn(kept, k)), kept.ok]).toEqual([[], [1]]);
   });
 
   test("mergeSettings: junk falls back per field, values are clamped, an unknown top-level key is left to the file writer", () => {

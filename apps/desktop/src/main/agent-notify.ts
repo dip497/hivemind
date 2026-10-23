@@ -1,5 +1,6 @@
 /**
- * Native OS notifications for agents that need you.
+ * Native OS notifications for agents that need you, and for widgets (`hive.notify`, decided in
+ * widget-notices.ts).
  *
  * Signal source: the renderer's agent-status bus (agent-status-bus.ts), the
  * same state machine that already drives the in-app chips + toasts. It is
@@ -23,6 +24,7 @@ import type { AgentNotice } from "../shared/ipc.js";
 import { shouldNotify } from "../shared/notification-settings.js";
 import { getNotificationSettings } from "./notification-settings-store.js";
 import { composeNotice } from "./agent-notify-core.js";
+import { widgetNoticeToShow } from "./widget-notices.js";
 
 export { composeNotice } from "./agent-notify-core.js";
 
@@ -64,4 +66,17 @@ export function registerAgentNotifications(getWin: () => BrowserWindow | null): 
   };
 
   on("notify:agent", onNotice, { local: true });
+}
+
+/** Register `notify:widget`: a widget's `hive.notify`, from the window that runs it, shown as an
+ *  OS notice when `widgetNoticeToShow` says so. */
+export function registerWidgetNotifications(): void {
+  on("notify:widget", (_e: unknown, raw: unknown) => {
+    if (!Notification.isSupported()) return;
+    const shown = widgetNoticeToShow(raw, Date.now());
+    if (!shown) return;
+    const n = new Notification(shown);
+    n.on("failed", (_e, error) => console.warn("[notify] the OS did not show a widget's notice:", error));
+    n.show();
+  }, { local: true });
 }

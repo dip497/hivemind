@@ -72,6 +72,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     sshListDir: (uri, dir) => port.invoke("sshListDir", uri, dir),
 
     notifyAgent: local("notify:agent", send("notify:agent")),
+    notifyWidget: local("notify:widget", send("notify:widget")),
     layersShown: (repo, shown) => port.send("layers:shown", repo, shown),
     recentFolders: (folders) => port.send("recent:folders", folders),
 

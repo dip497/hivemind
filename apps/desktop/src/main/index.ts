@@ -63,7 +63,7 @@ const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
-import { registerAgentNotifications } from "./agent-notify.js";
+import { registerAgentNotifications, registerWidgetNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
@@ -1866,6 +1866,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // agent-status bus over IPC (multi-agent, transition-deduped). Reads
     // The window the user is at, read lazily; gated on it not being focused inside the bridge.
     registerAgentNotifications(userWindow);
+    registerWidgetNotifications();
     startPlanReviewBridge();
     startHcpControlPlane();
     startViewHost();

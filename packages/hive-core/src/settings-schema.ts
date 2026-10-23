@@ -465,13 +465,14 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|[a-z]{3,20})$/;
 const color = (v: unknown, def: string) => (typeof v === "string" && COLOR_RE.test(v.trim()) ? v.trim() : def);
 
-/** At most this much JSON of the keys a section does not know, per section. */
+/** At most this many bytes (UTF-8) of JSON of the keys a section does not know, per section. */
 const UNKNOWN_MAX = 64 * 1024;
+const UTF8 = new TextEncoder();
 
 /** The keys of a section this build does not know, as a newer build wrote them: kept, so writing
  *  a setting here never erases them. A patch that leaves one out keeps `base`'s, and one set to
  *  undefined removes it. Each is copied as JSON (what is not JSON is dropped), and at most
- *  `UNKNOWN_MAX` in all. */
+ *  `UNKNOWN_MAX` bytes in all. Spread it before the checked fields, so those always win. */
 function keptUnknown(raw: Record<string, unknown>, known: ReadonlySet<string>, base: object): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   let size = 0;
@@ -480,8 +481,10 @@ function keptUnknown(raw: Record<string, unknown>, known: ReadonlySet<string>, b
       if (known.has(k) || !Object.hasOwn(from, k) || (from !== raw && Object.hasOwn(raw, k))) continue;
       let json: string | undefined;
       try { json = JSON.stringify(from[k]); } catch { continue; } // a cycle or a bigint
-      if (json === undefined || size + k.length + json.length > UNKNOWN_MAX) continue;
-      size += k.length + json.length;
+      if (json === undefined) continue;
+      const bytes = UTF8.encode(k).length + UTF8.encode(json).length;
+      if (size + bytes > UNKNOWN_MAX) continue;
+      size += bytes;
       out[k] = JSON.parse(json);
     }
   }
@@ -518,6 +521,7 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   const ansi = base.terminal.ansi.map((d, i) => color(ansiIn[i], d));
   const srcOk = (v: unknown) => (typeof v === "string" && !v.startsWith("blob:") ? v : undefined);
   return {
+    ...keptUnknown(p, APPEARANCE_KEYS, base),
     preset,
     mode: p.mode === "light" ? "light" : "dark",
     palette,
@@ -548,7 +552,6 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
     },
     pluginSurfaces: p.pluginSurfaces === "opaque" ? "opaque" : "theme",
     overlayMedia: (Array.isArray(p.overlayMedia) ? p.overlayMedia : []).map(mediaLayer).filter((m): m is MediaLayer => !!m),
-    ...keptUnknown(p, APPEARANCE_KEYS, base),
   };
 }
 
@@ -603,11 +606,15 @@ export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: st
   };
 }
 
-/** A theme file applied over the person's own appearance `cur`: checked as settings are, and the
- *  media it leaves out kept as `cur` has them, so a file of `exportAppearance` never removes yours. */
+/** A theme file applied over the person's own appearance `cur`: a bare appearance, or a whole
+ *  settings.json (its `appearance`). Only the keys this build knows are read from it, checked as
+ *  settings are, and `cur`'s own other keys stay. The media it leaves out are kept as `cur` has
+ *  them, so a file of `exportAppearance` never removes yours. */
 export function importAppearance(raw: unknown, cur: Appearance): Appearance {
-  const a = mergeAppearance(raw, cur);
-  const p = isObj(raw) ? raw : {};
+  const file = isObj(raw) && isObj(raw.appearance) ? raw.appearance : raw;
+  // Anything else in the file (a settings.json's `v` and `views`, a package.json's `name`) is not the look.
+  const p = isObj(file) ? Object.fromEntries(Object.entries(file).filter(([k]) => APPEARANCE_KEYS.has(k))) : {};
+  const a = mergeAppearance(p, cur);
   const w = isObj(p.wallpaper) ? p.wallpaper : {};
   return {
     ...a,
@@ -638,6 +645,37 @@ export function toolPreferences(s: Pick<Settings, "plugins">, installed: readonl
     for (const [tool, v] of Object.entries(st.options ?? {})) if (v === false) disabledTools.push(`${id}/${tool}`);
   }
   return { enabledPlugins, disabledTools };
+}
+
+/** The maps whose keys are ids (a view's, a plugin's): any key in one is a setting. */
+const ID_MAPS = new Set(["views.chrome", "views.toolbars", "plugins.state"]);
+
+/** Why `hive config set` cannot set the dotted `path`, or null when it is a setting. The file
+ *  keeps a key this build does not know (a newer build may have written it), so setting one would
+ *  store a value nothing here reads. Inside a map of ids (`views.chrome.<view>`,
+ *  `views.toolbars.<view>`, `plugins.state.<plugin>`) any id is one, its value checked as usual. */
+export function settingPathProblem(path: string): string | null {
+  const keys = path.split(".").filter(Boolean);
+  if (keys.length === 0) return "name a setting, such as appearance.glass.blur";
+  const all = mergeSettings(undefined);
+  let at: unknown = all;
+  for (let i = 0; i < keys.length; i++) {
+    const where = keys.slice(0, i).join(".");
+    if (ID_MAPS.has(where)) return null;
+    if (!isObj(at)) return `${where} is ${Array.isArray(at) ? "a list" : "one value"}: set it whole`;
+    if (!Object.hasOwn(at, keys[i]!)) {
+      const near = settingPaths(all).filter((p) => p.endsWith(`.${keys[i]}`));
+      return `this version has no setting ${keys.slice(0, i + 1).join(".")}; ${where || "the file"} holds ${Object.keys(at).join(", ")}${near.length ? `. Did you mean ${near.join(" or ")}?` : ""}`;
+    }
+    at = at[keys[i]!];
+  }
+  return null;
+}
+
+/** Every dotted path in `o` down to its values. */
+function settingPaths(o: unknown, at = ""): string[] {
+  if (!isObj(o) || ID_MAPS.has(at)) return [at];
+  return Object.entries(o).flatMap(([k, v]) => settingPaths(v, at ? `${at}.${k}` : k));
 }
 
 /** The keys each section checks; any other is kept as it is (`keptUnknown`). */
@@ -694,9 +732,10 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
-    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers), ...kept("views") },
-    plugins: { state, ...kept("plugins") },
+    views: { ...kept("views"), defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
+    plugins: { ...kept("plugins"), state },
     agents: {
+      ...kept("agents"),
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
       autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
       declined: (Array.isArray(agents.declined) ? agents.declined : base.agents.declined)
@@ -705,13 +744,12 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
       whenAgentStartsAgent: WHEN_AGENT_STARTS_AGENT.includes(agents.whenAgentStartsAgent as WhenAgentStartsAgent)
         ? (agents.whenAgentStartsAgent as WhenAgentStartsAgent) : base.agents.whenAgentStartsAgent,
-      ...kept("agents"),
     },
     // Here only: `profileOf` also reads what a peer sends, which keeps nothing it does not check.
-    profile: { ...profileOf(p.profile, base.profile), ...kept("profile") },
-    network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck), ...kept("network") },
-    browserApp: { ...browserAppOf(p.browserApp, base.browserApp), ...kept("browserApp") },
-    quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning), ...kept("quit") },
+    profile: { ...kept("profile"), ...profileOf(p.profile, base.profile) },
+    network: { ...kept("network"), updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
+    browserApp: { ...kept("browserApp"), ...browserAppOf(p.browserApp, base.browserApp) },
+    quit: { ...kept("quit"), whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
   };
 }
 

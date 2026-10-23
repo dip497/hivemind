@@ -52,10 +52,9 @@ function AppearancePrefs() {
     if (!f) return;
     try {
       const raw: unknown = JSON.parse(await f.text());
-      // Accept either a whole settings.json or a bare appearance object.
-      const a = raw && typeof raw === "object" && "appearance" in (raw as Record<string, unknown>) ? (raw as { appearance: unknown }).appearance : raw;
-      // Checked, and the wallpaper media and overlays a theme file leaves out stay yours.
-      patchSettings("appearance", importAppearance(a, getSettings().appearance));
+      // A theme file or a whole settings.json, checked; the wallpaper media and overlays a theme
+      // file leaves out stay yours.
+      patchSettings("appearance", importAppearance(raw, getSettings().appearance));
       toast.success(`Imported ${f.name}`);
     } catch { toast.error("That file is not a hivemind theme."); }
   };

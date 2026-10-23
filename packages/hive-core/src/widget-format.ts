@@ -121,10 +121,11 @@ export function widgetTint(tree: unknown): string | null {
   return typeof t === "string" && NOTE_COLORS.includes(t) ? t : null;
 }
 
-/** Why the `tint` of a drawing (`at`) colours nothing: it is set, and is not a note colour; else null. */
+/** Why the `tint` of a drawing (`at`) colours nothing: it is set, and is not a note colour; else
+ *  null. Null and "" are no tint, as is an option left empty ("$options.<id>" drawn as ""). */
 export function tintProblem(tree: unknown, at = "the tree"): string | null {
   const t = (tree as { tint?: unknown } | null)?.tint;
-  if (t === undefined || widgetTint(tree)) return null;
+  if (t === undefined || t === null || t === "" || widgetTint(tree)) return null;
   return `${at} has the tint ${JSON.stringify(t)}, which is not a note colour, so its card is drawn without one; the note colours: ${NOTE_COLORS.join(", ")}`;
 }
 

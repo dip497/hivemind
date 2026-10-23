@@ -10,9 +10,9 @@ applies at once and is saved for you.
 Change how Hivemind looks, from the terminal, with the \`hive theme\` and \`hive config\` commands.
 
 1. Show me the themes: \`hive theme list\`. Ask me which one I want, then run \`hive theme use <name>\`.
-2. Before changing anything else, save the current look: \`hive theme export ~/hivemind-theme-backup.json\`.
+2. Before changing anything else, save the current look, with its photo, video and overlays: \`hive config get appearance > ~/hivemind-theme-backup.json\`.
 3. For anything else I ask (blur, wallpaper, glass), read the value first with \`hive config get <dotted.path>\`, for example \`hive config get appearance.glass.blur\`. Then set it with \`hive config set <dotted.path> '<JSON value>'\`. The value is JSON: a number as is (\`12\`), text in double quotes inside single quotes (\`'"ice"'\`), \`true\` or \`false\`.
-4. If \`hive config set\` refuses a value, show me its message. Do not edit the settings file by hand.
+4. If \`hive config set\` refuses a path or a value, show me its message. Do not edit the settings file by hand.
 
 At the end, show the new values with \`hive config get appearance\`, and tell me that \`hive theme import ~/hivemind-theme-backup.json\` undoes it all.
 `}</AgentPrompt>
@@ -101,6 +101,10 @@ The file holds no media: your photo, video and overlays stay on this computer, a
 what it left out. Importing a file keeps the ones you have. If the theme used a photo or video,
 pick your own under **Background**.
 
+**Import…** and `hive theme import` also take a whole settings.json, and read only the look from
+any file. To keep a copy of your look with its photo, video and overlays, save
+`hive config get appearance > my-look.json`: importing that file puts them back.
+
 A guest who joins your workspace sees your theme, except your photo, video, overlays and fonts.
 
 ## Check it worked
@@ -113,6 +117,7 @@ A guest who joins your workspace sees your theme, except your photo, video, over
 | You see | Do this |
 |---|---|
 | `hive config set` refuses a value | The value must be JSON: text in double quotes inside single quotes (`'"ice"'`). Its range is in the [Settings reference](/settings#appearance). |
+| `hive config set` says this version has no such setting | Check the path. The message lists the settings in that group, and the one you may mean (`appearance.glass.blur` for `appearance.blur`). |
 | The text is hard to read over a photo | Lower **Media brightness**, or raise **Panel opacity**. |
 | Something else | [Troubleshooting](/troubleshooting) |
 

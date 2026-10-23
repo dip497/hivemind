@@ -104,7 +104,7 @@ export function shouldNotify(
 }
 
 /** A widget's notices: at most one per widget in this long, each at most this many characters. */
-const WIDGET_NOTICE_GAP_MS = 10_000;
+export const WIDGET_NOTICE_GAP_MS = 10_000;
 const WIDGET_NOTICE_MAX = 200;
 
 /** A widget's `hive.notify`: the text to show as an OS pop-up now, or null. It follows the master

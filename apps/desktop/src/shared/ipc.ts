@@ -793,6 +793,9 @@ export interface HiveIpc {
   /** Forward a notable agent-status transition to the main process, which fires
    *  a native OS notification IF the window is unfocused. Fire-and-forget. */
   notifyAgent?(notice: AgentNotice): void;
+  /** A widget's `hive.notify`, from the window that runs its code: main shows it as an OS notice
+   *  when the notification settings allow, at most one per widget in 10 s. Fire-and-forget. */
+  notifyWidget?(notice: WidgetNotice): void;
   /** What the Layers panel shows of the workspace in `repo`: its tiles in the order listed, and
    *  the pinned ones (the person's phone's Home lists them so). */
   layersShown(repo: string, shown: { order: string[]; pinned: string[] }): void;
@@ -871,6 +874,10 @@ export interface LedgerSince { id: string; bucket: ViewStatus; since: number; ex
 /** A PNG a view asked to share, checked and re-encoded by main, awaiting the user's choice. */
 export interface SharePrepared { token: string; preview: string; width: number; height: number }
 
+
+/** A widget's `hive.notify`: the widget `widget` on the board of `repo`, its name as the title, and
+ *  the text its code sent, as it sent it. */
+export interface WidgetNotice { repo: string; widget: string; title: string; text: unknown }
 
 /** A notable agent-status transition worth a native OS notification. */
 export interface AgentNotice {

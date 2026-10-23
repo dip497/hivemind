@@ -132,6 +132,56 @@ test("a widget reads the workspace through hive.hm, held to what its widget.json
   }
 });
 
+// A widget that says something when its button is pressed.
+const TELLER = `
+hive.on("start", () => hive.render({ type: "stack", children: [{ type: "button", label: "Tell", action: "tell" }] }));
+hive.on("action", () => hive.notify("Build passed"));
+`;
+
+test("a widget's notice is shown by main, as main's notification settings say, not the window's copy of them", async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-notify-repo-"));
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-notify-ud-"));
+  execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
+  const dir = path.join(ud, "src", "teller");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "widget.json"), JSON.stringify({ name: "Teller" }));
+  fs.writeFileSync(path.join(dir, "widget.js"), TELLER);
+  installPlugin(path.join(ud, "config"), dir);
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config") };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
+  try {
+    // What main shows, kept instead of shown: xvfb has no notification server.
+    await app.evaluate(({ Notification }) => {
+      const g = globalThis as unknown as { shown: string[] };
+      g.shown = [];
+      Notification.isSupported = () => true;
+      Notification.prototype.show = function (this: Electron.Notification) { g.shown.push(`${this.title}: ${this.body}`); };
+    });
+    const shown = () => app.evaluate(() => (globalThis as unknown as { shown: string[] }).shown);
+    const page = await app.firstWindow();
+    await page.waitForSelector(".react-flow", { timeout: 30_000 });
+    await page.locator('[data-toolbar-action="board"]').first().click();
+    await page.locator('[data-board-choice="widget:teller"]').click();
+    const tell = page.locator('[data-widget-layer] [data-widget="teller"]').getByRole("button", { name: "Tell", exact: true });
+    await expect(tell).toBeVisible({ timeout: 10_000 });
+    // Pop-ups off in main only, as another window's Settings → Notifications leaves it: this
+    // window's copy still says on.
+    const popups = (on: boolean) => page.evaluate(async (on) => window.hive.setNotificationSettings({ ...(await window.hive.getNotificationSettings()), osPopups: on }), on);
+    await popups(false);
+    await tell.click();
+    await page.waitForTimeout(1_000);
+    expect(await shown()).toEqual([]);
+    await popups(true);
+    await tell.click();
+    await expect.poll(shown, { timeout: 5_000 }).toEqual(["Teller: Build passed"]);
+  } finally {
+    await app.close();
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(ud, { recursive: true, force: true });
+  }
+});
+
 // A widget that walks across the screen and steps through its sprite's frames: the GPU moves it,
 // so the page lays nothing out and restyles nothing while it walks, however long the walk.
 const WALKER = `

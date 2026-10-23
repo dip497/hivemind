@@ -69,6 +69,43 @@ describe("hive config / hive theme", () => {
       r = hive(["theme", "import", out], { cwd: tmp, env });
       const after = JSON.parse(fs.readFileSync(file, "utf8")).appearance;
       expect([r.code, after.wallpaper.imageSrc, after.overlayMedia]).toEqual([0, picture, [overlay]]);
+      // The guide's backup, `hive config get appearance`, holds the media: importing it puts them back.
+      const backup = path.join(tmp, "backup.json");
+      fs.writeFileSync(backup, hive(["config", "get", "appearance"], { cwd: tmp, env }).stdout);
+      const set = (at: string, value: string) => hive(["config", "set", at, value], { cwd: tmp, env }).code;
+      expect([set("appearance.wallpaper.imageSrc", '"hivemedia://media/bo.png"'), set("appearance.overlayMedia", "[]")]).toEqual([0, 0]);
+      r = hive(["theme", "import", backup], { cwd: tmp, env });
+      const restored = JSON.parse(fs.readFileSync(file, "utf8")).appearance;
+      expect([r.code, restored.wallpaper.imageSrc, restored.overlayMedia]).toEqual([0, picture, [overlay]]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test("set refuses a path that is not a setting, and says which is; any id in a map of ids is one", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-config-path-"));
+    const env = { XDG_CONFIG_HOME: tmp, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
+    const file = path.join(tmp, "hivemind", "settings.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ v: 1 }));
+    try {
+      // The file keeps keys it does not know: each of these would be stored and never read.
+      const wrong = [
+        ["appearance.blur", "Did you mean appearance.glass.blur?"],
+        ["appearance.glass.blurr", "appearance.glass holds enabled, contentGlass, opacity, blur"],
+        ["notifications.enabled", "no setting notifications"],
+        ["appearance.glass.blur.x", "appearance.glass.blur is one value"],
+      ];
+      for (const [at, why] of wrong) {
+        const r = hive(["config", "set", at!, "12", "--json"], { cwd: tmp, env });
+        expect([at, r.code, r.json]).toEqual([at, 5, { error: expect.objectContaining({ code: "NOT_FOUND", message: expect.stringContaining(why!) }) }]);
+      }
+      const s = JSON.parse(fs.readFileSync(file, "utf8"));
+      expect([s.appearance?.blur, s.appearance?.glass?.blurr, s.notifications]).toEqual([undefined, undefined, undefined]);
+      const ids: [string, unknown][] = [["views.chrome.canvas", { island: "hidden" }], ["views.toolbars.canvas", { labels: false }], ["plugins.state.agent:claude", { enabled: false }]];
+      for (const [at, value] of ids) {
+        expect(hive(["config", "set", at, JSON.stringify(value), "--json"], { cwd: tmp, env }).json).toEqual({ path: at, value, rescanned: false });
+      }
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

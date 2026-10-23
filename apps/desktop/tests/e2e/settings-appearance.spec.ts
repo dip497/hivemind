@@ -136,14 +136,22 @@ test("a preserved terminal follows the view's opacity without another theme chan
   await original?.dispose();
 });
 
-test("Copy JSON copies the look without the wallpaper's picture, and says it left it out", async () => {
+test("Copy JSON copies the look without the wallpaper's picture, and says so; Import… of that file keeps your picture", async () => {
   // A wallpaper picked before the media picker: its address names the home folder.
-  hive("config", "set", "appearance.wallpaper", JSON.stringify({ kind: "image", imageSrc: "hm-media://v/%2Fhome%2Falice%2Fcat.png", brightness: 0.8 }));
+  const picture = "hm-media://v/%2Fhome%2Falice%2Fcat.png";
+  hive("config", "set", "appearance.wallpaper", JSON.stringify({ kind: "image", imageSrc: picture, brightness: 0.8 }));
   await expect(page.locator(".hm-wp-image")).toHaveCount(1);
   await openSettings("appearance");
   await page.getByRole("button", { name: "Copy JSON" }).click();
   await expect(page.getByText("Left out the wallpaper picture")).toBeVisible();
   const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
   expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8 }, false]);
+  // The file back, with other corners: the look changes and the picture stays.
+  const file = JSON.stringify({ ...JSON.parse(copied), radius: 3 });
+  await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "theme.json", mimeType: "application/json", buffer: Buffer.from(file) });
+  await expect(page.getByText("Imported theme.json")).toBeVisible();
+  await expect.poll(() => onDisk().appearance.radius, { timeout: 5_000 }).toBe(3);
+  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8 });
+  await expect(page.locator(".hm-wp-image")).toHaveCount(1);
   await closeSettings();
 });

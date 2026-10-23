@@ -20,8 +20,6 @@ import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import { onStoreChange, readBoard } from "../workspace/workspace-store-client";
 import { WIDGET_PRELUDE, drawingProblem } from "@hivemind/core/widget-api";
 import { useSettings } from "../settings-store";
-import { getNotificationSettings } from "../notification-settings";
-import { widgetNotice } from "../../../shared/notification-settings";
 import type { WidgetBridge } from "./widget-hm";
 
 
@@ -123,8 +121,6 @@ function failWidget(id: string, why: string): void {
 }
 /** The options each running widget was last given, as JSON. */
 const sentOptions = new Map<string, string>();
-/** When each running widget's last notice was shown. */
-const noticeAt = new Map<string, number>();
 
 /** A widget's options: what the person set, else each option's default; nothing it does not list. */
 export function optionsOf(pkg: WidgetPackage, w: WidgetObject): Record<string, unknown> {
@@ -323,12 +319,8 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
         }
         else if (m.type === "move") { shown.move = { x: m.x ?? 0, y: m.y ?? 0, over: m.over ?? 0, n: Date.now() * 1000 + (++moves % 1000) }; show(); }
         else if (m.type === "state") update(id, (o) => (o.kind === "widget" ? { ...o, state: m.state } : o));
-        else if (m.type === "notify" && typeof Notification !== "undefined") {
-          // As the person's notification settings allow, and not more than one in a while.
-          const now = Date.now();
-          const body = widgetNotice(getNotificationSettings(), m.text, noticeAt.get(id), now);
-          if (body !== null) { noticeAt.set(id, now); new Notification(pkg.name, { body }); }
-        }
+        // Main decides, by the person's notification settings as main has them.
+        else if (m.type === "notify") window.hive.notifyWidget?.({ repo, widget: id, title: pkg.name, text: m.text });
       };
       worker.onerror = (err) => { console.warn(`[widget ${pkg.id}] ${err.message}`); failWidget(id, err.message); };
       worker.postMessage({ type: "init", state: w.state, options: optionsOf(pkg, w), reducedMotion: lessMotion?.matches === true });
@@ -343,7 +335,6 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
       packageOf.delete(id);
       early.delete(id);
       failedEarly.delete(id);
-      noticeAt.delete(id);
       // Taken off the board: what it drew goes too. Still there, another window runs it now.
       if (!onBoard.current.has(id)) window.hive.widgetDraw(repo, id, null);
     }
