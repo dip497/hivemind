@@ -197,9 +197,10 @@ test("a package that opens with a view offers it once installed, and Open switch
   await addFromFolder(dir);
   await body().locator("[data-folder-install-do]").click();
   const offer = body().getByRole("status").filter({ hasText: "Open Isle?" });
+  await shot("10-open-start-view-offer");
   await offer.getByRole("button", { name: "Open" }).click();
   // Settings closes on the view it opened.
   await expect(page.locator('[data-community-view="@e2e/isle"]')).toBeVisible();
   await expect(body()).toHaveCount(0);
-  await shot("10-open-start-view");
+  await shot("11-open-start-view-opened");
 });

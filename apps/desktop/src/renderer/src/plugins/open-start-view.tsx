@@ -17,10 +17,10 @@ export function openStartView(id: string): void {
   window.dispatchEvent(new CustomEvent("hivemind:close-settings"));
 }
 
-/** The offer, after a package's "is installed" line. */
-export function OpenStartView({ view, onOpen }: { view: NonNullable<PackageReview["opens"]>; onOpen?: () => void }) {
+/** "Harbour is installed. Open Isle?" and its button, for the package named `installed`. */
+export function OpenStartView({ installed, view }: { installed: string; view: NonNullable<PackageReview["opens"]> }) {
   return <>
-    <span>Open {view.name}?</span>
-    <Button size="sm" data-open-start-view={view.id} onClick={() => { openStartView(view.id); onOpen?.(); }}>Open</Button>
+    <span>{installed} is installed. Open {view.name}?</span>
+    <Button size="sm" data-open-start-view={view.id} onClick={() => openStartView(view.id)}>Open</Button>
   </>;
 }

@@ -104,8 +104,8 @@ export function BrowsePlugins({ query, tab, onTab }: { query: string; tab: Plugi
   const opens = done?.review.type === "package" ? startViewOf(done.review) : null;
   return <div className="settings-stack">
     {done && <div role="status" className="settings-message catalog-done">
-      <span>{done.entry.name} is installed.</span>
-      {done.review.type === "package" ? opens && <OpenStartView view={opens} />
+      {opens ? <OpenStartView installed={done.entry.name} view={opens} /> : <span>{done.entry.name} is installed.</span>}
+      {done.review.type === "package" ? null
         : done.entry.type === "view"
         ? <Button onClick={() => { setViewMode(done.entry.id); go(`plugin:view:${done.entry.id}`); }}>Use this view</Button>
         : <Button onClick={() => go(`plugin:${done.entry.type}:${done.entry.id}`)}>Open its page</Button>}
