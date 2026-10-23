@@ -68,7 +68,7 @@ then Round 1, then this plan.
 | S1 | One notice desk in main: dedupe across windows, sound gate and pacing | ☐ |
 | S2 | The sound player, built-in sounds, Notifications ▸ Sounds, `hive notifications` | ☐ |
 | S3 | Pop-ups grouped in a burst ("10 agents finished") | ☐ (needs a yes, see Decisions) |
-| T0 | HiveHub works out "needs Hivemind X or newer" for packages and views | ☐ |
+| T0 | HiveHub works out "needs Hivemind X or newer" for packages and views | ☑ 2026-10-23 (branch `round2/hub-views`): `packages/hive-hub/src/since.ts` (`view.widgets`, `view.tokens`, `package.themes`, all 2026.10.6) gives views, widgets and packages a `minAppVersion`; one message for the app and `hive plugins install` (`needsNewerApp`); a package lists only its own and its members' files. HiveHub needs no code change (branch `t0/since` there: a test and the deploy order in `docs/operations.md`). A package with `themes` is checked through `sinceOf` until Track C's member lands; then add a folder test |
 | T1 | Fonts that apply (the system font by default, CSS, terminal, `@font-face` from `hivemedia:`) | ☑ 2026-10-22 except `@font-face` (comes with T2's font files): the settings drive the app, terminals (live, atlas redrawn), diffs and the editor; no migration (a file holding the old default `system-ui, sans-serif` is read as the system font, so nothing on disk changes); Settings ▸ Appearance has Interface font and Code font |
 | T2 | The theme member: `theme.json`, its checks, a custom accent | ☐ |
 | T3 | Apply, revert and update a theme: app, CLI, files copied | ☐ |

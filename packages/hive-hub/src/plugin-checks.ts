@@ -7,6 +7,7 @@ import { parseToolManifest, type ToolPackage } from "@hivemind/core/tool-format"
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import { idProblem, pathsProblem, safeRelative, smallJson, UNSAFE_TEXT_RE, type CatalogFile, type CatalogType } from "./index-format.js";
+import { laterOf, sinceOf } from "./since.js";
 import { checkPackageManifest, entriesOf, MEMBER_FORMATS, ownedBy, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, type MemberFormat, type MemberRuns } from "./package-format.js";
 
 export const MAX_PLUGIN_FILES = 200;
@@ -166,7 +167,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       description: plain("hivemind-view.json", "description", String(v.description ?? "A workspace view.").slice(0, 400)),
       version: plain("hivemind-view.json", "version", String(v.version ?? "0.1.0").slice(0, 40)),
       bin: null, homepage: null, icon: null, manifest: viewJson,
-      does: asks(v.permissions), traits: null, note: null, minAppVersion: null,
+      does: asks(v.permissions), traits: null, note: null, minAppVersion: sinceOf("view", v),
     };
   }
 
@@ -191,7 +192,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       bin: null, homepage: null, manifest: widgetJson,
       icon: svg && svg.length <= 16 << 10 ? { image: svgData(svg) } : null,
       iconFile: !svg && iconFile && /\.(png|webp|gif|jpe?g)$/i.test(iconFile) ? iconFile : null,
-      does: asks(w.permissions), traits: null, note: null, minAppVersion: null,
+      does: asks(w.permissions), traits: null, note: null, minAppVersion: sinceOf("widget", w),
     };
   }
 
@@ -235,12 +236,8 @@ const RUNS: Record<MemberRuns, string> = {
   "as an agent's instructions": "Instructions an agent follows",
 };
 
-/** Whether dotted version `a` is later than `b`. */
-const later = (a: string, b: string) => {
-  const pa = a.split(/[.-]/).map(Number), pb = b.split(/[.-]/).map(Number);
-  for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
-  return false;
-};
+/** A file of the package itself, beside its manifest and its members: its README and licence. */
+const OWN_FILE = /^(?:readme|licen[cs]e|copying|notice)(?:\.[a-z]+)?$/i;
 
 /** A package: its `hivemind-package.json`, and every member in its folder read as that kind is
  *  read alone. Every member is the package owner's. Its files are the package's, checked as one. */
@@ -252,7 +249,8 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   const m = checked.manifest;
   const owner = m.id.slice(0, m.id.indexOf("/"));
   const members: CheckedMember[] = [];
-  let minAppVersion: string | null = null;
+  // The package's own fields first, then the highest any member needs.
+  let minAppVersion = sinceOf("package", raw);
   for (const format of MEMBER_FORMATS) {
     for (const entry of entriesOf(m, format)) {
       if (!format.manifest) {
@@ -273,7 +271,7 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
       members.push({ kind: format.kind, id: d.id, name: d.name, runs: format.runs,
         permissions: Array.isArray(permissions) ? permissions.filter((x): x is string => typeof x === "string") : [],
         does: format.runs === "sandboxed" ? [RUNS[format.runs], ...d.does] : d.does });
-      if (d.minAppVersion && (!minAppVersion || later(d.minAppVersion, minAppVersion))) minAppVersion = d.minAppVersion;
+      minAppVersion = laterOf(minAppVersion, d.minAppVersion);
     }
   }
   // Each member's files are its own: a folder inside another member's would be shown as one kind
@@ -286,8 +284,12 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   const ids = members.map((x) => `${x.kind}:${x.id}`);
   if (new Set(ids).size !== ids.length) refuse("a member is named twice");
   const readmeName = [...text.keys()].find((f) => /^readme\.md$/i.test(f));
+  // What is listed is what installs: the package's own manifest, README and licence, and its
+  // members' folders. Anything else beside them (sources, build scripts, notes) is left out, so
+  // the app never downloads it and a view can never fetch it.
+  const listed = files.filter((f) => f.path === PACKAGE_MANIFEST || OWN_FILE.test(f.path) || folders.some((a) => a === "." || f.path.startsWith(`${a}/`)));
   return {
-    id: m.id, type: "package", name: m.name.slice(0, 80), category: "other", files,
+    id: m.id, type: "package", name: m.name.slice(0, 80), category: "other", files: listed,
     readme: readmeName ? text.get(readmeName)!.slice(0, MAX_README) : null,
     description: `A package of ${members.length}: ${members.map((x) => x.name).join(", ")}.`.slice(0, 400),
     version: m.version, bin: null, homepage: null, icon: null, iconFile: null, manifest: json,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { checkPluginFolder, ownerProblem } from "./plugin-checks.js";
 import { parseHubIndex } from "./index-format.js";
+import { laterOf, SINCE, sinceOf } from "./since.js";
 
 const folder = (files: Record<string, string | Uint8Array>) =>
   Object.entries(files).map(([path, body]) => ({ path, bytes: typeof body === "string" ? new TextEncoder().encode(body) : body }));
@@ -119,6 +120,12 @@ describe("checking a package", () => {
     expect(listed.skipped).toEqual([]);
   });
 
+  test("a package lists its own manifest, README and licence and its members' files, and nothing else beside them", async () => {
+    const kit = await plugin({ "hivemind-package.json": manifest(), ...pet(), "README.md": "# Kit", "LICENSE": "MIT",
+      "src/build.ts": "", "notes.txt": "", "pet-old/widget.js": "" });
+    expect(kit.files.map((f) => f.path)).toEqual(["hivemind-package.json", "LICENSE", "pet/widget.js", "pet/widget.json", "README.md"]);
+  });
+
   test("a package is refused for its manifest, a member its kind refuses, or a member of another owner", async () => {
     expect(await problem({ "hivemind-package.json": manifest({ apiVersion: 1 }), ...pet() })).toMatch(/^hivemind-package\.json: apiVersion/);
     expect(await problem({ "hivemind-package.json": manifest(), "pet/widget.json": JSON.stringify({ id: "@ada/pet", version: "1.0.0" }) }))
@@ -128,6 +135,38 @@ describe("checking a package", () => {
     // A member's folder inside another's would be listed as one kind and installed as part of the other.
     const tool = { "pet/inner/hivemind-tool.json": JSON.stringify({ apiVersion: 1, id: "@ada/inner", name: "Inner", version: "1.0.0", entry: "tool.js", tools: [{ key: "i", label: "I", tileKind: "inner" }] }), "pet/inner/tool.js": "" };
     expect(await problem({ "hivemind-package.json": manifest({ tools: [{ path: "pet/inner" }] }), ...pet(), ...tool })).toBe('"pet/inner" is inside "pet", another member\'s folder');
+  });
+});
+
+describe("the oldest Hivemind a plugin needs", () => {
+  const view = (extra: object = {}) => ({ "hivemind-view.json": JSON.stringify({ id: "@ada/graph", entry: "index.html", ...extra }), "index.html": "<p>" });
+
+  test("a view or package lists the release that first accepts a field it uses; old-style ones list none", async () => {
+    expect((await plugin(view({ widgets: "left" }))).minAppVersion).toBe(SINCE["view.widgets"]);
+    expect((await plugin(view({ tokens: { accent: "#f80" } }))).minAppVersion).toBe(SINCE["view.tokens"]);
+    expect((await plugin(view({ permissions: ["workspace:read"] }))).minAppVersion).toBeNull();
+    expect((await plugin(widget())).minAppVersion).toBeNull();
+    const kit = (members: object, files: Record<string, string>) => plugin({
+      "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@ada/kit", name: "Kit", version: "1.0.0", ...members }), ...files });
+    const graph = Object.fromEntries(Object.entries(view({ widgets: "right" })).map(([f, b]) => [`graph/${f}`, b]));
+    // A package needs what its members need.
+    expect((await kit({ views: [{ path: "graph" }] }, graph)).minAppVersion).toBe(SINCE["view.widgets"]);
+    const pet = Object.fromEntries(Object.entries(widget()).map(([f, b]) => [`pet/${f}`, b]));
+    expect((await kit({ widgets: [{ path: "pet" }] }, pet)).minAppVersion).toBeNull();
+  });
+
+  test("a package's own field counts even when it is empty, since an app that does not know it refuses its name", () => {
+    expect(sinceOf("package", { themes: [{ path: "themes/harbour" }] })).toBe(SINCE["package.themes"]);
+    expect(sinceOf("package", { themes: [] })).toBe(SINCE["package.themes"]);
+    expect(sinceOf("package", { widgets: [], views: [] })).toBeNull();
+    expect(sinceOf("view", { themes: [] })).toBeNull();
+  });
+
+  test("the highest version wins, compared as numbers", () => {
+    expect(laterOf("2026.9.10", "2026.10.1")).toBe("2026.10.1");
+    expect(laterOf("2026.10.10", "2026.10.9")).toBe("2026.10.10");
+    expect(laterOf(null, "2026.10.6")).toBe("2026.10.6");
+    expect(laterOf("2026.10.6", null)).toBe("2026.10.6");
   });
 });
 
