@@ -123,7 +123,13 @@ export interface Appearance {
    *  "opaque" uses the terminal background. */
   pluginSurfaces: "theme" | "opaque";
   overlayMedia: MediaLayer[];
+  /** The glass, wallpaper and corners a whole-look preset (Clean) replaced, put back when the
+   *  person leaves it for a colour preset. This computer's memory, not the look: never exported,
+   *  imported or shown to a guest. */
+  lookBefore?: LookBefore;
 }
+
+export interface LookBefore { glass: boolean; wallpaper: WallpaperId; radius: number }
 
 export interface ThemePreset {
   id: string;
@@ -278,27 +284,38 @@ export const DEFAULT_APPEARANCE: Appearance = {
   overlayMedia: [],
 };
 
+/** The glass, wallpaper and corners once `next` is chosen over the preset `from`, and what to
+ *  remember. A whole-look preset sets its own and remembers what it replaced (moving to another
+ *  keeps the first memory); leaving it for a colour preset puts each back, unless the person
+ *  changed it since. */
+function lookAfter(cur: LookBefore, before: LookBefore | undefined, from: string, next: ThemePreset): LookBefore & { before?: LookBefore } {
+  const was = PRESETS[from]?.look;
+  const look = next.look;
+  if (look) return { glass: look.glass ?? cur.glass, wallpaper: look.wallpaper ?? cur.wallpaper, radius: look.radius ?? cur.radius, before: was ? before : cur };
+  if (!was || !before) return cur;
+  const back = <K extends keyof LookBefore>(k: K) => (was[k] !== undefined && cur[k] === was[k] ? before[k] : cur[k]);
+  return { glass: back("glass"), wallpaper: back("wallpaper"), radius: back("radius") };
+}
+
 /** Apply a preset on top of an appearance: palette, terminal, accent, mode, id, and its look. */
 export function applyPreset(a: Appearance, preset: ThemePreset): Appearance {
-  const look = preset.look ?? {};
+  const { lookBefore, ...rest } = a;
+  const l = lookAfter({ glass: a.glass.enabled, wallpaper: a.wallpaper.kind, radius: a.radius }, lookBefore, a.preset, preset);
   return {
-    ...a, preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent,
+    ...rest, preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent,
     terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] },
-    ...(look.glass !== undefined ? { glass: { ...a.glass, enabled: look.glass } } : {}),
-    ...(look.wallpaper !== undefined ? { wallpaper: { ...a.wallpaper, kind: look.wallpaper } } : {}),
-    ...(look.radius !== undefined ? { radius: look.radius } : {}),
+    glass: { ...a.glass, enabled: l.glass }, wallpaper: { ...a.wallpaper, kind: l.wallpaper }, radius: l.radius,
+    ...(l.before ? { lookBefore: l.before } : {}),
   };
 }
 
-/** What choosing a preset changes, as a flat theme patch. */
-export function presetPatch(preset: ThemePreset): Partial<FlatTheme> {
-  const look = preset.look ?? {};
+/** What choosing a preset changes in the flat theme `cur`, as a patch. */
+export function presetPatch(preset: ThemePreset, cur: FlatTheme): Partial<FlatTheme> {
+  const l = lookAfter({ glass: cur.glass, wallpaper: cur.wallpaper, radius: cur.radius }, cur.lookBefore, cur.preset, preset);
   return {
     preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent,
     terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] },
-    ...(look.glass !== undefined ? { glass: look.glass } : {}),
-    ...(look.wallpaper !== undefined ? { wallpaper: look.wallpaper } : {}),
-    ...(look.radius !== undefined ? { radius: look.radius } : {}),
+    glass: l.glass, wallpaper: l.wallpaper, radius: l.radius, lookBefore: l.before,
   };
 }
 
@@ -507,7 +524,14 @@ function mediaLayer(p: unknown, i: number): MediaLayer | null {
   };
 }
 
-const APPEARANCE_KEYS = new Set(Object.keys(DEFAULT_APPEARANCE));
+/** The keys of a look, as a theme file holds them. */
+const THEME_KEYS = new Set(Object.keys(DEFAULT_APPEARANCE));
+const APPEARANCE_KEYS = new Set([...THEME_KEYS, "lookBefore"]);
+
+function lookBeforeOf(v: unknown): LookBefore | undefined {
+  if (!isObj(v) || typeof v.glass !== "boolean" || !WALLPAPERS.some((x) => x.id === v.wallpaper)) return undefined;
+  return { glass: v.glass, wallpaper: v.wallpaper as WallpaperId, radius: clamp(v.radius, 0, 24, DEFAULT_APPEARANCE.radius) };
+}
 
 export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARANCE): Appearance {
   const p = isObj(raw) ? raw : {};
@@ -520,6 +544,8 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   const ansiIn = Array.isArray(t.ansi) ? t.ansi : [];
   const ansi = base.terminal.ansi.map((d, i) => color(ansiIn[i], d));
   const srcOk = (v: unknown) => (typeof v === "string" && !v.startsWith("blob:") ? v : undefined);
+  // Only as `raw` has it: a write that drops it (leaving Clean) forgets it.
+  const lookBefore = lookBeforeOf(p.lookBefore);
   return {
     ...keptUnknown(p, APPEARANCE_KEYS, base),
     preset,
@@ -552,6 +578,7 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
     },
     pluginSurfaces: p.pluginSurfaces === "opaque" || p.pluginSurfaces === "theme" ? p.pluginSurfaces : base.pluginSurfaces,
     overlayMedia: (Array.isArray(p.overlayMedia) ? p.overlayMedia : []).map(mediaLayer).filter((m): m is MediaLayer => !!m),
+    ...(lookBefore ? { lookBefore } : {}),
   };
 }
 
@@ -614,8 +641,8 @@ export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: st
 export function importAppearance(raw: unknown, cur: Appearance): Appearance {
   const file = isObj(raw) && isObj(raw.appearance) ? raw.appearance : raw;
   // Anything else in the file (a settings.json's `v` and `views`, a package.json's `name`) is not the look.
-  const p = isObj(file) ? Object.fromEntries(Object.entries(file).filter(([k]) => APPEARANCE_KEYS.has(k))) : {};
-  if (Object.keys(p).length === 0) throw new Error(`not a hivemind theme: it sets none of ${[...APPEARANCE_KEYS].join(", ")}`);
+  const p = isObj(file) ? Object.fromEntries(Object.entries(file).filter(([k]) => THEME_KEYS.has(k))) : {};
+  if (Object.keys(p).length === 0) throw new Error(`not a hivemind theme: it sets none of ${[...THEME_KEYS].join(", ")}`);
   const a = mergeAppearance(p, cur);
   const w = isObj(p.wallpaper) ? p.wallpaper : {};
   return {
@@ -816,7 +843,7 @@ export interface FlatTheme {
   videoSrc?: string; imageSrc?: string; videoBrightness?: number; animate: boolean;
   contentGlass: boolean; contentOpacity: number; overlayMedia: MediaLayer[];
   preset: string; mode: "dark" | "light"; palette: Palette; radius: number; uiFont: string; monoFont: string;
-  terminal: TerminalPalette; pluginSurfaces: "theme" | "opaque";
+  terminal: TerminalPalette; pluginSurfaces: "theme" | "opaque"; lookBefore?: LookBefore;
 }
 
 export function flattenAppearance(a: Appearance): FlatTheme {
@@ -825,6 +852,7 @@ export function flattenAppearance(a: Appearance): FlatTheme {
     wallpaper: a.wallpaper.kind, videoSrc: a.wallpaper.videoSrc, imageSrc: a.wallpaper.imageSrc, videoBrightness: a.wallpaper.brightness,
     accent: a.accent, overlayMedia: a.overlayMedia,
     preset: a.preset, mode: a.mode, palette: a.palette, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
+    lookBefore: a.lookBefore,
   };
 }
 
@@ -840,6 +868,8 @@ export function nestAppearance(f: FlatTheme): Appearance {
     glass: { enabled: f.glass, contentGlass: f.contentGlass, opacity: f.opacity, blur: f.blur, contentOpacity: f.contentOpacity, animate: f.animate },
     wallpaper: { kind: f.wallpaper, videoSrc: f.videoSrc, imageSrc: f.imageSrc, brightness: f.videoBrightness ?? DEFAULT_APPEARANCE.wallpaper.brightness },
     terminal: f.terminal, pluginSurfaces: f.pluginSurfaces, overlayMedia: f.overlayMedia,
+    // Always named, undefined too: the store writes the sections that changed, a forgotten one included.
+    lookBefore: f.lookBefore,
   };
 }
 

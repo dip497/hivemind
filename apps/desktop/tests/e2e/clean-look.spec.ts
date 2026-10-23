@@ -1,7 +1,8 @@
 // The look settings that are drawn, in the real app: the corner setting rounds tiles and controls,
 // the font settings change the interface and the terminals, and the Clean Light preset makes a
 // light app (page, terminals, native chrome and the window behind them), flat, with no wallpaper.
-// A look that is no built-in preset reads as Custom, not as another preset's name.
+// Leaving Clean for a colour preset brings back the glass, wallpaper and corners it replaced. A look
+// that is no built-in preset reads as Custom, not as another preset's name.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -40,6 +41,9 @@ const set = (p: string, v: unknown) => page.evaluate(([p, v]) => window.hive.set
 const style = (selector: string, prop: string) =>
   page.evaluate(([s, p]) => { const el = document.querySelector(s as string); return el ? getComputedStyle(el).getPropertyValue(p as string) : null; }, [selector, prop] as const);
 const shot = async (name: string) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }); };
+/** The glass, wallpaper and corners on disk before Clean Light was chosen. */
+let lookBefore: unknown[] = [];
+const lookOf = (a: { glass: { enabled: boolean }; wallpaper: { kind: string }; radius: number }) => [a.glass.enabled, a.wallpaper.kind, a.radius];
 
 test.beforeAll(async () => {
   if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -89,6 +93,8 @@ test("the font settings change the interface and the terminals", async () => {
 });
 
 test("Clean Light: a light, flat app with no wallpaper, terminals and native chrome included", async () => {
+  lookBefore = lookOf(onDisk().appearance);
+  expect(lookBefore[0]).toBe(true);
   await page.locator('[aria-label="settings"]').click();
   await page.locator('[data-settings-page="appearance"]').click();
   await page.locator("[data-preset-select]").click();
@@ -113,6 +119,18 @@ test("Clean, its dark twin, and back: the window follows", async () => {
   await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("dark"))).toBe(true);
   await expect.poll(() => app.evaluate(({ nativeTheme }) => nativeTheme.themeSource)).toBe("dark");
   await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBackgroundColor().toLowerCase())).toBe("#0b0b0c");
+});
+
+test("leaving Clean for Signal in Appearance brings back the glass, wallpaper and corners Clean replaced", async () => {
+  await page.locator('[aria-label="settings"]').click();
+  await page.locator('[data-settings-page="appearance"]').click();
+  await page.locator("[data-preset-select]").click();
+  await page.locator('[data-preset-option="signal"]').click();
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await expect.poll(() => lookOf(onDisk().appearance)).toEqual(lookBefore);
+  expect(onDisk().appearance).not.toHaveProperty("lookBefore");
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(true);
+  await expect(page.locator(".hm-wallpaper")).toHaveCount(1);
 });
 
 test("a look that is no built-in preset reads as Custom", async () => {

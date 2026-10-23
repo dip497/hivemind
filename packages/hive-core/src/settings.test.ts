@@ -53,8 +53,28 @@ describe("settings schema", () => {
     const nord = applyPreset(mine, PRESETS.nord!);
     expect([nord.glass.enabled, nord.wallpaper.kind, nord.radius]).toEqual([true, "aurora", 16]);
     // The same change, as the flat patch the Appearance page applies.
-    expect(presetPatch(PRESETS["clean-light"]!)).toMatchObject({ glass: false, wallpaper: "none", radius: 8, mode: "light" });
-    expect(presetPatch(PRESETS.nord!)).not.toHaveProperty("glass");
+    expect(presetPatch(PRESETS["clean-light"]!, flattenAppearance(mine))).toMatchObject({ glass: false, wallpaper: "none", radius: 8, mode: "light" });
+    expect(presetPatch(PRESETS.nord!, flattenAppearance(mine))).toMatchObject({ glass: true, wallpaper: "aurora", radius: 16 });
+  });
+
+  test("leaving Clean for a colour preset puts back the glass, wallpaper and corners it replaced, but not over the person's own change", () => {
+    const mine = { ...DEFAULT_APPEARANCE, radius: 16, wallpaper: { kind: "aurora" as const, brightness: 0.7 } };
+    const clean = applyPreset(mine, PRESETS.clean!);
+    // Through Clean Light and out again: what Clean replaced comes back, and nothing is remembered after.
+    const back = applyPreset(applyPreset(clean, PRESETS["clean-light"]!), PRESETS.signal!);
+    expect([back.glass.enabled, back.wallpaper.kind, back.radius]).toEqual([true, "aurora", 16]);
+    expect(back.lookBefore).toBeUndefined();
+    // A wallpaper chosen while on Clean is kept; the glass and corners still come back.
+    const chose = applyPreset({ ...clean, wallpaper: { ...clean.wallpaper, kind: "mono" } }, PRESETS.nord!);
+    expect([chose.glass.enabled, chose.wallpaper.kind, chose.radius]).toEqual([true, "mono", 16]);
+    // Remembered across a save and a load, and the Appearance page's flat patch does the same.
+    const saved = mergeSettings(JSON.parse(JSON.stringify({ appearance: clean }))).appearance;
+    expect(applyPreset(saved, PRESETS.signal!).wallpaper.kind).toBe("aurora");
+    expect(presetPatch(PRESETS.signal!, flattenAppearance(saved))).toMatchObject({ glass: true, wallpaper: "aurora", radius: 16, lookBefore: undefined });
+    // It is this computer's memory, no part of the look: not in a theme file, not shown to a guest.
+    expect(exportAppearance(clean).theme).not.toHaveProperty("lookBefore");
+    expect(sharedAppearance(clean)).not.toHaveProperty("lookBefore");
+    expect(importAppearance({ ...clean, lookBefore: { glass: false, wallpaper: "none", radius: 2 } }, mine).lookBefore).toBeUndefined();
   });
 
   test("Clean's text is readable on its backgrounds, in both modes (WCAG 4.5:1)", () => {

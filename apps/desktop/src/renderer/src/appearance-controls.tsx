@@ -23,9 +23,9 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { MONO_FONT, PRESETS, SYSTEM_MONO_FONT, SYSTEM_UI_FONT, UI_FONT, presetPatch, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { MONO_FONT, PRESETS, SYSTEM_MONO_FONT, SYSTEM_UI_FONT, UI_FONT, type TerminalPalette } from "@hivemind/core/settings-schema";
 import {
-  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, removeOverlay, setTheme, updateOverlay,
+  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, choosePreset, removeOverlay, setTheme, updateOverlay,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
 } from "./theme-store";
 
@@ -90,7 +90,7 @@ export function PresetRow({ t }: { t: ThemeState }) {
           value={preset ? t.preset : "custom"}
           onValueChange={(v) => {
             const p = PRESETS[v];
-            if (p) setTheme(presetPatch(p));
+            if (p) choosePreset(p);
           }}
         >
           <SelectTrigger id="theme-preset" data-preset-select className="min-w-40"><SelectValue /></SelectTrigger>

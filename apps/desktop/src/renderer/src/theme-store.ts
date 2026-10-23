@@ -15,8 +15,8 @@
  */
 import { useSyncExternalStore } from "react";
 import {
-  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, guestTheme, nestAppearance,
-  type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type WallpaperId,
+  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, guestTheme, nestAppearance, presetPatch,
+  type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type ThemePreset, type WallpaperId,
 } from "@hivemind/core/settings-schema";
 import { getSettings, patchSettingsMany, subscribeSettings } from "./settings-store";
 
@@ -183,6 +183,11 @@ export function setTheme(patch: Partial<ThemeState>): void {
     .filter((k) => JSON.stringify(after[k]) !== JSON.stringify(before[k]))
     .map((k) => ({ path: `appearance.${k}`, value: after[k] }));
   patchSettingsMany(changed);
+}
+
+/** Choose a preset for the person's own theme (what is shown may be a host's). */
+export function choosePreset(p: ThemePreset): void {
+  setTheme(presetPatch(p, own));
 }
 
 /** A fresh, empty overlay layer (a new stacked slot's defaults). */
