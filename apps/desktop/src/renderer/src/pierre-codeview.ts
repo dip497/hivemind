@@ -51,8 +51,10 @@ export const PIERRE_CSS_VARS: CSSProperties = {
     // and word highlights nearly invisible and washed out the row tint.
     // Bound to the oklch semantic tokens so the diff stays in sync when the
     // accent is recolored, and reads as the same product as the rest of the app.
-    "--diffs-addition-color-override": "var(--color-ok)",    /* green-700  — added lines   */
-    "--diffs-deletion-color-override": "var(--color-err)",   /* red-500    — removed lines */
+    // The counts are text on Pierre's own near-black page, so added and removed
+    // are the palette's ok and err lifted to read there (styles.css).
+    "--diffs-addition-color-override": "var(--color-diff-added)",   /* ok  — added lines   */
+    "--diffs-deletion-color-override": "var(--color-diff-removed)", /* err — removed lines */
     "--diffs-modified-color-override": "var(--color-brand)", /* lavender   — modified / change icon */
 
     // Selection highlight for enableLineSelection. `--diffs-selection-base`

@@ -162,7 +162,7 @@
      Nord's bg3 the lightest; the light page has its own below. */
   --color-state-backlog:   oklch(0.77 0.013 231.77);  /* Plane priority-none (slate) */
   --color-state-todo:      oklch(0.77 0.11 265);       /* blue */
-  --color-state-progress:  oklch(0.77 0.17 65);        /* amber */
+  --color-state-progress:  oklch(0.77 0.11 200);       /* cyan: being worked on is not amber, which is what waits on you */
   --color-state-review:    oklch(0.78 0.12 303);       /* purple (Plane extended-purple-500 hue) */
   --color-state-done:      oklch(0.76 0.17 152);       /* green */
   --color-state-cancelled: oklch(0.77 0.006 230);      /* neutral grey */
@@ -530,7 +530,7 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
      Light's bg, bg2 and bg3, and a label's text on its chip in every hue. */
   --color-state-backlog:   oklch(0.52 0.013 231.77);
   --color-state-todo:      oklch(0.52 0.18 265);
-  --color-state-progress:  oklch(0.5 0.11 65);
+  --color-state-progress:  oklch(0.5 0.08 200);
   --color-state-review:    oklch(0.52 0.2 303);
   --color-state-done:      oklch(0.5 0.12 152);
   --color-state-cancelled: oklch(0.52 0.01 230);
@@ -539,6 +539,9 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --color-label-edge: oklch(0.80 0.04 0 / 0.5);
   --color-label-dot:  oklch(0.60 0.15 0);
   --color-person:     oklch(0.48 0.13 0);
+  /* A diff's ok and err as they are: its page is white. */
+  --color-diff-added:   var(--color-ok);
+  --color-diff-removed: var(--color-err);
 }
 :focus-visible {
   outline: 2px solid var(--color-focus);
@@ -924,6 +927,13 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --color-label-edge: oklch(0.34 0.03 0 / 0.4);
   --color-label-dot:  oklch(0.72 0.15 0);
   --color-person:     oklch(0.78 0.13 0);
+  /* A diff's added and removed lines (pierre-codeview.ts): the palette's ok and err, which it also
+     sets its +N and −N counts in, as text on its own near-black page (#0a0a0a). A preset's err is
+     drawn for a status mark, not for text (Ubuntu's reads 4.1:1 there, Solarized Dark's 4.3:1), so
+     the dark page lifts each to L 0.62 at least: 4.75:1 for any red or green. The light page takes
+     them as they are (:root[data-theme-mode="light"]). Read from inline styles, like the notes. */
+  --color-diff-added:   oklch(from var(--color-ok) max(l, 0.62) c h);
+  --color-diff-removed: oklch(from var(--color-err) max(l, 0.62) c h);
 }
 
 /* The master switch. Recolor the panel TOKENS to translucent variants of the

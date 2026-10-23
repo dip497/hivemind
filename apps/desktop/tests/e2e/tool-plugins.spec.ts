@@ -45,7 +45,8 @@ test.beforeAll(async () => {
   execSync("git init -q -b main", { cwd: repo });
   fs.writeFileSync(path.join(repo, "src", "a.ts"), "export const a = 1;\n");
   git("add -A && git -c user.email=t@t -c user.name=t commit -q -m 'first change'");
-  fs.appendFileSync(path.join(repo, "src", "a.ts"), "export const b = 2; // it leaks\n");
+  // A line changed and one added, so its diff has a −N and a +N.
+  fs.writeFileSync(path.join(repo, "src", "a.ts"), "export const a = 2;\nexport const b = 2; // it leaks\n");
   git("add -A && git -c user.email=t@t -c user.name=t commit -q -m 'second change'");
   // An agent to send to: what the app starts as `claude`, waiting on its input.
   fs.mkdirSync(bin);
@@ -84,35 +85,58 @@ test("it is drawn by its own code, linked with its permissions, and its settings
   await expect(tile().getByRole("button", { name: "Ask an agent to explain" })).toBeVisible();
 });
 
-test("the app's diff view in a tool draws its changes in the preset's colours and its code in the person's font, through a switch of preset", async () => {
-  // Read through the diff's shadow root: the +1 in its file header, and its code. What they should
-  // be is the palette's ok colour and the code font, resolved the same way on a span of the page's.
+test("the app's diff view in a tool draws its changes in the preset's colours, its counts readable on its page, and its code in the person's font, through a switch of preset", async () => {
+  // Read through the diff's shadow root: the +N and −N in its file header, the page under them, and
+  // its code. What they should be is the palette's ok colour and the code font, resolved the same
+  // way on a span of the page's. Colours as the browser paints them, so two spellings of one colour
+  // compare equal.
   const drawn = () => tile().evaluate((el) => {
-    const root = [...el.querySelectorAll("*")].find((n) => n.shadowRoot?.querySelector("[data-additions-count]"))?.shadowRoot;
-    const added = root?.querySelector("[data-additions-count]"), code = root?.querySelector("pre");
-    if (!added || !code) return null;
+    const root = [...el.querySelectorAll("*")].find((n) => n.shadowRoot?.querySelector("[data-deletions-count]"))?.shadowRoot;
+    const added = root?.querySelector("[data-additions-count]"), removed = root?.querySelector("[data-deletions-count]"), code = root?.querySelector("pre");
+    if (!added || !removed || !code) return null;
+    const c = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+    const paint = (colour: string) => { c.clearRect(0, 0, 1, 1); c.fillStyle = colour; c.fillRect(0, 0, 1, 1); return [...c.getImageData(0, 0, 1, 1).data]; };
+    // The nearest opaque background out from the counts, through the shadow root to its host.
+    let ground: Element | null = added;
+    while (ground && paint(getComputedStyle(ground).backgroundColor)[3] !== 255) ground = ground.parentElement ?? (ground.getRootNode() as ShadowRoot).host ?? null;
     const probe = el.appendChild(document.createElement("span"));
     probe.style.color = "var(--color-ok)";
     probe.style.fontFamily = "var(--font-mono)";
-    const want = getComputedStyle(probe), out = { added: getComputedStyle(added).color, ok: want.color, code: getComputedStyle(code).fontFamily, mono: want.fontFamily };
+    const want = getComputedStyle(probe), rgb = (colour: string) => paint(colour).slice(0, 3);
+    const out = { added: rgb(getComputedStyle(added).color), removed: rgb(getComputedStyle(removed).color), ok: rgb(want.color),
+      ground: ground && rgb(getComputedStyle(ground).backgroundColor), code: getComputedStyle(code).fontFamily, mono: want.fontFamily };
     probe.remove();
     return out;
   });
-  const follows = async () => {
+  /** WCAG contrast of two painted colours. */
+  const contrast = (a: number[], b: number[]) => {
+    const lum = (rgb: number[]) => {
+      const [r, g, b] = rgb.map((v) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi! + 0.05) / (lo! + 0.05);
+  };
+  const follows = async (id: string) => {
     await expect.poll(drawn, { timeout: 15_000 }).not.toBeNull();
     const d = (await drawn())!;
-    expect(d.added, "the added count is the preset's ok, not the diff library's own green").toBe(d.ok);
+    d.ok.forEach((v, i) => expect(Math.abs(d.added[i]! - v), "the added count is the preset's ok, not the diff library's own green").toBeLessThanOrEqual(1));
+    // The counts are words on the diff's own page, which is no preset's: each reads there.
+    expect(d.ground, "the counts sit on an opaque page").not.toBeNull();
+    expect(contrast(d.added, d.ground!), `+N on ${id}`).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(d.removed, d.ground!), `−N on ${id}`).toBeGreaterThanOrEqual(4.5);
     expect(d.code).toBe(d.mono);
   };
-  await follows();
+  await follows("signal");
   const ok = (await drawn())!.ok;
-  // A dark preset of another hue, then the light one: the diff follows each, live.
-  for (const id of ["dracula", "clean-light"]) {
+  // Dark presets of other hues (Solarized Dark's red the darkest), then the light one: the diff
+  // follows each, live.
+  for (const id of ["dracula", "solarized-dark", "clean-light"]) {
     expect(hive("theme", "use", id).status).toBe(0);
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.preset)).toBe(id);
-    await follows();
+    await follows(id);
   }
-  expect((await drawn())!.ok).not.toBe(ok);
+  expect((await drawn())!.ok).not.toEqual(ok);
   expect(hive("theme", "use", "signal").status).toBe(0);
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.preset)).toBe("signal");
 });

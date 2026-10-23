@@ -35,8 +35,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
-- A tool's diff (`PatchView`: Git history, Pull requests, Worktrees) draws added, removed and changed lines in the preset's own colours and its code in your code font, as the Diff tile does; before, it kept the diff library's green, red and blue and its own font in every preset.
-- Issues reads in every preset. On Clean Light, label chips were pale text on a grey smudge and an assignee's initial a pale letter on a pastel disc; they are drawn for the page they are on. Each state's word reads at 4.5:1 on Clean Light and on every dark preset (on the state picker, Todo, In review, Backlog and Cancelled were 1.8 to 3.9:1 under Nord, Dracula, Solarized Dark and One Dark), and a done criterion's tick shows on its green.
+- A tool's diff (`PatchView`: Git history, Pull requests, Worktrees) draws added, removed and changed lines in the preset's own colours and its code in your code font, as the Diff tile does; before, it kept the diff library's green, red and blue and its own font in every preset. In both, a diff's +N and −N read at 4.5:1 on its dark page in every preset: a preset's red or green too dark for it is drawn lighter (Ubuntu's and Solarized Dark's −N were 4.1 and 4.3:1).
+- Issues reads in every preset. On Clean Light, label chips were pale text on a grey smudge and an assignee's initial a pale letter on a pastel disc; they are drawn for the page they are on. Each state's word reads at 4.5:1 on Clean Light and on every dark preset (on the state picker, Todo, In review, Backlog and Cancelled were 1.8 to 3.9:1 under Nord, Dracula, Solarized Dark and One Dark), and a done criterion's tick shows on its green. In progress is cyan, no longer amber, which is kept for what waits on you.
 
 ### Security
 
