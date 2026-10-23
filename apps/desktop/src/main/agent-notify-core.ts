@@ -46,3 +46,23 @@ export function composeNotice(rec: AgentNotice, focused: boolean): ComposedNotic
     urgency: needs || error ? "critical" : "normal",
   };
 }
+
+const VERBS = { needs: ["needs you", "need you"], done: ["finished", "finished"], error: ["failed", "failed"] } as const;
+
+/** A gathered pop-up (notice-desk-core.ts): "9 more agents finished", "2 more agents need you",
+ *  naming the first three. Its click goes to the first. */
+export function composeGroup(kind: AgentNotice["kind"], notices: readonly AgentNotice[]): ComposedNotice {
+  const n = notices.length;
+  const names = notices.slice(0, 3).map((r) => (r.label?.trim() && !r.label.startsWith("tile-") ? r.label.trim() : "agent"));
+  return {
+    title: `${n} more agent${n === 1 ? "" : "s"} ${VERBS[kind][n === 1 ? 0 : 1]}`,
+    body: names.join(", ") + (n > 3 ? ", …" : ""),
+    urgency: kind === "done" ? "normal" : "critical",
+  };
+}
+
+/** One agent's pop-up with what it waits on or last showed under it (`text`, one line already),
+ *  when the person lets pop-ups say it (`notifications.popupText`). */
+export function withText(c: ComposedNotice, text: string | undefined): ComposedNotice {
+  return text ? { ...c, body: `${text}\n${c.body}` } : c;
+}

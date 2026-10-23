@@ -5,33 +5,13 @@
  * that changes redraws that line: never the panel's model of the tiles, nor the row.
  */
 import { memo, useCallback, useSyncExternalStore } from "react";
-import { oneLine } from "@hivemind/agent-host/one-line";
 import type { LayersPrefs } from "@hivemind/core/settings-schema";
-import { subscribeWait, waitOf, type AgentWait, type TileWait } from "./agent-waits";
+import { subscribeWait, waitOf, type TileWait } from "./agent-waits";
+import { lineFor } from "../../shared/line-for";
 import { tileLines } from "./line-store";
 import { LOOKS } from "./workspace/status-look";
 
-/** What a wait is, in a word, when it says no more. */
-const KIND_WORDS: Record<AgentWait["kind"], string> = {
-  permission: "Permission", question: "Question", plan: "Plan ready for review", approval: "Approval", other: "Blocked",
-};
-
-/**
- * What a row says under its name: for an agent that waits, the tool and the first line of what it
- * is about (`Bash: npm test`), its question (`Asks: …`), a plan to review, or else the kind of wait
- * in a word; for one that does not, its last line. "" for nothing. Each is what an agent or a process
- * in the tile wrote, so it is made one line of plain text (one-line.ts); React sets it as text,
- * never as markup.
- */
-export function lineFor(waiting: AgentWait | undefined, line: string | undefined): string {
-  if (!waiting) return oneLine(line ?? "");
-  const tool = oneLine(waiting.tool?.name ?? "");
-  const about = waiting.tool?.about?.split("\n").map(oneLine).find(Boolean);
-  if (tool) return about ? `${tool}: ${about}` : tool;
-  const asks = oneLine(waiting.asks?.[0]?.question ?? "");
-  if (asks) return `Asks: ${asks}`;
-  return KIND_WORDS[waiting.kind] ?? KIND_WORDS.other;
-}
+export { lineFor };
 
 /** `tile`'s line as main tells it; the tile is watched while this asks for it (not null). */
 function useLine(tile: string | null): string | undefined {

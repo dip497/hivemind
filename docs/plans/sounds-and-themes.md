@@ -65,9 +65,9 @@ then Round 1, then this plan.
 
 | Step | What | State |
 |---|---|---|
-| S1 | One notice desk in main: dedupe across windows, sound gate and pacing | ◐ 2026-10-23 (branch `round1/sounds`): notifications are the `notifications` section of the one settings.json (`@hivemind/core/notification-settings`), migration 0006 moves the app data folder's blob in; `hive config get/set notifications` work, person-only |
+| S1 | One notice desk in main: dedupe across windows, sound gate and pacing | ☑ 2026-10-23 (branch `round1/sounds`): notifications are the `notifications` section of the one settings.json (`@hivemind/core/notification-settings`), migration 0006 moves the app data folder's blob in; `hive config get/set notifications` work, person-only. `notice-desk-core.ts` (dedupe, `SoundPacer`, Recent) and `notice-desk.ts` in main; `agent-notify.ts` is the pop-up half (`silent` while the app plays its own sound). 1500 notices: 2–6 ms in the unit test on a loaded shared container (the 1 ms target not shown there) |
 | S2 | The sound player, built-in sounds, Notifications ▸ Sounds, `hive notifications` | ☐ |
-| S3 | Pop-ups grouped in a burst ("10 agents finished") | ☐ (needs a yes, see Decisions) |
+| S3 | Pop-ups grouped in a burst ("10 agents finished") | ☑ 2026-10-23 (branch `round1/sounds`; the person's "complete all the rounds" is the yes): the first pop-up of a kind at once, the rest within 1.5 s as one ("9 more agents finished"), each kind on its own, the click on the first gathered; Recent counts each burst's pop-ups |
 | T0 | HiveHub works out "needs Hivemind X or newer" for packages and views | ☐ |
 | T1 | Fonts that apply (the system font by default, CSS, terminal, `@font-face` from `hivemedia:`) | ☑ 2026-10-22 except `@font-face` (comes with T2's font files): the settings drive the app, terminals (live, atlas redrawn), diffs and the editor; no migration (a file holding the old default `system-ui, sans-serif` is read as the system font, so nothing on disk changes); Settings ▸ Appearance has Interface font and Code font |
 | T2 | The theme member: `theme.json`, its checks, a custom accent | ☐ |
@@ -127,7 +127,7 @@ The defaults below are what gets built unless the maintainer says otherwise.
 | Question | Default chosen | Why |
 |---|---|---|
 | Sounds on for everyone after the upgrade? | **No.** `notifications.sound` stays `false` until switched on. Switched on, **needs you** plays; **finished** and **failed** are off until chosen. | A sound nobody asked for after an update is the fastest way to make people switch the app's sounds off for good. |
-| Group pop-ups in a burst (S3)? | **Ask first.** It changes what people see: ten pop-ups become one. | A visible change to notifications, so the maintainer says yes before it ships. |
+| Group pop-ups in a burst (S3)? | **Yes** (2026-10-23: "complete all the rounds"). It changes what people see: ten pop-ups become one. | A visible change to notifications, so the maintainer said yes before it shipped. |
 | A theme's accent | **Any colour** (`accent: "custom"` with `accentCustom`), not only the 10 built-in ids. | A brand needs its own colour. Three call sites move to one owner (`accentOf`). |
 | Light themes | **Not until T5.** | No light preset exists, and light-mode CSS is one line (`styles.css:501`). |
 | Who may change sounds from the CLI | **The person only** (`personOnly`, as `hive plugins set`). | An agent should not be able to make its person's computer chime. |

@@ -1,4 +1,4 @@
-# Workspace API (0.34)
+# Workspace API (0.35)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -64,7 +64,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.34", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.35", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -330,6 +330,8 @@ says it is asked at the machine itself.
 | `view.emit` | `name`, `data`?, `view`? | `{id, delivered, view, reason?, buffered?}`: the event sent to the view open in the window, or kept for it until it listens (`view`: only while that one is open) | — |
 | `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |
 | `settings.reload` | | `null`: `settings.json` read again | — |
+| `notifications.play` | `moment` (`needs`, `done` or `error`) | `{id, played, why?, pack?}` (0.35): the moment's sound played now in the window the person is at, the applied theme's (`pack`) or the built-in one, or blocked and why (`suspended`, `no audio device`, `no window open`). The person's alone: an agent's tile is refused it. The app answers it; `hive host` has no sounds | target the moment |
+| `notifications.recentSounds` | | `[{id, moment, agents, at, popups, sound, why?, pack?, count?}]` (0.35): the last 10 bursts of agents' changes of one kind, newest first: how many agents, the sound (`off`, `waiting`, `skipped`, `played`, `blocked`) and how many OS pop-ups it showed | read |
 
 A terminal is named by its session id, `hm:<tile>`; the audit log names it by its tile. `pid` is -1
 when `attachOnly` finds no session.

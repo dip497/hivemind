@@ -6,6 +6,7 @@ import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
+import type { RecentSound, SoundResult } from "@hivemind/workspace-api/notifications";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
@@ -806,9 +807,18 @@ export interface HiveIpc {
   onTyping(cb: (tileId: string, by: Typist) => void): () => void;
 
   // ── notifications ─────────────────────────────────────────
-  /** Forward a notable agent-status transition to the main process, which fires
-   *  a native OS notification IF the window is unfocused. Fire-and-forget. */
+  /** Forward a notable agent-status transition to main's notice desk, which dedupes every
+   *  window's copy, shows the OS pop-up while no window has the focus, and picks the window that
+   *  plays a sound (notice-desk.ts). Fire-and-forget. */
   notifyAgent?(notice: AgentNotice): void;
+  /** Main asks this window to play a sound (`notify:sound`); answer with `soundResult`. */
+  onSound?(cb: (sound: SoundRequest) => void): () => void;
+  /** What became of sound `id`: played (with the theme's pack, if it was one), or blocked and why. */
+  soundResult?(result: SoundResult): void;
+  /** The last 10 bursts the desk saw: their moment, agents, sound and pop-ups (newest first). */
+  recentSounds?(): Promise<RecentSound[]>;
+  /** Play `moment`'s sound now in the window the person is at, as Settings' Play does. */
+  playSound?(moment: AgentNotice["kind"]): Promise<SoundResult>;
   /** A widget's `hive.notify`, from the window that runs its code: main shows it as an OS notice
    *  when the notification settings allow, at most one per widget in 10 s. Fire-and-forget. */
   notifyWidget?(notice: WidgetNotice): void;
@@ -918,7 +928,27 @@ export interface AgentNotice {
   /** Free-form one-line detail for the body (error kind). Currently the exit
    *  signal/name when available; kept generic for future failure kinds. */
   detail?: string;
+  /** The tile is selected in the window that sent this (main counts it only while that window
+   *  has the focus): a finished sound for it is skipped. */
+  selected?: boolean;
 }
+
+/** A sound main asks a window to play (`notify:sound`). */
+export interface SoundRequest {
+  id: number;
+  moment: AgentNotice["kind"];
+  /** How many agents it stands for. */
+  count: number;
+  /** 0–1. */
+  volume: number;
+  /** The applied theme's sound for this moment (a `hivemedia:` URL) and the theme's name; none:
+   *  the built-in sound. */
+  theme?: { url: string; pack: string };
+}
+
+/** What became of a sound (`notify:sound-result`), and one burst of Recent: the drive socket's
+ *  shapes (workspace-api notifications.ts). */
+export type { RecentSound, SoundResult } from "@hivemind/workspace-api/notifications";
 
 /** Pushed main→renderer when a background subsystem hits a NON-fATAL error the
  *  user would otherwise never see (e.g. the PTY daemon couldn't be refreshed,

@@ -103,3 +103,14 @@ test("a raw tile id never surfaces as the title — falls back to 'agent'", () =
   assert.equal(r.title, "agent");
   assert.equal(r.body, "Needs your input · api");
 });
+
+test("a gathered pop-up counts the agents after the first and names three; with text, one agent's says it first", async () => {
+  const { composeGroup, withText } = await import("../../src/main/agent-notify-core.ts");
+  const nine = Array.from({ length: 9 }, (_, i) => ({ tileId: `t${i}`, label: i === 1 ? "tile-x" : `codex #${i}`, kind: "done" as const }));
+  assert.deepEqual(composeGroup("done", nine), { title: "9 more agents finished", body: "codex #0, agent, codex #2, …", urgency: "normal" });
+  assert.deepEqual(composeGroup("needs", nine.slice(0, 1)), { title: "1 more agent needs you", body: "codex #0", urgency: "critical" });
+  assert.equal(composeGroup("needs", nine.slice(0, 2)).title, "2 more agents need you");
+  const one = composeNotice({ tileId: "t1", label: "claude", kind: "needs", frame: "api" }, false)!;
+  assert.equal(withText(one, "Bash: npm test").body, "Bash: npm test\nNeeds your input · api");
+  assert.equal(withText(one, undefined), one);
+});
