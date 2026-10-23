@@ -18,7 +18,6 @@ import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import { isDay } from "@hivemind/view-sdk/protocol";
-import { ActivityMeter } from "./pty-activity.js";
 import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
 import { StatusLedger } from "./status-ledger.js";
 import { ViewShare } from "./view-share.js";
@@ -98,6 +97,7 @@ import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput, type StartOpts } from "@hivemind/host/terminals";
 import { TileLines } from "@hivemind/host/tile-lines";
+import { TileActivity } from "@hivemind/host/tile-activity";
 import { startSpawned, wakeSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
@@ -1112,10 +1112,8 @@ const control: ControlPlane = new ControlPlane({
     },
   }),
 });
-// View protocol 1.3: output levels for watched tiles (a window asks with terminal.watchActivity).
-const ptyActivity = new ActivityMeter((levels) => {
-  workspaceServer.publish("terminal.activity", levels);
-});
+// View protocol 1.3: output levels of the tiles each window watches (terminal.watchActivity).
+const ptyActivity = new TileActivity(() => workspaceServer);
 /** Push a NON-FATAL background-subsystem error to the renderer as a toast, so
  *  nothing fails silently (e.g. a stale PTY daemon that breaks hook injection).
  *  Fatal errors still use dialogs. Idempotent + cheap; safe to call pre-window. */
@@ -1191,7 +1189,6 @@ const terminals = new Terminals({
   machineOf: terminalMachine,
   folderOf: (bare) => sessionFolder(heldBoards(workspaceStore()), bare),
   conversationAsleep: (opts) => control.conversationAsleep(opts.tileId, opts.args ?? []),
-  watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
     start: startSession,
@@ -1358,6 +1355,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
   tileLines.domain,
+  ptyActivity.domain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
   answers({
     plane: () => control,
