@@ -25,6 +25,13 @@ Tell me: which tool plugins are switched on (they run with my access), which API
 - Each message it sends is checked against them. With `workspace:prompt`, you also confirm each prompt it writes.
 - What each permission allows: [Permissions](/extension-authoring#permissions). What else the sandbox stops: [The sandbox](/extension-authoring#the-sandbox).
 
+## Sites in a Browser tile
+
+A site in a Browser tile asks before it uses your camera, microphone or location, or shows
+notifications. The tile names the site and what it wants, with **Block** and **Allow**. Your answer
+holds for that site until you quit the app. A question you leave for a minute, or whose tab you
+close, is a no. A view, or a page a tool shows in its tile, never gets any of these.
+
 ## Tools start switched off
 
 A tool you install starts switched off, and you turn it on yourself. The tools that ship with

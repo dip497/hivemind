@@ -292,6 +292,13 @@ export interface ViewPackageInfo {
 /** `url` is this computer's link; `others`, the same key at each of the person's other names. */
 export interface BrowserAppStatus { on: boolean; url: string | null; others: string[]; error: string | null }
 
+/** A Browser tile's page asks for something (`permissions`: "camera", "microphone", "geolocation",
+ *  "notifications"…) and the tile showing page `pageId` asks the person; or that ask is over
+ *  (`done`), answered or not. */
+export type BrowserPermissionEvent =
+  | { askId: number; pageId: number; site: string; permissions: string[] }
+  | { askId: number; done: true };
+
 export interface HiveIpc {
   // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──
   /** The workspace's core layout blob (frames, tiles, membership, names, tabs), or null. */
@@ -813,6 +820,8 @@ export interface HiveIpc {
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */
   browserCdp?(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
+  /** The person's answer to a Browser tile page's ask (`onBrowserPermission`). */
+  answerBrowserPermission?(askId: number, allowed: boolean): void;
   /** Agent-browser bridge settings for the in-app toggle. `active` = live this
    *  session; `enabled` = persisted choice (applies on next launch). */
   getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;
@@ -963,4 +972,7 @@ export type HiveApi = HiveIpc & {
   /** A BrowserTile guest requested a popup/new window (target=_blank,
    *  window.open) — the owning tile opens it as a new tab. */
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
+  /** A BrowserTile guest asks for the camera, the location… (or that ask is over): the owning tile
+   *  asks the person. */
+  onBrowserPermission: (cb: (e: BrowserPermissionEvent) => void) => () => void;
 };

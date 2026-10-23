@@ -248,7 +248,8 @@ h(Frame, { src: "http://127.0.0.1:5173/", title: "Dev server" });
 
 Only `http://127.0.0.1:<port>` and `http://localhost:<port>` can be shown; any other address is
 blocked, and the tile stops and says so. `Frame` runs the page's scripts, forms and popups, and
-never lets it move the app's window.
+never lets it move the app's window. It gets no camera, microphone, location or notifications: a
+page that needs them goes in a Browser tile, which asks you.
 
 ### Look at it, and see what broke
 

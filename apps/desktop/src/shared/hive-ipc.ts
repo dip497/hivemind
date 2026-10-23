@@ -80,6 +80,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
 
     browserRegister: local("browser:register", send("browser:register")),
     browserCdp: local("browserCdp", invoke("browserCdp")),
+    answerBrowserPermission: local("browser:permission-answer", send("browser:permission-answer")),
     getBrowserSettings: local("getBrowserSettings", invoke("getBrowserSettings")),
     setBrowserCdpEnabled: local("setBrowserCdpEnabled", invoke("setBrowserCdpEnabled")),
     relaunchApp: local("relaunchApp", invoke("relaunchApp")),
@@ -182,6 +183,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     runUpgrade: local("runUpgrade", invoke("runUpgrade")),
     onUpdateProgress: (cb) => port.on("update:progress", cb),
     onBrowserPopup: (cb) => port.on("browser:popup", cb),
+    onBrowserPermission: (cb) => port.on("browser:permission", cb),
 
     // Main takes the app's keys before the page (a terminal would otherwise have them) and sends
     // each as the keymap action it is.

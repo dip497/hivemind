@@ -204,11 +204,14 @@ Selection and focus need none.
 ### The sandbox
 
 The page runs on its own `hm-view://<id>` origin with a strict content policy: no `window.hive`,
-no Node, no network, no inline scripts. Malformed messages, floods or runaway CPU switch it off for
-the session and return you to the canvas.
+no Node, no network, no inline scripts, and no notifications, camera, microphone or location.
+Malformed messages, floods or runaway CPU switch it off for the session and return you to the
+canvas.
 
 - Name your files relatively (`./main.js`): in a browser tab the app serves views under a path.
 - Draw on change, and stop work while `document.hidden`.
+- In the app, a form's `submit` event fires and the form goes nowhere: handle the event. On the
+  phone page it does not fire, so a view with `"phone": true` also handles Enter in the field.
 - Test without the app with `fakeHost()` from `@hivemind/view-sdk/testing`.
 
 ### Commands

@@ -155,6 +155,9 @@ changes or you'll act on stale refs.
   flags exist for this — use them when a task touches anything risky.
 - **Don't drive the app-shell tab.** It's the hivemind UI. Only act on the web
   tab whose URL matches your chosen Browser tile.
+- **A site that asks** for the camera, microphone, location or notifications
+  shows **Block** / **Allow** on the tile and waits for the user. Leave the answer
+  to them: say what the site wants and why, or carry on without it.
 - If a command fails to connect, re-check Step 0 (port enabled? tile open?)
   rather than retrying blindly.
 

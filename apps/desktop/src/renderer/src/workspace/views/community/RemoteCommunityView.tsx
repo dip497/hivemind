@@ -71,7 +71,7 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
   const nameOf = new Map(model.layerTiles.map((tile) => [tile.id, tile.name]));
   return <div ref={root} className="relative flex-1 min-h-0 overflow-hidden" data-community-view={pkg.id} data-community-ready={ready ? "1" : "0"}>
     {!error && <iframe ref={iframe} name={`hm-view:${pkg.id}`} title={pkg.manifest?.name ?? pkg.id} src={pkg.url ? window.hive.resourceUrl(pkg.url) : undefined}
-      sandbox="allow-scripts" referrerPolicy="no-referrer" onLoad={onLoad} className="absolute inset-0 h-full w-full border-0 bg-transparent" />}
+      sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" onLoad={onLoad} className="absolute inset-0 h-full w-full border-0 bg-transparent" />}
     <SurfaceSlots rects={rects} width={root.current?.clientWidth ?? 0} names={nameOf} commands={commands}
       onUndock={(tileId) => { setRects((old) => old.filter((item) => item.tileId !== tileId)); deliver({ type: "undock", tileId }); }} />
     {error && <div role="alert" className="absolute inset-0 grid place-items-center text-[var(--color-fg2)]">{error}</div>}

@@ -279,6 +279,8 @@ Concretely:
 | `<iframe>` | `frame-src 'none'` |
 | `require`, `process`, `node:*` | there is no node here |
 | `localStorage` | opaque origin — use `setLayout` |
+| `<form>` | in the app its `submit` event fires and `form-action 'none'` keeps it from going anywhere, so handle the event; the phone page's frame does not fire it, so a `"phone": true` view also handles Enter |
+| `Notification`, `getUserMedia`, `geolocation` | refused — a view gets no browser permission |
 
 Images, fonts and media may be `data:`, `blob:` or bundled files. Workers may be
 `blob:`. WebAssembly is allowed (`wasm-unsafe-eval`). Bundle what you need.

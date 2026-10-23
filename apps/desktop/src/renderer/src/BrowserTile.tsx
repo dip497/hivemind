@@ -5,6 +5,7 @@ import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { useScaleOnScreen } from "./workspace/tile-scale";
+import { BrowserAsk, useBrowserAsks } from "./browser-asks";
 
 interface Props {
   tileId: string;
@@ -158,6 +159,10 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
   pageZoomFactorRef.current = pageZoomFactor;
 
   const wvMap = useRef(new Map<string, WebviewTag>());
+  // A page asks for the camera, the location… on this tile: one of its tabs, attached or loading.
+  const { ask, answer } = useBrowserAsks(useCallback((pageId: number) => [...(guestsRef.current?.querySelectorAll("webview") ?? [])].some((wv) => {
+    try { return (wv as WebviewTag).getWebContentsId() === pageId; } catch { return false; }
+  }), []));
   const activeIdRef = useRef(activeId);
   const addrFocused = useRef(false);
   activeIdRef.current = activeId;
@@ -428,6 +433,8 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
           🤖 {cdpMsg}
         </div>
       )}
+
+      {ask && <BrowserAsk ask={ask} answer={answer} />}
 
       {/* Guests. All tabs mounted; only the active one is shown. */}
       <div ref={guestsRef} className="flex-1 bg-white relative overflow-hidden">

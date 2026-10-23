@@ -118,6 +118,7 @@ import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { installBrowserApp } from "./browser-app.js";
+import { installPermissions } from "./permissions.js";
 import { serveScheme } from "./schemes.js";
 import { fileIn } from "@hivemind/host/repo-paths";
 
@@ -248,6 +249,11 @@ function attachWinStateSaver(win: BrowserWindow): void {
   win.on("unmaximize", save);
 }
 
+/** The app's own page: the dev server's in a dev run, else the built file. */
+function appPageUrl(): string {
+  return process.env["ELECTRON_RENDERER_URL"] ?? pathToFileURL(path.join(__dirname, "../renderer/index.html")).href;
+}
+
 async function createWindow(target: string | null = cliLaunchTarget): Promise<void> {
   // Remove the native File/Edit/View/Window/Help menu entirely (autoHideMenuBar
   // only hides it until Alt; this kills it outright). No app actions live there
@@ -259,7 +265,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
-  const appPage = devUrl ?? pathToFileURL(path.join(__dirname, "../renderer/index.html")).href;
+  const appPage = appPageUrl();
   const win = new BrowserWindow({
     width: state.width,
     height: state.height,
@@ -1579,6 +1585,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // Community view packages: hm-view://<id>/… served to sandboxed iframes.
   registerViewScheme();
   app.whenReady().then(async () => {
+    // Before any window or Browser tile page loads, so none is ever granted without them.
+    installPermissions(appPageUrl());
     await migrateOnStart();
     // A daemon of another protocol is replaced before anything connects to it: each connection
     // waits for this, the window does not.

@@ -22,8 +22,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - **Breaking:** a view's own keys (`keys` on a command) no longer act while you type in a terminal or a field: the key is the terminal program's there.
 
+### Security
+
+- A site in a Browser tile asks before it uses your camera, microphone or location, or shows notifications: the tile names the site, and your **Allow** or **Block** holds for it until you quit the app. Before, every site got them without asking. A view, or a page a tool shows in its tile, never gets them.
+
 ### Fixed
 
+- A form in a view submits in the app: Enter in its text box fires the form's `submit` event, which did nothing before. The form still cannot leave the view's page.
 - An agent whose workers finish one after another is told "Your agents sent you messages" once, at its prompt, even before it has finished a turn since the app started; before, the line could be pasted into its prompt again for each worker.
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.
 - Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
