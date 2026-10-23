@@ -81,6 +81,19 @@ interrupt:
 # A message typed while it works is queued and read at its next step: claude 2.1.289 shows
 # "Press up to edit queued messages".
 steer: true
+# Its prompt with nothing typed, read from claude 2.1.309: the cursor sits right after "❯ ", before
+# the dim suggestion it shows there; the person's words come between the two.
+emptyPrompt:
+  when:
+    seq:
+    - lit: ❯
+    - run: space
+      min: 0
+    - end: true
+    at: start
+  scope:
+    kind: tail
+    n: 1
 options:
 - id: mode
   label: Permission mode

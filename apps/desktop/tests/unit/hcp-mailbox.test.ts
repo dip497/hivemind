@@ -229,3 +229,70 @@ test("photos for an agent that attaches a pasted path: each path pasted alone, t
   await settle();
   assert.deepEqual(writes, ["/p/c.png", "\r", "and this", "\r"], "in the order sent");
 });
+
+/** A hooked agent whose file says how its empty prompt reads: `screen.words` is what its prompt
+ *  shows before the cursor. */
+function screenHarness() {
+  const writes: string[] = [];
+  const screen = { words: "" };
+  const mb = new Mailbox((_id, data) => { writes.push(data); return true; }, 1, undefined, undefined, undefined,
+    async () => screen.words === "");
+  mb.setBusy(PID); mb.setIdle(PID);
+  return { mb, writes, screen };
+}
+
+test("a draft cleared with keys that say nothing (Esc Esc): a message after it is typed, not held for an Enter", async () => {
+  const { mb, writes, screen } = screenHarness();
+  mb.typed(PID, "when we crawl"); screen.words = "when we crawl";
+  mb.typed(PID, "\x1b"); mb.typed(PID, "\x1b"); screen.words = "";
+  mb.deliver(PID, "from the phone");
+  await settle();
+  assert.deepEqual(writes, ["from the phone", "\r"]);
+});
+
+test("a draft deleted key by key while a message waits: it goes once the person stops typing", async () => {
+  const { mb, writes, screen } = screenHarness();
+  mb.typed(PID, "ab"); screen.words = "ab";
+  mb.deliver(PID, "from the phone");
+  await settle();
+  assert.deepEqual(writes, [], "held while the person has words there");
+  mb.typed(PID, "\x7f"); mb.typed(PID, "\x7f"); screen.words = "";
+  await new Promise((r) => setTimeout(r, 1400));
+  assert.deepEqual(writes, ["from the phone", "\r"]);
+});
+
+test("words typed while the agent works hold what waits for its prompt, instead of being sent glued to it", async () => {
+  const { mb, writes, screen } = screenHarness();
+  mb.setBusy(PID);
+  mb.deliver(PID, "Hello");
+  mb.typed(PID, "check ssh"); screen.words = "check ssh";
+  mb.setIdle(PID);
+  await settle();
+  assert.deepEqual(writes, [], "not typed after the person's words");
+  assert.equal(mb.pending(PID), 1);
+
+  mb.typed(PID, "\r"); screen.words = ""; // they send theirs: a turn runs
+  mb.setBusy(PID); mb.setIdle(PID);
+  await settle();
+  assert.deepEqual(writes, ["Hello", "\r"]);
+});
+
+test("what the agent itself shows at its prompt holds nothing: only the person's words do", async () => {
+  const { mb, writes, screen } = screenHarness();
+  screen.words = "/resume";
+  mb.deliver(PID, "report");
+  await settle();
+  assert.deepEqual(writes, ["report", "\r"]);
+});
+
+test("a steering agent the person typed to earlier in its turn is not typed over, however long ago", async () => {
+  const writes: string[] = [];
+  const mb = new Mailbox((_id, data) => { writes.push(data); return true; }, 1, () => true);
+  mb.setBusy(PID);
+  mb.typed(PID, "check ssh");
+  await new Promise((r) => setTimeout(r, 5200));
+  mb.deliver(PID, "Hello");
+  await settle();
+  assert.deepEqual(writes, [], "not glued to the person's words");
+  assert.equal(mb.pending(PID), 1);
+});

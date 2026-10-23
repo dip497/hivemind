@@ -4,6 +4,7 @@ import { Worker } from "node:worker_threads";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { FromScreens, ToScreens } from "./screen-messages.js";
+import type { Viewport } from "./pty-protocol.js";
 
 /** Built next to this code as .js (the app's bundle, the compiled `hive`), or run from source as .ts. */
 function workerFile(): URL {
@@ -63,7 +64,7 @@ export class ScreenThread {
   }
 
   /** Null when the worker gave no answer: the rows are unknown, not empty. */
-  rows(ids: string[]): Promise<Map<string, string> | null> {
+  rows(ids: string[]): Promise<Map<string, Viewport> | null> {
     return this.ask((req) => ({ t: "rows", req, ids })).then((m) => (m?.t === "rows" ? new Map(m.rows) : null));
   }
 

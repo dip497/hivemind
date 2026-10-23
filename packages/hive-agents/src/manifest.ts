@@ -81,6 +81,10 @@ export interface AgentManifest {
   /** It attaches an image whose path is pasted alone into its prompt, so a message's images are
    *  pasted so, one by one, before its text. Claim it only from the real binary. */
   pastedImages?: boolean;
+  /** How its screen reads, up to the cursor, while nothing is typed at its prompt: a message for
+   *  it waits while the person has words there, and goes once they are sent or deleted. Without
+   *  it, the keys the person typed are the only guess. Claim it only from the real binary. */
+  emptyPrompt?: { when: Expr; scope?: Scope };
   session?: unknown;
   assets?: unknown;
   launch?: unknown;
@@ -682,6 +686,11 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   req(m.choose === undefined || (keyTokens(m.choose) && m.choose.some((k) => k.includes("{n}"))), "choose must be 1-4 key tokens, one naming the option, {n}");
   req(m.steer === undefined || typeof m.steer === "boolean", "steer must be true or false");
   req(m.pastedImages === undefined || typeof m.pastedImages === "boolean", "pastedImages must be true or false");
+  if (m.emptyPrompt !== undefined) {
+    req(m.emptyPrompt && typeof m.emptyPrompt === "object" && m.emptyPrompt.when !== undefined, "emptyPrompt needs a `when`");
+    try { validateExpr(m.emptyPrompt.when, "emptyPrompt.when"); validateScope(m.emptyPrompt.scope, "emptyPrompt.scope"); }
+    catch (e) { throw new ManifestError((e as Error).message); }
+  }
 
   const aliases = m.aliases;
   req(aliases === undefined || (Array.isArray(aliases) && aliases.every((a) => typeof a === "string")),
@@ -721,6 +730,9 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     match: compileDetect({ rules: [{ when: d.when, then: "blocked", ...(d.scope ? { scope: d.scope } : {}) }], default: "idle" }),
     keys: d.keys,
   })).map(({ match, keys }) => ({ match: (screen: string) => match(screen).status === "blocked", keys }));
+  const emptyPrompt = m.emptyPrompt
+    ? compileDetect({ rules: [{ when: m.emptyPrompt.when, then: "idle", ...(m.emptyPrompt.scope ? { scope: m.emptyPrompt.scope } : {}) }], default: "working" })
+    : undefined;
 
   const def: AgentProviderDef = {
     id: m.id,
@@ -735,6 +747,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.choose ? { choose: m.choose } : {}),
     ...(m.steer ? { steer: true } : {}),
     ...(m.pastedImages ? { pastedImages: true } : {}),
+    ...(emptyPrompt ? { emptyPrompt: (upToCursor: string) => emptyPrompt(upToCursor).status === "idle" } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),

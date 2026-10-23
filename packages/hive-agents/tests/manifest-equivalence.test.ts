@@ -237,6 +237,15 @@ describe("manifest validation refuses what it cannot back", () => {
     bad({ steer: "yes" }, /steer must be true or false/);
   });
 
+  test("an agent that says how its empty prompt reads says it in the screen rules' own words, and anything else is refused at load", () => {
+    const def = defFromManifest({ ...base, emptyPrompt: { when: { seq: [{ lit: ">" }, { end: true }], at: "start" }, scope: { kind: "tail", n: 1 } } });
+    expect(def.emptyPrompt!("rule\n>")).toBe(true);
+    expect(def.emptyPrompt!("rule\n> hi")).toBe(false);
+    expect(defFromManifest(base).emptyPrompt).toBeUndefined();
+    bad({ emptyPrompt: { scope: { kind: "tail", n: 1 } } }, /emptyPrompt needs a `when`/);
+    bad({ emptyPrompt: { when: { re: "^>$" } } }, /emptyPrompt.when.re: rules do not take regexes/);
+  });
+
   test("an agent that attaches an image whose path is pasted alone says so, and anything but a flag is refused at load", () => {
     expect(defFromManifest({ ...base, pastedImages: true }).pastedImages).toBe(true);
     expect(defFromManifest(base).pastedImages).toBeUndefined();
