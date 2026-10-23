@@ -24,6 +24,8 @@
  */
 import type { AgentNotice } from "../shared/ipc.js";
 import { shouldNotify, type NoticeKind, type NotificationSettings } from "../shared/notification-settings.js";
+import { lineFor, type AgentWait } from "../shared/line-for.js";
+import { toBareId } from "@hivemind/workspace-api/tile-id";
 
 export const DEDUPE_MS = 2000;
 export const DEDUPE_MAX = 1024;
@@ -262,5 +264,33 @@ export class NoticeDeskCore {
     b.count = carried.length;
     this.playing.set(b.id, b);
     this.deps.sound({ id: b.id, moment, count: carried.length });
+  }
+}
+
+/** How long a pop-up with text waits for the feed to bring what an agent waits on: its status
+ *  changes at once, its wait up to 250 ms later (agent-feed.ts). */
+export const WAIT_FOR_WAIT_MS = 1000;
+const WAIT_STEP_MS = 250;
+
+/**
+ * What one agent's pop-up says under its name when the person turned that on (`popupText`), else
+ * nothing: for needs you, what it waits on (asked again every 250 ms for up to WAIT_FOR_WAIT_MS);
+ * for finished or failed, its tile's last line. One line of plain text (`lineFor`), never for a
+ * gathered pop-up, and never anywhere but this pop-up: push carries no text.
+ */
+export async function popupTextOf(
+  p: Popup,
+  on: boolean,
+  o: { waitingOf(bare: string): AgentWait | undefined; lineOf(bare: string): string | undefined; sleep(ms: number): Promise<unknown> },
+): Promise<string | undefined> {
+  const first = p.notices[0];
+  if (!on || p.more || !first) return undefined;
+  const bare = toBareId(first.tileId);
+  if (p.kind !== "needs") return lineFor(undefined, o.lineOf(bare)) || undefined;
+  for (let waited = 0; ; waited += WAIT_STEP_MS) {
+    const w = o.waitingOf(bare);
+    if (w) return lineFor(w, undefined) || undefined;
+    if (waited >= WAIT_FOR_WAIT_MS) return undefined;
+    await o.sleep(WAIT_STEP_MS);
   }
 }

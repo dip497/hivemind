@@ -170,3 +170,22 @@ test("Recent keeps the last 10 bursts and what the window said of each sound", (
   d.result(asked.id, true);
   assert.deepEqual([d.recent()[0]!.moment, d.recent()[0]!.sound, d.recent()[0]!.count], ["error", "played", 1]);
 });
+
+test("a pop-up's text: none unless the person turned it on or for a gathered one; a wait as one line, waited for up to 1 s; else the last line", async () => {
+  const { popupTextOf } = await import("../../src/main/notice-desk-core.ts");
+  const one = (kind: AgentNotice["kind"]): Popup => ({ kind, notices: [n("hm:t1", kind)], more: false, silent: false });
+  let slept = 0;
+  let wait: unknown;
+  const o = {
+    waitingOf: (bare: string) => (bare === "t1" ? (wait as never) : undefined),
+    lineOf: (bare: string) => (bare === "t1" ? "214 tests‮ passed\u0007" : undefined),
+    sleep: async (ms: number) => { slept += ms; if (slept >= 500) wait = { kind: "permission", since: 1, tool: { name: "Bash", about: "rm -rf build\nsecond line" } }; },
+  };
+  assert.equal(await popupTextOf(one("done"), false, o), undefined, "off by default");
+  assert.equal(await popupTextOf({ ...one("done"), more: true }, true, o), undefined);
+  assert.equal(await popupTextOf(one("done"), true, o), "214 tests passed", "controls and bidi stripped");
+  assert.equal(await popupTextOf(one("needs"), true, o), "Bash: rm -rf build");
+  assert.equal(slept, 500, "it waited for the feed to bring the wait");
+  wait = undefined; slept = -1e9;
+  assert.equal(await popupTextOf(one("needs"), true, { ...o, sleep: async (ms: number) => { slept += ms; } }), undefined, "it gives up after 1 s");
+});

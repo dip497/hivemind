@@ -15,12 +15,11 @@ import { appWindowOf, userWindow } from "./windows.js";
 import { showAgentPopup } from "./agent-notify.js";
 import { getNotificationSettings } from "./notification-settings-store.js";
 import { onSettingsChange, settingsFile } from "./settings-store.js";
-import { NoticeDeskCore, type Popup } from "./notice-desk-core.js";
+import { NoticeDeskCore, popupTextOf } from "./notice-desk-core.js";
 import { NOTICE_KINDS, type NoticeKind } from "../shared/notification-settings.js";
 import { themeSoundOf } from "../shared/theme-sounds.js";
-import { lineFor, type AgentWait } from "../shared/line-for.js";
+import type { AgentWait } from "../shared/line-for.js";
 import type { AgentNotice, SoundResult } from "../shared/ipc.js";
-import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { ApiError } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 
@@ -36,9 +35,6 @@ const ANSWER_MS = 3000;
 /** The most of a theme sound's file handed to a window: a theme's sound is at most 400 KB. */
 const THEME_SOUND_MAX = 1024 * 1024;
 
-/** How long a pop-up with text waits for the feed to bring what an agent waits on: its status
- *  changes at once, its wait up to 250 ms later (agent-feed.ts). */
-const WAIT_FOR_WAIT_MS = 1000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isKind = (v: unknown): v is NoticeKind => NOTICE_KINDS.includes(v as NoticeKind);
@@ -74,27 +70,15 @@ async function playNamed(moment: NoticeKind): Promise<SoundResult> {
 export function registerNoticeDesk(o: NoticeDeskOptions): void {
   onSettingsChange(() => { rawSettings = undefined; });
 
-  /** What a single agent's pop-up says under its name, when the person lets it. */
-  async function popupText(p: Popup): Promise<string | undefined> {
-    const first = p.notices[0];
-    if (p.more || !first || !getNotificationSettings().popupText) return undefined;
-    const bare = toBareId(first.tileId);
-    if (p.kind !== "needs") return lineFor(undefined, o.lineOf(bare)) || undefined;
-    for (let waited = 0; ; waited += 250) {
-      const w = o.waitingOf(bare);
-      if (w) return lineFor(w, undefined) || undefined;
-      if (waited >= WAIT_FOR_WAIT_MS) return undefined;
-      await sleep(250);
-    }
-  }
-
   desk = new NoticeDeskCore({
     now: Date.now,
     schedule: (fn, ms) => setTimeout(fn, ms),
     settings: getNotificationSettings,
     focused: () => !!userWindow()?.isFocused(),
     popup: (p) => {
-      void popupText(p).catch(() => undefined).then((text) => showAgentPopup(p, text, userWindow));
+      void popupTextOf(p, getNotificationSettings().popupText, { ...o, sleep })
+        .catch(() => undefined)
+        .then((text) => showAgentPopup(p, text, userWindow));
     },
     sound: (s) => {
       const win: BrowserWindow | null = userWindow();
