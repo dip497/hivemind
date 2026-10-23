@@ -29,7 +29,9 @@
  *
  * A PERSON'S DRAFT is the third thing typing can break: a message typed into a composer
  * the person is writing in is merged with their words and submitted as theirs. So a
- * message is also held while the person has typed there and not yet sent or cleared it.
+ * message is also held while the person has words at the prompt. An agent whose file says
+ * how its empty prompt reads is asked its screen just before each message is typed; for
+ * any other, the keys the person typed are the guess.
  *
  * Keyed by PTY id (`hm:<bare>`), which is what the hooks report and what writeToTile
  * takes.
@@ -48,6 +50,9 @@ const IDLE_SETTLE_MS = 250;
 /** After the person's own Enter, how long the turn it starts has to be reported before a
  *  held message is typed: typed sooner, it lands in the turn that is starting. */
 const SUBMIT_SETTLE_MS = 2000;
+
+/** After the person's last key, how long before a held message looks at the prompt again. */
+const TYPING_SETTLE_MS = 1000;
 
 /** How long a woken agent that never says it is up, nor settles, is waited for. */
 const WAKE_WAIT_MS = 60_000;
@@ -96,12 +101,18 @@ export class Mailbox {
   private draft = new Set<string>();
   /** When the person last typed into each tile. */
   private typedAt = new Map<string, number>();
+  /** Tiles the person typed into since their agent's turn last began: only their words at its
+   *  prompt hold a message, never what the agent itself shows there. */
+  private typedSinceTurn = new Set<string>();
   /** A pending release timer, so a burst of idle signals releases exactly one. */
   private releaseTimer = new Map<string, ReturnType<typeof setTimeout>>();
   /** Tiles whose session sleeps: nothing is typed into them, and what comes waits. */
   private asleep = new Set<string>();
   /** Tiles woken whose agent has not yet said its session is up. */
   private waking = new Set<string>();
+  /** Tiles whose screen is being read before a release, and whether another release was asked
+   *  for meanwhile. */
+  private reading = new Map<string, boolean>();
 
   constructor(
     /** Raw write into a tile's pty. `paste` = a message handed over as one block, not
@@ -116,6 +127,9 @@ export class Mailbox {
     /** Whether the tile's agent reports its turns (its file says `turnSignal`): held for its
      *  prompt from the start, not only once a turn of it has been seen. */
     private readonly signalsTurns: (ptyId: string) => boolean = () => false,
+    /** Whether the tile's prompt is empty, read from its screen; undefined when its agent does not
+     *  say how its empty prompt reads, or the screen cannot be read. */
+    private readonly promptEmpty: (ptyId: string) => Promise<boolean | undefined> = async () => undefined,
   ) {}
 
   /** What comes for this tile is held for its prompt, not typed at once. */
@@ -130,6 +144,7 @@ export class Mailbox {
     this.managed.add(ptyId);
     this.busy.add(ptyId);
     this.draft.delete(ptyId); // a turn began: whatever was in the composer was sent
+    this.typedSinceTurn.delete(ptyId);
     // A release waiting on the person's Enter would outlast this turn's end.
     const t = this.releaseTimer.get(ptyId);
     if (t) clearTimeout(t);
@@ -140,12 +155,14 @@ export class Mailbox {
    * The person typed `data` into the tile. Printable text at the prompt is a draft, held
    * around until they send or clear it. Keys typed mid-turn answer the agent's own
    * prompts (a permission's "1"), and escape sequences are the terminal's reports.
-   * ponytail: a draft backspaced to nothing still counts, until Enter, Ctrl-C or Ctrl-U.
+   * A draft backspaced to nothing is seen only on the screen: once the person stops typing,
+   * what waits looks at the prompt again.
    * `answers`: the keys answer the agent's own prompt (`agent.answer`), never a draft.
    */
   typed(ptyId: string, data: string, paste = false, answers = false): void {
     this.typedAt.set(ptyId, Date.now());
     if (answers) return;
+    if (data[0] !== "\x1b") this.typedSinceTurn.add(ptyId);
     // A line and the key that sends it can come in one write (a pasted line, a phone's): only
     // what follows the last such key is still being written.
     const cleared = paste ? -1 : Math.max(...[...CLEARS_DRAFT].map((key) => data.lastIndexOf(key)));
@@ -157,6 +174,10 @@ export class Mailbox {
     }
     if (this.busy.has(ptyId)) return;
     if (paste || isDraft(data)) this.draft.add(ptyId);
+    if (data[0] !== "\x1b" && this.queued.get(ptyId)?.length) {
+      this.cancelRelease(ptyId);
+      this.scheduleRelease(ptyId, TYPING_SETTLE_MS);
+    }
   }
 
   /** Turn ended (Stop / agent_end). Coalesced: repeated calls before the release fires
@@ -206,8 +227,9 @@ export class Mailbox {
    */
   deliver(ptyId: string, text: string, onSent?: () => void, o: Delivery = {}): boolean {
     // An agent that steers reads it mid-turn: typed now, into the turn that is running.
+    // Not while the person may have words at its prompt: typed this turn, or lately.
     const steer = !o.atPrompt && this.busy.has(ptyId) && !this.queued.get(ptyId)?.length && this.steers(ptyId)
-      && Date.now() - (this.typedAt.get(ptyId) ?? 0) >= TYPING_QUIET_MS;
+      && !this.typedSinceTurn.has(ptyId) && Date.now() - (this.typedAt.get(ptyId) ?? 0) >= TYPING_QUIET_MS;
     const held = this.asleep.has(ptyId) || this.waking.has(ptyId);
     if (!held && (steer || (!this.waitsForPrompt(ptyId) && !this.draft.has(ptyId)))) {
       // Hookless (or not known to report its turns) → immediate, matching the pre-mailbox path.
@@ -236,9 +258,11 @@ export class Mailbox {
     this.managed.delete(ptyId);
     this.draft.delete(ptyId);
     this.typedAt.delete(ptyId);
+    this.typedSinceTurn.delete(ptyId);
     this.queued.delete(ptyId);
     this.asleep.delete(ptyId);
     this.waking.delete(ptyId);
+    this.reading.delete(ptyId);
     this.cancelRelease(ptyId);
   }
 
@@ -252,39 +276,58 @@ export class Mailbox {
    *  (coalesces duplicate idle signals) and a no-op while the tile is busy or empty. */
   private scheduleRelease(ptyId: string, after = IDLE_SETTLE_MS): void {
     if (this.releaseTimer.has(ptyId)) return; // a release is already pending
+    if (this.reading.has(ptyId)) { this.reading.set(ptyId, true); return; } // asked again once its screen is read
     if (this.busy.has(ptyId)) return; // still mid-turn
     if (this.asleep.has(ptyId) || this.waking.has(ptyId)) return; // nothing runs to read it yet
-    if (this.draft.has(ptyId)) return; // the person is writing there
     if (!this.queued.get(ptyId)?.length) return; // nothing to send
     const t = setTimeout(() => {
       this.releaseTimer.delete(ptyId);
-      const q = this.queued.get(ptyId);
-      if (this.busy.has(ptyId) || this.draft.has(ptyId) || !q?.length) return; // raced back to busy / drained
-      let next: Held | undefined;
-      do next = q.shift(); while (next?.wanted && !next.wanted());
-      if (!q.length) this.queued.delete(ptyId);
-      this.onHeld(ptyId, q.length);
-      if (!next) return;
-      // A hookless tile reports no turn end to wait for: the rest follow at once.
-      if (!this.waitsForPrompt(ptyId)) {
-        if (this.send(ptyId, next.text, next.pasted)) next.onSent?.();
-        this.scheduleRelease(ptyId);
-        return;
-      }
-      // Optimistic: this delivery starts a turn, so hold the rest until it ends. A
-      // managed agent always turns on a submitted prompt (claude/pi/droid), so the
-      // matching setIdle WILL arrive and drain the next. If the send fails (dead pty),
-      // un-hold so the queue doesn't wedge — forget() on exit is the real backstop.
-      // ponytail: relies on "submitted prompt ⇒ a turn"; true for every managed agent.
-      this.busy.add(ptyId);
-      if (this.send(ptyId, next.text, next.pasted)) next.onSent?.();
-      else {
-        this.busy.delete(ptyId);
-        this.scheduleRelease(ptyId);
-      }
+      void this.release(ptyId);
     }, after);
     t.unref?.();
     this.releaseTimer.set(ptyId, t);
+  }
+
+  /** Type ONE queued message, if the tile is at its prompt and the person has no words there. */
+  private async release(ptyId: string): Promise<void> {
+    if (this.busy.has(ptyId) || !this.queued.get(ptyId)?.length) return; // raced back to busy / drained
+    // The prompt is read just before typing: a draft deleted key by key is gone, and words typed
+    // while the agent worked are there, though no key said so.
+    this.reading.set(ptyId, false);
+    const empty = await this.promptEmpty(ptyId).catch(() => undefined);
+    const again = this.reading.get(ptyId);
+    if (!this.reading.delete(ptyId)) return; // forgotten meanwhile
+    if (empty) this.draft.delete(ptyId);
+    else if (empty === false && this.typedSinceTurn.has(ptyId)) this.draft.add(ptyId);
+    const q = this.queued.get(ptyId);
+    if (this.busy.has(ptyId) || this.asleep.has(ptyId) || this.waking.has(ptyId) || !q?.length) return;
+    if (this.draft.has(ptyId)) {
+      // The person is writing there: it waits for their Enter, or for a key that may have emptied it.
+      if (again) this.scheduleRelease(ptyId, TYPING_SETTLE_MS);
+      return;
+    }
+    let next: Held | undefined;
+    do next = q.shift(); while (next?.wanted && !next.wanted());
+    if (!q.length) this.queued.delete(ptyId);
+    this.onHeld(ptyId, q.length);
+    if (!next) return;
+    // A hookless tile reports no turn end to wait for: the rest follow at once.
+    if (!this.waitsForPrompt(ptyId)) {
+      if (this.send(ptyId, next.text, next.pasted)) next.onSent?.();
+      this.scheduleRelease(ptyId);
+      return;
+    }
+    // Optimistic: this delivery starts a turn, so hold the rest until it ends. A
+    // managed agent always turns on a submitted prompt (claude/pi/droid), so the
+    // matching setIdle WILL arrive and drain the next. If the send fails (dead pty),
+    // un-hold so the queue doesn't wedge — forget() on exit is the real backstop.
+    // ponytail: relies on "submitted prompt ⇒ a turn"; true for every managed agent.
+    this.busy.add(ptyId);
+    if (this.send(ptyId, next.text, next.pasted)) next.onSent?.();
+    else {
+      this.busy.delete(ptyId);
+      this.scheduleRelease(ptyId);
+    }
   }
 
   private send(ptyId: string, text: string, pasted: string[] = []): boolean {

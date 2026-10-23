@@ -9,6 +9,7 @@ import * as HeadlessXtermNS from "@xterm/headless";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
 // Type imports only: run from source, a worker gets no loader that maps `./x.js` to `./x.ts`.
 import type { FromScreens, ToScreens } from "./screen-messages.js";
+import type { Viewport } from "./pty-protocol.js";
 
 type HeadlessCtor = typeof import("@xterm/headless").Terminal;
 type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
@@ -125,11 +126,11 @@ function screenOf(s: Screen, lines: number): string {
   return text;
 }
 
-function visibleRows(s: Screen): string {
+function visibleRows(s: Screen): Viewport {
   const buf = s.term.buffer.active;
   const rows: string[] = [];
   for (let y = 0; y < s.term.rows; y++) rows.push(buf.getLine(buf.baseY + y)?.translateToString(true) ?? "");
-  return rows.join("\n");
+  return { text: rows.join("\n"), cursor: { x: buf.cursorX, y: buf.cursorY } };
 }
 
 port.on("message", (m: ToScreens) => {
@@ -150,7 +151,7 @@ port.on("message", (m: ToScreens) => {
       break;
     }
     case "rows": {
-      const rows: Array<[string, string]> = [];
+      const rows: Array<[string, Viewport]> = [];
       const ready = m.ids.flatMap((id) => {
         const s = screens.get(id);
         return s ? [new Promise<void>((r) => inTurn(s, () => { rows.push([id, visibleRows(s)]); r(); }))] : [];

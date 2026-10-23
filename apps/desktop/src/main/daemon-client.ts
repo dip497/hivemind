@@ -7,7 +7,7 @@ import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app } from "electron";
-import { type SessionInfo, DAEMON_PROTOCOL_VERSION, SOCKET_NAME } from "@hivemind/agent-host/pty-protocol";
+import { type SessionInfo, type Viewport, DAEMON_PROTOCOL_VERSION, SOCKET_NAME } from "@hivemind/agent-host/pty-protocol";
 import { daemonProtocol, daemonSessions, retireDaemon, socketAt, stopDaemon as stopDaemonAt, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { DaemonEndpoint, type Callbacks } from "@hivemind/agent-host/daemon-endpoint";
 import { reachDaemon } from "@hivemind/agent-host/daemon-start";
@@ -124,8 +124,8 @@ export function screenPty(tileId: string, cb: (replay: string | null) => void, l
   local.screen(tileId, cb, lines);
   return true;
 }
-/** The session's screen as text, line by line; null when this client does not hold it. */
-export function viewportPty(tileId: string): Promise<string | null> {
+/** The session's screen as text, line by line, and its cursor; null when this client does not hold it. */
+export function viewportPty(tileId: string): Promise<Viewport | null> {
   return local.has(tileId) ? local.viewport(tileId) : Promise.resolve(null);
 }
 export function writePty(tileId: string, data: string, paste?: boolean): void {

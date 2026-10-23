@@ -14,7 +14,7 @@ import { pasteText } from "@hivemind/agent-host/paste";
 import { shq, withoutControl } from "@hivemind/agents/node";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-endpoint";
-import { DAEMON_PROTOCOL_VERSION } from "@hivemind/agent-host/pty-protocol";
+import { DAEMON_PROTOCOL_VERSION, type Viewport } from "@hivemind/agent-host/pty-protocol";
 import { daemonProtocol, retireDaemon, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { acceptRemoteEvent } from "./events.js";
 import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
@@ -306,8 +306,8 @@ export function screenRemotePty(tileId: string, cb: (replay: string | null) => v
   ep.screen(tileId, cb, lines);
   return true;
 }
-/** A daemon-backed remote session's screen as text, line by line; null for one with no screen kept. */
-export function viewportRemotePty(tileId: string): Promise<string | null> {
+/** A daemon-backed remote session's screen as text, line by line, and its cursor; null for one with no screen kept. */
+export function viewportRemotePty(tileId: string): Promise<Viewport | null> {
   return daemonTiles.get(tileId)?.viewport(tileId) ?? Promise.resolve(null);
 }
 export function pauseRemotePty(tileId: string): void {

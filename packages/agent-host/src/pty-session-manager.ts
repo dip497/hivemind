@@ -27,7 +27,7 @@
  *                user sees their last visible state + a working fresh shell.
  */
 import { pasteText } from "./paste.js";
-import { NothingAsleep, type SessionInfo } from "./pty-protocol.js";
+import { NothingAsleep, type SessionInfo, type Cursor } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
 import { splitAtBoundary } from "./vt-boundary.js";
 import { ScreenThread } from "./screen-thread.js";
@@ -903,17 +903,17 @@ export class SessionManager {
     return this.sessions.get(id)?.spec.cmd;
   }
 
-  /** The visible rows of each live session's screen as text, and the command it runs. */
+  /** The visible rows of each live session's screen as text, its cursor, and the command it runs. */
   /** Null when the screen worker gave no answer: unknown, not gone. */
-  async viewports(ids: string[]): Promise<Map<string, { cmd: string; screen: string }> | null> {
+  async viewports(ids: string[]): Promise<Map<string, { cmd: string; screen: string; cursor?: Cursor }> | null> {
     const live = ids.filter((id) => this.hasLive(id));
-    const out = new Map<string, { cmd: string; screen: string }>();
+    const out = new Map<string, { cmd: string; screen: string; cursor?: Cursor }>();
     if (!live.length) return out;
     const rows = await this.screens.rows(live);
     if (!rows) return null;
-    for (const [id, screen] of rows) {
+    for (const [id, { text, cursor }] of rows) {
       const s = this.sessions.get(id);
-      if (s && !s.exited) out.set(id, { cmd: s.spec.cmd, screen });
+      if (s && !s.exited) out.set(id, { cmd: s.spec.cmd, screen: text, cursor });
     }
     return out;
   }
