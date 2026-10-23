@@ -17,7 +17,7 @@
  * settings-row, settings-stack, …); the controls themselves are the shared
  * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -112,6 +112,7 @@ export function PresetRow({ t }: { t: ThemeState }) {
 
 export function AccentPicker({ t }: { t: ThemeState }) {
   const custom = t.accentCustom;
+  const wellRef = useRef<HTMLInputElement>(null);
   // A colour of the person's own is a mark too: say when it is hard to see on this page.
   const mark = custom ? contrastRatio(custom.brand, t.palette.bg) : null;
   return (
@@ -140,24 +141,29 @@ export function AccentPicker({ t }: { t: ThemeState }) {
             />
           );
         })}
-        {/* Any colour: the native colour well, as Terminal colours use. */}
-        <label
+        {/* Any colour: the native colour well, as Terminal colours use, opened from a swatch that
+            takes focus like the others. */}
+        <button
+          type="button"
           className="settings-accent settings-accent-custom"
           role="radio"
           aria-checked={!!custom}
+          aria-label="Your own colour"
           title="Your own colour"
           data-selected={custom ? "" : undefined}
           style={custom ? { background: custom.brand, boxShadow: `0 0 0 2px var(--color-bg2), 0 0 0 4px ${custom.brand}` } : undefined}
-        >
-          <input
-            type="color"
-            className="sr-only"
-            aria-label="Your own accent colour"
-            data-accent-custom
-            value={cssColorToHex(custom?.brand ?? ACCENTS[t.accent].brand, "#5f6b7a")}
-            onChange={(e) => chooseAccentColours({ brand: e.target.value, accent: e.target.value })}
-          />
-        </label>
+          onClick={() => wellRef.current?.showPicker?.() ?? wellRef.current?.click()}
+        />
+        <input
+          ref={wellRef}
+          type="color"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          data-accent-custom
+          value={cssColorToHex(custom?.brand ?? ACCENTS[t.accent].brand, ACCENTS.graphite.brand)}
+          onChange={(e) => chooseAccentColours({ brand: e.target.value, accent: e.target.value })}
+        />
       </div>
     </div>
   );
@@ -175,7 +181,9 @@ function FontRow({ id, label, hint, value, fonts, onChange }: {
   fonts: { id: string; label: string; value: string; also?: string[] }[]; onChange: (v: string) => void;
 }) {
   const named = fonts.find((f) => f.value === value || f.also?.includes(value));
-  const [custom, setCustom] = useState(!named);
+  const [chosen, setCustom] = useState(!named);
+  // A font set elsewhere (a theme, `hive config set`) that is none of these is shown as Custom.
+  const custom = chosen || !named;
   return (
     <div className="settings-row">
       <div><label htmlFor={id}>{label}</label><p>{hint}</p></div>

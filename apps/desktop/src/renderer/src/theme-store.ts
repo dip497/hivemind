@@ -94,12 +94,9 @@ export function slotWallpaper(t: ThemeState = state): boolean {
 }
 
 /** The text on a button filled with `brand`: the palette's text or page colour, whichever reads
- *  better on it, else black or white. */
+ *  better on it. */
 function onBrand(brand: string, t: ThemeState): string {
-  const best = [t.palette.fg, t.palette.bg, "#ffffff", "#000000"]
-    .map((c) => ({ c, r: contrastRatio(c, brand) ?? 0 }))
-    .find((x, i, all) => x.r >= 4.5 || i === all.length - 1)!;
-  return best.c;
+  return (contrastRatio(t.palette.fg, brand) ?? 0) >= (contrastRatio(t.palette.bg, brand) ?? 0) ? t.palette.fg : t.palette.bg;
 }
 
 /** The `@font-face` rules a theme's font files make, kept in one <style> and rewritten only when

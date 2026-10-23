@@ -122,9 +122,8 @@
 .settings-swatch { width: 12px; height: 12px; border-radius: 4px; border: 1px solid var(--color-line2); }
 .settings-accents { display: flex; flex-wrap: wrap; gap: 9px; padding: 4px; }
 .settings-accent { width: 20px; height: 20px; border-radius: 50%; }
-/* The accent of your own: a colour wheel until one is picked, then that colour. */
-.settings-accent-custom { position: relative; cursor: pointer; background: conic-gradient(oklch(0.7 0.12 30), oklch(0.7 0.12 150), oklch(0.7 0.12 260), oklch(0.7 0.12 30)); }
-.settings-accent-custom:focus-within { outline: 2px solid var(--color-ring); outline-offset: 2px; }
+/* The accent of your own: a wheel of the page's tones until one is picked, then that colour. */
+.settings-accent-custom { background: conic-gradient(var(--color-brand), var(--color-fg3), var(--color-bg4), var(--color-brand)); }
 .settings-wallpaper { min-width: 0; text-align: center; }
 .settings-wallpaper-preview { display: grid; place-items: center; height: 48px; border: 1px solid var(--color-line2); border-radius: 5px; color: var(--color-fg2); }
 .settings-wallpaper[aria-checked=true] .settings-wallpaper-preview { border-color: var(--color-brand); box-shadow: 0 0 0 1px var(--color-brand); }

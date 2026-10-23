@@ -76,7 +76,8 @@ A package's files are copied in and checked before anything you use changes. If 
 fails halfway, the version you had stays in use.
 
 A package that holds several is a folder with a `hivemind-package.json`. It names a folder for
-each tool, widget and view, each with its own manifest, and the agent presets it brings:
+each tool, widget, view and [theme](/packages#themes), each with its own manifest, and the agent
+presets it brings:
 
 ```json
 {
@@ -87,6 +88,7 @@ each tool, widget and view, each with its own manifest, and the agent presets it
   "tools": [{ "path": "tools/prs" }],
   "widgets": [{ "path": "widgets/dog" }],
   "views": [{ "path": "views/island" }],
+  "themes": [{ "path": "themes/harbour" }],
   "agents": [{ "id": "@you/reviewer", "name": "Reviewer", "provider": "claude", "prompt": "Review the diff." }]
 }
 ```
@@ -112,9 +114,10 @@ the app, and what it asks for.
 
 ### Updates and rollback
 
-Views and widgets run in a sandbox that holds them to the permissions they ask for. Tools run in
-the app, and an agent preset is instructions an agent follows. So a new package that holds a tool
-or an agent preset arrives switched off, and one of only views and widgets arrives on.
+Views and widgets run in a sandbox that holds them to the permissions they ask for. A theme is
+data, with no code. Tools run in the app, and an agent preset is instructions an agent follows. So
+a new package that holds a tool or an agent preset arrives switched off, and one of only views,
+widgets and themes arrives on.
 
 Installing a newer version of a package keeps its switch, unless something in it needs you to
 trust it again: a view or widget that asks for a permission it did not have, or a tool or agent

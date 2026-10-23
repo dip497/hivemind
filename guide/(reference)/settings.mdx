@@ -73,9 +73,9 @@ hive config set views.layers.groupBy '"status"'
 
 | Path | Default | Allowed |
 |---|---|---|
-| `appearance.preset` | `signal` | `signal`, `clean`, `clean-light`, `ubuntu`, `dracula`, `nord`, `solarized-dark`, `one-dark` (set with `hive theme use`) |
+| `appearance.preset` | `signal` | `signal`, `clean`, `clean-light`, `ubuntu`, `dracula`, `nord`, `solarized-dark`, `one-dark` (set with `hive theme use`), or `theme` while a theme from a package is applied |
 | `appearance.mode` | from the preset | `dark`, `light`. Set it with a preset: a light mode needs a light palette, such as `clean-light`'s |
-| `appearance.accent` | from the preset | `graphite`, `indigo`, `volt`, `ember`, `ice`, `pulse`, `rose`, `emerald`, `amber`, `violet` |
+| `appearance.accent` | from the preset | `graphite`, `indigo`, `volt`, `ember`, `ice`, `pulse`, `rose`, `emerald`, `amber`, `violet`. A colour of your own goes in `appearanceExtra.accent`, which wins over it |
 | `appearance.radius` | `12` | 0 to 24 (px): **Corners** |
 | `appearance.uiFont` | the system's own interface font | a CSS font list: **Interface font** (System, Geist, or your own) |
 | `appearance.monoFont` | `"JetBrains Mono", monospace` | a CSS font list: **Code font** |
@@ -91,7 +91,24 @@ hive config set views.layers.groupBy '"status"'
 | `appearance.palette`, `appearance.terminal` | from the preset | CSS colours; set them with **Terminal colours** or a theme file |
 | `appearance.overlayMedia` | none | set with **Add overlay** |
 
-A view you installed is told your fonts, but draws only the fonts it ships or your computer has.
+A view you installed is told your fonts. It draws a theme's fonts, the fonts it ships and the
+fonts your computer has ([how](/plugin-settings#the-apps-colours)).
+
+## appearanceExtra
+
+The parts of the look an older Hivemind does not know. They sit in their own key, so a write by an
+older app or `hive` keeps them, and `appearance.accent` keeps a built-in id that older builds read.
+Each part is set whole.
+
+| Path | Default | Allowed |
+|---|---|---|
+| `appearanceExtra.accent` | none | `{ "brand", "accent", "working"? }` colours (`#rrggbb`, `rgb()` or `oklch()`): your own **Accent**. Picking a built-in accent or a preset removes it |
+| `appearanceExtra.fontFaces` | none | `{ "ui"?, "mono"? }`, the font files a theme brought. Set by applying a theme |
+| `appearanceExtra.theme` | none | the theme applied, its version, and your look before it. Set by **Apply** and `hive theme use`, cleared by **Revert to previous look**, `hive theme revert` or a preset |
+
+```bash
+hive config set appearanceExtra.accent '{"brand":"#c08552","accent":"#d9a273"}'
+```
 
 ## views
 

@@ -1594,7 +1594,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // sandbox model as hm-media, but keyed by BARE FILENAME (hivemedia://<file>)
     // and confined to userData/media. `stream: true` is REQUIRED so <video>
     // range-requests (seek/loop) work.
-    { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    // corsEnabled: a theme's fonts load with CORS; the handler answers the app's own window only.
+    { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
     // Tool plugins' modules, imported into the app's windows; corsEnabled so module scripts load.
     { scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   ]);
@@ -1775,7 +1776,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     // ever read to files the user explicitly chose (never an arbitrary path from
     // the URL), and survives the original being moved/deleted.
     const mediaDir = path.join(path.dirname(settingsFile()), "media"); // beside settings.json (see wallpaperDir)
-    serveScheme("hivemedia", (request) => {
+    const mediaOrigins = new Set(["file://", ...(process.env.ELECTRON_RENDERER_URL ? [new URL(process.env.ELECTRON_RENDERER_URL).origin] : [])]);
+    serveScheme("hivemedia", async (request) => {
       try {
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
         // the fixed marker "media"). Resolve against mediaDir, then verify it
@@ -1788,7 +1790,15 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
           return new Response("forbidden", { status: 403 });
         }
         if (!existsSync(abs) || !statSync(abs).isFile()) return new Response("not found", { status: 404 });
-        return net.fetch(pathToFileURL(abs).toString(), { headers: request.headers });
+        const res = await net.fetch(pathToFileURL(abs).toString(), { headers: request.headers });
+        // A font is fetched with CORS: allowed for the app's own page (file://, or the dev server),
+        // never for a view's sandboxed frame, whose origin is "null".
+        const origin = request.headers.get("origin");
+        if (!origin || !mediaOrigins.has(origin)) return res;
+        const headers = new Headers(res.headers);
+        headers.set("Access-Control-Allow-Origin", origin);
+        headers.set("Vary", "Origin");
+        return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
       } catch {
         return new Response("bad request", { status: 400 });
       }
