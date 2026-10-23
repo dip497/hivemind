@@ -129,6 +129,29 @@ describe("checking a package", () => {
     const tool = { "pet/inner/hivemind-tool.json": JSON.stringify({ apiVersion: 1, id: "@ada/inner", name: "Inner", version: "1.0.0", entry: "tool.js", tools: [{ key: "i", label: "I", tileKind: "inner" }] }), "pet/inner/tool.js": "" };
     expect(await problem({ "hivemind-package.json": manifest({ tools: [{ path: "pet/inner" }] }), ...pet(), ...tool })).toBe('"pet/inner" is inside "pet", another member\'s folder');
   });
+
+  const THEME = { format: 1, name: "Harbour", mode: "dark", accent: "ice", wallpaper: { image: "still.webp" },
+    palette: { bg: "#0e1a24", bg2: "#14242f", bg3: "#1b2e3b", bg4: "#233847", line: "#233847", line2: "#2f4757", fg: "#eef3f6", fg2: "#c3cfd6", fg3: "#8fa0ab", select: "#c3cfd6", ok: "#7fc49a", warn: "#e6b866", err: "#e08a7a" } };
+  const harbour = (theme: object = THEME) => ({ "themes/harbour/theme.json": JSON.stringify(theme), "themes/harbour/still.webp": new Uint8Array(64) });
+
+  test("a theme is listed as data: its id in the package, its name, and that it changes how the app looks", async () => {
+    const kit = await plugin({ "hivemind-package.json": manifest({ themes: [{ path: "themes/harbour" }] }), ...pet(), ...harbour() });
+    expect(kit.members).toContainEqual({ kind: "theme", id: "@ada/kit/harbour", name: "Harbour", runs: "nothing: it is data", permissions: [],
+      does: ["Changes how the app looks and sounds, once you apply it (1 file: fonts, a wallpaper or sounds)"] });
+    expect(kit.does).toContain("Changes how the app looks and sounds, once you apply it (1 file: fonts, a wallpaper or sounds)");
+  });
+
+  test("a theme the app would refuse is refused by the hub for the same reason", async () => {
+    const pkg = manifest({ themes: [{ path: "themes/harbour" }] });
+    expect(await problem({ "hivemind-package.json": pkg, ...pet(), ...harbour({ ...THEME, palette: { ...THEME.palette, fg: "#3a4652" } }) }))
+      .toMatch(/^"themes\/harbour": theme\.json: palette: fg on bg is .*:1; it needs at least 4\.5:1/);
+    expect(await problem({ "hivemind-package.json": pkg, ...pet(), "themes/harbour/theme.json": JSON.stringify(THEME) }))
+      .toBe('"themes/harbour": theme.json: wallpaper.image: there is no still.webp in the theme\'s folder');
+    expect(await problem({ "hivemind-package.json": pkg, ...pet(), "themes/harbour/notes.txt": "" })).toBe('"themes/harbour": themes names a folder holding no theme.json');
+    // Sized as the app sizes it: a sound past 400 KB.
+    expect(await problem({ "hivemind-package.json": pkg, ...pet(), ...harbour({ ...THEME, sounds: { done: "bell.ogg" } }), "themes/harbour/bell.ogg": new Uint8Array(500 * 1024) }))
+      .toMatch(/sounds\.done: bell\.ogg is 500 KB; .* at most 400 KB/);
+  });
 });
 
 test("a view's, widget's, tool's or package's owner is the account that publishes it; an agent has none", () => {

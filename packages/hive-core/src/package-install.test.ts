@@ -131,6 +131,25 @@ test("a package with one of each kind installs as one, each member where the app
   expect((await listInstalledViews()).map((v) => [v.id, v.error, v.package?.id])).toEqual([["@acme/island", null, "@acme/kit"]]);
 });
 
+/** A theme.json the format takes: Signal's colours with a built-in accent. */
+const THEME = JSON.stringify({ format: 1, name: "Harbour", mode: "dark", accent: "ice",
+  palette: { bg: "#0e1a24", bg2: "#14242f", bg3: "#1b2e3b", bg4: "#233847", line: "#233847", line2: "#2f4757", fg: "#eef3f6", fg2: "#c3cfd6", fg3: "#8fa0ab", select: "#c3cfd6", ok: "#7fc49a", warn: "#e6b866", err: "#e08a7a" } });
+
+test("a theme installs as a member with no code: its id is in its package, and a package of widgets and themes arrives on", async () => {
+  const root = folder("looks", { "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/looks", name: "Looks", version: "1.0.0", widgets: [{ path: "dog" }], themes: [{ path: "themes/harbour" }] }) });
+  fs.mkdirSync(path.join(root, "dog"));
+  fs.writeFileSync(path.join(root, "dog", "widget.json"), JSON.stringify({ id: "@acme/dog", name: "Dog", draw: { type: "text", text: "woof" } }));
+  fs.mkdirSync(path.join(root, "themes", "harbour"), { recursive: true });
+  fs.writeFileSync(path.join(root, "themes", "harbour", "theme.json"), THEME);
+  const { record } = await installPackage(root);
+  expect(record.members.find((m) => m.kind === "theme")).toMatchObject({ id: "@acme/looks/harbour", path: "themes/harbour", permissions: [] });
+  expect(record.on).toBe(true);
+});
+
+test("a theme on its own is no package: it is refused, saying it comes in one", async () => {
+  await expect(installPackage(folder("harbour", { "theme.json": THEME }), { dryRun: true })).rejects.toThrow(/a theme comes in a package/);
+});
+
 test("a member whose id has another owner is refused, and nothing is installed", async () => {
   const src = bundle();
   fs.writeFileSync(path.join(src, "widgets/dog/widget.json"), JSON.stringify({ id: "@mallory/dog", name: "Dog", draw: { type: "text", text: "woof" } }));

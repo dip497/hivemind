@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MEMBER_FORMATS, MEMBER_ID, memberFormat, PACKAGE_MANIFEST } from "@hivemind/hub";
+import { MEMBER_FORMATS, MEMBER_ID, memberFormat, PACKAGE_MANIFEST, runsWithoutTrust } from "@hivemind/hub";
 import { memberKind } from "@hivemind/core/package-kinds";
 import type { AuthoredKind } from "./plugin-kinds.js";
 import { packageBrief } from "./plugin-brief.js";
@@ -69,4 +69,4 @@ export async function addEntry(pkg: PackageFolder, k: AuthoredKind, entryPath: s
 
 /** Whether installing it needs the person to switch it on: it holds a member that is not sandboxed. */
 export const arrivesOff = (pkg: PackageFolder): boolean =>
-  MEMBER_FORMATS.some((f) => f.runs !== "sandboxed" && Array.isArray(pkg.manifest[f.list]) && (pkg.manifest[f.list] as unknown[]).length > 0);
+  MEMBER_FORMATS.some((f) => !runsWithoutTrust(f.runs) && Array.isArray(pkg.manifest[f.list]) && (pkg.manifest[f.list] as unknown[]).length > 0);
