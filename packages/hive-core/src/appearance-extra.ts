@@ -16,7 +16,7 @@
  * reverting a theme is `./theme-apply.ts`.
  */
 import { cssColorToRgb } from "./css-color.js";
-import { ACCENTS, applyPreset, keptUnknown, mergeAppearance, type Appearance, type ThemePreset } from "./settings-schema.js";
+import { ACCENTS, applyPreset, mergeAppearance, type Appearance, type ThemePreset } from "./settings-schema.js";
 
 /** An accent as colours: what a built-in id names, or any colour a person or a theme picks. */
 export interface AccentColors { brand: string; accent: string; working?: string }
@@ -123,14 +123,12 @@ function themeRecordOf(v: unknown): ThemeRecord | undefined {
   };
 }
 
-const KNOWN = new Set(["accent", "fontFaces", "theme"]);
-
 /** `appearanceExtra` from anything (a file, a patch): each part checked, a part that fails
- *  dropped, and the keys a newer build added kept as they are. */
+ *  dropped. A key a newer build added is the writer's to keep (`./settings-write.ts`). */
 export function appearanceExtraOf(raw: unknown): AppearanceExtra {
   const p = isObj(raw) ? raw : {};
   const theme = themeRecordOf(p.theme);
-  return { ...keptUnknown(p, KNOWN, {}), ...lookExtraOf(p), ...(theme ? { theme } : {}) };
+  return { ...lookExtraOf(p), ...(theme ? { theme } : {}) };
 }
 
 /** The accent a look paints with: its custom colours when set, else its built-in id's. */

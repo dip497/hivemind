@@ -10,7 +10,7 @@
  *                                                that is not a setting here is refused
  */
 import { defineCommand } from "citty";
-import { HiveError, getPath, patchSettingsFile, readSettings, settingPathProblem, settingsPath } from "@hivemind/core";
+import { HiveError, SETTINGS_VERSION, getPath, patchSettingsFile, readSettings, settingPathProblem, settingsPath } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { personOnly } from "../person-only.js";
@@ -33,6 +33,8 @@ const getCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     const s = await readSettings();
+    // Not on stdout, which is the value.
+    if (s.v > SETTINGS_VERSION) process.stderr.write(`settings.json is from a newer version of hivemind (format ${s.v}); this one shows what it knows, and its writes keep the rest.\n`);
     const v = args.path ? getPath(s, String(args.path)) : s;
     if (v === undefined) return err(ctx, "not_found", `no setting at "${args.path}"`);
     return ok(ctx, { path: args.path ? String(args.path) : null, value: v }, () => JSON.stringify(v, null, 2));

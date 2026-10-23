@@ -14,6 +14,7 @@
  */
 import type { SettingValue } from "./settings.js";
 import { chordMatches } from "./commands.js";
+import { tokenVar } from "./tokens.js";
 import {
   CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
@@ -650,11 +651,13 @@ export function createInvalidator(client: ViewClient, draw: () => void): { inval
  *   --hm-accent          --hm-radius (px)   --hm-font-ui   --hm-font-mono
  *   --hm-surface         --hm-terminal-bg   --hm-glass (0 | 1)   --hm-mode
  *   --hm-color-scheme    (dark | light — put it on panels that scroll, never on the root)
+ *   --hm-token-<id>      (1.16: each of the view's own tokens, its manifest's `tokens`)
  *
  * So a plugin's CSS can say `background: var(--hm-color-bg2)` and follow the
  * user's appearance without reading messages itself. Returns the unsubscribe.
  */
 export function applyThemeVars(client: ViewClient, root: HTMLElement = document.documentElement): () => void {
+  const set = new Set<string>();
   const apply = (t: ViewTheme) => {
     for (const [k, v] of Object.entries(t.colors)) root.style.setProperty(`--hm-color-${k}`, v);
     // Status tones: the host's, or — from a host that predates them — the same meanings derived
@@ -675,6 +678,11 @@ export function applyThemeVars(client: ViewClient, root: HTMLElement = document.
     if (t.surface) root.style.setProperty("--hm-surface", t.surface);
     if (t.terminalBackground) root.style.setProperty("--hm-terminal-bg", t.terminalBackground);
     if (t.glass !== undefined) root.style.setProperty("--hm-glass", t.glass ? "1" : "0");
+    // The view's own tokens; one the theme no longer sends goes, so its `var()` fallback shows.
+    const tokens = Object.entries(t.tokens ?? {}).filter(([k, v]) => /^[a-z][a-z0-9-]{0,31}$/.test(k) && /^#[0-9a-f]{6}$/i.test(v));
+    for (const k of set) if (!tokens.some(([id]) => id === k)) root.style.removeProperty(tokenVar(k));
+    set.clear();
+    for (const [k, v] of tokens) { root.style.setProperty(tokenVar(k), v); set.add(k); }
     if (t.mode) {
       root.style.setProperty("--hm-mode", t.mode);
       root.dataset.hmMode = t.mode;

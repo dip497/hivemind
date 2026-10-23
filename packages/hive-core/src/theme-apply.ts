@@ -78,6 +78,10 @@ async function copyFiles(dir: string, theme: Theme, mediaDir: string): Promise<M
 /** The fields of `appearance` a theme writes; Revert puts these back and leaves the rest. */
 const THEME_FIELDS = ["preset", "mode", "palette", "accent", "terminal", "radius", "uiFont", "monoFont", "wallpaper"] as const satisfies readonly (keyof Appearance)[];
 
+/** Written even where they read the same here: a value this build cannot read (a newer build's
+ *  accent id) reads as the default, and a theme's look replaces it. */
+const THEME_PATHS = THEME_FIELDS.map((k) => `appearance.${k}`);
+
 const quoted = (family: string) => `"${family}"`;
 
 function facesOf(theme: Theme, urls: Map<string, string>): FontFaces | undefined {
@@ -154,7 +158,7 @@ export async function applyTheme(t: InstalledTheme, settingsFile: string = setti
       ...(Object.keys(sounds).length ? { sounds } : {}),
     };
     return { ...cur, appearance: look.appearance, appearanceExtra: { ...look.extra, theme: record } };
-  }, settingsFile);
+  }, settingsFile, THEME_PATHS);
   await cleanUp(settingsFile, written);
   return written;
 }
@@ -169,7 +173,7 @@ export async function revertTheme(settingsFile: string = settingsPath()): Promis
     const { accent: _a, fontFaces: _f, theme: _t, ...others } = cur.appearanceExtra;
     const back = Object.fromEntries(THEME_FIELDS.map((k) => [k, record.before.appearance[k]]));
     return { ...cur, appearance: { ...cur.appearance, ...back }, appearanceExtra: { ...others, ...record.before.extra } };
-  }, settingsFile);
+  }, settingsFile, THEME_PATHS);
   if (!had) throw new Error("no theme is applied: there is no look to go back to");
   await cleanUp(settingsFile, written);
   return written;

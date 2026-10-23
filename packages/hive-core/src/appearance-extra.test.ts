@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { patchSettingsFile } from "./settings";
 import { accentOf, appearanceExtraOf } from "./appearance-extra";
 import { DEFAULT_APPEARANCE, DEFAULT_SETTINGS, lookForGuests, mergeSettings, setPath, settingPathProblem, sharedAppearance } from "./settings-schema";
 
@@ -13,13 +17,21 @@ describe("appearanceExtra in settings.json", () => {
     expect(after.appearance.accent).toBe("ember");
   });
 
-  test("a part that fails its check is dropped; a newer build's key is kept", () => {
+  test("a part that fails its check is dropped", () => {
     const x = appearanceExtraOf({
       accent: { brand: "red", accent: "#fff" },
       fontFaces: { ui: { family: "x\"; } body { color: red", files: [{ url: "hivemedia://media/a.woff2" }] }, mono: face("https://evil.example/a.woff2").ui },
-      spinner: { speed: 3 },
     });
-    expect(x).toEqual({ spinner: { speed: 3 } });
+    expect(x).toEqual({});
+  });
+
+  test("on disk, a write here keeps a newer build's key inside it, and the custom accent", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-extra-"));
+    const file = path.join(dir, "settings.json");
+    fs.writeFileSync(file, JSON.stringify({ v: 1, appearanceExtra: { accent: BRAND, spinner: { speed: 3 } } }));
+    await patchSettingsFile([{ path: "appearance.radius", value: 4 }], file);
+    expect(JSON.parse(fs.readFileSync(file, "utf8")).appearanceExtra).toEqual({ accent: BRAND, spinner: { speed: 3 } });
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   test("a font file is a copied woff2 in the media folder, nothing else", () => {

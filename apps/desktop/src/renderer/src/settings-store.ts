@@ -15,7 +15,7 @@
  * "what the file says, plus the patches we have not persisted yet", so a
  * broadcast never yanks the control the user is dragging.
  */
-import { pluginKey, withPluginState, type PackageOf, type PluginKind, type PluginState } from "@hivemind/core/plugin-settings";
+import { pluginKey, withPluginState, type PackageOf, type PluginKind, type PluginState, type SettingValue } from "@hivemind/core/plugin-settings";
 import { useSyncExternalStore } from "react";
 import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "@hivemind/core/settings-schema";
 
@@ -159,7 +159,7 @@ export function switchPlugin(kind: PluginKind, plugin: { id: string; package?: P
 }
 
 /** Set one of a plugin's options (undefined or empty: back to its default). */
-export function setPluginOption(kind: PluginKind, id: string, option: string, value: string | number | boolean | undefined): void {
+export function setPluginOption(kind: PluginKind, id: string, option: string, value: SettingValue | undefined): void {
   patchPluginState(kind, id, (s) => {
     const options = { ...s.options };
     if (value === undefined || value === "") delete options[option]; else options[option] = value;

@@ -106,6 +106,13 @@ describe("hive config / hive theme", () => {
         ["views.chrome.Bad_Id", '"Bad_Id" is not a view\'s id'],
         ["views.toolbars.Bad_Id", '"Bad_Id" is not a view\'s id'],
         ["plugins.state.claude", '"claude" is not a plugin\'s key'],
+        // Below a good id, what one entry of the map holds.
+        ["views.chrome.canvas.bogus", "views.chrome.canvas holds island"],
+        ["views.toolbars.canvas.bogus", "views.toolbars.canvas holds actions, labels"],
+        ["plugins.state.agent:claude.bogus", "plugins.state.agent:claude holds enabled, options, workspaces"],
+        ["plugins.state.agent:claude.options.model.x", "plugins.state.agent:claude.options.model is one value"],
+        // The file's format, which the app keeps.
+        ["v", "v is the format of settings.json"],
       ];
       for (const [at, why] of wrong) {
         const r = hive(["config", "set", at!, "12", "--json"], { cwd: tmp, env });
@@ -113,10 +120,20 @@ describe("hive config / hive theme", () => {
       }
       const s = JSON.parse(fs.readFileSync(file, "utf8"));
       expect([s.appearance?.blur, s.appearance?.glass?.blurr, s.notifications]).toEqual([undefined, undefined, undefined]);
-      const ids: [string, unknown][] = [["views.chrome.canvas", { island: "hidden" }], ["views.toolbars.canvas", { labels: false }], ["plugins.state.agent:claude", { enabled: false }]];
+      expect([s.v, s.views?.chrome?.canvas, s.plugins?.state?.["agent:claude"]]).toEqual([1, undefined, undefined]);
+      const ids: [string, unknown][] = [
+        ["views.chrome.canvas", { island: "hidden" }], ["views.toolbars.canvas", { labels: false }], ["plugins.state.agent:claude", { enabled: false }],
+        ["views.chrome.canvas.island", "top"], ["plugins.state.agent:claude.options.model", "opus"],
+      ];
       for (const [at, value] of ids) {
         expect(hive(["config", "set", at, JSON.stringify(value), "--json"], { cwd: tmp, env }).json).toEqual({ path: at, value, rescanned: false });
       }
+      // A newer build's file: read for what this version knows, said once, its format kept.
+      fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), v: 5 }));
+      const got = hive(["config", "get", "views.chrome.canvas", "--json"], { cwd: tmp, env });
+      expect([got.json, got.stderr]).toEqual([{ path: "views.chrome.canvas", value: { island: "top" } }, expect.stringContaining("newer version of hivemind (format 5)")]);
+      hive(["config", "set", "appearance.radius", "4"], { cwd: tmp, env });
+      expect(JSON.parse(fs.readFileSync(file, "utf8")).v).toBe(5);
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }

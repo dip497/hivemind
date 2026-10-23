@@ -33,7 +33,9 @@ one wins.
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
 `history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
 `participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run); 1.15
-adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone). A
+adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone); 1.16 adds
+`tokens` (`theme.tokens`: the view's own colours from its manifest's `tokens`, resolved, set as
+`--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
@@ -108,6 +110,8 @@ is not something a view chooses. `spawnAgent` takes a catalog id, never a comman
   "assets": "dist",         // optional: dir served alongside the entry
   "wallpaper": false,       // optional: refuse the user's wallpaper (default: you get it)
   "widgets": "left",        // optional: start the app's widget cards down the left edge (default: right)
+  "settings": [],           // optional: fields the app draws (boolean, number/slider, text, choice, color, multi, list; section, showIf) — guide /plugin-settings
+  "tokens": [],             // optional: your own colours, {id, label, dark, light}, "#rrggbb" or "=accent"; read var(--hm-token-<id>)
   "author": "Ada",          // optional provenance, shown where the user decides to trust you
   "homepage": "https://…",  // https only — the host opens it in the user's browser
   "license": "MIT"          // a short identifier, not a sentence

@@ -193,7 +193,8 @@ Selection and focus need none.
 | `entry` | the page to load, usually `index.html` |
 | `protocol` | the view protocol it speaks: `1` |
 | `permissions` | what it may do (above) |
-| `"settings"` | fields the app draws on the view's Settings page: `boolean`, `number`, `text`, `choice` |
+| `"settings"` | fields the app draws on the view's Settings page: see [Plugin settings](/plugin-settings) |
+| `"tokens"` | colours of its own that follow the theme and the person can change: see [A view's own colours](/plugin-settings#a-views-own-colours) |
 | `"commands"` | what an agent can run in it (`hm.onCommand(name, handler)`), optionally with `"keys": "mod+alt+k"` |
 | `"toolbar"` | `"top"`, `"bottom"` (the default), `"hidden"` or `"off"` |
 | `"widgets": "left"` | start widget cards down the left edge over the view instead of the right, for a view that keeps its own panels on the right; a card the person moved stays put |

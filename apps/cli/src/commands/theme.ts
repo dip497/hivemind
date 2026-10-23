@@ -22,6 +22,9 @@ import { driveCall } from "../drive.js";
 async function reloadApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
 }
+/** What choosing a preset sets, written even where it reads the same here: an id this version does
+ *  not know (a newer build's accent) reads as the default, and choosing a preset replaces it. */
+const PRESET_PATHS = ["preset", "mode", "palette", "accent", "terminal"].map((k) => `appearance.${k}`);
 const note = (r: boolean) => (r ? "app reloaded" : "app not running — applies on next start");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e));
 
@@ -57,7 +60,7 @@ const useCmd = defineCommand({
     const id = String(args.look);
     const p = PRESETS[id];
     if (p) {
-      await updateSettings((cur) => withPreset(cur, p));
+      await updateSettings((cur) => withPreset(cur, p), undefined, PRESET_PATHS);
       const rescanned = await reloadApp();
       return ok(ctx, { preset: p.id, rescanned }, () => `theme: ${p.label}; ${note(rescanned)}`);
     }
@@ -114,7 +117,7 @@ const importCmd = defineCommand({
     // A file that sets nothing of the look (a package.json picked by mistake) is refused before the
     // settings are touched; importAppearance says why.
     try { importAppearance(raw, DEFAULT_APPEARANCE); } catch (e) { return err(ctx, "invalid_theme", `cannot import ${args.file}: ${(e as Error).message}`); }
-    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }));
+    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }), undefined, ["appearance"]);
     const appearance = written.appearance;
     const rescanned = await reloadApp();
     return ok(ctx, { preset: appearance.preset, rescanned }, () => `imported ${args.file} (preset ${appearance.preset}); ${note(rescanned)}`);
