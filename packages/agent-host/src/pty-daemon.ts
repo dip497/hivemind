@@ -35,7 +35,7 @@ import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { startHookDoor } from "./hooks/hook-door.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
-import { holdsTerminal } from "./foreground.js";
+import { terminalHolder } from "./foreground.js";
 import { StatusStore } from "./status-store.js";
 import { cleanName } from "@hivemind/agents";
 import { driveSockPath, holderOf, speaksFor, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
@@ -43,7 +43,7 @@ import { installCarried } from "./agent-package.js";
 
 // Lazy: node-pty must never be evaluated inside the compiled `hive` (see bun-pty.ts).
 const spawnPty: (file: string, args: string[] | string, opts: { cwd: string; cols: number; rows: number; name: string; env: Record<string, string> }) => {
-  readonly pid: number; write(d: string): void; resize(c: number, r: number): void; kill(sig?: string): void;
+  readonly pid: number; readonly process: string; write(d: string): void; resize(c: number, r: number): void; kill(sig?: string): void;
   pause(): void; resume(): void; onData(cb: (d: string) => void): unknown; onExit(cb: (e: { exitCode: number; signal?: number }) => void): unknown;
 } = process.versions.bun
   ? bunPty.spawn
@@ -349,7 +349,7 @@ const factory = (spec: SpawnSpec): ManagedPty => {
     resume: () => p.resume(),
     onData: (cb) => p.onData(cb),
     onExit: (cb) => p.onExit(({ exitCode, signal }) => cb(exitCode, signal)),
-    holdsTerminal: () => holdsTerminal(p.pid),
+    holdsTerminal: terminalHolder(p),
   };
 };
 
@@ -371,6 +371,7 @@ statuses.subscribe(({ tileId, status }) => { for (const push of eventViewers) pu
 const screens = new ScreenWatcher({
   read: (ids) => manager.viewports(ids),
   detect: (cmd, screen) => agentForCmd(cmd)?.detect?.(screen),
+  agent: (cmd) => agentForCmd(cmd),
   report: (id, { status: state, says }) => {
     statuses.screen(id, state, says);
     for (const push of eventViewers) push({ t: "event", topic: "agent.screen", data: { tileId: id, state, ...(says ? { says } : {}) } });

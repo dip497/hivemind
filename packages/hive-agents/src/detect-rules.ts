@@ -65,7 +65,10 @@ export type HelperName = "hasBrailleSpinner" | "hasConfirmationPrompt" | "hasInt
 /** `says`: what the screen a waiting rule matches is (its trust prompt, say), so what it waits on
  *  can be told apart from another wait of its kind and answered with its own keys. */
 export type Rule = { when: Expr; then: TileStatus; says?: string; scope?: Scope };
-export type DetectRules = { rules: Rule[]; default: TileStatus; scope?: Scope };
+/** `chrome`: what a row of the agent's own chrome reads like (its spinner and timer, a status bar,
+ *  what a turn's end says), tested on each row alone as the screen shows it, from its first column:
+ *  a tile's last line passes over those rows (agent-host's screen-status.ts). */
+export type DetectRules = { rules: Rule[]; default: TileStatus; scope?: Scope; chrome?: Expr };
 
 const isBraille = (c: string): boolean => c >= "⠀" && c <= "⣿";
 

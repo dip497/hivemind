@@ -51,16 +51,29 @@ const DRAWN = /^[\s\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e\u00b7\u2010-\u2027\u2030
  * input's own chrome (a footer, a completion list). While a command the shell ran holds the
  * terminal, the cursor waits on its question (`Overwrite b? [y/N]`, a password), which is the
  * line. A question the shell asks itself (`read -p`) is its prompt's, and is passed over.
+ *
+ * `agent`: the agent the session runs, as its manifest says; undefined for a program that is none
+ * (a shell). Rows of the agent's own chrome (`chrome`: its spinner and timer, its status bar) are
+ * passed over. A shell's prompt of two rows that it did not mark (starship's, powerlevel10k's
+ * without shell integration) ends on a row that opens with its mark alone (`❯`, `╰─`), and the row
+ * above that is the prompt's too: the path, the branch.
  */
-export function lastLine(screen: string, cursor: ScreenCursor, own = true): string {
+export function lastLine(screen: string, cursor: ScreenCursor, own = true, agent?: { chrome?: (row: string) => boolean }): string {
   const rows = screen.split("\n");
-  const from = !cursor.hidden && own ? cursor.top - 1 : rows.length - 1;
+  const input = !cursor.hidden && own;
+  const from = !input ? rows.length - 1 : !agent && !cursor.marked && PROMPT_END.test(rows[cursor.top] ?? "") ? cursor.top - 2 : cursor.top - 1;
+  const chrome = agent?.chrome;
   for (let y = Math.min(from, rows.length - 1); y >= 0; y--) {
     const l = oneLine(rows[y]!);
-    if (l && !(GLYPH.test(l) && DRAWN.test(l))) return l;
+    if (l && !(GLYPH.test(l) && DRAWN.test(l)) && !chrome?.(rows[y]!)) return l;
   }
   return "";
 }
+
+/** The last row of a prompt of two rows: its mark alone before what is typed, a `❯` (starship,
+ *  pure, powerlevel10k's lean style) or a corner that closes the row above (`╰─`, `└─❯`). Not `$`,
+ *  `%`, `>` or `➜`, the marks of prompts of one row. */
+const PROMPT_END = /^\s*(?:[╰└]─*[❯>]?|❯)(?:\s|$)/;
 
 /** Reads the screens of sessions that produced output since the last tick, and reports each
  *  one's reading when it changes: its status, or for a wait, the screen it says it is; and its
@@ -77,6 +90,9 @@ export class ScreenWatcher {
     read: (ids: string[]) => Promise<Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }> | null>;
     /** The agent's own detector for what it runs; undefined for a program that is not an agent. */
     detect: (cmd: string, screen: string) => ScreenReading | undefined;
+    /** The agent a command runs, for its chrome (`lastLine`); undefined for a program that is no
+     *  agent. Left out: every program is taken as none. */
+    agent?: (cmd: string) => { chrome?: (row: string) => boolean } | undefined;
     report: (id: string, reading: ScreenReading) => void;
     /** A session's last line, as it changes: "" once, when the line told goes blank. */
     line?: (id: string, line: string) => void;
@@ -109,7 +125,7 @@ export class ScreenWatcher {
       const s = got.get(id);
       if (!s) { this.seen.delete(id); continue; }
       if (this.o.line) {
-        const line = lastLine(s.screen, s.cursor, s.own);
+        const line = lastLine(s.screen, s.cursor, s.own, this.o.agent?.(s.cmd));
         // A screen cleared no longer says what it said: its blank is told, once. A screen that
         // never had a line says nothing.
         if ((this.lines.get(id) ?? "") !== line) {

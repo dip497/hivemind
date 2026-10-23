@@ -54,9 +54,10 @@ A terminal's line leaves out its prompt and what you type there, so it shows wha
 printed. A few rows are the exception:
 
 - A question a command waits on, such as `Overwrite b? [y/N]` or a password prompt, is the line on
-  Linux. On macOS and Windows it is left out with the prompt.
-- A prompt that takes two rows shows its top row, unless your shell marks where its prompt starts,
-  as shell integration does (the OSC 133 marks).
+  Linux and macOS. On Windows it is left out with the prompt.
+- A prompt that takes two rows is left out whole when its second row starts with `❯` or a corner
+  such as `╰─`, as starship's and powerlevel10k's do. Another prompt of two rows shows its top row,
+  unless your shell marks where its prompt starts, as shell integration does (the OSC 133 marks).
 - A question your shell asks itself, such as `read -p`, is left out with the prompt.
 
 To choose which rows show a line, open the Layers panel's **View** menu, then **Lines**:

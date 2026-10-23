@@ -8,6 +8,8 @@ interface NativeTerm { fd: number; pid: number; pty: string }
 interface NativePty {
   fork(file: string, args: string[], env: string[], cwd: string, cols: number, rows: number, uid: number, gid: number, utf8: boolean, helperPath: string, onExit: (code: number, signal: number) => void): NativeTerm;
   resize(fd: number, cols: number, rows: number, xPixel: number, yPixel: number): void;
+  /** The name of the process that leads the terminal's foreground group (`tty` on Linux). */
+  process(fd: number, tty?: string): string | undefined;
 }
 
 export interface BunPtyOptions {
@@ -21,6 +23,9 @@ export interface BunPtyOptions {
 /** The node-pty IPty subset the daemon's factory uses. */
 export interface BunPty {
   readonly pid: number;
+  /** The name of the process that leads its terminal's foreground group, as node-pty's `process`;
+   *  "" once that cannot be read. */
+  readonly process: string;
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
@@ -143,6 +148,7 @@ export function spawn(file: string, args: string[] | string, opts: BunPtyOptions
 
   return {
     get pid() { return term.pid; },
+    get process() { return exitEmitted ? "" : (process.platform === "darwin" ? native.process(term.fd) : native.process(term.fd, term.pty)) ?? ""; },
     write(data) {
       const buf = Buffer.from(data, "utf8");
       if (!buf.length || exitEmitted) return;
