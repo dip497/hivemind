@@ -10,7 +10,7 @@
  */
 
 import type { AgentProviderDef } from "@hivemind/agents";
-import { FIELD_ID, MAX_TEXT, parseSettingFields, type SettingField } from "@hivemind/view-sdk/settings";
+import { FIELD_ID, MAX_LIST, MAX_TEXT, parseSettingFields, type SettingField, type SettingValue } from "@hivemind/view-sdk/settings";
 import { TOOL_ID_RE, type ToolPluginContribution } from "./tool-registry.js";
 import { isWidgetId } from "./widget-format.js";
 
@@ -27,7 +27,7 @@ export interface PluginState {
   /** On or off; absent: as the plugin is by default. */
   enabled?: boolean;
   /** Values set for its fields, by field id; absent: each field's default. */
-  options?: Record<string, string | number | boolean>;
+  options?: Record<string, SettingValue>;
   /** The workspaces its service may drive, by their folder: none until picked. */
   workspaces?: string[];
 }
@@ -66,11 +66,13 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
     const state: PluginState = {};
     if (typeof v.enabled === "boolean") state.enabled = v.enabled;
     if (isObj(v.options)) {
-      const options: Record<string, string | number | boolean> = {};
+      const options: Record<string, SettingValue> = {};
       for (const [k, x] of Object.entries(v.options).slice(0, MAX_OPTIONS)) {
         if (!FIELD_ID.test(k)) continue;
         if (typeof x === "boolean" || (typeof x === "number" && Number.isFinite(x))) options[k] = x;
         else if (typeof x === "string") options[k] = x.slice(0, MAX_TEXT);
+        // Several choices, or a list: texts only, as many as a list may hold.
+        else if (Array.isArray(x)) options[k] = x.filter((y): y is string => typeof y === "string").slice(0, MAX_LIST).map((y) => y.slice(0, MAX_TEXT));
       }
       if (Object.keys(options).length) state.options = options;
     }
@@ -117,12 +119,12 @@ export function disabledPlugins(states: Record<string, PluginState>, kind: Plugi
 }
 
 /** The values stored for a plugin's fields (unchecked: resolve them against its fields). */
-export function pluginOptions(states: Record<string, PluginState>, kind: PluginKind, id: string): Record<string, string | number | boolean> {
+export function pluginOptions(states: Record<string, PluginState>, kind: PluginKind, id: string): Record<string, SettingValue> {
   return states[pluginKey(kind, id)]?.options ?? {};
 }
 
 /** Option values as an agent's launch takes them: its options are all text. */
-export function stringOptions(options: Record<string, string | number | boolean>): Record<string, string> {
+export function stringOptions(options: Record<string, SettingValue>): Record<string, string> {
   return Object.fromEntries(Object.entries(options).filter((e): e is [string, string] => typeof e[1] === "string"));
 }
 

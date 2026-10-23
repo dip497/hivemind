@@ -43,6 +43,7 @@ import { readInstalledPackages, type PackageRecord } from "@hivemind/core/instal
 import { memberKind } from "@hivemind/core/package-kinds";
 import { BUILTIN_WIDGETS } from "@hivemind/core/widget-format";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
+import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
@@ -89,7 +90,7 @@ async function inventory(): Promise<Plugin[]> {
   const added = await listToolPackages();
   const out: Plugin[] = [
     ...agents.map((a): Plugin => ({ key: pluginKey("agent", a.id), kind: "agent", id: a.id, name: a.def?.label ?? a.id, enabledByDefault: true, fields: a.def ? agentSettingFields(a.def) : [], problem: a.error })),
-    ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest?.settings ?? [], problem: v.error, dir: v.dir, ...(v.package ? { package: v.package } : {}) })),
+    ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest ? viewSettingFields(v.manifest) : [], problem: v.error, dir: v.dir, ...(v.package ? { package: v.package } : {}) })),
     ...widgets.map((w): Plugin => ({ key: pluginKey("widget", w.id), kind: "widget", id: w.id, name: w.name, enabledByDefault: true, fields: [], problem: null, ...(w.dir ? { dir: w.dir } : {}), ...(w.package ? { package: w.package } : {}) })),
     ...BUNDLED_TOOL_PLUGINS.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.tools.map((x) => x.label).join(", "), enabledByDefault: !!t.builtin, fields: toolSettingFields(t), problem: null, opens: opensOf(t) })),
     ...added.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.name, enabledByDefault: false, fields: [...toolSettingFields(t), ...t.settings], problem: t.problem, ...(t.service ? { service: t.service.command } : {}), opens: opensOf(t), dir: t.dir, ...(t.package ? { package: t.package } : {}) })),
@@ -144,7 +145,7 @@ const note = (reloaded: boolean) => (reloaded ? "app reloaded" : "app not runnin
  *  refuses (exit 7); anything else fails (exit 1). */
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never =>
   err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e), e instanceof HiveError && e.code === "part_of_a_package" ? 7 : 1);
-const show = (v: unknown) => (typeof v === "string" ? JSON.stringify(v) : String(v));
+const show = (v: unknown) => (typeof v === "string" || Array.isArray(v) ? JSON.stringify(v) : String(v));
 
 const listCmd = defineCommand({
   meta: { name: "list", description: "Every plugin on this machine, on or off" },

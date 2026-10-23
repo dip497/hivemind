@@ -137,13 +137,17 @@ export interface ViewTheme {
   /** Protocol 1.1, additive: one `#rrggbb` per status tone, resolved from the host's status
    *  tokens. A host that predates it sends none, and `applyThemeVars` derives them from `colors`. */
   status?: Partial<Record<StatusTone, string>>;
+  /** 1.16 (feature `tokens`): the view's own tokens (its manifest's `tokens`), each resolved to
+   *  `#rrggbb` for this theme and what the person set; `applyThemeVars` sets each as
+   *  `--hm-token-<id>`. A host without the feature sends none: give each `var()` a fallback. */
+  tokens?: Record<string, string>;
 }
 
 // ── protocol 1.3 (additive) ─────────────────────────────────────────────────
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
