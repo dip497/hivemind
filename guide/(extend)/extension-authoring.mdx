@@ -105,7 +105,9 @@ Each is on HiveHub as `@dip497/<name>`.
     ```
 
     `structure` comes again whenever frames or tiles change. The app serves `@hivemind/view-sdk`
-    to every view, so your bundle leaves it out.
+    to every view, so your bundle leaves it out. To draw a state the way the app does, a shape
+    per state in its colour (only "needs you" pulses), put `statusMarkSvg(statusTone(s))` in the row
+    instead of the dot; `STATUS_MARKS` holds each state's word and shape.
   </Step>
   <Step title="Change it">
     Add this line inside the `structure` handler, after `list.replaceChildren();`:

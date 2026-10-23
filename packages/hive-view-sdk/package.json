@@ -13,6 +13,7 @@
     "./settings": "./src/settings.ts",
     "./category": "./src/category.ts",
     "./commands": "./src/commands.ts",
+    "./status": "./src/status.ts",
     "./testing": "./src/testing.ts"
   },
   "scripts": {

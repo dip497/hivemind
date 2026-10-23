@@ -128,6 +128,11 @@ translucent —
 is what the shipped examples use. Set `"wallpaper": false` only if you paint an opaque
 scene of your own: nothing would show through, and its animation still costs every frame.
 
+An agent's state is drawn the way the app draws it, never as your own dots: `STATUS_MARKS`
+(each tone's word, its shape as an SVG path, and whether it pulses: only `attention` does) and
+`statusMarkSvg(tone, size)` from the SDK, in the host's `--hm-status-<tone>` colour. An older app
+serves no `STATUS_MARKS`: read it through `import * as sdk` and fall back to a plain dot.
+
 `validateViewManifest()` from the SDK reports **every** problem, not the first — run it
 in your own build and you will never be surprised by `hive plugins install`.
 

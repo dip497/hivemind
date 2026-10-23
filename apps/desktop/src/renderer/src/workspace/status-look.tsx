@@ -7,26 +7,23 @@
 import type { Ref } from "react";
 import type { TileStatusKind } from "../agent-status-bus";
 import { bucketTileStatus } from "@hivemind/view-host/status";
+import { STATUS_MARKS } from "@hivemind/view-sdk/status";
 
 export type StatusLook = "working" | "needs" | "done" | "failed" | "idle" | "exited";
 
-/** Shapes in a 10×10 box, filled with the look's colour. */
-const CIRCLE = "M5 0.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9Z";
-const RING = `${CIRCLE}M5 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4Z`;
-const TRIANGLE = "M5 0.5L9.8 9.3H0.2Z";
-const DIAMOND = "M5 0L10 5L5 10L0 5Z";
-const SQUARE = "M1 1H9V9H1Z";
-const CROSS = "M2.2 0.8L5 3.6L7.8 0.8L9.2 2.2L6.4 5L9.2 7.8L7.8 9.2L5 6.4L2.2 9.2L0.8 7.8L3.6 5L0.8 2.2Z";
-
+/** The word, mark and pulse come from the SDK's one table, which views draw from too; the colour is
+ *  the app's own token for the tone. */
+const look = (tone: keyof typeof STATUS_MARKS, color: string) => {
+  const m = STATUS_MARKS[tone];
+  return { word: m.word, color, shape: m.path, pulse: m.pulse };
+};
 export const LOOKS: Record<StatusLook, { word: string; color: string; shape: string; pulse: boolean }> = {
-  working: { word: "working", color: "var(--color-status-working)", shape: CIRCLE, pulse: false },
-  // The one look that asks for you: it alone pulses.
-  needs: { word: "needs you", color: "var(--color-status-attention)", shape: TRIANGLE, pulse: true },
-  // Finished since you last looked.
-  done: { word: "finished", color: "var(--color-unread)", shape: DIAMOND, pulse: false },
-  failed: { word: "failed", color: "var(--color-status-failed)", shape: CROSS, pulse: false },
-  idle: { word: "idle", color: "var(--color-status-idle)", shape: RING, pulse: false },
-  exited: { word: "exited", color: "var(--color-status-exited)", shape: SQUARE, pulse: false },
+  working: look("working", "var(--color-status-working)"),
+  needs: look("attention", "var(--color-status-attention)"),
+  done: look("done", "var(--color-unread)"),
+  failed: look("failed", "var(--color-status-failed)"),
+  idle: look("idle", "var(--color-status-idle)"),
+  exited: look("exited", "var(--color-status-exited)"),
 };
 
 /** What a tile that needs you waits for, in a word. */

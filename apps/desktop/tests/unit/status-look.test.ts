@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { exitFailed, groupLook, LOOKS, statusLook, statusWord, type StatusLook } from "../../src/renderer/src/workspace/status-look.tsx";
+import { STATUS_MARKS } from "@hivemind/view-sdk/status";
 
 const NEEDS = ["blocked", "permission", "question", "plan_review", "awaiting_approval"] as const;
 
@@ -11,6 +12,14 @@ test("each look has its own shape and its own word, so none is told by colour al
   assert.deepEqual(looks.sort(), ["done", "exited", "failed", "idle", "needs", "working"]);
   assert.equal(new Set(looks.map((l) => LOOKS[l].shape)).size, looks.length, "a shape per look");
   assert.equal(new Set(looks.map((l) => LOOKS[l].word)).size, looks.length, "a word per look");
+});
+
+test("the app draws the SDK's marks and words, the ones every view draws, so the two cannot drift", () => {
+  const tone = { working: "working", needs: "attention", done: "done", failed: "failed", idle: "idle", exited: "exited" } as const;
+  for (const l of Object.keys(LOOKS) as StatusLook[]) {
+    const m = STATUS_MARKS[tone[l]];
+    assert.deepEqual([LOOKS[l].shape, LOOKS[l].word, LOOKS[l].pulse], [m.path, m.word, m.pulse], l);
+  }
 });
 
 test("only needing you pulses, so reduced motion loses no state", () => {
