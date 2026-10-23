@@ -240,3 +240,33 @@ test("joining a shared workspace is in the panel's title menu, and opens on the 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+test("a tile that fails reads failed and not finished: an exit 3 while you look elsewhere, a session that cannot be opened", async () => {
+  const ids = () => page.locator(".react-flow__node-terminal").evaluateAll((ns) => ns.map((n) => n.getAttribute("data-id")!));
+  /** Opens a tile and gives back its id. */
+  const opened = async (open: () => Promise<void>) => {
+    const had = await ids();
+    await open();
+    await expect.poll(async () => (await ids()).length).toBe(had.length + 1);
+    return (await ids()).find((id) => !had.includes(id))!;
+  };
+  const shell = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  const row = (id: string) => panel().locator(`[data-layer-tile="${id}"]`);
+  const header = (id: string) => page.locator(`.react-flow__node-terminal[data-id="${id}"] .hm-term-root`);
+  const failing = await opened(shell);
+  const other = await opened(shell);
+  await row(failing).click();
+  await page.waitForTimeout(300);
+  await page.keyboard.type("sleep 1; exit 3\n");
+  await row(other).click();
+  await expect(row(failing).locator('[data-layer-status="failed"]')).toBeVisible({ timeout: 15_000 });
+  await expect(header(failing).locator('[data-status-look="failed"]')).toHaveCount(1);
+  await expect(row(failing).locator("[data-layer-unread]")).toHaveCount(0);
+  // A session that has ended, opened again: there is no exit code to say it failed.
+  const frameId = await page.locator(".react-flow__node-frame").first().getAttribute("data-id");
+  const gone = await opened(() => page.evaluate((frameId) => window.dispatchEvent(new CustomEvent("hivemind:open-session", {
+    detail: { frameId, session: { id: "no-such-session", state: "live", cmd: "bash", args: [], cwd: "/", viewers: 0, cols: 80, rows: 24, title: "gone" } },
+  })), frameId));
+  await expect(header(gone).locator('[data-status-look="failed"]')).toHaveCount(1, { timeout: 15_000 });
+  await expect(row(gone).locator('[data-layer-status="failed"]')).toBeVisible();
+});

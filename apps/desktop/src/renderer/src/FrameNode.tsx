@@ -9,7 +9,8 @@
 import { useEffect, useState } from "react";
 import { GitBranch, FolderGit, Server, Ellipsis } from "./components/icons";
 import { Button } from "./components/ui/button";
-import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+import { subscribeStatus } from "./agent-status-bus";
+import { exitFailed, groupLook, LOOKS, StatusGlyph, statusLook, type StatusLook } from "./workspace/status-look";
 import { FrameMenu, type FrameActions } from "./FrameMenu";
 import { useGitBranch } from "./queries";
 import { isRemote, remoteBasename, remoteDisplay } from "@hivemind/core/remote-uri";
@@ -50,9 +51,9 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(data.title);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  // Live status per child tile — chips show a colored dot for working/blocked.
+  // Live look per child tile, for the frame's mark (workspace/status-look).
   // Subscribe filters by data.tileIds so unrelated tile events are skipped.
-  const [chipStatus, setChipStatus] = useState<Map<string, TileStatusKind>>(new Map());
+  const [chipStatus, setChipStatus] = useState<Map<string, StatusLook>>(new Map());
   useEffect(() => {
     if (!data.tileIds?.length) {
       setChipStatus(new Map());
@@ -61,10 +62,11 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
     const ids = new Set(data.tileIds);
     return subscribeStatus((e) => {
       if (!ids.has(e.tileId)) return;
+      const look = statusLook(e.status, { failed: exitFailed(e) });
       setChipStatus((m) => {
-        if (m.get(e.tileId) === e.status) return m;
+        if (m.get(e.tileId) === look) return m;
         const next = new Map(m);
-        next.set(e.tileId, e.status);
+        next.set(e.tileId, look);
         return next;
       });
     });
@@ -225,23 +227,18 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
 
             What it did carry, and what survives here, is the one fact the frame
             header can't otherwise tell you: does something INSIDE this frame
-            want me? Collapsed to a single dot, shown only when the answer is
-            yes (an agent is blocked / asking / needs approval, or a tile died).
-            Steady work needs no dot — a frame full of busy agents is the normal
-            case, not an alert. */}
+            want me? Collapsed to a single mark, shown only when the answer is
+            yes (an agent is blocked / asking / needs approval, or a tile failed).
+            Steady work needs no mark — a frame full of busy agents is the normal
+            case, not an alert — and nor does a clean exit, as in Layers. */}
         {(() => {
-          const states = (data.tileIds ?? []).map((tid) => chipStatus.get(tid) ?? "idle");
-          const needsYou = states.some((s) => s === "blocked" || s === "permission" || s === "question");
-          const died = states.some((s) => s === "exited");
-          if (!needsYou && !died) return null;
-          const color = needsYou ? "var(--color-warn)" : "var(--color-err)";
+          const look = groupLook((data.tileIds ?? []).map((tid) => chipStatus.get(tid) ?? "idle"));
+          if (look !== "needs" && look !== "failed") return null;
+          const says = `A tile in this frame ${look === "needs" ? LOOKS.needs.word : LOOKS.failed.word}`;
           return (
-            <span
-              aria-label={needsYou ? "a tile in this frame needs you" : "a tile in this frame exited"}
-              title={needsYou ? "A tile in this frame needs you" : "A tile in this frame exited"}
-              className={`mr-1 size-1.5 rounded-full shrink-0 ${needsYou ? "animate-pulse" : ""}`}
-              style={{ background: color }}
-            />
+            <span aria-label={says} title={says} className="mr-1 grid shrink-0">
+              <StatusGlyph look={look} className="size-1.5" />
+            </span>
           );
         })()}
         {/* Its menu, the one the Layers panel opens: shown on hover, while selected or open, or on focus. */}

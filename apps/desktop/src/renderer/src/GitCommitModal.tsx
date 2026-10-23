@@ -20,6 +20,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { useGitStatus, useGitCommit, useGitPush, useGitPull, useStageFiles } from "./queries";
+import { keyLabel } from "./shortcut";
 
 export function GitCommitModal({
   repoPath,
@@ -200,7 +201,7 @@ export function GitCommitModal({
               variant="outline"
               onClick={onCommit}
               disabled={!canCommit}
-              title="Commit staged changes (⌘↵)"
+              title={`Commit staged changes (${keyLabel("mod+enter")})`}
             >
               {commitMut.isPending ? <Spinner className="animate-spin" /> : null}
               Commit

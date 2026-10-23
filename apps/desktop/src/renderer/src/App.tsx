@@ -38,6 +38,8 @@ import type { NotificationSettings } from "../../shared/ipc";
 import { tellRecentFolders } from "./recent-folders";
 import { chooseFolder, FolderPathDialog } from "./choose-folder";
 import { runShortcut } from "./shortcut";
+import { StatusAnnouncer } from "./workspace/StatusAnnouncer";
+import { LOOKS } from "./workspace/status-look";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
@@ -350,6 +352,7 @@ export function App() {
 
         <FolderPathDialog />
         <QuitDialog />
+        <StatusAnnouncer />
         <RecentProjects
           open={!!recentOpen}
           joining={recentOpen === "join"}
@@ -407,6 +410,8 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
   );
 }
 
+/** A status word as a label: "needs you" → "Needs you". */
+const sentence = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
 function NotificationPrefs() {
   const [s, setS] = useState<NotificationSettings>(() => getNotificationSettings());
@@ -420,9 +425,9 @@ function NotificationPrefs() {
   const dim = !s.enabled;
 
   const kinds: { key: "needs" | "done" | "error"; label: string; hint: string }[] = [
-    { key: "needs", label: "Needs you", hint: "Permission prompts, questions, blocked" },
-    { key: "done", label: "Finished", hint: "An agent completed its task" },
-    { key: "error", label: "Failed", hint: "Agent crashed or exited non-zero" },
+    { key: "needs", label: sentence(LOOKS.needs.word), hint: "Permission prompts, questions, plans to review, blocked" },
+    { key: "done", label: sentence(LOOKS.done.word), hint: "An agent completed its task" },
+    { key: "error", label: sentence(LOOKS.failed.word), hint: "Agent crashed or exited non-zero" },
   ];
 
   return (
@@ -458,8 +463,12 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-subheading">Delivery</div>
         <div className="settings-row">
-          <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
-          <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" />
+          {/* The window's live region (workspace/announcer.ts) follows this switch as a toast does. */}
+          <div className="min-w-0">
+            <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
+            <div id="notify-in-app-note" className="settings-note">Also what a screen reader says</div>
+          </div>
+          <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" aria-describedby="notify-in-app-note" />
         </div>
         <div className="settings-row">
           <div className="text-label text-[var(--color-fg)]">Native OS popups</div>

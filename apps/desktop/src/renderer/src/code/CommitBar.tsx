@@ -9,6 +9,7 @@ import type { GitStatusSnapshot } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useGitCommit, useGitPush, useStageFiles } from "../queries";
+import { keyLabel } from "../shortcut";
 
 export function CommitBar({ repoPath, status }: { repoPath: string; status: GitStatusSnapshot }) {
   const [message, setMessage] = useState("");
@@ -51,7 +52,7 @@ export function CommitBar({ repoPath, status }: { repoPath: string; status: GitS
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) doCommit(); }}
-          placeholder={staged.length ? "commit message · ⌘↵" : "stage files to commit"}
+          placeholder={staged.length ? `commit message · ${keyLabel("mod+enter")}` : "stage files to commit"}
           disabled={staged.length === 0}
           className="nodrag flex-1"
         />

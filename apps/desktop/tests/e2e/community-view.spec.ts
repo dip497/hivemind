@@ -45,6 +45,8 @@ const reloadViews = () => page.evaluate(() => window.dispatchEvent(new CustomEve
 const activeView = () => page.getAttribute("[data-active-view]", "data-active-view");
 const report = () => page.evaluate(() => (window as unknown as { __hivemindViews: { registered: string[]; refused: Record<string, string> } }).__hivemindViews);
 const probe = (sel: string) => page.evaluate((s) => (document.querySelector(s) as unknown as Record<string, unknown> | null)?.__probe ?? null, sel);
+/** A terminal header's mark for an ended process, clean or failed. */
+const ENDED = '.hm-term-root [data-status-look="exited"], .hm-term-root [data-status-look="failed"]';
 
 test.beforeAll(async () => {
   repo = await fs.promises.mkdtemp(path.join(os.tmpdir(), "hm-community-"));
@@ -211,7 +213,7 @@ test("a flooding plugin and a CPU-burning plugin are disabled; the canvas comes 
   await expect(page.locator(".xterm")).toHaveCount(1);
   await page.waitForSelector(".react-flow__node-terminal .xterm");
   expect(await probe(".react-flow__node-terminal .xterm")).toBe("kept");
-  await expect(page.locator(".hm-term-root").filter({ hasText: "exited" })).toHaveCount(0);
+  await expect(page.locator(ENDED)).toHaveCount(0);
 });
 
 test("a package asking for an unknown permission is refused by install AND by the loader", async () => {

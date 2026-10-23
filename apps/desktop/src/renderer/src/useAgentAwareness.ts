@@ -1,16 +1,18 @@
 /** Agent status transitions → in-app toast (not for a selected tile) and OS
- *  notification (main suppresses it while the window is focused). */
+ *  notification (main suppresses it while the window is focused). `noticeOf` decides which
+ *  transitions are told; the screen reader's line (workspace/announcer.ts) asks it too. */
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+import { subscribeStatus, type StatusEvent, type TileStatusKind } from "./agent-status-bus";
 import { isBackgroundTile } from "./worker-tiles";
 import { getNotificationSettings } from "./notification-settings";
 import { shouldNotify } from "../../shared/notification-settings.js";
 import type { FrameState } from "./canvas-persistence";
+import { statusLook } from "./workspace/status-look";
 
 type TileMeta = { label: string; status: TileStatusKind; seen: boolean };
 
 /** The verb-class of a toast / OS popup — drives accent color, icon and copy.
- *  Derived from a status transition: needs-you (blocked/permission/question),
+ *  Derived from a status transition: needs-you (any status that looks "needs"),
  *  finished (working→idle, or clean exit code 0), or error (working→exited,
  *  non-zero). Kept separate from TileStatusKind so a single "error" kind can
  *  overlay an `exited` status with red styling + the exit code in the body. */
@@ -52,11 +54,34 @@ export interface ToastAction {
   primary?: boolean;
 }
 
+/**
+ * What a status change tells the person, or null for nothing. `prev`: the tile's status before
+ * this one (undefined: the first seen of it).
+ *  - needs: it waits for a person (a permission, a question, a plan to review, an approval,
+ *    blocked), from any state: what wears the "needs" look. A background worker that needs you
+ *    still does.
+ *  - done: a working agent finished its turn, or closed cleanly (exit code 0). Not a synthetic
+ *    idle: a stuck "working" corrected, or the person interrupting it.
+ *  - error: a working agent's process died, with a non-zero code or none known.
+ * Only a tile that was working can finish or fail: a plain shell never says it works, so its exit
+ * stays quiet. A background worker (a workflow's, `report:false`) is gathered in bulk: its end is
+ * not told one by one.
+ */
+export function noticeOf(prev: TileStatusKind | undefined, e: StatusEvent): NoticeKind | null {
+  // A supervised worker's approval is its lead's to give (an agent), not the person's: its mark shows
+  // it, and nothing is said.
+  if (statusLook(e.status) === "needs") return e.status === "awaiting_approval" ? null : "needs";
+  if (prev !== "working" || isBackgroundTile(e.tileId)) return null;
+  if (e.status === "idle") return e.synthetic ? null : "done";
+  if (e.status === "exited") return e.exitCode === 0 ? "done" : "error";
+  return null;
+}
+
 /** The notice class for a toast, deriving it from the status when the caller
  *  didn't set `kind` explicitly (the worktree handlers pass only a status). */
 export function toastKindOf(t: { kind?: NoticeKind; status: TileStatusKind }): NoticeKind {
   if (t.kind) return t.kind;
-  if (t.status === "blocked" || t.status === "permission" || t.status === "question") return "needs";
+  if (statusLook(t.status) === "needs") return "needs";
   if (t.status === "exited") return "error";
   return "done";
 }
@@ -151,44 +176,24 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       const selected = selectedTileIdsRef.current.has(e.tileId);
       const prev = statusesRef.current;
       const old = prev.get(e.tileId);
-      const rawFinished = e.status === "idle" && old?.status === "working"; // done now
-      const needsHuman =
-        e.status === "blocked" || e.status === "permission" || e.status === "question";
-      // A WORKING agent whose process just DIED. This is the failure mode that
-      // was previously silent (a non-zero exit only painted grey inline text):
-      // a crash, an OOM-kill, a failed build that took the shell down. Only a
-      // tile that was actually working can "crash" — a plain shell's exit has no
-      // prior working status (it never publishes one) so this stays quiet for it.
-      // Background workers are gathered in bulk and excluded like `finished`.
-      const exitedFromWorking = e.status === "exited" && old?.status === "working" && !isBackgroundTile(e.tileId);
-      // exitCode 0 = the agent closed cleanly (e.g. /exit) → reads as "done",
-      // not alarm-red. Unknown/missing code or non-zero → error.
-      const cleanExit = exitedFromWorking && e.exitCode === 0;
-      const crashed = exitedFromWorking && e.exitCode !== 0;
-      // Skip the "finished" path for:
-      //  - SYNTHETIC idles: a stuck "working" decayed because output stopped (a
-      //    state correction, not a completion) — toasting/notifying for each would
-      //    flood the screen (the "filling laggy" report); the status still updates.
-      //  - background workflow workers (report:false), gathered in bulk.
-      // needs-you is kept either way: an unattended blocked worker still needs help.
-      const finished = (rawFinished && !e.synthetic) || cleanExit;
+      const kind = noticeOf(old?.status, e);
+      const crashed = kind === "error";
       // "seen" = user is looking (tile selected) OR nothing noteworthy happened.
-      const seen = selected ? true : finished || needsHuman || crashed ? false : old?.seen ?? true;
+      const seen = selected ? true : kind ? false : old?.seen ?? true;
       const next = new Map(prev);
       next.set(e.tileId, { label: e.label, status: e.status, seen });
       commitStatuses(next);
-      // Resolve the notice class + the project context once, for both surfaces.
-      // `frame` is the frame title (a worktree's branch); `repo` is the repo dir
-      // basename — the fallback context so a bare "claude" is still pinned to a
-      // project when the frame has no title. Both surfaces read the same fields.
-      const kind: NoticeKind = crashed ? "error" : needsHuman ? "needs" : "done";
+      if (!kind) return;
+      // The project context, once, for both surfaces. `frame` is the frame title (a worktree's
+      // branch); `repo` is the repo dir basename — the fallback context so a bare "claude" is
+      // still pinned to a project when the frame has no title. Both surfaces read the same fields.
       const fid = frameOfRef.current[e.tileId];
       const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
       const repo = ((fr?.worktreePath ?? fr?.workspacePath) || "")
         .split("/").filter(Boolean).pop() || undefined;
       // Toast only for background events — suppress when the tile is selected.
       // Gated by user prefs (master / per-kind / DND) for the in-app surface.
-      if (!selected && (needsHuman || finished || crashed) && shouldNotify(getNotificationSettings(), kind, "inApp")) {
+      if (!selected && shouldNotify(getNotificationSettings(), kind, "inApp")) {
         pushToast({
           tileId: e.tileId,
           label: e.label,
@@ -203,20 +208,18 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       // the window IS focused AND applies the same prefs for the osPopups
       // surface. One state machine, two surfaces. We still forward every event
       // so the OS-surface pref is honored even when the in-app one is off.
-      if (needsHuman || finished || crashed) {
-        try {
-          window.hive.notifyAgent?.({
-            tileId: e.tileId,
-            label: e.label,
-            kind,
-            ...(fr?.title ? { frame: fr.title } : {}),
-            ...(repo ? { repo } : {}),
-            ...(crashed
-              ? { ...(e.exitCode !== undefined ? { exitCode: e.exitCode } : {}), ...(e.detail ? { detail: e.detail } : {}) }
-              : {}),
-          });
-        } catch { /* preload missing in some test harnesses */ }
-      }
+      try {
+        window.hive.notifyAgent?.({
+          tileId: e.tileId,
+          label: e.label,
+          kind,
+          ...(fr?.title ? { frame: fr.title } : {}),
+          ...(repo ? { repo } : {}),
+          ...(crashed
+            ? { ...(e.exitCode !== undefined ? { exitCode: e.exitCode } : {}), ...(e.detail ? { detail: e.detail } : {}) }
+            : {}),
+        });
+      } catch { /* preload missing in some test harnesses */ }
     });
     return off;
   }, [commitStatuses, pushToast, frameOfRef, framesRef]);

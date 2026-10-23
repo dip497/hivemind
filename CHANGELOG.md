@@ -17,6 +17,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
 - Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.
+- An agent's status has a shape as well as a colour in the surface bar, Layers, a terminal's header and a frame's corner: working, needs you, finished, failed, idle and exited each look different, also with reduced motion on.
+- A screen reader hears a tile's name with "needs you", "finished" or "failed" once when it comes to that state: for the same changes, and under the same **Settings → Notifications**, as a toast, and for the selected tile too.
 - Two presets, **Clean** and **Clean Light**: flat and quiet, in true greys, with glass and the background off and smaller corners. Clean Light is the first light look: the page, terminals, the editor, diffs, diagrams, notifications, the window behind the page and the system's own menus and scrollbars all turn light (`hive theme use clean-light`).
 - Settings → Appearance has **Corners**, **Interface font** and **Code font**. The corner and font settings now change the app: before, `appearance.radius`, `uiFont` and `monoFont` were saved but drawn nowhere.
 
@@ -27,6 +29,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - **Breaking:** `hive config set` refuses a path that is not a setting in this version (`NOT_FOUND`, exit 5), and says which settings are there and the one you may mean (`appearance.glass.blur` for `appearance.blur`); before, it exited 0 and stored nothing. Under `views.chrome` and `views.toolbars` any view's id is a setting, and under `plugins.state` any plugin's `kind:id`.
 - A widget's `hive.notify` follows Settings → Notifications (the switch, **Native OS popups** and **Do Not Disturb**), shows at most one notice every 10 seconds per widget, and cuts its text to 200 characters.
 - **Breaking:** for tool authors: a tool's tile runs in the app's page and gets only the browser rights the app uses, notifications and writing to the clipboard. The camera, the microphone, the location and reading the clipboard are refused; open a page that needs them in a Browser tile, which asks.
+- Settings → Shortcuts is made from the app's own keymap, every key in it, and shows each key as your computer writes it (⇧⌘A on a Mac, Ctrl+Shift+A elsewhere). The key hints in tooltips, menus and the Browser, editor and commit boxes do the same instead of showing ⌘ on every computer. An editor, a diff and a plan size their text with the terminal's font keys, the ones their buttons name.
+- Status words are one list: Layers says "approve?", "input?" and "review?" as a terminal's header does, and "needs you" for a frame.
 
 ### Security
 
@@ -39,10 +43,15 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A look that is no built-in preset (an imported theme file) shows as **Custom** in Settings → Appearance instead of as Ubuntu, and **Reset** puts the terminal back to Signal's colours. The Accent's description says what it colours.
 - An agent whose workers finish one after another is told "Your agents sent you messages" once, at its prompt, even before it has finished a turn since the app started; before, the line could be pasted into its prompt again for each worker.
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.
-- Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
+- Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves, and the full-screen buttons of a terminal, an editor and a diff name that key instead of Esc. Settings → Shortcuts lists the terminal's own keys.
 - An agent whose background subagents never reported their end no longer shows "working" forever: two minutes after the last subagent signal they stop counting, now on the daemon that runs the agent.
 - A setting a newer version added directly under a section of settings.json (`appearance`, `views`, `agents` and the others) survives a change made by this version; before, any change erased it. One added inside a group this version knows, such as `appearance.glass`, is still dropped. A guest who joins your workspace still gets only the named parts of your look.
 - A widget's `tint` colours its card only when it is a note colour (`yellow`, `peach`, `pink`, `violet`, `blue` or `green`); any other word, `ink` included, drew dark text on a card of no colour and now leaves the card plain. `hive plugins check` reports such a tint.
+- A frame's corner, Layers and a terminal's header agree about an exit: only a failed one is red, and a clean one raises no mark. A terminal that could not start, or whose session could not be opened, is failed too, also to a custom view when it closes, and Layers shows a failed tile without the blue mark for a finished one. A frame's corner also shows a plan or an approval waiting on you.
+- An agent that waits for you to review its plan raises a toast, an OS notification and a screen reader's line, as its amber mark says it needs you; before, only a permission, a question or a blocked agent did. A supervised worker waiting for its lead's approval stays quiet: its lead answers it. **Settings → Notifications** names them under **Needs you**, and says under **In-app toasts** that it also covers what a screen reader says.
+- A workflow's background workers no longer each raise a "finished" toast and notification when their turn ends, as was meant; one that needs you still does.
+- Increased contrast (the system setting) strengthens faint text and lines with glass off too, not only with glass on.
+- Settings → Shortcuts and the guide showed ⌘Tab for the next tile, which is Ctrl+Tab on a Mac too; Settings → Agents named ⌘\ for starting the default agent, which is ⇧⌘A / Ctrl+Shift+A. On Windows and Linux they no longer offer Super+B for Layers, which the system takes; the everyday keys come before Quit.
 
 ## [2026.10.5] — 2026-10-21
 

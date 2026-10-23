@@ -162,3 +162,24 @@ test("Copy JSON copies the look without the wallpaper's picture, and says so; Im
   expect(onDisk().appearance).toEqual(before);
   await closeSettings();
 });
+
+test("increased contrast strengthens faint text and lines with glass off, over the preset's inline palette", async () => {
+  expect(hive("config", "set", "appearance.glass.enabled", "false").value).toBe(false);
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(false);
+  const read = () => page.evaluate(() => {
+    const s = getComputedStyle(document.documentElement);
+    const v = (name: string) => s.getPropertyValue(name).trim();
+    return { fg2: v("--color-fg2"), fg3: v("--color-fg3"), line: v("--color-line"), inline: document.documentElement.style.getPropertyValue("--color-fg3") !== "" };
+  });
+  const usual = await read();
+  expect(usual.inline, "the theme store writes the palette inline, which a plain stylesheet rule cannot beat").toBe(true);
+  expect(usual.fg3).not.toBe(usual.fg2);
+  await page.emulateMedia({ contrast: "more" });
+  try {
+    const more = await read();
+    expect(more.fg3, "faint text takes the secondary text colour").toBe(more.fg2);
+    expect(more.line, "lines are drawn stronger").not.toBe(usual.line);
+  } finally {
+    await page.emulateMedia({ contrast: null });
+  }
+});

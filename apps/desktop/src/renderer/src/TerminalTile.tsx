@@ -12,7 +12,7 @@ import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl } from "./tile-font";
-import { IS_MAC, onShortcut } from "./shortcut";
+import { actionKey, IS_MAC, onShortcut } from "./shortcut";
 import { actionsFor } from "../../shared/keymap";
 import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
@@ -36,7 +36,7 @@ import { terminalThemeFor } from "@hivemind/core/settings-schema";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
-import { statusColor } from "./workspace/tile-status-bucket";
+import { exitFailed, LOOKS, paintGlyph, StatusGlyph, statusLook, statusWord } from "./workspace/status-look";
 import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
 import { useShown } from "./multiplayer/shown";
@@ -269,7 +269,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // Agent/terminal status — driven by PTY activity, mutated imperatively via
   // refs (NOT React state) so high-frequency output never triggers re-renders.
   //   working = output within the last ~1.5s · idle = quiet · exited = PTY gone
-  const dotRef = useRef<HTMLSpanElement | null>(null);
+  const dotRef = useRef<SVGSVGElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** Wrapper around the status dot+label — hidden entirely while idle. */
@@ -293,49 +293,35 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
 
   useEffect(() => {
     if (!agentsScanned) return;
-    // [color, label, pulse]. permission/question = needs the human (from the
-    // real Claude-state scrape); working/idle from screen or PTY activity.
-    // Labels and pulse only; colours come from workspace/tile-status-bucket so this header
-    // agrees with the layers panel and every surface bar. Only actionable states pulse.
-    const STATUS: Record<string, [string, boolean]> = {
-      working: ["working", false],
-      idle: ["idle", false],
-      exited: ["exited", false],
-      permission: ["approve?", true],
-      question: ["input?", true],
-      blocked: ["blocked", true],
-      plan_review: ["review?", true],
-      awaiting_approval: ["approval?", true],
-    };
+    // permission/question = needs the human (from the real Claude-state scrape); working/idle
+    // from screen or PTY activity. The words, shape and colour are workspace/status-look's, so
+    // this header agrees with Layers and every surface bar.
     /** The header chip. An agent tile's follows the bus (the host's status); a shell's its own activity. */
-    const paint = (s: TileStatusKind, extra?: { exitCode?: number; detail?: string }) => {
+    const paint = (s: TileStatusKind, extra?: { exitCode?: number; failed?: boolean; detail?: string }) => {
       const dot = dotRef.current;
       const label = labelRef.current;
       if (!dot || !label) return;
       // A shell calls this on every output chunk; rewriting an unchanged chip
       // replaced its text node and dirtied the header's layout each time.
       if (s === lastStatusRef.current && !extra) return;
-      const [text, pulse] = STATUS[s]!;
-      // The colour is the shared one for this state; only a failed exit is not neutral.
-      const color = statusColor(s, { failed: s === "exited" && !!extra?.exitCode });
+      // Only a failed exit is not neutral.
+      const failed = exitFailed({ status: s, ...extra });
+      const look = statusLook(s, { failed });
       // `idle` is the ABSENCE of a state, not a state — and it rendered as a green
       // dot, which reads as "success" when it means "nothing is happening". Hide the
       // whole chip so a quiet tile has a quiet header, and every chip that remains
       // (working / approve? / blocked / exited) is worth looking at. Matches
       // LayersPanel, which already skips idle rows.
       if (statusWrapRef.current) statusWrapRef.current.style.display = s === "idle" ? "none" : "inline-flex";
-      dot.style.background = color;
-      // No glow (box-shadow) — the pulsing-glow-on-dark dot is a textbook
-      // AI-slop tell. A solid dot + pulse on actionable states reads cleaner.
-      dot.classList.toggle("animate-pulse", pulse);
-      label.textContent = text;
-      label.style.color = color;
+      paintGlyph(dot, look);
+      label.textContent = statusWord(s, { failed });
+      label.style.color = LOOKS[look].color;
       lastStatusRef.current = s;
     };
     const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
     /** What the tile itself knows: a shell's activity, and how any process exited — the code
      *  and detail let the awareness layer tell a crash from a clean close. */
-    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; detail?: string }) => {
+    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; failed?: boolean; detail?: string }) => {
       paint(s, extra);
       if (s === "exited") publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
     };
@@ -458,7 +444,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // selected and focus landed on the CANVAS CHROME — body, the react-flow pane,
     // or ANY node wrapper (a re-render/selection steal) and NOT a real editable
     // field — take focus straight back next frame. Never fights a deliberate move
-    // into another tile's terminal, a rename box, or the command palette (all
+    // into another tile's terminal, a rename box, or a search field (all
     // editable elements), so it can't trap focus.
     const reclaimFocusIfStolen = () => {
       if (!selectedRef.current) return;
@@ -847,13 +833,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         e.preventDefault();
         return false;
       }
-      // Shift+Enter: a new line in the prompt, not a send. A program that turned the kitty protocol
-      // on is told Shift+Enter as itself; any other gets ESC CR, which agents read as Alt+Enter.
-      if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !kittyFlags(term)) {
-        term.input("\x1b\r", true);
-        e.preventDefault();
-        return false;
-      }
       for (const action of actionsFor(e, "terminal", IS_MAC)) {
         if (!runTerminalKey(action)) continue;
         e.preventDefault();
@@ -873,6 +852,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           term.clearSelection();
           return true;
         }
+        // Shift+Enter: a new line in the prompt, not a send. A program that turned the kitty protocol
+        // on is told Shift+Enter as itself; any other gets ESC CR, which agents read as Alt+Enter.
+        case "new-line":
+          if (kittyFlags(term)) return false;
+          term.input("\x1b\r", true);
+          return true;
         case "take-keyboard":
           if (!kbRef.current.mayTake) return false;
           window.hive.keyboardTake(ptyId);
@@ -960,12 +945,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         if (pid === -1) {
           // An adopted session that is gone; or, in a workspace joined from elsewhere, one its host
           // is not running.
-          term.writeln(session
-            ? `\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`
-            : "\x1b[2m[hivemind] this terminal is not running on the machine it belongs to\x1b[0m");
+          const detail = session
+            ? `could not open session ${session}: it has ended, or its machine is unreachable`
+            : "this terminal is not running on the machine it belongs to";
+          term.writeln(`\x1b[2m[hivemind] ${detail}\x1b[0m`);
           attachedRef.current = false;
           exited = true;
-          setStatus("exited");
+          setStatus("exited", { failed: true, detail });
           return;
         }
         // Force the live PTY to match our CURRENT geometry. On a RE-ATTACH the
@@ -1016,9 +1002,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       } catch (e) {
         attachedRef.current = false;
         releaseBoot();
-        term.writeln(`\x1b[31m[hivemind] spawn failed: ${(e as Error).message}\x1b[0m`);
+        const detail = `spawn failed: ${(e as Error).message}`;
+        term.writeln(`\x1b[31m[hivemind] ${detail}\x1b[0m`);
         exited = true;
-        setStatus("exited");
+        setStatus("exited", { failed: true, detail });
       }
     }
     void doSpawn();
@@ -1374,7 +1361,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             and whole-tile scale (−/+, grows the node box + font in proportion). */}
         <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
           {/* Font size only (A−/A+) */}
-          <span className="nodrag inline-flex items-center divide-x divide-[var(--color-line2)] rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden" title="Font size (Ctrl/Cmd ±)">
+          <span className="nodrag inline-flex items-center divide-x divide-[var(--color-line2)] rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden" title={`Font size (${actionKey("font-bigger")} / ${actionKey("font-smaller")})`}>
             <Button variant="ghost" size="micro" onClick={font.dec} aria-label="decrease font size">
               A−
             </Button>
@@ -1399,7 +1386,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             onClick={() => setOverlay((v) => !v)}
             className="nodrag"
             aria-label="fullscreen terminal"
-            title="Fullscreen (Ctrl/Cmd ⇧F) · Esc to exit"
+            title={`Fullscreen (${actionKey("fit-to-screen")})`}
           >
             ⤢
           </Button>
@@ -1409,12 +1396,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           className="inline-flex items-center gap-1.5 text-chip"
           title="agent status — working / blocked / exited (idle is not shown)"
         >
-          <span
-            ref={dotRef}
-            aria-hidden
-            className="size-1.5 rounded-full"
-            style={{ background: "var(--color-fg3)" }}
-          />
+          <StatusGlyph ref={dotRef} look="idle" className="size-1.5" />
           <span ref={labelRef} style={{ color: "var(--color-fg3)" }}>
             starting
           </span>

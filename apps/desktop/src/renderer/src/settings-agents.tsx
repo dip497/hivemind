@@ -15,6 +15,7 @@ import { Switch } from "./components/ui/switch";
 import { agentToStart, notReady, useAgentEntries, useAgentPresence, setAgentDisabled, refreshAgentPresence, syncAgentPlugins } from "./agent-plugins";
 import { useSettingsNavigate } from "./settings-panels";
 import { SvgMark } from "./agents";
+import { actionKey } from "./shortcut";
 
 type Choices = Awaited<ReturnType<typeof window.hive.agentOptionChoices>>;
 
@@ -95,7 +96,7 @@ export function useAgentRows(matches: (text: string) => boolean): { rows: Listed
       </p>
     ) : !all.some((c) => c.id === defaultId && state(c) === "on") ? (
       <p role="status" className="error">Your default agent is not ready on this machine. Open another to make it the default, or install it.</p>
-    ) : <p>{"⌘\\"} and the toolbar's agent button start the default.</p>}
+    ) : <p>{actionKey("agent")} and the toolbar's agent button start the default.</p>}
     <div className="plugins-group-setting" data-auto-install>
       <label htmlFor="agents-auto-install">Add agents found on this machine</label>
       <span>· one you remove stays removed</span>

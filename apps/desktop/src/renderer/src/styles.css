@@ -1354,6 +1354,18 @@ html.glass-on .react-flow__node-browser {
   .hm-wallpaper { display: none !important; }
 }
 
+/* Increased contrast with glass off too: faint text takes the secondary text colour, and lines
+   stand at least 3:1 on the canvas. The theme store writes the palette inline on <html>, so these
+   need !important; each is mixed from the preset's own text and canvas, so a light preset gets
+   darker lines, not lighter ones. */
+@media (prefers-contrast: more) {
+  :root {
+    --color-fg3: var(--color-fg2) !important;
+    --color-line: color-mix(in oklab, var(--color-fg) 50%, var(--color-bg)) !important;
+    --color-line2: color-mix(in oklab, var(--color-fg) 65%, var(--color-bg)) !important;
+  }
+}
+
 /* Vibrancy: text over a translucent surface needs more weight and a touch of
    tracking than the same text over a solid one, because the backdrop moves and
    its local contrast is unpredictable. Only applies while glass is actually on. */

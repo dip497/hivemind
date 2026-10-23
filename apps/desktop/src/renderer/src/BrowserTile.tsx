@@ -8,6 +8,7 @@ import { useScaleOnScreen } from "./workspace/tile-scale";
 import { BrowserAsk, useBrowserAsks } from "./browser-asks";
 import { SiteButton } from "./browser-site";
 import { siteOf } from "../../shared/site";
+import { keyLabel } from "./shortcut";
 
 interface Props {
   tileId: string;
@@ -357,7 +358,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
             onClick={() => newTab()}
             className="nodrag shrink-0 self-center"
             aria-label="new tab"
-            title="New tab (⌘T)"
+            title={`New tab (${keyLabel("mod+t")})`}
           >
             <Plus />
           </Button>
@@ -378,7 +379,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
       <div className="h-8 flex items-center gap-1 px-2 bg-[var(--color-bg3)] border-b border-[var(--color-line)]">
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => activeWv()?.goBack()} disabled={!active?.canBack} aria-label="back" title="Back"><ArrowLeft /></Button>
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => activeWv()?.goForward()} disabled={!active?.canFwd} aria-label="forward" title="Forward"><ArrowRight /></Button>
-        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => (active?.loading ? activeWv()?.stop() : activeWv()?.reload())} aria-label="reload" title="Reload (⌘R)"><RotateCw className={active?.loading ? "animate-spin" : ""} /></Button>
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => (active?.loading ? activeWv()?.stop() : activeWv()?.reload())} aria-label="reload" title={`Reload (${keyLabel("mod+r")})`}><RotateCw className={active?.loading ? "animate-spin" : ""} /></Button>
         <SiteButton site={siteOf(active?.url ?? "")} />
         <Input font="mono"
           value={address}
@@ -394,7 +395,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
           placeholder="Search or enter address"
           title={active?.title}
         />
-        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => setFindOpen((v) => !v)} aria-label="find" title="Find in page (⌘F)"><Search /></Button>
+        <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => setFindOpen((v) => !v)} aria-label="find" title={`Find in page (${keyLabel("mod+f")})`}><Search /></Button>
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={toggleDevtools} aria-label="devtools" title="Toggle DevTools"><Wrench /></Button>
         {/* Visible CDP proof — runs the same bridge an agent uses against the visible tab. */}
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={cdpSelfTest} aria-label="cdp test" title="CDP self-test (drive this tab like an agent)"><Bot /></Button>

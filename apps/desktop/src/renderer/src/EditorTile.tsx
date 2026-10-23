@@ -43,6 +43,7 @@ import { unifiedMergeView } from "@codemirror/merge";
 import { resolveActive } from "./editor-active";
 import { getTheme, useThemeField } from "./theme-store";
 import { htmlFileUrl, isHtmlPath } from "./browser-open";
+import { actionKey, keyLabel } from "./shortcut";
 // Lazy: marked + DOMPurify (and, on demand, mermaid) load only when the user
 // actually opens Preview — opening an editor tile pulls in zero markdown code.
 const MarkdownPreview = lazy(() =>
@@ -615,7 +616,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
               </Button>
               </>
             )}
-            <span className="text-chip text-[var(--color-fg3)]">⌘S to save</span>
+            <span className="text-chip text-[var(--color-fg3)]">{keyLabel("mod+s")} to save</span>
             <FontStepper {...font} />
           </span>
           <Button
@@ -718,12 +719,13 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         )}
         {/* Fullscreen — in the tab bar so it shows even when the editor is
             embedded in the Workbench (which strips the standalone header).
-            Sticky so it stays put when the tabs overflow-scroll. */}
+            Sticky so it stays put when the tabs overflow-scroll. Its tooltip names the
+            fit-to-screen key, which leaves from anywhere: Esc is the editor's while you type. */}
         <button
           onClick={() => setOverlay((v) => !v)}
           className="nodrag ml-auto sticky right-0 shrink-0 px-2 grid place-items-center bg-[var(--color-bg2)] border-l border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors text-label leading-none"
           aria-label="fullscreen editor"
-          title="Fullscreen · Esc to exit"
+          title={`Fullscreen (${actionKey("fit-to-screen")} to leave)`}
         >
           ⤢
         </button>
