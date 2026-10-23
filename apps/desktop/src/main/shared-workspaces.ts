@@ -43,7 +43,7 @@ import type { HandedOff } from "@hivemind/workspace-api/git";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
-import { sharedAppearance, type Appearance } from "@hivemind/core/settings-schema";
+import { sharedAppearance, type SharedAppearance as Appearance } from "@hivemind/core/settings-schema";
 
 /** Where the connection to a workspace's host is. */
 export type SharedState = "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";

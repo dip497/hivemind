@@ -1,9 +1,10 @@
 import { installViewManagementIpc } from "./view-packages.js";
 import { installPluginSwitchIpc } from "./plugin-switch.js";
 import { installPackagesIpc } from "./packages-ipc.js";
+import { installThemesIpc } from "./themes-ipc.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
-import { toolPreferences } from "@hivemind/core/settings-schema";
+import { lookForGuests, toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
 import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
@@ -1425,7 +1426,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   presence(() => workspaceServer, () => machineIdentity().personId),
   widgetDomain,
   // How this host looks to its guests, as its theme changes.
-  appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
+  appearance({ current: () => lookForGuests(getAppSettings()), onChange: (l) => { onSettingsChange((s) => l(lookForGuests(s))); }, server: () => workspaceServer }),
   peopleHere.domain,
   grantsDomain({
     serving: () => driveServing,
@@ -1642,6 +1643,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installToolPackageIpc();
     installPluginSwitchIpc();
     installPackagesIpc();
+    installThemesIpc();
     installServicesIpc();
     installPluginCatalogIpc();
     installQuitIpc({
@@ -1745,7 +1747,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       console.warn(`[browser] extension load failed: ${(err as Error).message}`);
     }
 
-    // Wallpaper media is CONFINED to a sandboxed dir under userData. The
+    // Wallpapers picked by older builds (settings that still name hm-media://) are CONFINED to a
+    // sandboxed dir under userData; new picks and theme files go to the media dir below. The
     // hm-media:// handler serves ONLY files inside it — never an arbitrary path
     // from the URL. Without this confinement the scheme is an arbitrary-file-read
     // primitive (e.g. hm-media://v/<encoded /etc/passwd>), reachable from the
@@ -1766,50 +1769,6 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         return new Response("bad request", { status: 400 });
       }
     });
-    // Import a user-picked image/video INTO the sandboxed dir and return its
-    // hm-media:// URL. Copying (a) confines what the protocol can ever read to
-    // files the user explicitly chose, and (b) makes the wallpaper survive the
-    // original being moved/deleted. The dest name is a hash of the source path
-    // (+ext) so re-picking the same file is idempotent.
-    // Classify a wallpaper file by extension so import can prune OLD files of the
-    // same kind — only one video + one image can ever be active, so keeping every
-    // file the user ever picked just leaked hundreds of MB into userData.
-    const VIDEO_EXT = new Set([".mp4", ".webm", ".mov", ".mkv", ".m4v", ".ogv"]);
-    const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"]);
-    const mediaKind = (f: string): "video" | "image" | null => {
-      const e = path.extname(f).toLowerCase();
-      return VIDEO_EXT.has(e) ? "video" : IMAGE_EXT.has(e) ? "image" : null;
-    };
-    handle("wallpaper:import", (_e, srcPath: unknown) => {
-      try {
-        const src = path.resolve(String(srcPath));
-        if (!existsSync(src) || !statSync(src).isFile()) return null;
-        mkdirSync(wallpaperDir, { recursive: true });
-        // Keep the original basename (sanitized) so the customizer shows a
-        // recognizable name; prefix a short hash of the source path for
-        // uniqueness + idempotent re-pick.
-        const base = path.basename(src).replace(/[^.\w-]/g, "_").slice(-60);
-        const dest = path.join(wallpaperDir, `${createHash("sha1").update(src).digest("hex").slice(0, 8)}-${base}`);
-        cpSync(src, dest);
-        // Prune previously-imported files of the SAME kind (the just-replaced
-        // wallpaper + any older orphans) — only the newest video/image is ever
-        // referenced, so this caps the dir at one video + one image instead of
-        // accumulating every pick forever.
-        const kind = mediaKind(dest);
-        if (kind) {
-          for (const f of readdirSync(wallpaperDir)) {
-            const abs = path.join(wallpaperDir, f);
-            if (abs !== dest && mediaKind(abs) === kind) {
-              try { unlinkSync(abs); } catch { /* best-effort */ }
-            }
-          }
-        }
-        return `hm-media://v/${encodeURIComponent(dest)}`;
-      } catch {
-        return null;
-      }
-    }, { local: true });
-
     // ── Custom-media layers (bring-your-own background + overlay) ─────────────
     // Files the user picks are COPIED into userData/media and served by bare
     // filename via hivemedia://<file>. Copying confines what the protocol can

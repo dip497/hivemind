@@ -869,11 +869,13 @@ export interface FlatTheme {
   /** From `appearanceExtra`: the custom accent, which wins over `accent`, and a theme's font
    *  files. Written back there, never into `appearance`. */
   accentCustom?: AccentColors; fontFaces?: FontFaces;
+  /** The theme applied (`appearanceExtra.theme`), by id: its wallpaper draws without glass. */
+  themeId?: string;
 }
 
-export function flattenAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "accent" | "fontFaces"> | null): FlatTheme {
+export function flattenAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "accent" | "fontFaces" | "theme"> | null): FlatTheme {
   return {
-    accentCustom: extra?.accent, fontFaces: extra?.fontFaces,
+    accentCustom: extra?.accent, fontFaces: extra?.fontFaces, themeId: extra?.theme?.id,
     glass: a.glass.enabled, blur: a.glass.blur, opacity: a.glass.opacity, contentGlass: a.glass.contentGlass, contentOpacity: a.glass.contentOpacity, animate: a.glass.animate,
     wallpaper: a.wallpaper.kind, videoSrc: a.wallpaper.videoSrc, imageSrc: a.wallpaper.imageSrc, videoBrightness: a.wallpaper.brightness,
     accent: a.accent, overlayMedia: a.overlayMedia,

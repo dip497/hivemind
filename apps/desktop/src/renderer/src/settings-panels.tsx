@@ -27,6 +27,7 @@ import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, ShapeAndTypeControls, TerminalColors,
 } from "./appearance-controls";
+import { ThemeList } from "./appearance-themes";
 import { createContext, Fragment, useContext } from "react";
 import { pluginPage } from "./settings-registry";
 import { doesWhat, KEYMAP, keysLabel, reachesApp, type KeyOS, type Where } from "../../shared/keymap";
@@ -65,6 +66,7 @@ function AppearancePrefs() {
     <div className="settings-stack">
       <Section title="Theme">
         <PresetRow t={t} />
+        <ThemeList />
         <AccentPicker t={t} />
         <ShapeAndTypeControls t={t} />
       </Section>

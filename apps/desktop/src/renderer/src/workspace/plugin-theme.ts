@@ -1,6 +1,7 @@
 /** The app's theme as a plugin is told it (`hello.theme`, `theme`): every token resolved to hex. */
 import { STATUS_TONES, type ViewTheme } from "@hivemind/view-sdk/protocol";
-import { ACCENTS, effectiveGlass, getTheme } from "../theme-store";
+import { accentOf } from "@hivemind/core/appearance-extra";
+import { effectiveGlass, getTheme } from "../theme-store";
 import { cssColorToHexString } from "./css-color";
 
 const THEME_VARS = ["bg", "bg2", "bg3", "bg4", "fg", "fg2", "fg3", "line", "line2", "brand", "err", "ok", "warn", "info", "accent"];
@@ -16,7 +17,7 @@ export function readTheme(): ViewTheme {
   return {
     colors,
     mode: t.mode,
-    accent: cssColorToHexString(ACCENTS[t.accent].brand),
+    accent: cssColorToHexString(accentOf({ accent: t.accent }, { accent: t.accentCustom }).brand),
     radius: t.radius,
     fonts: { ui: t.uiFont, mono: t.monoFont },
     surface: cssColorToHexString(t.palette.bg2),
