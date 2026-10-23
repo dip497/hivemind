@@ -13,6 +13,7 @@
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
 import { isPluginKey, isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
+import { accentColorsOf, appearanceExtraOf, type AccentColors, type AppearanceExtra, type FontFaces } from "./appearance-extra.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -444,6 +445,9 @@ export interface QuitSettings {
 export interface Settings {
   v: 1;
   appearance: Appearance;
+  /** The look's values an older build's write would erase: the custom accent, font faces and
+   *  the theme applied (`./appearance-extra.ts`). Read on top of `appearance`. */
+  appearanceExtra: AppearanceExtra;
   views: ViewsSettings;
   plugins: PluginsSettings;
   agents: AgentsSettings;
@@ -456,6 +460,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   v: 1,
   appearance: DEFAULT_APPEARANCE,
+  appearanceExtra: {},
   views: { defaultView: "canvas", chrome: {}, toolbars: {}, layers: DEFAULT_LAYERS_PREFS },
   // Fresh install: every plugin as it is by default (a tool plugin that is not built in: off).
   plugins: { state: {} },
@@ -488,7 +493,7 @@ const UTF8 = new TextEncoder();
  *  a setting here never erases them. A patch that leaves one out keeps `base`'s, and one set to
  *  undefined removes it. Each is copied as JSON (what is not JSON is dropped), and at most
  *  `UNKNOWN_MAX` bytes in all. Spread it before the checked fields, so those always win. */
-function keptUnknown(raw: Record<string, unknown>, known: ReadonlySet<string>, base: object): Record<string, unknown> {
+export function keptUnknown(raw: Record<string, unknown>, known: ReadonlySet<string>, base: object): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   let size = 0;
   for (const from of [raw, base as Record<string, unknown>]) {
@@ -585,10 +590,13 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
  *  becomes the default one, and overlays go: their media is the host's alone. Fonts are not the
  *  look: a guest reads in their own, so the host's are not sent. Each field is named: a field
  *  added later, or one a newer build wrote, reaches guests only when it is added here. */
-export function sharedAppearance(raw: unknown): Appearance {
+export function sharedAppearance(raw: unknown): SharedAppearance {
   const a = mergeAppearance(raw);
   const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  // The custom accent (a theme's colours), as `lookForGuests` adds it: a colour, never a file.
+  const accentCustom = accentColorsOf((raw as { accentCustom?: unknown } | null)?.accentCustom);
   return {
+    ...(accentCustom ? { accentCustom } : {}),
     preset: a.preset,
     mode: a.mode,
     palette: a.palette,
@@ -602,6 +610,15 @@ export function sharedAppearance(raw: unknown): Appearance {
     pluginSurfaces: a.pluginSurfaces,
     overlayMedia: [],
   };
+}
+
+/** A host's look as guests get it: its appearance, and its custom accent when one is set. */
+export type SharedAppearance = Appearance & { accentCustom?: AccentColors };
+
+/** What a host sends its guests, before `sharedAppearance` takes out what is its own: the
+ *  appearance with the custom accent of its `appearanceExtra`. */
+export function lookForGuests(s: Pick<Settings, "appearance" | "appearanceExtra">): SharedAppearance {
+  return { ...s.appearance, ...(s.appearanceExtra.accent ? { accentCustom: s.appearanceExtra.accent } : {}) };
 }
 
 /** A theme file (`hive theme export`, Copy JSON): the appearance without the media it names. */
@@ -683,6 +700,9 @@ const ID_MAPS = new Map<string, { test(id: string): boolean; what: string }>([
   ["plugins.state", { test: isPluginKey, what: "a plugin's key (kind:id, such as agent:claude)" }],
 ]);
 
+/** Sections whose parts are absent until set (`appearanceExtra.accent`). */
+const OPTIONAL_PARTS = new Map<string, readonly string[]>([["appearanceExtra", ["accent", "fontFaces", "theme"]]]);
+
 /** Why `hive config set` cannot set the dotted `path`, or null when it is a setting. The file
  *  keeps a key this build does not know (a newer build may have written it), so setting one would
  *  store a value nothing here reads. Inside a map of ids (`views.chrome.<view>`,
@@ -697,6 +717,9 @@ export function settingPathProblem(path: string): string | null {
     const where = keys.slice(0, i).join(".");
     const ids = ID_MAPS.get(where);
     if (ids) return ids.test(keys[i]!) ? null : `"${keys[i]}" is not ${ids.what}, and ${where} holds only those`;
+    // A part that is absent until set: set it whole.
+    const parts = OPTIONAL_PARTS.get(where);
+    if (parts?.includes(keys[i]!)) return i === keys.length - 1 ? null : `${keys.slice(0, i + 1).join(".")} is set whole`;
     if (!isObj(at)) return `${where} is ${Array.isArray(at) ? "a list" : "one value"}: set it whole`;
     if (!Object.hasOwn(at, keys[i]!)) {
       const near = settingPaths(all).filter((p) => p.endsWith(`.${keys[i]}`));
@@ -767,6 +790,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
+    appearanceExtra: appearanceExtraOf(isObj(p.appearanceExtra) ? p.appearanceExtra : base.appearanceExtra),
     views: { ...kept("views"), defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
     plugins: { ...kept("plugins"), state },
     agents: {
@@ -842,10 +866,14 @@ export interface FlatTheme {
   contentGlass: boolean; contentOpacity: number; overlayMedia: MediaLayer[];
   preset: string; mode: "dark" | "light"; palette: Palette; radius: number; uiFont: string; monoFont: string;
   terminal: TerminalPalette; pluginSurfaces: "theme" | "opaque"; lookBefore?: LookBefore;
+  /** From `appearanceExtra`: the custom accent, which wins over `accent`, and a theme's font
+   *  files. Written back there, never into `appearance`. */
+  accentCustom?: AccentColors; fontFaces?: FontFaces;
 }
 
-export function flattenAppearance(a: Appearance): FlatTheme {
+export function flattenAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "accent" | "fontFaces"> | null): FlatTheme {
   return {
+    accentCustom: extra?.accent, fontFaces: extra?.fontFaces,
     glass: a.glass.enabled, blur: a.glass.blur, opacity: a.glass.opacity, contentGlass: a.glass.contentGlass, contentOpacity: a.glass.contentOpacity, animate: a.glass.animate,
     wallpaper: a.wallpaper.kind, videoSrc: a.wallpaper.videoSrc, imageSrc: a.wallpaper.imageSrc, videoBrightness: a.wallpaper.brightness,
     accent: a.accent, overlayMedia: a.overlayMedia,
@@ -856,8 +884,9 @@ export function flattenAppearance(a: Appearance): FlatTheme {
 
 /** What a guest paints while a host's workspace is shown: the host's look (`sharedAppearance`),
  *  read in the guest's own fonts. */
-export function guestTheme(own: FlatTheme, host: Appearance): FlatTheme {
-  return { ...flattenAppearance(host), uiFont: own.uiFont, monoFont: own.monoFont };
+export function guestTheme(own: FlatTheme, host: SharedAppearance): FlatTheme {
+  // The host's custom accent is a colour; its font files are its own, as its fonts are.
+  return { ...flattenAppearance(host, { accent: host.accentCustom }), uiFont: own.uiFont, monoFont: own.monoFont, fontFaces: own.fontFaces };
 }
 
 export function nestAppearance(f: FlatTheme): Appearance {
