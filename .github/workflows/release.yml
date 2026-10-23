@@ -102,7 +102,7 @@ jobs:
           echo "hash=$(cat crates/hive-web/www/page.sha256)" >> "$GITHUB_OUTPUT"
 
       - name: Stage release artifacts
-        # What the server serves, under phone/: `hive-net serve --phone <dir>/phone`. Not the
+        # What the server serves, under phone/, and what each hive-net of the release carries. Not the
         # sources, nor B0's echo probe.
         run: |
           set -euo pipefail
@@ -855,6 +855,8 @@ jobs:
   # platform it ships the app or the CLI for. Windows alone stays optional, as its app does.
   build-hive-net:
     name: build ${{ matrix.asset }}
+    # It carries the release's phone page, so a server serves the page of its own release.
+    needs: build-phone-page
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     continue-on-error: ${{ matrix.optional }}
@@ -892,9 +894,17 @@ jobs:
           key: release-${{ matrix.asset }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: The phone page it carries
+        uses: actions/download-artifact@v8
+        with:
+          name: phone-page
+          path: phone-page
+
       - name: Build
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          tar -xzf phone-page/hive-phone-page.tar.gz -C phone-page
+          export HIVE_NET_PHONE_PAGE="$PWD/phone-page/phone"
           cargo build --release --locked --manifest-path crates/hive-net/Cargo.toml
 
       - name: Smoke-test the binary
@@ -907,6 +917,16 @@ jobs:
           want=$(jq -r '.ed25519[0].id' conformance/identity.json)
           got=$("crates/hive-net/target/release/${{ matrix.exe }}" id --identity "$dir")
           [ "$got" = "$want" ] || { echo "hive-net id gave $got, want $want"; exit 1; }
+
+      - name: It serves the release's phone page
+        run: |
+          set -euo pipefail
+          "crates/hive-net/target/release/${{ matrix.exe }}" serve --relay --phone --bind 127.0.0.1:47311 &
+          server=$!
+          for _ in $(seq 50); do got=$(curl -fsS http://127.0.0.1:47311/phone/page.sha256 2>/dev/null) && break; sleep 0.2; done
+          kill "$server"
+          want=$(cat phone-page/hive-phone-page.sha256)
+          [ "${got:-}" = "$want" ] || { echo "it serves the page ${got:-none}, want $want"; exit 1; }
 
       - name: It starts on the macOS releases ran on before (14)
         if: runner.os == 'macOS'

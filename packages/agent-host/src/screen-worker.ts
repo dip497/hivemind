@@ -8,7 +8,7 @@ import { parentPort } from "node:worker_threads";
 import * as HeadlessXtermNS from "@xterm/headless";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
 // Type imports only: run from source, a worker gets no loader that maps `./x.js` to `./x.ts`.
-import type { Cursor, FromScreens, ToScreens } from "./screen-messages.js";
+import type { FromScreens, ScreenCursor, ScreenRows, ToScreens } from "./screen-messages.js";
 
 type HeadlessCtor = typeof import("@xterm/headless").Terminal;
 type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
@@ -136,17 +136,17 @@ function screenOf(s: Screen, lines: number): string {
   return text;
 }
 
-function visibleRows(s: Screen): string {
+function visibleRows(s: Screen): ScreenRows {
   const buf = s.term.buffer.active;
   const rows: string[] = [];
   for (let y = 0; y < s.term.rows; y++) rows.push(buf.getLine(buf.baseY + y)?.translateToString(true) ?? "");
-  return rows.join("\n");
+  return { text: rows.join("\n"), cursor: cursorOf(s) };
 }
 
 /** Read through the public API: `cursorY` counts from `baseY`, the row `visibleRows` starts at. The
  *  input the cursor is in starts where the shell's prompt does, when it marked it, else on the
  *  first row of its line: a command typed past the width wraps onto the rows below it. */
-function cursorOf(s: Screen): Cursor {
+function cursorOf(s: Screen): ScreenCursor {
   const buf = s.term.buffer.active;
   const row = buf.cursorY;
   let top = row;
@@ -155,7 +155,7 @@ function cursorOf(s: Screen): Cursor {
   // A prompt below the cursor was drawn before the screen was cleared; one above the screen leaves
   // every row up to the cursor to it.
   if (prompt <= row) top = Math.max(0, Math.min(top, prompt));
-  return { row, top, hidden: !s.term.modes.showCursor };
+  return { x: buf.cursorX, y: row, top, hidden: !s.term.modes.showCursor };
 }
 
 port.on("message", (m: ToScreens) => {
@@ -176,10 +176,10 @@ port.on("message", (m: ToScreens) => {
       break;
     }
     case "rows": {
-      const rows: Array<[string, string, Cursor]> = [];
+      const rows: Array<[string, ScreenRows]> = [];
       const ready = m.ids.flatMap((id) => {
         const s = screens.get(id);
-        return s ? [new Promise<void>((r) => inTurn(s, () => { rows.push([id, visibleRows(s), cursorOf(s)]); r(); }))] : [];
+        return s ? [new Promise<void>((r) => inTurn(s, () => { rows.push([id, visibleRows(s)]); r(); }))] : [];
       });
       void Promise.all(ready).then(() => post({ t: "rows", req: m.req, rows }));
       break;

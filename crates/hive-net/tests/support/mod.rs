@@ -47,9 +47,21 @@ impl Running {
     }
 }
 
+impl Running {
+    /// Its pid, when it has not exited.
+    pub fn alive(&mut self) -> Option<u32> {
+        matches!(self.child.try_wait(), Ok(None)).then(|| self.child.id())
+    }
+}
+
 /// Start `hive-net <args>`, with `env` set.
 pub fn start(args: &[&str], env: &[(&str, &str)]) -> Running {
-    let mut child = Command::new(BIN)
+    start_from(Path::new(BIN), args, env)
+}
+
+/// Start the hive-net at `bin` with `args`, with `env` set.
+pub fn start_from(bin: &Path, args: &[&str], env: &[(&str, &str)]) -> Running {
+    let mut child = Command::new(bin)
         .args(args)
         .envs(env.iter().copied())
         .stdout(Stdio::piped())

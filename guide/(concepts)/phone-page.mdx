@@ -7,6 +7,10 @@ The phone page is Hivemind on your phone: a web page your phone's browser opens.
 network server serves it, at `/phone/`. It reaches your computer through that server, because a
 browser cannot reach a device directly.
 
+The page comes inside hive-net, so your server always serves the page of its own release. When
+hive-net is upgraded, the running server starts the new one in its place, and the phone gets the new
+page on its next open. An upgrade does not sign your phone out: its key is kept by its browser, not by the server.
+
 <Diagram name="phone-flow" caption="How your phone sees an agent" />
 
 - **Agent** → **background process**: its hook says it asks something.

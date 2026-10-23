@@ -1,6 +1,6 @@
 /** One PTY daemon connection over any transport: attach, stream, and re-attach live tiles after a drop. */
 import type { Duplex } from "node:stream";
-import { type ClientMsg, type ServerMsg, type SessionInfo, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
+import { type ClientMsg, type ServerMsg, type SessionInfo, type Viewport, NothingAsleep, frame, makeLineDecoder } from "./pty-protocol.js";
 import { agentPackageFor } from "./agent-package.js";
 
 export interface SpawnOpts {
@@ -361,11 +361,11 @@ export class DaemonEndpoint {
     this.send({ t: "screen", reqId, id: tileId, lines }).catch(() => { this.screens.delete(reqId); cb(null); });
   }
 
-  /** The session's screen as text, line by line, as the daemon reads it; null when it is not
-   *  running. */
-  async viewport(tileId: string, timeoutMs = 5_000): Promise<string | null> {
+  /** The session's screen as text, line by line, as the daemon reads it, and its cursor; null when
+   *  it is not running. An unread screen is empty, with no cursor. */
+  async viewport(tileId: string, timeoutMs = 5_000): Promise<Viewport | null> {
     const r = await this.request<Extract<ServerMsg, { t: "viewport" }>>({ t: "viewport", reqId: `v${++this.seq}`, id: tileId }, timeoutMs);
-    return r.text;
+    return r.text === null ? null : { text: r.text, ...(r.cursor ? { cursor: r.cursor } : {}) };
   }
 
   /** End the session's process but keep it, its screen saved, for an attach to bring back. Rejects

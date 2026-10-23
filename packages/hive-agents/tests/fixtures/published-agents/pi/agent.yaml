@@ -27,6 +27,19 @@ icon:
 # A message typed while it works steers that turn: pi 1.3.0 shows "Steering: <message>"
 # (Alt+Enter would queue it for after the turn instead).
 steer: true
+# Its prompt with nothing typed, read from pi 1.3.0: the cursor at the start of the line under the
+# rule that opens its editor, with no marker; the person's words start right there.
+emptyPrompt:
+  when:
+    seq:
+    - run: ─
+    - run: space
+      min: 0
+    - end: true
+    at: start
+  scope:
+    kind: tail
+    n: 1
 options:
 - id: model
   label: Model

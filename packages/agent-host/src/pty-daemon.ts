@@ -676,7 +676,10 @@ const server = net.createServer((sock) => {
       case "viewport": {
         const { reqId, id } = msg;
         // Unread (no screen worker) is an empty screen: null would say the session is not running.
-        void manager.viewports([id]).then((rows) => send({ t: "viewport", reqId, id, text: rows ? rows.get(id)?.screen ?? null : manager.hasLive(id) ? "" : null }));
+        void manager.viewports([id]).then((rows) => {
+          const v = rows?.get(id);
+          send({ t: "viewport", reqId, id, text: v ? v.screen : !rows && manager.hasLive(id) ? "" : null, ...(v ? { cursor: { x: v.cursor.x, y: v.cursor.y } } : {}) });
+        });
         break;
       }
       case "list":

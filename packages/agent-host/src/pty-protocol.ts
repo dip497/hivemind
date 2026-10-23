@@ -36,6 +36,28 @@ export interface SessionInfo {
   asleep?: true;
 }
 
+/** Where a terminal's cursor is: column and row of its visible rows, from 0. */
+export interface Cursor {
+  x: number;
+  y: number;
+}
+
+/** A session's visible rows as text, and its cursor among them. */
+export interface Viewport {
+  text: string;
+  /** Absent when the screen has not been read. */
+  cursor?: Cursor;
+}
+
+/** The screen's rows down to the cursor's, that one cut at the cursor: what an agent's prompt
+ *  holds before it. Null when the cursor is unknown. */
+export function upToCursor(v: Viewport): string | null {
+  if (!v.cursor) return null;
+  const rows = v.text.split("\n").slice(0, v.cursor.y + 1);
+  rows[v.cursor.y] = (rows[v.cursor.y] ?? "").slice(0, v.cursor.x);
+  return rows.join("\n");
+}
+
 // Append-only: new fields are optional and ignored by older peers.
 
 /** client (desktop main, `hive attach`, `hive ps`) → daemon */
@@ -109,7 +131,7 @@ export type ServerMsg =
   /** Answers `control`; `error` when `sock` is not an absolute path. */
   | { t: "control"; reqId: string; error?: string }
   /** Answers `viewport`; null when the session is not running. */
-  | { t: "viewport"; reqId: string; id: string; text: string | null }
+  | { t: "viewport"; reqId: string; id: string; text: string | null; cursor?: Cursor }
   | { t: "error"; reqId?: string; message: string };
 
 export const SOCKET_NAME = "pty-daemon.sock";

@@ -207,6 +207,8 @@ test("one woken that neither says it is up nor settles is told what waited after
   assert.equal(typed("a3"), "");
   t.mock.timers.tick(1_000);
   t.mock.timers.tick(300);
+  // What waited is typed once its prompt is read, after the timer.
+  await new Promise((r) => setImmediate(r));
   assert.match(typed("a3"), /hive ctl inbox/);
 });
 

@@ -17,6 +17,7 @@ import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
 import { hcpSockPath, holderOf, readOrCreateToken, speaksFor } from "@hivemind/agent-host/hooks/token";
 import { StatusStore, isSessionStatus, type ScreenState } from "@hivemind/agent-host/status-store";
 import { ControlRefused } from "@hivemind/agent-host/daemon-endpoint";
+import { upToCursor, type Viewport } from "@hivemind/agent-host/pty-protocol";
 import { toBareId, toPtyId } from "@hivemind/workspace-api/tile-id";
 import type { WorkspaceServer } from "@hivemind/workspace-api/server";
 import type { AgentItem } from "@hivemind/workspace-api/agents";
@@ -57,6 +58,11 @@ export interface ControlPlaneOptions {
   /** Whether a tile's agent reports its turns (its file says `turnSignal`): only then is a turn
    *  its screen shows one whose end will be known. */
   signalsTurns?(bareTile: string): boolean;
+  /** How the screen of a tile's agent reads, up to the cursor, with nothing typed at its prompt
+   *  (its file says `emptyPrompt`). */
+  emptyPrompt?(bareTile: string): ((upToCursor: string) => boolean) | undefined;
+  /** A tile's screen and its cursor, by its pty id; null when it has none here. */
+  viewport?(ptyId: string): Promise<Viewport | null>;
   /** A tile the control plane spawned, written to its workspace: the embedder starts its session,
    *  with `prompt` its first task. Every client has been told of it, and lays it out. */
   spawned(spawn: { tileId: string; repo: string; prompt?: string; background: boolean }): void;
@@ -143,6 +149,12 @@ export class ControlPlane {
       const bare = toBareId(ptyId);
       const now = this.status.get(bare)?.state;
       return now !== undefined && now !== "exited" && (o.signalsTurns?.(bare) ?? false);
+    }, async (ptyId) => {
+      // What the prompt holds is read off its screen, where its agent says how an empty one reads.
+      const empty = o.emptyPrompt?.(toBareId(ptyId));
+      const screen = empty && (await o.viewport?.(ptyId));
+      const text = screen ? upToCursor(screen) : null;
+      return empty && text !== null ? empty(text) : undefined;
     });
     this.inbox = new Inbox((to, wanted, rung) => this.mailbox.deliver(toPtyId(to), DOORBELL, rung, { wanted, atPrompt: true }));
     // However a turn is known to run (its hook, or the screen of an agent that reports its turns:

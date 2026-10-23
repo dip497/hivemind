@@ -386,11 +386,13 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // A tile's last line changed: the person's phone's Home is told, once it is served.
   let homeChanged = (): void => {};
   const said = new LastSaid({ tileSessionsDir: path.join(o.dir, TILE_SESSIONS_DIR) });
+  // A session's screen and its cursor.
+  const viewport = (ptyId: string) => (endpoint.has(ptyId) ? endpoint.viewport(ptyId) : Promise.resolve(null));
   // How the host watches a session it starts or wakes.
   const hostStarted = {
     terminals, holds,
     status: (bare: string) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
-    screen: (ptyId: string) => (endpoint.has(ptyId) ? endpoint.viewport(ptyId) : Promise.resolve(null)),
+    screen: (ptyId: string) => viewport(ptyId).then((v) => v?.text ?? null),
   };
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,
@@ -402,6 +404,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     steers: (bare) => !!manifestOf(heldBoards(store), bare)?.steer,
     pastesPhotos: (bare) => !!manifestOf(heldBoards(store), bare)?.pastedImages,
     signalsTurns: (bare) => !!manifestOf(heldBoards(store), bare)?.caps.turnSignal,
+    emptyPrompt: (bare) => manifestOf(heldBoards(store), bare)?.emptyPrompt,
+    viewport,
     // Nobody lays a spawned tile out: the host starts it, once it is in its workspace.
     spawned: (spawn) => {
       queueMicrotask(() => void startSpawned({

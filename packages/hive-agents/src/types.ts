@@ -419,6 +419,9 @@ export interface AgentProviderDef {
   steer?: boolean;
   /** It attaches an image whose path is pasted alone into its prompt. */
   pastedImages?: boolean;
+  /** Whether its screen, up to the cursor, shows its prompt with nothing typed there (see
+   *  AgentManifest.emptyPrompt). */
+  emptyPrompt?: (upToCursor: string) => boolean;
 }
 
 /** The keys that allow, and the keys that deny, what an agent asks on its screen. */

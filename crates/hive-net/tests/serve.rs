@@ -181,3 +181,39 @@ fn on_a_closed_network_the_admins_enrolment_link_puts_one_device_on_the_relay_an
     assert_eq!(again.after("network link: "), link);
     fs::remove_dir_all(root).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn a_server_whose_binary_an_upgrade_replaces_runs_the_new_one_in_its_place_on_the_same_port() {
+    let root = temp("serve-upgrade");
+    let bin = root.join("hive-net");
+    fs::copy(BIN, &bin).unwrap();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let bind = format!("127.0.0.1:{port}");
+    let mut server = start_from(&bin, &["serve", "--relay", "--bind", &bind], &[]);
+    let relay = server.after("relay serving on ");
+    let pid = server.alive().expect("it runs");
+
+    // As the installer upgrades it: the new binary written beside it, then moved over it.
+    let next = root.join("hive-net.new");
+    fs::copy(BIN, &next).unwrap();
+    fs::rename(&next, &bin).unwrap();
+
+    server.after("hive-net was upgraded: starting the new one in its place");
+    assert_eq!(
+        server.after("relay serving on "),
+        relay,
+        "the same address again"
+    );
+    assert_eq!(
+        server.alive(),
+        Some(pid),
+        "the same process, so its service never saw it stop"
+    );
+    let answer = std::net::TcpStream::connect(&bind);
+    assert!(answer.is_ok(), "it listens on {bind} again");
+}

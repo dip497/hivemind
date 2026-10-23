@@ -5,7 +5,7 @@
  */
 import type { ScreenReading, TileStatus } from "@hivemind/agents";
 import { oneLine } from "./one-line.js";
-import type { Cursor } from "./screen-messages.js";
+import type { ScreenCursor } from "./screen-messages.js";
 
 /**
  * A screen, sampled every poll, can show an agent's idle prompt for a moment between two
@@ -52,7 +52,7 @@ const DRAWN = /^[\s\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e\u00b7\u2010-\u2027\u2030
  * terminal, the cursor waits on its question (`Overwrite b? [y/N]`, a password), which is the
  * line. A question the shell asks itself (`read -p`) is its prompt's, and is passed over.
  */
-export function lastLine(screen: string, cursor: Cursor, own = true): string {
+export function lastLine(screen: string, cursor: ScreenCursor, own = true): string {
   const rows = screen.split("\n");
   const from = !cursor.hidden && own ? cursor.top - 1 : rows.length - 1;
   for (let y = Math.min(from, rows.length - 1); y >= 0; y--) {
@@ -74,7 +74,7 @@ export class ScreenWatcher {
     /** Each session's screen, its cursor and what it runs, and whether that holds its terminal
      *  (`lastLine`'s `own`); a session that is gone is left out. Null: the screens could not be
      *  read this time, which says nothing about the sessions. */
-    read: (ids: string[]) => Promise<Map<string, { cmd: string; screen: string; cursor: Cursor; own?: boolean }> | null>;
+    read: (ids: string[]) => Promise<Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }> | null>;
     /** The agent's own detector for what it runs; undefined for a program that is not an agent. */
     detect: (cmd: string, screen: string) => ScreenReading | undefined;
     report: (id: string, reading: ScreenReading) => void;
@@ -102,7 +102,7 @@ export class ScreenWatcher {
     const ids = [...this.dirty];
     this.dirty.clear();
     this.reading = true;
-    let got: Map<string, { cmd: string; screen: string; cursor: Cursor; own?: boolean }> | null;
+    let got: Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }> | null;
     try { got = await this.o.read(ids); } finally { this.reading = false; }
     if (!got) { for (const id of ids) this.dirty.add(id); return; }
     for (const id of ids) {

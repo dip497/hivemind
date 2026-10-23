@@ -18,7 +18,7 @@ services:
       context: ..
       dockerfile: infra/Dockerfile
     image: hivemind/hive-net:local
-    command: [serve, --all, --data, /data, --phone, /phone, --views, "3341", --url, "${HIVE_URL:-http://127.0.0.1:3340}", --name, "${HIVE_NAME:-}", --push-allow, "${HIVE_PUSH_ALLOW:-}"]
+    command: [serve, --all, --data, /data, --phone, --views, "3341", --url, "${HIVE_URL:-http://127.0.0.1:3340}", --name, "${HIVE_NAME:-}", --push-allow, "${HIVE_PUSH_ALLOW:-}"]
     ports:
       - "3340:3340"
       - "3341:3341"

@@ -2,7 +2,7 @@
 # Build the phone page into www/: the wasm and its JS glue (www/pkg), the app's TypeScript checked
 # and bundled with the glue into one file (www/main.js; each module also in www/js, for tests), its
 # fonts, the list the service worker keeps (shell.json), and a compressed copy of
-# each file for `hive-net serve --phone`; and the page's hash (www/page.sha256), which the desktop's
+# each file for `hive-net serve --phone-folder`, and for a release's hive-net to carry; and the page's hash (www/page.sha256), which the desktop's
 # pairing dialog compares with what a server serves. Prints the wasm's size raw, gzipped and
 # brotli'd, and the hash.
 #

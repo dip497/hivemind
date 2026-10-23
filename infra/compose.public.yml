@@ -6,7 +6,7 @@
 #     docker compose -f infra/compose.yml -f infra/compose.public.yml up -d
 services:
   hive-net:
-    command: [serve, --all, --data, /data, --phone, /phone, --views, "8443", --domain, "${HIVE_DOMAIN:?name the server: HIVE_DOMAIN=hive.example.com}", --contact, "${HIVE_CONTACT:-}", --name, "${HIVE_NAME:-}"]
+    command: [serve, --all, --data, /data, --phone, --views, "8443", --domain, "${HIVE_DOMAIN:?name the server: HIVE_DOMAIN=hive.example.com}", --contact, "${HIVE_CONTACT:-}", --name, "${HIVE_NAME:-}"]
     ports: !override
       - "443:443"
       - "80:80"

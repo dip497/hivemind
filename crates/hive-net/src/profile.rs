@@ -231,7 +231,11 @@ pub fn verify(file: &Signed) -> Result<Verified> {
 /// A profile from what someone gave: a built-in name, a link, or a signed file's text.
 pub fn load(given: &str) -> Result<Verified> {
     // `hosted` named servers that were never run: a device that chose it is on the local network.
-    let given = if given.trim() == "hosted" { "local" } else { given };
+    let given = if given.trim() == "hosted" {
+        "local"
+    } else {
+        given
+    };
     match builtin(given.trim()) {
         Some(found) => Ok(found),
         None => verify(&signed(given)?),

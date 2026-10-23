@@ -31,7 +31,7 @@ import { NothingAsleep, type SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
 import { splitAtBoundary } from "./vt-boundary.js";
 import { ScreenThread } from "./screen-thread.js";
-import type { Cursor } from "./screen-messages.js";
+import type { ScreenCursor } from "./screen-messages.js";
 
 /** Whether process `pid` is still running (signal 0 only checks). */
 function alive(pid: number): boolean {
@@ -910,9 +910,9 @@ export class SessionManager {
   /** The visible rows of each live session's screen as text, its cursor, and the command it runs;
    *  while the cursor shows, whether that command holds its terminal (`own`: undefined where that
    *  cannot be told). Null when the screen worker gave no answer: unknown, not gone. */
-  async viewports(ids: string[]): Promise<Map<string, { cmd: string; screen: string; cursor: Cursor; own?: boolean }> | null> {
+  async viewports(ids: string[]): Promise<Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }> | null> {
     const live = ids.filter((id) => this.hasLive(id));
-    const out = new Map<string, { cmd: string; screen: string; cursor: Cursor; own?: boolean }>();
+    const out = new Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }>();
     if (!live.length) return out;
     const rows = await this.screens.rows(live);
     if (!rows) return null;

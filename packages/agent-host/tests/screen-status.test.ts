@@ -4,7 +4,7 @@ import { ScreenWatcher, SCREEN_WORKING_HOLD_MS, stabilizeScreenStatus } from "..
 import { SessionManager, type ManagedPty } from "../src/pty-session-manager.ts";
 
 /** The cursor of a screen read for its status, which only the line looks at. */
-const cursor = { row: 0, top: 0, hidden: true };
+const cursor = { x: 0, y: 0, top: 0, hidden: true };
 
 test("a lone idle blip after working is held; a second idle past the window is the end", () => {
   const lw = { t: null as number | null };
@@ -88,9 +88,9 @@ test("a wait the screen says it is reports again when it says another, and sayin
 });
 
 test("each session's last line with text is reported as it changes, an agent's or any program's, cut to 160 characters", async () => {
-  const screens = new Map<string, { cmd: string; screen: string; cursor: { row: number; top: number; hidden: boolean } }>();
+  const screens = new Map<string, { cmd: string; screen: string; cursor: { x: number; y: number; top: number; hidden: boolean } }>();
   // The cursor shown on row `row`, in an input of that row alone, as the screen worker reads it.
-  const at = (row: number) => ({ row, top: row, hidden: false });
+  const at = (row: number) => ({ x: 0, y: row, top: row, hidden: false });
   const lines: string[] = [];
   const w = new ScreenWatcher({
     read: async (ids) => new Map(ids.flatMap((id) => { const s = screens.get(id); return s ? [[id, s] as const] : []; })),

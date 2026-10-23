@@ -1027,13 +1027,18 @@ function hostStarted() {
     terminals,
     holds: (ptyId: string) => onYourDevices.holds(ptyId) || hasRemotePty(ptyId) || hasSession(ptyId),
     status: (bare: string) => { const s = control.status.get(bare); return s && tileStatusOf(s).status; },
-    screen: (ptyId: string) => (hasRemotePty(ptyId) ? viewportRemotePty(ptyId) : ptyDaemon.viewportPty(ptyId)),
+    screen: (ptyId: string) => viewportOf(ptyId).then((v) => v?.text ?? null),
   };
 }
 
 /** Each tile's last line, for the windows and devices that watch it (`tile.watchLines`), and for
  *  the person's phone's Home, told as one changes. */
 const tileLines = new TileLines({ server: () => workspaceServer, changed: () => homeChanged() });
+
+/** A session's screen and its cursor, wherever it runs. */
+function viewportOf(ptyId: string) {
+  return hasRemotePty(ptyId) ? viewportRemotePty(ptyId) : ptyDaemon.viewportPty(ptyId);
+}
 
 const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
@@ -1046,6 +1051,8 @@ const control: ControlPlane = new ControlPlane({
   steers: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.steer,
   pastesPhotos: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.pastedImages,
   signalsTurns: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.caps.turnSignal,
+  emptyPrompt: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.emptyPrompt,
+  viewport: viewportOf,
   // The host starts a spawned tile, its task on the agent's command line where it takes one there:
   // a window that shows it joins it, so whichever opens it first, the agent gets its task.
   spawned: (spawn) => queueMicrotask(() => void startSpawned({

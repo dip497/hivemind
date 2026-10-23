@@ -3,7 +3,7 @@
 import { Worker } from "node:worker_threads";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Cursor, FromScreens, ToScreens } from "./screen-messages.js";
+import type { FromScreens, ScreenRows, ToScreens } from "./screen-messages.js";
 
 /** Built next to this code as .js (the app's bundle, the compiled `hive`), or run from source as .ts. */
 function workerFile(): URL {
@@ -64,9 +64,8 @@ export class ScreenThread {
 
   /** Each session's visible rows as text, and its cursor. Null when the worker gave no answer: the
    *  rows are unknown, not empty. */
-  rows(ids: string[]): Promise<Map<string, { text: string; cursor: Cursor }> | null> {
-    return this.ask((req) => ({ t: "rows", req, ids })).then((m) =>
-      m?.t === "rows" ? new Map(m.rows.map(([id, text, cursor]) => [id, { text, cursor }])) : null);
+  rows(ids: string[]): Promise<Map<string, ScreenRows> | null> {
+    return this.ask((req) => ({ t: "rows", req, ids })).then((m) => (m?.t === "rows" ? new Map(m.rows) : null));
   }
 
   private ask(build: (req: number) => ToScreens): Promise<FromScreens | null> {
