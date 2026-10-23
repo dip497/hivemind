@@ -102,3 +102,17 @@ export function shouldNotify(
   if (kind !== "needs" && dndActive(s, now)) return false;
   return true;
 }
+
+/** A widget's notices: at most one per widget in this long, each at most this many characters. */
+const WIDGET_NOTICE_GAP_MS = 10_000;
+const WIDGET_NOTICE_MAX = 200;
+
+/** A widget's `hive.notify`: the text to show as an OS pop-up now, or null. It follows the master
+ *  switch, the pop-up switch and Do Not Disturb (a widget is never urgent), and stays quiet within
+ *  WIDGET_NOTICE_GAP_MS of that widget's last notice (`last`). The text is cut to WIDGET_NOTICE_MAX. */
+export function widgetNotice(s: NotificationSettings, text: unknown, last: number | undefined, now: number): string | null {
+  if (!s.enabled || !s.osPopups || dndActive(s, now)) return null;
+  if (last !== undefined && now - last < WIDGET_NOTICE_GAP_MS) return null;
+  const chars = [...String(text ?? "").slice(0, WIDGET_NOTICE_MAX * 2)];
+  return chars.length > WIDGET_NOTICE_MAX ? `${chars.slice(0, WIDGET_NOTICE_MAX - 1).join("")}…` : chars.join("");
+}

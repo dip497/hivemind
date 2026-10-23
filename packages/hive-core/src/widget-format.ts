@@ -114,10 +114,18 @@ export function widgetTree(w: PlacedWidget, pkg: WidgetPackage | undefined, draw
   return drawn ?? null;
 }
 
-/** The note colour a widget's drawing tints its card (`tint`), if any. */
+/** The note colour a widget's drawing tints its card (`tint`), if any: one of the note colours,
+ *  else none (any other word would draw dark ink on a card of no colour). */
 export function widgetTint(tree: unknown): string | null {
   const t = (tree as { tint?: unknown } | null)?.tint;
-  return typeof t === "string" && /^[a-z]+$/.test(t) ? t : null;
+  return typeof t === "string" && NOTE_COLORS.includes(t) ? t : null;
+}
+
+/** Why the `tint` of a drawing (`at`) colours nothing: it is set, and is not a note colour; else null. */
+export function tintProblem(tree: unknown, at = "the tree"): string | null {
+  const t = (tree as { tint?: unknown } | null)?.tint;
+  if (t === undefined || widgetTint(tree)) return null;
+  return `${at} has the tint ${JSON.stringify(t)}, which is not a note colour, so its card is drawn without one; the note colours: ${NOTE_COLORS.join(", ")}`;
 }
 
 const MAX_VIEW_IMAGES = 1_000_000;

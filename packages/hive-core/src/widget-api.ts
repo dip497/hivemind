@@ -74,7 +74,7 @@ export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Writt
 
 /** Something to draw. The app draws it in the theme; a widget never draws pixels itself. */
 type Node =
-  /** \`tint\` on the outermost stack colours the card as a note (\`yellow\`, \`pink\`, \`blue\`…). */
+  /** \`tint\` on the outermost stack colours the card as a note: \`yellow\`, \`peach\`, \`pink\`, \`violet\`, \`blue\` or \`green\`. Any other word colours nothing. */
   | { type: "stack"; children: Node[]; fill?: boolean; tint?: string }
   | { type: "row"; children: Node[] }
   /** One line, cut short with … when too long, unless \`wrap\`: then whole, on as many lines as it needs. */

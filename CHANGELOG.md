@@ -23,6 +23,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ### Changed
 
 - **Breaking:** a view's own keys (`keys` on a command) no longer act while you type in a terminal or a field: the key is the terminal program's there.
+- `hive theme export` and Settings → Appearance → **Copy JSON** leave out the wallpaper's photo or video and the overlays, and say so: they are files on your computer the recipient does not have, and an older wallpaper's address named your home folder. `hive theme import` and **Import…** keep the photo, video and overlays you have. `hive theme export <file> --json` adds `leftOut`.
+- A widget's `hive.notify` follows Settings → Notifications (the switch, **Native OS popups** and **Do Not Disturb**), shows at most one notice every 10 seconds per widget, and cuts its text to 200 characters.
 
 ### Fixed
 
@@ -31,6 +33,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.
 - Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
 - An agent whose background subagents never reported their end no longer shows "working" forever: two minutes after the last subagent signal they stop counting, now on the daemon that runs the agent.
+- A setting a newer version wrote in settings.json, in `appearance` or any other section, survives a change made by this version; before, any change erased it. A guest who joins your workspace still gets only the named parts of your look.
+- A widget's `tint` colours its card only when it is a note colour (`yellow`, `peach`, `pink`, `violet`, `blue` or `green`); any other word, `ink` included, drew dark text on a card of no colour and now leaves the card plain. `hive plugins check` reports such a tint.
 
 ## [2026.10.5] — 2026-10-21
 

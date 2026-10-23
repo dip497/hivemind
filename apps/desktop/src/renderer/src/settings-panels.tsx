@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { getSettings, patchSettings } from "./settings-store";
+import { exportAppearance, importAppearance } from "@hivemind/core/settings-schema";
 import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, ShapeAndTypeControls, TerminalColors,
@@ -41,8 +42,8 @@ function AppearancePrefs() {
   const [advanced, setAdvanced] = useState(false);
 
   const exportTheme = async () => {
-    const json = JSON.stringify(getSettings().appearance, null, 2);
-    try { await navigator.clipboard.writeText(json); toast.success("Theme copied as JSON."); }
+    const { theme, note } = exportAppearance(getSettings().appearance);
+    try { await navigator.clipboard.writeText(JSON.stringify(theme, null, 2)); toast.success("Theme copied as JSON.", note ? { description: note } : undefined); }
     catch { toast.error("Could not reach the clipboard. Use `hive theme export <file>`."); }
   };
   const importTheme = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,7 +54,8 @@ function AppearancePrefs() {
       const raw: unknown = JSON.parse(await f.text());
       // Accept either a whole settings.json or a bare appearance object.
       const a = raw && typeof raw === "object" && "appearance" in (raw as Record<string, unknown>) ? (raw as { appearance: unknown }).appearance : raw;
-      patchSettings("appearance", a); // main + mergeAppearance validate it
+      // Checked, and the wallpaper media and overlays a theme file leaves out stay yours.
+      patchSettings("appearance", importAppearance(a, getSettings().appearance));
       toast.success(`Imported ${f.name}`);
     } catch { toast.error("That file is not a hivemind theme."); }
   };

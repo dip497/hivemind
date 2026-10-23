@@ -465,6 +465,29 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|oklch\([^)]*\)|oklab\([^)]*\)|[a-z]{3,20})$/;
 const color = (v: unknown, def: string) => (typeof v === "string" && COLOR_RE.test(v.trim()) ? v.trim() : def);
 
+/** At most this much JSON of the keys a section does not know, per section. */
+const UNKNOWN_MAX = 64 * 1024;
+
+/** The keys of a section this build does not know, as a newer build wrote them: kept, so writing
+ *  a setting here never erases them. A patch that leaves one out keeps `base`'s, and one set to
+ *  undefined removes it. Each is copied as JSON (what is not JSON is dropped), and at most
+ *  `UNKNOWN_MAX` in all. */
+function keptUnknown(raw: Record<string, unknown>, known: ReadonlySet<string>, base: object): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  let size = 0;
+  for (const from of [raw, base as Record<string, unknown>]) {
+    for (const k in from) {
+      if (known.has(k) || !Object.hasOwn(from, k) || (from !== raw && Object.hasOwn(raw, k))) continue;
+      let json: string | undefined;
+      try { json = JSON.stringify(from[k]); } catch { continue; } // a cycle or a bigint
+      if (json === undefined || size + k.length + json.length > UNKNOWN_MAX) continue;
+      size += k.length + json.length;
+      out[k] = JSON.parse(json);
+    }
+  }
+  return out;
+}
+
 function mediaLayer(p: unknown, i: number): MediaLayer | null {
   if (!isObj(p)) return null;
   const url = typeof p.url === "string" && p.url.startsWith("hivemedia://") ? p.url : null;
@@ -480,6 +503,8 @@ function mediaLayer(p: unknown, i: number): MediaLayer | null {
     anchor: ANCHORS.includes(p.anchor as MediaAnchor) ? (p.anchor as MediaAnchor) : "center",
   };
 }
+
+const APPEARANCE_KEYS = new Set(Object.keys(DEFAULT_APPEARANCE));
 
 export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARANCE): Appearance {
   const p = isObj(raw) ? raw : {};
@@ -523,22 +548,71 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
     },
     pluginSurfaces: p.pluginSurfaces === "opaque" ? "opaque" : "theme",
     overlayMedia: (Array.isArray(p.overlayMedia) ? p.overlayMedia : []).map(mediaLayer).filter((m): m is MediaLayer => !!m),
+    ...keptUnknown(p, APPEARANCE_KEYS, base),
   };
 }
 
 /** A host's look as a guest shows it, from anything (a peer's message is untrusted): checked as
  *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper
  *  becomes the default one, and overlays go: their media is the host's alone. Fonts are not the
- *  look: a guest reads in their own, so the host's are not sent. */
+ *  look: a guest reads in their own, so the host's are not sent. Each field is named: a field
+ *  added later, or one a newer build wrote, reaches guests only when it is added here. */
 export function sharedAppearance(raw: unknown): Appearance {
   const a = mergeAppearance(raw);
   const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
   return {
-    ...a,
+    preset: a.preset,
+    mode: a.mode,
+    palette: a.palette,
+    accent: a.accent,
+    radius: a.radius,
     uiFont: DEFAULT_APPEARANCE.uiFont,
     monoFont: DEFAULT_APPEARANCE.monoFont,
+    glass: a.glass,
     wallpaper: { kind: media ? DEFAULT_APPEARANCE.wallpaper.kind : a.wallpaper.kind, brightness: a.wallpaper.brightness },
+    terminal: a.terminal,
+    pluginSurfaces: a.pluginSurfaces,
     overlayMedia: [],
+  };
+}
+
+/** A theme file (`hive theme export`, Copy JSON): the appearance without the media it names. */
+export type ThemeFile = Omit<Appearance, "wallpaper" | "overlayMedia"> & { wallpaper: Omit<Appearance["wallpaper"], "imageSrc" | "videoSrc"> };
+
+const MEDIA_WORDS: Record<string, string> = { "wallpaper.imageSrc": "the wallpaper picture", "wallpaper.videoSrc": "the wallpaper video", overlayMedia: "the overlays" };
+
+/** The appearance as a theme file, each field named. A picture, video or overlay is a file on this
+ *  computer the recipient does not have (an old wallpaper's address even names the home folder),
+ *  so each is left out: `leftOut` names those that were set, and `note` says so in words. A key a
+ *  newer build wrote stays out too: it is that build's to export. */
+export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: string[]; note: string | null } {
+  const leftOut = [
+    ...(a.wallpaper.imageSrc ? ["wallpaper.imageSrc"] : []),
+    ...(a.wallpaper.videoSrc ? ["wallpaper.videoSrc"] : []),
+    ...(a.overlayMedia.length > 0 ? ["overlayMedia"] : []),
+  ];
+  const words = leftOut.map((k) => MEDIA_WORDS[k]!);
+  const list = words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words[0];
+  return {
+    theme: {
+      preset: a.preset, mode: a.mode, palette: a.palette, accent: a.accent, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont,
+      glass: a.glass, wallpaper: { kind: a.wallpaper.kind, brightness: a.wallpaper.brightness }, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
+    },
+    leftOut,
+    note: list ? `Left out ${list}: a theme file holds no media files.` : null,
+  };
+}
+
+/** A theme file applied over the person's own appearance `cur`: checked as settings are, and the
+ *  media it leaves out kept as `cur` has them, so a file of `exportAppearance` never removes yours. */
+export function importAppearance(raw: unknown, cur: Appearance): Appearance {
+  const a = mergeAppearance(raw, cur);
+  const p = isObj(raw) ? raw : {};
+  const w = isObj(p.wallpaper) ? p.wallpaper : {};
+  return {
+    ...a,
+    wallpaper: { ...a.wallpaper, imageSrc: "imageSrc" in w ? a.wallpaper.imageSrc : cur.wallpaper.imageSrc, videoSrc: "videoSrc" in w ? a.wallpaper.videoSrc : cur.wallpaper.videoSrc },
+    overlayMedia: "overlayMedia" in p ? a.overlayMedia : cur.overlayMedia,
   };
 }
 
@@ -565,6 +639,9 @@ export function toolPreferences(s: Pick<Settings, "plugins">, installed: readonl
   }
   return { enabledPlugins, disabledTools };
 }
+
+/** The keys each section checks; any other is kept as it is (`keptUnknown`). */
+const SECTION_KEYS = Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, new Set(isObj(v) ? Object.keys(v) : [])])) as Record<keyof Settings, Set<string>>;
 
 /** Validate + fill a parsed settings.json (any junk) into a Settings.
  *
@@ -612,11 +689,13 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   const agents = isObj(p.agents) ? p.agents : {};
   // Plugin state as stored; else (a partial merge) as `base` has it.
   const state = isObj(plugins.state) ? parsePluginStates(plugins.state) : base.plugins.state;
+  // Each section keeps the keys it does not know (a newer build's) beside the ones it checks.
+  const kept = (k: keyof Settings) => keptUnknown(isObj(p[k]) ? p[k] : {}, SECTION_KEYS[k], base[k] as object);
   return {
     v: 1,
     appearance: mergeAppearance(p.appearance, base.appearance),
-    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
-    plugins: { state },
+    views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers), ...kept("views") },
+    plugins: { state, ...kept("plugins") },
     agents: {
       defaultAgent: str(agents.defaultAgent, base.agents.defaultAgent, 64),
       autoInstall: bool(agents.autoInstall, base.agents.autoInstall),
@@ -626,11 +705,13 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
         .filter((x): x is string => typeof x === "string" && AGENT_KEY_RE.test(x)).slice(0, 200),
       whenAgentStartsAgent: WHEN_AGENT_STARTS_AGENT.includes(agents.whenAgentStartsAgent as WhenAgentStartsAgent)
         ? (agents.whenAgentStartsAgent as WhenAgentStartsAgent) : base.agents.whenAgentStartsAgent,
+      ...kept("agents"),
     },
-    profile: profileOf(p.profile, base.profile),
-    network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
-    browserApp: browserAppOf(p.browserApp, base.browserApp),
-    quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
+    // Here only: `profileOf` also reads what a peer sends, which keeps nothing it does not check.
+    profile: { ...profileOf(p.profile, base.profile), ...kept("profile") },
+    network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck), ...kept("network") },
+    browserApp: { ...browserAppOf(p.browserApp, base.browserApp), ...kept("browserApp") },
+    quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning), ...kept("quit") },
   };
 }
 

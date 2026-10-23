@@ -77,6 +77,21 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
     }
   }, 120_000);
 
+  test("a widget whose drawing asks for a tint that is not a note colour is told so", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-tint-"));
+    const dir = path.join(tmp, "tally");
+    try {
+      expect(hive(["plugins", "new", "widget", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      fs.writeFileSync(path.join(dir, "widget.js"), `hive.on("start", () => hive.render({ type: "stack", tint: "red", children: [{ type: "text", text: "hi" }] }));\n`);
+      const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect((r.json as Report).problems.filter((p) => p.step === "draw")).toEqual([
+        expect.objectContaining({ file: "widget.js", message: expect.stringContaining('tint "red", which is not a note colour') }),
+      ]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   test("the type check never runs a tsc the plugin's folder holds", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-tsc-"));
     const dir = path.join(tmp, "tally");

@@ -9,6 +9,7 @@ import {
   normalizeNotificationSettings,
   dndActive,
   shouldNotify,
+  widgetNotice,
   type NotificationSettings,
 } from "../../src/shared/notification-settings.ts";
 
@@ -68,6 +69,19 @@ test("DND mutes done + error but NEVER needs-you", () => {
 test("DND disabled is a no-op regardless of window", () => {
   const s = S({ dnd: { enabled: false, start: "00:00", end: "23:59" } });
   assert.equal(dndActive(s, new Date(2025, 0, 1, 3, 0)), false);
+});
+
+test("a widget's notice shows as the person allows OS pop-ups, outside DND, once per widget in 10 s, its text cut short", () => {
+  const noon = new Date(2025, 0, 1, 12, 0).getTime();
+  assert.equal(widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "Build passed", undefined, noon), "Build passed");
+  // A widget is never urgent: Do Not Disturb mutes it, as the master and pop-up switches do.
+  for (const s of [S({ enabled: false }), S({ osPopups: false }), S({ dnd: { enabled: true, start: "09:00", end: "17:00" } })]) {
+    assert.equal(widgetNotice(s, "Build passed", undefined, noon), null);
+  }
+  assert.equal(widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "again", noon - 9_000, noon), null);
+  assert.equal(widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "again", noon - 10_000, noon), "again");
+  const long = widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "x".repeat(5_000), undefined, noon) ?? "";
+  assert.deepEqual([[...long].length <= 200, long.endsWith("…")], [true, true]);
 });
 
 test("normalize backfills missing fields from an older settings blob", () => {

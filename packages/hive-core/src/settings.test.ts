@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, presetPatch, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, presetPatch, exportAppearance, flattenAppearance, getPath, importAppearance, mergeAppearance, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { cssColorToRgb } from "./css-color.js";
@@ -87,6 +87,29 @@ describe("settings schema", () => {
     expect(JSON.stringify(got)).not.toContain("host");
     expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness });
     expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });
+    // A key this build does not know, which settings keep, never reaches a guest; nor does a picture's path.
+    const later = sharedAppearance({ ...host, wallpaper: { kind: "image", imageSrc: "hivemedia://media/host-cat.png", brightness: 0.7 }, theme: { before: "/home/host/theme.json" } });
+    expect([Object.hasOwn(later, "theme"), JSON.stringify(later).includes("host")]).toEqual([false, false]);
+  });
+
+  test("a theme file holds the look without its media, says what it left out, and importing it keeps the media you have", () => {
+    const layer = (url: string) => ({ id: url, url, kind: "image", opacity: 1, fit: "cover", size: 1, anchor: "center" });
+    const mine = mergeAppearance({
+      ...applyPreset(DEFAULT_APPEARANCE, PRESETS.nord!), radius: 6,
+      wallpaper: { kind: "image", imageSrc: "hm-media://v/%2Fhome%2Falice%2Fcat.png", videoSrc: "hivemedia://media/alice-clip.mp4", brightness: 0.7 },
+      overlayMedia: [layer("hivemedia://media/alice-cat.png")], someFutureKey: { before: "/home/alice/theme.json" },
+    });
+    const { theme, leftOut, note } = exportAppearance(mine);
+    expect(JSON.stringify(theme)).not.toContain("alice");
+    expect(theme).toMatchObject({ preset: "nord", radius: 6, wallpaper: { kind: "image", brightness: 0.7 } });
+    expect([leftOut, note]).toEqual([["wallpaper.imageSrc", "wallpaper.videoSrc", "overlayMedia"], expect.stringContaining("the wallpaper picture, the wallpaper video and the overlays")]);
+    expect(exportAppearance(DEFAULT_APPEARANCE)).toMatchObject({ leftOut: [], note: null });
+    // Your own file back undoes everything; someone else's keeps their media.
+    const file = JSON.parse(JSON.stringify(theme));
+    expect(importAppearance(file, mine)).toEqual(mine);
+    const theirs = mergeAppearance({ wallpaper: { kind: "video", videoSrc: "hivemedia://media/bo.mp4" }, overlayMedia: [layer("hivemedia://media/bo.png")] });
+    const got = importAppearance(file, theirs);
+    expect([got.preset, got.wallpaper.videoSrc, got.wallpaper.imageSrc, got.overlayMedia]).toEqual(["nord", "hivemedia://media/bo.mp4", undefined, theirs.overlayMedia]);
   });
 
   test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {
@@ -225,7 +248,24 @@ describe("settings schema", () => {
     expect(toolPreferences(s)).toEqual({ enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser"] });
   });
 
-  test("mergeSettings: junk falls back per field, values are clamped, unknown keys dropped", () => {
+  test("a key a newer build wrote is kept in every section, as JSON within a bound; known keys are checked as before", () => {
+    const future = { at: "2027", layers: [1, 2] };
+    const sections = ["appearance", "views", "plugins", "agents", "profile", "network", "browserApp", "quit"] as const;
+    const s = mergeSettings(Object.fromEntries(sections.map((k) => [k, { someFutureKey: future }])));
+    for (const k of sections) expect([k, (s[k] as unknown as Record<string, unknown>).someFutureKey]).toEqual([k, future]);
+    // A patch that does not name it keeps it, and the known keys beside it are still clamped.
+    const next = mergeSettings({ appearance: { accent: "ember", radius: 999 } }, s);
+    expect(next.appearance).toMatchObject({ someFutureKey: future, accent: "ember", radius: 24 });
+    // One that names it changes it, and undefined removes it.
+    const changed = (v: unknown) => mergeSettings({ appearance: { someFutureKey: v } }, s).appearance as unknown as Record<string, unknown>;
+    expect([changed(2).someFutureKey, Object.hasOwn(changed(undefined), "someFutureKey")]).toEqual([2, false]);
+    // What is not JSON, or too big, is dropped; the rest is kept.
+    const odd = mergeSettings({ appearance: { fn: () => 1, big: 1n, huge: "x".repeat(70_000), ok: [1] } });
+    const kept = odd.appearance as unknown as Record<string, unknown>;
+    expect([["fn", "big", "huge"].filter((k) => Object.hasOwn(kept, k)), kept.ok]).toEqual([[], [1]]);
+  });
+
+  test("mergeSettings: junk falls back per field, values are clamped, an unknown top-level key is left to the file writer", () => {
     const s = mergeSettings({
       v: 99, appearance: { preset: 7, glass: { opacity: 5, blur: "x", enabled: "yes" }, wallpaper: { kind: "lava", videoSrc: "blob:abc" }, terminal: { ansi: ["#000"] }, palette: { bg: "javascript:alert(1)" }, pluginSurfaces: "glass" },
       views: { defaultView: "orbit", chrome: { orbit: { island: "left" }, world: { island: "hidden" }, "../x": { island: "top" } } },
@@ -406,6 +446,14 @@ describe("settings concurrency", () => {
     expect(s.appearance.accent).toBe("ember");
     expect(s.views.defaultView).toBe("windows");
     expect(s.plugins.state["agent:claude"]?.options?.model).toBe("opus");
+  });
+
+  test("an appearance key a newer build wrote survives a write through updateSettings", async () => {
+    const file = settingsPath();
+    fs.writeFileSync(file, JSON.stringify({ v: 1, appearance: { preset: "signal", someFutureKey: { id: "harbour" } } }));
+    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) })); // `hive theme use nord`
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    expect([raw.appearance.preset, raw.appearance.someFutureKey]).toEqual(["nord", { id: "harbour" }]);
   });
 
   test("a patch is validated like any other write, and unknown top-level keys survive it", async () => {

@@ -135,3 +135,15 @@ test("a preserved terminal follows the view's opacity without another theme chan
   expect(await terminal.evaluate((el, previous) => el === previous, original)).toBe(true);
   await original?.dispose();
 });
+
+test("Copy JSON copies the look without the wallpaper's picture, and says it left it out", async () => {
+  // A wallpaper picked before the media picker: its address names the home folder.
+  hive("config", "set", "appearance.wallpaper", JSON.stringify({ kind: "image", imageSrc: "hm-media://v/%2Fhome%2Falice%2Fcat.png", brightness: 0.8 }));
+  await expect(page.locator(".hm-wp-image")).toHaveCount(1);
+  await openSettings("appearance");
+  await page.getByRole("button", { name: "Copy JSON" }).click();
+  await expect(page.getByText("Left out the wallpaper picture")).toBeVisible();
+  const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8 }, false]);
+  await closeSettings();
+});

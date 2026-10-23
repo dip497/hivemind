@@ -12,7 +12,7 @@
 import { defineCommand } from "citty";
 import { promises as fs } from "node:fs";
 import {
-  HiveError, PRESETS, applyPreset, getPath, mergeAppearance, patchSettingsFile, readSettings, settingsPath, updateSettings,
+  HiveError, PRESETS, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingsPath, updateSettings,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
@@ -91,24 +91,29 @@ const useCmd = defineCommand({
 });
 
 const exportCmd = defineCommand({
-  meta: { name: "export", description: "Write the current appearance as JSON (stdout or a file)" },
+  meta: { name: "export", description: "Write the current appearance as JSON (stdout or a file), without its media files" },
   args: { file: { type: "positional", required: false }, json: { type: "boolean" } },
   async run({ args }) {
-    const a = (await readSettings()).appearance;
-    const text = JSON.stringify(a, null, 2) + "\n";
-    if (args.file) { await fs.writeFile(String(args.file), text, "utf8"); return ok({ json: !!args.json }, { file: String(args.file) }, () => `wrote ${args.file}`); }
+    const { theme, leftOut, note } = exportAppearance((await readSettings()).appearance);
+    const text = JSON.stringify(theme, null, 2) + "\n";
+    if (args.file) {
+      await fs.writeFile(String(args.file), text, "utf8");
+      return ok({ json: !!args.json }, { file: String(args.file), leftOut }, () => `wrote ${args.file}${note ? `\n${note}` : ""}`);
+    }
     process.stdout.write(text);
+    // Not on stdout, which is the file.
+    if (note) process.stderr.write(`${note}\n`);
   },
 });
 
 const importCmd = defineCommand({
-  meta: { name: "import", description: "Replace the appearance with a JSON file (validated)" },
+  meta: { name: "import", description: "Replace the appearance with a JSON file (validated); your wallpaper media and overlays stay" },
   args: { file: { type: "positional", required: true }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
     let raw: unknown;
     try { raw = JSON.parse(await fs.readFile(String(args.file), "utf8")); } catch (e) { return err(ctx, "invalid_theme", `cannot read ${args.file}: ${(e as Error).message}`); }
-    const written = await updateSettings((cur) => ({ ...cur, appearance: mergeAppearance(raw, cur.appearance) }));
+    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }));
     const appearance = written.appearance;
     const rescanned = await reloadApp();
     return ok(ctx, { preset: appearance.preset, rescanned }, () => `imported ${args.file} (preset ${appearance.preset}); ${note(rescanned)}`);

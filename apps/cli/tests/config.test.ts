@@ -48,4 +48,29 @@ describe("hive config / hive theme", () => {
     expect(r.json, `stdout=${JSON.stringify(r.stdout)} stderr=${JSON.stringify(r.stderr)} code=${r.code}`).toEqual({ preset: "nord", rescanned: false });
     fs.rmSync(tmp, { recursive: true, force: true });
   }, 30_000);
+
+  test("theme export leaves out the media files this computer holds and says so; importing the file keeps yours", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-theme-media-"));
+    const env = { XDG_CONFIG_HOME: tmp, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
+    const file = path.join(tmp, "hivemind", "settings.json");
+    const picture = "hm-media://v/%2Fhome%2Falice%2Fcat.png";
+    const overlay = { id: "o", url: "hivemedia://media/alice-cat.png", kind: "image", opacity: 1, fit: "cover", size: 1, anchor: "center" };
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ v: 1, appearance: { preset: "nord", wallpaper: { kind: "image", imageSrc: picture, brightness: 0.7 }, overlayMedia: [overlay] } }));
+    try {
+      const out = path.join(tmp, "theme.json");
+      let r = hive(["theme", "export", out], { cwd: tmp, env });
+      expect([fs.readFileSync(out, "utf8").includes("alice"), r.stdout]).toEqual([false, expect.stringContaining("Left out the wallpaper picture and the overlays")]);
+      r = hive(["theme", "export", out, "--json"], { cwd: tmp, env });
+      expect(r.json).toEqual({ file: out, leftOut: ["wallpaper.imageSrc", "overlayMedia"] });
+      // To stdout, the file stays JSON: the note goes to stderr.
+      r = hive(["theme", "export"], { cwd: tmp, env });
+      expect([JSON.parse(r.stdout).preset, r.stdout.includes("alice"), r.stderr]).toEqual(["nord", false, expect.stringContaining("Left out")]);
+      r = hive(["theme", "import", out], { cwd: tmp, env });
+      const after = JSON.parse(fs.readFileSync(file, "utf8")).appearance;
+      expect([r.code, after.wallpaper.imageSrc, after.overlayMedia]).toEqual([0, picture, [overlay]]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 30_000);
 });
