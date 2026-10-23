@@ -19,7 +19,7 @@ import { handle, handleEffect } from "./app-ipc.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, type InstalledView } from "@hivemind/core/views";
 import { installPackage, removePlugin } from "@hivemind/core/package-install";
-import { VIEW_SCHEME, entryUrl, newNonce, pluginCsp, serveViewFile } from "@hivemind/core/view-files";
+import { VIEW_SCHEME, entryUrl, newNonce, ownFiles, pluginCsp, serveViewFile } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 import type { ViewFile, ViewListing } from "@hivemind/workspace-api/views";
 import { elsewhere } from "./shared-workspaces.js";
@@ -82,7 +82,7 @@ export function registerViewScheme(): void {
   protocol.registerSchemesAsPrivileged([
     // corsEnabled: a view's page is sandboxed to an opaque origin, and loading a module
     // script is always a CORS request — so without it Chromium refuses the view's own code
-    // and it never starts. The boundary is the sandbox + CSP (connect-src 'none'), not this.
+    // and it never starts. The boundary is the sandbox + CSP (connect-src: its own origin only), not this.
     { scheme: VIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   ]);
 }
@@ -109,13 +109,14 @@ export function handleViewProtocol(): void {
         const nonce = /'nonce-([\w+/=-]+)'/.exec(file.csp)?.[1];
         if (!nonce) return new Response("bad view file", { status: 400 });
         return new Response(Buffer.from(file.data, "base64"), { status: 200, headers: {
-          "Content-Security-Policy": pluginCsp(nonce), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+          "Content-Security-Policy": pluginCsp(nonce, ownFiles(source.id)), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
           "Access-Control-Allow-Origin": "*", "Content-Type": file.type,
         } });
       }
       const dir = source.dir;
       if (!dir) return new Response("unknown view", { status: 404 });
-      const file = await serveViewFile(dir, rel, { js: u.searchParams.get("js"), sdk: viewSdk });
+      // A view may fetch its own files, from its own origin: the CSP names no other.
+      const file = await serveViewFile(dir, rel, { js: u.searchParams.get("js"), sdk: viewSdk, files: ownFiles(source.id) });
       if (file.status !== 200) return new Response(file.status === 400 ? "bad entry" : file.status === 403 ? "forbidden" : "not found", { status: file.status });
       // The files are the view's published code; who may run them is the CSP's call.
       const headers = { "Content-Security-Policy": file.csp, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" };

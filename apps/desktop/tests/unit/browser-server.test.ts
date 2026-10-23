@@ -37,7 +37,7 @@ const server = await serveBrowser({
   },
   schemes: (scheme) => scheme === "hm-plugin" || scheme === "hm-view" ? (req: Request) => {
     asked.push({ url: req.url, range: req.headers.get("range") });
-    return new Response(`served ${req.url}`, { headers: { "content-type": "text/javascript", "content-security-policy": "default-src 'none'; script-src 'self'" } });
+    return new Response(`served ${req.url}`, { headers: { "content-type": "text/javascript", "content-security-policy": `default-src 'none'; script-src 'self'; connect-src ${new URL(req.url).protocol}//${new URL(req.url).host}` } });
   } : undefined,
   onTab: () => {},
   onError: () => {},
@@ -210,7 +210,8 @@ test("a view's files need the views key, which a sandboxed frame can carry, and 
   const file = await request({ path: `/hm-view/${key}/windows/index.html?r=1`, headers: { origin: "null" } });
   assert.equal(file.status, 200);
   assert.equal(file.body, "served hm-view://windows/index.html?r=1");
-  assert.equal(file.headers["content-security-policy"], "default-src 'none'; script-src 'self'");
+  // Its policy lets it fetch its own files, at its own path on this server: not 'self', which is every view's.
+  assert.equal(file.headers["content-security-policy"], `default-src 'none'; script-src 'self'; connect-src http://${here}/hm-view/${key}/windows/`);
 
   const asCookie = `hive-${server.port}=${key}`;
   assert.equal((await request({ headers: { cookie: asCookie } })).status, 401);

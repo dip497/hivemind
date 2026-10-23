@@ -1,6 +1,6 @@
 // What a view's frame may do: its own form submits (the frame allows forms, and its CSP still sends
-// them nowhere), and it is refused what the app's permission handlers keep from views, here
-// notifications.
+// them nowhere), it fetches its own files and no other view's, and it is refused what the app's
+// permission handlers keep from views, here notifications.
 import { test, expect, _electron as electron, type ElectronApplication, type Page, type Frame } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -14,6 +14,7 @@ test.use({ trace: "off" });
 const APP_DIR = process.cwd();
 const CLI = path.resolve(APP_DIR, "../cli/src/index.ts");
 const VIEW = path.join(APP_DIR, "tests/e2e/fixtures/views/sandbox-probe");
+const NEIGHBOUR = path.join(APP_DIR, "tests/e2e/fixtures/views/sandbox-neighbour");
 // Its own profile, so the view it installs is in no other spec's switcher.
 const XDG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-viewsandbox-xdg-"));
 const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-viewsandbox-repo-"));
@@ -26,8 +27,10 @@ let view: Frame;
 test.beforeAll(async () => {
   seedAgents(XDG);
   execFileSync("git", ["init", "-q"], { cwd: repo });
-  const installed = spawnSync("bun", [CLI, "plugins", "install", VIEW, "--json"], { cwd: repo, encoding: "utf8", env: ENV });
-  expect(installed.status, installed.stdout + installed.stderr).toBe(0);
+  for (const dir of [VIEW, NEIGHBOUR]) {
+    const installed = spawnSync("bun", [CLI, "plugins", "install", dir, "--json"], { cwd: repo, encoding: "utf8", env: ENV });
+    expect(installed.status, installed.stdout + installed.stderr).toBe(0);
+  }
   app = await electron.launch({ args: [path.join(APP_DIR, "out/main/index.js"), "--no-sandbox"], cwd: repo, env: ENV });
   page = await app.firstWindow();
   await page.waitForSelector(".react-flow", { timeout: 20_000 });
@@ -59,4 +62,14 @@ test("Enter in a view's form submits it: the view's prompt opens the app's dialo
 test("a view asking for notifications is refused", async () => {
   expect(await view.evaluate(() => (window as unknown as { askNotifications: () => Promise<string> }).askNotifications())).toBe("denied");
   expect(await view.evaluate(() => Notification.permission)).toBe("denied");
+});
+
+test("a view fetches its own files, and is refused another view's and the network", async () => {
+  const read = (url: string) => view.evaluate((u) => (window as unknown as { read: (u: string) => Promise<unknown> }).read(u), url);
+  expect(await read("./data.json")).toEqual({ whose: "the probe" });
+  expect(await read("hm-view://sandbox-probe/data.json")).toEqual({ whose: "the probe" });
+  // Served, but not to it: "refused" is the policy, where a missing file would be a status.
+  expect(await read("./missing.json")).toBe("status 404");
+  expect(await read("hm-view://sandbox-neighbour/data.json")).toBe("refused");
+  expect(await read("https://example.com/")).toBe("refused");
 });

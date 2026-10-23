@@ -14,8 +14,8 @@ degrade — the user loses sight of agents that are still running.
 
 The trap is not the protocol, which is small. It is that a view runs under
 `default-src 'none'` in an opaque origin, and **the web reflexes that fail there fail
-silently**. `fetch()` does not throw a useful error, it is refused by
-`connect-src 'none'`. A Google Font link loads nothing. An `<iframe>` is `frame-src
+silently**. `fetch()` of anything but the view's own files does not throw a useful error, it
+is refused by `connect-src`. A Google Font link loads nothing. An `<iframe>` is `frame-src
 'none'`. A CDN `<script>` is not on `hm-view:`. Authors lose an afternoon to a blank
 canvas because they assumed a normal page.
 
@@ -274,7 +274,8 @@ Concretely:
 
 | You wrote | What happens |
 | --- | --- |
-| `fetch()` / `XMLHttpRequest` / WebSocket | refused — `connect-src 'none'`. There is no network, by design |
+| `fetch("./data.json")`, XHR of your own files | works from Hivemind 2026.10.6, in the app and a browser tab: `connect-src` names your own origin (`hm-view://<host>`, or your path in a tab) and nothing else. Refused on the phone page; bundle what the phone shows |
+| `fetch()` of anything else / WebSocket | refused, another view's files too. There is no network, by design |
 | `<link>` to Google Fonts, a CDN script | loads nothing, no error worth reading |
 | `<iframe>` | `frame-src 'none'` |
 | `require`, `process`, `node:*` | there is no node here |

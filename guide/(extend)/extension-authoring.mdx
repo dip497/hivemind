@@ -10,7 +10,7 @@ Build a Hivemind view (a sandboxed web page that draws the whole workspace its o
 
 1. Ask me what the view should show and do, and its name (lowercase letters, digits and dashes).
 2. Start it: \`hive plugins new view <name>\`. It takes the owner from the GitHub account \`gh\` is signed in as. If \`gh\` is not signed in, ask me for my GitHub login and pass \`--owner <login>\`. Then run \`npm install\` in the new folder (it needs Node).
-3. Read \`PROMPT.md\` in full: it is the whole contract (the SDK, permissions, the sandbox). Write what I asked for under its "What I want", and build only from it. The view has no network, no files and no \`window.hive\`. It uses \`@hivemind/view-sdk\`, which the app serves, so do not bundle it.
+3. Read \`PROMPT.md\` in full: it is the whole contract (the SDK, permissions, the sandbox). Write what I asked for under its "What I want", and build only from it. The view has no network, reads only its own files and has no \`window.hive\`. It uses \`@hivemind/view-sdk\`, which the app serves, so do not bundle it.
 4. Check it, then build and install it, again after each change: \`hive plugins check .\` must say ok (it names the file and line of each problem), then \`npm run dev\`. Check it prints "installed @owner/name".
 5. Show it: \`hive ctl plugin open view:@owner/name\`. If \`hive plugins list\` shows it off, run \`hive plugins enable view:@owner/name\` first.
 6. Declare one command in \`hivemind-view.json\` under "commands", answered with \`hm.onCommand\`, that reports what the view shows. Check it with \`hive ctl plugin call @owner/name <command>\`.
@@ -207,10 +207,15 @@ Selection and focus need none.
 
 The page runs on its own `hm-view://<id>` origin with a strict content policy: no `window.hive`,
 no Node, no network, no inline scripts, and no notifications, camera, microphone or location.
+It may `fetch` its own files, from its own origin: `fetch("./levels.json")` works, and another
+view's files or any other address are refused.
 Malformed messages, floods or runaway CPU switch it off for the session and return you to the
 canvas.
 
-- Name your files relatively (`./main.js`): in a browser tab the app serves views under a path.
+- Name your files relatively (`./main.js`, `fetch("./data.json")`): in a browser tab the app
+  serves views under a path.
+- Fetching its own files needs Hivemind 2026.10.6 or newer, and works in the app and a browser
+  tab. On the phone page it is refused: bundle what the phone must show.
 - Draw on change, and stop work while `document.hidden`.
 - A form's `submit` event fires, in the app and on the phone page, and the form goes nowhere:
   handle the event and call `preventDefault()`.

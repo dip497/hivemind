@@ -31,9 +31,10 @@ product, and it shapes what counts as a boundary below.
    - **Views** run untrusted. Each is a page on its own `hm-view:` origin, in an iframe with
      `sandbox="allow-scripts allow-forms"` and no `allow-same-origin`
      (`apps/desktop/src/renderer/src/workspace/views/community/CommunityView.tsx`), served with a
-     CSP of `default-src 'none'`, `connect-src 'none'`, `frame-src 'none'`, `form-action 'none'`
-     (`pluginCsp` in `packages/hive-core/src/view-files.ts`): a form fires its `submit` event and
-     goes nowhere. Files are confined to the package by path and realpath (`resolvePackageFile`,
+     CSP of `default-src 'none'`, `connect-src` its own origin only (`hm-view://<host>`, or its
+     own path on the browser server, `withOwnFiles`; `'none'` on the phone), `frame-src 'none'`,
+     `form-action 'none'` (`pluginCsp` in `packages/hive-core/src/view-files.ts`): it may fetch its
+     own files and no other view's, and a form fires its `submit` event and goes nowhere. Files are confined to the package by path and realpath (`resolvePackageFile`,
      same file). A view talks only over one `MessageChannel`; every message is parsed and refused
      if malformed
      (`parsePluginMessage` in `packages/hive-view-sdk/src/protocol.ts`), rate-limited and disabled

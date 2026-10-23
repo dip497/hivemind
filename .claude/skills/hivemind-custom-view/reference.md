@@ -164,7 +164,7 @@ img-src hm-view: data: blob:;
 font-src hm-view: data:;
 media-src hm-view: data: blob:;
 worker-src blob:;
-connect-src 'none'; frame-src 'none'; object-src 'none';
+connect-src hm-view://<host>; frame-src 'none'; object-src 'none';
 form-action 'none'; base-uri 'none';
 ```
 
