@@ -88,9 +88,10 @@ then Round 1, then this plan.
   picked a file (the File System Access API), and the check answers no until the site is allowed, so a
   web app that reads a picked file without asking first gets an error. Decide whether a picked file is
   readable without asking, with its own e2e.
-- **Font keys in a terminal and on the canvas on other layouts.** The keymap matches `-`, `=` and `0`
-  by their place on a US keyboard, so Ctrl+- on a German or French layout and the numpad's keys do not
-  size a terminal's text (they always did not). Editors, diffs and plans take what the key types too.
+- ~~**Font keys in a terminal and on the canvas on other layouts.**~~ Closed 2026-10-23 (branch
+  `round2/hub-views`): `pressIs` in `@hivemind/view-sdk/commands` matches a sign as the layout types
+  it, its US place only when the layout types no other sign there or shift made its US pair, and a
+  digit on the top row or the number pad. Not built: a numpad key while Num Lock is off.
 - **`hive config set` under an id.** A wrong key below a valid view id (`views.chrome.canvas.bogus`) still
   prints "normalised" and exits 0.
 - **Agents and Browser tile permissions.** With Agent browser control on, an agent can grant a site a
