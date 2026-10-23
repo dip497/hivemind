@@ -1,13 +1,17 @@
 /** Agent status transitions → in-app toast (not for a selected tile) and OS
  *  notification (main suppresses it while the window is focused). `noticeOf` decides which
  *  transitions are told; the screen reader's line (workspace/announcer.ts) asks it too. */
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { subscribeStatus, type StatusEvent, type TileStatusKind } from "./agent-status-bus";
 import { isBackgroundTile } from "./worker-tiles";
 import { getNotificationSettings } from "./notification-settings";
 import { shouldNotify } from "../../shared/notification-settings.js";
 import type { FrameState } from "./canvas-persistence";
 import { statusLook } from "./workspace/status-look";
+import { subscribeWait, waitOf, type AgentWait } from "./agent-waits";
+import { lineFor } from "./row-line";
+import { decidable } from "./wait-decide";
+import { oneLine } from "@hivemind/agent-host/one-line";
 
 type TileMeta = { label: string; status: TileStatusKind; seen: boolean };
 
@@ -35,23 +39,11 @@ export interface Toast {
   frame?: string;
   /** Creation ts — the rich toast renders a relative "just now" / "12s" stamp. */
   at: number;
-  /** Inline actions rendered as a button row under the context line. FUTURE SEAM
-   *  (nothing sets this yet): the first real use is a supervised-worker approval —
-   *  push a `needs` toast with actions `[{label:"Approve", primary:true, run: () =>
-   *  approve(reqId,"allow")}, {label:"Deny", run: () => approve(reqId,
-   *  "deny")}]` (agent.answer) so the human answers from the toast instead of tabbing to the tile.
-   *  `run` returns the toast id to dismiss (or void to keep it open, e.g. pending). */
-  actions?: ToastAction[];
-}
-
-/** An inline toast button. Kept intentionally minimal — a label, a handler, and a
- *  primary flag for the accent-filled variant. The handler owns any async work
- *  (e.g. the HCP call); the toast just renders the button and dismisses on click. */
-export interface ToastAction {
-  label: string;
-  run: () => void;
-  /** Accent-filled (the affirmative action, e.g. Approve). Others render quiet. */
-  primary?: boolean;
+  /** A needs-you toast's wait, once the agent feed tells it, when it can be allowed or denied from
+   *  the toast (wait-decide.tsx): its Deny and Allow are drawn under the context line. */
+  decide?: AgentWait;
+  /** When the wait the toast shows began: once it ends, the toast goes. */
+  waited?: number;
 }
 
 /**
@@ -120,16 +112,47 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
     setToasts((ts) => ts.filter((t) => t.id !== id));
   }, []);
   const pushToast = useCallback((t: Omit<Toast, "id" | "at"> & { at?: number }) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const at = t.at ?? Date.now();
     setToasts((ts) => {
-      // Collapse a prior toast for the same tile — only the latest state matters.
-      const kept = ts.filter((x) => x.tileId !== t.tileId);
-      return [...kept, { ...t, id, at }];
+      // A prior toast for the same tile is replaced, only the latest state matters, and keeps its
+      // id: its card stays mounted and starts its time again.
+      const was = ts.find((x) => x.tileId === t.tileId);
+      const id = was?.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      return [...ts.filter((x) => x.tileId !== t.tileId), { ...t, id, at }];
     });
     // Auto-dismiss is owned by the CARD (a pausable timer that stops on hover and
     // on window-blur), so a toast never vanishes while you're reading it or
     // reaching for its ×. See ToastCard in workspace/agent-toasts.tsx.
+  }, []);
+
+  // A needs-you toast says what its agent waits on, and offers Allow and Deny when it can: the wait
+  // comes with the agent feed, up to 250 ms after the status that raised the toast, so the toast is
+  // filled in place as it comes (agent-waits.ts), and goes once the wait ends (answered here, on its
+  // tile or elsewhere). A done toast says the tile's last line, read once (`tile.readLines`).
+  const needsTiles = useMemo(() => toasts.filter((t) => toastKindOf(t) === "needs").map((t) => t.tileId).sort().join("\n"), [toasts]);
+  useEffect(() => {
+    if (!needsTiles) return undefined;
+    const fill = (tile: string) => {
+      const waiting = waitOf(tile)?.waiting;
+      setToasts((ts) => {
+        const t = ts.find((x) => x.tileId === tile);
+        if (!t || toastKindOf(t) !== "needs") return ts;
+        if (!waiting) return t.waited === undefined ? ts : ts.filter((x) => x !== t);
+        const detail = lineFor(waiting, undefined);
+        const decide = decidable(waiting) ? waiting : undefined;
+        if (t.detail === detail && t.decide === decide && t.waited === waiting.since) return ts;
+        return ts.map((x) => (x === t ? { ...t, detail, decide, waited: waiting.since } : x));
+      });
+    };
+    const offs = needsTiles.split("\n").map((tile) => { fill(tile); return subscribeWait(tile, () => fill(tile)); });
+    return () => { for (const off of offs) off(); };
+  }, [needsTiles]);
+  const sayLine = useCallback((tile: string) => {
+    void window.hive.tileLinesRead?.([tile]).then(({ lines }) => {
+      const detail = oneLine(lines[tile] ?? "");
+      if (!detail) return;
+      setToasts((ts) => ts.map((t) => (t.tileId === tile && toastKindOf(t) === "done" && t.detail !== detail ? { ...t, detail } : t)));
+    }, () => { /* an older host reads no lines */ });
   }, []);
 
   // Expose pushToast to the (earlier-declared) bind/unbind worktree handlers.
@@ -202,6 +225,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
           ...(crashed ? { detail: e.detail ?? (e.exitCode !== undefined ? `exit code ${e.exitCode}` : undefined) } : {}),
           ...(fr?.title ? { frame: fr.title } : repo ? { frame: repo } : {}),
         });
+        if (kind === "done") sayLine(e.tileId);
       }
       // Native OS notification for the SAME transitions, NOT gated on selection
       // (if the whole window is unfocused you're away). Main suppresses it when
@@ -222,7 +246,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       } catch { /* preload missing in some test harnesses */ }
     });
     return off;
-  }, [commitStatuses, pushToast, frameOfRef, framesRef]);
+  }, [commitStatuses, pushToast, sayLine, frameOfRef, framesRef]);
 
   return { toasts, dismissToast, markSeen, selectedTileIdsRef };
 }
