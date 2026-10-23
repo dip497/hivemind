@@ -82,6 +82,16 @@ test("lifecycle: opened after start is an event with its parent; closing reports
   assert.equal(h.hub.sinceOf("b"), undefined);
 });
 
+test("closing reports failed for a spawn that never ran, with no code, and not for a clean close", () => {
+  for (const [exit, failed] of [[{ failed: true }, true], [{ exitCode: 0 }, false], [{}, false]] as const) {
+    const h = harness();
+    h.hub.setWorkspace("ws", [h.tile("a")]);
+    h.hub.onStatus({ tileId: "a", label: "", status: "exited", ...exit });
+    h.hub.setWorkspace("ws", []);
+    assert.deepEqual(h.events.at(-1), { kind: "tileClosed", tileId: "a", lastStatus: "exited", ...(failed ? { failed: true } : {}), seq: 1, at: h.now() }, JSON.stringify(exit));
+  }
+});
+
 test("a workspace switch is not a mass close", () => {
   const h = harness();
   h.hub.setWorkspace("ws1", [h.tile("a")]);

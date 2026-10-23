@@ -1,6 +1,6 @@
 /**
  * Per-node font sizing — each tile remembers its OWN font size (persisted by
- * tileId), adjustable via A−/A+ header buttons and Ctrl/Cmd +/−/0 when focused.
+ * tileId), adjustable via A−/A+ header buttons and the keymap's font keys when focused.
  *
  * Every tile kind applies the size differently (xterm option, a CSS var, a
  * CodeMirror theme, a CSS zoom), so this module only owns the shared STATE +
@@ -8,7 +8,9 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./components/ui/button";
-import { actionKey } from "./shortcut";
+import { actionKey, keyOS } from "./shortcut";
+import { actionsFor } from "../../shared/keymap";
+import type { KeyPress } from "@hivemind/view-sdk/commands";
 import { MIN_FONT as MIN, MAX_FONT as MAX, clampFont, optimalFontForScreen } from "./tile-font-calc";
 
 export { optimalFontForScreen } from "./tile-font-calc";
@@ -46,15 +48,20 @@ export function useTileFont(tileId: string, def: number): TileFont {
   return { size, inc, dec, reset, set, best };
 }
 
-/** Ctrl/Cmd +/−/0 → inc/dec/reset. Returns true if it handled the event. */
+/** The keys that size a terminal's text (the keymap's font-bigger, -smaller and -reset) size an
+ *  editor's, a diff's or a plan's: inc/dec/reset. Returns true if it handled the event. */
 export function handleFontKey(
-  e: { ctrlKey: boolean; metaKey: boolean; key: string; preventDefault: () => void },
+  e: KeyPress & { preventDefault: () => void },
   f: Pick<TileFont, "inc" | "dec" | "reset">,
 ): boolean {
   if (!(e.ctrlKey || e.metaKey)) return false;
-  if (e.key === "=" || e.key === "+") { e.preventDefault(); f.inc(); return true; }
-  if (e.key === "-" || e.key === "_") { e.preventDefault(); f.dec(); return true; }
-  if (e.key === "0") { e.preventDefault(); f.reset(); return true; }
+  for (const action of actionsFor(e, "terminal", keyOS() === "mac")) {
+    const run = action === "font-bigger" ? f.inc : action === "font-smaller" ? f.dec : action === "font-reset" ? f.reset : null;
+    if (!run) continue;
+    e.preventDefault();
+    run();
+    return true;
+  }
   return false;
 }
 

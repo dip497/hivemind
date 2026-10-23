@@ -6,7 +6,8 @@
  * a state that passes at once (a prompt answered, a turn that resumes) is never said.
  *
  * Per status event: a map read and write and the notice check, all O(1). The bus emits only on a
- * change. The timer runs only while something waits to be said.
+ * change. The timer runs only while something waits to be said. A flush, at most once per notice
+ * queued, walks every tile seen so far to drop the closed ones: O(live tiles), a map read each.
  */
 import { statusOf, type StatusEvent, type TileStatusKind } from "../agent-status-bus";
 import { noticeOf, type NoticeKind } from "../useAgentAwareness";

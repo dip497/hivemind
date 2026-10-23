@@ -425,7 +425,7 @@ function NotificationPrefs() {
   const dim = !s.enabled;
 
   const kinds: { key: "needs" | "done" | "error"; label: string; hint: string }[] = [
-    { key: "needs", label: sentence(LOOKS.needs.word), hint: "Permission prompts, questions, blocked" },
+    { key: "needs", label: sentence(LOOKS.needs.word), hint: "Permission prompts, questions, plans to review, approvals, blocked" },
     { key: "done", label: sentence(LOOKS.done.word), hint: "An agent completed its task" },
     { key: "error", label: sentence(LOOKS.failed.word), hint: "Agent crashed or exited non-zero" },
   ];
@@ -463,8 +463,12 @@ function NotificationPrefs() {
       <div className="settings-section">
         <div className="settings-subheading">Delivery</div>
         <div className="settings-row">
-          <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
-          <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" />
+          {/* The window's live region (workspace/announcer.ts) follows this switch as a toast does. */}
+          <div className="min-w-0">
+            <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
+            <div id="notify-in-app-note" className="settings-note">Also what a screen reader says</div>
+          </div>
+          <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" aria-describedby="notify-in-app-note" />
         </div>
         <div className="settings-row">
           <div className="text-label text-[var(--color-fg)]">Native OS popups</div>

@@ -31,6 +31,7 @@ import { Loading } from "./components/ui/loading";
 import { MenuItem } from "./components/ui/menu-item";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell } from "./tile-fullscreen";
+import { actionKey } from "./shortcut";
 import { DiffSurface } from "./code/DiffSurface";
 import {
   CodeView,
@@ -1014,7 +1015,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             className="nodrag"
             onClick={() => setOverlay((v) => !v)}
             aria-label="fullscreen diff"
-            title="Fullscreen · Esc to exit"
+            title={`Fullscreen (${actionKey("fit-to-screen")} to leave)`}
           >
             <Maximize />
           </Button>

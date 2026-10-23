@@ -30,6 +30,7 @@ function listen(t: TestContext): string[] {
 test("a tile that needs you, finished or failed is said once, with the others that changed", (t) => {
   const said = listen(t);
   ev("a1", "working"); ev("b1", "working"); ev("c1", "working"); ev("d1", "working"); ev("e1", "working"); ev("f1", "working"); ev("g1", "working");
+  ev("h1", "working"); ev("i1", "working");
   ev("a1", "permission");
   ev("a1", "permission", { label: "A1 renamed" }); // the same state again: no second line
   ev("b1", "idle");
@@ -38,9 +39,11 @@ test("a tile that needs you, finished or failed is said once, with the others th
   ev("e1", "idle", { synthetic: true }); // interrupted, not finished
   ev("f1", "question"); ev("f1", "working"); // answered before it was said
   ev("g1", "exited"); // no code: as a toast says, it failed
+  ev("h1", "plan_review"); // a plan to review needs you, as its amber mark says
+  ev("i1", "awaiting_approval");
   assert.deepEqual(said, [], "nothing is said before the states hold");
   mock.timers.tick(1000);
-  assert.deepEqual(said, ["A1 needs you. B1 finished. C1 failed. D1 finished. G1 failed"]);
+  assert.deepEqual(said, ["A1 needs you. B1 finished. C1 failed. D1 finished. G1 failed. H1 needs you. I1 needs you"]);
 
   ev("a1", "permission", { detail: "still waiting" });
   ev("b1", "idle", { detail: "turn ended" });

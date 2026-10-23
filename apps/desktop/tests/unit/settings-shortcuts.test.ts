@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import SettingsPages from "../../src/renderer/src/settings-panels.tsx";
-import { FontStepper } from "../../src/renderer/src/tile-font.tsx";
+import { FontStepper, handleFontKey } from "../../src/renderer/src/tile-font.tsx";
 import { actionsFor, KEYMAP, labelsOf, type Action, type Where } from "../../src/shared/keymap.ts";
 import type { KeyPress } from "@hivemind/view-sdk/commands";
 
@@ -120,15 +120,21 @@ test("the guide's table lists every key of the keymap, for a Mac and for Windows
   }
 });
 
-test("the font buttons name the keys that size a terminal's text, on each platform", () => {
+test("each font button's tooltip names a key that handleFontKey sizes the text with, on each platform", () => {
+  // FontStepper sits on the editor, diff and plan tiles, whose keys go through handleFontKey.
   const font = { size: 13, inc() {}, dec() {}, reset() {}, set() {}, best() {} };
   for (const os of ["mac", "linux", "windows"] as const) {
     Object.defineProperty(globalThis, "navigator", { value: { platform: PLATFORM[os] }, configurable: true });
     const html = unescape(renderToStaticMarkup(createElement(FontStepper, font)));
-    for (const [action, word] of [["font-smaller", "Smaller"], ["font-reset", "Reset"], ["font-bigger", "Larger"]] as const) {
+    for (const [does, word] of [["dec", "Smaller"], ["reset", "Reset"], ["inc", "Larger"]] as const) {
       const key = new RegExp(`title="${word}[^"(]*\\(([^)]+)\\)"`).exec(html)?.[1];
       assert.ok(key, `the ${word} button names a key on ${os}`);
-      assert.ok(pressesOf(key, os).some((p) => actionsFor(p, "terminal", os === "mac").includes(action)), `"${key}" runs ${action} on ${os}`);
+      for (const press of pressesOf(key, os)) {
+        const ran: string[] = [];
+        let taken = false;
+        const handled = handleFontKey({ ...press, preventDefault: () => { taken = true; } }, { inc: () => ran.push("inc"), dec: () => ran.push("dec"), reset: () => ran.push("reset") });
+        assert.deepEqual([handled, taken, ran], [true, true, [does]], `"${key}" runs ${does} on ${os}`);
+      }
     }
   }
 });

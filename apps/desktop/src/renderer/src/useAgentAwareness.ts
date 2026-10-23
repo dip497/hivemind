@@ -7,11 +7,12 @@ import { isBackgroundTile } from "./worker-tiles";
 import { getNotificationSettings } from "./notification-settings";
 import { shouldNotify } from "../../shared/notification-settings.js";
 import type { FrameState } from "./canvas-persistence";
+import { statusLook } from "./workspace/status-look";
 
 type TileMeta = { label: string; status: TileStatusKind; seen: boolean };
 
 /** The verb-class of a toast / OS popup — drives accent color, icon and copy.
- *  Derived from a status transition: needs-you (blocked/permission/question),
+ *  Derived from a status transition: needs-you (any status that looks "needs"),
  *  finished (working→idle, or clean exit code 0), or error (working→exited,
  *  non-zero). Kept separate from TileStatusKind so a single "error" kind can
  *  overlay an `exited` status with red styling + the exit code in the body. */
@@ -56,8 +57,9 @@ export interface ToastAction {
 /**
  * What a status change tells the person, or null for nothing. `prev`: the tile's status before
  * this one (undefined: the first seen of it).
- *  - needs: it waits for a person (blocked, a permission, a question), from any state. A
- *    background worker that needs you still does.
+ *  - needs: it waits for a person (a permission, a question, a plan to review, an approval,
+ *    blocked), from any state: what wears the "needs" look. A background worker that needs you
+ *    still does.
  *  - done: a working agent finished its turn, or closed cleanly (exit code 0). Not a synthetic
  *    idle: a stuck "working" corrected, or the person interrupting it.
  *  - error: a working agent's process died, with a non-zero code or none known.
@@ -66,7 +68,7 @@ export interface ToastAction {
  * not told one by one.
  */
 export function noticeOf(prev: TileStatusKind | undefined, e: StatusEvent): NoticeKind | null {
-  if (e.status === "blocked" || e.status === "permission" || e.status === "question") return "needs";
+  if (statusLook(e.status) === "needs") return "needs";
   if (prev !== "working" || isBackgroundTile(e.tileId)) return null;
   if (e.status === "idle") return e.synthetic ? null : "done";
   if (e.status === "exited") return e.exitCode === 0 ? "done" : "error";
@@ -77,7 +79,7 @@ export function noticeOf(prev: TileStatusKind | undefined, e: StatusEvent): Noti
  *  didn't set `kind` explicitly (the worktree handlers pass only a status). */
 export function toastKindOf(t: { kind?: NoticeKind; status: TileStatusKind }): NoticeKind {
   if (t.kind) return t.kind;
-  if (t.status === "blocked" || t.status === "permission" || t.status === "question") return "needs";
+  if (statusLook(t.status) === "needs") return "needs";
   if (t.status === "exited") return "error";
   return "done";
 }
