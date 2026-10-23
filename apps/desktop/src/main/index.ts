@@ -31,6 +31,8 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   findRoot,
+  ignoreSyncFolders,
+  LOCAL_PREFIX_RE,
   listWorkspaces,
   forgetWorkspace,
   registerWorkspace,
@@ -807,7 +809,7 @@ handleEffect(
   (dir, prefix) => ({ target: named(dir), detail: named(prefix)?.toUpperCase() }),
   wrap(async (_e, dir: string, prefixRaw: string) => {
     const prefix = String(prefixRaw).toUpperCase();
-    if (!/^[A-Z][A-Z0-9]{1,9}$/.test(prefix)) {
+    if (!LOCAL_PREFIX_RE.test(prefix)) {
       throw new Error(`prefix must be UPPERCASE 2-10 chars (got: ${prefix})`);
     }
     const root = path.join(dir, ".hivemind");
@@ -816,6 +818,8 @@ handleEffect(
     await fsp.mkdir(path.join(root, "issues"), { recursive: true });
     await writeConfig(root, { prefix, next_id: 1, agents: {}, format: WORKSPACE_FORMAT });
     await writeAgentContext(root);
+    // Mirrored issues and sync state are per machine (design jira-sync §5.3), as `hive init` does.
+    await ignoreSyncFolders(root);
     // Install the agentic stack by default — a brand-new workspace should be
     // agent-ready so "Work on this" actually works (the agent gets the hive
     // skills + CLAUDE.md section). Idempotent.

@@ -18,6 +18,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { readConfig } from "./storage.js";
+import { issuePrefix } from "./issue-id.js";
 
 export interface WorkspaceEntry {
   /** Config prefix — the registry key and the issue-id prefix. */
@@ -101,8 +102,7 @@ export async function forgetWorkspace(repo: string): Promise<void> {
 /** Extract the workspace prefix from an issue id (`MANAGEARK-3` → `MANAGEARK`,
  *  `PAY-1.2` → `PAY`). Returns null if the id isn't well-formed. */
 export function prefixOf(id: string): string | null {
-  const m = /^([A-Z][A-Z0-9]{1,9})-\d+(\.\d+)*$/.exec(id.trim());
-  return m ? m[1]! : null;
+  return issuePrefix(id);
 }
 
 /** True when the entry's root still exists on disk. */

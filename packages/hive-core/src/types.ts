@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ISSUE_ID_RE, LOCAL_PREFIX_RE, EXTERNAL_PREFIX_RE } from "./issue-id.js";
 
 export const IssueStateZ = z.enum([
   "backlog",
@@ -22,10 +23,10 @@ export const IsoZ = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/);
 
-/** Full issue id incl. dotted sub-issues — `PAY-42`, `PAY-1.2.3`. The prefix
- *  (chars before `-`) names the workspace, so a full id is globally unique and
- *  is itself the cross-repo address — no extra repo qualifier needed. */
-export const IssueIdZ = z.string().regex(/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/);
+/** Full issue id incl. dotted sub-issues — `PAY-42`, `PAY-1.2.3` — or a tracker's key mirrored
+ *  as an id (`LONG_KEY-7`; see issue-id.ts). The prefix (chars before `-`) names the workspace or
+ *  the mirrored project, so a full id is itself the cross-repo address. */
+export const IssueIdZ = z.string().regex(ISSUE_ID_RE);
 
 /** Relationship types for cross-repo (and intra-repo non-parent) links. Each
  *  has a reciprocal recorded on the other end (see `reciprocalLinkType`):
@@ -154,6 +155,8 @@ export interface ActivityEntry {
   at: string;
   who: string; // user id or agent id
   message: string;
+  /** A row's stable id (`jira-c-10023`), so a mirrored comment is matched, not duplicated. */
+  id?: string;
 }
 
 export interface Issue extends IssueFrontmatter {
@@ -218,10 +221,14 @@ export const NewIssueZ = z.object({
 export type NewIssue = z.infer<typeof NewIssueZ>;
 
 export const ConfigZ = z.object({
-  prefix: z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/, "prefix must be UPPERCASE 2-10 chars"),
+  prefix: z.string().regex(LOCAL_PREFIX_RE, "prefix must be UPPERCASE 2-10 chars"),
   next_id: z.number().int().positive(),
   /** The on-disk format the workspace is at (storage.ts WORKSPACE_FORMAT). */
   format: z.number().int().positive().optional(),
+  /** Tracker project keys mirrored here (`PAY` for `PAY-318`), written by `hive ingest`. */
+  external_prefixes: z.array(z.string().regex(EXTERNAL_PREFIX_RE)).optional(),
+  /** `commit: true` keeps `.hivemind/mirror/` in git instead of ignoring it (mirror.ts). */
+  mirror: z.object({ commit: z.boolean().optional() }).loose().optional(),
   agents: z
     .record(
       z.string(),

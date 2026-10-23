@@ -3,7 +3,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   HiveError,
+  LOCAL_PREFIX_RE,
   findRoot,
+  ignoreSyncFolders,
   registerWorkspace,
   templates,
   writeConfig,
@@ -65,9 +67,8 @@ export const initCmd = defineCommand({
       return err(ctx, "exists", `.hivemind/ already exists at ${root}`);
     }
 
-    const PREFIX_RE = /^[A-Z][A-Z0-9]{1,9}$/;
     const prefix = String(args.prefix).toUpperCase();
-    if (!PREFIX_RE.test(prefix)) {
+    if (!LOCAL_PREFIX_RE.test(prefix)) {
       return err(
         ctx,
         "bad_prefix",
@@ -121,6 +122,8 @@ export const initCmd = defineCommand({
         gi = (gi.endsWith("\n") || gi.length === 0 ? gi : gi + "\n") + ".hivemind/.agent.md\n";
         await fs.writeFile(giPath, gi, "utf8");
       }
+      // Mirrored issues and sync state are per machine (design jira-sync §5.3).
+      await ignoreSyncFolders(root);
 
       // Optionally chain the agentic install in one shot.
       if (args.agentic) {
