@@ -77,6 +77,23 @@ then Round 1, then this plan.
 | T6 | Archipelago ships the **Harbour** theme (hivemind-plugins) | ☐ (after a release with T0–T4) |
 | C | **Clean** and **Clean Light** presets; corners (`appearance.radius`) that apply; a preset `look` (glass, wallpaper, corners) | ☑ 2026-10-22 (branch `feat/round0-clean-look`) |
 | W | Widget workers: measured, ceiling written, no build | ☑ (2026-10-22, design §4c) |
+| R0 | Round 0 of the [gap review](../design/customization-gaps-2026-10-22.md): permission handlers (Browser tile asks, views and tools get nothing), forms in views (app and phone page), status by shape with one word list and a screen-reader line, shortcuts made from the keymap, sections that keep unknown keys, `hive config set` refusing unknown paths, theme files without media, widget notices through main | ☑ 2026-10-23 (branch `feat/round0-clean-look`) |
+
+### Known gaps after Round 0
+
+- **Files a site opens in a Browser tile.** Electron checks the file system right even after the person
+  picked a file (the File System Access API), and the check answers no until the site is allowed, so a
+  web app that reads a picked file without asking first gets an error. Decide whether a picked file is
+  readable without asking, with its own e2e.
+- **Font keys in a terminal and on the canvas on other layouts.** The keymap matches `-`, `=` and `0`
+  by their place on a US keyboard, so Ctrl+- on a German or French layout and the numpad's keys do not
+  size a terminal's text (they always did not). Editors, diffs and plans take what the key types too.
+- **`hive config set` under an id.** A wrong key below a valid view id (`views.chrome.canvas.bogus`) still
+  prints "normalised" and exits 0.
+- **Agents and Browser tile permissions.** With Agent browser control on, an agent can grant a site a
+  right over the DevTools protocol (said on the security page).
+- Settings keep unknown keys directly under a section only; groups this build rebuilds (`glass`,
+  `wallpaper`, `terminal`, `views.layers`) still drop keys a newer build added. Round 1 step 1.
 
 ## Rounds and PRs
 
