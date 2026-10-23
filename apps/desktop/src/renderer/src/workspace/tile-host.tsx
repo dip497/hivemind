@@ -26,11 +26,9 @@
  * size, exactly once — except a terminal no view claims: after a short grace it
  * mounts in the park at its kind's default size, so its session runs unseen.
  *
- * Known limit: an Electron `<webview>` reloads its page once when its DOM node is
- * reparented (Chromium guest re-attach). React state (tabs, address, history) is
- * preserved; the page's own scroll/form state is not. Fixing that means hosting
- * browser guests as main-process WebContentsViews — tracked in
- * docs/design/workspace-views.md as a follow-up.
+ * Every move goes through `moveInto`, which never takes a surface out of the
+ * document: an Electron `<webview>` that is disconnected, even for one commit,
+ * destroys its guest and loads the page again.
  */
 import { lazy, memo, Suspense, useEffect, useLayoutEffect, useRef, useSyncExternalStore, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -150,29 +148,38 @@ export function surfaceEl(tileId: string): HTMLDivElement {
  *  on the first switch back). */
 const stableSize = new Map<string, { w: number; h: number }>();
 
-/** Freeze a surface at `rect` and return it to the park. Deferred to a
- *  microtask so a view switch — old slot's cleanup + new slot's adoption in the
- *  SAME commit — moves the element straight from one slot to the other with no
- *  park hop in between: each DOM insertion of a `<webview>` re-creates its
- *  guest, so the hop cost a second page load and leaked a WebContents. */
+/** Put `el` under `parent` while keeping it connected (`moveBefore`), so a
+ *  `<webview>` inside keeps its page (see public/webview-move.js). A detached
+ *  element can only be inserted. */
+function moveInto(parent: HTMLElement, el: HTMLElement) {
+  if (el.parentElement === parent) return;
+  if (el.isConnected && parent.isConnected) parent.moveBefore(el, null);
+  else parent.appendChild(el);
+}
+
+/** Freeze a surface at `rect` and return it to the park. Runs in the slot's
+ *  layout-effect cleanup, which React calls before it removes the slot's DOM:
+ *  waiting any longer lets the surface leave the document with the slot. The
+ *  `SURFACE_PARKED` event waits a microtask and is dropped when a slot adopts
+ *  the surface again in the same commit (a view switch). */
 function parkSurface(tileId: string, from: HTMLElement, rect: { w: number; h: number } | null, transient: boolean) {
+  const el = surfaces.get(tileId);
+  // Already adopted by another slot.
+  if (!el || el.parentElement !== from) return;
+  // Hold the last slot size so nothing inside refits/resizes the PTY while
+  // parked (a full-window park made every parked terminal reflow twice and
+  // re-resize on every window resize). No size known (slot never laid out)
+  // → keep the fill-the-park sizing. Leaving a transient slot: restore the
+  // arranging view's size instead, and tell the body it changed (it refits
+  // NOW, while hidden — on the cheap renderer the selected tile uses).
+  if (rect && !transient) stableSize.set(tileId, rect);
+  const size = transient ? stableSize.get(tileId) ?? rect : rect;
+  if (size) el.style.cssText = `position:absolute;left:0;top:0;width:${Math.max(1, size.w)}px;height:${Math.max(1, size.h)}px;display:flex;flex-direction:column;`;
+  moveInto(park(), el);
+  const resized = !!(rect && size && (size.w !== rect.w || size.h !== rect.h));
   const gen = adoptGen.get(tileId);
   queueMicrotask(() => {
-    const el = surfaces.get(tileId);
-    // Adopted again meanwhile — by another slot, or by this one re-running its
-    // effect (StrictMode) while the element never left it.
-    if (!el || el.parentElement !== from || adoptGen.get(tileId) !== gen) return;
-    // Hold the last slot size so nothing inside refits/resizes the PTY while
-    // parked (a full-window park made every parked terminal reflow twice and
-    // re-resize on every window resize). No size known (slot never laid out)
-    // → keep the fill-the-park sizing. Leaving a transient slot: restore the
-    // arranging view's size instead, and tell the body it changed (it refits
-    // NOW, while hidden — on the cheap renderer the selected tile uses).
-    if (rect && !transient) stableSize.set(tileId, rect);
-    const size = transient ? stableSize.get(tileId) ?? rect : rect;
-    if (size) el.style.cssText = `position:absolute;left:0;top:0;width:${Math.max(1, size.w)}px;height:${Math.max(1, size.h)}px;display:flex;flex-direction:column;`;
-    park().appendChild(el);
-    const resized = !!(rect && size && (size.w !== rect.w || size.h !== rect.h));
+    if (adoptGen.get(tileId) !== gen || el.parentElement !== park()) return;
     el.dispatchEvent(new CustomEvent(SURFACE_PARKED, { detail: { resized } }));
   });
 }
@@ -293,7 +300,7 @@ export function TileSlot({ tileId, className, style, transient = false }: {
     if (!slot) return;
     const el = surfaceEl(tileId);
     el.style.cssText = ADOPTED_CSS;
-    if (el.parentElement !== slot) slot.appendChild(el);
+    moveInto(slot, el);
     adoptGen.set(tileId, (adoptGen.get(tileId) ?? 0) + 1);
     if (!adoptedOnce.has(tileId)) { adoptedOnce.add(tileId); notifyAdopted(); }
     el.dispatchEvent(new CustomEvent(SURFACE_ADOPTED));
@@ -308,7 +315,6 @@ export function TileSlot({ tileId, className, style, transient = false }: {
     ro.observe(slot);
     return () => {
       ro.disconnect();
-      // The move itself is deferred — see parkSurface.
       parkSurface(tileId, slot, last, transient);
     };
   }, [tileId, transient]);

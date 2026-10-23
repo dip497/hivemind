@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a browser tile no longer loads its page again when you switch to another tab or view and back; a playing video keeps playing and a half-filled form keeps its text.
 ### Added
 
 - The phone page in a browser reaches every computer of yours, not only the one it paired with: Home shows what waits on you across all of them. Pairing with someone else's computer adds an account instead of replacing yours; switch between accounts from a chip on Home or from Devices.
