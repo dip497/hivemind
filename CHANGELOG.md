@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - Fixed: your network server always serves the phone page of its own release, so the phone page gets new features (photos, say) when you upgrade instead of staying on the page copied when the server was set up. hive-net carries the page itself, and a running `hive-net serve` whose binary an upgrade replaces starts the new one in its place, on the same ports. Your phone stays signed in through it.
 - **Breaking:** `hive-net serve --phone` takes no folder: it serves the page hive-net carries. Serve a page built here with `--phone-folder <dir>`. A server set up before this release changes `--phone ~/hive-network/phone` to `--phone` in its service.
+- Fixed: on an iPhone, the phone page's text no longer gets larger after you turn the phone sideways and back.
 - Fixed: an agent's notification shows in every view, not only the canvas, and goes away on its own there. Switching back to the canvas no longer shows every notification from the time you spent in another view at once, and app notices such as an update stack above agent notifications instead of covering them.
 - Fixed: a browser tile no longer loads its page again when you switch to another tab or view and back; a playing video keeps playing and a half-filled form keeps its text.
 ### Added

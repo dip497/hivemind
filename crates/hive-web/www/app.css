@@ -32,6 +32,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--canvas); color: var(--text); }
+/* iOS enlarges text when the phone turns sideways and keeps it enlarged once it turns back. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   font: 400 16px/24px var(--sans);
   -webkit-font-smoothing: antialiased;
