@@ -227,12 +227,12 @@ Each step is a Tailwind token (`text-heading`, `text-title`, `text-row`, `text-b
 - **Body** (400, 13px, line-height 1.5): the app default. Buttons, inputs, Settings text.
 - **Label** (500, 12px, pencil-text): panel headings and menu items. Sentence case.
 - **Count** (400, 11px, tabular figures): counts, keycaps, secondary choices.
-- **Chip** (500, 10px): status chips and badge numbers only.
+- **Chip** (500, 10px): status chips, badge numbers and the initial on a person's disc only.
 
 Letter-spacing follows size: -0.014em at 16–23px, -0.005em at 12–15px, +0.01em at 11px and below.
 
 ### Named Rules
-**The Named Steps Rule.** Text is set only through the seven named steps, everywhere: the renderer, its CSS and the tools that ship with the app. The panel, menus and frame header use five of them (15, 14, 12, 11, 10); heading and body belong to pages and dialogs. `tests/unit/design-system.test.ts` fails on a literal size, a Tailwind size or an inline `fontSize`. A new size is a defect, not a variant. A tile's content (terminal, editor, diff) follows its own zoom, not the scale.
+**The Named Steps Rule.** Text is set only through the seven named steps, everywhere: the renderer, its CSS and the tools that ship with the app. The panel, menus and frame header use five of them (15, 14, 12, 11, 10); heading and body belong to pages and dialogs. `tests/unit/design-system.test.ts` fails on a literal size, a Tailwind size or an inline `fontSize` written as a number; a size worked out in code (`size * 0.5`) it cannot see, so review catches that. A new size is a defect, not a variant. A tile's content (terminal, editor, diff) follows its own zoom, not the scale.
 
 **The Sentence Case Rule.** No uppercase section labels anywhere. A heading is 12px medium pencil-text in sentence case.
 

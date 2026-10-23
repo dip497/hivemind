@@ -9,7 +9,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import { PRESETS } from "@hivemind/core/settings-schema";
 
-const LABELS = ["hooks", "ssh", "docs"];
+const LABELS = ["theme", "ci", "backend"];
 
 /** An element's text colour and what it is drawn on, as the browser paints them: every background
  *  from the nearest opaque one in to the element's own, then the text colour over them. */
@@ -45,8 +45,9 @@ test.beforeAll(async () => {
   workspace = await fs.mkdtemp(path.join(os.tmpdir(), "hm-issues-"));
   await fs.mkdir(path.join(workspace, ".hivemind", "issues"), { recursive: true });
   await fs.writeFile(path.join(workspace, ".hivemind", "config.yaml"), "prefix: XX\nnext_id: 3\nagents: {}\n", "utf8");
-  // Labels on both sides of the colour wheel, a cyan the light page reads least well and a pink the
-  // dark one does, an assignee, and a criterion that is done.
+  // Labels in the hues each page reads least well, theme a cyan (199) on the light page and ci a pink
+  // (350) on the dark one, and backend a red (20) near the end of the hues a name may take
+  // (name-hue.ts); an assignee, and a criterion that is done.
   await fs.writeFile(
     path.join(workspace, ".hivemind", "issues", "XX-2.md"),
     `---

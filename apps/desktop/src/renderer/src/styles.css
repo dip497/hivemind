@@ -155,11 +155,12 @@
   --color-status-exited:    var(--color-fg3);
   --color-status-failed:    var(--color-err);
 
-  /* State palette — Plane's 5-group workflow states (backlog/unstarted/
-     started/completed/cancelled), with hivemind's in_progress/in_review split,
-     on Plane's priority/state hues. A state is a word too (the issue's state
-     picker), so each reads at 4.5:1 on bg, bg2 and bg3 in every dark preset,
-     Nord's bg3 the lightest; the light page has its own below. */
+  /* Issue states (tools/issues): Plane's five groups (backlog, unstarted, started, completed,
+     cancelled), with In progress and In review apart. No state's hue is near a preset's warn, the
+     amber of what waits on you (DESIGN.md, The One Voice Rule): In progress is cyan where Plane's
+     is amber (tests/unit/issue-colours.test.ts). A state is a word too (the issue's state
+     picker), so each reads at 4.5:1 on bg, bg2 and bg3 in every dark preset, Nord's bg3 the
+     lightest; the light page has its own below. */
   --color-state-backlog:   oklch(0.77 0.013 231.77);  /* Plane priority-none (slate) */
   --color-state-todo:      oklch(0.77 0.11 265);       /* blue */
   --color-state-progress:  oklch(0.77 0.11 200);       /* cyan: being worked on is not amber, which is what waits on you */
@@ -920,8 +921,9 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --color-note-green:  oklch(0.86 0.08 150);
   --color-note-ink:    oklch(0.24 0.01 250);
   /* An issue's label chips and the discs behind people's initials (tools/issues): each takes its
-     hue from the name, put in with oklch(from …), and its lightness from here, so the light page
-     redraws them (:root[data-theme-mode="light"]). Read from inline styles, like the notes. */
+     hue from the name (name-hue.ts, never a warn's), put in with oklch(from …), and its lightness
+     from here, so the light page redraws them (:root[data-theme-mode="light"]). Read from inline
+     styles, like the notes. */
   --color-label-text: oklch(0.82 0.10 0);
   --color-label-fill: oklch(0.28 0.04 0 / 0.5);
   --color-label-edge: oklch(0.34 0.03 0 / 0.4);

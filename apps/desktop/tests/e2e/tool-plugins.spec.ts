@@ -129,8 +129,8 @@ test("the app's diff view in a tool draws its changes in the preset's colours, i
   };
   await follows("signal");
   const ok = (await drawn())!.ok;
-  // Dark presets of other hues (Solarized Dark's red the darkest), then the light one: the diff
-  // follows each, live.
+  // Dark presets of other hues (Solarized Dark's red, 4.3:1 on the diff's page as it is, needs the
+  // lift; only Ubuntu's, 4.1:1, is darker), then the light one: the diff follows each, live.
   for (const id of ["dracula", "solarized-dark", "clean-light"]) {
     expect(hive("theme", "use", id).status).toBe(0);
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.preset)).toBe(id);
