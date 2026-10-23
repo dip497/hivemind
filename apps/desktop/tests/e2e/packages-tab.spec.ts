@@ -183,3 +183,23 @@ test("in a browser tab the Packages tab lists the package, and its switch reache
     if (shots) await tab.screenshot({ path: path.join(shots, "13-browser-tab-add.png") });
   } finally { await browser.close(); }
 });
+
+test("a package that opens with a view offers it once installed, and Open switches to it", async () => {
+  const dir = path.join(root, "harbour");
+  fs.mkdirSync(path.join(dir, "views", "isle"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "views", "isle", "hivemind-view.json"), JSON.stringify({ id: "@e2e/isle", name: "Isle", version: "1.0.0", entry: "index.html" }));
+  fs.writeFileSync(path.join(dir, "views", "isle", "index.html"), "<!doctype html>");
+  fs.writeFileSync(path.join(dir, "hivemind-package.json"), JSON.stringify({
+    apiVersion: 2, id: "@e2e/harbour", name: "Harbour", version: "1.0.0", views: [{ path: "views/isle" }], startup: { view: "@e2e/isle" },
+  }));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } })));
+  await expect(page.locator("[data-plugins-home]")).toBeVisible();
+  await addFromFolder(dir);
+  await body().locator("[data-folder-install-do]").click();
+  const offer = body().getByRole("status").filter({ hasText: "Open Isle?" });
+  await offer.getByRole("button", { name: "Open" }).click();
+  // Settings closes on the view it opened.
+  await expect(page.locator('[data-community-view="@e2e/isle"]')).toBeVisible();
+  await expect(body()).toHaveCount(0);
+  await shot("10-open-start-view");
+});

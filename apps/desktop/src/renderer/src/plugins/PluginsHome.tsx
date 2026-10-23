@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { OpenStartView, startViewOf } from "./open-start-view";
 import { ChevronDown, FolderPlus, Plus, Sparkles } from "../components/icons";
 import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
@@ -113,6 +114,7 @@ function useWidgetRows(matches: (text: string) => boolean): ListedRow[] {
  *  is `hive agents install <folder>`. */
 function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean } {
   const [review, setReview] = useState<Review | null>(null);
+  const [opens, setOpens] = useState<Review["opens"]>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLElement | null>(null);
@@ -123,18 +125,20 @@ function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean 
   // From a folder this computer's picker chooses: not from a browser tab.
   const { reviewPackageFolder, installPackageFolder } = window.hive;
   const item = reviewPackageFolder && <DropdownMenuItem data-folder-install onSelect={() => void act(async () => {
-    setReview(null);
+    setReview(null); setOpens(null);
     const r = await reviewPackageFolder();
     setReview(r);
     if (r) requestAnimationFrame(() => ref.current?.focus());
   })}><FolderPlus />Add from a folder</DropdownMenuItem>;
   const panel = <>
     {error && <div role="alert" className="settings-message error">{error}</div>}
+    {opens && <div role="status" className="settings-message catalog-done"><OpenStartView view={opens} /></div>}
     {review && installPackageFolder && <section ref={ref} tabIndex={-1} className="settings-install-review" aria-label={`Review ${review.name}`}>
       <PackageReview review={review} heading />
       <div className="settings-actions"><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>Cancel</Button><Button disabled={busy} data-folder-install-do onClick={() => void act(async () => {
         await installPackageFolder(review.token);
-        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`, { id: `package:${review.id}` }); setReview(null); rescan();
+        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`, { id: `package:${review.id}` });
+        setOpens(startViewOf(review)); setReview(null); rescan();
       })}>{busy ? "Installing…" : review.replaces ? "Update" : "Install"}</Button></div>
     </section>}
   </>;

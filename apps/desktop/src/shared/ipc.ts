@@ -267,6 +267,8 @@ export interface PackageReview {
   on: boolean;
   /** The version it replaces, and whether that one is on. */
   replaces: { version: string; on: boolean } | null;
+  /** The view it opens with (its manifest's `startup.view`), which the app offers once it is installed. */
+  opens: { id: string; name: string } | null;
   members: Array<{ kind: string; id: string; name: string; permissions: string[]; runs: MemberRuns }>;
   changes: Array<MemberChange & { name: string; runs: MemberRuns }>;
 }

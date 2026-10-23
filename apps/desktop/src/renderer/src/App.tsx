@@ -230,11 +230,14 @@ export function App() {
     // An agent started from Settings (set it up with an agent): the agent is shown.
     const onAgent = () => setSettingsOpen(false);
     window.addEventListener("hivemind:spawn-agent", onAgent);
+    // A package's view opened from Settings (open-start-view): the view is shown.
+    window.addEventListener("hivemind:close-settings", onAgent);
     window.addEventListener("hivemind:open-folder", onFolder);
     window.addEventListener("hivemind:open-recent", onRecent);
     window.addEventListener("hivemind:open-workspace", onWorkspace);
     return () => {
       window.removeEventListener("hivemind:spawn-agent", onAgent);
+      window.removeEventListener("hivemind:close-settings", onAgent);
       window.removeEventListener("hivemind:open-folder", onFolder);
       window.removeEventListener("hivemind:open-recent", onRecent);
       window.removeEventListener("hivemind:open-workspace", onWorkspace);

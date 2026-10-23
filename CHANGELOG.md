@@ -24,6 +24,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A view can ask for widget cards down the left edge instead of the right, with `"widgets": "left"` in its `hivemind-view.json`, so they stay off a terminal it docks on the right. A card you moved stays where you put it.
 - A HiveHub view, widget or package that uses a manifest field newer than your app (a view's `widgets` or `tokens`, a package's `themes`) says "needs Hivemind 2026.10.6 or newer" before it downloads, instead of downloading and then refusing the manifest. The release that first reads each field is one table in the hub kit, `packages/hive-hub/src/since.ts`. A package's listing holds only its manifest, README, licence and its members' folders, so a build script beside them is no longer downloaded.
 - A view can `fetch` its own files (`fetch("./levels.json")`) from its own origin, in the app and in a browser tab; another view's files and every other address are still refused, and on the phone page it fetches nothing.
+- Installing a package that names a view to open with (`"startup": { "view": … }`) from Settings → Plugins asks **Open Archipelago?** (the view's name), and **Open** closes Settings on that view.
 - A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
 - Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.

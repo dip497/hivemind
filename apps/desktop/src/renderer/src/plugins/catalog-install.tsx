@@ -44,7 +44,7 @@ export function useCatalogInstall() {
   const [review, setReview] = useState<{ key: string; data: CatalogReview } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
-  const [done, setDone] = useState<{ entry: CatalogEntry } | null>(null);
+  const [done, setDone] = useState<{ entry: CatalogEntry; review: CatalogReview } | null>(null);
   const reviewRef = useRef<HTMLElement | null>(null);
   const startReview = async (e: CatalogEntry) => {
     setBusy(catalogKey(e)); setError(null); setDone(null); setReview(null);
@@ -64,7 +64,7 @@ export function useCatalogInstall() {
       else if (r.type === "package") { await window.hive.installCatalogPackage(r.token); rescan(); }
       else { await window.hive.installCatalogAgent(r.token); await syncAgentPlugins(); }
       setReview(null);
-      setDone({ entry: e });
+      setDone({ entry: e, review: r });
     } catch (err) { setError({ key: catalogKey(e), message: cleanError(err) }); }
     finally { setBusy(null); }
   };
