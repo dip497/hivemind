@@ -216,6 +216,25 @@ test("a link a site would open in another program is asked about by its scheme",
   await closePanel();
 });
 
+test("a control focused past the canvas's edge leaves the canvas where it is, so a press on a question lands where it was aimed", async () => {
+  // The tile runs past the canvas's right edge. Focusing a control out there scrolled the canvas's
+  // box, and React Flow scrolled it back on the next frame: a press focusing Block could move it
+  // before its release, and the release landed on the site's name.
+  const moved = await page.evaluate((id) => {
+    const canvas = document.querySelector(".react-flow") as HTMLElement;
+    const edge = canvas.getBoundingClientRect().right;
+    const node = document.querySelector(`.react-flow__node[data-id="${id}"]`) as HTMLElement;
+    const past = [...node.querySelectorAll<HTMLElement>("button, input")].sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)[0]!;
+    const out = past.getBoundingClientRect().right > edge;
+    const before = node.getBoundingClientRect().x;
+    past.focus();
+    const after = node.getBoundingClientRect().x;
+    past.blur();
+    return { past: out, scrolled: [canvas.scrollLeft, canvas.scrollTop], by: after - before };
+  }, tileId);
+  expect(moved).toEqual({ past: true, scrolled: [0, 0], by: 0 });
+});
+
 test("the site's panel allows notifications to a site that only reads whether it has them", async () => {
   await visit(`http://127.0.0.1:${ports[1]}/`);
   // A site that reads the state and asks only when it would be shown the question never asks.

@@ -77,7 +77,7 @@ then Round 1, then this plan.
 | T6 | Archipelago ships the **Harbour** theme (hivemind-plugins) | ☐ (after a release with T0–T4) |
 | C | **Clean** and **Clean Light** presets; corners (`appearance.radius`) that apply; a preset `look` (glass, wallpaper, corners), put back on leaving it (`appearance.lookBefore`) | ☑ 2026-10-23 (branch `feat/round0-clean-look`) |
 | W | Widget workers: measured, ceiling written, no build | ☑ (2026-10-22, design §4c) |
-| R0 | Round 0 of the [gap review](../design/customization-gaps-2026-10-22.md): permission handlers (Browser tile asks, views and tools get nothing), forms in views (app and phone page), status by shape with one word list and a screen-reader line, shortcuts made from the keymap, sections that keep unknown keys, `hive config set` refusing unknown paths, theme files without media, widget notices through main | ☑ 2026-10-23 (branch `feat/round0-clean-look`) |
+| R0 | Round 0 of the [gap review](../design/customization-gaps-2026-10-22.md): permission handlers (Browser tile asks, views and tools get nothing), forms in views (app and phone page), status by shape with one word list and a screen-reader line, shortcuts made from the keymap, sections that keep unknown keys, `hive config set` refusing unknown paths, theme files without media, widget notices through main; the canvas box clipped, never scrolled, so a press on a tile past its edge lands where aimed | ☑ 2026-10-23 (branch `feat/round0-clean-look`) |
 
 ### Known gaps after Round 0
 

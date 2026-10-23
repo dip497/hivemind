@@ -39,6 +39,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- Focusing a button or box in a tile that runs past the canvas's edge no longer shifts the canvas for a moment, which could make a click land on something else (seen on a Browser tile's Block and Allow).
 - A form in a view submits, in the app and on the phone page: Enter in its text box fires the form's `submit` event, which did nothing before. The form still cannot leave the view's page.
 - A look that is no built-in preset (an imported theme file) shows as **Custom** in Settings → Appearance instead of as Ubuntu, and **Reset** puts the terminal back to Signal's colours. The Accent's description says what it colours.
 - An agent whose workers finish one after another is told "Your agents sent you messages" once, at its prompt, even before it has finished a turn since the app started; before, the line could be pasted into its prompt again for each worker.

@@ -543,6 +543,10 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
    solid backdrop now. */
 .react-flow {
   background-color: var(--color-bg) !important;
+  /* Clipped, never scrolled (React Flow sets hidden inline). Focusing a control in a tile that runs
+     past the canvas's edge scrolled this box, and React Flow scrolled it back on the next frame: the
+     canvas jumped, and a press and its release could land on different things. */
+  overflow: clip !important;
 }
 .react-flow__attribution {
   display: none !important;
