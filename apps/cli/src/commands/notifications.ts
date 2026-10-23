@@ -8,6 +8,7 @@
  *                                            sounds.needs|done|error, volume (0–1),
  *                                            kinds.needs|done|error, dnd.enabled|start|end
  *   hive notifications play <needs|done|error> [--json]
+ *   hive notifications recent [--json]       the last 10 bursts: anyone may read them
  */
 import { defineCommand } from "citty";
 import { HiveError, patchSettingsFile, readSettings } from "@hivemind/core";
@@ -15,6 +16,7 @@ import { NOTICE_KINDS, type NoticeKind } from "@hivemind/core/notification-setti
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { personOnly } from "../person-only.js";
+import type { RecentSound } from "@hivemind/workspace-api/notifications";
 
 type Kind = "bool" | "volume" | "time";
 /** Every key `set` takes, and what its value is. */
@@ -105,7 +107,30 @@ const playCmd = defineCommand({
   },
 });
 
+const WORDS: Record<string, string> = { needs: "needs you", done: "finished", error: "failed" };
+
+const recentCmd = defineCommand({
+  meta: { name: "recent", description: "The last 10 bursts of agents' changes: how many agents, the sound and the pop-ups" },
+  args: { json: { type: "boolean" } },
+  async run({ args }) {
+    const ctx = { json: !!args.json };
+    let rows: RecentSound[];
+    try {
+      rows = (await driveCall("notifications.recentSounds", [], 5000)) as RecentSound[];
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === "UNAVAILABLE" || code === "UNKNOWN_METHOD") return err(ctx, "UNAVAILABLE", "no hivemind app is running: Recent lives in it", undefined, "open the hivemind app; `hive host` plays no sounds");
+      throw e;
+    }
+    return ok(ctx, { recent: rows }, () => rows.length === 0 ? "nothing yet" : rows.map((r) => {
+      const when = new Date(r.at).toLocaleTimeString();
+      const sound = `${r.sound}${r.pack ? ` (${r.pack})` : ""}${r.why ? `: ${r.why}` : ""}`;
+      return `${when}  ${WORDS[r.moment]!.padEnd(9)}  ${String(r.agents).padStart(3)} agent${r.agents === 1 ? " " : "s"}  ${String(r.popups).padStart(2)} pop-up${r.popups === 1 ? " " : "s"}  ${sound}`;
+    }).join("\n"));
+  },
+});
+
 export const notificationsCmd = defineCommand({
-  meta: { name: "notifications", description: "The app's notifications and sounds: show, set, play (the person only)" },
-  subCommands: { show: showCmd, set: setCmd, play: playCmd },
+  meta: { name: "notifications", description: "The app's notifications and sounds: show, set, play (the person only), recent" },
+  subCommands: { show: showCmd, set: setCmd, play: playCmd, recent: recentCmd },
 });

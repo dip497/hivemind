@@ -1,7 +1,8 @@
 /**
  * `hive notifications`: `set` takes each key with a value of its kind and writes the
- * `notifications` section the app reads, refusing a key or value that is not one; `play` with no
- * app running says UNAVAILABLE with what to do; and an agent is refused both, as the person's.
+ * `notifications` section the app reads, refusing a key or value that is not one; `play` and
+ * `recent` with no app running say UNAVAILABLE with what to do; and an agent is refused set and
+ * play, as the person's.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
@@ -47,10 +48,12 @@ describe("hive notifications", () => {
     expect(JSON.parse(fs.readFileSync(file(), "utf8")).notifications.volume).toBe(0.8);
   });
 
-  test("play with no app running is UNAVAILABLE and says to open the app", () => {
-    const r = hive(["notifications", "play", "needs", "--json"], { env });
-    expect(r.code).toBe(3);
-    expect(JSON.parse(r.stderr).error).toMatchObject({ code: "UNAVAILABLE", fix: expect.stringContaining("open the hivemind app") });
+  test("play and recent with no app running are UNAVAILABLE and say to open the app", () => {
+    for (const args of [["play", "needs"], ["recent"]]) {
+      const r = hive(["notifications", ...args, "--json"], { env });
+      expect([args[0], r.code]).toEqual([args[0], 3]);
+      expect(JSON.parse(r.stderr).error).toMatchObject({ code: "UNAVAILABLE", fix: expect.stringContaining("open the hivemind app") });
+    }
   });
 
   test("an agent is refused set and play, and nothing is written", () => {
