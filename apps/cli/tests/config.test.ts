@@ -100,7 +100,7 @@ describe("hive config / hive theme", () => {
       const wrong = [
         ["appearance.blur", "Did you mean appearance.glass.blur?"],
         ["appearance.glass.blurr", "appearance.glass holds enabled, contentGlass, opacity, blur"],
-        ["notifications.enabled", "no setting notifications"],
+        ["browserCdp", "no setting browserCdp"],
         ["appearance.glass.blur.x", "appearance.glass.blur is one value"],
         // An id no view or plugin can have: the map drops it, so it would print as set to nothing.
         ["views.chrome.Bad_Id", '"Bad_Id" is not a view\'s id'],
@@ -112,7 +112,7 @@ describe("hive config / hive theme", () => {
         expect([at, r.code, r.json]).toEqual([at, 5, { error: expect.objectContaining({ code: "NOT_FOUND", message: expect.stringContaining(why!) }) }]);
       }
       const s = JSON.parse(fs.readFileSync(file, "utf8"));
-      expect([s.appearance?.blur, s.appearance?.glass?.blurr, s.notifications]).toEqual([undefined, undefined, undefined]);
+      expect([s.appearance?.blur, s.appearance?.glass?.blurr, s.browserCdp]).toEqual([undefined, undefined, undefined]);
       const ids: [string, unknown][] = [["views.chrome.canvas", { island: "hidden" }], ["views.toolbars.canvas", { labels: false }], ["plugins.state.agent:claude", { enabled: false }]];
       for (const [at, value] of ids) {
         expect(hive(["config", "set", at, JSON.stringify(value), "--json"], { cwd: tmp, env }).json).toEqual({ path: at, value, rescanned: false });
