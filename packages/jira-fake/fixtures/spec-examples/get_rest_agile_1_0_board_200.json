@@ -1,0 +1,20 @@
+{
+ "isLast": false,
+ "maxResults": 2,
+ "startAt": 1,
+ "total": 5,
+ "values": [
+  {
+   "id": 84,
+   "name": "scrum board",
+   "self": "https://your-domain.atlassian.net/rest/agile/1.0/board/84",
+   "type": "scrum"
+  },
+  {
+   "id": 92,
+   "name": "kanban board",
+   "self": "https://your-domain.atlassian.net/rest/agile/1.0/board/92",
+   "type": "kanban"
+  }
+ ]
+}

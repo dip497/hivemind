@@ -1,0 +1,329 @@
+{
+  "name": "cloud-scrum-company",
+  "description": "Cloud, company-managed Scrum project PAY. Per-type workflows: Story has 9 statuses (the P0b e2e workflow), Bug has 6 with an assignee-only Start, Sub-task 3. Covers screens with required resolution, a hidden validator field, a condition refusal, multi-hop paths (To Do→Code Review is 2 hops, In Progress→Done is 4), a global Won't Do, an epic, a sub-task, blockers, a flagged issue, a restricted and a deleted issue, another install's entity property, and an issue moved to OPS (see cloud-kanban-team).",
+  "deployment": "Cloud",
+  "restVersion": 3,
+  "baseUrl": "https://acme.atlassian.net",
+  "cloudId": "8c0b7e5a-3f1d-4b6e-9a2c-1d4e5f6a7b8c",
+  "serverInfo": { "version": "1001.0.0-SNAPSHOT", "versionNumbers": [1001, 0, 0], "buildNumber": 100300, "serverTimeZone": "Etc/UTC" },
+  "myself": "5b10ac8d82e05b22cc7d4ef5",
+  "users": [
+    { "accountId": "5b10ac8d82e05b22cc7d4ef5", "displayName": "Ujjwal Solanki", "emailAddress": "ujjwal@example.com", "timeZone": "Asia/Kolkata" },
+    { "accountId": "5b10a2844c20165700ede21g", "displayName": "Jane Doe", "emailAddress": null, "timeZone": "America/New_York" },
+    { "accountId": "70121:9d2c7e1b-4f3a-4c8e-b7a6-2e1f0d9c8b7a", "displayName": "Release Bot", "emailAddress": null, "timeZone": "Etc/UTC" }
+  ],
+  "permissions": {
+    "PAY": ["BROWSE_PROJECTS", "TRANSITION_ISSUES", "ASSIGN_ISSUES", "ASSIGNABLE_USER", "ADD_COMMENTS", "EDIT_ISSUES", "LINK_ISSUES"]
+  },
+  "statuses": [
+    { "id": "10000", "name": "Backlog", "statusCategory": { "id": 2, "key": "new", "colorName": "blue-gray", "name": "To Do" } },
+    { "id": "10001", "name": "To Do", "statusCategory": { "id": 2, "key": "new", "colorName": "blue-gray", "name": "To Do" } },
+    { "id": "3", "name": "In Progress", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10002", "name": "Blocked", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10003", "name": "Code Review", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10004", "name": "QA", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10005", "name": "Ready for Release", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10006", "name": "Done", "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" } },
+    { "id": "10007", "name": "Won't Do", "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" } }
+  ],
+  "workflows": {
+    "PAY Story workflow": {
+      "name": "PAY Story workflow",
+      "statuses": ["10000", "10001", "3", "10002", "10003", "10004", "10005", "10006", "10007"],
+      "initial": "10000",
+      "transitions": [
+        { "id": "11", "name": "Plan", "from": ["10000"], "to": "10001" },
+        { "id": "21", "name": "Start", "from": ["10001"], "to": "3" },
+        { "id": "31", "name": "Block", "from": ["3"], "to": "10002" },
+        { "id": "32", "name": "Unblock", "from": ["10002"], "to": "3" },
+        { "id": "41", "name": "Request review", "from": ["3"], "to": "10003" },
+        { "id": "51", "name": "Send to QA", "from": ["10003"], "to": "10004" },
+        { "id": "52", "name": "Changes requested", "from": ["10003", "10004"], "to": "3" },
+        { "id": "61", "name": "Pass QA", "from": ["10004"], "to": "10005" },
+        {
+          "id": "71", "name": "Release", "from": ["10005"], "to": "10006", "hasScreen": true,
+          "fields": {
+            "resolution": { "required": true, "name": "Resolution", "schema": { "type": "resolution", "system": "resolution" }, "allowedValues": [{ "id": "10000", "name": "Done" }, { "id": "10001", "name": "Won't Do" }], "operations": ["set"] }
+          },
+          "hiddenRequired": { "fixVersions": "Fix Version/s is required." },
+          "condition": { "kind": "users", "allow": ["70121:9d2c7e1b-4f3a-4c8e-b7a6-2e1f0d9c8b7a"] }
+        },
+        {
+          "id": "81", "name": "Won't do", "from": "*", "to": "10007", "hasScreen": true,
+          "fields": {
+            "resolution": { "required": true, "name": "Resolution", "schema": { "type": "resolution", "system": "resolution" }, "allowedValues": [{ "id": "10001", "name": "Won't Do" }, { "id": "10002", "name": "Duplicate" }, { "id": "10003", "name": "Cannot Reproduce" }], "operations": ["set"] },
+            "comment": { "required": false, "name": "Comment", "schema": { "type": "comment", "system": "comment" }, "operations": ["add"] }
+          }
+        },
+        { "id": "91", "name": "Reopen", "from": ["10006", "10007"], "to": "10001" }
+      ]
+    },
+    "PAY Bug workflow": {
+      "name": "PAY Bug workflow",
+      "statuses": ["10001", "3", "10003", "10004", "10006", "10007"],
+      "initial": "10001",
+      "transitions": [
+        { "id": "21", "name": "Start", "from": ["10001"], "to": "3", "condition": { "kind": "assigneeOnly" } },
+        { "id": "41", "name": "Request review", "from": ["3"], "to": "10003" },
+        { "id": "51", "name": "Send to QA", "from": ["10003"], "to": "10004" },
+        { "id": "52", "name": "Changes requested", "from": ["10003", "10004"], "to": "3" },
+        {
+          "id": "71", "name": "Close", "from": ["10004"], "to": "10006", "hasScreen": true,
+          "fields": {
+            "resolution": { "required": true, "name": "Resolution", "schema": { "type": "resolution", "system": "resolution" }, "allowedValues": [{ "id": "10000", "name": "Done" }, { "id": "10003", "name": "Cannot Reproduce" }], "operations": ["set"] }
+          }
+        },
+        {
+          "id": "81", "name": "Won't do", "from": "*", "to": "10007", "hasScreen": true,
+          "fields": {
+            "resolution": { "required": true, "name": "Resolution", "schema": { "type": "resolution", "system": "resolution" }, "allowedValues": [{ "id": "10001", "name": "Won't Do" }, { "id": "10002", "name": "Duplicate" }], "operations": ["set"] }
+          }
+        },
+        { "id": "91", "name": "Reopen", "from": ["10006", "10007"], "to": "10001" }
+      ]
+    },
+    "PAY Sub-task workflow": {
+      "name": "PAY Sub-task workflow",
+      "statuses": ["10001", "3", "10006"],
+      "initial": "10001",
+      "transitions": [
+        { "id": "21", "name": "Start", "from": ["10001"], "to": "3" },
+        { "id": "31", "name": "Done", "from": "*", "to": "10006" },
+        { "id": "91", "name": "Reopen", "from": ["10006"], "to": "10001" }
+      ]
+    },
+    "PAY Epic workflow": {
+      "name": "PAY Epic workflow",
+      "statuses": ["10001", "3", "10006"],
+      "initial": "10001",
+      "transitions": [
+        { "id": "21", "name": "Start", "from": ["10001"], "to": "3" },
+        { "id": "31", "name": "Done", "from": "*", "to": "10006" }
+      ]
+    }
+  },
+  "projects": [
+    {
+      "id": "10100", "key": "PAY", "name": "Payments", "style": "classic", "simplified": false, "projectTypeKey": "software",
+      "projectKeys": ["PAY"],
+      "issueTypes": [
+        { "id": "10004", "name": "Bug", "subtask": false, "hierarchyLevel": 0, "workflow": "PAY Bug workflow" },
+        { "id": "10001", "name": "Story", "subtask": false, "hierarchyLevel": 0, "workflow": "PAY Story workflow" },
+        { "id": "10002", "name": "Task", "subtask": false, "hierarchyLevel": 0, "workflow": "PAY Story workflow" },
+        { "id": "10003", "name": "Sub-task", "subtask": true, "hierarchyLevel": -1, "workflow": "PAY Sub-task workflow" },
+        { "id": "10000", "name": "Epic", "subtask": false, "hierarchyLevel": 1, "workflow": "PAY Epic workflow" }
+      ]
+    }
+  ],
+  "resolutions": [
+    { "id": "10000", "name": "Done", "isDefault": true },
+    { "id": "10001", "name": "Won't Do" },
+    { "id": "10002", "name": "Duplicate" },
+    { "id": "10003", "name": "Cannot Reproduce" }
+  ],
+  "priorities": [
+    { "id": "1", "name": "Highest" }, { "id": "2", "name": "High" }, { "id": "3", "name": "Medium" }, { "id": "4", "name": "Low" }, { "id": "5", "name": "Lowest" }
+  ],
+  "fields": [
+    { "id": "summary", "key": "summary", "name": "Summary", "custom": false, "schema": { "type": "string", "system": "summary" }, "clauseNames": ["summary"] },
+    { "id": "description", "key": "description", "name": "Description", "custom": false, "schema": { "type": "string", "system": "description" }, "clauseNames": ["description"] },
+    { "id": "status", "key": "status", "name": "Status", "custom": false, "schema": { "type": "status", "system": "status" }, "clauseNames": ["status"] },
+    { "id": "assignee", "key": "assignee", "name": "Assignee", "custom": false, "schema": { "type": "user", "system": "assignee" }, "clauseNames": ["assignee"] },
+    { "id": "reporter", "key": "reporter", "name": "Reporter", "custom": false, "schema": { "type": "user", "system": "reporter" }, "clauseNames": ["reporter"] },
+    { "id": "priority", "key": "priority", "name": "Priority", "custom": false, "schema": { "type": "priority", "system": "priority" }, "clauseNames": ["priority"] },
+    { "id": "issuetype", "key": "issuetype", "name": "Issue Type", "custom": false, "schema": { "type": "issuetype", "system": "issuetype" }, "clauseNames": ["issuetype", "type"] },
+    { "id": "parent", "key": "parent", "name": "Parent", "custom": false, "schema": { "type": "issuelink", "system": "parent" }, "clauseNames": ["parent"] },
+    { "id": "resolution", "key": "resolution", "name": "Resolution", "custom": false, "schema": { "type": "resolution", "system": "resolution" }, "clauseNames": ["resolution"] },
+    { "id": "labels", "key": "labels", "name": "Labels", "custom": false, "schema": { "type": "array", "items": "string", "system": "labels" }, "clauseNames": ["labels"] },
+    { "id": "components", "key": "components", "name": "Components", "custom": false, "schema": { "type": "array", "items": "component", "system": "components" }, "clauseNames": ["component"] },
+    { "id": "fixVersions", "key": "fixVersions", "name": "Fix versions", "custom": false, "schema": { "type": "array", "items": "version", "system": "fixVersions" }, "clauseNames": ["fixVersion"] },
+    { "id": "issuelinks", "key": "issuelinks", "name": "Linked Issues", "custom": false, "schema": { "type": "array", "items": "issuelinks", "system": "issuelinks" }, "clauseNames": ["issueLink"] },
+    { "id": "subtasks", "key": "subtasks", "name": "Sub-tasks", "custom": false, "schema": { "type": "array", "items": "issuelinks", "system": "subtasks" }, "clauseNames": ["subtasks"] },
+    { "id": "comment", "key": "comment", "name": "Comment", "custom": false, "schema": { "type": "comments-page", "system": "comment" }, "clauseNames": ["comment"] },
+    { "id": "attachment", "key": "attachment", "name": "Attachment", "custom": false, "schema": { "type": "array", "items": "attachment", "system": "attachment" }, "clauseNames": ["attachments"] },
+    { "id": "created", "key": "created", "name": "Created", "custom": false, "schema": { "type": "datetime", "system": "created" }, "clauseNames": ["created", "createdDate"] },
+    { "id": "updated", "key": "updated", "name": "Updated", "custom": false, "schema": { "type": "datetime", "system": "updated" }, "clauseNames": ["updated", "updatedDate"] },
+    { "id": "customfield_10020", "key": "customfield_10020", "name": "Sprint", "custom": true, "schema": { "type": "array", "items": "json", "custom": "com.pyxis.greenhopper.jira:gh-sprint", "customId": 10020 }, "clauseNames": ["cf[10020]", "Sprint"] },
+    { "id": "customfield_10019", "key": "customfield_10019", "name": "Rank", "custom": true, "schema": { "type": "any", "custom": "com.pyxis.greenhopper.jira:gh-lexo-rank", "customId": 10019 }, "clauseNames": ["cf[10019]", "Rank"] },
+    { "id": "customfield_10028", "key": "customfield_10028", "name": "Story Points", "custom": true, "schema": { "type": "number", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:float", "customId": 10028 }, "clauseNames": ["cf[10028]", "Story Points"] },
+    { "id": "customfield_10016", "key": "customfield_10016", "name": "Story point estimate", "custom": true, "schema": { "type": "number", "custom": "com.pyxis.greenhopper.jira:jsw-story-points", "customId": 10016 }, "clauseNames": ["cf[10016]", "Story point estimate"] },
+    { "id": "customfield_10021", "key": "customfield_10021", "name": "Flagged", "custom": true, "schema": { "type": "array", "items": "option", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes", "customId": 10021 }, "clauseNames": ["cf[10021]", "Flagged", "Flagged[Checkboxes]"] },
+    { "id": "customfield_10001", "key": "customfield_10001", "name": "Team", "custom": true, "schema": { "type": "team", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:atlassian-team", "customId": 10001 }, "clauseNames": ["cf[10001]", "Team", "Team[Team]"] },
+    { "id": "customfield_10050", "key": "customfield_10050", "name": "Acceptance Criteria", "custom": true, "schema": { "type": "string", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:textarea", "customId": 10050 }, "clauseNames": ["cf[10050]", "Acceptance Criteria"] },
+    { "id": "customfield_10015", "key": "customfield_10015", "name": "Start date", "custom": true, "schema": { "type": "date", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:datepicker", "customId": 10015 }, "clauseNames": ["cf[10015]", "Start date"] },
+    { "id": "duedate", "key": "duedate", "name": "Due date", "custom": false, "schema": { "type": "date", "system": "duedate" }, "clauseNames": ["due", "duedate"] }
+  ],
+  "boards": [
+    {
+      "id": 12, "name": "PAY board", "type": "scrum", "projectKey": "PAY",
+      "filter": { "id": "10040", "jql": "project = PAY ORDER BY Rank ASC" },
+      "columns": [
+        { "name": "To Do", "statuses": ["10001"] },
+        { "name": "In Progress", "statuses": ["3", "10002"] },
+        { "name": "Review", "statuses": ["10003", "10004"], "max": 4 },
+        { "name": "Ready", "statuses": ["10005"] },
+        { "name": "Done", "statuses": ["10006", "10007"] }
+      ],
+      "estimationFieldId": "customfield_10028",
+      "rankFieldId": 10019,
+      "features": { "BACKLOG": "ENABLED", "SPRINTS": "ENABLED", "ESTIMATION": "ENABLED", "RELEASES": "ENABLED", "CODE": "ENABLED" }
+    },
+    {
+      "id": 13, "name": "PAY bugs (second board on the same project)", "type": "kanban", "projectKey": "PAY",
+      "filter": { "id": "10041", "jql": "project = PAY AND issuetype = Bug ORDER BY Rank ASC" },
+      "subQuery": "fixVersion in unreleasedVersions() OR fixVersion is EMPTY",
+      "columns": [
+        { "name": "Open", "statuses": ["10001"] },
+        { "name": "Fixing", "statuses": ["3", "10003", "10004"] },
+        { "name": "Closed", "statuses": ["10006", "10007"] }
+      ],
+      "rankFieldId": 10019,
+      "features": { "BACKLOG": "DISABLED", "SPRINTS": "DISABLED" }
+    }
+  ],
+  "sprints": [
+    { "id": 86, "boardId": 12, "name": "PAY Sprint 41", "state": "closed", "startDate": "2026-09-28T09:00:00.000Z", "endDate": "2026-10-12T09:00:00.000Z" },
+    { "id": 87, "boardId": 12, "name": "PAY Sprint 42", "state": "active", "startDate": "2026-10-12T09:00:00.000Z", "endDate": "2026-10-26T09:00:00.000Z", "goal": "Webhook reliability" },
+    { "id": 89, "boardId": 12, "name": "PAY Hotfix sprint", "state": "active", "startDate": "2026-10-20T09:00:00.000Z", "endDate": "2026-10-27T09:00:00.000Z" },
+    { "id": 88, "boardId": 12, "name": "PAY Sprint 43", "state": "future" }
+  ],
+  "issues": [
+    {
+      "id": "10400", "key": "PAY-300", "project": "PAY", "issueType": "10000", "status": "3",
+      "summary": "Webhook reliability", "description": null,
+      "assignee": "5b10a2844c20165700ede21g", "reporter": "5b10a2844c20165700ede21g", "priority": "High",
+      "created": "2026-09-20T10:00:00.000+0000", "updated": "2026-10-12T09:05:00.000+0000"
+    },
+    {
+      "id": "10423", "key": "PAY-318", "project": "PAY", "issueType": "10004", "status": "10001",
+      "summary": "Retry failed webhooks",
+      "description": { "adf": { "type": "doc", "version": 1, "content": [
+        { "type": "paragraph", "content": [ { "type": "text", "text": "Failed deliveries are dropped. Retry with backoff; see " }, { "type": "text", "text": "the runbook", "marks": [ { "type": "link", "attrs": { "href": "https://wiki.example.com/runbook" } } ] }, { "type": "text", "text": "." } ] },
+        { "type": "panel", "attrs": { "panelType": "warning" }, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Do not retry 4xx except 429." } ] } ] },
+        { "type": "heading", "attrs": { "level": 3 }, "content": [ { "type": "text", "text": "Acceptance Criteria" } ] },
+        { "type": "taskList", "attrs": { "localId": "tl-1" }, "content": [
+          { "type": "taskItem", "attrs": { "localId": "ti-1", "state": "DONE" }, "content": [ { "type": "text", "text": "Retries 5 times with jittered backoff" } ] },
+          { "type": "taskItem", "attrs": { "localId": "ti-2", "state": "TODO" }, "content": [ { "type": "text", "text": "Dead-letters after the last retry" } ] }
+        ] },
+        { "type": "codeBlock", "attrs": { "language": "ts" }, "content": [ { "type": "text", "text": "await retry(send, { attempts: 5 })" } ] },
+        { "type": "paragraph", "content": [ { "type": "mention", "attrs": { "id": "5b10a2844c20165700ede21g", "text": "@Jane Doe" } }, { "type": "text", "text": " owns the queue. " }, { "type": "status", "attrs": { "text": "BLOCKED ON INFRA", "color": "red" } }, { "type": "text", "text": " " }, { "type": "emoji", "attrs": { "shortName": ":warning:", "text": "⚠️" } } ] },
+        { "type": "mediaSingle", "content": [ { "type": "media", "attrs": { "type": "file", "id": "a1b2c3", "collection": "jira-10423" } } ] }
+      ] } },
+      "assignee": null, "reporter": "5b10a2844c20165700ede21g", "priority": "High",
+      "labels": ["webhooks"], "components": ["api"], "parent": "PAY-300", "sprints": [87], "estimate": 3,
+      "links": [ { "type": "Blocks", "direction": "inward", "key": "PAY-321" } ],
+      "created": "2026-10-13T08:00:00.000+0000", "updated": "2026-10-22T09:14:00.000+0000",
+      "comments": [
+        { "id": "10023", "author": "5b10a2844c20165700ede21g", "created": "2026-10-21T11:00:00.000+0000", "updated": "2026-10-21T11:00:00.000+0000",
+          "body": { "adf": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Multi-line comment,\nsecond line." } ] } ] } } },
+        { "id": "10024", "author": "5b10a2844c20165700ede21g", "created": "2026-10-21T12:00:00.000+0000", "updated": "2026-10-22T09:14:00.000+0000",
+          "visibility": { "type": "role", "value": "Developers" },
+          "body": { "adf": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Edited, role-restricted." } ] } ] } } }
+      ],
+      "changelog": [
+        { "id": "20001", "author": "5b10a2844c20165700ede21g", "created": "2026-10-22T09:14:00.000+0000", "items": [ { "field": "assignee", "fieldId": "assignee", "from": "5b10ac8d82e05b22cc7d4ef5", "fromString": "Ujjwal Solanki", "to": null, "toString": null } ] }
+      ]
+    },
+    {
+      "id": "10426", "key": "PAY-321", "project": "PAY", "issueType": "10001", "status": "3",
+      "summary": "Move webhook queue to the new broker",
+      "description": { "adf": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Infra work that PAY-318 waits on." } ] } ] } },
+      "assignee": "5b10a2844c20165700ede21g", "reporter": "5b10a2844c20165700ede21g", "priority": "Medium",
+      "parent": "PAY-300", "sprints": [87], "estimate": 5,
+      "links": [ { "type": "Blocks", "direction": "outward", "key": "PAY-318" } ],
+      "created": "2026-10-13T08:10:00.000+0000", "updated": "2026-10-20T16:00:00.000+0000"
+    },
+    {
+      "id": "10427", "key": "PAY-322", "project": "PAY", "issueType": "10001", "status": "10001",
+      "summary": "Expose retry metrics",
+      "description": { "adf": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Prometheus counters for retries and dead letters." } ] } ] } },
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10a2844c20165700ede21g", "priority": "Medium",
+      "parent": "PAY-300", "sprints": [87], "estimate": 2,
+      "custom": { "customfield_10050": "* Counter per endpoint\n* Dead-letter gauge\n* Dashboard panel" },
+      "created": "2026-10-13T08:20:00.000+0000", "updated": "2026-10-23T07:30:00.000+0000"
+    },
+    {
+      "id": "10428", "key": "PAY-323", "project": "PAY", "issueType": "10003", "status": "10001",
+      "summary": "Counter for dead letters", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Low",
+      "parent": "PAY-322", "sprints": [87],
+      "created": "2026-10-14T08:00:00.000+0000", "updated": "2026-10-14T08:00:00.000+0000"
+    },
+    {
+      "id": "10429", "key": "PAY-324", "project": "PAY", "issueType": "10001", "status": "10003",
+      "summary": "Idempotency keys on webhook sends",
+      "description": { "adf": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Already in review." } ] } ] } },
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "High",
+      "sprints": [87], "estimate": 3,
+      "properties": { "hivemind": { "hiveVersion": "2026.10.5", "branch": "PAY-324-idempotency-keys", "pr": { "repo": "acme/payments", "number": 1180 }, "by": "machine:7f3a" } },
+      "remoteLinks": [ { "id": 10000, "globalId": "github-pr:acme/payments#1180", "object": { "url": "https://github.com/acme/payments/pull/1180", "title": "PAY-324: Idempotency keys on webhook sends", "status": { "resolved": false } } } ],
+      "created": "2026-10-13T09:00:00.000+0000", "updated": "2026-10-21T15:00:00.000+0000"
+    },
+    {
+      "id": "10430", "key": "PAY-325", "project": "PAY", "issueType": "10001", "status": "3",
+      "summary": "Signing secret rotation",
+      "description": { "adf": { "type": "doc", "version": 1, "content": [ { "type": "paragraph", "content": [ { "type": "text", "text": "Someone else is on this one." } ] } ] } },
+      "assignee": "5b10a2844c20165700ede21g", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Medium",
+      "sprints": [89], "flagged": true,
+      "created": "2026-10-20T09:00:00.000+0000", "updated": "2026-10-23T12:00:00.000+0000"
+    },
+    {
+      "id": "10431", "key": "PAY-326", "project": "PAY", "issueType": "10001", "status": "10001",
+      "summary": "Retry dashboard (next sprint)", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Low",
+      "sprints": [88],
+      "created": "2026-10-20T09:30:00.000+0000", "updated": "2026-10-20T09:30:00.000+0000"
+    },
+    {
+      "id": "10432", "key": "PAY-327", "project": "PAY", "issueType": "10001", "status": "10000",
+      "summary": "Backlog idea: replay tool", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Lowest",
+      "created": "2026-10-01T09:30:00.000+0000", "updated": "2026-10-01T09:30:00.000+0000"
+    },
+    {
+      "id": "10433", "key": "PAY-328", "project": "PAY", "issueType": "10001", "status": "10006", "resolution": "Done",
+      "summary": "Webhook payload v2", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Medium",
+      "sprints": [86, 87], "fixVersions": ["2026.10"],
+      "created": "2026-09-28T09:30:00.000+0000", "updated": "2026-10-15T10:00:00.000+0000"
+    },
+    {
+      "id": "10434", "key": "PAY-329", "project": "PAY", "issueType": "10004", "status": "10001",
+      "summary": "Bug assigned to Jane (Start is assignee-only)", "description": null,
+      "assignee": "5b10a2844c20165700ede21g", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "High",
+      "sprints": [87],
+      "created": "2026-10-16T09:30:00.000+0000", "updated": "2026-10-16T09:30:00.000+0000"
+    },
+    {
+      "id": "10435", "key": "PAY-330", "project": "PAY", "issueType": "10001", "status": "10005",
+      "summary": "Ready to release, but only Release Bot may release", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Medium",
+      "sprints": [87],
+      "created": "2026-10-16T10:30:00.000+0000", "updated": "2026-10-22T10:30:00.000+0000"
+    },
+    {
+      "id": "10436", "key": "PAY-331", "project": "PAY", "issueType": "10001", "status": "10001",
+      "summary": "Restricted: security fix", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Highest",
+      "sprints": [87], "restricted": true,
+      "created": "2026-10-16T11:30:00.000+0000", "updated": "2026-10-23T11:30:00.000+0000"
+    },
+    {
+      "id": "10437", "key": "PAY-332", "project": "PAY", "issueType": "10001", "status": "10001",
+      "summary": "Deleted after it was mirrored", "description": null,
+      "assignee": "5b10ac8d82e05b22cc7d4ef5", "reporter": "5b10ac8d82e05b22cc7d4ef5", "priority": "Low",
+      "sprints": [87], "deleted": true,
+      "created": "2026-10-16T12:30:00.000+0000", "updated": "2026-10-16T12:30:00.000+0000"
+    }
+  ],
+  "faults": [
+    { "name": "burst 429 on search, then OK", "match": { "method": "POST", "path": "/rest/api/3/search/jql", "nth": 3 }, "status": 429,
+      "headers": { "Retry-After": "2", "RateLimit-Reason": "jira-burst-based", "X-RateLimit-Limit": "100", "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "2026-10-24T08:00:02Z" } },
+    { "name": "per-issue write limit on a transition", "match": { "method": "POST", "path": "/rest/api/3/issue/PAY-322/transitions", "nth": 2 }, "status": 429,
+      "headers": { "Retry-After": "3", "RateLimit-Reason": "jira-per-issue-on-write" } },
+    { "name": "near-limit warning", "match": { "method": "GET", "path": "/rest/api/3/myself", "nth": 2 }, "status": 200,
+      "headers": { "X-RateLimit-NearLimit": "true" } },
+    { "name": "old offset search is gone on Cloud", "match": { "method": "GET", "path": "/rest/api/3/search", "times": 1000 }, "status": 410,
+      "body": { "errorMessages": ["The requested API has been removed. Please migrate to the /rest/api/3/search/jql API. A full migration guideline is available at https://developer.atlassian.com/changelog/#CHANGE-2046"], "errors": {} } }
+  ]
+}
