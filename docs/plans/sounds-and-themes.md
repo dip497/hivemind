@@ -69,7 +69,7 @@ then Round 1, then this plan.
 | S2 | The sound player, built-in sounds, Notifications ▸ Sounds, `hive notifications` | ☐ |
 | S3 | Pop-ups grouped in a burst ("10 agents finished") | ☐ (needs a yes, see Decisions) |
 | T0 | HiveHub works out "needs Hivemind X or newer" for packages and views | ☐ |
-| T1 | Fonts that apply (the system font by default, CSS, terminal, `@font-face` from `hivemedia:`) | ☑ 2026-10-22 except `@font-face` (comes with T2's font files): the settings drive the app, terminals (live, atlas redrawn), diffs and the editor; migration 0005; Settings ▸ Appearance has Interface font and Code font |
+| T1 | Fonts that apply (the system font by default, CSS, terminal, `@font-face` from `hivemedia:`) | ☑ 2026-10-22 except `@font-face` (comes with T2's font files): the settings drive the app, terminals (live, atlas redrawn), diffs and the editor; no migration (a file holding the old default `system-ui, sans-serif` is read as the system font, so nothing on disk changes); Settings ▸ Appearance has Interface font and Code font |
 | T2 | The theme member: `theme.json`, its checks, a custom accent | ☐ |
 | T3 | Apply, revert and update a theme: app, CLI, files copied | ☐ |
 | T4 | A theme's sounds | ☐ |
