@@ -240,8 +240,9 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         <span aria-hidden className="grid place-items-center">
           {t.kind === AGENT_TILE_KIND ? <AgentIcon id={t.agent} size={ICON - 1} /> : <KindMark kind={t.kind} size={ICON} />}
         </span>
-        {/* Working, or finished since you last looked: a mark on its icon's corner, as a machine's link is. */}
-        {(st === "working" || unread) && (
+        {/* Working, or finished since you last looked: a mark on its icon's corner, as a machine's link is.
+            A failed one has its red word instead. */}
+        {(st === "working" || (unread && !failed)) && (
           <span className={`absolute -bottom-0.5 -right-0.5 grid rounded-full p-px ${selected ? "bg-[var(--surface-4)]" : "bg-[var(--color-bg2)] group-hover:bg-[var(--surface-3)]"}`}>
             {st === "working"
               ? <span aria-label={LOOKS.working.word} title={LOOKS.working.word} className="grid"><StatusGlyph look="working" className="size-1.5" /></span>

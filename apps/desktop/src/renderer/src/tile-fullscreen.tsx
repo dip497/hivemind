@@ -1,7 +1,7 @@
 /**
  * Shared tile fit-to-screen fullscreen — one component + one hook reused by every
  * tile kind, so the look (a frosted glass panel floating over a clean copy of the
- * live wallpaper) and the behavior (Esc to exit, font A−/A+) stay identical
+ * live wallpaper) and the behavior (the keys that leave, font A−/A+) stay identical
  * whether you fullscreen a terminal, an editor, or a diff.
  *
  * Two integration styles, both filling the SAME `hostRef` glass panel:
@@ -13,7 +13,7 @@
  *     `hostRef.current` while open — switching the portal container preserves the
  *     component's state.
  */
-import { onShortcut } from "./shortcut";
+import { actionKey, onShortcut } from "./shortcut";
 import { useEffect, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Wallpaper } from "./Wallpaper";
@@ -26,7 +26,7 @@ function FsFontButtons({ font }: { font: TileFont }) {
   return (
     <span
       className="nodrag inline-flex items-center rounded border border-[var(--color-line2)] overflow-hidden"
-      title="Font size (Ctrl/Cmd ±)"
+      title={`Font size (${actionKey("font-bigger")} / ${actionKey("font-smaller")})`}
     >
       <button
         onClick={font.dec}
@@ -49,7 +49,8 @@ function FsFontButtons({ font }: { font: TileFont }) {
 /**
  * The fullscreen chrome. Portaled to document.body so it escapes react-flow's CSS
  * transform; renders a clean embedded wallpaper behind a frosted glass panel whose
- * `hostRef` div the caller fills (reparent or portal). Esc closes.
+ * `hostRef` div the caller fills (reparent or portal). Esc (outside a terminal or field) or the
+ * fit-to-screen key closes.
  */
 export function FullscreenShell({
   title,
@@ -91,9 +92,10 @@ export function FullscreenShell({
             <button
               onClick={onClose}
               className="nodrag rounded border border-[var(--color-line2)] px-1.5 h-5 grid place-items-center text-chip text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] transition-colors"
-              title="Exit fullscreen (Esc)"
+              title="Leave fullscreen"
             >
-              Esc ✕
+              {/* Esc leaves too, but not from inside a terminal or an editor: this key does. */}
+              {actionKey("fit-to-screen")} ✕
             </button>
           </span>
         </div>

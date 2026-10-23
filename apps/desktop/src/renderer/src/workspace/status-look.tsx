@@ -34,9 +34,10 @@ const WAITS: Partial<Record<TileStatusKind, string>> = {
   permission: "approve?", question: "input?", plan_review: "review?", awaiting_approval: "approval?", blocked: "blocked",
 };
 
-/** An exit failed when its process said so (a non-zero code); a close or `/exit` is a clean one. */
-export function exitFailed(e: { status: TileStatusKind; exitCode?: number }): boolean {
-  return e.status === "exited" && !!e.exitCode;
+/** An exit failed when its process said so (a non-zero code), or it never ran (`failed`); a close
+ *  or `/exit` is a clean one. */
+export function exitFailed(e: { status: TileStatusKind; exitCode?: number; failed?: boolean }): boolean {
+  return e.status === "exited" && (!!e.exitCode || !!e.failed);
 }
 
 /** A status's look. `unread`: it finished since the person last looked. */

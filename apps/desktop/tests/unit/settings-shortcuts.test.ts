@@ -1,12 +1,14 @@
 // Settings → Shortcuts and the guide's table name the keys the keymap (shared/keymap.ts) answers,
 // as each platform writes them, and every action in it: a key listed that the app does not take, or
 // an action left out, is a list that drifted from the keys (the page showed ⌘ Tab, bound as Ctrl+Tab).
+// On Windows and Linux the system takes the keys held with Super (the Windows key): none is named there.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import SettingsPages from "../../src/renderer/src/settings-panels.tsx";
+import { FontStepper } from "../../src/renderer/src/tile-font.tsx";
 import { actionsFor, KEYMAP, labelsOf, type Action, type Where } from "../../src/shared/keymap.ts";
 import type { KeyPress } from "@hivemind/view-sdk/commands";
 
@@ -55,11 +57,17 @@ function pressesOf(label: string, os: OS): KeyPress[] {
   return digits.map((d) => ({ ...a, key: d, code: `Digit${d}` }));
 }
 
-/** What is wrong with a list of keys for one place: a key the app does not take there, an action it leaves out. */
+/** A key the system takes before the app: on Windows and Linux, one held with Super. */
+const systemKey = (keys: string, os: OS) => os !== "mac" && keys.split("+").includes("meta");
+
+/** What is wrong with a list of keys for one place: a key the app does not take there, an action it
+ *  leaves out, a key the system takes. "—": no key on this platform. */
 function drift(where: Where, labels: string[], os: OS): string[] {
   const wrong: string[] = [];
   const answered = new Set<Action>();
   for (const label of labels) {
+    if (label === "—") continue;
+    if (os !== "mac" && /\b(Super|Win)\b/.test(label)) wrong.push(`"${label}" is listed on ${os}, where the system takes it`);
     let presses: KeyPress[];
     try { presses = pressesOf(label, os); } catch (e) { wrong.push((e as Error).message); continue; }
     for (const p of presses) {
@@ -68,7 +76,7 @@ function drift(where: Where, labels: string[], os: OS): string[] {
       for (const a of acts) answered.add(a);
     }
   }
-  for (const b of KEYMAP) if (b.where === where && !answered.has(b.action)) wrong.push(`${b.action} (${b.keys}) is not listed under ${SECTION[where]} on ${os}`);
+  for (const b of KEYMAP) if (b.where === where && !systemKey(b.keys, os) && !answered.has(b.action)) wrong.push(`${b.action} (${b.keys}) is not listed under ${SECTION[where]} on ${os}`);
   return [...new Set(wrong)];
 }
 
@@ -89,6 +97,9 @@ test("Settings → Shortcuts lists every key of the keymap, as each platform wri
       assert.ok(labels.length > 0, `the ${SECTION[where]} section was read on ${os}`);
       assert.deepEqual(drift(where, labels, os), []);
     }
+    // Everyday keys first: Quit is the last of the keys that work anywhere.
+    const anywhere = new RegExp(`<section[^>]*aria-label="${SECTION.anywhere}"[^>]*>([\\s\\S]*?)</section>`).exec(page)?.[1] ?? "";
+    assert.match([...anywhere.matchAll(/<dd>([^<]+)<\/dd>/g)].at(-1)?.[1] ?? "", /^Quit/, `Quit is listed last under Anywhere on ${os}`);
   }
 });
 
@@ -109,10 +120,24 @@ test("the guide's table lists every key of the keymap, for a Mac and for Windows
   }
 });
 
+test("the font buttons name the keys that size a terminal's text, on each platform", () => {
+  const font = { size: 13, inc() {}, dec() {}, reset() {}, set() {}, best() {} };
+  for (const os of ["mac", "linux", "windows"] as const) {
+    Object.defineProperty(globalThis, "navigator", { value: { platform: PLATFORM[os] }, configurable: true });
+    const html = unescape(renderToStaticMarkup(createElement(FontStepper, font)));
+    for (const [action, word] of [["font-smaller", "Smaller"], ["font-reset", "Reset"], ["font-bigger", "Larger"]] as const) {
+      const key = new RegExp(`title="${word}[^"(]*\\(([^)]+)\\)"`).exec(html)?.[1];
+      assert.ok(key, `the ${word} button names a key on ${os}`);
+      assert.ok(pressesOf(key, os).some((p) => actionsFor(p, "terminal", os === "mac").includes(action)), `"${key}" runs ${action} on ${os}`);
+    }
+  }
+});
+
 test("a hint names the key held with this platform's own modifier, and it runs the action", () => {
-  // Layers is ⌘B from anywhere on a Mac; elsewhere Super+B is the window manager's, so the hint is Ctrl+B.
+  // Layers is ⌘B from anywhere on a Mac; elsewhere Super+B is the system's, so only Ctrl+B is named.
   assert.equal(labelsOf("toggle-layers", "mac")[0], "⌘B");
-  assert.equal(labelsOf("toggle-layers", "linux")[0], "Ctrl+B");
+  assert.deepEqual(labelsOf("toggle-layers", "linux"), ["Ctrl+B"]);
+  assert.deepEqual(labelsOf("toggle-layers", "windows"), ["Ctrl+B"]);
   for (const os of ["mac", "linux", "windows"] as const) {
     for (const action of new Set(KEYMAP.map((b) => b.action))) {
       const runs = pressesOf(labelsOf(action, os)[0]!, os).some((p) => (["anywhere", "canvas", "terminal"] as const).some((w) => actionsFor(p, w, os === "mac").includes(action)));

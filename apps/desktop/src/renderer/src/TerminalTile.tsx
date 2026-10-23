@@ -12,7 +12,7 @@ import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl } from "./tile-font";
-import { IS_MAC, onShortcut } from "./shortcut";
+import { actionKey, IS_MAC, onShortcut } from "./shortcut";
 import { actionsFor } from "../../shared/keymap";
 import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
@@ -297,7 +297,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // from screen or PTY activity. The words, shape and colour are workspace/status-look's, so
     // this header agrees with Layers and every surface bar.
     /** The header chip. An agent tile's follows the bus (the host's status); a shell's its own activity. */
-    const paint = (s: TileStatusKind, extra?: { exitCode?: number; detail?: string }) => {
+    const paint = (s: TileStatusKind, extra?: { exitCode?: number; failed?: boolean; detail?: string }) => {
       const dot = dotRef.current;
       const label = labelRef.current;
       if (!dot || !label) return;
@@ -321,7 +321,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
     /** What the tile itself knows: a shell's activity, and how any process exited — the code
      *  and detail let the awareness layer tell a crash from a clean close. */
-    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; detail?: string }) => {
+    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; failed?: boolean; detail?: string }) => {
       paint(s, extra);
       if (s === "exited") publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
     };
@@ -945,12 +945,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         if (pid === -1) {
           // An adopted session that is gone; or, in a workspace joined from elsewhere, one its host
           // is not running.
-          term.writeln(session
-            ? `\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`
-            : "\x1b[2m[hivemind] this terminal is not running on the machine it belongs to\x1b[0m");
+          const detail = session
+            ? `could not open session ${session}: it has ended, or its machine is unreachable`
+            : "this terminal is not running on the machine it belongs to";
+          term.writeln(`\x1b[2m[hivemind] ${detail}\x1b[0m`);
           attachedRef.current = false;
           exited = true;
-          setStatus("exited");
+          setStatus("exited", { failed: true, detail });
           return;
         }
         // Force the live PTY to match our CURRENT geometry. On a RE-ATTACH the
@@ -1001,9 +1002,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       } catch (e) {
         attachedRef.current = false;
         releaseBoot();
-        term.writeln(`\x1b[31m[hivemind] spawn failed: ${(e as Error).message}\x1b[0m`);
+        const detail = `spawn failed: ${(e as Error).message}`;
+        term.writeln(`\x1b[31m[hivemind] ${detail}\x1b[0m`);
         exited = true;
-        setStatus("exited");
+        setStatus("exited", { failed: true, detail });
       }
     }
     void doSpawn();
@@ -1359,7 +1361,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             and whole-tile scale (−/+, grows the node box + font in proportion). */}
         <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
           {/* Font size only (A−/A+) */}
-          <span className="nodrag inline-flex items-center divide-x divide-[var(--color-line2)] rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden" title="Font size (Ctrl/Cmd ±)">
+          <span className="nodrag inline-flex items-center divide-x divide-[var(--color-line2)] rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden" title={`Font size (${actionKey("font-bigger")} / ${actionKey("font-smaller")})`}>
             <Button variant="ghost" size="micro" onClick={font.dec} aria-label="decrease font size">
               A−
             </Button>
@@ -1384,7 +1386,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             onClick={() => setOverlay((v) => !v)}
             className="nodrag"
             aria-label="fullscreen terminal"
-            title="Fullscreen (Ctrl/Cmd ⇧F) · Esc to exit"
+            title={`Fullscreen (${actionKey("fit-to-screen")})`}
           >
             ⤢
           </Button>

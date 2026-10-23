@@ -1,37 +1,56 @@
 /**
- * What a screen reader is told about tiles: "<name> needs you", "<name> finished", "<name> failed",
- * once for each time a tile comes to that state. Statuses change many times a second, so this
- * keeps one look per tile and acts only when it changes; a state that has passed again before the
- * next announcement (a prompt answered at once, a turn that resumes) is never said.
+ * What a screen reader is told about tiles: a tile's name and "needs you", "finished" or "failed",
+ * for the same changes a toast and an OS notification tell (useAgentAwareness's `noticeOf`), under
+ * the same notification settings. Unlike a toast it is said for the selected tile too: a screen
+ * reader does not see the tile change. Each is said once its tile's state has held for a moment, so
+ * a state that passes at once (a prompt answered, a turn that resumes) is never said.
+ *
+ * Per status event: a map read and write and the notice check, all O(1). The bus emits only on a
+ * change. The timer runs only while something waits to be said.
  */
-import type { StatusEvent } from "../agent-status-bus";
-import { exitFailed, LOOKS, statusLook, type StatusLook } from "./status-look";
+import { statusOf, type StatusEvent, type TileStatusKind } from "../agent-status-bus";
+import { noticeOf, type NoticeKind } from "../useAgentAwareness";
+import { getNotificationSettings } from "../notification-settings";
+import { shouldNotify } from "../../../shared/notification-settings.js";
+import { LOOKS } from "./status-look";
 
-/** How long a new state waits before it is said, with any others that came meanwhile. */
+/** How long a tile's new state holds before it is said. */
 const ANNOUNCE_MS = 700;
 
+const WORD: Record<NoticeKind, string> = { needs: LOOKS.needs.word, done: LOOKS.done.word, error: LOOKS.failed.word };
+
 export function createAnnouncer(say: (text: string) => void): { onStatus: (e: StatusEvent) => void; stop: () => void } {
-  const last = new Map<string, StatusLook>();
-  const pending = new Map<string, string>();
+  /** Each tile's last status, to tell a change from a repeat. */
+  const last = new Map<string, TileStatusKind>();
+  /** What waits to be said, per tile, and when its state changed. */
+  const pending = new Map<string, { text: string; at: number }>();
   let timer: ReturnType<typeof setTimeout> | null = null;
+  const arm = () => {
+    if (timer || !pending.size) return;
+    const first = Math.min(...[...pending.values()].map((p) => p.at));
+    timer = setTimeout(flush, Math.max(0, first + ANNOUNCE_MS - Date.now()));
+  };
   const flush = () => {
     timer = null;
-    if (pending.size) say([...pending.values()].join(". "));
-    pending.clear();
+    const now = Date.now();
+    // A tile the bus no longer knows has closed: nothing of it is said or kept.
+    for (const id of last.keys()) if (statusOf(id) === null) { last.delete(id); pending.delete(id); }
+    const due: string[] = [];
+    for (const [id, p] of pending) if (now - p.at >= ANNOUNCE_MS) { due.push(p.text); pending.delete(id); }
+    if (due.length) say(due.join(". "));
+    arm();
   };
   return {
     onStatus(e) {
-      const look = statusLook(e.status, { failed: exitFailed(e) });
       const prev = last.get(e.tileId);
-      last.set(e.tileId, look);
-      // The first status seen of a tile (every live one when the window opens) is where it is, not news.
-      if (prev === undefined || prev === look) return;
-      const finished = prev === "working" && (look === "idle" || look === "exited") && !e.synthetic;
-      const said = look === "needs" || look === "failed" ? LOOKS[look].word : finished ? LOOKS.done.word : null;
-      const name = e.label.startsWith("tile-") ? "A tile" : e.label;
-      if (said) pending.set(e.tileId, `${name} ${said}`);
-      else pending.delete(e.tileId);
-      if (pending.size && !timer) timer = setTimeout(flush, ANNOUNCE_MS);
+      if (prev === e.status) return;
+      last.set(e.tileId, e.status);
+      const kind = noticeOf(prev, e);
+      if (kind && shouldNotify(getNotificationSettings(), kind, "inApp")) {
+        const name = e.label.startsWith("tile-") ? "A tile" : e.label;
+        pending.set(e.tileId, { text: `${name} ${WORD[kind]}`, at: Date.now() });
+      } else pending.delete(e.tileId);
+      arm();
     },
     stop() {
       if (timer) clearTimeout(timer);

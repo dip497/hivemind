@@ -16,27 +16,33 @@ test("each look has its own shape and its own word, so none is told by colour al
 test("only needing you pulses, so reduced motion loses no state", () => {
   for (const s of NEEDS) assert.equal(statusLook(s), "needs", s);
   assert.deepEqual((Object.keys(LOOKS) as StatusLook[]).filter((l) => LOOKS[l].pulse), ["needs"]);
-  assert.equal(LOOKS.needs.color, "var(--color-status-attention)");
+});
+
+test("needing you and failing each have a colour no other look has", () => {
+  const looks = Object.keys(LOOKS) as StatusLook[];
+  for (const alarm of ["needs", "failed"] as const) {
+    for (const l of looks) if (l !== alarm) assert.notEqual(LOOKS[l].color, LOOKS[alarm].color, `${l} is not drawn as ${alarm}`);
+  }
 });
 
 test("a failed exit is the failure look; a clean one, or one whose code is unknown, is neutral", () => {
-  const look = (exitCode?: number) => statusLook("exited", { failed: exitFailed({ status: "exited", ...(exitCode === undefined ? {} : { exitCode }) }) });
-  assert.equal(look(1), "failed");
-  assert.equal(LOOKS.failed.color, "var(--color-status-failed)");
-  assert.equal(look(0), "exited");
-  assert.equal(look(), "exited");
-  assert.equal(LOOKS.exited.color, "var(--color-status-exited)");
+  const look = (e: { exitCode?: number; failed?: boolean }) => statusLook("exited", { failed: exitFailed({ status: "exited", ...e }) });
+  assert.equal(look({ exitCode: 1 }), "failed");
+  assert.equal(look({ exitCode: 0 }), "exited");
+  assert.equal(look({}), "exited");
+  // No code, and it never ran: a spawn that failed, a session that could not be opened.
+  assert.equal(look({ failed: true }), "failed");
   assert.equal(statusLook("working", { failed: true }), "working", "only an exit can fail");
+  assert.equal(exitFailed({ status: "working", failed: true }), false, "only an exit can fail");
   assert.equal(statusWord("exited", { failed: true }), "failed");
   assert.equal(statusWord("exited"), "exited");
 });
 
-test("working, idle and finished are their own looks, none of them the attention colour", () => {
+test("working, idle and finished are their own looks", () => {
   assert.equal(statusLook("working"), "working");
   assert.equal(statusLook("idle"), "idle");
   assert.equal(statusLook(null), "idle", "no status yet reads as idle");
   assert.equal(statusLook("idle", { unread: true }), "done");
-  for (const l of ["working", "idle", "done", "exited"] as const) assert.notEqual(LOOKS[l].color, LOOKS.needs.color, l);
 });
 
 test("a tile's own chip says what it waits for, in one word list", () => {

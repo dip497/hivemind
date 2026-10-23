@@ -8,6 +8,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./components/ui/button";
+import { actionKey } from "./shortcut";
 import { MIN_FONT as MIN, MAX_FONT as MAX, clampFont, optimalFontForScreen } from "./tile-font-calc";
 
 export { optimalFontForScreen } from "./tile-font-calc";
@@ -65,7 +66,7 @@ export function FontStepper({ size, inc, dec, reset }: TileFont) {
         variant="ghost"
         size="micro"
         onClick={dec}
-        title="Smaller font (Ctrl/Cmd −)"
+        title={`Smaller font (${actionKey("font-smaller")})`}
         aria-label="decrease font size"
       >
         A−
@@ -75,7 +76,7 @@ export function FontStepper({ size, inc, dec, reset }: TileFont) {
         size="micro"
         font="mono"
         onClick={reset}
-        title="Reset font size (Ctrl/Cmd 0)"
+        title={`Reset font size (${actionKey("font-reset")})`}
       >
         {size}
       </Button>
@@ -83,7 +84,7 @@ export function FontStepper({ size, inc, dec, reset }: TileFont) {
         variant="ghost"
         size="micro"
         onClick={inc}
-        title="Larger font (Ctrl/Cmd +)"
+        title={`Larger font (${actionKey("font-bigger")})`}
         aria-label="increase font size"
       >
         A+

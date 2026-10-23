@@ -28,7 +28,7 @@ import {
 } from "./appearance-controls";
 import { createContext, Fragment, useContext } from "react";
 import { pluginPage } from "./settings-registry";
-import { doesWhat, KEYMAP, keysLabel, type KeyOS, type Where } from "../../shared/keymap";
+import { doesWhat, KEYMAP, keysLabel, reachesApp, type KeyOS, type Where } from "../../shared/keymap";
 import { keyOS } from "./shortcut";
 
 // ── Appearance ──────────────────────────────────────────────────────────────
@@ -114,11 +114,12 @@ const SHORTCUT_PLACES: Array<[Where, string, string]> = [
 ];
 
 /** The keymap's rows for one place as this platform writes them (shared/keymap.ts), one row per
- *  action: `tile:1` … `tile:9` are one, and actions on the same keys are one, in the order tried. */
+ *  action: `tile:1` … `tile:9` are one, and actions on the same keys are one, in the order tried.
+ *  A key the system takes here (Super on Windows and Linux) is left out. */
 function shortcutRows(where: Where, os: KeyOS): Array<{ keys: string[]; does: string }> {
   const byAction = new Map<string, { keys: string[]; does: string }>();
   for (const b of KEYMAP) {
-    if (b.where !== where) continue;
+    if (b.where !== where || !reachesApp(b.keys, os)) continue;
     const id = b.action.startsWith("tile:") ? "tile" : b.action;
     const row = byAction.get(id) ?? { keys: [], does: doesWhat(b.action) };
     byAction.set(id, row);

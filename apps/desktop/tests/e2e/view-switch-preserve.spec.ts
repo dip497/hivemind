@@ -21,6 +21,8 @@ let page: Page;
 let repo: string;
 const FILE = "notes.ts";
 const MARK = "UNSAVED_VIEW_SWITCH_MARKER";
+/** A terminal header's mark for an ended process, clean or failed. */
+const ENDED = '.hm-term-root [data-status-look="exited"], .hm-term-root [data-status-look="failed"]';
 
 const toggleView = async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:toggle-view-mode")));
@@ -94,10 +96,9 @@ test("the terminal body is one instance, adopted by each view in turn — never 
   await page.waitForSelector(".react-flow__node-terminal");
   await expect(page.locator(".xterm")).toHaveCount(1);
   await expect.poll(() => probe(".react-flow__node-terminal .xterm")).toBe("kept");
-  // No session teardown surfaced: a killed PTY prints its exit banner and the
-  // header status flips to "exited".
+  // No session teardown surfaced: a killed PTY's header shows an exit, clean or failed.
   await page.waitForTimeout(400);
-  await expect(page.locator(".hm-term-root").filter({ hasText: "exited" })).toHaveCount(0);
+  await expect(page.locator(ENDED)).toHaveCount(0);
 });
 
 test("the camera survives a canvas → windows → canvas round trip (no snap back to launch viewport)", async () => {

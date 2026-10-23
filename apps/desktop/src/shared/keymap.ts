@@ -72,9 +72,8 @@ export function doesWhat(action: Action): string {
 
 const tiles = Array.from({ length: 9 }, (_, i) => ({ keys: `mod+${i + 1}`, where: "anywhere", action: `tile:${i + 1}` }) as const);
 
+/** In the order Settings ▸ Shortcuts lists them: everyday keys first, Quit last. */
 export const KEYMAP: readonly Binding[] = [
-  { keys: "mod+q", where: "anywhere", action: "quit" },
-  { keys: "f11", where: "anywhere", action: "window-fullscreen" },
   { keys: "mod+shift+`", where: "anywhere", action: "new-terminal" },
   { keys: "mod+shift+e", where: "anywhere", action: "explorer" },
   { keys: "mod+shift+a", where: "anywhere", action: "agent" },
@@ -87,6 +86,8 @@ export const KEYMAP: readonly Binding[] = [
   { keys: "mod+shift+0", where: "anywhere", action: "reset-scale" },
   { keys: "mod+.", where: "anywhere", action: "focus-selected" },
   { keys: "meta+b", where: "anywhere", action: "toggle-layers" },
+  { keys: "f11", where: "anywhere", action: "window-fullscreen" },
+  { keys: "mod+q", where: "anywhere", action: "quit" },
 
   { keys: "mod+e", where: "canvas", action: "toggle-view-mode" },
   { keys: "mod+z", where: "canvas", action: "undo" },
@@ -164,10 +165,16 @@ export function keysLabel(keys: string, os: KeyOS): string {
   return [meta && (os === "windows" ? "Win" : "Super"), ctrl && "Ctrl", c.alt && "Alt", c.shift && "Shift", key].filter(Boolean).join("+");
 }
 
+/** Whether a key reaches the app on this platform. On Windows and Linux the system takes the keys
+ *  held with Super (the Windows key) first, so they are not named there. */
+export function reachesApp(keys: string, os: KeyOS): boolean {
+  return os === "mac" || !readChord(keys)?.meta;
+}
+
 /** An action's keys as this platform writes them, the one to name first first: a key held with
  *  this platform's own modifier (⌘ on a Mac, Ctrl elsewhere) comes before one that is not. */
 export function labelsOf(action: Action, os: KeyOS): string[] {
   const foreign = (c: Chord) => (os === "mac" ? c.ctrl : c.meta);
-  const rows = READ.filter((b) => b.action === action).sort((a, b) => Number(foreign(a.chord)) - Number(foreign(b.chord)));
+  const rows = READ.filter((b) => b.action === action && reachesApp(b.keys, os)).sort((a, b) => Number(foreign(a.chord)) - Number(foreign(b.chord)));
   return [...new Set(rows.map((b) => keysLabel(b.keys, os)))];
 }
