@@ -40,7 +40,8 @@ Show the command, and explain each option in one line. List the ports I must ope
 | `--access-cache <s>` | 300 | How long a relay remembers a yes from that service. |
 | `--dns-bind <ip:port>` | none | The lookup also answers DNS there. |
 | `--lookup-limit per-address\|off` | `per-address` | Rate limit on lookups. |
-| `--phone <dir>` | none | Serves the [phone page](/phone) at `/phone/`. |
+| `--phone` | off | Serves the [phone page](/phone) this hive-net carries, its own release's, at `/phone/`. |
+| `--phone-folder <dir>` | none | Serves a phone page built here (`crates/hive-web/build.sh`) instead. |
 | `--views <port>` | none | Serves the phone page's views on that port, an origin of their own. |
 | `--push-allow <cidr>` | none | Also delivers push to UnifiedPush servers on this network. Repeat it for each. |
 | `--apns-key <.p8>` `--apns-key-id` `--apns-team` `--apns-topic` | none | Push to iPhones through Apple, for an app build you sign yourself. |

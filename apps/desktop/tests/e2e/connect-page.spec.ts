@@ -195,5 +195,5 @@ test("Set it up with an agent offers the agents here; the one chosen starts with
   await expect(page.locator(".settings-dialog")).toHaveCount(0);
   const args = path.join(root, "claude-args");
   await expect.poll(() => fs.existsSync(args) && fs.readFileSync(args, "utf8"), { timeout: 30_000 }).toContain("First ask me how my devices should reach this computer");
-  expect(fs.readFileSync(args, "utf8")).toContain("--phone ~/hive-network/phone");
+  expect(fs.readFileSync(args, "utf8")).toContain("--data ~/hive-network --phone`");
 });

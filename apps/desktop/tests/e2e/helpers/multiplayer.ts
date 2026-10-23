@@ -28,7 +28,7 @@ export async function ownNetwork(root: string, procs: ChildProcess[], policy: "c
   const voucher = (kind: string) => execFileSync(HIVE_NET, ["access", "voucher", "--kind", kind, "--admin", admin], { encoding: "utf8" }).trim();
   const adminId = (JSON.parse(voucher("enrol")) as { by: string }).by;
   const data = path.join(root, "network");
-  const server = spawn(HIVE_NET, ["serve", "--relay", "--lookup", "--access", "--push", "--push-allow", "127.0.0.0/8", "--admin-id", adminId, "--policy", policy, "--pow-bits", "8", "--data", data, "--bind", "127.0.0.1:0", ...(phone ? ["--phone", phone, "--views", "0"] : [])], { stdio: ["ignore", "pipe", "ignore"] });
+  const server = spawn(HIVE_NET, ["serve", "--relay", "--lookup", "--access", "--push", "--push-allow", "127.0.0.0/8", "--admin-id", adminId, "--policy", policy, "--pow-bits", "8", "--data", data, "--bind", "127.0.0.1:0", ...(phone ? ["--phone-folder", phone, "--views", "0"] : [])], { stdio: ["ignore", "pipe", "ignore"] });
   procs.push(server);
   const lines: string[] = [];
   await new Promise<void>((resolve) => server.stdout!.on("data", (d: Buffer) => { lines.push(...d.toString().trim().split("\n")); if (lines.length >= (phone ? 6 : 4)) resolve(); }));

@@ -660,7 +660,10 @@ async fn a_stream_whose_name_is_too_long_is_not_opened_and_one_after_it_is() {
     let (mut api_out, _api_in) = ws::open(&connection, "api").await.unwrap();
     write_frame(&mut api_out, b"hello").await.unwrap();
     assert_eq!(host.next("opened").await["name"], "api");
-    assert!(host.within("opened", Duration::from_secs(2)).await.is_none());
+    assert!(host
+        .within("opened", Duration::from_secs(2))
+        .await
+        .is_none());
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -702,7 +705,10 @@ async fn a_frame_larger_than_the_budget_arrives_while_other_streams_wait_for_mai
     // then the welcome's rest. Main reads nothing for a while, and then all of it.
     let (mut welcome, _w) = ws::open(&connection, "sync").await.unwrap();
     let len = 1536 * 1024;
-    welcome.write_all(&(len as u32).to_be_bytes()).await.unwrap();
+    welcome
+        .write_all(&(len as u32).to_be_bytes())
+        .await
+        .unwrap();
     welcome.write_all(&vec![b'w'; 100 * 1024]).await.unwrap();
     tokio::time::sleep(Duration::from_millis(300)).await;
     let mut busy = Vec::new();
@@ -717,7 +723,10 @@ async fn a_frame_larger_than_the_budget_arrives_while_other_streams_wait_for_mai
     }
     tokio::time::sleep(Duration::from_millis(500)).await;
     let rest = tokio::spawn(async move {
-        welcome.write_all(&vec![b'w'; len - 100 * 1024]).await.unwrap();
+        welcome
+            .write_all(&vec![b'w'; len - 100 * 1024])
+            .await
+            .unwrap();
         welcome
     });
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -775,7 +784,11 @@ async fn an_app_that_speaks_another_protocol_is_told_so_and_the_daemon_stops() {
         (json!({ "t": "hello", "v": 2 }), 2, false),
         // Untagged is protocol 2 or before, whatever it says.
         (json!({ "t": "hello", "v": PROTOCOL }), 2, false),
-        (json!({ "t": "hello", "v": PROTOCOL + 1 }), PROTOCOL + 1, true),
+        (
+            json!({ "t": "hello", "v": PROTOCOL + 1 }),
+            PROTOCOL + 1,
+            true,
+        ),
     ];
     for (i, (first, speaks, tagged)) in firsts.into_iter().enumerate() {
         let mut main = Main::launch(&root, &format!("app{i}"), &[], Stdio::piped()).await;

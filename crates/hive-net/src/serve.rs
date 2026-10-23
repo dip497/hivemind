@@ -322,8 +322,11 @@ impl Serving {
         self.lookup.as_ref().map(Lookup::dns_addr)
     }
 
-    /// Serve until a role stops, or the process is told to.
+    /// Serve until a role stops or the process is told to. When its binary is replaced by an
+    /// upgrade, the new one is started in its place: an older server beside a newer app speaks
+    /// another protocol and serves another page.
     pub async fn run(self) -> Result<()> {
+        let exe = std::env::current_exe().ok();
         let relay = async {
             match self.relay {
                 Some(mut relay) => relay.join().await?.context("the relay stopped"),
@@ -340,9 +343,63 @@ impl Serving {
             stopped = relay => stopped,
             stopped = lookup => stopped,
             _ = self.front => anyhow::bail!("the front stopped"),
+            _ = replaced(exe.clone()) => start_upgraded(exe),
             _ = tokio::signal::ctrl_c() => Ok(()),
         }
     }
+}
+
+/// How often the server looks at the file it runs from.
+const UPGRADE_CHECK: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Resolves once the file this process runs from (`exe`) is replaced, as an upgrade replaces it,
+/// and has stayed the same for a check: a file still being written is not started.
+async fn replaced(exe: Option<std::path::PathBuf>) {
+    let Some(exe) = exe else {
+        return std::future::pending().await;
+    };
+    let running = file_identity(&exe);
+    if running.is_none() {
+        return std::future::pending().await;
+    }
+    let mut seen = running.clone();
+    loop {
+        tokio::time::sleep(UPGRADE_CHECK).await;
+        let now = file_identity(&exe);
+        if now.is_some() && now != running && now == seen {
+            return;
+        }
+        seen = now;
+    }
+}
+
+/// Start the upgraded binary at `exe` in this process's place, with the same arguments: its pid,
+/// and so its service, stay; its sockets close, and the new one listens on them again.
+#[cfg(unix)]
+fn start_upgraded(exe: Option<std::path::PathBuf>) -> Result<()> {
+    use std::os::unix::process::CommandExt;
+    let exe = exe.context("no binary to start")?;
+    println!("hive-net was upgraded: starting the new one in its place");
+    let failed = std::process::Command::new(&exe)
+        .args(std::env::args_os().skip(1))
+        .exec();
+    Err(failed).with_context(|| format!("cannot start the upgraded {}", exe.display()))
+}
+
+/// Windows keeps a running binary from being replaced: an upgrade stops the server first.
+#[cfg(not(unix))]
+fn start_upgraded(_: Option<std::path::PathBuf>) -> Result<()> {
+    anyhow::bail!("hive-net was upgraded: start it again")
+}
+
+/// What tells one file at `path` from another put there in its place.
+fn file_identity(path: &std::path::Path) -> Option<(Option<std::time::SystemTime>, u64, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    #[cfg(unix)]
+    let inode = std::os::unix::fs::MetadataExt::ino(&meta);
+    #[cfg(not(unix))]
+    let inode = 0;
+    Some((meta.modified().ok(), meta.len(), inode))
 }
 
 /// `tcp`, its TLS handshake done when it has one.

@@ -9,8 +9,7 @@ To reach your devices from anywhere, you run a small server of your own. If ever
 
 First ask me how my devices should reach this computer, offering what fits this machine: a VPN such as Tailscale (if it is installed), a domain of mine pointing at a public address, a tunnel, or a port forwarded on my router. Then set it up:
 
-- The server is \`hive-net serve --all --url <the HTTPS address devices use> --data ~/hive-network --phone ~/hive-network/phone\`, kept running in the background and started again after a restart (a user service); \`--bind\` where the HTTPS in front of it reaches it, or \`--domain\` (or \`--cert\` and \`--key\`) for it to serve HTTPS itself. hive-net is beside hive (\`~/.hivemind-app/hive-net\`, or on PATH).
-- The phone page: \`mkdir -p ~/hive-network && curl -L https://github.com/dip497/hivemind/releases/latest/download/hive-phone-page.tar.gz | tar -xz -C ~/hive-network\`.
+- The server is \`hive-net serve --all --url <the HTTPS address devices use> --data ~/hive-network --phone\`, kept running in the background and started again after a restart (a user service); it serves the phone page of its own release, and an upgrade of hive-net starts the new one in its place; \`--bind\` where the HTTPS in front of it reaches it, or \`--domain\` (or \`--cert\` and \`--key\`) for it to serve HTTPS itself. hive-net is beside hive (\`~/.hivemind-app/hive-net\`, or on PATH).
 - A phone's browser runs the page only over HTTPS with a trusted certificate: check that https://<address>/phone/manifest.webmanifest answers 200. Use a port nothing else on this machine listens on.
 - Put this computer on the network: \`hive network enrol-link --data ~/hive-network --uses 1\`, then \`hive network use <that link>\`; \`hive network show\` says enrolled.
 - Finish only when \`hive network doctor\` says every relay answers; Settings → Servers then shows the new network and checks it by itself.
