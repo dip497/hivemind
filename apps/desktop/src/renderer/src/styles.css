@@ -156,14 +156,16 @@
   --color-status-failed:    var(--color-err);
 
   /* State palette — Plane's 5-group workflow states (backlog/unstarted/
-     started/completed/cancelled), with hivemind's in_progress/in_review split.
-     Tuned to Plane's priority/state hues. */
-  --color-state-backlog:   oklch(0.64 0.013 231.77);  /* Plane priority-none (slate) */
-  --color-state-todo:      oklch(0.55 0.18 265);       /* = brand lavender-blue */
-  --color-state-progress:  oklch(0.77 0.17 65);        /* amber-600 */
-  --color-state-review:    oklch(0.60 0.20 303);       /* purple (Plane extended-purple-500 hue) */
-  --color-state-done:      oklch(0.70 0.19 152);       /* green-700 */
-  --color-state-cancelled: oklch(0.52 0.01 230);       /* neutral grey */
+     started/completed/cancelled), with hivemind's in_progress/in_review split,
+     on Plane's priority/state hues. A state is a word too (the issue's state
+     picker), so each reads at 4.5:1 on bg, bg2 and bg3 in every dark preset,
+     Nord's bg3 the lightest; the light page has its own below. */
+  --color-state-backlog:   oklch(0.77 0.013 231.77);  /* Plane priority-none (slate) */
+  --color-state-todo:      oklch(0.77 0.11 265);       /* blue */
+  --color-state-progress:  oklch(0.77 0.17 65);        /* amber */
+  --color-state-review:    oklch(0.78 0.12 303);       /* purple (Plane extended-purple-500 hue) */
+  --color-state-done:      oklch(0.76 0.17 152);       /* green */
+  --color-state-cancelled: oklch(0.77 0.006 230);      /* neutral grey */
 
   /* The person's fonts (appearance.uiFont / monoFont, painted as --font-*-user); the bundled
      faces until the theme store has painted. */
@@ -524,6 +526,19 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --color-syntax-type: #0e7490;
   --color-syntax-property: #2563c9;
   --color-syntax-tag: #c02679;
+  /* Issue states, labels and people's initials, drawn dark on the light page: 4.5:1 on Clean
+     Light's bg, bg2 and bg3, and a label's text on its chip in every hue. */
+  --color-state-backlog:   oklch(0.52 0.013 231.77);
+  --color-state-todo:      oklch(0.52 0.18 265);
+  --color-state-progress:  oklch(0.5 0.11 65);
+  --color-state-review:    oklch(0.52 0.2 303);
+  --color-state-done:      oklch(0.5 0.12 152);
+  --color-state-cancelled: oklch(0.52 0.01 230);
+  --color-label-text: oklch(0.45 0.10 0);
+  --color-label-fill: oklch(0.93 0.04 0 / 0.6);
+  --color-label-edge: oklch(0.80 0.04 0 / 0.5);
+  --color-label-dot:  oklch(0.60 0.15 0);
+  --color-person:     oklch(0.48 0.13 0);
 }
 :focus-visible {
   outline: 2px solid var(--color-focus);
@@ -901,6 +916,14 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --color-note-blue:   oklch(0.84 0.06 235);
   --color-note-green:  oklch(0.86 0.08 150);
   --color-note-ink:    oklch(0.24 0.01 250);
+  /* An issue's label chips and the discs behind people's initials (tools/issues): each takes its
+     hue from the name, put in with oklch(from …), and its lightness from here, so the light page
+     redraws them (:root[data-theme-mode="light"]). Read from inline styles, like the notes. */
+  --color-label-text: oklch(0.82 0.10 0);
+  --color-label-fill: oklch(0.28 0.04 0 / 0.5);
+  --color-label-edge: oklch(0.34 0.03 0 / 0.4);
+  --color-label-dot:  oklch(0.72 0.15 0);
+  --color-person:     oklch(0.78 0.13 0);
 }
 
 /* The master switch. Recolor the panel TOKENS to translucent variants of the

@@ -1,6 +1,7 @@
 /**
  * Shared @pierre/diffs CodeView config — the worker-pool wiring + theme vars
- * used by both DiffTile and FileViewerTile so the two viewers stay identical.
+ * used by both DiffTile and the PatchView tools draw with (tiles/host-sdk.tsx),
+ * so the two viewers stay identical.
  *
  * The worker pool moves syntax highlighting off the main thread (the whole
  * point of the 1.2.0 CodeView migration). `workerFactory` is the Vite-bundled

@@ -84,6 +84,39 @@ test("it is drawn by its own code, linked with its permissions, and its settings
   await expect(tile().getByRole("button", { name: "Ask an agent to explain" })).toBeVisible();
 });
 
+test("the app's diff view in a tool draws its changes in the preset's colours and its code in the person's font, through a switch of preset", async () => {
+  // Read through the diff's shadow root: the +1 in its file header, and its code. What they should
+  // be is the palette's ok colour and the code font, resolved the same way on a span of the page's.
+  const drawn = () => tile().evaluate((el) => {
+    const root = [...el.querySelectorAll("*")].find((n) => n.shadowRoot?.querySelector("[data-additions-count]"))?.shadowRoot;
+    const added = root?.querySelector("[data-additions-count]"), code = root?.querySelector("pre");
+    if (!added || !code) return null;
+    const probe = el.appendChild(document.createElement("span"));
+    probe.style.color = "var(--color-ok)";
+    probe.style.fontFamily = "var(--font-mono)";
+    const want = getComputedStyle(probe), out = { added: getComputedStyle(added).color, ok: want.color, code: getComputedStyle(code).fontFamily, mono: want.fontFamily };
+    probe.remove();
+    return out;
+  });
+  const follows = async () => {
+    await expect.poll(drawn, { timeout: 15_000 }).not.toBeNull();
+    const d = (await drawn())!;
+    expect(d.added, "the added count is the preset's ok, not the diff library's own green").toBe(d.ok);
+    expect(d.code).toBe(d.mono);
+  };
+  await follows();
+  const ok = (await drawn())!.ok;
+  // A dark preset of another hue, then the light one: the diff follows each, live.
+  for (const id of ["dracula", "clean-light"]) {
+    expect(hive("theme", "use", id).status).toBe(0);
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.preset)).toBe(id);
+    await follows();
+  }
+  expect((await drawn())!.ok).not.toBe(ok);
+  expect(hive("theme", "use", "signal").status).toBe(0);
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.preset)).toBe("signal");
+});
+
 test("the app's own diff view draws in its tile, and the app's bar on its tile closes it", async () => {
   // The diff view draws inside shadow roots: read the text through them, spaces left out, as a
   // highlighted line is split into tokens.
