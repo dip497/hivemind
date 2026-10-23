@@ -20,9 +20,10 @@
 import { useState } from "react";
 import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { MONO_FONT, PRESETS, SYSTEM_MONO_FONT, SYSTEM_UI_FONT, UI_FONT, presetPatch, type TerminalPalette } from "@hivemind/core/settings-schema";
 import {
   ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, removeOverlay, setTheme, updateOverlay,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
@@ -72,8 +73,10 @@ export function Section({ title, hint, action, children }: {
  *  SELECTOR NOTE: `data-preset-option` lives on each item of the list; the control
  *  itself carries `data-preset-select`. */
 export function PresetRow({ t }: { t: ThemeState }) {
-  const preset = PRESETS[t.preset] ?? PRESETS.ubuntu!;
-  const swatches = [preset.palette.bg, preset.palette.bg3, preset.terminal.background, preset.terminal.ansi[1]!, preset.terminal.ansi[2]!];
+  // A look that is no built-in preset (imported, or a theme's) is shown as itself, as "Custom".
+  const preset = PRESETS[t.preset];
+  const { palette, terminal } = preset ?? t;
+  const swatches = [palette.bg, palette.bg3, terminal.background, terminal.ansi[1]!, terminal.ansi[2]!];
   return (
     <div className="settings-row">
       <label htmlFor="theme-preset">Preset</label>
@@ -84,14 +87,15 @@ export function PresetRow({ t }: { t: ThemeState }) {
           ))}
         </span>
         <Select
-          value={t.preset in PRESETS ? t.preset : "ubuntu"}
+          value={preset ? t.preset : "custom"}
           onValueChange={(v) => {
             const p = PRESETS[v];
-            if (p) setTheme({ preset: p.id, mode: p.mode, palette: { ...p.palette }, accent: p.accent, terminal: { ...p.terminal, ansi: [...p.terminal.ansi] } });
+            if (p) setTheme(presetPatch(p));
           }}
         >
           <SelectTrigger id="theme-preset" data-preset-select className="min-w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
+            {!preset && <SelectItem value="custom" disabled>Custom</SelectItem>}
             {Object.values(PRESETS).map((p) => (
               <SelectItem key={p.id} value={p.id} data-preset-option={p.id}>{p.label}</SelectItem>
             ))}
@@ -105,7 +109,7 @@ export function PresetRow({ t }: { t: ThemeState }) {
 export function AccentPicker({ t }: { t: ThemeState }) {
   return (
     <div className="settings-row">
-      <div><label id="accent-label">Accent</label><p>Buttons, selection and focus.</p></div>
+      <div><label id="accent-label">Accent</label><p>The selected tile, sliders, links and the text cursor.</p></div>
       <div className="settings-accents" role="radiogroup" aria-labelledby="accent-label">
         {(Object.keys(ACCENTS) as AccentId[]).map((id) => {
           const a = ACCENTS[id];
@@ -127,6 +131,58 @@ export function AccentPicker({ t }: { t: ThemeState }) {
         })}
       </div>
     </div>
+  );
+}
+
+// ── corners and fonts ───────────────────────────────────────────────────────
+
+const UI_FONTS = [{ id: "geist", label: "Geist", value: UI_FONT }, { id: "system", label: "System", value: SYSTEM_UI_FONT }];
+const MONO_FONTS = [{ id: "jetbrains", label: "JetBrains Mono", value: MONO_FONT }, { id: "system", label: "System", value: SYSTEM_MONO_FONT }];
+
+/** A font: one of the faces named here, or any CSS font list the person types (Custom). */
+function FontRow({ id, label, hint, value, fonts, onChange }: {
+  id: string; label: string; hint: string; value: string;
+  fonts: { id: string; label: string; value: string }[]; onChange: (v: string) => void;
+}) {
+  const named = fonts.find((f) => f.value === value);
+  const [custom, setCustom] = useState(!named);
+  return (
+    <div className="settings-row">
+      <div><label htmlFor={id}>{label}</label><p>{hint}</p></div>
+      <div className="settings-inline">
+        {custom && (
+          <Input
+            className="min-w-48" aria-label={`${label}, custom`} defaultValue={value} key={value}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== value) onChange(v); }}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          />
+        )}
+        <Select
+          value={custom ? "custom" : named!.id}
+          onValueChange={(v) => {
+            const f = fonts.find((x) => x.id === v);
+            setCustom(!f);
+            if (f) onChange(f.value);
+          }}
+        >
+          <SelectTrigger id={id} data-font-select={id} className="min-w-40"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {fonts.map((f) => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
+            <SelectItem value="custom">Custom…</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
+export function ShapeAndTypeControls({ t }: { t: ThemeState }) {
+  return (
+    <>
+      <Slider label="Corners" value={t.radius} min={0} max={24} suffix="px" onChange={(v) => setTheme({ radius: v })} />
+      <FontRow id="ui-font" label="Interface font" hint="Menus, panels and Settings." value={t.uiFont} fonts={UI_FONTS} onChange={(v) => setTheme({ uiFont: v })} />
+      <FontRow id="mono-font" label="Code font" hint="Terminals, code and diffs." value={t.monoFont} fonts={MONO_FONTS} onChange={(v) => setTheme({ monoFont: v })} />
+    </>
   );
 }
 
@@ -346,7 +402,7 @@ const ansiLabel = (i: number) => `${i > 7 ? "Bright " : ""}${ANSI_NAMES[i % 8]}`
 /** 4 + 16 colour wells. Mounted only when its disclosure is open. */
 export function TerminalColors({ t }: { t: ThemeState }) {
   const setTerm = (patch: Partial<TerminalPalette>) => setTheme({ terminal: { ...t.terminal, ...patch } });
-  const preset = PRESETS[t.preset] ?? PRESETS.ubuntu!;
+  const preset = PRESETS[t.preset] ?? PRESETS.signal!;
   const dirty = JSON.stringify(t.terminal) !== JSON.stringify(preset.terminal);
   return (
     <>

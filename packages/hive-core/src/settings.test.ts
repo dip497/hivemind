@@ -4,9 +4,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, presetPatch, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
+import { cssColorToRgb } from "./css-color.js";
 import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
 
 // The pre-2.0 literal from TerminalTile.tsx, verbatim: the ubuntu preset must
@@ -39,6 +40,39 @@ describe("settings schema", () => {
       expect(a.preset).toBe(p.id);
       expect(mergeSettings({ appearance: a }).appearance).toEqual(a); // survives validation unchanged
     }
+  });
+
+  test("Clean and Clean Light are a whole look: glass off, no wallpaper, corners 8; a colour preset keeps the person's", () => {
+    const mine = { ...DEFAULT_APPEARANCE, radius: 16, wallpaper: { kind: "aurora" as const, brightness: 0.7 } };
+    for (const id of ["clean", "clean-light"]) {
+      const a = applyPreset(mine, PRESETS[id]!);
+      expect([a.glass.enabled, a.wallpaper.kind, a.radius, a.mode]).toEqual([false, "none", 8, id === "clean" ? "dark" : "light"]);
+      expect(a.wallpaper.brightness).toBe(0.7);
+      expect(a.glass.blur).toBe(mine.glass.blur);
+    }
+    const nord = applyPreset(mine, PRESETS.nord!);
+    expect([nord.glass.enabled, nord.wallpaper.kind, nord.radius]).toEqual([true, "aurora", 16]);
+    // The same change, as the flat patch the Appearance page applies.
+    expect(presetPatch(PRESETS["clean-light"]!)).toMatchObject({ glass: false, wallpaper: "none", radius: 8, mode: "light" });
+    expect(presetPatch(PRESETS.nord!)).not.toHaveProperty("glass");
+  });
+
+  test("Clean's text is readable on its backgrounds, in both modes (WCAG 4.5:1)", () => {
+    const lum = (c: string) => {
+      const [r, g, b] = cssColorToRgb(c)!.map((v) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x! + 0.05) / (y! + 0.05); };
+    for (const id of ["clean", "clean-light"]) {
+      const p = PRESETS[id]!.palette;
+      for (const fg of [p.fg, p.fg2, p.fg3]) for (const bg of [p.bg, p.bg2, p.bg3]) expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("the interface font is the one the app draws: Geist, falling back to the system's", () => {
+    expect(DEFAULT_APPEARANCE.uiFont).toBe(UI_FONT);
+    expect(UI_FONT.startsWith('"Geist Sans"')).toBe(true);
+    expect(DEFAULT_APPEARANCE.uiFont).not.toBe(OLD_UI_FONT_DEFAULT);
   });
 
   test("a host's look as a guest gets it names no file on the host, and junk from a peer is dropped", () => {

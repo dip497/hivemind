@@ -41,6 +41,7 @@ import { tags as t } from "@lezer/highlight";
 // buffer there).
 import { unifiedMergeView } from "@codemirror/merge";
 import { resolveActive } from "./editor-active";
+import { getTheme, useThemeField } from "./theme-store";
 import { htmlFileUrl, isHtmlPath } from "./browser-open";
 // Lazy: marked + DOMPurify (and, on demand, mermaid) load only when the user
 // actually opens Preview — opening an editor tile pulls in zero markdown code.
@@ -73,8 +74,7 @@ interface Props {
 
 // ── theme ─────────────────────────────────────────────────────────────────
 // CodeMirror theme bound to the app's --color-* tokens (see styles.css).
-const cmTheme = EditorView.theme(
-  {
+const cmThemeSpec: Parameters<typeof EditorView.theme>[0] = {
     "&": {
       height: "100%",
       backgroundColor: "var(--color-bg2)",
@@ -140,9 +140,12 @@ const cmTheme = EditorView.theme(
     },
     ".cm-button:hover": { backgroundColor: "var(--color-bg2)" },
     ".cm-search .cm-button:active": { backgroundColor: "var(--color-brand)" },
-  },
-  { dark: true },
-);
+};
+/** The colours are tokens either way; `dark` picks CodeMirror's own defaults (panels, tooltips). */
+const cmThemes = { dark: EditorView.theme(cmThemeSpec, { dark: true }), light: EditorView.theme(cmThemeSpec, { dark: false }) };
+/** One compartment for the editor theme, so a mode change swaps it in an open editor. */
+const themeCompartment = new Compartment();
+const themeFor = (mode: "dark" | "light") => themeCompartment.of(cmThemes[mode]);
 
 const highlightStyle = HighlightStyle.define([
   { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--color-fg3)", fontStyle: "italic" },
@@ -177,7 +180,6 @@ const baseExtensions: Extension = [
   highlightSelectionMatches(),
   // Find/replace panel (Mod-f). `top: true` docks it above the editor body.
   search({ top: true }),
-  cmTheme,
   EditorView.lineWrapping,
   // searchKeymap LAST so Mod-f / Mod-g / etc. win over any default binding.
   keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
@@ -432,6 +434,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         doc: "",
         extensions: [
           baseExtensions,
+          themeFor(getTheme().mode),
           langCompartment.current.of([]),
           diffCompartment.current.of([]),
           keymap.of([
@@ -455,6 +458,12 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
     };
   }, []);
 
+  // The theme's mode, applied to the open editor as it changes.
+  const mode = useThemeField("mode");
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: themeCompartment.reconfigure(cmThemes[mode]) });
+  }, [mode]);
+
   // Load + display the active tab's buffer.
   useEffect(() => {
     const view = viewRef.current;
@@ -475,6 +484,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         doc,
         extensions: [
           baseExtensions,
+          themeFor(getTheme().mode),
           langCompartment.current.of(lang ? lang : []),
           diffCompartment.current.of([]),
           keymap.of([

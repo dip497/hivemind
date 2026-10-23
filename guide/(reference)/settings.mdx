@@ -60,12 +60,12 @@ hive config set views.layers.groupBy '"status"'
 
 | Path | Default | Allowed |
 |---|---|---|
-| `appearance.preset` | `signal` | `signal`, `ubuntu`, `dracula`, `nord`, `solarized-dark`, `one-dark` (set with `hive theme use`) |
-| `appearance.mode` | from the preset | `dark`, `light` |
+| `appearance.preset` | `signal` | `signal`, `clean`, `clean-light`, `ubuntu`, `dracula`, `nord`, `solarized-dark`, `one-dark` (set with `hive theme use`) |
+| `appearance.mode` | from the preset | `dark`, `light`. Set it with a preset: a light mode needs a light palette, such as `clean-light`'s |
 | `appearance.accent` | from the preset | `graphite`, `indigo`, `volt`, `ember`, `ice`, `pulse`, `rose`, `emerald`, `amber`, `violet` |
-| `appearance.radius` | `12` | 0 to 24 (px) |
-| `appearance.uiFont` | `system-ui, sans-serif` | a CSS font list |
-| `appearance.monoFont` | `"JetBrains Mono", monospace` | a CSS font list |
+| `appearance.radius` | `12` | 0 to 24 (px): **Corners** |
+| `appearance.uiFont` | Geist, then the system's font | a CSS font list: **Interface font** |
+| `appearance.monoFont` | `"JetBrains Mono", monospace` | a CSS font list: **Code font** |
 | `appearance.glass.enabled` | `true` | **Glass panels** |
 | `appearance.glass.opacity` | `0.72` | 0.30 to 0.95: **Panel opacity** |
 | `appearance.glass.blur` | `18` | 8 to 24 (px): **Blur** |
@@ -78,7 +78,7 @@ hive config set views.layers.groupBy '"status"'
 | `appearance.palette`, `appearance.terminal` | from the preset | CSS colours; set them with **Terminal colours** or a theme file |
 | `appearance.overlayMedia` | none | set with **Add overlay** |
 
-Fonts and corner radius have no control on a page. Set them here or with `hive config set`.
+A view you installed is told your fonts, but draws only the fonts it ships or your computer has.
 
 ## views
 

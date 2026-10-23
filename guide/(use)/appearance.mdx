@@ -1,6 +1,6 @@
 ---
 title: "Change how Hivemind looks"
-description: "Pick a theme and accent, set the wallpaper and frosted glass, add overlays, and share your theme as a file."
+description: "Pick a theme and accent, set corners and fonts, set the wallpaper and frosted glass, add overlays, and share your theme as a file."
 ---
 
 Change the look when you want other colours, a calmer background, or more contrast. Every change
@@ -24,10 +24,20 @@ At the end, show the new values with \`hive config get appearance\`, and tell me
         Open **Settings → Appearance**. Settings is the gear at the right end of the toolbar.
       </Step>
       <Step title="Pick a theme">
-        Under **Theme**, pick a **Preset**. Then pick an **Accent**: the colour of buttons,
-        selection and focus.
+        Under **Theme**, pick a **Preset**. **Clean** and **Clean Light** are flat and quiet: they
+        also turn glass and the background off and use smaller corners. **Clean Light** is the light
+        one. Then pick an **Accent**: the colour of the selected tile, sliders, links and the text
+        cursor.
 
         Check: the whole window changes colour at once.
+      </Step>
+      <Step title="Set corners and fonts">
+        **Corners** rounds tiles, panels and controls, from square (0) to round (24). **Interface
+        font** is for menus, panels and Settings; **Code font** is for terminals, code and diffs.
+        Pick **System** for your computer's own font, or **Custom…** and type any font you have
+        installed.
+
+        Check: the corners of a tile change as you drag, and terminals redraw in the new font.
       </Step>
       <Step title="Set the background">
         Under **Workspace**, pick a **Background**: a moving wallpaper, a **Photo**, a **Video**, or
@@ -52,7 +62,8 @@ At the end, show the new values with \`hive config get appearance\`, and tell me
   <Tab title="In a terminal">
     ```bash
     hive theme list                 # the presets
-    hive theme use nord
+    hive theme use clean-light
+    hive config set appearance.radius 6
     hive config set appearance.glass.blur 12
     hive config set appearance.wallpaper.kind '"ice"'
     ```

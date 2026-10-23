@@ -132,6 +132,9 @@ export interface ThemePreset {
   palette: Palette;
   accent: AccentId;
   terminal: TerminalPalette;
+  /** More than colours: a preset that is a whole look also sets these. Leaving one out keeps the
+   *  person's own. */
+  look?: { glass?: boolean; wallpaper?: WallpaperId; radius?: number };
 }
 
 /** The look hivemind shipped with: the Plane/Linear neutral ladder and the
@@ -177,8 +180,52 @@ export const SIGNAL: ThemePreset = {
   },
 };
 
+/** Clean: flat and quiet. True greys, no glass and no wallpaper, smaller corners; colour only for
+ *  what needs you. One dark and one light, the same in all but lightness. */
+export const CLEAN: ThemePreset = {
+  id: "clean",
+  label: "Clean",
+  mode: "dark",
+  palette: {
+    bg: "#0b0b0c", bg2: "#111113", bg3: "#18181b", bg4: "#202024",
+    line: "#232326", line2: "#2f2f33",
+    fg: "#ededef", fg2: "#b4b4bb", fg3: "#8b8b94",
+    select: "#b4b4bb",
+    ok: "#5bb98c", warn: "#e0a43a", err: "#e5686a",
+  },
+  accent: "graphite",
+  terminal: {
+    background: "#0b0b0c", foreground: "#e4e4e7", cursor: "#e4e4e7", selection: "rgba(228,228,231,0.20)",
+    ansi: ["#27272a", "#e5686a", "#5bb98c", "#e0a43a", "#6c9ef8", "#b18cf2", "#5cc0c8", "#d4d4d8",
+           "#52525b", "#f08385", "#7ccfa4", "#ecbc63", "#8db4fa", "#c5a7f6", "#7fd2d8", "#fafafa"],
+  },
+  look: { glass: false, wallpaper: "none", radius: 8 },
+};
+
+export const CLEAN_LIGHT: ThemePreset = {
+  id: "clean-light",
+  label: "Clean Light",
+  mode: "light",
+  palette: {
+    bg: "#fafafa", bg2: "#ffffff", bg3: "#f4f4f5", bg4: "#e9e9ec",
+    line: "#e4e4e7", line2: "#d4d4d8",
+    fg: "#18181b", fg2: "#3f3f46", fg3: "#6b6b76",
+    select: "#3f3f46",
+    ok: "#16794a", warn: "#a35f00", err: "#c53030",
+  },
+  accent: "graphite",
+  terminal: {
+    background: "#ffffff", foreground: "#27272a", cursor: "#27272a", selection: "rgba(24,24,27,0.14)",
+    ansi: ["#27272a", "#c53030", "#16794a", "#8a5a00", "#1f5fd1", "#7c3aed", "#0e7490", "#71717a",
+           "#52525b", "#e05252", "#1f9d5c", "#a36b00", "#3b82f6", "#9061f9", "#0891b2", "#a1a1aa"],
+  },
+  look: { glass: false, wallpaper: "none", radius: 8 },
+};
+
 export const PRESETS: Record<string, ThemePreset> = {
   signal: SIGNAL,
+  clean: CLEAN,
+  "clean-light": CLEAN_LIGHT,
   ubuntu: UBUNTU,
   dracula: {
     id: "dracula", label: "Dracula", mode: "dark", accent: "violet",
@@ -206,14 +253,24 @@ export const PRESETS: Record<string, ThemePreset> = {
   },
 };
 
+/** The faces the app ships with: Geist for the interface, JetBrains Mono for terminals and code.
+ *  A font setting is a CSS font list, so the system's own faces follow when one is missing. */
+export const UI_FONT = "\"Geist Sans\", \"Geist\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif";
+export const MONO_FONT = "\"JetBrains Mono\", monospace";
+/** The system's own faces, for a person who prefers them. */
+export const SYSTEM_UI_FONT = "system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif";
+export const SYSTEM_MONO_FONT = "ui-monospace, \"SF Mono\", Menlo, Consolas, \"DejaVu Sans Mono\", monospace";
+/** What `uiFont` held before it was applied: never drawn, so it is not anyone's choice (migration 0005). */
+export const OLD_UI_FONT_DEFAULT = "system-ui, sans-serif";
+
 export const DEFAULT_APPEARANCE: Appearance = {
   preset: "signal",
   mode: "dark",
   palette: { ...SIGNAL.palette },
   accent: "graphite",
   radius: 12,
-  uiFont: "system-ui, sans-serif",
-  monoFont: "\"JetBrains Mono\", monospace",
+  uiFont: UI_FONT,
+  monoFont: MONO_FONT,
   glass: { enabled: true, contentGlass: false, opacity: 0.72, blur: 18, contentOpacity: 0.25, animate: true },
   wallpaper: { kind: "mono", brightness: 0.85 },
   terminal: { ...SIGNAL.terminal, ansi: [...SIGNAL.terminal.ansi] },
@@ -221,9 +278,28 @@ export const DEFAULT_APPEARANCE: Appearance = {
   overlayMedia: [],
 };
 
-/** Apply a preset on top of an appearance: palette, terminal, accent, mode, id. */
+/** Apply a preset on top of an appearance: palette, terminal, accent, mode, id, and its look. */
 export function applyPreset(a: Appearance, preset: ThemePreset): Appearance {
-  return { ...a, preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent, terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] } };
+  const look = preset.look ?? {};
+  return {
+    ...a, preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent,
+    terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] },
+    ...(look.glass !== undefined ? { glass: { ...a.glass, enabled: look.glass } } : {}),
+    ...(look.wallpaper !== undefined ? { wallpaper: { ...a.wallpaper, kind: look.wallpaper } } : {}),
+    ...(look.radius !== undefined ? { radius: look.radius } : {}),
+  };
+}
+
+/** What choosing a preset changes, as a flat theme patch. */
+export function presetPatch(preset: ThemePreset): Partial<FlatTheme> {
+  const look = preset.look ?? {};
+  return {
+    preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent,
+    terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] },
+    ...(look.glass !== undefined ? { glass: look.glass } : {}),
+    ...(look.wallpaper !== undefined ? { wallpaper: look.wallpaper } : {}),
+    ...(look.radius !== undefined ? { radius: look.radius } : {}),
+  };
 }
 
 /** xterm `ITheme` for an appearance. Key order matches the pre-2.0 literal

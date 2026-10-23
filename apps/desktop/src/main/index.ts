@@ -81,6 +81,7 @@ import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/tok
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
 import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
+import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
@@ -273,7 +274,8 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     ...(typeof state.y === "number" ? { y: state.y } : {}),
     minWidth: 720,
     minHeight: 560,
-    backgroundColor: "#0d0e12",
+    // The look's own background, so a light look does not open on a dark flash.
+    backgroundColor: initialWindowBackground(),
     // Window / taskbar icon (Linux). The AppImage's desktop icon comes from
     // electron-builder's linux.icon; this sets the live window icon too.
     icon: path.join(__dirname, "../renderer/icon.png"),
@@ -1597,6 +1599,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     handleViewProtocol();
     handleToolProtocol();
     installSettingsIpc(broadcast);
+    followWindowLook();
     installBrowserApp(path.join(__dirname, "../renderer"), getAppSettings, onSettingsChange);
     installIdentityIpc();
     // The person's other devices run terminals here in this computer's daemon, when it has one.
