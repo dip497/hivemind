@@ -15,7 +15,9 @@
 :is(.settings-dialog, .theme-panel) :is(button, input):disabled { cursor: default; opacity: .45; }
 .settings-sidebar { width: 232px; flex-shrink: 0; padding: 28px 16px 20px; display: flex; flex-direction: column; background: var(--color-bg2); border-right: 1px solid var(--color-line2); }
 .settings-title { padding: 0 12px; margin-bottom: 28px; font-size: var(--text-row); font-weight: 600; }
-.settings-sidebar nav { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; min-height: 0; margin-right: -8px; padding-right: 8px; }
+/* It scrolls, so it cuts off what is drawn past its sides: 8px each side, past the sidebar's own
+   padding, keep a focus ring whole (2px set 2px out) and the scrollbar off the rows. */
+.settings-sidebar nav { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; min-height: 0; margin-inline: -8px; padding-inline: 8px; }
 .settings-sidebar nav button { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 8px 12px; border-radius: 6px; text-align: left; color: var(--color-fg2); }
 .settings-sidebar nav button:hover { background: var(--color-bg3); color: var(--color-fg); }
 .settings-sidebar nav button[aria-current] { background: var(--color-bg4); color: var(--color-fg); font-weight: 500; }
