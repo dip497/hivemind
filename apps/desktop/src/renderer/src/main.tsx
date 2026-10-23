@@ -66,10 +66,12 @@ function ThemedToaster() {
     <Toaster
       theme={mode}
       position="bottom-right"
+      // One column with the agent cards (workspace/agent-toasts.tsx): these
+      // stack above them, never over them.
+      offset={{ bottom: "calc(12px + var(--agent-toasts-height, 0px))", right: "12px" }}
       // Same glass family as the agent .hm-toast cards (frosted surface +
       // token colors + inner-top highlight) so action confirmations and
-      // agent events read as one notification plane. Both are bottom-right
-      // and temporally rare, so they share the corner cleanly.
+      // agent events read as one notification plane.
       toastOptions={{
         className: "hm-sonner",
         style: {

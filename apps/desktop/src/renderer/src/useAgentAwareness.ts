@@ -129,7 +129,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
     });
     // Auto-dismiss is owned by the CARD (a pausable timer that stops on hover and
     // on window-blur), so a toast never vanishes while you're reading it or
-    // reaching for its ×. See ToastCard in canvas-overlays.tsx.
+    // reaching for its ×. See ToastCard in workspace/agent-toasts.tsx.
   }, []);
 
   // Expose pushToast to the (earlier-declared) bind/unbind worktree handlers.

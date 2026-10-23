@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: an agent's notification shows in every view, not only the canvas, and goes away on its own there. Switching back to the canvas no longer shows every notification from the time you spent in another view at once, and app notices such as an update stack above agent notifications instead of covering them.
+- Fixed: a browser tile no longer loads its page again when you switch to another tab or view and back; a playing video keeps playing and a half-filled form keeps its text.
 ### Added
 
 - Each agent's and terminal's row in the Layers panel says what its screen last showed (`214 tests passed`) on a second line under its name, and while an agent needs you, what for, in amber: `Bash: npm test`, `Asks: …` or Plan ready for review. The View menu's **Lines** shows them on every row (the default), only on those that need you, or not at all (`views.layers.lines`). A window watches only the lines of the rows it shows, and none while the panel is hidden. Workspace API 0.34: `tile.watchLines` and its `tile.lines` event.

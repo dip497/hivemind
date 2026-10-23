@@ -102,6 +102,7 @@ import { SayHere } from "./multiplayer/presence";
 import { joinedId } from "./multiplayer/shown";
 import { openAdd } from "./workspace/add-dialog";
 import { HostChrome } from "./workspace/host-chrome";
+import { AgentToasts } from "./workspace/agent-toasts";
 import { openAppearanceSettings } from "./workspace/chrome-store";
 import { openViewMenu } from "./workspace/standard-toolbar";
 import { loadCommunityViews } from "./workspace/views/community/registry";
@@ -1287,14 +1288,14 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     positions, sizes, currentViewportRef, setViewport: saveCamera,
     onNodeResizeCommit, handleNodeDragStop, resetCanvas,
     focusReq, focusModeReq, setFocusModeReq, focusModeNonceRef, selectedTileIdRef, selectedFrameIdRef,
-    selectedTileIdsRef, markSeen, toasts, dismissToast,
+    selectedTileIdsRef, markSeen,
     frameTiles, updateFrameTitle, bringFrameToFront,
     pins, togglePin, onPinChange, board, canvasPointRef,
     agentSel, setAgentSel, spawnAgent, spawnBrowser,
     updateAvailable, updateStaged, onUpgrade: () => onUpgrade?.(), onRestart: () => onRestart?.(), upgrading,
   }), [
     positions, sizes, saveCamera, onNodeResizeCommit, handleNodeDragStop, resetCanvas, focusReq, focusModeReq,
-    selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, toasts, dismissToast, frameTiles,
+    selectedTileIdRef, selectedFrameIdRef, selectedTileIdsRef, markSeen, frameTiles,
     updateFrameTitle, bringFrameToFront,
     pins, togglePin, onPinChange, board, agentSel, spawnAgent, spawnBrowser, updateAvailable, updateStaged, onUpgrade, onRestart, upgrading,
   ]);
@@ -1347,6 +1348,11 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
         onUpgrade={() => onUpgrade?.()}
         onRestart={() => onRestart?.()}
         upgrading={upgrading}
+      />
+      <AgentToasts
+        toasts={toasts}
+        onDismiss={dismissToast}
+        onView={(id) => { setSelectedTileId(id); focusTile(id); markSeen([id]); }}
       />
       {/* Shared-layer selection: a body's native pointerdown selects its tile
           (React synthetic events from a portaled body never reach a view's own

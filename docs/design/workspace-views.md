@@ -125,12 +125,11 @@ Consequences worth knowing:
   than to protect a session.
 - The TileHost sits **outside** the view's crash boundary: a view that throws
   loses its arrangement, not the terminals.
-- `<webview>` limit: Chromium re-attaches the guest when its element is
-  reparented, so a browser tile's *page* reloads once per view switch. React
-  state (tabs, address, history) survives; page scroll/form state does not. The
-  fix is hosting browser guests as main-process `WebContentsView`s positioned
-  over the slot — a follow-up, not a milestone-1 blocker (it was a full remount
-  before).
+- A `<webview>` whose element leaves the document destroys its guest, so a
+  surface is never detached: every move is `Element.moveBefore`, and a slot parks
+  its surface in its layout-effect cleanup, before React removes the slot.
+  `public/webview-move.js` gives `<webview>` a `connectedMoveCallback` before
+  Electron defines it, which is what makes `moveBefore` keep the guest's page.
 - `selected` is a runtime fact (one selected tile across views), fed to the body
   by the host. The Windows view's active tab is a *projection* of it: whatever
   selects a tile (tab click, spawn, "open in editor", HCP `tile.focus`, a toast,
