@@ -154,7 +154,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -365,8 +365,21 @@ export interface ViewParticipant {
 
 // ── host → plugin ───────────────────────────────────────────────────────────
 
+/** 1.17 (feature `fontFaces`): one file of a font a theme brought, as its bytes (woff2, base64).
+ *  A view's frame cannot fetch the app's files, but a face made from bytes loads in it
+ *  (`new FontFace(family, bytes)`); the client SDK adds each to the view's `document.fonts`, so the
+ *  family `theme.fonts` names draws in it. Sent in `hello` and in `fonts` when they change, never
+ *  in `theme`, which is sent on every slider move. */
+export interface ViewFontFace { family: string; data: string; weight?: string; style?: string }
+/** The most faces, and the most base64 characters of one, a host sends (4 files of 400 KB for each
+ *  of the two faces a theme may set). */
+export const MAX_VIEW_FONT_FACES = 8;
+export const MAX_VIEW_FONT_DATA = 560_000;
+
 export type HostMessage =
-  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice; /** 1.7 */ settings?: Record<string, SettingValue>; /** 1.13: the declared commands' keys, run in the plugin's frame */ keys?: CommandKeys[] }
+  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice; /** 1.7 */ settings?: Record<string, SettingValue>; /** 1.13: the declared commands' keys, run in the plugin's frame */ keys?: CommandKeys[]; /** 1.17 */ fontFaces?: ViewFontFace[] }
+  /** 1.17: the theme's font faces changed (none: the theme has no font files). */
+  | { type: "fonts"; fontFaces: ViewFontFace[] }
   /** Frames / tiles / membership (+ the current names). Structural only. */
   | { type: "structure"; frames: ViewFrame[]; tiles: ViewTile[]; /** 1.2 */ links?: ViewLinks }
   /** Display names changed (renames, agent titles) — nothing structural did. */
@@ -860,6 +873,8 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
       return typeof raw.visible === "boolean" ? { ok: true, msg: raw as unknown as HostMessage } : bad("visible must be a boolean");
     case "theme":
       return isObj(raw.theme) ? { ok: true, msg: raw as unknown as HostMessage } : bad("theme must be an object");
+    case "fonts":
+      return areFontFaces(raw.fontFaces) ? { ok: true, msg: raw as unknown as HostMessage } : bad("fontFaces must be a list of { family, data } faces");
     case "widgets":
       return Array.isArray(raw.widgets) && raw.widgets.every((w) => isObj(w) && isId(w.id) && typeof w.widget === "string")
         ? { ok: true, msg: raw as unknown as HostMessage } : bad("widgets must be an array of widgets");
@@ -875,6 +890,14 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
     default:
       return { ok: false, reason: `unknown message type ${JSON.stringify(raw.type)}` };
   }
+}
+
+/** Whether `v` is a list of font faces a client may load (1.17): a plain family and base64 bytes. */
+export function areFontFaces(v: unknown): v is ViewFontFace[] {
+  return Array.isArray(v) && v.length <= MAX_VIEW_FONT_FACES && v.every((f) => isObj(f)
+    && typeof f.family === "string" && /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/.test(f.family)
+    && typeof f.data === "string" && f.data.length <= MAX_VIEW_FONT_DATA && /^[A-Za-z0-9+/]*={0,2}$/.test(f.data)
+    && (f.weight === undefined || typeof f.weight === "string") && (f.style === undefined || typeof f.style === "string"));
 }
 
 /** The message the host posts to the iframe window to hand over the port. */

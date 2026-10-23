@@ -98,3 +98,7 @@ one of these colours.
 
 It also sets `--hm-status-<tone>` for each agent state, `--hm-accent`, `--hm-radius`,
 `--hm-font-ui`, `--hm-font-mono`, `--hm-surface`, `--hm-terminal-bg`, `--hm-glass` and `--hm-mode`.
+
+When the person applies a [theme](/packages#themes) with its own fonts, a host with view protocol
+1.17 (`hm.supports("fontFaces")`) sends the font files and the SDK loads them in the view, so
+`--hm-font-ui` and `--hm-font-mono` draw in them. The view does nothing for it.

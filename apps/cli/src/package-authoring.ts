@@ -4,8 +4,10 @@
 import fs from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { MEMBER_FORMATS, MEMBER_ID, memberFormat, PACKAGE_MANIFEST } from "@hivemind/hub";
+import { MEMBER_FORMATS, MEMBER_ID, memberFormat, PACKAGE_MANIFEST, runsWithoutTrust } from "@hivemind/hub";
 import { memberKind } from "@hivemind/core/package-kinds";
+import { THEME_MANIFEST, themeFromLook } from "@hivemind/core/theme-format";
+import type { Settings } from "@hivemind/core/settings-schema";
 import type { AuthoredKind } from "./plugin-kinds.js";
 import { packageBrief } from "./plugin-brief.js";
 
@@ -59,7 +61,7 @@ export async function memberId(k: AuthoredKind, dir: string): Promise<string> {
 }
 
 /** Name the member at `entryPath` in the package's manifest, under its kind's list. */
-export async function addEntry(pkg: PackageFolder, k: AuthoredKind, entryPath: string): Promise<void> {
+export async function addEntry(pkg: PackageFolder, k: { kind: string }, entryPath: string): Promise<void> {
   const list = memberFormat(k.kind)!.list;
   const was = Array.isArray(pkg.manifest[list]) ? (pkg.manifest[list] as Array<{ path?: string }>) : [];
   if (was.some((e) => e.path === entryPath)) throw new Error(`${PACKAGE_MANIFEST} already names ${entryPath}`);
@@ -67,6 +69,12 @@ export async function addEntry(pkg: PackageFolder, k: AuthoredKind, entryPath: s
   await writeFile(path.join(pkg.dir, PACKAGE_MANIFEST), JSON.stringify(pkg.manifest, null, 2) + "\n");
 }
 
+/** What `hive plugins new theme` writes: a `theme.json` of the look in use, which the author
+ *  edits, adding font, wallpaper and sound files beside it. */
+export function themeStarter(name: string, look: Pick<Settings, "appearance" | "appearanceExtra">): Record<string, string> {
+  return { [THEME_MANIFEST]: JSON.stringify(themeFromLook(title(name), look.appearance, look.appearanceExtra), null, 2) + "\n" };
+}
+
 /** Whether installing it needs the person to switch it on: it holds a member that is not sandboxed. */
 export const arrivesOff = (pkg: PackageFolder): boolean =>
-  MEMBER_FORMATS.some((f) => f.runs !== "sandboxed" && Array.isArray(pkg.manifest[f.list]) && (pkg.manifest[f.list] as unknown[]).length > 0);
+  MEMBER_FORMATS.some((f) => !runsWithoutTrust(f.runs) && Array.isArray(pkg.manifest[f.list]) && (pkg.manifest[f.list] as unknown[]).length > 0);

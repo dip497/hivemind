@@ -1,6 +1,6 @@
 /**
- * `hive config` — read/write settings.json (the app's one configuration file)
- * and `hive theme` — the appearance presets. Both edit the file directly and
+ * `hive config` — read/write settings.json (the app's one configuration file).
+ * `hive theme` is `./theme.ts`. Both edit the file directly and
  * ask a running app to reload on its drive socket (`settings.reload`), so a change shows
  * without a restart; without an app they just say so.
  *
@@ -8,13 +8,9 @@
  *   hive config get [appearance.glass.blur]      whole file or one dotted path (JSON)
  *   hive config set appearance.glass.blur 12     value is JSON (strings need quotes: '"nord"'); a path
  *                                                that is not a setting here is refused
- *   hive theme list | use <preset> | export [file] | import <file>
  */
 import { defineCommand } from "citty";
-import { promises as fs } from "node:fs";
-import {
-  DEFAULT_APPEARANCE, HiveError, PRESETS, SETTINGS_VERSION, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingPathProblem, settingsPath, updateSettings,
-} from "@hivemind/core";
+import { HiveError, SETTINGS_VERSION, getPath, patchSettingsFile, readSettings, settingPathProblem, settingsPath } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { personOnly } from "../person-only.js";
@@ -22,7 +18,6 @@ import { personOnly } from "../person-only.js";
 async function reloadApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
 }
-const PRESET_PATHS = ["preset", "mode", "palette", "accent", "terminal"].map((k) => `appearance.${k}`);
 const note = (r: boolean) => (r ? "app reloaded" : "app not running — applies on next start");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e));
 
@@ -72,67 +67,4 @@ const setCmd = defineCommand({
 export const configCmd = defineCommand({
   meta: { name: "config", description: "Read / write settings.json" },
   subCommands: { path: pathCmd, get: getCmd, set: setCmd },
-});
-
-const listCmd = defineCommand({
-  meta: { name: "list", description: "List the appearance presets" },
-  args: { json: { type: "boolean" } },
-  async run({ args }) {
-    const cur = (await readSettings()).appearance.preset;
-    const rows = Object.values(PRESETS).map((p) => ({ id: p.id, label: p.label, mode: p.mode, active: p.id === cur }));
-    return ok({ json: !!args.json }, { themes: rows }, () => rows.map((r) => `${r.active ? "*" : " "} ${r.id.padEnd(16)} ${r.label}`).join("\n"));
-  },
-});
-
-const useCmd = defineCommand({
-  meta: { name: "use", description: "Switch to a preset (palette, terminal colours, accent)" },
-  args: { preset: { type: "positional", required: true }, json: { type: "boolean" } },
-  async run({ args }) {
-    const ctx = { json: !!args.json };
-    const p = PRESETS[String(args.preset)];
-    if (!p) return err(ctx, "not_found", `unknown preset "${args.preset}" (known: ${Object.keys(PRESETS).join(", ")})`);
-    // What a preset sets is written even where it reads the same here: an id this version does not
-    // know (a newer build's accent) reads as the default, and choosing a preset replaces it.
-    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, p) }), undefined, PRESET_PATHS);
-    const rescanned = await reloadApp();
-    return ok(ctx, { preset: p.id, rescanned }, () => `theme: ${p.label}; ${note(rescanned)}`);
-  },
-});
-
-const exportCmd = defineCommand({
-  meta: { name: "export", description: "Write the current appearance as JSON (stdout or a file), without its media files" },
-  args: { file: { type: "positional", required: false }, json: { type: "boolean" } },
-  async run({ args }) {
-    const { theme, leftOut, note } = exportAppearance((await readSettings()).appearance);
-    const text = JSON.stringify(theme, null, 2) + "\n";
-    if (args.file) {
-      await fs.writeFile(String(args.file), text, "utf8");
-      return ok({ json: !!args.json }, { file: String(args.file), leftOut }, () => `wrote ${args.file}${note ? `\n${note}` : ""}`);
-    }
-    process.stdout.write(text);
-    // Not on stdout, which is the file.
-    if (note) process.stderr.write(`${note}\n`);
-  },
-});
-
-const importCmd = defineCommand({
-  meta: { name: "import", description: "Replace the appearance with a theme file or a whole settings.json's (validated); your wallpaper media and overlays stay" },
-  args: { file: { type: "positional", required: true }, json: { type: "boolean" } },
-  async run({ args }) {
-    const ctx = { json: !!args.json };
-    let raw: unknown;
-    try { raw = JSON.parse(await fs.readFile(String(args.file), "utf8")); } catch (e) { return err(ctx, "invalid_theme", `cannot read ${args.file}: ${(e as Error).message}`); }
-    // A file that sets nothing of the look (a package.json picked by mistake) is refused before the
-    // settings are touched; importAppearance says why.
-    try { importAppearance(raw, DEFAULT_APPEARANCE); } catch (e) { return err(ctx, "invalid_theme", `cannot import ${args.file}: ${(e as Error).message}`); }
-    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }), undefined, ["appearance"]);
-    const appearance = written.appearance;
-    const rescanned = await reloadApp();
-    return ok(ctx, { preset: appearance.preset, rescanned }, () => `imported ${args.file} (preset ${appearance.preset}); ${note(rescanned)}`);
-  },
-});
-
-export const themeCmd = defineCommand({
-  meta: { name: "theme", description: "Appearance presets: list, use, export, import" },
-  subCommands: { list: listCmd, use: useCmd, export: exportCmd, import: importCmd },
 });

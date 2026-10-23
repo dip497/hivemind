@@ -17,15 +17,17 @@
  * settings-row, settings-stack, …); the controls themselves are the shared
  * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { GEIST_FONT, MONO_FONT, OLD_UI_FONT_DEFAULT, PRESETS, SYSTEM_MONO_FONT, UI_FONT, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { contrastRatio, cssColorToHex } from "@hivemind/core/css-color";
+import { useSettings } from "./settings-store";
 import {
-  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, choosePreset, removeOverlay, setTheme, updateOverlay,
+  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
 } from "./theme-store";
 
@@ -73,8 +75,10 @@ export function Section({ title, hint, action, children }: {
  *  SELECTOR NOTE: `data-preset-option` lives on each item of the list; the control
  *  itself carries `data-preset-select`. */
 export function PresetRow({ t }: { t: ThemeState }) {
-  // A look that is no built-in preset (imported, or a theme's) is shown as itself, as "Custom".
+  // A look that is no built-in preset (imported, or a theme's) is shown as itself: as the theme
+  // in use, or as "Custom".
   const preset = PRESETS[t.preset];
+  const themeName = useSettings().appearanceExtra.theme?.name;
   const { palette, terminal } = preset ?? t;
   const swatches = [palette.bg, palette.bg3, terminal.background, terminal.ansi[1]!, terminal.ansi[2]!];
   return (
@@ -95,7 +99,7 @@ export function PresetRow({ t }: { t: ThemeState }) {
         >
           <SelectTrigger id="theme-preset" data-preset-select className="min-w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {!preset && <SelectItem value="custom" disabled>Custom</SelectItem>}
+            {!preset && <SelectItem value="custom" disabled>{themeName ?? "Custom"}</SelectItem>}
             {Object.values(PRESETS).map((p) => (
               <SelectItem key={p.id} value={p.id} data-preset-option={p.id}>{p.label}</SelectItem>
             ))}
@@ -107,13 +111,21 @@ export function PresetRow({ t }: { t: ThemeState }) {
 }
 
 export function AccentPicker({ t }: { t: ThemeState }) {
+  const custom = t.accentCustom;
+  const wellRef = useRef<HTMLInputElement>(null);
+  // A colour of the person's own is a mark too: say when it is hard to see on this page.
+  const mark = custom ? contrastRatio(custom.brand, t.palette.bg) : null;
   return (
     <div className="settings-row">
-      <div><label id="accent-label">Accent</label><p>The selected tile, sliders, links and the text cursor.</p></div>
+      <div>
+        <label id="accent-label">Accent</label>
+        <p>The selected tile, sliders, links and the text cursor. A colour of your own, or a theme's, also fills the main button, a switch that is on and the focus ring.</p>
+        {mark !== null && mark < 3 && <p className="settings-note" data-accent-faint>Hard to see on this background ({mark.toFixed(1)}:1).</p>}
+      </div>
       <div className="settings-accents" role="radiogroup" aria-labelledby="accent-label">
         {(Object.keys(ACCENTS) as AccentId[]).map((id) => {
           const a = ACCENTS[id];
-          const sel = t.accent === id;
+          const sel = !custom && t.accent === id;
           return (
             <button
               key={id}
@@ -122,13 +134,36 @@ export function AccentPicker({ t }: { t: ThemeState }) {
               aria-checked={sel}
               aria-label={a.label}
               title={a.label}
-              onClick={() => setTheme({ accent: id })}
+              onClick={() => setTheme({ accent: id, accentCustom: undefined })}
               className="settings-accent"
               data-selected={sel ? "" : undefined}
               style={{ background: a.swatch, ...(sel ? { boxShadow: `0 0 0 2px var(--color-bg2), 0 0 0 4px ${a.swatch}` } : {}) }}
             />
           );
         })}
+        {/* Any colour: the native colour well, as Terminal colours use, opened from a swatch that
+            takes focus like the others. */}
+        <button
+          type="button"
+          className="settings-accent settings-accent-custom"
+          role="radio"
+          aria-checked={!!custom}
+          aria-label="Your own colour"
+          title="Your own colour"
+          data-selected={custom ? "" : undefined}
+          style={custom ? { background: custom.brand, boxShadow: `0 0 0 2px var(--color-bg2), 0 0 0 4px ${custom.brand}` } : undefined}
+          onClick={() => wellRef.current?.showPicker?.() ?? wellRef.current?.click()}
+        />
+        <input
+          ref={wellRef}
+          type="color"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          data-accent-custom
+          value={cssColorToHex(custom?.brand ?? ACCENTS[t.accent].brand, ACCENTS.graphite.brand)}
+          onChange={(e) => chooseAccentColours({ brand: e.target.value, accent: e.target.value })}
+        />
       </div>
     </div>
   );
@@ -146,7 +181,9 @@ function FontRow({ id, label, hint, value, fonts, onChange }: {
   fonts: { id: string; label: string; value: string; also?: string[] }[]; onChange: (v: string) => void;
 }) {
   const named = fonts.find((f) => f.value === value || f.also?.includes(value));
-  const [custom, setCustom] = useState(!named);
+  const [chosen, setCustom] = useState(!named);
+  // A font set elsewhere (a theme, `hive config set`) that is none of these is shown as Custom.
+  const custom = chosen || !named;
   return (
     <div className="settings-row">
       <div><label htmlFor={id}>{label}</label><p>{hint}</p></div>

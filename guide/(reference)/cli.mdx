@@ -196,7 +196,7 @@ hive ctl plugin call windows unsplit
 
 ## Plugins
 
-To write, check, install, list and remove agents, views, widgets, tools and packages, and change their settings. Guide: [Packages](/packages).
+To write, check, install, list and remove agents, views, widgets, tools, themes and packages, and change their settings. Guide: [Packages](/packages).
 
 ```text
 hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
@@ -205,6 +205,8 @@ hive plugins new package <name> [--dir folder] [--owner login]
                                         # a package that holds nothing yet, with PROMPT.md
 hive plugins new tool|widget|view <name> --in <package folder>
                                         # a starter inside the package, named in its hivemind-package.json
+hive plugins new theme <name> --in <package folder> [--dir folder]
+                                        # a theme.json of the look in use, in <package>/themes/<name>
 hive plugins add <folder> --to <package folder>
                                         # one already written, copied in when outside; another owner's id is refused
 hive plugins check <folder> [--json]    # its types, its manifest and its code drawn once; file:line for each problem
@@ -262,8 +264,10 @@ To read and change settings, themes, the installed version and what it changed i
 hive config path
 hive config get [dotted.path]
 hive config set <path> '<json>'
-hive theme list
-hive theme use nord
+hive theme list                         # the presets, and installed themes as @owner/package/theme
+hive theme use nord                     # a preset
+hive theme use @owner/kit/harbour       # a theme: its files are copied beside settings.json
+hive theme revert                       # back to the look before the theme
 hive theme export f.json
 hive theme import f.json
 hive upgrade [--dev]

@@ -18,6 +18,8 @@ import {
   ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, guestTheme, nestAppearance, presetPatch,
   type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type ThemePreset, type WallpaperId,
 } from "@hivemind/core/settings-schema";
+import { accentOf, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
+import { contrastRatio } from "@hivemind/core/css-color";
 import { getSettings, patchSettingsMany, subscribeSettings } from "./settings-store";
 
 export { ACCENTS, ANCHORS, WALLPAPERS };
@@ -28,7 +30,7 @@ export type ThemeState = FlatTheme;
 export const CINEMATIC: Partial<ThemeState> = { glass: true, blur: 20, opacity: 0.78, videoBrightness: 0.55, contentGlass: false, animate: true };
 
 /** The person's own theme, as their settings say. */
-let own: ThemeState = flattenAppearance(getSettings().appearance);
+let own: ThemeState = flattenAppearance(getSettings().appearance, getSettings().appearanceExtra);
 /** The look of the host whose workspace is shown, while one is; null for this person's own. */
 let host: Appearance | null = null;
 /** What is painted: the host's look while its workspace is shown, else the person's own. */
@@ -36,7 +38,7 @@ let state: ThemeState = own;
 const listeners = new Set<() => void>();
 const shown = (): ThemeState => (host ? guestTheme(own, host) : own);
 subscribeSettings(() => {
-  own = flattenAppearance(getSettings().appearance);
+  own = flattenAppearance(getSettings().appearance, getSettings().appearanceExtra);
   show(shown());
 });
 /** Show a joined workspace in its host's look (`null`: this person's own workspace, own look). */
@@ -74,6 +76,11 @@ export function setPluginScene(on: boolean): void {
   for (const l of listeners) l();
 }
 export function isWallpaperActive(): boolean { return fullWallpaper; }
+/** Whether the wallpaper is drawn: behind glass, which is the person's, or a theme's without it.
+ *  A theme's wallpaper is part of its look, so it shows whether or not glass is on. */
+export function wallpaperDrawn(t: Pick<ThemeState, "glass" | "wallpaper" | "themeId"> = state): boolean {
+  return t.wallpaper !== "none" && (t.glass || !!t.themeId);
+}
 /** Glass as it applies right now. */
 export function effectiveGlass(t: ThemeState = state): boolean {
   // Nothing behind the glass means nothing to see through it: a translucent panel over the
@@ -83,7 +90,33 @@ export function effectiveGlass(t: ThemeState = state): boolean {
 /** A host-placed slot in a scene paints the wallpaper behind itself (clipped
  *  to the slot) when the theme wants it there and nothing full-window does. */
 export function slotWallpaper(t: ThemeState = state): boolean {
-  return !fullWallpaper && t.pluginSurfaces === "theme" && t.glass && t.wallpaper !== "none";
+  return !fullWallpaper && t.pluginSurfaces === "theme" && wallpaperDrawn(t);
+}
+
+/** The text on a button filled with `brand`: the palette's text or page colour, whichever reads
+ *  better on it. */
+function onBrand(brand: string, t: ThemeState): string {
+  return (contrastRatio(t.palette.fg, brand) ?? 0) >= (contrastRatio(t.palette.bg, brand) ?? 0) ? t.palette.fg : t.palette.bg;
+}
+
+/** The `@font-face` rules a theme's font files make, kept in one <style> and rewritten only when
+ *  they change: a font file loads once, not on every slider move. */
+let lastFaces = "";
+function paintFontFaces(faces: FontFaces | undefined): void {
+  const key = faces ? JSON.stringify(faces) : "";
+  if (key === lastFaces) return;
+  lastFaces = key;
+  let el = document.getElementById("hm-font-faces");
+  if (!faces) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement("style");
+    el.id = "hm-font-faces";
+    document.head.append(el);
+  }
+  // Family and URL were checked when settings were read (FAMILY_RE, MEDIA_URL_RE): no quote or
+  // brace can reach this CSS.
+  el.textContent = [faces.ui, faces.mono].flatMap((f) => f?.files.map((x) =>
+    `@font-face{font-family:"${f.family}";src:url("${window.hive?.resourceUrl?.(x.url) ?? x.url}") format("woff2");font-display:swap;${x.weight ? `font-weight:${x.weight};` : ""}${x.style ? `font-style:${x.style};` : ""}}`) ?? []).join("\n");
 }
 
 /** What a colour change looks like, so only a real one pays for the suppression below. */
@@ -115,7 +148,7 @@ export function applyTheme(t: ThemeState = state): void {
   // deciding how to paint must never be able to stop the painting.
   let colours = "";
   try {
-    colours = `${t.preset}\u0000${t.accent}\u0000${t.mode}\u0000${PALETTE_KEYS.map((k) => t.palette?.[k]).join(",")}`;
+    colours = `${t.preset}\u0000${t.accent}\u0000${JSON.stringify(t.accentCustom ?? null)}\u0000${t.mode}\u0000${PALETTE_KEYS.map((k) => t.palette?.[k]).join(",")}`;
   } catch { /* an incomplete theme still paints, it just does not snap */ }
   const snap = colours !== "" && lastColours !== "" && colours !== lastColours;
   lastColours = colours;
@@ -129,6 +162,8 @@ function paintTheme(t: ThemeState): void {
   root.classList.toggle("glass-on", glass);
   root.classList.toggle("wp-static", !t.animate);
   root.classList.toggle("content-glass", glass && t.contentGlass);
+  // A theme's wallpaper without glass: the canvas clears to show it, the panels stay solid.
+  root.classList.toggle("wallpaper-on", !glass && wallpaperDrawn(t) && (!pluginScene || t.pluginSurfaces === "theme"));
   root.dataset.themeMode = t.mode;
   // shadcn's `dark:` variant and Sonner read the class; the page starts dark (index.html).
   root.classList.toggle("dark", t.mode !== "light");
@@ -156,9 +191,16 @@ function paintTheme(t: ThemeState): void {
   root.style.setProperty("--radius-user", `${t.radius}px`);
   root.style.setProperty("--font-ui-user", t.uiFont);
   root.style.setProperty("--font-mono-user", t.monoFont);
-  const a = ACCENTS[t.accent];
+  const a = accentOf({ accent: t.accent }, { accent: t.accentCustom });
   const light = t.mode === "light";
   root.style.setProperty("--color-brand", a.brand);
+  // A theme's accent, or one the person picked, also colours the switch that is on, the focus
+  // ring and the primary button; the built-in presets keep Clean's calm monochrome (DESIGN.md).
+  const marks = !!t.themeId || a.custom;
+  root.classList.toggle("accent-marks", marks);
+  if (marks) root.style.setProperty("--color-brand-fg", onBrand(a.brand, t));
+  else root.style.removeProperty("--color-brand-fg");
+  paintFontFaces(t.fontFaces);
   // The accents are pale tints made for a dark page; on a light one they would wash out, so text
   // and marks take the deeper brand colour, and a near-white "working" becomes the second text.
   root.style.setProperty("--color-status-working", a.working ? (light ? t.palette.fg2 : a.working) : a.brand);
@@ -179,15 +221,26 @@ export function setTheme(patch: Partial<ThemeState>): void {
   // slider then writes `appearance.glass` alone, so a `hive theme use` landing
   // mid-drag keeps its palette/terminal instead of being reverted wholesale.
   const after = nestAppearance(own);
-  const changed = (Object.keys(after) as (keyof typeof after)[])
+  const changed: { path: string; value: unknown }[] = (Object.keys(after) as (keyof typeof after)[])
     .filter((k) => JSON.stringify(after[k]) !== JSON.stringify(before[k]))
     .map((k) => ({ path: `appearance.${k}`, value: after[k] }));
+  // The custom accent lives beside `appearance`, where an older build's write keeps it; leaving a
+  // theme (`themeId: undefined`) forgets its record.
+  if ("accentCustom" in patch) changed.push({ path: "appearanceExtra.accent", value: patch.accentCustom });
+  if ("themeId" in patch && patch.themeId === undefined) changed.push({ path: "appearanceExtra.theme", value: undefined });
   patchSettingsMany(changed);
 }
 
 /** Choose a preset for the person's own theme (what is shown may be a host's). */
 export function choosePreset(p: ThemePreset): void {
-  setTheme(presetPatch(p, own));
+  // A preset's accent is its id: a custom accent would win over it. A theme left behind is forgotten.
+  setTheme({ ...presetPatch(p, own), accentCustom: undefined, ...(own.themeId ? { themeId: undefined } : {}) });
+}
+
+/** Paint with any colour as the accent, kept in `appearanceExtra.accent`; null goes back to the
+ *  built-in accent. */
+export function chooseAccentColours(colours: AccentColors | null): void {
+  setTheme({ accentCustom: colours ?? undefined });
 }
 
 /** A fresh, empty overlay layer (a new stacked slot's defaults). */

@@ -4,6 +4,7 @@
 import YAML from "yaml";
 import { agentDisclosures, defFromManifest, RESERVED_AGENTS, type AgentProviderDef } from "@hivemind/agents";
 import { parseToolManifest, type ToolPackage } from "@hivemind/core/tool-format";
+import { checkTheme, THEME_MANIFEST, themeFiles } from "@hivemind/core/theme-format";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import { idProblem, pathsProblem, safeRelative, smallJson, UNSAFE_TEXT_RE, type CatalogFile, type CatalogType } from "./index-format.js";
@@ -103,7 +104,9 @@ async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
   let total = 0;
   const files: CatalogFile[] = [];
   const text = new Map<string, string>();
+  const sizes = new Map<string, number>();
   for (const f of folder) {
+    sizes.set(f.path, f.bytes.byteLength);
     if (!safeRelative(f.path)) refuse(`${shown(f.path)} is not a plain relative path`);
     if (f.bytes.byteLength > MAX_PLUGIN_FILE_BYTES) refuse(`${f.path} is larger than 2 MB`);
     total += f.bytes.byteLength;
@@ -115,7 +118,7 @@ async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
   if (clash) refuse(clash);
   files.sort((a, b) => a.path.localeCompare(b.path));
   const pkg = text.get(PACKAGE_MANIFEST);
-  if (pkg !== undefined) return readPackage(pkg, files, text);
+  if (pkg !== undefined) return readPackage(pkg, files, text, sizes);
   return readPlugin(files, text) ?? refuse(`no ${PACKAGE_MANIFEST}, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder`);
 }
 
@@ -233,7 +236,11 @@ const RUNS: Record<MemberRuns, string> = {
   sandboxed: "Runs in a sandbox that holds it to what it asks for",
   "in the app": "Runs inside Hivemind, with the app's access to your files and network, once you switch it on",
   "as an agent's instructions": "Instructions an agent follows",
+  "nothing: it is data": "Has no code",
 };
+
+/** What a theme does, in the words the app shows before it installs. */
+const THEME_DOES = "Changes how the app looks and sounds, once you apply it";
 
 /** Whether dotted version `a` is later than `b`. */
 const later = (a: string, b: string) => {
@@ -244,7 +251,7 @@ const later = (a: string, b: string) => {
 
 /** A package: its `hivemind-package.json`, and every member in its folder read as that kind is
  *  read alone. Every member is the package owner's. Its files are the package's, checked as one. */
-function readPackage(json: string, files: CatalogFile[], text: Map<string, string>): CheckedPlugin {
+function readPackage(json: string, files: CatalogFile[], text: Map<string, string>, sizes: Map<string, number>): CheckedPlugin {
   let raw: unknown;
   try { raw = JSON.parse(json); } catch { return refuse(`${PACKAGE_MANIFEST} is not valid JSON`); }
   const checked = checkPackageManifest(raw);
@@ -266,6 +273,20 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
       const prefix = at === "." ? "" : `${at}/`;
       const inside = files.filter((f) => f.path.startsWith(prefix)).map((f) => ({ ...f, path: f.path.slice(prefix.length) }));
       const sub = new Map([...text].filter(([f]) => f.startsWith(prefix)).map(([f, t]) => [f.slice(prefix.length), t]));
+      if (format.kind === "theme") {
+        // A theme is data: its theme.json checked against the files beside it, as the app checks it.
+        const folder = at.slice(at.lastIndexOf("/") + 1);
+        if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(folder)) refuse(`${shown(at)}: a theme's folder is named like its id: lowercase letters, digits and dashes`);
+        const source = sub.get(THEME_MANIFEST) ?? refuse(`${shown(at)}: ${format.list} names a folder holding no ${THEME_MANIFEST}`);
+        let raw: unknown;
+        try { raw = JSON.parse(source); } catch { return refuse(`${shown(at)}: ${THEME_MANIFEST} is not valid JSON`); }
+        const t = checkTheme(raw, inside.map((f) => ({ path: f.path, bytes: sizes.get(prefix + f.path) ?? 0 })));
+        if ("problem" in t) return refuse(`${shown(at)}: ${THEME_MANIFEST}: ${escaped(t.problem)}`);
+        const holds = themeFiles(t.theme).length;
+        members.push({ kind: "theme", id: `${m.id}/${folder}`, name: t.theme.name, runs: format.runs, permissions: [],
+          does: [`${THEME_DOES}${holds ? ` (${holds} file${holds === 1 ? "" : "s"}: fonts, a wallpaper or sounds)` : ""}`] });
+        continue;
+      }
       let d: CheckedPlugin | null;
       try { d = readPlugin(inside, sub); } catch (e) { return refuse(`${shown(at)}: ${(e as Error).message}`); }
       if (!d || d.type !== format.kind) return refuse(`${shown(at)}: ${format.list} names a folder holding no ${format.manifest}`);

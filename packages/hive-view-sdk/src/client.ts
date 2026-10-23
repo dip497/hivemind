@@ -16,8 +16,8 @@ import type { SettingValue } from "./settings.js";
 import { chordMatches } from "./commands.js";
 import { tokenVar } from "./tokens.js";
 import {
-  CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
-  type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
+  CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, areFontFaces, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
+  type ActivityLevel, type ViewFontFace, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
   ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
 } from "./protocol.js";
@@ -236,7 +236,7 @@ class Client implements ViewClient {
       port.onmessage = (e) => {
         const r = parseHostMessage(e.data);
         if (!r.ok) return;
-        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; this.settings = r.msg.settings ?? {}; this.bindKeys(r.msg.keys); res(); return; }
+        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; this.settings = r.msg.settings ?? {}; this.bindKeys(r.msg.keys); this.loadFonts(r.msg.fontFaces); res(); return; }
         this.dispatch(r.msg);
       };
     });
@@ -303,6 +303,7 @@ class Client implements ViewClient {
       case "resize": this.viewport = { w: m.w, h: m.h }; this.emit("resize", this.viewport); break;
       case "visibility": this.visible = m.visible; this.emit("visibility", { visible: m.visible }); break;
       case "theme": this.emit("theme", m.theme); break;
+      case "fonts": this.loadFonts(m.fontFaces); break;
       case "settings": this.settings = m.settings; this.emit("settings", m.settings); break;
       case "undock": {
         // The host has let go of it already: forget it without telling the host again.
@@ -314,6 +315,24 @@ class Client implements ViewClient {
       case "reveal": this.answerReveal(m.requestId, m.tileId); break;
       default: break;
     }
+  }
+
+  /** The theme's font faces (1.17) in this frame's `document.fonts`, replacing the ones before:
+   *  made from bytes, which load where the frame's CSP lets it fetch no font. The family
+   *  `theme.fonts` names then draws here; a view does nothing for it. */
+  private fontFaces: FontFace[] = [];
+  private loadFonts(faces: ViewFontFace[] | undefined): void {
+    if (typeof FontFace === "undefined" || typeof document === "undefined" || !areFontFaces(faces ?? [])) return;
+    for (const f of this.fontFaces) document.fonts.delete(f);
+    this.fontFaces = (faces ?? []).flatMap((f) => {
+      try {
+        const bytes = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
+        const face = new FontFace(f.family, bytes, { ...(f.weight ? { weight: f.weight } : {}), ...(f.style ? { style: f.style } : {}) });
+        document.fonts.add(face);
+        void face.load().catch(() => {});
+        return [face];
+      } catch { return []; }
+    });
   }
 
   /** The last of each event that says how things are now, which a listener added later is told first. */

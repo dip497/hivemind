@@ -969,6 +969,31 @@ html.glass-on .react-flow,
 html.glass-on [data-windows-view] {
   background-color: transparent !important;
 }
+/* A theme's wallpaper without glass (theme-store `wallpaper-on`): the canvas and the shell clear
+   so it shows between tiles, and every panel keeps its solid colour. */
+html.wallpaper-on .react-flow,
+html.wallpaper-on [data-windows-view] {
+  background-color: transparent !important;
+}
+html.wallpaper-on .react-flow__background {
+  display: none !important;
+}
+html.wallpaper-on body {
+  background: transparent;
+}
+/* A theme's accent, or one the person picked (theme-store `accent-marks`), colours the primary
+   button, the focus ring and a switch that is on. Never a status: the accent is not a signal. */
+html.accent-marks {
+  --primary: var(--color-brand);
+  --primary-foreground: var(--color-brand-fg, var(--color-bg));
+  --ring: var(--color-brand);
+}
+html.accent-marks [data-slot="switch"][data-state="checked"] {
+  background-color: var(--color-brand);
+}
+html.accent-marks [data-slot="switch-thumb"][data-state="checked"] {
+  background-color: var(--color-brand-fg, var(--color-bg));
+}
 /* Kill the dotted grid under glass — it reads as noise over a live wallpaper. */
 html.glass-on .react-flow__background {
   display: none !important;

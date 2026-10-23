@@ -247,7 +247,7 @@ export interface UpdateStatus {
   staged: string | null;
 }
 
-import type { Appearance, Settings } from "@hivemind/core/settings-schema";
+import type { Settings, SharedAppearance } from "@hivemind/core/settings-schema";
 import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
 
 /** An installed package, as the Plugins page lists it: each member with where its code runs, and
@@ -516,9 +516,9 @@ export interface HiveIpc {
   /** A joined workspace's connection changed. */
   onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
   /** How the joined workspace `workspace`'s host looks, checked; null before it says. */
-  sharedLooks(workspace: string): Promise<Appearance | null>;
+  sharedLooks(workspace: string): Promise<SharedAppearance | null>;
   /** A joined workspace's host changed how it looks. */
-  onSharedLooks(cb: (workspace: string, appearance: Appearance) => void): () => void;
+  onSharedLooks(cb: (workspace: string, appearance: SharedAppearance) => void): () => void;
   /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
   leave(workspace: string): Promise<void>;
   /** What this person lets the people in the joined workspace `workspace` do on this computer, in
@@ -936,6 +936,13 @@ export interface AppErrorEvent {
 }
 
 /** `window.hive`: the IPC surface, and what only a window has. */
+/** Installed themes as Settings ▸ Appearance lists them (`theme-apply.ts`). */
+export interface ThemesInfo {
+  themes: Array<{ id: string; name: string; mode: "dark" | "light"; swatches: string[]; package: { id: string; name: string; version: string } }>;
+  /** The applied theme against what is installed: a newer version, or its package gone. */
+  status: { update: string | null; removed: boolean } | null;
+}
+
 export type HiveApi = HiveIpc & {
   /** Host OS, exposed synchronously so the first canvas can pick a shell. */
   platform: NodeJS.Platform;
@@ -984,8 +991,14 @@ export type HiveApi = HiveIpc & {
   /** Where this window loads a URL of the app's schemes (a view, a tool's module, a wallpaper):
    *  the URL itself in an app window, a path on the browser server in a tab. */
   resourceUrl(url: string): string;
-  /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
-  importWallpaper?: (srcPath: string) => Promise<string | null>;
+  /** The themes installed packages hold, and how the applied one stands (an update, a removed package). */
+  themes?: {
+    list(): Promise<ThemesInfo>;
+    /** Apply an installed theme over the look in use; the settings broadcast carries the result. */
+    apply(id: string): Promise<void>;
+    /** Back to the look before the theme. */
+    revert(): Promise<void>;
+  };
   /** Pick a custom media file for a canvas layer (background/overlay) → copied
    *  into userData/media and served via the sandboxed hivemedia:// protocol. */
   pickMedia?: (slot: string) => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;

@@ -89,6 +89,6 @@ describe("hive plugins new", () => {
 
   test("a kind that is not one you write is refused, naming those that are", () => {
     const r = hive(["plugins", "new", "agent", "tally", "--owner", "ada", "--json"], { cwd: os.tmpdir() });
-    expect([r.code, r.json]).toEqual([2, { error: { code: "USAGE", message: "the kind is one of: tool, widget, view, package" } }]);
+    expect([r.code, r.json]).toEqual([2, { error: { code: "USAGE", message: "the kind is one of: tool, widget, view, theme, package" } }]);
   });
 });

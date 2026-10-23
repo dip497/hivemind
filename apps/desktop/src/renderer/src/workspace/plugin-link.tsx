@@ -32,6 +32,8 @@ import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "./view-layo
 import { cssColorToHexString } from "./css-color";
 import { viewLinkServices } from "./view-services";
 import { readTheme } from "./plugin-theme";
+import { viewFontFaces } from "./view-fonts";
+import { getTheme, useThemeField } from "../theme-store";
 import { ShareDialog, type ShareChoice } from "./views/community/ShareDialog";
 import { PromptDialog, type PromptAsk } from "./views/community/PromptDialog";
 import { tileMarkSvg } from "../tiles/mark-svg";
@@ -218,18 +220,36 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     const t = readTheme(), tokens = optsRef.current.tokens;
     return tokens?.length ? { ...t, tokens: resolveTokens(tokens, t.mode, t.colors, settingsRef.current) } : t;
   };
+  // The theme's font faces (1.17): in hello when their bytes are read already, else in `fonts` once
+  // they are, and again only when they change.
+  const fontFaces = useThemeField("fontFaces");
+  const sentFonts = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
+    const fonts = viewFontFaces(getTheme().fontFaces);
+    if (fonts.done) sentFonts.current = fonts.key;
     send({
-      type: "hello", v: PROTOCOL_VERSION, pluginId: o.pluginId, capabilities: o.capabilities, settings: settingsRef.current,
+      type: "hello", v: PROTOCOL_VERSION, ...(fonts.done?.length ? { fontFaces: fonts.done } : {}), pluginId: o.pluginId, capabilities: o.capabilities, settings: settingsRef.current,
       theme: theme(), layout: loadViewLayout(layoutSpec(o.layoutId, o.personal), layoutKey),
-      viewport: box(), visible: !document.hidden, features: [...link.features, "settings", "tokens"],
+      viewport: box(), visible: !document.hidden, features: [...link.features, "settings", "tokens", "fontFaces"],
       // A desktop: whether its pointer is a finger, never a phone's screen.
       device: { touch: matchMedia("(pointer: coarse)").matches, compact: false },
       keys: (o.commands ?? []).flatMap((c) => (c.keys ? [{ keys: c.keys, command: c.name }] : [])),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+  useEffect(() => {
+    if (!ready) return;
+    const fonts = viewFontFaces(fontFaces);
+    if (sentFonts.current === fonts.key) return;
+    let live = true;
+    void fonts.faces.then((faces) => {
+      if (!live || sentFonts.current === fonts.key) return;
+      sentFonts.current = fonts.key;
+      send({ type: "fonts", fontFaces: faces });
+    });
+    return () => { live = false; };
+  }, [ready, fontFaces, send]);
   const sentSettings = useRef(settingsKey);
   useEffect(() => {
     if (!ready || sentSettings.current === settingsKey) return;

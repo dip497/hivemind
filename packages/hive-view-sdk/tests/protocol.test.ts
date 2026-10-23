@@ -90,6 +90,13 @@ describe("parseHostMessage", () => {
     expect(parseHostMessage({ type: "hello", v: 1, pluginId: "p", capabilities: [], theme: { colors: {} }, layout: null, viewport: { w: 1, h: 1 }, visible: true }).ok).toBe(true);
     expect(parseHostMessage({ type: "status", tileId: "t", status: "working" }).ok).toBe(true);
     expect(parseHostMessage({ type: "status", tileId: "t", status: "purple" }).ok).toBe(false);
+    // 1.17: a theme's font faces as bytes; a family that could break out of CSS, or bytes that are
+    // not base64 or are too many, are refused.
+    expect(parseHostMessage({ type: "fonts", fontFaces: [{ family: "Harbour Display", data: "d09GMgABAAAA", weight: "400" }] }).ok).toBe(true);
+    expect(parseHostMessage({ type: "fonts", fontFaces: [] }).ok).toBe(true);
+    expect(parseHostMessage({ type: "fonts", fontFaces: [{ family: "x\"}", data: "AAAA" }] }).ok).toBe(false);
+    expect(parseHostMessage({ type: "fonts", fontFaces: [{ family: "X", data: "not base64!" }] }).ok).toBe(false);
+    expect(parseHostMessage({ type: "fonts", fontFaces: [{ family: "X", data: "A".repeat(600_000) }] }).ok).toBe(false);
     expect(parseHostMessage({ type: "selection", tileId: null, frameId: null, fresh: false }).ok).toBe(true);
     expect(parseHostMessage({ type: "selection", tileId: null, frameId: null }).ok).toBe(false);
     expect(parseHostMessage({ type: "undock", tileId: "t1" }).ok).toBe(true);

@@ -5,7 +5,8 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { effectiveGlass, getTheme, getSurfacePolicy, setPluginScene, setTheme, setWallpaperActive, slotWallpaper } from "../../src/renderer/src/theme-store";
+import { getSettings, patchSettingsMany } from "../../src/renderer/src/settings-store";
+import { effectiveGlass, getTheme, getSurfacePolicy, setPluginScene, setTheme, setWallpaperActive, slotWallpaper, wallpaperDrawn } from "../../src/renderer/src/theme-store";
 
 // Two gates, not one: whether the view paints the full-window wallpaper, and whether a plugin
 // draws it. A plugin view gets the wallpaper too, so "opaque" keys off the second.
@@ -54,6 +55,23 @@ test("a theme with glass off or no wallpaper never costs a slot layer", () => {
   setTheme({ glass: false });
   assert.equal(slotWallpaper(getTheme()), false);
   setTheme({ glass: true, wallpaper: "none" });
+  assert.equal(slotWallpaper(getTheme()), false);
+  reset();
+});
+
+test("a theme's wallpaper draws without glass, and glass stays off: it is the person's", () => {
+  reset();
+  // A theme is applied by main (theme-apply.ts); the window hears its record in the settings.
+  patchSettingsMany([{ path: "appearanceExtra.theme", value: { id: "@acme/looks/harbour", name: "Harbour", version: "1.0.0", appliedAt: 1, before: { appearance: getSettings().appearance, extra: {} } } }]);
+  setTheme({ glass: false });
+  assert.equal(wallpaperDrawn(getTheme()), true);
+  assert.equal(effectiveGlass(getTheme()), false);
+  // In a plugin scene it is painted per slot, as a wallpaper behind glass is.
+  setWallpaperActive(false);
+  assert.equal(slotWallpaper(getTheme()), true);
+  // Without a theme, glass off still means no wallpaper (the presets look as they did).
+  patchSettingsMany([{ path: "appearanceExtra.theme", value: undefined }]);
+  assert.equal(wallpaperDrawn(getTheme()), false);
   assert.equal(slotWallpaper(getTheme()), false);
   reset();
 });

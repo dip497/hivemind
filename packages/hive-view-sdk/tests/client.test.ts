@@ -280,3 +280,24 @@ describe("view-sdk client", () => {
     expect(older.client.device).toEqual({ touch: false, compact: false });
   });
 });
+
+describe("a theme's font faces (1.17)", () => {
+  test("hello's faces are added to the frame's fonts from their bytes, and `fonts` replaces them", async () => {
+    // The frame's font set and FontFace, as a browser has them: what the client is given to load into.
+    const added = new Set<{ family: string; bytes: Uint8Array }>();
+    const g = globalThis as Record<string, unknown>;
+    const saved = { FontFace: g.FontFace, document: g.document };
+    g.FontFace = class { constructor(public family: string, public bytes: Uint8Array) {} load() { return Promise.resolve(this); } };
+    g.document = { fonts: { add: (f: never) => added.add(f), delete: (f: never) => added.delete(f) } };
+    try {
+      const { send } = await scriptedHost([], ["fontFaces"], { fontFaces: [{ family: "Harbour Display", data: btoa("wOF2one") }] });
+      expect([...added].map((f) => [f.family, new TextDecoder().decode(f.bytes)])).toEqual([["Harbour Display", "wOF2one"]]);
+      send({ type: "fonts", fontFaces: [{ family: "Sea Mono", data: btoa("wOF2two") }] });
+      await tick();
+      expect([...added].map((f) => f.family)).toEqual(["Sea Mono"]);
+      send({ type: "fonts", fontFaces: [] });
+      await tick();
+      expect(added.size).toBe(0);
+    } finally { g.FontFace = saved.FontFace; g.document = saved.document; }
+  });
+});

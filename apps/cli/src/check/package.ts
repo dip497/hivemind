@@ -76,7 +76,7 @@ export async function checkPackage(dir: string): Promise<PackageCheckReport> {
       // Read as an install reads it, once its own check is clean: its id, and whose it is.
       let id: string | null = null;
       if (!problems.length) {
-        try { id = (await k.check(dir, entry, { folder: path.basename(dir) })).id; } catch (e) {
+        try { id = (await k.check(dir, entry, { folder: path.basename(dir), package: m.id })).id; } catch (e) {
           problems.push(atManifest(e instanceof Error ? e.message : String(e), needle, name));
         }
       }
