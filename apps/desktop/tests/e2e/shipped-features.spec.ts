@@ -4,6 +4,7 @@
 // diff content is deterministic (real changes + a branch base).
 import { test, expect, type Page } from "@playwright/test";
 import { launchWindow, type AppWindow } from "./helpers/window";
+import { reveal } from "./helpers/canvas";
 import { execSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -120,13 +121,15 @@ test("commit bar stages and commits from the diff", async () => {
   // working mode commit bar present
   const stageAll = page.locator('button[title="stage all changes"]');
   await expect(stageAll).toBeVisible({ timeout: 4_000 });
+  // The tile opens at 100%: its commit bar can sit below the window, out of reach until zoomed out.
+  const commitBtn = page.locator('button', { hasText: /^commit$/ });
+  await reveal(page, commitBtn);
   await stageAll.click();
   await page.waitForTimeout(800);
   // message + commit
   const msg = page.locator('input[placeholder*="commit message"]');
   await expect(msg).toBeEnabled({ timeout: 4_000 });
   await msg.fill("test: commit from diff bar");
-  const commitBtn = page.locator('button', { hasText: /^commit$/ });
   await commitBtn.click();
   // after commit the working tree is clean (no changed files) -> empty state
   await page.waitForFunction(
