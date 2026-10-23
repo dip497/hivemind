@@ -144,6 +144,10 @@ function apiStreams(link: Link): (serve: (api: TextChannel & Room, terminals: bo
   };
 }
 
+/** Whether `event` is one window's to hear, on its own stream: its terminals', and the last lines
+ *  of the tiles it watches (`tile.watchLines`, told to the connection that watches alone). */
+const windowsEvent = (event: string): boolean => event.startsWith("terminal.") || event === "tile.lines";
+
 /** Whether a stream whose first frame is `text` is for terminals alone; null when that frame does
  *  not say, but asks. */
 function forTerminals(text: string): boolean | null {
@@ -449,7 +453,8 @@ export class PeerLinks {
       // The owner's other devices keep its list in step, to take it over with as it is (M3).
       const list = access === "owner" ? serveList(lists, hello.workspace, streamOf(link, "list")) : () => {};
       const stop = () => { replica(); list(); };
-      // Its app's stream hears what happens in the workspace, once; each window's, its terminals'.
+      // Its app's stream hears what happens in the workspace, once; each window's, its terminals'
+      // and the last lines it watches (both sent to the window that asked alone).
       serveApi((api, terminals) => servePeer(server, api, {
         actor: { kind: "peer", person, device: link.peer, access },
         workspace: hello.workspace,
@@ -458,7 +463,7 @@ export class PeerLinks {
         holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
         elsewhere: (tile) => store.workspaceOf(toBareId(tile)) !== null,
         places: () => frameWorktrees(store.getCore(repo)),
-        ...(terminals === null ? {} : { hears: (event: string) => event.startsWith("terminal.") === terminals }),
+        ...(terminals === null ? {} : { hears: (event: string) => windowsEvent(event) === terminals }),
       }));
       const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);

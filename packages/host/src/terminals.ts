@@ -87,8 +87,6 @@ export interface TerminalsOptions {
   backend: SessionBackend;
   intents: Pick<Intents, "perform">;
   relay: SessionRelayOptions;
-  /** The terminals whose activity a client wants. */
-  watchActivity?(tiles: string[]): void;
   /** An end that failed, which no client is told of. */
   onError?(message: string): void;
   /** Tell every client (who holds a keyboard, a session's size). */
@@ -128,7 +126,7 @@ export const TYPED_BURST_MS = 60_000;
 type TerminalMethod = "terminal.open" | "terminal.saved";
 type TerminalNotice =
   | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow" | "terminal.ack" | "terminal.fit" | "terminal.history"
-  | "terminal.close" | "terminal.detach" | "terminal.watchActivity"
+  | "terminal.close" | "terminal.detach"
   | "terminal.keyboard.ask" | "terminal.keyboard.give" | "terminal.keyboard.take";
 
 export class Terminals {
@@ -203,7 +201,6 @@ export class Terminals {
           const t = tileOf(tile);
           if (this.relay.leave(t, this.viewerOf(from)) === 0) this.letGo(t);
         },
-        "terminal.watchActivity": (_, tiles) => opts.watchActivity?.(texts(tiles, "tiles").slice(0, 1024)),
         "terminal.keyboard.ask": (from, tile) => this.keyboards.ask(tileOf(tile), from),
         "terminal.keyboard.give": (from, tile, to) => this.keyboards.give(tileOf(tile), from, text(to, "to")),
         "terminal.keyboard.take": (from, tile) => this.keyboards.take(tileOf(tile), from),

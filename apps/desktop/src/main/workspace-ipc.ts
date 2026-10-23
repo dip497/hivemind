@@ -14,10 +14,12 @@ type Client = Caller["sender"];
 /** Calls and notices another host answers: a workspace shared from elsewhere (M1). `from`: the
  *  window that asks (none: this process itself). */
 export interface Elsewhere {
-  /** The answer from the host of the workspace the call names; null when it names none. */
-  call(method: unknown, params: unknown, from?: Connection): Promise<Answer> | null;
-  /** Whether the notice went to such a host. */
-  notice(method: unknown, params: unknown, from?: Connection): boolean;
+  /** The answer from the host of the workspace the call names; null when it names none. `here`:
+   *  this host's answer to the same method with other params, for a call about tiles of several
+   *  workspaces (`tile.watchLines`), whose answers are put together. */
+  call(method: unknown, params: unknown, from?: Connection, here?: (params: unknown[]) => Promise<Answer>): Promise<Answer> | null;
+  /** Whether the notice went to such a host; `here` takes what of it is this host's. */
+  notice(method: unknown, params: unknown, from?: Connection, here?: (params: unknown[]) => void): boolean;
 }
 
 export function serveWorkspaceApi(server: WorkspaceServer, elsewhere?: Elsewhere): { connect(client: Client): Connection; find(client: Client): Connection | undefined } {
@@ -42,11 +44,11 @@ export function serveWorkspaceApi(server: WorkspaceServer, elsewhere?: Elsewhere
   };
   handle("workspace", (e, method: unknown, params: unknown) => {
     const conn = connect(e.sender);
-    return elsewhere?.call(method, params, conn) ?? server.answer(method, params, conn);
+    return elsewhere?.call(method, params, conn, (p) => server.answer(method, p, conn)) ?? server.answer(method, params, conn);
   });
   on("workspace:notice", (e, method: unknown, params: unknown) => {
     const conn = connect(e.sender);
-    if (!elsewhere?.notice(method, params, conn)) server.notice(method, params, conn);
+    if (!elsewhere?.notice(method, params, conn, (p) => server.notice(method, p, conn))) server.notice(method, params, conn);
   });
   return { connect, find: (wc) => connections.get(wc) };
 }

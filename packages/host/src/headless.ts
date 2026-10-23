@@ -88,6 +88,7 @@ import { startSpawned, wakeSpawned } from "./spawned.js";
 import { Layouts } from "./store.js";
 import { Terminals, type SessionBackend } from "./terminals.js";
 import { TileLines } from "./tile-lines.js";
+import { TileActivity } from "./tile-activity.js";
 
 export interface HeadlessHostOptions {
   /** The data folder, laid out as the app's on this machine. */
@@ -298,6 +299,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     }),
     terminals.domain,
     tileLines.domain,
+    // A device's watch of terminals' activity is taken, and told nothing: no output is measured here.
+    new TileActivity(() => api).domain,
     presence(() => api, () => keys.personId),
     widgetDomain,
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.

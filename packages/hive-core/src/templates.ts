@@ -244,7 +244,7 @@ the result object on stdout on success, \`{"error":{"code":"…","message":"…"
 Exit codes: 0 ok · 2 usage · 3 app not running · 4 timeout · 5 not found · 6 unauthorized · 7 refused · 8 waiting on an answer · 1 other.
 Ids are stable strings: a tile id (\`tile\`) lives as long as the tile; your own is \`$HIVEMIND_TILE\`.
 \`hive ctl whoami\` says which app you reach (hivemind or hivemind-dev), your workspace's folder, your tile and your session. Your token drives that workspace only.
-Frames are repo/worktree groups on the canvas: \`hive ctl frames --json\`. \`hive ctl agents --json\` shows every agent with its state and what it waits on: \`name\` is the name you gave it (\`--name\`), \`agent\` the program (\`--agent\`); \`--session <id>\` finds the one in that session. \`hive ctl tiles --json\` lists every tile, tools and browsers too, with its kind.
+Frames are repo/worktree groups on the canvas: \`hive ctl frames --json\`. \`hive ctl agents --json\` shows every agent with its state, what it waits on and its last line (\`line\`: what it last said, or its screen last showed): \`name\` is the name you gave it (\`--name\`), \`agent\` the program (\`--agent\`); \`--session <id>\` finds the one in that session. \`hive ctl tiles --json\` lists every tile, tools and browsers too, with its kind.
 A frame on a folder of another machine (a saved one, or another of the person's devices), made when missing: \`hive ctl frame add --machine <name or id> --folder /srv/web --name web --json\`, then \`hive ctl spawn --frame web\`.
 
 **Talking to another tile:** an agent in another tile is reached with \`hive ctl send\`, \`hive ctl report\`, \`hive ctl inbox\` and \`hive ctl read\`, whatever agent runs in it.
@@ -465,7 +465,7 @@ hive ctl read <tileId> --timeout 90s --json                 # block for its repl
 hive ctl inbox --json                                         # what your agents sent you, read once
 hive ctl read <tileId> --poll --json                          # never blocks
 hive ctl keys <tileId> Down,Enter                             # drive its TUI picker (AskUserQuestion etc.)
-hive ctl agents --json                                        # every agent with its state (working / idle / waiting / asleep / …) and what it waits on; --watch follows them
+hive ctl agents --json                                        # every agent with its state (working / idle / waiting / asleep / …), what it waits on and its last line; --watch follows them
 hive ctl tiles --json                                         # every tile (agents, terminals, tools, browsers) with its kind, name and frame
 hive ctl focus <tileId> · hive ctl close <tileId> · hive ctl rename <tileId> "name"   # no name: take it away
 \`\`\`
