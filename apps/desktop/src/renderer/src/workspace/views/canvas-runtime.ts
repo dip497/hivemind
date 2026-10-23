@@ -15,7 +15,6 @@
 import { createContext, useContext, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type { Node } from "@xyflow/react";
 import type { PinRect } from "../tile-surfaces";
-import type { Toast } from "../../useAgentAwareness";
 import type { Board } from "../../board-objects/useBoard";
 import type { Point } from "../../board-objects/board-model";
 import type { Pins } from "../pins";
@@ -48,11 +47,6 @@ export interface CanvasRuntime {
   /** Agent-awareness "seen" tracking (selecting a tile clears its done-unseen). */
   selectedTileIdsRef: MutableRefObject<Set<string>>;
   markSeen: (ids: string[]) => void;
-  /** Agent-awareness toasts. Rendered by the canvas: a toast card flies the
-   *  react-flow camera to its tile (useTileFocus → useReactFlow), so it can only
-   *  live inside <ReactFlow>. */
-  toasts: Toast[];
-  dismissToast: (id: string) => void;
   // ── frame / worktree ops for FrameNode headers ──
   frameTiles: Map<string, string[]>;
   updateFrameTitle: (id: string, title: string) => void;

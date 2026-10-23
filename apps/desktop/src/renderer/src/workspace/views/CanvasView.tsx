@@ -13,7 +13,6 @@
  */
 import { isRemote } from "@hivemind/core/remote-uri";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Background,
   BackgroundVariant,
@@ -31,7 +30,7 @@ import { Button } from "../../components/ui/button";
 import { LayersPanel } from "../../LayersPanel";
 import { ZoomIsland } from "../../canvas-islands";
 import { setChromeSuppressed } from "../chrome-store";
-import { CanvasEmptyState, Toasts } from "../../canvas-overlays";
+import { CanvasEmptyState } from "../../canvas-overlays";
 import { useNodeTypes, PinnedLayerContext } from "../../canvas-nodes";
 import { ArrowDraft, BoardArrows, BoardPointer } from "../../board-objects/Arrows";
 import { PresenceLayer, followPerson, onHost, useFollowing, usePeopleHere } from "../../multiplayer/presence";
@@ -636,18 +635,6 @@ export function CanvasView({ model, commands }: WorkspaceViewProps) {
           {/* The tool island is host chrome now (workspace/host-chrome.tsx),
               drawn by the runtime over every view; zen suppresses it through
               chrome-store (effect above). */}
-
-          {/* Background-event toasts — BOTTOM-right (top-right collides with the
-              Board/List/Canvas switcher). An agent that goes blocked or finishes
-              while off-screen pings here; click to fly to it. Declared inside
-              <ReactFlow>, as a card's focus uses the react-flow camera, but drawn
-              in the page's notification layer: inside the canvas they sat under widgets. */}
-          {rt.toasts.length > 0 && createPortal(
-            <div className="fixed bottom-3 right-3 z-(--layer-notifications)" data-notifications>
-              <Toasts toasts={rt.toasts} onDismiss={rt.dismissToast} onView={(id) => rt.markSeen([id])} />
-            </div>,
-            document.body,
-          )}
 
           {/* Zoom + nav island — bottom-left (Excalidraw footer). The EYE toggle
               is always visible (it restores zen); the zoom island hides in zen. */}
