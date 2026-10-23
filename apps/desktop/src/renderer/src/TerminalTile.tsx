@@ -8,6 +8,7 @@ import { followsLink, linkHint, registerFileLinks } from "./terminal-file-links"
 import { installCrispDpr } from "./terminal-dpr";
 import { drawnSize, nextPtySize, resizeBurst, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
+import { answerThemeNotify, colorFgBg, isDarkBackground, ThemeNotify } from "./theme-notify";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
@@ -97,6 +98,15 @@ const SCREEN_RESET = "\x1bc";
 // so it follows the user's glass setting, not the per-view gate.
 /** Mounted tiles per session id: a tile shares its id with its remount. */
 const liveMounts = new Map<string, number>();
+/** Each session's mode 2031, by session id: what its program asked for outlives a remount of the
+ *  tile (a view switch), and goes when the program exits. */
+const themeNotify = new Map<string, ThemeNotify>();
+const themeNotifyOf = (ptyId: string): ThemeNotify => {
+  let n = themeNotify.get(ptyId);
+  if (!n) themeNotify.set(ptyId, (n = new ThemeNotify(isDarkBackground(getTheme().terminal.background))));
+  return n;
+};
+
 /** Each mounted terminal's "your tile is closing", by tile id. */
 const closing = new Map<string, Set<() => void>>();
 
@@ -116,6 +126,7 @@ export function endTileSession(tileId: string, adopted: boolean): void {
   const mounts = closing.get(tileId);
   if (mounts?.size) for (const close of mounts) close();
   else if (!adopted) window.hive.ptyKill(toPtyId(tileId));
+  themeNotify.delete(toPtyId(tileId));
 }
 
 const termThemeFor = (t: ThemeState) => withScrollbar(terminalThemeFor(t.terminal));
@@ -240,12 +251,18 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const term = termRef.current;
     if (!term) return;
     term.options.theme = { ...withScrollbar(terminalThemeFor(termPalette)), background: termBg };
+    // A program that asked (mode 2031) hears the background went light or dark; the window whose
+    // keys reach the session tells it, so two windows showing it do not say it twice.
+    const report = themeNotifyOf(ptyIdRef.current).theme(isDarkBackground(termPalette.background));
+    if (report && kbRef.current.mayType) window.hive.ptyWrite(ptyIdRef.current, report);
   }, [termBg, termPalette]);
   // One session per tile, its id the tile's: the same tile reattaches to its session in the daemon
   // across restarts, a remount (StrictMode, a view move) shares it, and an unmount lets go of it
   // (only a close kills it). Not keyed on cwd: a frame rebinding its folder keeps the session, which
   // the daemon keeps at the folder it began in, where an agent's history is.
   const ptyId = session ?? toPtyId(tileId);
+  const ptyIdRef = useRef(ptyId);
+  ptyIdRef.current = ptyId;
   useEffect(() => trackOpenSession(ptyId), [ptyId]);
   // One keyboard per terminal (M2): who has it, whether this window's keys reach the session, and
   // the size the session was given. Heard before the session is opened, which tells it both.
@@ -626,6 +643,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     /** Every spawn and attach of this tile's session: its size now, and the history it holds. */
     const spawn = (more: Partial<Parameters<typeof window.hive.ptySpawn>[0]> = {}) => window.hive.ptySpawn({
       tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows,
+      // What it starts on: a program that reads its colours from COLORFGBG picks them for this.
+      env: { COLORFGBG: colorFgBg(isDarkBackground(getTheme().terminal.background)) },
       ...(history === undefined ? {} : { history }), ...more,
     });
     term.onScroll(() => {
@@ -779,6 +798,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         `\r\n\x1b[2m[hivemind] exited code=${code} signal=${signal ?? ""} — press Enter to restart\x1b[0m`,
       );
       exited = true;
+      themeNotify.delete(ptyId);
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) { clearInterval(agentPoll); agentPoll = undefined; }
       // Thread the exit code + a one-line detail so the awareness layer can
@@ -815,6 +835,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       window.hive.ptyWrite(ptyId, `\x1b]11;${reply}\x1b\\`);
       return true;
     });
+    // Mode 2031: the program asks to hear when the background goes light or dark, or asks now.
+    answerThemeNotify(term.parser, themeNotifyOf(ptyId), (reply) => { if (kbRef.current.mayType) window.hive.ptyWrite(ptyId, reply); });
     // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
     // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
     // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls
