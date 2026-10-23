@@ -397,3 +397,37 @@ rich text, admin-gated workflow graph, unversioned shapes.
    call Rovo `search` (it costs credits).
 9. **Data Center:** v2, a PAT, wiki markup, offset search, usernames instead of accountIds.
    End of life 2029-03-28.
+
+## D. P-R verdicts (2026-10-24)
+
+Each UNVERIFIED item above, closed or designed around. The design's §18 lists every correction;
+the full source list is in the P-R comment on HIVEMI-1.
+
+| Item (section) | Verdict |
+|---|---|
+| Kanban backlog in `columnConfig` (A.3) | **Community-sourced only.** Kanban boards always return a first column "Backlog". `statuses: []` = a placeholder (no backlog); statuses + `features.BACKLOG` enabled = the Kanban backlog. Encoded in the fixtures; re-check on the live smoke. |
+| `/board/{id}/features` shape (A.3) | **Verified (OpenAPI):** `features[{boardFeature, state: ENABLED\|DISABLED\|COMING_SOON, featureType, …}]`. Needs `read:board-scope.admin:jira-software` on scoped tokens. |
+| RFC-127 removal date (A.3) | **Verified:** CHANGE-3193 (2026-05-01). The `/rest/agile/1.0/.../issue` listings are removed **after 2026-11-01**. Replacements under `/rest/software/1.0` (CHANGE-3192). |
+| 20 comments / changelog in search (A.4) | **Corrected:** 20 comments and **40** changelog items (CHANGE-2046). |
+| Rank / Team type keys (A.4) | Rank `gh-lexo-rank` verified (KB). **Team corrected** to `com.atlassian.teams:rm-teams-custom-field-team` (Teams REST doc, 2026-09-15); accept `atlassian-team` too. Flagged and story-point keys are still unverified: match on schema + name, and the person confirms. |
+| `hierarchyLevel` meanings (A.4) | **Verified:** −1 sub-task, 0 standard, 1 epic, ≥2 Premium levels. |
+| ADF → md (A.4) | **Corrected:** `@atlaskit/editor-markdown-transformer` can't do ADF → md (`encode()` throws). Chosen: `mdast-util-from-adf` (ADF → md) and `marklassian` (md → ADF). `adf2md` is dead; `adf-to-md` is unmaintained. |
+| Property write bumps `updated` (A.5) | **Still unverified** (no doc). The ledger ignores the `updated` our own writes return either way; needs a live test. |
+| Unscoped token deprecation date (A.7) | **Corrected:** none announced. The token page only recommends scopes. |
+| `_edge/tenant_info` (A.7) | **Documented in Atlassian's KB** (2026-03-31), not as an API; the wizard falls back to asking for the cloudId. |
+| Rovo token lifetime / rotation (B.1) | **Still unverified.** Issues report ~1 h access tokens, refresh failures after ~4 idle days (#260) and 403 "app not installed" (#283); all are treated as "sign in again". DCR results must not be cached (CHANGE-3170). |
+| Rovo hourly limits (B.1) | **Still unverified.** Only third-party figures exist; concurrency stays at 3. |
+| Rovo `structuredContent` gating on v2 (B.1) | **Still unverified** (#213 open, v1 only). P4 records a v2 session to settle it. |
+
+New facts found in P-R, not in the notes above:
+- Since CHANGE-3131 (2026-06-29), invalid JQL clauses return zero results instead of an error.
+  Validate with `POST /rest/api/3/jql/parse`.
+- `issue/bulkfetch` reports retriable failures in `issueErrors[]`. It takes 1000 ids only with
+  explicit, single-value fields (at most 100).
+- On v3, `serverInfo.deploymentType` is always `Cloud`. DC's schema doesn't document it.
+- `priority/search` needs `manage:jira-configuration`.
+- A remote-link update nulls the fields it omits. `POST transitions` takes `properties` and can
+  answer 409, 413 or 422.
+- The Rovo MCP API token must be scoped (`read`/`write`/`search:jira:agent-interface`), and
+  `cloudId` is a tool argument.
+- DC 11.3 lacks `bulkfetch`, `jql/match`, `changelog/bulkfetch` and the per-issue `changelog`.

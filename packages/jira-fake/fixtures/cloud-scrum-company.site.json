@@ -148,7 +148,7 @@
     { "id": "customfield_10028", "key": "customfield_10028", "name": "Story Points", "custom": true, "schema": { "type": "number", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:float", "customId": 10028 }, "clauseNames": ["cf[10028]", "Story Points"] },
     { "id": "customfield_10016", "key": "customfield_10016", "name": "Story point estimate", "custom": true, "schema": { "type": "number", "custom": "com.pyxis.greenhopper.jira:jsw-story-points", "customId": 10016 }, "clauseNames": ["cf[10016]", "Story point estimate"] },
     { "id": "customfield_10021", "key": "customfield_10021", "name": "Flagged", "custom": true, "schema": { "type": "array", "items": "option", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:multicheckboxes", "customId": 10021 }, "clauseNames": ["cf[10021]", "Flagged", "Flagged[Checkboxes]"] },
-    { "id": "customfield_10001", "key": "customfield_10001", "name": "Team", "custom": true, "schema": { "type": "team", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:atlassian-team", "customId": 10001 }, "clauseNames": ["cf[10001]", "Team", "Team[Team]"] },
+    { "id": "customfield_10001", "key": "customfield_10001", "name": "Team", "custom": true, "schema": { "type": "team", "custom": "com.atlassian.teams:rm-teams-custom-field-team", "customId": 10001 }, "clauseNames": ["cf[10001]", "Team", "Team[Team]"] },
     { "id": "customfield_10050", "key": "customfield_10050", "name": "Acceptance Criteria", "custom": true, "schema": { "type": "string", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:textarea", "customId": 10050 }, "clauseNames": ["cf[10050]", "Acceptance Criteria"] },
     { "id": "customfield_10015", "key": "customfield_10015", "name": "Start date", "custom": true, "schema": { "type": "date", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:datepicker", "customId": 10015 }, "clauseNames": ["cf[10015]", "Start date"] },
     { "id": "duedate", "key": "duedate", "name": "Due date", "custom": false, "schema": { "type": "date", "system": "duedate" }, "clauseNames": ["due", "duedate"] }
@@ -173,6 +173,7 @@
       "filter": { "id": "10041", "jql": "project = PAY AND issuetype = Bug ORDER BY Rank ASC" },
       "subQuery": "fixVersion in unreleasedVersions() OR fixVersion is EMPTY",
       "columns": [
+        { "name": "Backlog", "statuses": [] },
         { "name": "Open", "statuses": ["10001"] },
         { "name": "Fixing", "statuses": ["3", "10003", "10004"] },
         { "name": "Closed", "statuses": ["10006", "10007"] }
