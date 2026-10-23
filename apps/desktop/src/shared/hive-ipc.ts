@@ -76,6 +76,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     soundResult: local("notify:sound-result", send("notify:sound-result")),
     recentSounds: local("notify:recent-sounds", invoke("notify:recent-sounds")),
     playSound: local("notify:play", invoke("notify:play")),
+    themeSoundBytes: local("notify:theme-sound", invoke("notify:theme-sound")),
     notifyWidget: local("notify:widget", send("notify:widget")),
     layersShown: (repo, shown) => port.send("layers:shown", repo, shown),
     recentFolders: (folders) => port.send("recent:folders", folders),

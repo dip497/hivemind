@@ -9,7 +9,7 @@
  * that on (`notifications.popupText`): a command on screen may hold a secret. Push never carries it.
  */
 import { readFileSync } from "node:fs";
-import type { BrowserWindow } from "electron";
+import { net, type BrowserWindow } from "electron";
 import { handle, on } from "./app-ipc.js";
 import { appWindowOf, userWindow } from "./windows.js";
 import { showAgentPopup } from "./agent-notify.js";
@@ -33,6 +33,9 @@ export interface NoticeDeskOptions {
 
 /** How long a sound asked for by name waits for its window to answer. */
 const ANSWER_MS = 3000;
+/** The most of a theme sound's file handed to a window: a theme's sound is at most 400 KB. */
+const THEME_SOUND_MAX = 1024 * 1024;
+
 /** How long a pop-up with text waits for the feed to bring what an agent waits on: its status
  *  changes at once, its wait up to 250 ms later (agent-feed.ts). */
 const WAIT_FOR_WAIT_MS = 1000;
@@ -129,6 +132,15 @@ export function registerNoticeDesk(o: NoticeDeskOptions): void {
   }, { local: true });
 
   handle("notify:recent-sounds", () => desk?.recent() ?? [], { local: true });
+  // Only the applied theme's sounds: a window asks for no other file this way.
+  handle("notify:theme-sound", async (_e, url: unknown) => {
+    if (typeof url !== "string" || !NOTICE_KINDS.some((k) => themeSound(k)?.url === url)) throw new Error("not one of the applied theme's sounds");
+    const r = await net.fetch(url);
+    if (!r.ok) throw new Error(`${r.status}`);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes.byteLength > THEME_SOUND_MAX) throw new Error("too large");
+    return bytes;
+  }, { local: true });
   handle("notify:play", (_e, moment: unknown) => {
     if (!isKind(moment)) throw new Error("moment must be needs, done or error");
     return playNamed(moment);

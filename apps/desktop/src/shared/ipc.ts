@@ -819,6 +819,9 @@ export interface HiveIpc {
   recentSounds?(): Promise<RecentSound[]>;
   /** Play `moment`'s sound now in the window the person is at, as Settings' Play does. */
   playSound?(moment: AgentNotice["kind"]): Promise<SoundResult>;
+  /** The bytes of one of the applied theme's sounds (its `hivemedia:` URL), which a window cannot
+   *  fetch itself; any other URL is refused. */
+  themeSoundBytes?(url: string): Promise<Uint8Array>;
   /** A widget's `hive.notify`, from the window that runs its code: main shows it as an OS notice
    *  when the notification settings allow, at most one per widget in 10 s. Fire-and-forget. */
   notifyWidget?(notice: WidgetNotice): void;

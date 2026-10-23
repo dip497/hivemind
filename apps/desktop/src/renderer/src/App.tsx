@@ -13,13 +13,10 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UPDATE_START, UPDATE_STEPS, updateProgress, type UpdateProgress } from "../../shared/update-progress";
-import { Bell, ExternalLink, Spinner, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "./components/icons";
+import { ExternalLink, Spinner, X, Palette, PanelsTopLeft, Bot, Keyboard, Info } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Loading } from "./components/ui/loading";
 import { preloadable } from "./lib/preloadable";
-import { Input } from "./components/ui/input";
-import { Label } from "./components/ui/label";
-import { Switch } from "./components/ui/switch";
 import path from "path-browserify";
 import type { UpdateStatus } from "../../shared/ipc";
 import {
@@ -33,13 +30,13 @@ import { TileErrorBoundary } from "./TileErrorBoundary";
 import { flushSettings } from "./settings-store";
 import { useSettingsNav } from "./settings-nav";
 import { UpdateCheckSwitch } from "./update-check";
-import { getNotificationSettings, useNotificationSettings, saveNotificationSettings } from "./notification-settings";
-import type { NotificationSettings } from "../../shared/ipc";
+import { getNotificationSettings } from "./notification-settings";
+import { NotificationPrefs } from "./settings-notifications";
+import { useSounds } from "./sounds/use-sounds";
 import { tellRecentFolders } from "./recent-folders";
 import { chooseFolder, FolderPathDialog } from "./choose-folder";
 import { runShortcut } from "./shortcut";
 import { StatusAnnouncer } from "./workspace/StatusAnnouncer";
-import { LOOKS } from "./workspace/status-look";
 const SettingsPages = preloadable(() => import("./settings-panels").then((m) => m.default));
 // Sharing's dialogs load when opened: they are nothing the first frame draws.
 const MakePluginDialog = lazy(() => import("./plugins/MakePlugin").then((m) => ({ default: m.MakePluginDialog })));
@@ -155,6 +152,8 @@ function useUpdateCheck() {
 }
 
 export function App() {
+  // The window's sound player: what main's notice desk sends this window.
+  useSounds();
   // "Open project" flow: rootHint flips when the user picks a folder; the
   // useProject query refetches because rootHint is part of its key. We
   // persist the last opened path in localStorage so the next launch reopens
@@ -399,102 +398,6 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
       </div>
       {ready && <Button onClick={onRestart} size="xs" title="Restart into the new version">Restart</Button>}
     </>
-  );
-}
-
-/** A status word as a label: "needs you" → "Needs you". */
-const sentence = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
-
-function NotificationPrefs() {
-  const s = useNotificationSettings();
-  const update = (patch: Partial<NotificationSettings>): void => saveNotificationSettings({ ...s, ...patch });
-  const dim = !s.enabled;
-
-  const kinds: { key: "needs" | "done" | "error"; label: string; hint: string }[] = [
-    { key: "needs", label: sentence(LOOKS.needs.word), hint: "Permission prompts, questions, plans to review, blocked" },
-    { key: "done", label: sentence(LOOKS.done.word), hint: "An agent completed its task" },
-    { key: "error", label: sentence(LOOKS.failed.word), hint: "Agent crashed or exited non-zero" },
-  ];
-
-  return (
-    <div className="settings-section">
-      <div className="settings-row">
-        <div className="flex items-center gap-2">
-          <Bell size={14} className="text-[var(--color-fg2)]" />
-          <span className="text-body font-medium text-[var(--color-fg)]">Notifications</span>
-        </div>
-        <Switch checked={s.enabled} onCheckedChange={(v) => update({ enabled: v })} aria-label="Enable notifications" />
-      </div>
-
-      {/* Per-kind mute — which agent transitions reach you. */}
-      <div className="settings-section">
-        <div className="settings-subheading">Notify me about</div>
-        {kinds.map((k) => (
-          <div key={k.key} className="settings-row">
-            <div className="min-w-0">
-              <div className="text-label text-[var(--color-fg)]">{k.label}</div>
-              <div className="settings-note">{k.hint}</div>
-            </div>
-            <Switch
-              disabled={dim}
-              checked={s.kinds[k.key]}
-              onCheckedChange={(v) => update({ kinds: { ...s.kinds, [k.key]: v } })}
-              aria-label={`Notify on ${k.label}`}
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Surface choice — in-app toast vs. native OS popup, independent. */}
-      <div className="settings-section">
-        <div className="settings-subheading">Delivery</div>
-        <div className="settings-row">
-          {/* The window's live region (workspace/announcer.ts) follows this switch as a toast does. */}
-          <div className="min-w-0">
-            <div className="text-label text-[var(--color-fg)]">In-app toasts</div>
-            <div id="notify-in-app-note" className="settings-note">Also what a screen reader says</div>
-          </div>
-          <Switch disabled={dim} checked={s.inApp} onCheckedChange={(v) => update({ inApp: v })} aria-label="In-app toasts" aria-describedby="notify-in-app-note" />
-        </div>
-        <div className="settings-row">
-          <div className="text-label text-[var(--color-fg)]">Native OS popups</div>
-          <Switch disabled={dim} checked={s.osPopups} onCheckedChange={(v) => update({ osPopups: v })} aria-label="Native OS popups" />
-        </div>
-      </div>
-
-      {/* Do-Not-Disturb — mutes finished/failed (NOT needs-you) during a window. */}
-      <div className="settings-section">
-        <div className="settings-row">
-          <div className="min-w-0">
-            <div className="text-label text-[var(--color-fg)]">Do Not Disturb</div>
-            <div className="settings-note">Mutes finished/failed; needs-you still fires</div>
-          </div>
-          <Switch disabled={dim} checked={s.dnd.enabled} onCheckedChange={(v) => update({ dnd: { ...s.dnd, enabled: v } })} aria-label="Do Not Disturb" />
-        </div>
-        {s.dnd.enabled && (
-          <div className="mt-2 flex items-center gap-2">
-            <Input
-              type="time"
-              disabled={dim}
-              value={s.dnd.start}
-              onChange={(e) => update({ dnd: { ...s.dnd, start: e.target.value } })}
-              className="w-auto"
-              aria-label="DND start"
-            />
-            <span className="text-count text-[var(--color-fg2)]">to</span>
-            <Input
-              type="time"
-              disabled={dim}
-              value={s.dnd.end}
-              onChange={(e) => update({ dnd: { ...s.dnd, end: e.target.value } })}
-              className="w-auto"
-              aria-label="DND end"
-            />
-            <span className="text-chip text-[var(--color-fg2)] ml-auto">local time</span>
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
 

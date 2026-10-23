@@ -37,6 +37,7 @@ import { runCmd } from "./commands/run.js";
 import { machineCmd } from "./commands/machine.js";
 import { killCmd } from "./commands/kill.js";
 import { pushCmd } from "./commands/push.js";
+import { notificationsCmd } from "./commands/notifications.js";
 import { joinCmd, peopleCmd, shareCmd } from "./commands/share.js";
 import { grantCmd } from "./commands/grant.js";
 import { migrateOnStart } from "./migrate-on-start.js";
@@ -100,6 +101,7 @@ const main = defineCommand({
     network: networkCmd,
     kill: killCmd,
     push: pushCmd,
+    notifications: notificationsCmd,
     migrations: migrationsCmd,
     guide: guideCmd,
   },
