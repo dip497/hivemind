@@ -81,6 +81,8 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     browserRegister: local("browser:register", send("browser:register")),
     browserCdp: local("browserCdp", invoke("browserCdp")),
     answerBrowserPermission: local("browser:permission-answer", send("browser:permission-answer")),
+    browserSiteRights: local("browser:site-rights", invoke("browser:site-rights")),
+    setBrowserSiteRight: local("browser:set-site-right", invoke("browser:set-site-right")),
     getBrowserSettings: local("getBrowserSettings", invoke("getBrowserSettings")),
     setBrowserCdpEnabled: local("setBrowserCdpEnabled", invoke("setBrowserCdpEnabled")),
     relaunchApp: local("relaunchApp", invoke("relaunchApp")),

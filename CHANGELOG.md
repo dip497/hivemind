@@ -23,14 +23,16 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 ### Changed
 
 - **Breaking:** a view's own keys (`keys` on a command) no longer act while you type in a terminal or a field: the key is the terminal program's there.
+- **Breaking:** for tool authors: a tool's tile runs in the app's page and gets only the browser rights the app uses, notifications and writing to the clipboard. The camera, the microphone, the location and reading the clipboard are refused; open a page that needs them in a Browser tile, which asks.
 
 ### Security
 
-- A site in a Browser tile asks before it uses your camera, microphone or location, or shows notifications: the tile names the site, and your **Allow** or **Block** holds for it until you quit the app. Before, every site got them without asking. A view, or a page a tool shows in its tile, never gets them.
+- A site in a Browser tile asks before it uses your camera, microphone or location, shows notifications, or opens a link in another program (`mailto:`, `zoommtg:`, `slack:`): the question shows over the page, names the site, and its **Allow** and **Block** take a click only after half a second on screen. Your answer holds for the site until you quit the app. Before, every site got them without asking. **Site permissions**, by the address, allows a site ahead of asking (one that only checks never asks) or takes a **Block** back. Links that run code or open files (`file:`, `javascript:`, `search-ms:`) never open, and a site never gets USB, serial or input devices or your screen. A view, or a page a tool shows in its tile, never gets any of them.
+- Known gap: with **Agent browser control** on, an agent can give a site these rights over the Chrome DevTools Protocol without asking you.
 
 ### Fixed
 
-- A form in a view submits in the app: Enter in its text box fires the form's `submit` event, which did nothing before. The form still cannot leave the view's page.
+- A form in a view submits, in the app and on the phone page: Enter in its text box fires the form's `submit` event, which did nothing before. The form still cannot leave the view's page.
 - A look that is no built-in preset (an imported theme file) shows as **Custom** in Settings → Appearance instead of as Ubuntu, and **Reset** puts the terminal back to Signal's colours. The Accent's description says what it colours.
 - An agent whose workers finish one after another is told "Your agents sent you messages" once, at its prompt, even before it has finished a turn since the app started; before, the line could be pasted into its prompt again for each worker.
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.

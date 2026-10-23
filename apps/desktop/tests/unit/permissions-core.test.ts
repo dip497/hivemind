@@ -2,7 +2,8 @@
 // a Browser tile, and everything else in the app's windows (a view's frame, a tool's page).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide, rightsOf, siteOf, SiteAnswers, type Decision } from "../../src/main/permissions-core.ts";
+import { answerable, decide, rightsOf, SiteAnswers, type Decision } from "../../src/main/permissions-core.ts";
+import { siteOf } from "../../src/shared/site.ts";
 
 const APP = "file:///opt/hivemind/resources/app.asar/out/renderer/index.html";
 const DEV = "http://localhost:5173/";
@@ -36,7 +37,7 @@ test("a view's frame, a tool's page or any other plugin page in the app's window
   }
 });
 
-test("a page in a Browser tile gets the harmless ones, asks for the rest, and never opens another program", () => {
+test("a page in a Browser tile gets the harmless ones, is refused what the app cannot give, and asks for the rest", () => {
   const site = "https://maps.example.com/route?to=home";
   const rows: Array<[string, Decision]> = [
     ["fullscreen", "allow"],
@@ -47,19 +48,41 @@ test("a page in a Browser tile gets the harmless ones, asks for the rest, and ne
     ["notifications", "ask"],
     ["midi", "ask"],
     ["midiSysex", "ask"],
-    ["display-capture", "ask"],
-    ["hid", "ask"],
-    ["serial", "ask"],
-    ["usb", "ask"],
     ["clipboard-read", "ask"],
     ["idle-detection", "ask"],
     ["window-management", "ask"],
     ["a-permission-chromium-adds-later", "ask"],
-    ["openExternal", "deny"],
+    // A device needs a chooser and a screen a picker, and the app has neither: asking would
+    // promise what the person's Allow could not give.
+    ["display-capture", "deny"],
+    ["hid", "deny"],
+    ["serial", "deny"],
+    ["usb", "deny"],
   ];
   for (const [permission, want] of rows) {
     assert.equal(decide({ permission, url: site, guest: true, appPage: APP }), want, permission);
   }
+});
+
+test("a Browser tile's page asks before a link opens in another program, and never for links that run code or open files", () => {
+  const site = "https://meet.example.com/call";
+  const rows: Array<[string | undefined, Decision]> = [
+    ["mailto:me@example.com", "ask"],
+    ["zoommtg://zoom.us/join?confno=1", "ask"],
+    ["slack://open", "ask"],
+    ["vscode://file/x", "ask"],
+    ["file:///etc/passwd", "deny"],
+    ["javascript:alert(1)", "deny"],
+    ["search-ms:query=x", "deny"],
+    ["ms-msdt:/id", "deny"],
+    ["not a link", "deny"],
+    [undefined, "deny"],
+  ];
+  for (const [externalUrl, want] of rows) {
+    assert.equal(decide({ permission: "openExternal", url: site, guest: true, appPage: APP, externalUrl }), want, String(externalUrl));
+  }
+  // Never from the app's page or a view.
+  assert.equal(decide({ permission: "openExternal", url: APP, guest: false, appPage: APP, externalUrl: "mailto:me@example.com" }), "deny");
 });
 
 test("a Browser tile's page never gets the app's rights at the app's address, and one with no site to name is refused", () => {
@@ -77,14 +100,40 @@ test("the site a person is asked about is the origin, never the path", () => {
   assert.equal(siteOf("not a url"), null);
 });
 
-test("a media request is the camera, the microphone or both, each answered on its own", () => {
-  assert.deepEqual(rightsOf("media", ["audio"]), ["microphone"]);
-  assert.deepEqual(rightsOf("media", ["video"]), ["camera"]);
-  assert.deepEqual(rightsOf("media", ["video", "audio"]), ["camera", "microphone"]);
+test("a media request is the camera, the microphone or both, and a link each scheme, each answered on its own", () => {
+  assert.deepEqual(rightsOf("media", { mediaTypes: ["audio"] }), ["microphone"]);
+  assert.deepEqual(rightsOf("media", { mediaTypes: ["video"] }), ["camera"]);
+  assert.deepEqual(rightsOf("media", { mediaTypes: ["video", "audio"] }), ["camera", "microphone"]);
   // A check that does not say which: both.
-  assert.deepEqual(rightsOf("media", ["unknown"]), ["camera", "microphone"]);
+  assert.deepEqual(rightsOf("media", { mediaTypes: ["unknown"] }), ["camera", "microphone"]);
   assert.deepEqual(rightsOf("media"), ["camera", "microphone"]);
   assert.deepEqual(rightsOf("geolocation"), ["geolocation"]);
+  // Allowing mailto: links is not allowing zoommtg: ones.
+  assert.deepEqual(rightsOf("openExternal", { externalUrl: "MAILTO:me@example.com" }), ["openExternal:mailto"]);
+  assert.deepEqual(rightsOf("openExternal", { externalUrl: "zoommtg://zoom.us/join" }), ["openExternal:zoommtg"]);
+});
+
+test("the person answers ahead only for a site's own origin and a right a page there would be asked about", () => {
+  const rows: Array<[string, string, boolean]> = [
+    ["https://meet.example", "notifications", true],
+    ["https://meet.example", "camera", true],
+    ["https://meet.example", "microphone", true],
+    ["https://meet.example", "geolocation", true],
+    ["https://meet.example", "openExternal:mailto", true],
+    ["http://127.0.0.1:8123", "notifications", true],
+    // What a site gets anyway, never gets, or is not a right.
+    ["https://meet.example", "fullscreen", false],
+    ["https://meet.example", "usb", false],
+    ["https://meet.example", "openExternal:file", false],
+    ["https://meet.example", "notifications and more", false],
+    ["https://meet.example", "", false],
+    // Not an origin: a path, nothing, or no site.
+    ["https://meet.example/call", "notifications", false],
+    ["https://meet.example/", "notifications", false],
+    ["data:text/html,hi", "notifications", false],
+    ["", "notifications", false],
+  ];
+  for (const [site, right, want] of rows) assert.equal(answerable(site, right, APP), want, `${right} for ${site}`);
 });
 
 test("an answer holds for its site and right only; a block holds over an allow; an unanswered right asks again", () => {
@@ -101,7 +150,19 @@ test("an answer holds for its site and right only; a block holds over an allow; 
   assert.equal(answers.get(site, ["camera", "microphone"]), false);
 });
 
-test("the answers kept are bounded: past the cap the oldest is forgotten", () => {
+test("an answer taken back is asked again, and the site lists only what is answered", () => {
+  const answers = new SiteAnswers();
+  const site = "https://meet.example";
+  answers.set(site, ["camera", "microphone"], false);
+  answers.set("https://other.example", ["camera"], true);
+  answers.set(site, ["microphone"], undefined);
+  assert.equal(answers.get(site, ["microphone"]), undefined);
+  assert.equal(answers.get(site, ["camera"]), false);
+  assert.deepEqual(answers.of(site), [["camera", false]]);
+  assert.deepEqual(answers.of("https://meet.example:8443"), []);
+});
+
+test("the answers kept are bounded: past the cap the one answered longest ago is forgotten", () => {
   const answers = new SiteAnswers(2);
   answers.set("https://a.example", ["notifications"], true);
   answers.set("https://b.example", ["notifications"], false);
@@ -109,4 +170,9 @@ test("the answers kept are bounded: past the cap the oldest is forgotten", () =>
   assert.equal(answers.get("https://a.example", ["notifications"]), undefined);
   assert.equal(answers.get("https://b.example", ["notifications"]), false);
   assert.equal(answers.get("https://c.example", ["notifications"]), true);
+  // Answered again, b is the newest: c goes first.
+  answers.set("https://b.example", ["notifications"], true);
+  answers.set("https://d.example", ["notifications"], true);
+  assert.equal(answers.get("https://b.example", ["notifications"]), true);
+  assert.equal(answers.get("https://c.example", ["notifications"]), undefined);
 });

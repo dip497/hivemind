@@ -5,29 +5,13 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./components/ui/button";
+import { siteParts, wants } from "./site-words";
 
 interface Ask { askId: number; site: string; permissions: string[] }
 
-/** What a right lets a site do, in the words the prompt uses. */
-const DOES: Record<string, string> = {
-  geolocation: "know your location",
-  notifications: "show notifications",
-  "display-capture": "see your screen",
-  "clipboard-read": "see what you copied",
-  "idle-detection": "know when you are away",
-  "window-management": "place windows on your screens",
-  midi: "use your MIDI devices",
-  midiSysex: "control your MIDI devices",
-  hid: "use your input devices",
-  serial: "use your serial ports",
-  usb: "use your USB devices",
-};
-
-function wants(permissions: string[]): string {
-  const media = permissions.filter((p) => p === "camera" || p === "microphone");
-  if (media.length) return `use your ${media.join(" and ")}`;
-  return permissions.map((p) => DOES[p] ?? `use ${p}`).join(" and ");
-}
+/** How long a question is on screen before its buttons take a click: a click meant for the page,
+ *  landing where the question has just appeared, answers nothing (Chrome waits as long). */
+const ARMED_AFTER_MS = 500;
 
 /** The asks of the pages `owns` says are this tile's, oldest first, and how to answer one. */
 export function useBrowserAsks(owns: (pageId: number) => boolean): { ask: Ask | undefined; answer: (askId: number, allowed: boolean) => void } {
@@ -45,13 +29,37 @@ export function useBrowserAsks(owns: (pageId: number) => boolean): { ask: Ask | 
   return { ask: asks[0], answer };
 }
 
+/** The question, over the top of the page: the page does not move when it shows. */
 export function BrowserAsk({ ask, answer }: { ask: Ask; answer: (askId: number, allowed: boolean) => void }) {
+  // The ask whose buttons take clicks: none until it has been shown a moment, again for each ask.
+  const [armed, setArmed] = useState<number | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => setArmed(ask.askId), ARMED_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [ask.askId]);
+  const ready = armed === ask.askId;
+  const does = wants(ask.permissions);
   return (
-    <div role="alertdialog" aria-label="Site permission" data-permission-ask className="flex items-center gap-2 px-2 py-1 bg-[var(--color-bg4)] border-b border-[var(--color-line)] text-label text-[var(--color-fg)]">
-      {/* The buttons follow the words, so a wide tile half off screen still shows them. */}
-      <span className="min-w-0 truncate"><span className="font-mono">{ask.site}</span> wants to {wants(ask.permissions)}.</span>
-      <Button variant="ghost" size="xs" className="nodrag" onClick={() => answer(ask.askId, false)}>Block</Button>
-      <Button variant="secondary" size="xs" className="nodrag" onClick={() => answer(ask.askId, true)}>Allow</Button>
+    <div role="alertdialog" aria-label={`${ask.site} wants to ${does}`} data-permission-ask className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 px-2 py-1 bg-[var(--color-bg4)] border-b border-[var(--color-line)] shadow-[var(--hm-shadow-float)] text-label text-[var(--color-fg)]">
+      {/* What it wants stays whole, on a line of its own when the tile is narrow. The buttons
+          follow the words, so a wide tile half off screen still shows them. */}
+      <p className="m-0 flex min-w-0 flex-wrap items-baseline gap-x-1">
+        <SiteName site={ask.site} />
+        <span>wants to {does}.</span>
+      </p>
+      <Button variant="ghost" size="xs" className="nodrag" disabled={!ready} onClick={() => answer(ask.askId, false)}>Block</Button>
+      <Button variant="secondary" size="xs" className="nodrag" disabled={!ready} onClick={() => answer(ask.askId, true)}>Allow</Button>
     </div>
+  );
+}
+
+/** A site's name, its end never cut: a long one loses its start. The whole origin is its title. */
+export function SiteName({ site }: { site: string }) {
+  const { head, tail } = siteParts(site);
+  return (
+    <span className="flex min-w-0 max-w-full font-mono" title={site}>
+      <span className="truncate [direction:rtl]"><bdi>{head}</bdi></span>
+      <span className="shrink-0">{tail}</span>
+    </span>
   );
 }

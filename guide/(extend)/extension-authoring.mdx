@@ -210,8 +210,8 @@ canvas.
 
 - Name your files relatively (`./main.js`): in a browser tab the app serves views under a path.
 - Draw on change, and stop work while `document.hidden`.
-- In the app, a form's `submit` event fires and the form goes nowhere: handle the event. On the
-  phone page it does not fire, so a view with `"phone": true` also handles Enter in the field.
+- A form's `submit` event fires, in the app and on the phone page, and the form goes nowhere:
+  handle the event and call `preventDefault()`.
 - Test without the app with `fakeHost()` from `@hivemind/view-sdk/testing`.
 
 ### Commands

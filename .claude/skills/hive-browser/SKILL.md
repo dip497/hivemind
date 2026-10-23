@@ -155,9 +155,11 @@ changes or you'll act on stale refs.
   flags exist for this — use them when a task touches anything risky.
 - **Don't drive the app-shell tab.** It's the hivemind UI. Only act on the web
   tab whose URL matches your chosen Browser tile.
-- **A site that asks** for the camera, microphone, location or notifications
-  shows **Block** / **Allow** on the tile and waits for the user. Leave the answer
-  to them: say what the site wants and why, or carry on without it.
+- **A site that asks** for the camera, microphone, location, notifications or
+  to open a link in another program shows **Block** / **Allow** over the page
+  and waits. That answer is the user's: say what the site wants and why, and let
+  them choose, or carry on without it. Over CDP you could answer it, or grant the
+  right yourself; don't, unless the user asked you to.
 - If a command fails to connect, re-check Step 0 (port enabled? tile open?)
   rather than retrying blindly.
 

@@ -205,6 +205,11 @@ built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the full
 
 Reach the app only through these, never `window.hive`.
 
+A tile's code runs in the app's own page, so it gets the browser rights the app uses and no
+others: notifications and writing to the clipboard. The camera, the microphone, the location and
+reading the clipboard are refused. A page that needs them goes in a Browser tile, which asks you:
+`host.openUrl(url)`.
+
 ### Ids, opening and reinstalling
 
 A tool package's id is `@owner/name`. Each tool in it has a full id, `@owner/name/<key>`:

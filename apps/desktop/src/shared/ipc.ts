@@ -299,6 +299,10 @@ export type BrowserPermissionEvent =
   | { askId: number; pageId: number; site: string; permissions: string[] }
   | { askId: number; done: true };
 
+/** A right a site in a Browser tile may be given ("notifications", "camera",
+ *  "openExternal:mailto"…) and the person's answer for it, until the app quits: "ask" when none. */
+export interface SiteRight { right: string; answer: "allow" | "block" | "ask" }
+
 export interface HiveIpc {
   // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──
   /** The workspace's core layout blob (frames, tiles, membership, names, tabs), or null. */
@@ -822,6 +826,10 @@ export interface HiveIpc {
   browserCdp?(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
   /** The person's answer to a Browser tile page's ask (`onBrowserPermission`). */
   answerBrowserPermission?(askId: number, allowed: boolean): void;
+  /** The rights a site (an origin) in a Browser tile is asked about, each with the person's answer. */
+  browserSiteRights?(site: string): Promise<SiteRight[]>;
+  /** Answer for `site` before it asks, or change or forget ("ask") an answer. */
+  setBrowserSiteRight?(site: string, right: string, answer: SiteRight["answer"]): Promise<void>;
   /** Agent-browser bridge settings for the in-app toggle. `active` = live this
    *  session; `enabled` = persisted choice (applies on next launch). */
   getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;

@@ -6,6 +6,8 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { useScaleOnScreen } from "./workspace/tile-scale";
 import { BrowserAsk, useBrowserAsks } from "./browser-asks";
+import { SiteButton } from "./browser-site";
+import { siteOf } from "../../shared/site";
 
 interface Props {
   tileId: string;
@@ -377,6 +379,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => activeWv()?.goBack()} disabled={!active?.canBack} aria-label="back" title="Back"><ArrowLeft /></Button>
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => activeWv()?.goForward()} disabled={!active?.canFwd} aria-label="forward" title="Forward"><ArrowRight /></Button>
         <Button variant="ghost" size="icon-2xs" className="nodrag" onClick={() => (active?.loading ? activeWv()?.stop() : activeWv()?.reload())} aria-label="reload" title="Reload (⌘R)"><RotateCw className={active?.loading ? "animate-spin" : ""} /></Button>
+        <SiteButton site={siteOf(active?.url ?? "")} />
         <Input font="mono"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
@@ -434,10 +437,11 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
         </div>
       )}
 
-      {ask && <BrowserAsk ask={ask} answer={answer} />}
-
-      {/* Guests. All tabs mounted; only the active one is shown. */}
-      <div ref={guestsRef} className="flex-1 bg-white relative overflow-hidden">
+      {/* Guests. All tabs mounted; only the active one is shown. Clipped, never scrolled: the page
+          is drawn larger and shrunk back, and a focused button in the question over it would
+          otherwise scroll the box by a few pixels between a press and its release. */}
+      <div ref={guestsRef} className="flex-1 bg-white relative overflow-clip">
+        {ask && <BrowserAsk ask={ask} answer={answer} />}
         <div
           className="absolute left-0 top-0"
           style={{
