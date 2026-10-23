@@ -46,16 +46,17 @@ export function resolvePackageFile(dir: string, rel: string): FileResolution {
   return { status: 200, abs: real };
 }
 
-/** The CSP every plugin document gets. No network (connect-src 'none'), no
- *  frames, objects, nothing from any other scheme. A form fires its submit
- *  event (the frame allows forms) and form-action 'none' sends it nowhere.
- *  Scripts come from
+/** The CSP every plugin document gets. No network: `fetch` and XHR reach the
+ *  view's own files at `files` (its own address, `ownFiles`) and nothing else,
+ *  and nowhere without it. No frames, objects, nothing from any other scheme.
+ *  A form fires its submit event (the frame allows forms) and form-action
+ *  'none' sends it nowhere. Scripts come from
  *  the package or carry THIS response's nonce — which only the bootstrap page
  *  we generate ever has, so an inline script in a plugin's own page does not
  *  run; ship it as a `.js` file instead. The package is the view's own origin
  *  ('self': where a phone's web view serves it, `https:` there) and anything
  *  on `hm-view:` (the app's iframe, whose sandboxed origin is opaque). */
-export function pluginCsp(nonce: string): string {
+export function pluginCsp(nonce: string, files?: string): string {
   const own = `'self' ${VIEW_SCHEME}:`;
   return [
     "default-src 'none'",
@@ -65,12 +66,24 @@ export function pluginCsp(nonce: string): string {
     `font-src ${own} data:`,
     `media-src ${own} data: blob:`,
     "worker-src blob:",
-    "connect-src 'none'",
+    `connect-src ${files ?? "'none'"}`,
     "frame-src 'none'",
     "object-src 'none'",
     "form-action 'none'",
     "base-uri 'none'",
   ].join("; ");
+}
+
+/** Where a view's frame may `fetch` its own files: its own origin, `hm-view://<host>`, and no other
+ *  view's. `'self'` is not enough: in a browser tab every view is a path on one server. */
+export function ownFiles(id: string): string {
+  return `${VIEW_SCHEME}://${viewHost(id)}`;
+}
+
+/** `csp` with `connect-src` naming `files` instead: a browser tab serves a view under a path of
+ *  its own (`/hm-view/<key>/<host>/`), which only the server answering the tab knows. */
+export function withOwnFiles(csp: string, files: string): string {
+  return csp.replace(/(^|; )connect-src [^;]*/, `$1connect-src ${files}`);
 }
 
 export function newNonce(): string {
@@ -123,10 +136,11 @@ export type ServedViewFile =
 /** Serve `rel` of the view package at `dir` as every screen is served it: `__sdk.js` is the SDK
  *  (`sdk()`, the build this device serves), `__entry.html` the page that runs the `.js` entry `js`,
  *  a page of the view's gets the SDK's import map first, and anything else is the file as it is.
- *  Each with a nonce of its own, which its policy names. */
-export async function serveViewFile(dir: string, rel: string, o: { js: string | null; sdk(): Promise<string> }): Promise<ServedViewFile> {
+ *  Each with a nonce of its own, which its policy names, and `files`, where the view may fetch
+ *  its own files (`ownFiles`; none when absent). */
+export async function serveViewFile(dir: string, rel: string, o: { js: string | null; sdk(): Promise<string>; files?: string }): Promise<ServedViewFile> {
   const nonce = newNonce();
-  const csp = pluginCsp(nonce);
+  const csp = pluginCsp(nonce, o.files);
   if (rel === ENTRY_PAGE) {
     const html = entryPage(o.js ?? "", nonce);
     return html === null ? { status: 400 } : { status: 200, type: mimeFor(ENTRY_PAGE), csp, text: withImportMap(html, nonce, ENTRY_PAGE) };

@@ -11,6 +11,7 @@ import type { ReadableStream as WebStream } from "node:stream/web";
 import { WebSocketServer, WebSocket } from "ws";
 import { cookieName, cookieOf, hostAllowed, sameOrigin, sameToken, sessionCookie, viewsKey } from "./browser-gate.js";
 import { CLOSE_UNAUTHORIZED, KEYED_SCHEME, SESSION_PATH, SOCKET_PATH, TOKEN_KEY, schemeOf, type MainFrame, type TabFrame } from "../shared/browser-socket.js";
+import { withOwnFiles } from "@hivemind/core/view-files";
 
 /** A browser tab, to main as a window is: it is sent events, and it goes. */
 export interface Tab {
@@ -160,6 +161,12 @@ export function serveBrowser(opts: BrowserServerOptions): Promise<BrowserServer>
     const answer = await handler(new Request(at.url, { headers: range ? { range } : {} }));
     const headers: Record<string, string> = at.scheme === KEYED_SCHEME ? { "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "cache-control": "no-store" } : { ...HEADERS };
     answer.headers.forEach((value, name) => { headers[name] = value; });
+    // A view fetches its own files at its own path here, every view being a path on this server.
+    const csp = headers["content-security-policy"];
+    if (at.scheme === KEYED_SCHEME && csp) {
+      const proto = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      headers["content-security-policy"] = withOwnFiles(csp, `${proto}://${req.headers.host}/${KEYED_SCHEME}/${at.key}/${new URL(at.url).host}/`);
+    }
     res.writeHead(answer.status, headers);
     if (req.method === "HEAD" || !answer.body) return void res.end();
     Readable.fromWeb(answer.body as WebStream).on("error", () => res.destroy()).pipe(res);

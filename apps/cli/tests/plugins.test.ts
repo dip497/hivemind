@@ -102,6 +102,24 @@ describe("hive plugins", () => {
     } finally { fs.rmSync(xdg, { recursive: true, force: true }); }
   });
 
+  test("a plugin that needs a newer Hivemind is refused by name and version before anything is downloaded", () => {
+    const xdg = fixtureXDG([]);
+    const ours = (JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "package.json"), "utf8")) as { version: string }).version;
+    const [y, m, n] = ours.split(".").map(Number);
+    const next = `${y}.${m}.${n! + 1}`;
+    // Its file is nowhere: a download would fail with another reason.
+    fs.writeFileSync(path.join(xdg, "index.json"), JSON.stringify({ version: 1, plugins: [
+      { id: "@ada/graph", type: "view", name: "Graph", description: "A graph.", author: "ada", version: "1.0.0", category: "git", path: "graph",
+        source: "https://127.0.0.1:9/nowhere/", minAppVersion: next, files: [{ path: "hivemind-view.json", sha256: "0".repeat(64) }] },
+    ] }));
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: `file://${path.join(xdg, "index.json")}` };
+    try {
+      const r = hive(["plugins", "install", "@ada/graph", "--json"], { cwd: xdg, env });
+      expect(r.code).not.toBe(0);
+      expect(r.json).toMatchObject({ error: { message: `Graph needs Hivemind ${next} or newer; this is ${ours}.` } });
+    } finally { fs.rmSync(xdg, { recursive: true, force: true }); }
+  });
+
   test("only the person switches plugins and changes their settings: an agent in a tile or a program with a grant is refused, told what to ask the person to run, and nothing is stored", () => {
     const xdg = fixtureXDG(["claude"]);
     const base = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock") };

@@ -1,5 +1,6 @@
 // A view that tries what its frame's sandbox decides, for view-sandbox.spec.ts: a form that only
-// listens for submit and gives the first tile what was typed, and a way to ask for notifications.
+// listens for submit and gives the first tile what was typed, a way to ask for notifications, and
+// a fetch that says what it read or that it was refused.
 import { connect } from "@hivemind/view-sdk";
 
 const hm = await connect();
@@ -16,4 +17,5 @@ form.addEventListener("submit", (e) => {
 document.body.append(form);
 
 window.askNotifications = () => Notification.requestPermission();
+window.read = (url) => fetch(url).then((r) => (r.ok ? r.json() : `status ${r.status}`), () => "refused");
 document.body.dataset.ready = "1";

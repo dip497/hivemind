@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { entryPage, entryUrl, mimeFor, newNonce, pageOf, pluginCsp, resolvePackageFile, serveViewFile, withImportMap } from "./view-files.js";
+import { entryPage, entryUrl, mimeFor, newNonce, ownFiles, pageOf, pluginCsp, resolvePackageFile, serveViewFile, withImportMap, withOwnFiles } from "./view-files.js";
 
 // Serving a community view package's files, to its iframe or to a phone: containment on the REAL
 // path (a symlink inside a package cannot escape it), and each file's type; the bootstrap page and
@@ -36,6 +36,26 @@ test("resolvePackageFile: files inside the package are served, traversal and sym
   expect(resolvePackageFile(dir, "assets")).toEqual({ status: 404 });            // a directory is not a file
   expect(resolvePackageFile(dir, "")).toEqual({ status: 404 });
   expect(resolvePackageFile(path.join(tmp, "nope"), "index.html")).toEqual({ status: 404 });
+});
+
+test("a view reads its own files only: another view's folder beside it, even one whose name starts with its own, is 403", () => {
+  for (const other of ["tasks", "orbit2"]) {
+    fs.mkdirSync(path.join(tmp, "views", other), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "views", other, "data.json"), "{}");
+    expect(resolvePackageFile(dir, `../${other}/data.json`)).toEqual({ status: 403 });
+  }
+});
+
+test("a view may fetch from its own address and nowhere else: not another view's, not the scheme, not 'self' in a tab", () => {
+  const connect = (csp: string) => csp.split("; ").find((d) => d.startsWith("connect-src "));
+  expect(ownFiles("@ada/graph")).toBe("hm-view://ada--graph");
+  expect(connect(pluginCsp("n", ownFiles("@ada/graph")))).toBe("connect-src hm-view://ada--graph");
+  // Without an address, as on a phone, it fetches nothing.
+  expect(connect(pluginCsp("n"))).toBe("connect-src 'none'");
+  // A browser tab serves every view under one server: the view's own path there, and only connect-src changes.
+  const tab = withOwnFiles(pluginCsp("n", ownFiles("orbit")), "https://box:7000/hm-view/key/orbit/");
+  expect(connect(tab)).toBe("connect-src https://box:7000/hm-view/key/orbit/");
+  expect(tab.replace(connect(tab)!, "")).toBe(pluginCsp("n", ownFiles("orbit")).replace("connect-src hm-view://orbit", ""));
 });
 
 test("a file's type is its extension's, and anything else is bytes", () => {
@@ -116,6 +136,10 @@ test("each request is served as on every screen: the SDK, the page running the e
   expect(nested.text).toContain('"@hivemind/view-sdk":"../__sdk.js"');
 
   expect(await serve("assets/a.png")).toMatchObject({ status: 200, type: "image/png", file: fs.realpathSync(path.join(dir, "assets", "a.png")) });
+  // Every response names where the view may fetch, when the screen gives it one.
+  const own = await serveViewFile(dir, "assets/a.png", { js: null, sdk, files: ownFiles("orbit") });
+  if (own.status !== 200) throw new Error(`the file: ${own.status}`);
+  expect(own.csp).toBe(pluginCsp(nonceOf(own.csp), ownFiles("orbit")));
   expect(await serve("leak.txt")).toEqual({ status: 403 });
   expect(await serve("missing.js")).toEqual({ status: 404 });
 });

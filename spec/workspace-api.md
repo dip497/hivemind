@@ -418,7 +418,8 @@ caller's connection closes, or the host disables the view (`view.ended`, with wh
   module; `__sdk.js` is the view SDK this device serves its views, so a view never bundles its
   own; and a page of the view's is served with the SDK's import map first (`@hivemind/view-sdk`
   → `/__sdk.js`). Every file comes with `csp`, the Content-Security-Policy the screen serves it
-  under, the window's: no network (`connect-src 'none'`), no frames, forms or objects, scripts
+  under: no network (`connect-src 'none'`: a screen elsewhere does not let a view fetch its own
+  files, which a window does from its own origin), no frames, forms or objects, scripts
   only from the view's own origin (`'self'`, where the screen serves it, or `hm-view:`) or with
   the nonce that only the page made here carries, so the view's own inline scripts do not run.
   `__entry.html` of a view whose entry is a page is `BAD_REQUEST`.
