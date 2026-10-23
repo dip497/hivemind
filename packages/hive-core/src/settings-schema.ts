@@ -12,7 +12,7 @@
  */
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
-import { isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
+import { isPluginKey, isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -523,7 +523,7 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   return {
     ...keptUnknown(p, APPEARANCE_KEYS, base),
     preset,
-    mode: p.mode === "light" ? "light" : "dark",
+    mode: p.mode === "light" || p.mode === "dark" ? p.mode : base.mode,
     palette,
     accent: typeof p.accent === "string" && p.accent in ACCENTS ? (p.accent as AccentId) : base.accent,
     radius: clamp(p.radius, 0, 24, base.radius),
@@ -550,7 +550,7 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
       selection: color(t.selection, base.terminal.selection),
       ansi,
     },
-    pluginSurfaces: p.pluginSurfaces === "opaque" ? "opaque" : "theme",
+    pluginSurfaces: p.pluginSurfaces === "opaque" || p.pluginSurfaces === "theme" ? p.pluginSurfaces : base.pluginSurfaces,
     overlayMedia: (Array.isArray(p.overlayMedia) ? p.overlayMedia : []).map(mediaLayer).filter((m): m is MediaLayer => !!m),
   };
 }
@@ -608,12 +608,14 @@ export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: st
 
 /** A theme file applied over the person's own appearance `cur`: a bare appearance, or a whole
  *  settings.json (its `appearance`). Only the keys this build knows are read from it, checked as
- *  settings are, and `cur`'s own other keys stay. The media it leaves out are kept as `cur` has
- *  them, so a file of `exportAppearance` never removes yours. */
+ *  settings are, and `cur`'s own other keys stay. What it leaves out is kept as `cur` has it, the
+ *  media too, so a file of `exportAppearance` never removes yours. A file that sets none of them
+ *  (a package.json picked by mistake) is not a theme: it throws, and nothing changes. */
 export function importAppearance(raw: unknown, cur: Appearance): Appearance {
   const file = isObj(raw) && isObj(raw.appearance) ? raw.appearance : raw;
   // Anything else in the file (a settings.json's `v` and `views`, a package.json's `name`) is not the look.
   const p = isObj(file) ? Object.fromEntries(Object.entries(file).filter(([k]) => APPEARANCE_KEYS.has(k))) : {};
+  if (Object.keys(p).length === 0) throw new Error(`not a hivemind theme: it sets none of ${[...APPEARANCE_KEYS].join(", ")}`);
   const a = mergeAppearance(p, cur);
   const w = isObj(p.wallpaper) ? p.wallpaper : {};
   return {
@@ -647,13 +649,20 @@ export function toolPreferences(s: Pick<Settings, "plugins">, installed: readonl
   return { enabledPlugins, disabledTools };
 }
 
-/** The maps whose keys are ids (a view's, a plugin's): any key in one is a setting. */
-const ID_MAPS = new Set(["views.chrome", "views.toolbars", "plugins.state"]);
+const VIEW_ID = { test: (id: string) => VIEW_ID_RE.test(id), what: "a view's id (lowercase letters, digits and dashes; @owner/name for one from HiveHub)" };
+/** The maps whose keys are ids (a view's, a plugin's): any key in one that such an id can be is a
+ *  setting. Merging drops any other, so it would be set to nothing. */
+const ID_MAPS = new Map<string, { test(id: string): boolean; what: string }>([
+  ["views.chrome", VIEW_ID],
+  ["views.toolbars", VIEW_ID],
+  ["plugins.state", { test: isPluginKey, what: "a plugin's key (kind:id, such as agent:claude)" }],
+]);
 
 /** Why `hive config set` cannot set the dotted `path`, or null when it is a setting. The file
  *  keeps a key this build does not know (a newer build may have written it), so setting one would
  *  store a value nothing here reads. Inside a map of ids (`views.chrome.<view>`,
- *  `views.toolbars.<view>`, `plugins.state.<plugin>`) any id is one, its value checked as usual. */
+ *  `views.toolbars.<view>`, `plugins.state.<plugin>`) any key such an id can be is one, its value
+ *  checked as usual. */
 export function settingPathProblem(path: string): string | null {
   const keys = path.split(".").filter(Boolean);
   if (keys.length === 0) return "name a setting, such as appearance.glass.blur";
@@ -661,7 +670,8 @@ export function settingPathProblem(path: string): string | null {
   let at: unknown = all;
   for (let i = 0; i < keys.length; i++) {
     const where = keys.slice(0, i).join(".");
-    if (ID_MAPS.has(where)) return null;
+    const ids = ID_MAPS.get(where);
+    if (ids) return ids.test(keys[i]!) ? null : `"${keys[i]}" is not ${ids.what}, and ${where} holds only those`;
     if (!isObj(at)) return `${where} is ${Array.isArray(at) ? "a list" : "one value"}: set it whole`;
     if (!Object.hasOwn(at, keys[i]!)) {
       const near = settingPaths(all).filter((p) => p.endsWith(`.${keys[i]}`));

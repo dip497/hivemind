@@ -132,13 +132,13 @@ test("a widget reads the workspace through hive.hm, held to what its widget.json
   }
 });
 
-// A widget that says something when its button is pressed.
+// A widget that says something when its button is pressed: a line, or a megabyte.
 const TELLER = `
-hive.on("start", () => hive.render({ type: "stack", children: [{ type: "button", label: "Tell", action: "tell" }] }));
-hive.on("action", () => hive.notify("Build passed"));
+hive.on("start", () => hive.render({ type: "stack", children: [{ type: "button", label: "Tell", action: "tell" }, { type: "button", label: "Shout", action: "shout" }] }));
+hive.on("action", (a) => hive.notify(a === "shout" ? "x".repeat(1000000) : "Build passed"));
 `;
 
-test("a widget's notice is shown by main, as main's notification settings say, not the window's copy of them", async () => {
+test("a widget's notice is shown by main, as main's notification settings say, not the window's copy of them, and reaches main cut short", async () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-notify-repo-"));
   const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-notify-ud-"));
   execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
@@ -152,13 +152,17 @@ test("a widget's notice is shown by main, as main's notification settings say, n
   const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
   try {
     // What main shows, kept instead of shown: xvfb has no notification server.
-    await app.evaluate(({ Notification }) => {
-      const g = globalThis as unknown as { shown: string[] };
+    // And how long each notice's text is as it reaches main.
+    await app.evaluate(({ Notification, ipcMain }) => {
+      const g = globalThis as unknown as { shown: string[]; sent: number[] };
       g.shown = [];
+      g.sent = [];
       Notification.isSupported = () => true;
       Notification.prototype.show = function (this: Electron.Notification) { g.shown.push(`${this.title}: ${this.body}`); };
+      ipcMain.on("notify:widget", (_e, n: { text?: unknown }) => g.sent.push(String(n?.text ?? "").length));
     });
     const shown = () => app.evaluate(() => (globalThis as unknown as { shown: string[] }).shown);
+    const sent = () => app.evaluate(() => (globalThis as unknown as { sent: number[] }).sent);
     const page = await app.firstWindow();
     await page.waitForSelector(".react-flow", { timeout: 30_000 });
     await page.locator('[data-toolbar-action="board"]').first().click();
@@ -175,6 +179,9 @@ test("a widget's notice is shown by main, as main's notification settings say, n
     await popups(true);
     await tell.click();
     await expect.poll(shown, { timeout: 5_000 }).toEqual(["Teller: Build passed"]);
+    // A megabyte of notice is cut in the window, before it crosses to main.
+    await page.locator('[data-widget-layer] [data-widget="teller"]').getByRole("button", { name: "Shout", exact: true }).click();
+    await expect.poll(sent, { timeout: 5_000 }).toEqual([12, 12, 400]);
   } finally {
     await app.close();
     fs.rmSync(repo, { recursive: true, force: true });

@@ -46,6 +46,13 @@ describe("hive config / hive theme", () => {
     hive(["theme", "use", "ubuntu"], { cwd: tmp, env });
     r = hive(["theme", "import", out, "--json"], { cwd: tmp, env });
     expect(r.json, `stdout=${JSON.stringify(r.stdout)} stderr=${JSON.stringify(r.stderr)} code=${r.code}`).toEqual({ preset: "nord", rescanned: false });
+    // A file that sets nothing of the look, picked by mistake, is refused and changes nothing.
+    hive(["config", "set", "appearance.mode", '"light"'], { cwd: tmp, env });
+    const before = fs.readFileSync(file, "utf8");
+    const pkg = path.join(tmp, "package.json");
+    fs.writeFileSync(pkg, JSON.stringify({ name: "app", version: "1.0.0", scripts: { build: "tsc" } }));
+    r = hive(["theme", "import", pkg, "--json"], { cwd: tmp, env });
+    expect([r.code, r.json, fs.readFileSync(file, "utf8")]).toEqual([1, { error: expect.objectContaining({ code: "INVALID_THEME", message: expect.stringContaining("not a hivemind theme") }) }, before]);
     fs.rmSync(tmp, { recursive: true, force: true });
   }, 30_000);
 
@@ -95,6 +102,10 @@ describe("hive config / hive theme", () => {
         ["appearance.glass.blurr", "appearance.glass holds enabled, contentGlass, opacity, blur"],
         ["notifications.enabled", "no setting notifications"],
         ["appearance.glass.blur.x", "appearance.glass.blur is one value"],
+        // An id no view or plugin can have: the map drops it, so it would print as set to nothing.
+        ["views.chrome.Bad_Id", '"Bad_Id" is not a view\'s id'],
+        ["views.toolbars.Bad_Id", '"Bad_Id" is not a view\'s id'],
+        ["plugins.state.claude", '"claude" is not a plugin\'s key'],
       ];
       for (const [at, why] of wrong) {
         const r = hive(["config", "set", at!, "12", "--json"], { cwd: tmp, env });

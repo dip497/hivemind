@@ -112,14 +112,27 @@ describe("settings schema", () => {
     expect([got.preset, got.wallpaper.videoSrc, got.wallpaper.imageSrc, got.overlayMedia]).toEqual(["nord", "hivemedia://media/bo.mp4", undefined, theirs.overlayMedia]);
   });
 
-  test("an imported file gives only the look: a whole settings.json gives its appearance, and no file adds a key this build does not know", () => {
+  test("an imported file gives only the look: a whole settings.json gives its appearance, no file adds a key this build does not know, and one with no appearance setting is refused", () => {
     const mine = mergeAppearance({ preset: "signal", someFutureKey: { id: "harbour" } });
     const keys = Object.keys(mine).sort();
-    // A package.json picked by mistake, and a whole settings.json whose appearance a newer build wrote.
+    // A file with one setting among others, and a whole settings.json whose appearance a newer build wrote.
     const pkg = importAppearance({ name: "app", version: "1.0.0", scripts: { build: "tsc" }, radius: 4 }, mine);
     const whole = importAppearance({ v: 1, appearance: { preset: "nord", later: true }, views: { defaultView: "orbit" }, agents: {} }, mine);
     expect([Object.keys(pkg).sort(), Object.keys(whole).sort()]).toEqual([keys, keys]);
     expect([pkg.radius, whole.preset, (whole as unknown as Record<string, unknown>).someFutureKey]).toEqual([4, "nord", { id: "harbour" }]);
+    // A package.json picked by mistake, a settings.json whose appearance is not one, and what is not an object at all.
+    for (const file of [{ name: "app", version: "1.0.0", scripts: { build: "tsc" } }, { v: 1, appearance: "nord" }, { v: 1, appearance: {} }, "nord", [], null]) {
+      expect(() => importAppearance(file, mine), JSON.stringify(file)).toThrow("not a hivemind theme");
+    }
+  });
+
+  test("an imported file that leaves out the mode or how tools look in a scene keeps yours", () => {
+    const light = mergeAppearance({ preset: "signal", mode: "light", pluginSurfaces: "opaque" });
+    const got = importAppearance({ preset: "nord", radius: 4 }, light);
+    expect([got.preset, got.radius, got.mode, got.pluginSurfaces]).toEqual(["nord", 4, "light", "opaque"]);
+    // One that names them gives its own.
+    const named = importAppearance({ mode: "dark", pluginSurfaces: "theme" }, light);
+    expect([named.mode, named.pluginSurfaces]).toEqual(["dark", "theme"]);
   });
 
   test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {

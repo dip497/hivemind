@@ -136,7 +136,7 @@ test("a preserved terminal follows the view's opacity without another theme chan
   await original?.dispose();
 });
 
-test("Copy JSON copies the look without the wallpaper's picture, and says so; Import… of that file keeps your picture", async () => {
+test("Copy JSON copies the look without the wallpaper's picture, and says so; Import… of that file keeps your picture, and of a file that is no theme changes nothing", async () => {
   // A wallpaper picked before the media picker: its address names the home folder.
   const picture = "hm-media://v/%2Fhome%2Falice%2Fcat.png";
   hive("config", "set", "appearance.wallpaper", JSON.stringify({ kind: "image", imageSrc: picture, brightness: 0.8 }));
@@ -153,5 +153,12 @@ test("Copy JSON copies the look without the wallpaper's picture, and says so; Im
   await expect.poll(() => onDisk().appearance.radius, { timeout: 5_000 }).toBe(3);
   expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8 });
   await expect(page.locator(".hm-wp-image")).toHaveCount(1);
+  // A package.json picked by mistake sets nothing of the look: refused, and the look stays.
+  const before = onDisk().appearance;
+  const pkg = JSON.stringify({ name: "app", version: "1.0.0", scripts: { build: "tsc" } });
+  await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "package.json", mimeType: "application/json", buffer: Buffer.from(pkg) });
+  await expect(page.getByText("That file is not a hivemind theme.")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(onDisk().appearance).toEqual(before);
   await closeSettings();
 });

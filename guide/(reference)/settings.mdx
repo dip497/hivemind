@@ -42,7 +42,8 @@ can do**.
 Everything is one file you own. The app and the `hive` command both read and write it, and it is
 checked each time. A value out of range is set to the nearest allowed one; an unknown value falls
 back to its default. `hive config set` refuses a path that is not a setting, and lists the
-settings there.
+settings there. It also refuses a `<view>` that is not a view's id, and a `<kind>:<id>` that is not
+a plugin's.
 
 | | Where |
 |---|---|

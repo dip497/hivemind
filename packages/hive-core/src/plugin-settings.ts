@@ -45,7 +45,8 @@ const ID_OF: Record<PluginKind, { test(id: string): boolean }> = {
 };
 /** Whether `id` is an id a plugin of `kind` can have. */
 export const isPluginId = (kind: PluginKind, id: string): boolean => ID_OF[kind].test(id);
-const keyOk = (key: string): boolean => {
+/** Whether `key` is a plugin's key in the stored state: `kind:id`, the id one of that kind can have. */
+export const isPluginKey = (key: string): boolean => {
   const cut = key.indexOf(":");
   const kind = key.slice(0, cut) as PluginKind;
   return cut > 0 && Object.hasOwn(ID_OF, kind) && ID_OF[kind].test(key.slice(cut + 1));
@@ -61,7 +62,7 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
   const out: Record<string, PluginState> = {};
   if (!isObj(raw)) return out;
   for (const [key, v] of Object.entries(raw).slice(0, MAX_PLUGINS)) {
-    if (!keyOk(key) || !isObj(v)) continue;
+    if (!isPluginKey(key) || !isObj(v)) continue;
     const state: PluginState = {};
     if (typeof v.enabled === "boolean") state.enabled = v.enabled;
     if (isObj(v.options)) {

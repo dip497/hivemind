@@ -13,7 +13,7 @@
 import { defineCommand } from "citty";
 import { promises as fs } from "node:fs";
 import {
-  HiveError, PRESETS, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingPathProblem, settingsPath, updateSettings,
+  DEFAULT_APPEARANCE, HiveError, PRESETS, applyPreset, exportAppearance, getPath, importAppearance, patchSettingsFile, readSettings, settingPathProblem, settingsPath, updateSettings,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
@@ -117,6 +117,9 @@ const importCmd = defineCommand({
     const ctx = { json: !!args.json };
     let raw: unknown;
     try { raw = JSON.parse(await fs.readFile(String(args.file), "utf8")); } catch (e) { return err(ctx, "invalid_theme", `cannot read ${args.file}: ${(e as Error).message}`); }
+    // A file that sets nothing of the look (a package.json picked by mistake) is refused before the
+    // settings are touched; importAppearance says why.
+    try { importAppearance(raw, DEFAULT_APPEARANCE); } catch (e) { return err(ctx, "invalid_theme", `cannot import ${args.file}: ${(e as Error).message}`); }
     const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }));
     const appearance = written.appearance;
     const rescanned = await reloadApp();

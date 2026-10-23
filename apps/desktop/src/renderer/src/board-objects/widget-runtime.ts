@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { isPluginOn, resolveSettings } from "@hivemind/core/plugin-settings";
 import type { BoardObject, WidgetObject } from "@hivemind/workspace-doc/shapes";
 import type { WidgetPackage } from "../../../shared/ipc";
+import { WIDGET_NOTICE_SENT_MAX } from "../../../shared/notification-settings";
 import { BUILTIN_WIDGETS, viewWidget } from "@hivemind/core/widget-format";
 import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import { onStoreChange, readBoard } from "../workspace/workspace-store-client";
@@ -319,8 +320,9 @@ export function useWidgetRuntime(repo: string | null, objects: BoardObject[], pa
         }
         else if (m.type === "move") { shown.move = { x: m.x ?? 0, y: m.y ?? 0, over: m.over ?? 0, n: Date.now() * 1000 + (++moves % 1000) }; show(); }
         else if (m.type === "state") update(id, (o) => (o.kind === "widget" ? { ...o, state: m.state } : o));
-        // Main decides, by the person's notification settings as main has them.
-        else if (m.type === "notify") window.hive.notifyWidget?.({ repo, widget: id, title: pkg.name, text: m.text });
+        // Main decides, by the person's notification settings as main has them. The widget's code
+        // can post anything: cut here, so a megabyte of it never crosses to main.
+        else if (m.type === "notify") window.hive.notifyWidget?.({ repo, widget: id, title: pkg.name, text: String(m.text ?? "").slice(0, WIDGET_NOTICE_SENT_MAX) });
       };
       worker.onerror = (err) => { console.warn(`[widget ${pkg.id}] ${err.message}`); failWidget(id, err.message); };
       worker.postMessage({ type: "init", state: w.state, options: optionsOf(pkg, w), reducedMotion: lessMotion?.matches === true });

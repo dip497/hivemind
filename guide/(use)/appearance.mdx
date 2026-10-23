@@ -102,7 +102,9 @@ what it left out. Importing a file keeps the ones you have. If the theme used a 
 pick your own under **Background**.
 
 **Import…** and `hive theme import` also take a whole settings.json, and read only the look from
-any file. To keep a copy of your look with its photo, video and overlays, save
+any file. What a file leaves out, such as light or dark, stays as you have it. A file with none of
+the look in it, such as a package.json, is refused and changes nothing. To keep a copy of your look
+with its photo, video and overlays, save
 `hive config get appearance > my-look.json`: importing that file puts them back.
 
 A guest who joins your workspace sees your theme, except your photo, video, overlays and fonts.
