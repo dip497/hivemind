@@ -40,10 +40,10 @@ test("a tile that needs you, finished or failed is said once, with the others th
   ev("f1", "question"); ev("f1", "working"); // answered before it was said
   ev("g1", "exited"); // no code: as a toast says, it failed
   ev("h1", "plan_review"); // a plan to review needs you, as its amber mark says
-  ev("i1", "awaiting_approval");
+  ev("i1", "awaiting_approval"); // a supervised worker's approval is its lead's to give, not the person's
   assert.deepEqual(said, [], "nothing is said before the states hold");
   mock.timers.tick(1000);
-  assert.deepEqual(said, ["A1 needs you. B1 finished. C1 failed. D1 finished. G1 failed. H1 needs you. I1 needs you"]);
+  assert.deepEqual(said, ["A1 needs you. B1 finished. C1 failed. D1 finished. G1 failed. H1 needs you"]);
 
   ev("a1", "permission", { detail: "still waiting" });
   ev("b1", "idle", { detail: "turn ended" });

@@ -68,7 +68,9 @@ export interface ToastAction {
  * not told one by one.
  */
 export function noticeOf(prev: TileStatusKind | undefined, e: StatusEvent): NoticeKind | null {
-  if (statusLook(e.status) === "needs") return "needs";
+  // A supervised worker's approval is its lead's to give (an agent), not the person's: its mark shows
+  // it, and nothing is said.
+  if (statusLook(e.status) === "needs") return e.status === "awaiting_approval" ? null : "needs";
   if (prev !== "working" || isBackgroundTile(e.tileId)) return null;
   if (e.status === "idle") return e.synthetic ? null : "done";
   if (e.status === "exited") return e.exitCode === 0 ? "done" : "error";

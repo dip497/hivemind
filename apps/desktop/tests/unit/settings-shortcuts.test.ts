@@ -139,6 +139,27 @@ test("each font button's tooltip names a key that handleFontKey sizes the text w
   }
 });
 
+test("the font keys size an editor's text on any layout and from the numpad, as they always did", () => {
+  // The keymap names - = and 0 by their place on a US keyboard; what the key types counts too, so a
+  // German or French layout (whose - sits elsewhere) and the numpad keep working.
+  Object.defineProperty(globalThis, "navigator", { value: { platform: PLATFORM.linux }, configurable: true });
+  const presses: [Partial<KeyPress>, string][] = [
+    [{ key: "-", code: "Slash" }, "dec"],          // German
+    [{ key: "-", code: "Digit6" }, "dec"],         // French
+    [{ key: "-", code: "NumpadSubtract" }, "dec"],
+    [{ key: "+", code: "NumpadAdd" }, "inc"],
+    [{ key: "+", code: "BracketRight" }, "inc"],   // German +
+    [{ key: "0", code: "Numpad0" }, "reset"],
+  ];
+  for (const [press, does] of presses) {
+    const ran: string[] = [];
+    const handled = handleFontKey({ ctrlKey: true, metaKey: false, altKey: false, shiftKey: false, key: "", code: "", ...press, preventDefault: () => {} }, { inc: () => ran.push("inc"), dec: () => ran.push("dec"), reset: () => ran.push("reset") });
+    assert.deepEqual([handled, ran], [true, [does]], `${press.key} on ${press.code} runs ${does}`);
+  }
+  // Without Ctrl or ⌘ the key is the text's.
+  assert.equal(handleFontKey({ ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, key: "-", code: "Minus", preventDefault: () => {} }, { inc() {}, dec() {}, reset() {} }), false);
+});
+
 test("a hint names the key held with this platform's own modifier, and it runs the action", () => {
   // Layers is ⌘B from anywhere on a Mac; elsewhere Super+B is the system's, so only Ctrl+B is named.
   assert.equal(labelsOf("toggle-layers", "mac")[0], "⌘B");

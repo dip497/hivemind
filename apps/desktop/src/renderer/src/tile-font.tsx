@@ -55,7 +55,10 @@ export function handleFontKey(
   f: Pick<TileFont, "inc" | "dec" | "reset">,
 ): boolean {
   if (!(e.ctrlKey || e.metaKey)) return false;
-  for (const action of actionsFor(e, "terminal", keyOS() === "mac")) {
+  // The keymap names - = and 0 by their place on the keyboard; what the key types counts too, so a
+  // layout whose - sits elsewhere (German, French) and the numpad size the text as well.
+  const typed = e.key === "=" || e.key === "+" ? "font-bigger" : e.key === "-" || e.key === "_" ? "font-smaller" : e.key === "0" ? "font-reset" : null;
+  for (const action of [...actionsFor(e, "terminal", keyOS() === "mac"), ...(typed ? [typed] : [])]) {
     const run = action === "font-bigger" ? f.inc : action === "font-smaller" ? f.dec : action === "font-reset" ? f.reset : null;
     if (!run) continue;
     e.preventDefault();

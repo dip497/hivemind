@@ -425,7 +425,7 @@ function NotificationPrefs() {
   const dim = !s.enabled;
 
   const kinds: { key: "needs" | "done" | "error"; label: string; hint: string }[] = [
-    { key: "needs", label: sentence(LOOKS.needs.word), hint: "Permission prompts, questions, plans to review, approvals, blocked" },
+    { key: "needs", label: sentence(LOOKS.needs.word), hint: "Permission prompts, questions, plans to review, blocked" },
     { key: "done", label: sentence(LOOKS.done.word), hint: "An agent completed its task" },
     { key: "error", label: sentence(LOOKS.failed.word), hint: "Agent crashed or exited non-zero" },
   ];
