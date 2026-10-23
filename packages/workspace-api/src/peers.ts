@@ -9,7 +9,8 @@
  *
  * `servePeer` is the host's side: each call is checked against the peer's role (`roles.ts`) before
  * the host answers it, the workspace named by its id is read as its repo here, a tile outside the
- * workspace is refused, and the peer is sent only the events about the workspace's tiles.
+ * workspace is refused, and the peer is sent only the events about the workspace's tiles: of an
+ * event about several (`terminal.activity`, `tile.lines`), only what it says of those.
  * `peerTransport` is the other side, a `ClientTransport` over the channel.
  */
 import type { Actor } from "@hivemind/workspace-host/intents";
@@ -212,6 +213,10 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
       const levels = Object.fromEntries(Object.entries((event.params[0] ?? {}) as Record<string, unknown>).filter(([tile]) => peer.holds(tile)));
       return { event: event.event, params: [levels] };
     }
+    if (event.event === "tile.lines") {
+      const lines = Object.entries((event.params[0] as { lines?: Record<string, unknown> } | undefined)?.lines ?? {}).filter(([tile]) => peer.holds(tile));
+      return lines.length > 0 ? { event: event.event, params: [{ lines: Object.fromEntries(lines) }] } : null;
+    }
     const tiles = tilesOf(event);
     if (tiles && !tiles.every((t) => peer.holds(t))) return null;
     return event;
@@ -291,7 +296,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
       return forbidden(elsewhere);
     }
     if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return forbidden(elsewhere);
-    if (method === "terminal.watchActivity" && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return forbidden(notOfThis("a tile there is not"));
+    if ((method === "terminal.watchActivity" || method === "tile.watchLines") && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return forbidden(notOfThis("a tile there is not"));
     if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return notHeld(String(params[1]));
     return null;
   };

@@ -27,6 +27,7 @@ At the end, tell me the topic, which events push, and that \`hive push off\` sto
 | Signal | Where | What it tells you |
 |---|---|---|
 | Amber | an agent's tile, its row in the Layers panel, its frame | this agent <Tooltip tip="An agent waiting for a person: a permission question, a choice, a plan to approve, or a supervised worker's request. Its tile turns amber." cta="Glossary" href="/glossary#needs-you">needs you</Tooltip> |
+| A second line | an agent's or a terminal's row in the Layers panel | what it waits for, or what its screen last showed |
 | The bell | top of the <Tooltip tip="The list beside the canvas of your projects, frames and tiles. ⌘B / Ctrl+B shows or hides it." cta="Glossary" href="/glossary#layers-panel">Layers panel</Tooltip> | how many agents need you |
 | A toast | inside the app | an agent needs you, finished, or failed |
 | An OS popup | your desktop | the same, when the app window is not in front |
@@ -34,6 +35,32 @@ At the end, tell me the topic, which events push, and that \`hive push off\` sto
 | A push | your phone | an agent needs you, even when you are away |
 
 Amber always means a person is being waited on. The other colours are on [Agent states](/agent-states).
+
+## Read what each row says
+
+Under the name of each agent and terminal in the Layers panel, a second line says what its screen
+last showed, such as `214 tests passed`. When an agent needs you, the line says what for, in amber:
+
+| The line | What the agent waits for |
+|---|---|
+| a tool and its command, such as `Bash: npm test` | your permission to run it; only the command's first line shows |
+| **Asks:** and a question | your answer |
+| **Plan ready for review** | your review of its plan |
+| **Permission**, **Question**, **Approval** or **Blocked** | that, in a word: its agent tells no more |
+
+Claude keeps its own conversation, so its row shows a line only while it waits for you.
+
+A terminal's line leaves out its prompt and what you type there, so it shows what the last command
+printed. A few rows are the exception:
+
+- A question a command waits on, such as `Overwrite b? [y/N]` or a password prompt, is the line on
+  Linux. On macOS and Windows it is left out with the prompt.
+- A prompt that takes two rows shows its top row, unless your shell marks where its prompt starts,
+  as shell integration does (the OSC 133 marks).
+- A question your shell asks itself, such as `read -p`, is left out with the prompt.
+
+To choose which rows show a line, open the Layers panel's **View** menu, then **Lines**:
+**All** (every agent and terminal), **Needs you** or **Off**.
 
 ## Jump to the next one
 

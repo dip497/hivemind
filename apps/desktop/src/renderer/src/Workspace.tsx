@@ -37,6 +37,7 @@ import { PickerDialog } from "./picker-dialog";
 import { isPluginVerb, pluginVerb, type PluginVerbHost } from "./workspace/plugin-verbs";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
+import { forgetAgent, forgetAgents, tellAgent } from "./agent-waits";
 import { ToolPlugins, WorkspacePropsContext } from "./tiles/tool-plugins";
 import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
@@ -955,7 +956,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // Plan review: an agent waits on a person's review of its plan (M2). Every window showing the
   // agent opens the review beside it, on every machine the workspace is shared with, and the ones
   // waiting when it opens; once anyone answers, or the agent stops waiting, it closes, and the
-  // others are told who answered. The agent list says it all (`waiting.plan`).
+  // others are told who answered. The agent list says it all (`waiting.plan`). What every agent
+  // waits on is kept for the Layers rows too (agent-waits.ts): one feed for the window.
   useEffect(() => {
     if (!persistKey) return undefined;
     let live = true;
@@ -964,6 +966,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     const reviewOf = (agent: string) => tilesRef.current.find((t) => t.kind === "planReview" && t.review?.agentTileId === agent);
     const seen = (a: AgentItem | { gone: string }): void => {
       const agent = "gone" in a ? a.gone : a.tile;
+      if ("gone" in a) forgetAgent(agent); else tellAgent(a);
       const plan = "gone" in a || a.waiting?.kind !== "plan" || a.waiting.plan === undefined ? null : { since: a.waiting.since, plan: a.waiting.plan };
       const open = reviewOf(agent);
       if (open && open.review?.since !== plan?.since) closeTile(open.id);
@@ -978,7 +981,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       if (repo !== persistKey || e.kind !== "answered" || !reviewed.delete(e.tile)) return;
       if (e.by && e.by.person !== me) toast(`${e.by.name || "Someone"} ${e.detail === "allow" ? "approved the plan" : "asked for changes to the plan"}`);
     });
-    return () => { live = false; offChanged(); offEvent(); };
+    return () => { live = false; offChanged(); offEvent(); forgetAgents(); };
   }, [persistKey, openPlanReview, closeTile]);
 
   // HCP control plane: main forwards a verb only a window can carry out (focus a tile, a view's

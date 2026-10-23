@@ -61,6 +61,8 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     fileWrite: (repo, file, contents) => workspace.call("file.write", repo, file, contents),
     ptyActivityWatch: (tiles) => workspace.notice("terminal.watchActivity", tiles),
     onPtyActivity: (cb) => workspace.on("terminal.activity", cb),
+    tileLinesWatch: (tiles) => workspace.call("tile.watchLines", tiles),
+    onTileLines: (cb) => workspace.on("tile.lines", cb),
     worktreeList: (repo) => workspace.call("worktree.list", repo),
     worktreeCreate: (repo, opts) => workspace.call("worktree.create", repo, opts),
     worktreeRemove: (repo, worktree, force) => workspace.call("worktree.remove", repo, worktree, force),

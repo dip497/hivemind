@@ -71,6 +71,7 @@ A line without an `id` is an event, `{"event": "…", "params": [...]}`, about t
 - `agent.event`: an agent finished replying (`turnEnded`), started waiting on you (`waiting`), was answered (`answered`), came, went, or reported.
 - `status.changed`: an agent's status changed.
 - `terminal.data`: output of a terminal you opened.
+- `tile.lines`: the last line of terminals you watch (`tile.watchLines`) changed, at most every 250 ms.
 - `file.changed`: files changed in the workspace.
 
 ## Error codes

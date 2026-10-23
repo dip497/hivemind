@@ -87,6 +87,7 @@ spacing:
   lg: "16px"
   xl: "24px"
   row: "32px"
+  row-tall: "44px"
   control: "32px"
   control-compact: "28px"
 components:
@@ -131,6 +132,14 @@ components:
     backgroundColor: "{colors.graphite-card}"
   tile-row-selected:
     backgroundColor: "{colors.graphite-hover}"
+  tile-row-tall:
+    height: "{spacing.row-tall}"
+  tile-row-line:
+    textColor: "{colors.pencil-text}"
+    typography: "{typography.count}"
+  tile-row-line-waiting:
+    textColor: "{colors.signal-amber}"
+    typography: "{typography.count}"
   status-chip:
     typography: "{typography.chip}"
     rounded: "{rounded.full}"
@@ -176,7 +185,7 @@ The palette is neutral graphite tinted a hair toward blue (hue 250), with colour
 - **Steel Accent** (steel-accent; steel-accent-hover on hover): the user's accent, a quiet desaturated steel by default. It marks resize handles under the pointer and checkbox fills; never focus, which is the selection colour. The user may set it to grey, so it never carries meaning.
 
 ### Tertiary
-- **Signal Amber** (signal-amber): needs-you, and nothing else. Blocked, asking and plan-review chips, the needs-you badge on the rail, the needs-you count. Nothing decorative borrows it.
+- **Signal Amber** (signal-amber): needs-you, and nothing else. Blocked, asking and plan-review chips, the needs-you badge on the rail, the needs-you count, and what such a row waits on, on its second line. Nothing decorative borrows it.
 - **Unread Blue** (unread-blue): a 6px dot after the name of a tile that finished since you last looked. It marks and never fills, and stays blue whatever the accent is.
 - **Sage Done** (sage-done): a finished agent.
 - **Brick Error** (brick-error): failed agents and destructive actions. Destructive hovers tint at 10%.
@@ -231,7 +240,7 @@ Letter-spacing follows size: -0.014em at 16–23px, -0.005em at 12–15px, +0.01
 
 The canvas fills the window, and the chrome sits at its edges: the Layers sheet on the left, a floating tool island at top centre, and toasts bottom right. Nothing at page level scrolls; panes scroll inside themselves.
 
-The panel is a list of 32px rows set 8px in from the sheet's sides. Nested items indent 14px per level. Every row's name starts at the same x, after a 16px icon slot. Gaps inside a row are 10px; menus pad 4px and items pad 6px by 8px. Settings is a centred sheet (up to 1080 by 780px) with a 208px sidebar. Its page content is capped at 760px, with 28px between sections.
+The panel is a list of 32px rows set 8px in from the sheet's sides; a terminal's row is 44px (row-tall) while it shows a second line. Nested items indent 14px per level. Every row's name starts at the same x, after a 16px icon slot. Gaps inside a row are 10px; menus pad 4px and items pad 6px by 8px. Settings is a centred sheet (up to 1080 by 780px) with a 208px sidebar. Its page content is capped at 760px, with 28px between sections.
 
 Row chrome stays hidden until the row is hovered or focused: close buttons, keycap hints, the status chip of a non-urgent row. Needs-you chips never hide.
 
@@ -297,6 +306,8 @@ The components are calm, exact and small. Nothing raises its voice until it need
 
 ### Tile Row (signature)
 A 32px row: a 16px icon slot (an agent's own logo, or the tool's mark), the name at 14px, an unread dot, a spacer, then one status mark. Working is a working-white dot. Done or failed is a chip that hides on hover. Needs-you is an amber chip that pulses. Idle shows nothing. While Ctrl or ⌘ is held, an 18px keycap with the jump number replaces the status. The selected row takes graphite-hover with a 12% chalk inner ring.
+
+A terminal's row may say one more thing, on a second line under the name and lined up with it: what its screen last showed (`214 tests passed`), in 11px mono pencil-text (`text-count font-mono`), cut with an ellipsis. While its agent waits on the person, the line is what it waits on instead (`Bash: npm test`, `Asks: …`, Plan ready for review), in Signal Amber. The row grows to 44px (row-tall) only while it has a line; with none it stays 32px. The line never pulses or moves, and an agent that keeps a conversation shows only what it waits on. The View menu's **Lines** shows them for all agents, only for those that need you, or not at all.
 
 ### Action Row (signature)
 The panel's start actions (New agent, New project, Add a tool or widget, New machine) use the tile row's shape, so the panel reads as one list. Their icon sits in a small tinted tile, the one place colour is decorative. Each action keeps its own fixed hue, never amber and never the unread blue. Its keycap hint appears only under the pointer or focus.

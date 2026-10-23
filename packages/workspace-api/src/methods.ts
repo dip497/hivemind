@@ -8,7 +8,7 @@ import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
-import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
+import type { ActivityLevels, ExitInfo, LastLines, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { GuestAnswer } from "@hivemind/workspace-host/connect";
 import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
@@ -81,6 +81,10 @@ export interface WorkspaceMethods {
   "review.save": (repo: string, comments: ReviewComment[]) => void;
   /** Every agent session's status there is. Each change after it is a `status.changed` event. */
   "status.all": () => Array<{ tileId: string; status: StatusChange["status"] }>;
+  /** (0.34) Watch the last lines of `tiles` (at most 1024), in place of those the caller watched (none:
+   *  it watches none). What each one's screen last showed with text, for those that showed one;
+   *  each change after it is a `tile.lines` to the caller alone. */
+  "tile.watchLines": (tiles: string[]) => { lines: LastLines };
   /** (0.18) The agents in the workspace at `repo`, as a phone is told of them: name, program,
    *  state, what each waits on and where it runs; and the feed's position. Each change after it
    *  is an `agent.changed` and an `agent.event` numbered on from `seq`. */
@@ -342,6 +346,9 @@ export interface WorkspaceEvents {
   "terminal.exit": (tile: string, info: ExitInfo) => void;
   /** Changes in watched terminals' activity. */
   "terminal.activity": (levels: ActivityLevels) => void;
+  /** (0.34) The tiles the client watches (`tile.watchLines`) whose last line changed, each with its line
+   *  now: to that client alone, at most every 250 ms. */
+  "tile.lines": (change: { lines: LastLines }) => void;
   /** Who holds a terminal's keyboard now: null while the host does. */
   "terminal.keyboard": (tile: string, holder: Typist | null) => void;
   /** Someone asks for the keyboard the client holds (or the host's windows, while the host does). */

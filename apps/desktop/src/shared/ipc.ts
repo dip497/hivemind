@@ -142,7 +142,7 @@ export type {
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
 import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
-import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
+import type { LastLines, TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -738,6 +738,11 @@ export interface HiveIpc {
   /** Bare tile ids whose output level someone watches (main samples only these). */
   ptyActivityWatch(tileIds: string[]): void;
   onPtyActivity(cb: (levels: Record<string, ActivityLevel>) => void): () => void;
+  /** Watch the last lines of these tiles (bare ids), in place of those this window watched (none:
+   *  it watches none). Answered with each one's line now, for those that showed one. */
+  tileLinesWatch(tileIds: string[]): Promise<{ lines: LastLines }>;
+  /** The watched tiles whose last line changed, each with its line now ("": it shows none). */
+  onTileLines(cb: (change: { lines: LastLines }) => void): () => void;
   presenceNow(): Promise<ViewPresence>;
   onPresence(cb: (p: ViewPresence) => void): () => void;
   viewSharePrepare?(png: ArrayBuffer): Promise<SharePrepared>;

@@ -348,6 +348,9 @@ export const LAYERS_GROUP_BY = ["machine", "group", "date", "status", "agent", "
 export const LAYERS_SORT_BY = ["canvas", "activity", "name"] as const;
 /** How Recents groups past sessions: by the agent, by the project (folder) they ran in, by day, or not. */
 export const LAYERS_RECENTS_BY = ["agent", "project", "date", "none"] as const;
+/** Which rows show a second line under the name: every terminal's last line and what each agent
+ *  waits on, only what agents wait on, or none. */
+export const LAYERS_LINES = ["all", "needs-you", "off"] as const;
 export interface LayersPrefs {
   /** Only the tiles in this state. */
   status: (typeof LAYERS_STATUS)[number];
@@ -358,8 +361,9 @@ export interface LayersPrefs {
   /** Only the tiles on these computers ("local", or a machine's id); empty: every one. */
   machines: string[];
   recentsBy: (typeof LAYERS_RECENTS_BY)[number];
+  lines: (typeof LAYERS_LINES)[number];
 }
-export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" };
+export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent", lines: "all" };
 
 export interface ViewsSettings {
   /** The view to open with (a registered id; unknown → canvas). */
@@ -902,5 +906,6 @@ function mergeLayersPrefs(raw: unknown, base: LayersPrefs): LayersPrefs {
       ? [...new Set(v.machines.filter((m): m is string => typeof m === "string" && m.length > 0 && m.length <= 128))].slice(0, 64)
       : base.machines,
     recentsBy: pick(v.recentsBy, LAYERS_RECENTS_BY, base.recentsBy),
+    lines: pick(v.lines, LAYERS_LINES, base.lines),
   };
 }

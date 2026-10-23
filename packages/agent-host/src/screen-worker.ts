@@ -8,7 +8,7 @@ import { parentPort } from "node:worker_threads";
 import * as HeadlessXtermNS from "@xterm/headless";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
 // Type imports only: run from source, a worker gets no loader that maps `./x.js` to `./x.ts`.
-import type { FromScreens, ToScreens } from "./screen-messages.js";
+import type { Cursor, FromScreens, ToScreens } from "./screen-messages.js";
 
 type HeadlessCtor = typeof import("@xterm/headless").Terminal;
 type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
@@ -56,6 +56,10 @@ interface Screen {
   paste: boolean;
   /** The last screen serialized, given again while no output or resize changed it. */
   last?: { at: number; lines: number; text: string };
+  /** Where the shell's prompt starts, while the shell waits at it, for a shell that marks its prompt
+   *  (OSC 133, its "shell integration"): set where a prompt starts (`A`), let go where the command
+   *  typed at it starts to run (`C`). */
+  prompt?: import("@xterm/headless").IMarker;
 }
 
 const port = parentPort!;
@@ -99,6 +103,13 @@ function open(m: Extract<ToScreens, { t: "open" }>): void {
   const s: Screen = { id: m.id, epoch: m.epoch, term, serializer, parsed: m.parsed, paste: false };
   screens.set(m.id, s);
   term.onTitleChange((title) => post({ t: "title", id: s.id, epoch: s.epoch, title }));
+  term.parser.registerOscHandler(133, (data) => {
+    const mark = data.split(";", 1)[0];
+    if (mark === "A" || mark === "C") { s.prompt?.dispose(); s.prompt = undefined; }
+    // None on the alternate screen, where no shell draws its prompt.
+    if (mark === "A") s.prompt = term.registerMarker(0) ?? undefined;
+    return true;
+  });
   if (m.seed) write(s, m.seed, m.parsed);
 }
 
@@ -132,6 +143,21 @@ function visibleRows(s: Screen): string {
   return rows.join("\n");
 }
 
+/** Read through the public API: `cursorY` counts from `baseY`, the row `visibleRows` starts at. The
+ *  input the cursor is in starts where the shell's prompt does, when it marked it, else on the
+ *  first row of its line: a command typed past the width wraps onto the rows below it. */
+function cursorOf(s: Screen): Cursor {
+  const buf = s.term.buffer.active;
+  const row = buf.cursorY;
+  let top = row;
+  while (top > 0 && buf.getLine(buf.baseY + top)?.isWrapped) top--;
+  const prompt = buf.type === "normal" && s.prompt && !s.prompt.isDisposed ? s.prompt.line - buf.baseY : row + 1;
+  // A prompt below the cursor was drawn before the screen was cleared; one above the screen leaves
+  // every row up to the cursor to it.
+  if (prompt <= row) top = Math.max(0, Math.min(top, prompt));
+  return { row, top, hidden: !s.term.modes.showCursor };
+}
+
 port.on("message", (m: ToScreens) => {
   switch (m.t) {
     case "open": open(m); break;
@@ -150,10 +176,10 @@ port.on("message", (m: ToScreens) => {
       break;
     }
     case "rows": {
-      const rows: Array<[string, string]> = [];
+      const rows: Array<[string, string, Cursor]> = [];
       const ready = m.ids.flatMap((id) => {
         const s = screens.get(id);
-        return s ? [new Promise<void>((r) => inTurn(s, () => { rows.push([id, visibleRows(s)]); r(); }))] : [];
+        return s ? [new Promise<void>((r) => inTurn(s, () => { rows.push([id, visibleRows(s), cursorOf(s)]); r(); }))] : [];
       });
       void Promise.all(ready).then(() => post({ t: "rows", req: m.req, rows }));
       break;

@@ -1,5 +1,10 @@
 /** What the daemon's I/O thread and its screen worker (screen-worker.ts) say to each other. */
 
+/** Where a session's cursor is: `row` counts down from the top visible row; `top`, the row the input
+ *  it is in starts on (a prompt the shell marked, a command line that wraps), at most `row`; `hidden`,
+ *  its program hid it (a prompt or an input box shows it). */
+export interface Cursor { row: number; top: number; hidden: boolean }
+
 /** `epoch` names the session instance: what is sent for one whose id another now holds is ignored. */
 export type ToScreens =
   /** A session's terminal, fed `seed` first (a saved screen, or recent output after a restart) and
@@ -10,14 +15,15 @@ export type ToScreens =
   | { t: "resize"; id: string; epoch: string; cols: number; rows: number }
   /** The screen as VT text with at most `lines` of scrollback. */
   | { t: "screen"; req: number; id: string; epoch: string; lines: number }
-  /** The visible rows of each session, as text. */
+  /** The visible rows of each session, as text, and where its cursor is. */
   | { t: "rows"; req: number; ids: string[] }
   | { t: "close"; id: string; epoch: string };
 
 export type FromScreens =
   /** `at`: the output position the screen covers; `mouse`: the mouse encoding the screen omits. */
   | { t: "screen"; req: number; text: string | null; at: number; modes: string }
-  | { t: "rows"; req: number; rows: Array<[string, string]> }
+  /** Each session's visible rows as text, and its cursor. */
+  | { t: "rows"; req: number; rows: Array<[string, string, Cursor]> }
   /** How far each session's terminal has taken in its output: id, epoch, position. */
   | { t: "parsed"; at: Array<[string, string, number]> }
   /** The app turned bracketed paste on or off. `epoch`: the session instance (a reused id is another). */

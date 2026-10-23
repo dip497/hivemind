@@ -87,6 +87,7 @@ import { makeSpawnPacer } from "./spawn-pacer.js";
 import { startSpawned, wakeSpawned } from "./spawned.js";
 import { Layouts } from "./store.js";
 import { Terminals, type SessionBackend } from "./terminals.js";
+import { TileLines } from "./tile-lines.js";
 
 export interface HeadlessHostOptions {
   /** The data folder, laid out as the app's on this machine. */
@@ -283,6 +284,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // Its widgets run on the person's own devices that have a workspace open: it has no window.
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const grants = new Grants(path.join(o.dir, "grants.json"));
+  // Each tile's last line, for the devices that watch it, and for Home.
+  const tileLines = new TileLines({ server: () => api, changed: () => homeChanged() });
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
@@ -291,6 +294,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       feed: () => agentFeed, workspaceOf: (repo) => store.ownership(repo)?.workspaceId ?? null,
     }),
     terminals.domain,
+    tileLines.domain,
     presence(() => api, () => keys.personId),
     widgetDomain,
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
@@ -391,7 +395,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,
     waitsChanged: () => agentFeed?.changed(),
-    lineChanged: () => homeChanged(),
+    lines: tileLines,
     waitingOf: (bare) => agentFeed?.waitingOf(bare),
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
@@ -506,7 +510,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     machines,
     // Home's rows: the links between agents, and what each tile last said or showed.
     links: () => control.links(),
-    line: (held, tile) => said.line(held, tile) ?? control.lines.get(tile),
+    line: (held, tile) => said.line(held, tile) ?? tileLines.get(tile),
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),
     // The phones one of the person's computers paired with are the person's here too

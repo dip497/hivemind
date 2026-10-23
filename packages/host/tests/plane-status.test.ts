@@ -10,6 +10,7 @@ import { evictTrackedSession, readTrackedSession, TILE_SESSIONS_DIR } from "@hiv
 import net from "node:net";
 import { readOrCreateToken, tileToken } from "@hivemind/agent-host/hooks/token";
 import { ControlPlane, type ControlPlaneOptions } from "../src/control/plane.ts";
+import { TileLines } from "../src/tile-lines.ts";
 
 const plane = (o: Partial<ControlPlaneOptions> = {}) => new ControlPlane({
   dir: () => "/nowhere",
@@ -40,18 +41,19 @@ test("the session an agent's hooks say it is in is its status's; one that says n
   assert.equal(p.status.get("t1")?.session, "5f0c3a1e");
 });
 
-test("what a tile's screen last showed is kept by its bare id, and told; anything but text is no line, and a tile forgotten keeps none", () => {
+test("what a tile's screen last showed is its line, by its bare id, and told; anything but text is no line, and a tile forgotten keeps none", () => {
   let told = 0;
-  const p = plane({ lineChanged: () => told++ });
+  const lines = new TileLines({ server: () => ({ publishTo: () => {} }), changed: () => told++ });
+  const p = plane({ lines });
   p.event("tile.line", { tileId: "hm:t1", line: "building" });
-  assert.deepEqual([...p.lines], [["t1", "building"]]);
+  assert.equal(lines.get("t1"), "building");
   assert.equal(told, 1);
   p.event("tile.line", { tileId: "hm:t1", line: 7 });
   p.event("tile.line", { line: "nobody's" });
-  assert.deepEqual([...p.lines], [["t1", "building"]]);
+  assert.equal(lines.get("t1"), "building");
   assert.equal(told, 1);
   p.forget("hm:t1");
-  assert.deepEqual([...p.lines], []);
+  assert.equal(lines.get("t1"), undefined);
 });
 
 test("a startup screen answered (a folder's trust) does not hold the messages sent after it", async () => {
@@ -88,7 +90,8 @@ test("the session an agent's hooks name is recorded for its tile to resume: a ne
 
 test("on the control-plane socket nothing is heard before a connection signs in, and a tile speaks for itself: what it says of another tile is dropped, what it says of its own is heard", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "plane-sock-"));
-  const p = plane({ dir: () => dir });
+  const lines = new TileLines({ server: () => ({ publishTo: () => {} }) });
+  const p = plane({ dir: () => dir, lines });
   const sock = path.join(dir, "hcp.sock");
   const server = p.listen(sock);
   for (let i = 0; i < 100 && !fs.existsSync(sock); i++) await new Promise((r) => setTimeout(r, 10));
@@ -109,8 +112,8 @@ test("on the control-plane socket nothing is heard before a connection signs in,
       { method: "tile.line", params: { tileId: "hm:t1", line: "forged" } },
       { method: "agent.screen", params: { tileId: "t1", state: "permission" } },
       { method: "tile.line", params: { tileId: "hm:t2", line: "its own" } });
-    assert.equal(p.lines.get("t2"), "its own");
-    assert.equal(p.lines.get("t1"), undefined);
+    assert.equal(lines.get("t2"), "its own");
+    assert.equal(lines.get("t1"), undefined);
     assert.equal(p.status.get("t1"), undefined);
     await said(as("hm:t1"), { method: "agent.event", params: { tileId: "hm:t1", event: "turn.started" } });
     assert.equal(p.status.get("t1")?.state, "working");

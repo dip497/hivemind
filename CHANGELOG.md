@@ -11,6 +11,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Added
 
+- Each agent's and terminal's row in the Layers panel says what its screen last showed (`214 tests passed`) on a second line under its name, and while an agent needs you, what for, in amber: `Bash: npm test`, `Asks: …` or Plan ready for review. The View menu's **Lines** shows them on every row (the default), only on those that need you, or not at all (`views.layers.lines`). A window watches only the lines of the rows it shows, and none while the panel is hidden. Workspace API 0.34: `tile.watchLines` and its `tile.lines` event.
 - A view can draw an agent's state the way the app does, with the same shape and word: `STATUS_MARKS` and `statusMarkSvg(tone)` in `@hivemind/view-sdk`. The app's own Layers, headers and notifications draw from the same table.
 - The phone page in a browser reaches every computer of yours, not only the one it paired with: Home shows what waits on you across all of them. Pairing with someone else's computer adds an account instead of replacing yours; switch between accounts from a chip on Home or from Devices.
 - A view that draws its own toolbar (`"toolbar": "off"`) can open the app's own menus from its buttons (view protocol 1.15, feature `hostMenu`): `hm.commands.openHostMenu("views", rect)` lists the views to switch to beside its button, and `"add"`, `"appearance"` and `"settings"` open Add, the theme panel and Settings. No permission: the person chooses in the menu.

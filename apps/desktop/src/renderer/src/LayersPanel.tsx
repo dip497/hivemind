@@ -30,7 +30,8 @@ import {
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
-import { AGENT_TILE_KIND } from "./tile-kinds";
+import { AGENT_TILE_KIND, isTerminalKind } from "./tile-kinds";
+import { lineId, RowLine } from "./row-line";
 import type { SleepActions } from "./workspace/SleepAgents";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
@@ -148,6 +149,7 @@ const VIEW_CHOICES = {
   activity: [["all", "All"], ["hour", "Past hour"], ["today", "Today"], ["week", "This week"]],
   groupBy: [["group", "Project"], ["machine", "Machine"], ["date", "Date"], ["status", "Status"], ["agent", "Agent"], ["none", "None"]],
   sortBy: [["canvas", "Canvas order"], ["activity", "Last activity"], ["name", "Name"]],
+  lines: [["all", "All"], ["needs-you", "Needs you"], ["off", "Off"]],
 } as const satisfies Record<string, ReadonlyArray<readonly [string, string]>>;
 const choiceLabel = <K extends keyof typeof VIEW_CHOICES>(k: K, v: string) => (VIEW_CHOICES[k] as ReadonlyArray<readonly [string, string]>).find(([id]) => id === v)?.[1] ?? v;
 
@@ -199,16 +201,19 @@ interface RowActions {
   close?: (id: string) => void;
 }
 
-/** One tile's row: its mark, its name, and its status when that is worth reading. */
-const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0, folded = false, jumpKey, until, asleep = false, failed = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; started?: number; folded?: boolean; jumpKey?: number; until?: string; asleep?: boolean; failed?: boolean }) {
+/** One tile's row: its mark, its name, and its status when that is worth reading. A terminal's
+ *  may say more under its name, as the View menu's Lines says (`lines`): it is two lines high then. */
+const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, started = 0, folded = false, jumpKey, until, asleep = false, failed = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; lines: LayersPrefs["lines"]; started?: number; folded?: boolean; jumpKey?: number; until?: string; asleep?: boolean; failed?: boolean }) {
   const st = t.status;
   const unread = isUnread(t);
   const isPlan = !!tileKind(t.kind).waitsOnPerson;
   const look = statusLook(st, { failed });
+  const lined = lines !== "off" && isTerminalKind(t.kind);
   return (
     <div
       role="button"
       aria-label={t.name}
+      aria-describedby={lined ? lineId(t.id) : undefined}
       tabIndex={0}
       onClick={() => actions.focus(t.id)}
       onKeyDown={(e) => { if (e.key === "Enter") actions.focus(t.id); }}
@@ -223,7 +228,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
         ...(selected ? { background: "var(--surface-4)", boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)" } : {}),
       }}
       // `w-[calc(100%-1rem)] min-w-0`: without a width the row shrink-wraps its text and `truncate` never engages.
-      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none cursor-pointer transition-colors ${
+      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 has-[[data-layer-line]]:h-11 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none cursor-pointer transition-colors ${
         selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg)] hover:bg-[var(--surface-3)]"
       }`}
     >
@@ -250,8 +255,10 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, started = 0
           </span>
         )}
       </span>
-      <span className="truncate min-w-0">{t.name}</span>
-      <span className="flex-1" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate">{t.name}</span>
+        {lined && <RowLine tileId={t.id} show={lines} />}
+      </span>
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (
         <kbd data-layer-jump={jumpKey} className="grid min-w-[18px] h-[18px] shrink-0 place-items-center rounded-keycap px-1 font-sans text-count leading-none tabular-nums text-[var(--color-fg2)] shadow-[inset_0_0_0_1px_var(--color-line2)]">
@@ -604,10 +611,10 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
     }
     const started = view.kids.get(t.id) ?? [];
     const folded = collapsed.has(`tile:${t.id}`);
-    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} jumpKey={key} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />;
+    if (!started.length) return <TileRow key={t.id} t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} lines={prefs.lines} jumpKey={key} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />;
     return (
       <div key={t.id} role="group" aria-label={`${t.name} and what it started`} data-layer-started={t.id}>
-        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} started={started.length} folded={folded} jumpKey={key} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />
+        <TileRow t={t} depth={depth} selected={t.id === selectedTileId} actions={rowActions} lines={prefs.lines} started={started.length} folded={folded} jumpKey={key} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />
         {!folded && started.map((k) => renderTile(k, depth + 1))}
       </div>
     );
@@ -768,7 +775,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         {tiles.length > 0 && nothing && (
           <div className="px-4 py-3 text-label text-[var(--color-fg3)]" data-layers-nothing>
             Nothing matches.{" "}
-            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy }); setHideAsleep(false); setQuery(""); }}>Show everything</button>
+            <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy, lines: prefs.lines }); setHideAsleep(false); setQuery(""); }}>Show everything</button>
           </div>
         )}
         {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
@@ -811,7 +818,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
               <span className={`ml-auto ${COUNT}`}>{view.snoozed.length}</span>
             </button>
             {!collapsed.has("section:snoozed") && view.snoozed.map((t) => (
-              <TileRow key={t.id} t={t} depth={0} selected={t.id === selectedTileId} actions={rowActions} until={`until ${timeOf(t.snoozedUntil!, now)}`} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />
+              <TileRow key={t.id} t={t} depth={0} selected={t.id === selectedTileId} actions={rowActions} lines={prefs.lines} until={`until ${timeOf(t.snoozedUntil!, now)}`} asleep={asleep.has(t.id)} failed={failed.has(t.id)} />
             ))}
           </section>
         )}
@@ -1129,11 +1136,12 @@ function ViewChoices() {
   );
 }
 
-/** The panel's View menu: which tiles (status, last activity, machines), grouped and ordered how. */
+/** The panel's View menu: which tiles (status, last activity, machines), grouped and ordered how,
+ *  and which rows say more under their names. */
 function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
   prefs: LayersPrefs; setPref: (k: keyof LayersPrefs, v: unknown) => void; machines: MachineGroup[]; hideAsleep: boolean; setHideAsleep: (on: boolean) => void;
 }) {
-  const radio = <K extends "status" | "activity" | "groupBy" | "sortBy">(key: K, label: string) => (
+  const radio = <K extends "status" | "activity" | "groupBy" | "sortBy" | "lines">(key: K, label: string) => (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger data-layers-view={key}>
         <span className="flex-1">{label}</span>
@@ -1186,6 +1194,8 @@ function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
         <DropdownMenuSeparator />
         {radio("groupBy", "Group by")}
         {radio("sortBy", "Sort by")}
+        <DropdownMenuSeparator />
+        {radio("lines", "Lines")}
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={!altered} onSelect={() => { patchSettings("views.layers", tilesDefault); setHideAsleep(false); }} data-layers-reset>Reset to defaults</DropdownMenuItem>
       </DropdownMenuContent>

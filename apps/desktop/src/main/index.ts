@@ -97,6 +97,7 @@ import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
 import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput, type StartOpts } from "@hivemind/host/terminals";
+import { TileLines } from "@hivemind/host/tile-lines";
 import { startSpawned, wakeSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
@@ -1030,10 +1031,14 @@ function hostStarted() {
   };
 }
 
+/** Each tile's last line, for the windows and devices that watch it (`tile.watchLines`), and for
+ *  the person's phone's Home, told as one changes. */
+const tileLines = new TileLines({ server: () => workspaceServer, changed: () => homeChanged() });
+
 const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
   waitsChanged: () => agentFeed()?.changed(),
-  lineChanged: () => homeChanged(),
+  lines: tileLines,
   waitingOf: (bare) => agentFeed()?.waitingOf(bare),
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   // Used by agent.send and pipe forwarding.
@@ -1345,6 +1350,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   layouts.domain,
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
+  tileLines.domain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
   answers({
     plane: () => control,
@@ -1614,7 +1620,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       home: {
         links: () => control.links(),
         linkState,
-        line: (held, tile) => lastSaid().line(held, tile) ?? control.lines.get(tile),
+        line: (held, tile) => lastSaid().line(held, tile) ?? tileLines.get(tile),
       },
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>

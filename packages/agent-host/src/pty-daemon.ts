@@ -35,6 +35,7 @@ import { agentEventHookSource } from "./hooks/agent-event-hook-source.js";
 import { startHookDoor } from "./hooks/hook-door.js";
 import { SDK_FILE, sdkSource } from "@hivemind/agent-sdk";
 import { ScreenWatcher } from "./screen-status.js";
+import { holdsTerminal } from "./foreground.js";
 import { StatusStore } from "./status-store.js";
 import { cleanName } from "@hivemind/agents";
 import { driveSockPath, holderOf, speaksFor, readOrCreateToken, hcpSockPath, tileToken } from "./hooks/token.js";
@@ -348,6 +349,7 @@ const factory = (spec: SpawnSpec): ManagedPty => {
     resume: () => p.resume(),
     onData: (cb) => p.onData(cb),
     onExit: (cb) => p.onExit(({ exitCode, signal }) => cb(exitCode, signal)),
+    holdsTerminal: () => holdsTerminal(p.pid),
   };
 };
 
