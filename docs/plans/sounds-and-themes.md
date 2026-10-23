@@ -88,6 +88,14 @@ then Round 1, then this plan.
   picked a file (the File System Access API), and the check answers no until the site is allowed, so a
   web app that reads a picked file without asking first gets an error. Decide whether a picked file is
   readable without asking, with its own e2e.
+  - Not decided yet (2026-10-23, branch `round2/hub-views`): the e2e cannot pick the file. With
+    Playwright's file chooser on, Chromium aborts the site's `showOpenFilePicker()` ("Intercepted
+    by Page.setInterceptFileChooserDialog()", measured on Electron 44.5.1); without it a native GTK
+    dialog opens, which nothing in the harness answers (no xdotool), and the JS `dialog` module is
+    not the picker's. A drop gives no handle either (a synthetic `DataTransfer`). Next: answer the
+    GTK dialog from the harness, or find the request's `details` (`fileAccessType`, `isDirectory`)
+    on a real desktop first; the likely rule is Chrome's, a picked file readable at once, writing
+    and a picked folder asked.
 - ~~**Font keys in a terminal and on the canvas on other layouts.**~~ Closed 2026-10-23 (branch
   `round2/hub-views`): `pressIs` in `@hivemind/view-sdk/commands` matches a sign as the layout types
   it, its US place only when the layout types no other sign there or shift made its US pair, and a
