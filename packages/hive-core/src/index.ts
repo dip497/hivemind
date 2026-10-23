@@ -1,4 +1,5 @@
 export * from "./types.js";
+export * from "./workflow.js";
 export * from "./storage.js";
 export * from "./query.js";
 export * from "./agent-context.js";

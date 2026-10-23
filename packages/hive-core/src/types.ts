@@ -51,6 +51,63 @@ export const IssueLinkZ = z.object({
 });
 export type IssueLink = z.infer<typeof IssueLinkZ>;
 
+/** A person in an external tracker (Jira's assignee or reporter) — not hive's `assignee`. */
+export const ExternalUserZ = z
+  .object({
+    /** Cloud identity; Data Center users have only `name` (their username). */
+    accountId: z.string().optional(),
+    name: z.string(),
+    /** True when this is the person whose credentials the sync uses. */
+    me: z.boolean().optional(),
+  })
+  .loose();
+export type ExternalUser = z.infer<typeof ExternalUserZ>;
+
+/** Why a mirrored issue is hidden: hive never deletes one because the tracker stopped returning it. */
+export const ExternalArchivedZ = z.object({
+  reason: z.enum(["left scope", "deleted", "no access"]),
+  at: IsoZ,
+});
+
+/** The link from a mirrored issue to the tracker that owns it (design jira-sync §5.1). The tracker
+ *  owns every field here; `source` + `id` is the sync identity (keys change when issues move). */
+export const ExternalRefZ = z
+  .object({
+    provider: z.string().min(1),
+    /** Which link owns it, e.g. `jira:acme/PAY`. */
+    source: z.string().min(1),
+    /** The tracker's immutable id (Jira's numeric issue id, as a string). */
+    id: z.string().min(1),
+    key: z.string().min(1),
+    url: z.string().url().optional(),
+    type: z.object({ id: z.string(), name: z.string(), hierarchyLevel: z.number().int().optional() }).loose().optional(),
+    /** The tracker's status right now, as a workflow status id (may differ from `status`). */
+    remoteStatus: z.string().optional(),
+    assignee: ExternalUserZ.nullable().optional(),
+    reporter: ExternalUserZ.nullable().optional(),
+    sprint: z.object({ id: z.number().int(), name: z.string(), state: z.string() }).loose().nullable().optional(),
+    priority: z.string().optional(),
+    estimate: z.number().optional(),
+    parentKey: z.string().optional(),
+    /** The tracker's own `updated`, normalised to ISO UTC. Compared only with itself, never the local clock. */
+    remoteUpdated: IsoZ.optional(),
+    syncedAt: IsoZ.optional(),
+    archived: ExternalArchivedZ.nullable().optional(),
+  })
+  .loose();
+export type ExternalRef = z.infer<typeof ExternalRefZ>;
+
+/** The pull request an issue's work went into (design jira-sync §11). */
+export const PrRefZ = z
+  .object({
+    repo: z.string().min(1),
+    number: z.number().int().positive(),
+    url: z.string().url(),
+    state: z.enum(["open", "draft", "merged", "closed"]),
+  })
+  .loose();
+export type PrRef = z.infer<typeof PrRefZ>;
+
 /** YAML frontmatter schema for an issue file. */
 export const IssueFrontmatterZ = z.object({
   id: IssueIdZ,
@@ -64,6 +121,15 @@ export const IssueFrontmatterZ = z.object({
   // literals and on-disk files without the field stay valid without churn;
   // read it as `issue.links ?? []`.
   links: z.array(IssueLinkZ).optional(),
+  /** The workflow status id (design jira-sync §4). `state` is always its category; absent = `state`. */
+  status: z.string().min(1).optional(),
+  /** Set on issues mirrored from an external tracker. */
+  external: ExternalRefZ.optional(),
+  /** The git branch this issue's work happens on. */
+  branch: z.string().min(1).optional(),
+  pr: PrRefZ.optional(),
+  /** Earlier ids that still resolve to this issue (a Jira key before the issue moved). */
+  aliases: z.array(z.string()).optional(),
   created: IsoZ,
   updated: IsoZ,
 });
