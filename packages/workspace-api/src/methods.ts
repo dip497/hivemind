@@ -4,6 +4,7 @@
  */
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
+import type { WorkflowView } from "@hivemind/core/workflow-model";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
@@ -64,6 +65,8 @@ export interface WorkspaceMethods {
   /** `root` is the workspace's `.hivemind` directory. */
   "issue.list": (root: string) => IssueSummary[];
   "issue.read": (root: string, id: string) => Issue;
+  /** The workspace's statuses in board order, its board columns and per-type transitions. */
+  "issue.workflow": (root: string) => WorkflowView;
   "issue.create": (root: string, issue: NewIssue) => Issue;
   "issue.update": (root: string, id: string, patch: IssuePatch) => Issue;
   /** A state change, with a note in the same activity entry. */

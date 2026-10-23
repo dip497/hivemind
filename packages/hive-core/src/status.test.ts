@@ -159,3 +159,17 @@ describe("workflowStatuses", () => {
     expect(transitionTargets(view, undefined, "jira:10001")).toBeUndefined();
   });
 });
+
+describe("the agents' context file", () => {
+  test("names each issue's status when the workspace has a workflow, and stays as it was without", async () => {
+    const { buildAgentContext } = await import("./agent-context.js");
+    const plain = await mkRoot();
+    await createIssue(plain, { title: "a", state: "in_review" });
+    expect(await buildAgentContext(plain)).toContain("- `@PAY-1` — a\n");
+    const root = await mkRoot(WORKFLOW);
+    await createIssue(root, { title: "a", status: "QA" });
+    expect(await buildAgentContext(root)).toContain("- `@PAY-1` — a · QA\n");
+    await fs.writeFile(path.join(root, "workflow.yaml"), "version: 1\nstatuses: []\n"); // broken
+    expect(await buildAgentContext(root)).toContain("- `@PAY-1` — a\n");
+  });
+});

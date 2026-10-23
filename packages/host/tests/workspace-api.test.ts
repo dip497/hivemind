@@ -68,3 +68,24 @@ test("saving a repo's review comments with what is not a list is a bad request, 
   for (const comments of [null, { c1: comment }, "[]"]) assert.equal(await codeOf("review.save", repo, comments), "BAD_REQUEST", JSON.stringify(comments));
   assert.deepEqual((await result<Array<{ id: string }>>("review.list", repo)).map((c) => c.id), ["c1"]);
 });
+
+test("a status reaches core through the API, sets the state, and the workflow is read as the window lists it", async () => {
+  const root = await makeWorkspace();
+  fs.writeFileSync(path.join(root, "workflow.yaml"), [
+    "version: 1",
+    "statuses:",
+    ...["backlog", "todo", "in_progress", "done", "cancelled"].map((c) => `  - { id: "s:${c}", name: ${c}, category: ${c} }`),
+    '  - { id: "jira:10004", name: QA, category: in_review, source: jira }',
+  ].join("\n"));
+  const { id, state } = await result<Issue>("issue.create", root, { title: "x", status: "qa" });
+  assert.equal(state, "in_review");
+  await result("issue.update", root, id, { status: "s:done" });
+  const issue = await result<Issue & { status?: string }>("issue.read", root, id);
+  assert.deepEqual([issue.state, issue.status], ["done", "s:done"]);
+  // Refused by core, as every core refusal is: FAILED, naming the statuses there are.
+  const refused = await ask("issue.update", root, id, { status: "Shipped" });
+  assert.match("error" in refused ? refused.error.message : "", /unknown status "Shipped".*QA \(jira:10004\)/);
+  const wf = await result<{ custom: boolean; statuses: Array<{ id: string }> }>("issue.workflow", root);
+  assert.equal(wf.custom, true);
+  assert.deepEqual(wf.statuses.map((s) => s.id), ["s:backlog", "s:todo", "s:in_progress", "jira:10004", "s:done", "s:cancelled"]);
+});
