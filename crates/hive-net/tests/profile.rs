@@ -304,7 +304,11 @@ fn a_device_is_reached_through_a_relay_only_its_profile_names() {
         file.to_str().unwrap(),
     ]);
     assert!(out.status.success(), "{}", text(&out));
-    assert!(text(&out).contains(&format!("{id} answered")), "{}", text(&out));
+    assert!(
+        text(&out).contains(&format!("{id} answered")),
+        "{}",
+        text(&out)
+    );
     // The doctor says which of a network's relays answer.
     let checked = dir.join("checked.json");
     let body = serde_json::json!({

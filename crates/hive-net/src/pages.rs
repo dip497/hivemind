@@ -1,6 +1,7 @@
-//! The phone page (docs/design/phone-browser-2026-10-03.md §10): hive-web's files, served from a
-//! folder at `/phone/`, so a person opens hivemind in their phone's browser from their own server,
-//! over the HTTPS it already has. Static files only: what the page says, it says to the person's
+//! The phone page (docs/design/phone-browser-2026-10-03.md §10): hive-web's files, served at
+//! `/phone/`, so a person opens hivemind in their phone's browser from their own server, over the
+//! HTTPS it already has. The page is the one this binary carries (build.rs), its own release's, or
+//! one built here, from a folder. Static files only: what the page says, it says to the person's
 //! devices through the relay, never to this server.
 
 use std::{
@@ -27,10 +28,31 @@ const POLICY: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; 
 const SHELL_POLICY: &str = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; \
     frame-src 'self'; base-uri 'none'; form-action 'none'";
 
-/// The folder the page is served from.
+mod carried {
+    include!(concat!(env!("OUT_DIR"), "/carried_page.rs"));
+}
+
+/// The hash of the page this binary carries (its `page.sha256`); none when it carries no page.
+pub fn carried_hash() -> Option<&'static str> {
+    Files::Carried { within: "" }
+        .carried("page.sha256")
+        .and_then(|b| std::str::from_utf8(b).ok())
+        .map(str::trim)
+}
+
+/// Where a page's files come from.
+#[derive(Debug, Clone)]
+enum Files {
+    /// Those this binary carries, under `within` (`""`, or `"view/"` for the frame views are shown in).
+    Carried { within: &'static str },
+    /// A folder on this machine.
+    Folder(PathBuf),
+}
+
+/// The page served.
 #[derive(Debug, Clone)]
 pub struct Pages {
-    dir: PathBuf,
+    files: Files,
     /// The port views are shown on, the page's host there being their origin.
     views: Option<u16>,
 }
@@ -39,10 +61,22 @@ pub struct Pages {
 /// it serves is that frame; a view's files come from the page, through its service worker.
 #[derive(Debug, Clone)]
 pub struct ViewShell {
-    dir: PathBuf,
+    files: Files,
 }
 
 impl Pages {
+    /// The page this binary carries, its own release's.
+    pub fn carried() -> Result<Self> {
+        anyhow::ensure!(
+            carried_hash().is_some(),
+            "this hive-net carries no phone page (a release's does): serve one built here with --phone-folder <dir>"
+        );
+        Ok(Self {
+            files: Files::Carried { within: "" },
+            views: None,
+        })
+    }
+
     /// The page in `dir`, which holds its `index.html`.
     pub fn open(dir: &Path) -> Result<Self> {
         let dir = dir
@@ -53,18 +87,23 @@ impl Pages {
             "{} has no index.html: build the page with crates/hive-web/build.sh",
             dir.display()
         );
-        Ok(Self { dir, views: None })
+        Ok(Self {
+            files: Files::Folder(dir),
+            views: None,
+        })
     }
 
     /// The frame views are shown in, from the page's `view/`.
     pub fn view_shell(&self) -> Result<ViewShell> {
-        let dir = self.dir.join("view");
+        let files = match &self.files {
+            Files::Carried { .. } => Files::Carried { within: "view/" },
+            Files::Folder(dir) => Files::Folder(dir.join("view")),
+        };
         anyhow::ensure!(
-            dir.join("index.html").is_file(),
-            "{} has no index.html: build the page with crates/hive-web/build.sh",
-            dir.display()
+            files.has("index.html"),
+            "the phone page has no view/index.html: build the page with crates/hive-web/build.sh"
         );
-        Ok(ViewShell { dir })
+        Ok(ViewShell { files })
     }
 
     /// Views are shown on `port`.
@@ -113,7 +152,7 @@ impl Pages {
             (Some(port), Some(host)) => format!("{POLICY}; frame-src {host}:{port}"),
             _ => POLICY.to_string(),
         };
-        serve(&self.dir, name, req, &policy).await
+        serve(&self.files, name, req, &policy).await
     }
 }
 
@@ -135,7 +174,7 @@ impl ViewShell {
             let ancestors =
                 host_of(req).map_or("'none'".into(), |h| format!("http://{h}:* https://{h}:*"));
             serve(
-                &self.dir,
+                &self.files,
                 name,
                 req,
                 &format!("{SHELL_POLICY}; frame-ancestors {ancestors}"),
@@ -172,8 +211,80 @@ fn host_of<B>(req: &Request<B>) -> Option<String> {
     (!host.is_empty() && host.chars().all(plain)).then_some(host)
 }
 
-/// `name` in `dir`, as `req` asks for it, under `policy`.
-async fn serve<B>(dir: &Path, name: &str, req: &Request<B>, policy: &str) -> Response<Full<Bytes>> {
+impl Files {
+    /// `name` among the files this binary carries, when these are those.
+    fn carried(&self, name: &str) -> Option<&'static [u8]> {
+        let Files::Carried { within } = self else {
+            return None;
+        };
+        let full = format!("{within}{name}");
+        carried::CARRIED
+            .binary_search_by(|(n, _)| (*n).cmp(full.as_str()))
+            .ok()
+            .map(|i| carried::CARRIED[i].1)
+    }
+
+    fn has(&self, name: &str) -> bool {
+        match self {
+            Files::Carried { .. } => self.carried(name).is_some(),
+            Files::Folder(dir) => dir.join(name).is_file(),
+        }
+    }
+
+    /// The tag of `name`, which changes with what it holds; none when it is no file of the page.
+    async fn tag(&self, name: &str) -> Option<String> {
+        match self {
+            Files::Carried { .. } => self
+                .carried(name)
+                .map(|b| format!("\"{}-{:x}\"", carried_hash().unwrap_or_default(), b.len())),
+            Files::Folder(dir) => {
+                let meta = tokio::fs::metadata(dir.join(name)).await.ok()?;
+                if !meta.is_file() {
+                    return None;
+                }
+                let changed = meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_millis());
+                Some(format!("\"{:x}-{:x}\"", meta.len(), changed))
+            }
+        }
+    }
+
+    /// `name`, or its copy compressed as `ext` (`br`, `gz`) when that copy is of what it holds now.
+    async fn read(&self, name: &str, ext: Option<&str>) -> Option<Bytes> {
+        let full = ext.map_or_else(|| name.to_string(), |ext| format!("{name}.{ext}"));
+        match self {
+            Files::Carried { .. } => self.carried(&full).map(Bytes::from_static),
+            Files::Folder(dir) => {
+                if ext.is_some() {
+                    // One older than its file is of what the file was.
+                    let of = tokio::fs::metadata(dir.join(name))
+                        .await
+                        .and_then(|m| m.modified())
+                        .ok()?;
+                    let at = tokio::fs::metadata(dir.join(&full))
+                        .await
+                        .and_then(|m| m.modified())
+                        .ok()?;
+                    if at < of {
+                        return None;
+                    }
+                }
+                tokio::fs::read(dir.join(&full)).await.ok().map(Bytes::from)
+            }
+        }
+    }
+}
+
+/// `name` of `files`, as `req` asks for it, under `policy`.
+async fn serve<B>(
+    files: &Files,
+    name: &str,
+    req: &Request<B>,
+    policy: &str,
+) -> Response<Full<Bytes>> {
     // Names the page has: no way out of the folder, nothing hidden.
     if name
         .split('/')
@@ -181,19 +292,9 @@ async fn serve<B>(dir: &Path, name: &str, req: &Request<B>, policy: &str) -> Res
     {
         return plain(StatusCode::NOT_FOUND, "not found");
     }
-    let file = dir.join(name);
-    let Ok(meta) = tokio::fs::metadata(&file).await else {
+    let Some(tag) = files.tag(name).await else {
         return plain(StatusCode::NOT_FOUND, "not found");
     };
-    if !meta.is_file() {
-        return plain(StatusCode::NOT_FOUND, "not found");
-    }
-    let changed = meta
-        .modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map_or(0, |d| d.as_millis());
-    let tag = format!("\"{:x}-{:x}\"", meta.len(), changed);
     let answer = Response::builder()
         .header(header::CONTENT_TYPE, kind_of(name))
         // Asked again each time, so a new page is had at once; the service worker serves it
@@ -227,16 +328,7 @@ async fn serve<B>(dir: &Path, name: &str, req: &Request<B>, policy: &str) -> Res
         if !accepts(coding) {
             continue;
         }
-        let packed = PathBuf::from(format!("{}.{ext}", file.display()));
-        // One older than its file is of what the file was.
-        let current = tokio::fs::metadata(&packed)
-            .await
-            .and_then(|m| m.modified())
-            .is_ok_and(|at| meta.modified().is_ok_and(|of| at >= of));
-        if !current {
-            continue;
-        }
-        if let Ok(bytes) = tokio::fs::read(&packed).await {
+        if let Some(bytes) = files.read(name, Some(ext)).await {
             answer = answer.header(header::CONTENT_ENCODING, coding);
             body = Some(bytes);
             break;
@@ -244,15 +336,15 @@ async fn serve<B>(dir: &Path, name: &str, req: &Request<B>, policy: &str) -> Res
     }
     let bytes = match body {
         Some(bytes) => bytes,
-        None => match tokio::fs::read(&file).await {
-            Ok(bytes) => bytes,
-            Err(_) => return plain(StatusCode::NOT_FOUND, "not found"),
+        None => match files.read(name, None).await {
+            Some(bytes) => bytes,
+            None => return plain(StatusCode::NOT_FOUND, "not found"),
         },
     };
     let bytes = if *req.method() == Method::HEAD {
         Bytes::new()
     } else {
-        Bytes::from(bytes)
+        bytes
     };
     answer
         .body(Full::new(bytes))

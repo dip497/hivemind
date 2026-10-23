@@ -524,9 +524,14 @@ impl Daemon {
             return;
         };
         let writer = self.clone();
-        tokio::spawn(async move { writer.write_stream(conn, stream, send, queue, writing).await });
+        tokio::spawn(async move {
+            writer
+                .write_stream(conn, stream, send, queue, writing)
+                .await
+        });
         self.tell(ToMain::Opened { conn, stream, name });
-        self.read_stream(conn, stream, recv, reading, budget, unfinished).await;
+        self.read_stream(conn, stream, recv, reading, budget, unfinished)
+            .await;
     }
 
     /// Write the frames main queues for `stream`, in order, each moment's in one write, telling
@@ -554,7 +559,11 @@ impl Daemon {
                 }
             }
             let wrote = send.write_all(&bytes).await.is_ok();
-            self.tell(ToMain::Took { conn, stream, n: took });
+            self.tell(ToMain::Took {
+                conn,
+                stream,
+                n: took,
+            });
             let _ = writing.try_send(());
             if !wrote {
                 self.end(conn, stream);

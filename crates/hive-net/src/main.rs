@@ -50,9 +50,11 @@
 //! `--url
 //! <base>` is how devices reach this server, when it is not what `--domain` or `--bind` says;
 //! with it (or `--domain`), and the admin key kept here, the network's link is printed, its
-//! signed profile kept as `network.json` in `--data`; `--name` names the network. `--phone <dir>`
-//! serves the phone page (crates/hive-web/www, built) at `/phone/`; `--views <port>` shows its
-//! views on that port, an origin of their own.
+//! signed profile kept as `network.json` in `--data`; `--name` names the network. `--phone` serves
+//! the phone page at `/phone/`: the one this binary carries, its own release's, or with
+//! `--phone-folder <dir>` one built here (crates/hive-web/www); `--views <port>` shows its views on
+//! that port, an origin of their own. A server whose binary is replaced by an upgrade starts the
+//! new one in its place.
 
 use std::{
     net::SocketAddr, path::PathBuf, process::ExitCode, str::FromStr, sync::Arc, time::Duration,
@@ -131,7 +133,8 @@ struct Args {
     expires_in: Option<u64>,
     uses: Option<u32>,
     replacing: Option<String>,
-    phone: Option<PathBuf>,
+    phone: bool,
+    phone_folder: Option<PathBuf>,
     views: Option<u16>,
 }
 
@@ -153,7 +156,8 @@ fn parse(mut argv: impl Iterator<Item = String>) -> Result<Args> {
             "--profile" => args.profile = Some(value(&mut argv, &arg)?),
             "--admin" => args.admin = Some(value(&mut argv, &arg)?.into()),
             "--access" => args.access_role = true,
-            "--phone" => args.phone = Some(value(&mut argv, &arg)?.into()),
+            "--phone" => args.phone = true,
+            "--phone-folder" => args.phone_folder = Some(value(&mut argv, &arg)?.into()),
             "--views" => args.views = Some(value(&mut argv, &arg)?.parse()?),
             "--lookup" if args.command == "serve" => args.lookup_role = true,
             "--lookup" => args.lookup = Some(value(&mut argv, &arg)?.parse()?),
@@ -473,7 +477,11 @@ async fn serve(args: &Args) -> Result<()> {
         domain: args.domain.clone(),
         access: access.clone(),
         push: push.clone(),
-        pages: args.phone.as_deref().map(Pages::open).transpose()?,
+        pages: match (&args.phone_folder, args.phone) {
+            (Some(dir), _) => Some(Pages::open(dir)?),
+            (None, true) => Some(Pages::carried()?),
+            (None, false) => None,
+        },
         views: args.views.map(|port| SocketAddr::new(bind.ip(), port)),
     })
     .await?;
@@ -494,7 +502,7 @@ async fn serve(args: &Args) -> Result<()> {
     if push.is_some() {
         println!("push serving on {base}/push");
     }
-    if args.phone.is_some() {
+    if args.phone || args.phone_folder.is_some() {
         println!("phone page serving on {base}/phone/");
     }
     if let Some(views) = serving.views_addr() {
