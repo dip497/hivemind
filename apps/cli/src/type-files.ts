@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 /** Each package a plugin is given the types of, its folder in this repository, and its files. */
 export const TYPE_PACKAGES = {
-  "view-sdk": { dir: "packages/hive-view-sdk/src", files: ["index.ts", "protocol.ts", "manifest.ts", "settings.ts", "category.ts", "commands.ts", "client.ts", "testing.ts"] },
+  "view-sdk": { dir: "packages/hive-view-sdk/src", files: ["index.ts", "protocol.ts", "manifest.ts", "settings.ts", "category.ts", "commands.ts", "client.ts", "testing.ts", "status.ts"] },
   "tile-sdk": { dir: "packages/tile-sdk/src", files: ["index.ts"] },
 } as const;
 export type TypePackage = keyof typeof TYPE_PACKAGES;
