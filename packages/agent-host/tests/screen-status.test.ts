@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
-import type { ScreenReading } from "@hivemind/agents";
+import path from "node:path";
+import type { AgentProviderDef, ScreenReading } from "@hivemind/agents";
+import { readAgentManifest } from "@hivemind/agents/load";
 import { ScreenWatcher, SCREEN_WORKING_HOLD_MS, stabilizeScreenStatus } from "../src/screen-status.js";
 import { SessionManager, type ManagedPty } from "../src/pty-session-manager.ts";
 
@@ -140,12 +142,13 @@ function fakePty(holds?: boolean) {
 /** `n` shells, t0 to t(n-1), whose lines a watcher reads as the daemon wires it: their output marks
  *  them for the next tick, and their screens are read by the real screen worker. `holds[i]`: whether
  *  shell i's own program holds its terminal, as Linux tells the daemon (left out: it is not told). */
-async function shells(n: number, holds: Array<boolean | undefined> = []) {
+async function shells(n: number, holds: Array<boolean | undefined> = [], agent?: AgentProviderDef) {
   const said: Array<(d: string) => void> = [];
   const told: string[] = [];
   const w: ScreenWatcher = new ScreenWatcher({
     read: (ids) => m.viewports(ids),
     detect: () => undefined,
+    ...(agent ? { agent: () => agent } : {}),
     report: () => {},
     line: (id, line) => told.push(`${id}: ${line}`),
   });
@@ -161,6 +164,14 @@ test("the line is the last row with text above the input the cursor waits in, an
     ["npm test\r\n214 tests passed\r\n$ ", "214 tests passed", true],
     // A prompt of two rows, which the shell marked (OSC 133 A): both are the prompt's.
     ["npm test\r\n214 tests passed\r\n\r\n\x1b]133;A\x07~/hivemind on  main via ⬢ v20\r\n❯ ", "214 tests passed", true],
+    // A prompt of two rows the shell did not mark (starship's, powerlevel10k's): its last row opens
+    // with its mark alone, and the row above it is the prompt's too.
+    ["npm test\r\n214 tests passed\r\n\r\n~/hivemind on  main via ⬢ v20\r\n❯ ", "214 tests passed", true],
+    ["npm test\r\n214 tests passed\r\n╭─ ~/hivemind  main\r\n╰─ ", "214 tests passed", true],
+    // A prompt of one row the shell marked: it is all there is of the prompt, whatever its mark.
+    ["npm test\r\ndone\r\n\x1b]133;A\x07❯ ", "done", true],
+    // A prompt of one row with its path on it (oh-my-zsh's): the row above it is what the command said.
+    ["cd hivemind\r\ndone\r\n➜  hivemind git:(main) ", "done", true],
     // A command typed past the width wraps onto a second row: both are the input's.
     [`done\r\n$ ${"x".repeat(100)}`, "done", true],
     // A command the shell ran holds the terminal and waits on its question, with the cursor on it.
@@ -186,16 +197,33 @@ test("the line is the last row with text above the input the cursor waits in, an
 });
 
 test("a screen cleared tells a blank line once, and nothing is told while nothing new shows", async () => {
-  const s = await shells(1);
+  const s = await shells(2);
   s.say(0, "npm test\r\n214 tests passed\r\n$ ");
+  s.say(1, "npm test\r\n214 tests passed\r\n\r\n~/hivemind on  main\r\n❯ ");
   await s.w.tick();
-  // Ctrl+L: the screen cleared, with only the prompt drawn again.
+  // Ctrl+L: the screen cleared, with only the prompt drawn again, of one row or of two.
   s.say(0, "\x1b[H\x1b[2J$ ");
+  s.say(1, "\x1b[H\x1b[2J~/hivemind on  main\r\n❯ ");
   await s.w.tick();
-  expect(s.told).toEqual(["t0: 214 tests passed", "t0: "]);
+  expect(s.told).toEqual(["t0: 214 tests passed", "t1: 214 tests passed", "t0: ", "t1: "]);
   // No output, then output that leaves the screen as it was (a bell).
   await s.w.tick();
   s.say(0, "\x07");
   await s.w.tick();
-  expect(s.told).toEqual(["t0: 214 tests passed", "t0: "]);
+  expect(s.told).toEqual(["t0: 214 tests passed", "t1: 214 tests passed", "t0: ", "t1: "]);
+});
+
+test("an agent's own chrome above its input is passed over, as its manifest says: the line is what it said", async () => {
+  const claude = (await readAgentManifest(path.join(import.meta.dir, "../../hive-agents/tests/fixtures/published-agents/claude/agent.yaml"), { source: "user", requireDirMatch: true })).def!;
+  const rule = "─".repeat(80);
+  // Its screen as the claude 2.1.309 binary drew it while it works, its cursor in its input.
+  const working = ["❯ hello there", "", "● Reading the file", "", "* Newspapering… (2s · ↓ 2 tokens)",
+    `${" ".repeat(60)}◐ medium · /effort`, rule, "❯ ", rule, "  ⏸ manual mode on · esc to interrupt"];
+  const s = await shells(2, [true, true], claude);
+  s.say(0, `${working.join("\r\n")}\x1b[8;3H`);
+  // An agent's input that opens with `❯` is its own, not a shell's prompt of two rows: the row above
+  // it is what the agent said.
+  s.say(1, "npm test\r\n● 214 tests pass\r\n❯ ");
+  await s.w.tick();
+  expect(s.told).toEqual(["t0: ● Reading the file", "t1: ● 214 tests pass"]);
 });

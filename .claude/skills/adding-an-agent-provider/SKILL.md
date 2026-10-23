@@ -76,6 +76,7 @@ Answer all eleven with a source. Each answer decides a field of the manifest.
 | 8 | Can the agent run shell commands + inherit the spawn env? | whether the worker can call `hive ctl report` (needs `hive` on PATH + HIVE_HCP_SOCK/HCP_TOKEN/HIVEMIND_TILE from the env) |
 | 9 | `--model` flag? claude-style permission modes? | the `options` block (`model`, `mode`) |
 | 10 | What the TUI prints while **working**, and while **waiting for approval** | the `detect` rules and `caps.blockedDetection` — capture real output, do not guess |
+| 10b | Which rows above its input are its own chrome (spinner, timer, status bar, what a turn's end says) | `detect.chrome`, so a tile's last line shows what it said — capture real rows, do not guess |
 | 11 | Which keys **allow** and which **deny** its own permission prompt | the `answer.permission` block (the phone's Allow / Deny types them) — read them from the binary's chooser, or leave the block out |
 | 11b | Which keys **choose an option** of a question it asks (AskUserQuestion's chooser) | `choose` with `{n}` (the phone's option buttons type it) and `asks` under the transcript's `tool` — read them from the binary's chooser, or leave them out |
 | 12 | Which key **interrupts its turn** (the "esc to interrupt" hint) | `interrupt` (the phone's Stop types it) — read it from the binary's own hint, or leave it out |
@@ -126,7 +127,8 @@ field reference; `claude/agent.yaml` in the published fixtures is the richest ex
    that delivers it (see Phase 2).
 3. `options` — what Settings lets the user choose at launch; `model` and `mode` are
    what `hive ctl spawn --model/--mode` set.
-4. `detect` — ordered rules over the rendered screen; the first match wins.
+4. `detect` — ordered rules over the rendered screen; the first match wins. `detect.chrome` is one
+   test of a single row: the rows of its own chrome, which a tile's last line skips.
 5. `icon` — shapes, not SVG markup; `viewBox` + `path`/`rect`/`circle`/`ellipse`.
 6. `hooks.events` — map each native hook event to a **canonical event** with `emit:`, not to
    a script. The vocabulary is `session.started`, `session.ready`, `session.ended`,

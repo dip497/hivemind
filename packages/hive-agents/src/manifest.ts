@@ -707,6 +707,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
   }
 
   let detect: ((screen: string) => ScreenReading) | undefined;
+  let chrome: ((row: string) => boolean) | undefined;
   if (m.detect) {
     req(Array.isArray(m.detect.rules), "detect.rules must be an array");
     req(STATUSES.includes(m.detect.default), `detect.default must be one of ${STATUSES.join(", ")}`);
@@ -723,6 +724,12 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
       } catch (e) { throw new ManifestError((e as Error).message); }
     });
     detect = compileDetect(m.detect);
+    if (m.detect.chrome !== undefined) {
+      try { validateExpr(m.detect.chrome, "detect.chrome"); }
+      catch (e) { throw new ManifestError((e as Error).message); }
+      const row = compileDetect({ rules: [{ when: m.detect.chrome, then: "idle" }], default: "working" });
+      chrome = (r: string) => row(r).status === "idle";
+    }
   }
 
   // A dismissable screen is matched the way a status is, so a manifest has one vocabulary.
@@ -751,6 +758,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),
+    ...(chrome ? { chrome } : {}),
     icon: m.icon ? iconFromManifest(m.icon) : GENERIC_AGENT_ICON,
     ...(m.note ? { note: m.note } : {}),
     ...(options ? { options } : {}),

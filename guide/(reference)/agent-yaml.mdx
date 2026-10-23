@@ -105,6 +105,20 @@ text field.
 Regular expressions are not allowed: a bad one could stall status for every terminal. Every test
 runs in time proportional to the line.
 
+`detect.chrome` is one test, in the same words, for a row of the agent's own chrome: its spinner
+and timer, its status bar, what it says as a turn ends. Each row is tested alone, as the screen shows
+it from its first column. A tile's last line in the Layers panel skips those rows, so it shows what
+the agent said. Read the rows from the real program, as for `rules`.
+
+```yaml
+detect:
+  chrome:
+    any:
+    - seq: [{ lit: " · /effort" }]   # ◐ medium · /effort, right of the rule over its input
+    - seq: [{ run: "✻*", min: 1, max: 1 }, { run: space, min: 1, max: 1 }, { run: "!space", min: 1, max: 1 }, { upTo: "…" }]
+      at: start                  # ✻ Combobulating…
+```
+
 ## answer, choose, interrupt, steer, pastedImages
 
 These let your phone answer the agent. Write keys as `hive ctl keys` takes them: one to four keys,
