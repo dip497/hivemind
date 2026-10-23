@@ -16,7 +16,7 @@
  * reverting a theme is `./theme-apply.ts`.
  */
 import { cssColorToRgb } from "./css-color.js";
-import { ACCENTS, keptUnknown, mergeAppearance, type Appearance } from "./settings-schema.js";
+import { ACCENTS, applyPreset, keptUnknown, mergeAppearance, type Appearance, type ThemePreset } from "./settings-schema.js";
 
 /** An accent as colours: what a built-in id names, or any colour a person or a theme picks. */
 export interface AccentColors { brand: string; accent: string; working?: string }
@@ -138,4 +138,12 @@ export function accentOf(appearance: Pick<Appearance, "accent">, extra?: Pick<Ap
   if (extra?.accent) return { ...extra.accent, custom: true };
   const a = ACCENTS[appearance.accent] ?? ACCENTS.graphite;
   return { brand: a.brand, accent: a.accent, ...(a.working ? { working: a.working } : {}), custom: false };
+}
+
+/** The settings once a built-in preset is chosen: its colours and accent id, so the custom accent
+ *  that would win over that id goes, and so does the record of a theme the person has left. A
+ *  theme's font faces stay while its family is still the font in use. */
+export function withPreset<S extends { appearance: Appearance; appearanceExtra: AppearanceExtra }>(s: S, preset: ThemePreset): S {
+  const { accent: _a, theme: _t, ...rest } = s.appearanceExtra;
+  return { ...s, appearance: applyPreset(s.appearance, preset), appearanceExtra: rest };
 }

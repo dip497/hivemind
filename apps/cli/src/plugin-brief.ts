@@ -145,7 +145,7 @@ it needs is here: it does not need the Hivemind source.
 
 ## What I want
 
-<!-- Say what the package is for, and which tools, widgets and views it should hold. -->
+<!-- Say what the package is for, and which tools, widgets, views and themes it should hold. -->
 
 ...
 
@@ -153,7 +153,7 @@ it needs is here: it does not need the Hivemind source.
 
 ## What you are building
 
-A **Hivemind package**: one folder holding tools, widgets and views, each in a folder of its own,
+A **Hivemind package**: one folder holding tools, widgets, views and themes, each in a folder of its own,
 that installs, switches on, updates and is removed as one. This is \`${id}\`, started in this
 folder. \`hivemind-package.json\` names its members; it holds none yet.
 
@@ -162,6 +162,7 @@ folder. \`hivemind-package.json\` names its members; it holds none yet.
 \`\`\`bash
 ${commented([
   ...(Object.keys(NOUN) as PluginKind[]).map((k): [string, string] => [`hive plugins new ${k} <name> --in .`, `a ${NOUN[k]}: ${WHAT[k]}`]),
+  ["hive plugins new theme <name> --in .", "a theme: the look in use as themes/<name>/theme.json, to edit; no code"],
   ["hive plugins add <folder> --to .", `one already written; its id must be ${owner}/<name>`],
 ])}
 \`\`\`
@@ -178,8 +179,15 @@ ${commented([
   [`hive plugins enable ${id}`, "once, if it says it is off (a tool or an agent preset arrives off)"],
   ["hive ctl plugin open <kind>:<member id>", "open a tool's tile, put a widget on the board, switch to a view"],
   ["hive ctl tile look <tile>", "the picture of a tile, its state and what its code logged"],
+  [`hive theme use ${id}/<theme>`, "a theme: see it on the app; `hive theme revert` goes back in one step"],
 ])}
 \`\`\`
+
+A theme is data, not code: \`theme.json\` (\`format: 1\`) holds the 13 palette colours, the accent
+(a built-in id or \`{ brand, accent }\` colours), and optionally the terminal colours, corners,
+fonts (\`.woff2\`), a wallpaper and sounds (\`.ogg\` or \`.mp3\`) from its folder. The check
+refuses text below 4.5:1 on its background, and an accent in the colour of "needs you". Only
+preview a theme with \`hive theme use\` when the person asked you to change their look.
 
 ## Done means
 

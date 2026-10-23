@@ -6,7 +6,7 @@
  *
  *   hive plugins new <tool|widget|view> <name> [--dir <folder>] [--owner <login>]   a starter that works, with PROMPT.md
  *   hive plugins new package <name> [--dir <folder>]  a package to hold several, with PROMPT.md
- *   hive plugins new <tool|widget|view> <name> --in <package folder>   a starter, as a member of that package
+ *   hive plugins new <tool|widget|view|theme> <name> --in <package folder>   a starter, as a member of that package (a theme: the look in use)
  *   hive plugins add <folder> --to <package folder>  one already written, as a member of that package
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
  *                                                  (@owner/name is HiveHub's: write a folder as ./x);
@@ -57,7 +57,7 @@ import { checkPlugin, DRAW_ALONE } from "../check/check.js";
 import { checkPackage } from "../check/package.js";
 import { where } from "../check/problem.js";
 import { PACKAGE_MANIFEST, memberFormat } from "@hivemind/hub";
-import { addEntry, arrivesOff, memberId, memberPath, packageStarter, readPackageFolder, type PackageFolder } from "../package-authoring.js";
+import { addEntry, arrivesOff, memberId, memberPath, packageStarter, readPackageFolder, themeStarter, type PackageFolder } from "../package-authoring.js";
 
 interface Plugin {
   key: string;
@@ -340,7 +340,9 @@ const HUB_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** The kind `hive plugins new` starts that holds the others. */
 const PACKAGE = { kind: "package", noun: "package", guide: "https://hivemind.griiken.com/guide/packages/" } as const;
-const NEW_KINDS = `${KIND_NAMES}, ${PACKAGE.kind}`;
+/** A theme: data, not code, written from the look in use into a package (`--in`). */
+const THEME = { kind: "theme", noun: "theme", guide: "https://hivemind.griiken.com/guide/packages/#themes" } as const;
+const NEW_KINDS = `${KIND_NAMES}, ${THEME.kind}, ${PACKAGE.kind}`;
 /** A folder as printed, so `install` never reads it as an id on HiveHub. */
 const shownPath = (given: string) => (given === "." || /^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`);
 /** `to` as written from the current folder. */
@@ -376,10 +378,11 @@ const newCmd = defineCommand({
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    if (String(args.kind) === THEME.kind) return newTheme(ctx, { name: String(args.name), in: args.in ? String(args.in) : undefined, dir: args.dir ? String(args.dir) : undefined });
     const isPackage = String(args.kind) === PACKAGE.kind;
     const k = isPackage ? null : kindNamed(String(args.kind));
     if (!isPackage && !k) return err(ctx, "usage", `the kind is one of: ${NEW_KINDS}`, 2);
-    if (isPackage && args.in) return err(ctx, "usage", "a package holds tools, widgets and views, not another package", 2);
+    if (isPackage && args.in) return err(ctx, "usage", "a package holds tools, widgets, views and themes, not another package", 2);
     const name = String(args.name);
     if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(name) || name.includes("--")) return err(ctx, "bad_name", `"${name}" is not a name: lowercase letters, digits and single dashes`);
     let pkg: PackageFolder | null = null;
@@ -398,7 +401,7 @@ const newCmd = defineCommand({
     if (!k) {
       const id = `@${owner}/${name}`;
       try { await writeStarter(dir, packageStarter(owner, name)); } catch (e) { return fail(ctx, e, "new_failed"); }
-      const next = [...KINDS.map((x) => `hive plugins new ${x.kind} <name> --in ${shown}`), `hive plugins add <folder> --to ${shown}`];
+      const next = [...[...KINDS, THEME].map((x) => `hive plugins new ${x.kind} <name> --in ${shown}`), `hive plugins add <folder> --to ${shown}`];
       return ok(ctx, { kind: PACKAGE.kind, id, dir, next, prompt: path.join(dir, "PROMPT.md"), guide: PACKAGE.guide }, () => [
         `started package ${id} in ${dir}; it holds nothing yet`, "Add its members:", steps(next),
         `Want an agent to build it? Write your idea into ${shown}/PROMPT.md and hand it that file.`,
@@ -423,6 +426,32 @@ const newCmd = defineCommand({
     ].join("\n"));
   },
 });
+
+/** `hive plugins new theme <name> --in <package>`: the look in use as a theme.json in the package,
+ *  named in its manifest. A theme is data, so there is nothing to build: check it, install the
+ *  package, and preview it with `hive theme use`. */
+async function newTheme(ctx: { json: boolean }, a: { name: string; in?: string; dir?: string }) {
+  if (!a.in) return err(ctx, "usage", "a theme comes in a package: `hive plugins new theme <name> --in <package folder>` (start one with `hive plugins new package <name>`)", 2);
+  if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(a.name) || a.name.includes("--")) return err(ctx, "bad_name", `"${a.name}" is not a name: lowercase letters, digits and single dashes`);
+  let pkg: PackageFolder;
+  try { pkg = await readPackageFolder(a.in); } catch (e) { return fail(ctx, e, "not_a_package"); }
+  const dir = a.dir ? path.resolve(a.dir) : path.join(pkg.dir, memberFormat(THEME.kind)!.list, a.name);
+  if (!dir.startsWith(pkg.dir + path.sep)) return err(ctx, "usage", `--dir must be inside the package, ${pkg.dir}`, 2);
+  if (path.basename(dir) !== a.name) return err(ctx, "usage", `a theme's folder is its name: --dir must end in /${a.name}`, 2);
+  if (await notEmpty(dir)) return err(ctx, "exists", `${dir} is already there and not an empty folder`);
+  try {
+    await writeStarter(dir, themeStarter(a.name, await readSettings()));
+    await addEntry(pkg, THEME, path.relative(pkg.dir, dir).split(path.sep).join("/"));
+  } catch (e) { return fail(ctx, e, "new_failed"); }
+  const id = `${pkg.id}/${a.name}`;
+  const at = shownFrom(pkg.dir);
+  const next = [`edit ${shownFrom(path.join(dir, "theme.json"))}`, `hive plugins check ${at}`, `hive plugins install ${at}`, `hive theme use ${id}    # see it; \`hive theme revert\` goes back`];
+  return ok(ctx, { kind: THEME.kind, id, dir, package: pkg.id, next, guide: THEME.guide }, () => [
+    `started theme ${id} in ${dir}, a member of ${pkg.id}, from the look in use`, "Next:", steps(next),
+    "Add fonts (.woff2), a wallpaper picture and sounds (.ogg or .mp3) beside theme.json and name them in it.",
+    `Guide: ${THEME.guide}`,
+  ].join("\n"));
+}
 
 /** Copy a plugin's folder, without what a build or a checkout leaves beside it. */
 const copyMember = (from: string, to: string) =>
@@ -507,7 +536,8 @@ const installCmd = defineCommand({
 /** What `install` says it did, for a person and as --json. */
 function installReport(installed: InstalledPackage, app: AppAnswer) {
   const { record } = installed;
-  const next = [...(record.on ? [] : [`hive plugins enable ${record.members.length === 1 ? `${record.members[0]!.kind}:${record.members[0]!.id}` : record.id}`]), ...installed.members.flatMap((m) => kindNamed(m.kind)?.see(m.id) ?? [])];
+  const next = [...(record.on ? [] : [`hive plugins enable ${record.members.length === 1 ? `${record.members[0]!.kind}:${record.members[0]!.id}` : record.id}`]),
+    ...installed.members.flatMap((m) => (m.kind === THEME.kind ? [`hive theme use ${m.id}`] : kindNamed(m.kind)?.see(m.id) ?? []))];
   return {
     id: record.id, name: record.name, version: record.version, digest: record.digest, on: record.on,
     members: installed.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, dir: m.dir, permissions: m.permissions })),
