@@ -48,8 +48,11 @@ const setCmd = defineCommand({
   args: { path: { type: "positional", required: true }, value: { type: "positional", required: true }, json: { type: "boolean" } },
   async run({ args }) {
     const ctx = { json: !!args.json };
-    // Which plugins run is the person's to say, here as in `hive plugins`.
-    if (String(args.path).split(".")[0] === "plugins") personOnly(ctx, "change which plugins run and their settings", `hive config set ${String(args.path)} ${String(args.value)}`);
+    // Which plugins run, and what the app sounds and pops up, are the person's to say, here as in
+    // `hive plugins` and `hive notifications`.
+    const section = String(args.path).split(".")[0];
+    if (section === "plugins") personOnly(ctx, "change which plugins run and their settings", `hive config set ${String(args.path)} ${String(args.value)}`);
+    if (section === "notifications") personOnly(ctx, "change the app's sounds and notifications", `hive config set ${String(args.path)} ${String(args.value)}`, "Notifications");
     // The file keeps keys it does not know, so a mistyped path would be stored and never read.
     const why = settingPathProblem(String(args.path));
     if (why) return err(ctx, "not_found", why, undefined, "run `hive config get` to see every setting, or read the Settings reference in the guide");

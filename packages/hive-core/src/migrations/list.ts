@@ -8,8 +8,10 @@ import { m0001 } from "./0001-adopt-plugins-as-packages.js";
 import { m0002 } from "./0002-plugin-state-from-old-keys.js";
 import { m0003 } from "./0003-remove-old-one-off-backups.js";
 import { m0004 } from "./0004-remove-machines-marker.js";
+import { m0006 } from "./0006-notifications-into-settings.js";
 
-export const MIGRATIONS: readonly Migration[] = [m0001, m0002, m0003, m0004];
+/** 0005 is not here: it was dropped before any release (0006 says why). */
+export const MIGRATIONS: readonly Migration[] = [m0001, m0002, m0003, m0004, m0006];
 
 /** The list is the order, so it is checked at start: a number used twice, or out of order, stops
  *  the build that has it before it touches any data. */

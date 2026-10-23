@@ -49,7 +49,7 @@ export async function writeSettings(next: Settings, file: string = settingsPath(
 }
 
 /** The actual atomic write: schema settings + the file's non-schema top-level
- *  keys (`browserCdp`, `notifications`, …), which the app has always kept in the
+ *  keys (`browserCdp`, a newer build's, …), which the app has always kept in the
  *  same file. Callers that CHANGED the extras pass their new value — re-reading
  *  them here would drop the change they just made. */
 async function writeBoth(settings: Settings, extras: Record<string, unknown>, file: string): Promise<void> {
@@ -248,7 +248,7 @@ export async function updateSettings(
 
 /**
  * Patch the file's NON-schema top-level keys — the app's own legacy blobs
- * (`browserCdp`, `notifications`) that have always lived in settings.json and
+ * (`browserCdp`) that have always lived in settings.json and
  * are the same file as the theme in a packaged app. They used to be written
  * with a plain read-then-write, which erases whatever the theme wrote in
  * between; this applies them to the file as it is, under the same lock, and

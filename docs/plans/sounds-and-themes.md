@@ -65,7 +65,7 @@ then Round 1, then this plan.
 
 | Step | What | State |
 |---|---|---|
-| S1 | One notice desk in main: dedupe across windows, sound gate and pacing | ☐ |
+| S1 | One notice desk in main: dedupe across windows, sound gate and pacing | ◐ 2026-10-23 (branch `round1/sounds`): notifications are the `notifications` section of the one settings.json (`@hivemind/core/notification-settings`), migration 0006 moves the app data folder's blob in; `hive config get/set notifications` work, person-only |
 | S2 | The sound player, built-in sounds, Notifications ▸ Sounds, `hive notifications` | ☐ |
 | S3 | Pop-ups grouped in a burst ("10 agents finished") | ☐ (needs a yes, see Decisions) |
 | T0 | HiveHub works out "needs Hivemind X or newer" for packages and views | ☐ |

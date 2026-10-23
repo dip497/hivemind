@@ -1,0 +1,11 @@
+{
+  "browserCdp": true,
+  "notifications": {
+    "enabled": true,
+    "kinds": { "needs": true, "done": false, "error": true },
+    "dnd": { "enabled": true, "start": "23:00", "end": "06:30" },
+    "osPopups": false,
+    "inApp": true,
+    "sound": true
+  }
+}

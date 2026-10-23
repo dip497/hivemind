@@ -517,20 +517,20 @@ describe("settings concurrency", () => {
   });
 
   test("legacy top-level blobs and the theme are written concurrently without erasing each other", async () => {
-    // The app keeps `browserCdp` and `notifications` in the SAME settings.json as
-    // the theme (identical path in a packaged app). Both used to be written with
-    // a read-then-write, which erases whatever the other wrote in between.
+    // The app keeps `browserCdp` in the SAME settings.json as the theme, and
+    // `notifications` is a section of it. Each used to be written with a
+    // read-then-write, which erases whatever the other wrote in between.
     await Promise.all([
       patchSettingsExtras({ browserCdp: true }),
       patchSettingsFile([{ path: "appearance.accent", value: "ember" }]),
-      patchSettingsExtras({ notifications: { enabled: false } }),
+      patchSettingsFile([{ path: "notifications.enabled", value: false }]),
       updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) })),
       patchSettingsFile([{ path: "views.defaultView", value: "windows" }]),
     ]);
 
     const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
     expect(raw.browserCdp).toBe(true);                     // legacy blob survived
-    expect(raw.notifications).toEqual({ enabled: false }); // legacy blob survived
+    expect(raw.notifications.enabled).toBe(false);         // its section survived
     expect(raw.views.defaultView).toBe("windows");         // schema write survived
     expect(["ember", PRESETS.nord!.accent]).toContain(raw.appearance.accent);
     expect(raw.appearance.palette.bg).toBe(PRESETS.nord!.palette.bg); // preset survived

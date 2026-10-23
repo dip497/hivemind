@@ -169,9 +169,8 @@ test("a widget's notice is shown by main, as main's notification settings say, n
     await page.locator('[data-board-choice="widget:teller"]').click();
     const tell = page.locator('[data-widget-layer] [data-widget="teller"]').getByRole("button", { name: "Tell", exact: true });
     await expect(tell).toBeVisible({ timeout: 10_000 });
-    // Pop-ups off in main only, as another window's Settings → Notifications leaves it: this
-    // window's copy still says on.
-    const popups = (on: boolean) => page.evaluate(async (on) => window.hive.setNotificationSettings({ ...(await window.hive.getNotificationSettings()), osPopups: on }), on);
+    // Pop-ups off in settings.json, as Settings → Notifications or `hive notifications set` leaves it.
+    const popups = (on: boolean) => page.evaluate(async (on) => { await window.hive.settingsPatch([{ path: "notifications.osPopups", value: on }]); }, on);
     await popups(false);
     await tell.click();
     await page.waitForTimeout(1_000);

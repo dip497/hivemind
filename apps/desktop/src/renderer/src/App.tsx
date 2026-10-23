@@ -33,7 +33,7 @@ import { TileErrorBoundary } from "./TileErrorBoundary";
 import { flushSettings } from "./settings-store";
 import { useSettingsNav } from "./settings-nav";
 import { UpdateCheckSwitch } from "./update-check";
-import { getNotificationSettings, setNotificationSettingsCache, subscribeNotificationSettings, saveNotificationSettings } from "./notification-settings";
+import { getNotificationSettings, useNotificationSettings, saveNotificationSettings } from "./notification-settings";
 import type { NotificationSettings } from "../../shared/ipc";
 import { tellRecentFolders } from "./recent-folders";
 import { chooseFolder, FolderPathDialog } from "./choose-folder";
@@ -269,14 +269,6 @@ export function App() {
     return () => window.removeEventListener("hivemind:issues-set-up", onSetUp);
   });
 
-  // Load the persisted notification preferences into the renderer cache once on
-  // mount, so useAgentAwareness's in-app-toast gate reads the real values
-  // (defaults until this resolves). The SettingsModal refreshes the cache on
-  // every write, so no relaunch is needed for a toggle to take effect.
-  useEffect(() => {
-    void window.hive.getNotificationSettings().then(setNotificationSettingsCache).catch(() => {});
-  }, []);
-
   // Surface non-fatal background-subsystem errors (pushed by main over app:error)
   // as a sonner toast instead of letting them die in a console.error. These are
   // the "something is degraded but the app still runs" cases — e.g. a stale PTY
@@ -414,14 +406,8 @@ function UpdateWork({ progress, busy, onRestart }: { progress: UpdateProgress | 
 const sentence = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
 
 function NotificationPrefs() {
-  const [s, setS] = useState<NotificationSettings>(() => getNotificationSettings());
-  useEffect(() => subscribeNotificationSettings(setS), []);
-
-  const update = (patch: Partial<NotificationSettings>): void => {
-    const next = { ...s, ...patch };
-    setS(next); // optimistic — the cache subscriber will re-sync on confirm
-    void saveNotificationSettings(next);
-  };
+  const s = useNotificationSettings();
+  const update = (patch: Partial<NotificationSettings>): void => saveNotificationSettings({ ...s, ...patch });
   const dim = !s.enabled;
 
   const kinds: { key: "needs" | "done" | "error"; label: string; hint: string }[] = [

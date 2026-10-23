@@ -11,8 +11,11 @@ import { DEFAULT_NOTIFICATION_SETTINGS } from "../../src/shared/notification-set
 
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), "hive-widget-notices-"));
 process.env.HIVE_TEST_USER_DATA = userData;
+// The one settings.json, which main's settings owner reads.
+process.env.HIVE_SETTINGS = path.join(userData, "settings.json");
+const electron = "export const app = { getPath: () => process.env.HIVE_TEST_USER_DATA }; export const ipcMain = { on() {}, handle() {}, removeHandler() {} }; export const BrowserWindow = { getFocusedWindow: () => null };";
 register(`data:text/javascript,${encodeURIComponent(`export async function resolve(s, c, next) {
-  if (s === "electron") return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent("export const app = { getPath: () => process.env.HIVE_TEST_USER_DATA };") };
+  if (s === "electron") return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(${JSON.stringify(electron)}) };
   return next(s, c);
 }`)}`);
 

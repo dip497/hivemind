@@ -76,9 +76,6 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     layersShown: (repo, shown) => port.send("layers:shown", repo, shown),
     recentFolders: (folders) => port.send("recent:folders", folders),
 
-    getNotificationSettings: () => port.invoke("getNotificationSettings"),
-    setNotificationSettings: (s) => port.invoke("setNotificationSettings", s),
-
     browserRegister: local("browser:register", send("browser:register")),
     browserCdp: local("browserCdp", invoke("browserCdp")),
     answerBrowserPermission: local("browser:permission-answer", send("browser:permission-answer")),

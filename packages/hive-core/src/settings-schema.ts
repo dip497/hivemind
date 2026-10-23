@@ -13,6 +13,7 @@
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
 import { isPluginKey, isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
+import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type NotificationSettings } from "./notification-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -451,6 +452,9 @@ export interface Settings {
   network: NetworkSettings;
   browserApp: BrowserAppSettings;
   quit: QuitSettings;
+  /** Toasts, OS pop-ups and sounds (`notification-settings.ts`). Before 2026-10 the app kept them
+   *  in a settings.json of its data folder; migration 0006 moved them here. */
+  notifications: NotificationSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -466,6 +470,7 @@ export const DEFAULT_SETTINGS: Settings = {
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
   quit: { whenRunning: "ask" },
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -785,6 +790,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     network: { ...kept("network"), updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
     browserApp: { ...kept("browserApp"), ...browserAppOf(p.browserApp, base.browserApp) },
     quit: { ...kept("quit"), whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
+    notifications: { ...kept("notifications"), ...normalizeNotificationSettings(p.notifications, base.notifications) },
   };
 }
 

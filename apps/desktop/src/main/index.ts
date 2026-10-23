@@ -64,8 +64,6 @@ import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
 import { registerAgentNotifications, registerWidgetNotifications } from "./agent-notify.js";
-import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
-import { normalizeNotificationSettings } from "../shared/notification-settings.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
 import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
@@ -585,15 +583,6 @@ handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "o
   return { ok: true as const };
 }), { local: true });
 
-// ── notification preferences ──────────────────────────────────────────────
-// The persisted blob lives in settings.json; this module owns the read + the
-// in-memory cache the per-notice OS-popup gate reads. The renderer caches its
-// own snapshot on load + on every change here (pushed back via the setter).
-handle("getNotificationSettings", () => getNotificationSettings());
-handleEffect("setNotificationSettings", () => ({}), wrap(async (_e, s: unknown) => {
-  await setNotificationSettings(normalizeNotificationSettings(s));
-  return { ok: true as const };
-}));
 // The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
 // what makes "restart after update" land on the new version: the running
 // AppImage can't overwrite itself, so install.sh stages the new build to

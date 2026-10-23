@@ -818,10 +818,6 @@ export interface HiveIpc {
   /** The folders the person opened lately, here and on saved machines (`machine://`), newest
    *  first: their phone starts agents there. */
   recentFolders(folders: string[]): void;
-  /** Read the persisted notification preferences (normalized onto defaults). */
-  getNotificationSettings(): Promise<NotificationSettings>;
-  /** Persist + apply notification preferences live (no relaunch needed). */
-  setNotificationSettings(s: NotificationSettings): Promise<{ ok: true }>;
 
   // ── BrowserTile <webview> ↔ agent CDP bridge ──────────────
   /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
