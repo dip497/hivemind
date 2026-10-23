@@ -5,6 +5,7 @@ import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
+import type { IssueChange } from "@hivemind/workspace-api/methods";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { MachineKind } from "@hivemind/core";
@@ -936,6 +937,9 @@ export type HiveApi = HiveIpc & {
     repoPath: string,
     cb: (info: { paths: string[] }) => void
   ) => () => void;
+  /** Each write to an issue kept in `root` (a `.hivemind`), whoever made it, while a window here
+   *  shows its workspace. */
+  onIssueChanged: (root: string, cb: (change: IssueChange) => void) => () => void;
   /** The sessions (agents mid-turn) a terminal daemon of another protocol waits on before it is
    *  replaced; null when none waits. */
   daemonWaitingOn?: () => Promise<string[] | null>;

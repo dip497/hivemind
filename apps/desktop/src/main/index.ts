@@ -63,6 +63,7 @@ const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
+import { IssueWatch } from "@hivemind/host/issue-watch";
 import { registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
@@ -476,7 +477,12 @@ handle("resolveProject", wrap(async (e, rootHint?: string) => {
     await openJoined(moved.slice("hive://".length), (event) => workspaceServer.relay(event));
     return { root: null, cwd: moved, repoPath: moved };
   }
-  if (repoPath) watchRepo(repoPath, workspaceIpc.connect(e.sender));
+  if (repoPath) {
+    const window = workspaceIpc.connect(e.sender);
+    watchRepo(repoPath, window);
+    // Its issues, whoever writes them (an agent's `hive` included), while the window shows it.
+    if (root) issueWatch.follow(repoPath, root, window.closed);
+  }
   // Index this workspace so cross-repo move/link/open can resolve its prefix.
   if (root) await registerWorkspace(root).catch(() => {});
   return { root, cwd, repoPath };
@@ -1340,7 +1346,7 @@ const placesHere = new StartPlaces({
 });
 const widgetDomain = widgets(() => workspaceServer, widgetAsset, listWidgets, (repo) => workspaceStore().getObjects(repo));
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
-  ...workspaceDomains,
+  ...workspaceDomains((c) => whoIs(c).name),
   layouts.domain,
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
@@ -1422,6 +1428,9 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
+// Every write to the issues of a workspace a window shows, or a service or guest is connected to.
+const issueWatch = new IssueWatch({ publish: (repo, change) => workspaceServer.publish("issue.changed", repo, change) });
+const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
 // A folder on another of the person's devices is answered there (M4); one of a workspace joined
 // from elsewhere, by its host.
 const onDevices = deviceFolders({ mine: isYourDevice, dial: dialDevice });
@@ -1607,6 +1616,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       onStatus: (listener) => { control.status.subscribe(listener); },
       workers: { parent: (bare) => control.parentOf(bare) },
       waits: control.waits,
+      follow: followIssues,
       home: {
         links: () => control.links(),
         linkState,
@@ -2015,6 +2025,7 @@ function startHcpControlPlane(): void {
       nameOf: (tile) => control.labelOf(tile),
       places: (repo) => frameWorktrees(workspaceStore().getCore(repo)),
       workspaceId: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
+      follow: followIssues,
       onWarn: (m) => console.warn(`[drive] ${m}`),
     });
     void drive.serving.then(servedDrive);

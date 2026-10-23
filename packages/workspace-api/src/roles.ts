@@ -24,6 +24,12 @@ const LEAST: Record<string, Role> = {
   "file.read": "view",
   "issue.list": "view",
   "issue.read": "view",
+  // Writing issues is editing the workspace: a service (a tool plugin's grant) and a guest who may
+  // edit, each signed as itself in the issue's activity.
+  "issue.create": "edit",
+  "issue.update": "edit",
+  "issue.setState": "edit",
+  "issue.comment": "edit",
   "review.list": "view",
   // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile
   // shows it (M4). Nothing of the host's is changed.

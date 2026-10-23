@@ -4,6 +4,7 @@
  */
 import type { WorkspaceClient } from "@hivemind/workspace-api/client";
 import type { Role } from "@hivemind/workspace-host/access";
+import type { IssueChange } from "@hivemind/workspace-api/methods";
 import type { HiveApi } from "./ipc.js";
 
 export function hiveOverWorkspace(workspace: WorkspaceClient) {
@@ -30,6 +31,11 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
   const terminalData = byKey("terminal.data");
   const terminalExit = byKey("terminal.exit");
   const fileChanged = byKey("file.changed");
+  // An issue's change, by the `.hivemind` it is kept in: that is what a plugin's issues know.
+  const issueChanged = new Map<string, Set<(change: IssueChange) => void>>();
+  workspace.on("issue.changed", (_repo, change) => {
+    for (const cb of issueChanged.get(change.root) ?? []) cb(change);
+  });
 
   return {
     listIssues: (root) => workspace.call("issue.list", root),
@@ -138,5 +144,14 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     onPtyData: terminalData.on,
     onPtyExit: terminalExit.on,
     onFsChanged: fileChanged.on,
+    onIssueChanged: (root, cb) => {
+      let set = issueChanged.get(root);
+      if (!set) issueChanged.set(root, (set = new Set()));
+      set.add(cb);
+      return () => {
+        set!.delete(cb);
+        if (set!.size === 0 && issueChanged.get(root) === set) issueChanged.delete(root);
+      };
+    },
   } satisfies Partial<HiveApi>;
 }

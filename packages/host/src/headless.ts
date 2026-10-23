@@ -63,6 +63,7 @@ import { daemonSessions } from "./daemon-sessions.js";
 import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
+import { IssueWatch } from "./issue-watch.js";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks, tellGuestOf } from "./peer-links.js";
@@ -284,7 +285,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const grants = new Grants(path.join(o.dir, "grants.json"));
   const api: WorkspaceServer = new WorkspaceServer([
-    ...workspaceDomains,
+    ...workspaceDomains((c) => who(c).name),
     layouts.domain,
     agents({
       statuses: () => control.status.all(), links: () => control.links(),
@@ -438,6 +439,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     onError: (e) => o.onWarn(`the control plane is off: ${e.message}. \`hive ctl\` cannot reach this host`),
   });
 
+  // Every write to a followed workspace's issues, told to its clients: a service's, a guest's.
+  const issueWatch = new IssueWatch({ publish: (repo, change) => api.publish("issue.changed", repo, change) });
+  const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
+
   // Programs drive the workspaces here through the workspace API, held to what they were granted.
   const driveSock = driveSockPath(o.dir);
   const drive = serveDrive(driveSock, {
@@ -449,6 +454,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     nameOf: (tile) => control.labelOf(tile),
     places: (repo) => frameWorktrees(store.getCore(repo)),
     workspaceId: (repo) => store.ownership(repo)?.workspaceId ?? null,
+    follow: followIssues,
     onWarn: o.onWarn,
   });
 
@@ -496,6 +502,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     changes: heard.changes,
     lists,
     server: api,
+    follow: followIssues,
     // The person's devices run terminals here, in frames on this machine (M3).
     daemon: o.daemon,
     hosting,
@@ -698,6 +705,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       await services?.stop();
       hcp.close();
       drive.close();
+      issueWatch.close();
       endpoint.close();
       elsewhere.close();
       store.flush();

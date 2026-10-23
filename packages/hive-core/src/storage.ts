@@ -535,8 +535,9 @@ function parseAcceptance(text: string): AcceptanceItem[] {
   return items;
 }
 
-// Activity line: `- <ISO-8601 timestamp> · <who> · <message>`.
-const ACT_RE = /^-\s+(\S+)\s+·\s+(\S+)\s+·\s+(.+)$/;
+// Activity line: `- <ISO-8601 timestamp> · <who> · <message>`. `who` may have spaces (a service
+// signs `@owner/name (service)`, a guest their name); the message may hold ` · ` itself.
+const ACT_RE = /^-\s+(\S+)\s+·\s+(.+?)\s+·\s+(.+)$/;
 function parseActivity(text: string): ActivityEntry[] {
   const out: ActivityEntry[] = [];
   for (const line of text.split("\n")) {

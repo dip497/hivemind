@@ -27,6 +27,18 @@ import type { WidgetPackage } from "@hivemind/core/widget-format";
 /** A press on a widget: one of its buttons (its `action`), or its card. */
 export type WidgetPress = { action: unknown } | { click: true };
 
+/** One write to an issue (design jira-sync §12.1), whoever made it: the app, a peer, a service or
+ *  `hive` on this machine. `root` is the workspace's `.hivemind`; `fields` the issue's fields and
+ *  body sections that differ from what it held before (every one it has, when it is new); `by`
+ *  who signed its newest activity row (null: it was deleted, or has none). */
+export interface IssueChange {
+  id: string;
+  root: string;
+  change: "created" | "updated" | "deleted";
+  fields: string[];
+  by: string | null;
+}
+
 /** A workspace's layouts as a client that holds them opens it. */
 export interface StoreSnapshot {
   core: CoreLayout | null;
@@ -351,6 +363,10 @@ export interface WorkspaceEvents {
   /** Someone types into `tile`: to each client that opened it but theirs, at most once a second
    *  for the same person typing (R4). */
   "terminal.typing": (tile: string, by: Typist) => void;
+  /** An issue of the workspace at `repo` was written, by anyone, as its file shows: to every
+   *  client of the workspace while something here follows it (a window showing it, a service or
+   *  guest connected to it). */
+  "issue.changed": (repo: string, change: IssueChange) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
   /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`; for the
