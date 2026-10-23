@@ -13,6 +13,9 @@ import { stopDaemons } from "./helpers/daemons";
 
 let root: string;
 const apps: ElectronApplication[] = [];
+/** Where screenshots go when someone asks for them. */
+const OUT = process.env.DECIDE_OUT;
+const shot = async (page: Page, name: string) => { if (OUT) await page.screenshot({ path: path.join(OUT, name) }); };
 test.beforeEach(() => { root = fs.mkdtempSync("/tmp/hm-decide-"); });
 test.afterEach(async () => {
   for (const a of apps.splice(0)) await a.close();
@@ -50,10 +53,12 @@ test("a permission says what it runs on the agent's row in amber; cut short ther
   const band = row.locator("[data-layer-decide]");
   await expect(band.locator("[data-decide]")).toHaveText(["Review"]);
   await expect(row).toHaveCSS("height", "80px");
+  await shot(desktop, "1-row-review.png");
 
   await band.locator('[data-decide="review"]').click();
   const review = desktop.locator("[data-wait-review]");
   await expect(review.locator("pre")).toHaveText("rm -rf build");
+  await shot(desktop, "2-review.png");
   await expect(review.locator("[data-decide]")).toHaveText(["Deny", "Allow"]);
   expect(await desktop.evaluate(() => document.activeElement?.getAttribute("data-decide") ?? null)).toBe("deny");
   await review.locator('[data-decide="allow"]').click();
@@ -73,6 +78,7 @@ test("seen from elsewhere, the agent's toast says what it waits on and offers De
   await expect(card).toContainText("Bash: rm -rf build", { timeout: 20_000 });
   const deny = card.locator('[data-decide="deny"]');
   await expect(card.locator("[data-decide]")).toHaveText(["Deny", "Allow"]);
+  await shot(desktop, "3-toast.png");
   await deny.click();
   await expect.poll(log, { timeout: 20_000 }).toContain("hook said");
   expect(log()).toMatch(/hook said .*deny/);

@@ -129,7 +129,7 @@ function ToastCard({
           </span>
           {/* A permission answered from here: Deny and Allow, or Review when what it allows is
               not all in sight. A press on them never reaches the card, which shows the tile. */}
-          {t.decide && <DecideButtons tile={t.tileId} waiting={t.decide} cut={cut} className="mt-2" />}
+          {t.decide && <DecideButtons tile={t.tileId} waiting={t.decide} cut={cut} className="mt-2 -ml-2.5" />}
         </div>
         <Button reveal="hidden"
           variant="ghost"

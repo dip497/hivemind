@@ -68,7 +68,8 @@ export const RowLine = memo(function RowLine({ tileId, show }: { tileId: string;
         style={waiting ? { color: LOOKS.needs.color } : undefined}>
         {text}
       </span>
-      {decides && <DecideButtons tile={tileId} waiting={waiting} cut={cut} className="mt-1.5" />}
+      {/* The ghost button's text, not its box, lines up with the line above. */}
+      {decides && <DecideButtons tile={tileId} waiting={waiting} cut={cut} className="mt-1.5 -ml-2.5" />}
     </>
   );
 });

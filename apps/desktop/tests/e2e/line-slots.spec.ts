@@ -49,6 +49,7 @@ test("a shell's last line shows in the slot a view left for it, drawn by the app
   };
   const slot = page.locator("[data-community-lines] [data-community-line] [data-line-slot]");
   await expect(slot).toHaveText("214 tests passed", { timeout: 20_000 });
+  if (process.env.DECIDE_OUT) await page.screenshot({ path: path.join(process.env.DECIDE_OUT, "4-line-slot.png") });
   // Where the view left room: 40px down its box, 16px in.
   const box = (await page.locator("[data-community-view]").boundingBox())!;
   const at = (await page.locator("[data-community-line]").boundingBox())!;
