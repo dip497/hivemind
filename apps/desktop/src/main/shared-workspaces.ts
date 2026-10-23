@@ -44,6 +44,7 @@ import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
 import { sharedAppearance, type Appearance } from "@hivemind/core/settings-schema";
+import { joinLines, SPLIT_METHODS, splitTiles, WATCHES } from "./watch-split.js";
 
 /** Where the connection to a workspace's host is. */
 export type SharedState = "connecting" | "connected" | "reconnecting" | "offline" | "left" | "removed";
@@ -417,18 +418,17 @@ function workspaceOf(method: unknown, params: unknown): string | null {
   // elsewhere when a replica holds it.
   if (typeof first === "string" || typeof (first as { tileId?: unknown } | null)?.tileId === "string") {
     const named = (first as { tile?: unknown } | null)?.tile;
-    const bare = typeof named === "string" ? named : toBareId(typeof first === "string" ? first : (first as { tileId: string }).tileId);
-    const repo = sharedStore().workspaceOf(bare);
-    return repo && !(guestIn(idOf(repo)) && onThisMachine(repo, bare)) ? idOf(repo) : null;
+    return sharedOf(typeof named === "string" ? named : toBareId(typeof first === "string" ? first : (first as { tileId: string }).tileId));
   }
   return null;
 }
 
-/** Where `window`'s call of `method` about the workspace `entry` goes: a terminal's on its own
- *  stream, opened the first time; anything else, or a call no window made, on the workspace's.
+/** Where `window`'s call of `method` about the workspace `entry` goes: a terminal's, or a watch of
+ *  tiles (each window's own there, as the events it brings are), on its own stream, opened the
+ *  first time; anything else, or a call no window made, on the workspace's.
  *  Null while not connected. */
 function apiOf(entry: Open, window: Connection | undefined, method: unknown): ClientTransport | null {
-  if (!window || !entry.api || typeof method !== "string" || !method.startsWith("terminal.")) return entry.api;
+  if (!window || !entry.api || typeof method !== "string" || !(method.startsWith("terminal.") || WATCHES.has(method))) return entry.api;
   return entry.windows.get(window)?.api ?? entry.openWindow?.(window) ?? null;
 }
 
@@ -438,11 +438,47 @@ function shows(window: Connection, repo: unknown): void {
   for (const [workspace, entry] of open) if (workspace !== showing) entry.windows.get(window)?.end();
 }
 
+/** The workspace shared from elsewhere tile `bare` is of; null when it is this host's, or in a
+ *  frame on this machine of someone else's workspace (M4), whose session runs here. */
+function sharedOf(bare: string): string | null {
+  const repo = sharedStore().workspaceOf(bare);
+  return repo && !(guestIn(idOf(repo)) && onThisMachine(repo, bare)) ? idOf(repo) : null;
+}
+
+/** A window's watch or read of tiles (`watch-split.ts`), each host asked of its own: this host's
+ *  through `here`, each other's on the window's own stream, and a host whose tiles a watch names no
+ *  more is told `[]`. Null when it names no tile shared from elsewhere and watched none there:
+ *  this host answers it whole. As a notice (`quiet`), nothing is asked of a host not connected. */
+function split(method: string, params: unknown[], from: Connection | undefined, here: ((params: unknown[]) => Promise<Answer>) | undefined, quiet = false): Promise<Answer> | null {
+  const [tiles, ...rest] = params;
+  if (!Array.isArray(tiles)) return null;
+  const { here: mine, there } = splitTiles(tiles, sharedOf);
+  const watch = WATCHES.has(method);
+  // In place of the last watch: a host this window watched tiles of before is told what it watches there now.
+  const before = watch && from ? [...open].filter(([ws, e]) => !there.has(ws) && e.windows.has(from)).map(([ws]) => ws) : [];
+  if (there.size === 0 && before.length === 0) return null;
+  const asked: Array<Promise<Answer>> = [];
+  if (here && (mine.length > 0 || watch)) asked.push(here([mine, ...rest]));
+  for (const ws of [...there.keys(), ...before]) {
+    const entry = open.get(ws);
+    const api = entry && apiOf(entry, from, method);
+    const named = [there.get(ws) ?? [], ...rest];
+    if (!api) {
+      if (!quiet) asked.push(Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } }));
+      continue;
+    }
+    if (quiet) api.notice(method, named);
+    else asked.push(api.call(method, named));
+  }
+  return Promise.all(asked).then(joinLines);
+}
+
 /** Routes a window's calls about a workspace shared from elsewhere to its host, a terminal's on
  *  that window's own stream. The store's own methods stay here: the replica answers them. */
 export const elsewhere: Elsewhere = {
-  call(method, params, from): Promise<Answer> | null {
+  call(method, params, from, here): Promise<Answer> | null {
     if (typeof method === "string" && method.startsWith("store.")) return null;
+    if (typeof method === "string" && SPLIT_METHODS.has(method) && Array.isArray(params)) return split(method, params, from, here);
     const ws = workspaceOf(method, params);
     if (!ws) return null;
     const entry = open.get(ws);
@@ -450,9 +486,12 @@ export const elsewhere: Elsewhere = {
     if (!entry || !api) return Promise.resolve({ error: { code: "FAILED", message: "not connected to this workspace's host" } });
     return api.call(method as string, attaching(method, params as unknown[], entry.status.access));
   },
-  notice(method, params, from): boolean {
+  notice(method, params, from, here): boolean {
     if (method === "store.shown" && from && Array.isArray(params)) shows(from, params[0]);
     if (typeof method === "string" && method.startsWith("store.")) return false;
+    if (typeof method === "string" && SPLIT_METHODS.has(method) && Array.isArray(params)) {
+      return split(method, params, from, here && ((p) => { here(p); return Promise.resolve({ result: null }); }), true) !== null;
+    }
     const ws = workspaceOf(method, params);
     if (!ws) return false;
     const entry = open.get(ws);

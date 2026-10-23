@@ -23,6 +23,7 @@ import type { Link, Stream } from "@hivemind/workspace-host/hive-net";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../src/domains.ts";
+import { TileLines } from "../src/tile-lines.ts";
 import { PeerLinks } from "../src/peer-links.ts";
 import { Terminals, type SessionOutput } from "../src/terminals.ts";
 import type { WaitingStatus } from "../src/needs.ts";
@@ -789,7 +790,8 @@ async function guestWindows({ early = false } = {}) {
       screen: (_, lines) => (cb) => { cb(lines === undefined ? "screen" : `screen with ${lines} lines`); return true; },
     },
   });
-  const server = new WorkspaceServer([...workspaceDomains, terminals.domain], intents);
+  const tileLines = new TileLines({ server: () => server });
+  const server = new WorkspaceServer([...workspaceDomains, terminals.domain, tileLines.domain], intents);
   const links = new PeerLinks({ store, changes: () => () => {}, lists, server, machines: { self: () => ({ device: idOf(newSeed()), name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined } });
   const [computerEnd, herComputer] = linkPair(hers, idOf(newSeed()));
   links.serve(computerEnd);
@@ -809,6 +811,14 @@ async function guestWindows({ early = false } = {}) {
       events,
       open: () => api.send(JSON.stringify({ id: 1, method: "terminal.open", params: [{ tileId: "hm:t1", tile: "t1", cwd: `hive://${workspace}`, cmd: "", cols: 80, rows: 24, attachOnly: true }] })),
       notice: (method: string, ...params: unknown[]) => api.send(JSON.stringify({ method, params })),
+      /** Watch the last lines of `tiles`: what it is answered. */
+      watchLines: async (tiles: string[]) => {
+        api.send(JSON.stringify({ id: 2, method: "tile.watchLines", params: [tiles] }));
+        await until(() => heard.some((m) => m.id === 2));
+        return heard.find((m) => m.id === 2);
+      },
+      /** Each `tile.lines` it was told. */
+      lines: () => heard.filter((m) => m.event === "tile.lines").map((m) => (m.params![0] as { lines: Record<string, string> }).lines),
       answered: () => heard.some((m) => m.id === 1),
       /** What it was sent of t1's screen and output. */
       shown: () => heard.filter((m) => m.event === "terminal.data").map((m) => m.params![1] as string),
@@ -823,7 +833,7 @@ async function guestWindows({ early = false } = {}) {
   await until(() => a.answered());
   b.open();
   await until(() => b.shown().includes("screen"));
-  return { a, b, herApp, letGo, server, print: (data: string) => session!.data(data) };
+  return { a, b, herApp, letGo, server, tileLines, print: (data: string) => session!.data(data) };
 }
 
 test("a guest's app hears what happens in the workspace once, on its own stream, and her windows only their terminals", async () => {
@@ -838,6 +848,17 @@ test("a guest's app hears what happens in the workspace once, on its own stream,
     assert.deepEqual(w.events().filter((e) => !e.startsWith("terminal.")), [], "a window hears no event but a terminal's");
     assert.ok(w.events().includes("terminal.size"));
   }
+});
+
+test("a guest's window that watches last lines is answered and told them on its own stream, alone: neither her other window nor her app hears them", async () => {
+  const { a, b, herApp, tileLines } = await guestWindows();
+  tileLines.set("t1", "npm test");
+  assert.deepEqual(await a.watchLines(["t1"]), { id: 2, result: { lines: { t1: "npm test" } } });
+  tileLines.set("t1", "214 tests passed");
+  await until(() => a.lines().length > 0);
+  await wait(100);
+  assert.deepEqual(a.lines(), [{ t1: "214 tests passed" }]);
+  assert.deepEqual([b.lines(), herApp.events().filter((e) => e === "tile.lines")], [[], []]);
 });
 
 test("a guest's window that asks before her app's hello reaches the host is answered once it does", async () => {
