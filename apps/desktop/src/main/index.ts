@@ -19,7 +19,6 @@ import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import { isDay } from "@hivemind/view-sdk/protocol";
-import { ActivityMeter } from "./pty-activity.js";
 import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
 import { StatusLedger } from "./status-ledger.js";
 import { ViewShare } from "./view-share.js";
@@ -86,7 +85,7 @@ import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { agentFeed, dialDevice, homeChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { agentFeed, dialDevice, homeLinesChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { broadcast, openWindows, registerWindow, tabsOpen, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -99,6 +98,7 @@ import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput, type StartOpts } from "@hivemind/host/terminals";
 import { TileLines } from "@hivemind/host/tile-lines";
+import { TileActivity } from "@hivemind/host/tile-activity";
 import { startSpawned, wakeSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
@@ -116,7 +116,7 @@ import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
-import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "@hivemind/host/conversations";
+import { askingOf, conversationOf, conversations, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
@@ -1018,10 +1018,6 @@ function writeTile(tileId: string, data: string, paste?: boolean): boolean {
   return false; // dead/unknown tile → agent.send surfaces NOT_FOUND
 }
 
-/** What each agent here last said, for the rows of the person's phone's Home. */
-let said: LastSaid | null = null;
-const lastSaid = (): LastSaid => (said ??= new LastSaid({ tileSessionsDir: path.join(app.getPath("userData"), TILE_SESSIONS_DIR) }));
-
 /** How the host watches a session it starts or wakes. */
 function hostStarted() {
   return {
@@ -1032,9 +1028,13 @@ function hostStarted() {
   };
 }
 
-/** Each tile's last line, for the windows and devices that watch it (`tile.watchLines`), and for
- *  the person's phone's Home, told as one changes. */
-const tileLines = new TileLines({ server: () => workspaceServer, changed: () => homeChanged() });
+/** Each tile's last line (what its agent last said, or its screen last showed), for the windows and
+ *  devices that watch it (`tile.watchLines`), and for the person's phone's Home, told as one
+ *  changes. */
+const tileLines = new TileLines({
+  server: () => workspaceServer, changed: () => homeLinesChanged(),
+  transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
+});
 
 /** A session's screen and its cursor, wherever it runs. */
 function viewportOf(ptyId: string) {
@@ -1113,10 +1113,8 @@ const control: ControlPlane = new ControlPlane({
     },
   }),
 });
-// View protocol 1.3: output levels for watched tiles (a window asks with terminal.watchActivity).
-const ptyActivity = new ActivityMeter((levels) => {
-  workspaceServer.publish("terminal.activity", levels);
-});
+// View protocol 1.3: output levels of the tiles each window watches (terminal.watchActivity).
+const ptyActivity = new TileActivity(() => workspaceServer);
 /** Push a NON-FATAL background-subsystem error to the renderer as a toast, so
  *  nothing fails silently (e.g. a stale PTY daemon that breaks hook injection).
  *  Fatal errors still use dialogs. Idempotent + cheap; safe to call pre-window. */
@@ -1192,7 +1190,6 @@ const terminals = new Terminals({
   machineOf: terminalMachine,
   folderOf: (bare) => sessionFolder(heldBoards(workspaceStore()), bare),
   conversationAsleep: (opts) => control.conversationAsleep(opts.tileId, opts.args ?? []),
-  watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
     start: startSession,
@@ -1359,6 +1356,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
   tileLines.domain,
+  ptyActivity.domain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
   answers({
     plane: () => control,
@@ -1629,7 +1627,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       home: {
         links: () => control.links(),
         linkState,
-        line: (held, tile) => lastSaid().line(held, tile) ?? tileLines.get(tile),
+        lines: tileLines,
       },
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>

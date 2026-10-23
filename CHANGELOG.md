@@ -9,6 +9,13 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a window's terminals show their activity again while another window is open; each window keeps its own watch, and a window that closes stops its terminals being measured.
+- Added: `hive ctl agents` says each agent's last line (`line` in `--json`): what it last said, or what its screen last showed.
+- Added: someone who joined your workspace sees what your agents and terminals last showed under their names in their own Layers panel, and how busy each terminal is.
+- Added: view protocol 1.17, `lineSlots`. A view leaves room for a tile's last line (`hm.setLineRects`), and the app draws it there: what its screen last showed or its agent last said, or what the agent waits on with the app's own Deny and Allow. The view never receives the text. Computer windows only; check `hm.supports("lineSlots")`.
+- Changed: a terminal's line in the Layers panel skips a two-row prompt such as starship's or powerlevel10k's, shows a command's question (`Overwrite b? [y/N]`) on macOS too, and skips an agent's own spinner, timer and status rows when its agent.yaml lists them (`detect.chrome`, additive).
+- Added: an agent that asks your permission to run a one-line command shows **Deny** and **Allow** on its Layers row and in its toast; a longer command shows **Review**, which shows the whole command first. Hovering a row shows its whole line or command. An agent's toast now says what it waits on, filled in as the app learns it, and goes once the wait ends; a finished agent's toast says its last line.
+- Changed: a Claude row in the Layers panel says what Claude last said, or the tool it last used, under its name, as your phone's Home does. What an agent said is read only for the rows and phones that show it, as it works, and only what it wrote since, so a board of agents no longer has its session files checked on every change your phone is told.
 - Fixed: your network server always serves the phone page of its own release, so the phone page gets new features (photos, say) when you upgrade instead of staying on the page copied when the server was set up. hive-net carries the page itself, and a running `hive-net serve` whose binary an upgrade replaces starts the new one in its place, on the same ports. Your phone stays signed in through it.
 - **Breaking:** `hive-net serve --phone` takes no folder: it serves the page hive-net carries. Serve a page built here with `--phone-folder <dir>`. A server set up before this release changes `--phone ~/hive-network/phone` to `--phone` in its service.
 - Fixed: on an iPhone, the phone page's text no longer gets larger after you turn the phone sideways and back.

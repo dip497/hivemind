@@ -77,8 +77,9 @@ export interface ControlPlaneOptions {
   /** A wait began, ended, or its time to answer changed. */
   waitsChanged?(): void;
   /** Each tile's last line (`tile-lines.ts`): told each line its screen shows, as its daemon reads
-   *  it, by the tile's bare id, and each tile closed. */
-  lines?: Pick<TileLines, "set" | "forget">;
+   *  it, by the tile's bare id, each report of its agent (what it said since is read), and each
+   *  tile closed. */
+  lines?: Pick<TileLines, "set" | "reported" | "forget">;
   /** What the agent of a tile waits on, as the person's devices are told it. */
   waitingOf?(bareTile: string): AgentItem["waiting"];
 }
@@ -406,7 +407,10 @@ export class ControlPlane {
     if (method === "agent.reply") {
       // A remote machine's daemon passes its hooks' replies on as this notification.
       const r = (params ?? {}) as { tileId?: string; text?: string };
-      if (r.tileId && typeof r.text === "string" && r.text) this.turns.recordReply(toPtyId(r.tileId), r.text);
+      if (r.tileId && typeof r.text === "string" && r.text) {
+        this.turns.recordReply(toPtyId(r.tileId), r.text);
+        this.o.lines?.reported(toBareId(r.tileId));
+      }
       return;
     }
     if (method !== AGENT_EVENT_METHOD) return;
@@ -422,6 +426,7 @@ export class ControlPlane {
     }
     const pid = toPtyId(evt.tileId);
     this.status.event(bare, evt);
+    this.o.lines?.reported(bare, evt.sessionId);
     // Hold agent-to-agent messages while this tile is mid-turn (its TUI would swallow them),
     // release one at its prompt.
     if (evt.event === "turn.started") { this.mailbox.setBusy(pid); return; }

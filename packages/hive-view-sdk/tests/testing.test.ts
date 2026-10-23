@@ -32,6 +32,25 @@ test("a view is greeted as the options say; what it sends is kept when the app w
   expect(host.refused).toEqual(["selectTile: unknown tile t9", "subscribeStatus: unknown tile t9"]);
 });
 
+test("1.17: a view's line slots are kept by a host that draws lines; the client sends none to one that does not", async () => {
+  const host = fakeHost({ features: ["lineSlots"] });
+  const hm = await host.connect();
+  host.send(structure);
+  await host.settle();
+  hm.setLineRects([{ tileId: "t1", x: 8, y: 40, w: 240, h: 20 }, { tileId: "t9", x: 8, y: 64, w: 240, h: 20 }]);
+  await host.settle();
+  expect(host.lines).toEqual([{ tileId: "t1", x: 8, y: 40, w: 240, h: 20 }]);
+  expect(host.refused).toEqual([]);
+
+  const older = fakeHost({ features: ["surfaces"] });
+  const view = await older.connect();
+  older.send(structure);
+  await older.settle();
+  view.setLineRects([{ tileId: "t1", x: 8, y: 40, w: 240, h: 20 }]);
+  await older.settle();
+  expect([older.lines, older.refused]).toEqual([[], []]);
+});
+
 test("a request is answered from the test's answers, and one it gave none for is UNSUPPORTED", async () => {
   const codex = { id: "codex", label: "Codex", default: true, turns: true, resumes: false, sessions: false };
   const host = fakeHost({ answers: { agents: () => ({ agents: [codex] }), history: () => { throw Object.assign(new Error("busy"), { code: "BUSY" }); } } });

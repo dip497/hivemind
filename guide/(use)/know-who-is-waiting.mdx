@@ -48,19 +48,38 @@ last showed, such as `214 tests passed`. When an agent needs you, the line says 
 | **Plan ready for review** | your review of its plan |
 | **Permission**, **Question**, **Approval** or **Blocked** | that, in a word: its agent tells no more |
 
-Claude keeps its own conversation, so its row shows a line only while it waits for you.
+For an agent that keeps its own conversation, such as Claude, the line is the first line of what
+it last said, or the tool it last used and what about, as your phone's Home shows it.
 
 A terminal's line leaves out its prompt and what you type there, so it shows what the last command
 printed. A few rows are the exception:
 
 - A question a command waits on, such as `Overwrite b? [y/N]` or a password prompt, is the line on
-  Linux. On macOS and Windows it is left out with the prompt.
-- A prompt that takes two rows shows its top row, unless your shell marks where its prompt starts,
-  as shell integration does (the OSC 133 marks).
+  Linux and macOS. On Windows it is left out with the prompt.
+- A prompt that takes two rows is left out whole when its second row starts with `❯` or a corner
+  such as `╰─`, as starship's and powerlevel10k's do. Another prompt of two rows shows its top row,
+  unless your shell marks where its prompt starts, as shell integration does (the OSC 133 marks).
 - A question your shell asks itself, such as `read -p`, is left out with the prompt.
+
+Someone who joined your workspace sees the same lines under your agents and terminals in their
+own Layers panel. `hive ctl agents` prints each agent's line too.
 
 To choose which rows show a line, open the Layers panel's **View** menu, then **Lines**:
 **All** (every agent and terminal), **Needs you** or **Off**.
+
+## Allow or deny from the row
+
+When an agent asks your permission to run a command of one line, its row and its toast show
+**Deny** and **Allow** under the line. Press one to answer, as you would in its tile.
+
+- When the command is longer than the row, or more than one line, the row shows **Review**
+  instead. Press it to read the whole command, then **Deny** or **Allow**.
+- Hover over a row to read its whole line, or the whole command it waits on.
+- If someone answered first, or the agent stopped waiting, your answer does nothing and a notice
+  says it was answered already.
+- An agent that tells Hivemind no more than "Permission" shows no buttons: answer it in its tile.
+
+A toast for an agent that finished says its line, such as what Claude last said.
 
 ## Jump to the next one
 

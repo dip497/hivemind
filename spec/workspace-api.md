@@ -1,4 +1,4 @@
-# Workspace API (0.34)
+# Workspace API (0.35)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -64,7 +64,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.34", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.35", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -239,7 +239,8 @@ host's. A change is signed `ui` in the issue's activity, whoever calls: who aske
 log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
-| `tile.watchLines` | `tiles` | `{lines: {[tile]: line}}` (0.34): the last line of each of `tiles` (bare ids, at most 1024) that showed one, what its screen last showed with text, one line of plain text of at most 160 characters ("": it shows none now); the caller watches these tiles from now on, in place of those it watched (`[]`: none), and is sent `tile.lines` as they change. A peer names only tiles of its workspace (`FORBIDDEN`) | read |
+| `tile.watchLines` | `tiles` | `{lines: {[tile]: line}}` (0.34): the last line of each of `tiles` (bare ids, at most 1024) that showed one, one line of plain text of at most 160 characters: for a tile whose agent keeps a conversation, what it last said there ("" until it says something, 0.35), else what its screen last showed with text ("": it shows none now); the caller watches these tiles from now on, in place of those it watched (`[]`: none), and is sent `tile.lines` as they change. A peer names only tiles of its workspace (`FORBIDDEN`) | read |
+| `tile.readLines` | `tiles` | `{lines: {[tile]: line}}` (0.35): the same lines, once: what an agent said is read first when a read of it is under way or it was never read. Watches nothing. A peer names only tiles of its workspace (`FORBIDDEN`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
 | `link.connect` | `src`, `dst` | `null`: each reply of the agent in `src` is handed to the one in `dst` as its next prompt, as `hive ctl connect` (0.23) | target `src->dst` |
 | `link.disconnect` | `src`, `dst`? | `null`: that pipe gone, or every pipe out of `src` (0.23) | target `src` |

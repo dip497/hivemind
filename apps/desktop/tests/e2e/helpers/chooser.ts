@@ -11,8 +11,10 @@ import path from "node:path";
  *  Claude Code's does; the first to answer wins. It writes `drawn` once its chooser is up, then
  *  what the hook printed (`hook said`), or that the hook ended with nothing (`hook let go`).
  *  `hookFor`: it ends that hook after so many seconds, its chooser still up, as Claude Code ends
- *  one that runs out of time. What the desktop's environment needs to run it. */
-export function chooserAgent(root: string, { held = false, hookFor }: { held?: boolean; hookFor?: number } = {}): Record<string, string> {
+ *  one that runs out of time. `about`: its manifest maps its tool uses as Claude Code's does
+ *  (`session.transcript`), so what its permission is about (`rm -rf build`) is known, as Claude's
+ *  is. What the desktop's environment needs to run it. */
+export function chooserAgent(root: string, { held = false, hookFor, about = false }: { held?: boolean; hookFor?: number; about?: boolean } = {}): Record<string, string> {
   const bin = path.join(root, "bin");
   fs.mkdirSync(bin, { recursive: true });
   fs.writeFileSync(path.join(bin, "chooser-agent"), [
@@ -87,6 +89,18 @@ export function chooserAgent(root: string, { held = false, hookFor }: { held?: b
       : "    PermissionRequest: { emit: input.requested, kind: permission, timeout: 10 }",
     "    PostToolUse: { emit: input.resolved, timeout: 10 }",
     "    PermissionDenied: { emit: input.resolved, timeout: 10 }",
+    ...(about ? [
+      "session:",
+      "  resume: { args: ['--resume', '{id}'], exists: '{home}/.chooser/{id}.jsonl' }",
+      "  transcript:",
+      "    id: uuid",
+      "    at: timestamp",
+      "    said:",
+      "    - require: { type: assistant }",
+      "      each: message.content",
+      "      item: { type: tool_use }",
+      "      tool: { id: id, name: name, about: [input.command], input: input }",
+    ] : []),
     "",
   ].join("\n"));
   return { PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`, CHOOSER_LOG: path.join(root, "chooser.log"), ...(held ? { CHOOSER_HELD: "1" } : {}), ...(hookFor ? { CHOOSER_HOOK_FOR: String(hookFor) } : {}) };

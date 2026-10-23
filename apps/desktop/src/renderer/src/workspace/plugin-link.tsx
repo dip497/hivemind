@@ -11,7 +11,7 @@ import { chordMatches, type PluginCommand } from "@hivemind/view-sdk/commands";
 import type { Running } from "@hivemind/view-host/instances";
 import { pluginInstances } from "./plugin-instances";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { PROTOCOL_VERSION, type HostMenu, type HostMessage, type ShareOutcome, type SurfaceRect, type ViewPermission, type ViewRect } from "@hivemind/view-sdk/protocol";
+import { PROTOCOL_VERSION, type HostMenu, type HostMessage, type ShareOutcome, type SurfaceRect, type LineRect, type ViewPermission, type ViewRect } from "@hivemind/view-sdk/protocol";
 import type { SettingField } from "@hivemind/view-sdk/settings";
 import { resolveTokens, type TokenDecl } from "@hivemind/view-sdk/tokens";
 import { CommunityLink } from "@hivemind/view-host/link";
@@ -67,6 +67,8 @@ export interface PluginLinkOptions {
   issueFolder?: () => string | null;
   /** Where it asks for live surfaces; absent: it places none. */
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
+  /** Where it reserves room for tiles' last lines, which the host draws (1.17); absent: it draws none. */
+  onLineRects?: (rects: LineRect[]) => void;
   /** What an agent may run in it while it runs (its manifest's `commands`), and which copy this is. */
   commands?: readonly PluginCommand[];
   instance?: { id: string; label: string };
@@ -180,6 +182,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     hasFrame: (id) => framesRef.current.some((f) => f.id === id),
     onReady: () => setReady(true),
     ...(o.onSurfaceRects ? { onSurfaceRects: (r: SurfaceRect[]) => enqueue(() => optsRef.current.onSurfaceRects?.(r)) } : {}),
+    ...(o.onLineRects ? { onLineRects: (r: LineRect[]) => enqueue(() => optsRef.current.onLineRects?.(r)) } : {}),
     onLayout: (data) => saveViewLayout(layoutSpec(optsRef.current.layoutId, optsRef.current.personal), layoutKeyRef.current, data),
     onFramesDrawn: () => { /* read from stats by the perf harness */ },
     onError: (message) => console.warn(`[hivemind] plugin "${o.pluginId}": ${message}`),

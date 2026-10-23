@@ -3,6 +3,8 @@
  * that set it and the glossary say. `name` is the tile's name (`spawn --name`), `agent` the program
  * it runs (`spawn --agent`), `workspace` the workspace's id and name, and an agent put to sleep is
  * `asleep`. The host's agent list is the phone's too, so its own field names stay as they are.
+ * `line` is the tile's last line, as its Layers row says it: for an agent that keeps a
+ * conversation, what it last said; else what its screen last showed (`tile.readLines`).
  */
 import type { AgentItem } from "@hivemind/workspace-api/agents";
 import type { Result } from "@hivemind/workspace-api/methods";
@@ -28,12 +30,15 @@ export interface AgentRow {
   session?: string;
   interrupt?: true;
   conversation?: true;
+  /** Its last line: what it last said, or its screen last showed; none before it showed any, or
+   *  from a host older than Workspace API 0.35. */
+  line?: string;
 }
 
 const asleep = (core: Core | null, tile: string): boolean => !!core?.tiles.find((t) => t.id === tile)?.sleeping;
 
-/** The host's agents, as `hive ctl agents` prints them. */
-export function agentRows(items: readonly AgentItem[], core: Core | null): AgentRow[] {
+/** The host's agents, as `hive ctl agents` prints them, each with its last line in `lines`. */
+export function agentRows(items: readonly AgentItem[], core: Core | null, lines: Readonly<Record<string, string>> = {}): AgentRow[] {
   return items.map(({ workspace, name, tile, agent, program, state, ...rest }) => ({
     tile,
     name: agent,
@@ -41,6 +46,7 @@ export function agentRows(items: readonly AgentItem[], core: Core | null): Agent
     workspace: { id: workspace, name },
     ...rest,
     state: asleep(core, tile) ? "asleep" : state,
+    ...(lines[tile] ? { line: lines[tile] } : {}),
   }));
 }
 

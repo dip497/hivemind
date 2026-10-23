@@ -154,8 +154,9 @@ function cursorOf(s: Screen): ScreenCursor {
   const prompt = buf.type === "normal" && s.prompt && !s.prompt.isDisposed ? s.prompt.line - buf.baseY : row + 1;
   // A prompt below the cursor was drawn before the screen was cleared; one above the screen leaves
   // every row up to the cursor to it.
-  if (prompt <= row) top = Math.max(0, Math.min(top, prompt));
-  return { x: buf.cursorX, y: row, top, hidden: !s.term.modes.showCursor };
+  const marked = prompt <= row;
+  if (marked) top = Math.max(0, Math.min(top, prompt));
+  return { x: buf.cursorX, y: row, top, hidden: !s.term.modes.showCursor, ...(marked ? { marked: true as const } : {}) };
 }
 
 port.on("message", (m: ToScreens) => {

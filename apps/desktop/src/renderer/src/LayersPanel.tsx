@@ -31,7 +31,7 @@ import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { AGENT_TILE_KIND, isTerminalKind } from "./tile-kinds";
-import { lineId, RowLine } from "./row-line";
+import { CardLine, lineId, RowLine } from "./row-line";
 import type { SleepActions } from "./workspace/SleepAgents";
 import { tileKind } from "./tiles";
 import { KindMark } from "./tiles/mark";
@@ -228,7 +228,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, star
         ...(selected ? { background: "var(--surface-4)", boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 12%, transparent)" } : {}),
       }}
       // `w-[calc(100%-1rem)] min-w-0`: without a width the row shrink-wraps its text and `truncate` never engages.
-      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 has-[[data-layer-line]]:h-11 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none cursor-pointer transition-colors ${
+      className={`group relative flex w-[calc(100%-1rem)] min-w-0 h-8 has-[[data-layer-line]]:not-has-[[data-layer-decide]]:h-11 has-[[data-layer-decide]]:h-20 items-center gap-2.5 pr-1.5 mx-2 text-left rounded-lg outline-none cursor-pointer transition-colors ${
         selected ? "text-[var(--color-fg)]" : "text-[var(--color-fg)] hover:bg-[var(--surface-3)]"
       }`}
     >
@@ -543,7 +543,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
         const r = el.getBoundingClientRect();
         const edge = el.closest("aside")?.getBoundingClientRect().right ?? r.right;
         // Beside the panel, level with the row, and never past the bottom of the window.
-        setCard({ tile, top: Math.max(8, Math.min(r.top - 6, window.innerHeight - 124)), left: edge + 8 });
+        setCard({ tile, top: Math.max(8, Math.min(r.top - 6, window.innerHeight - 220)), left: edge + 8 });
       }, 450);
     },
     fold: (id) => toggleGroup(`tile:${id}`),
@@ -1203,7 +1203,8 @@ function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
   );
 }
 
-/** What a row is, on hover: its name, when it last changed, and where it runs. */
+/** What a row is, on hover: its name, when it last changed, where it runs, and a terminal's whole
+ *  line, or the whole of what its agent waits on. */
 function HoverCard({ tile, top, left, now, frame, agent, failed }: { tile: ModelTile; top: number; left: number; now: number; frame?: LayerFrame; agent: string; failed: boolean }) {
   const when = ago(tile.activity, now);
   return (
@@ -1217,6 +1218,7 @@ function HoverCard({ tile, top, left, now, frame, agent, failed }: { tile: Model
           {frame && <span className="max-w-full truncate rounded-md bg-[var(--color-bg3)] px-2 py-0.5">{frame.title}</span>}
           {frame?.branch && <span className="max-w-full truncate rounded-md bg-[var(--color-bg3)] px-2 py-0.5 font-mono">{frame.branch}</span>}
         </div>
+        {isTerminalKind(tile.kind) && <CardLine tileId={tile.id} />}
       </div>
     </div>
   );

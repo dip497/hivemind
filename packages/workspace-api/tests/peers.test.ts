@@ -45,7 +45,7 @@ const domain = {
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
     ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
-      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines"].map((what) => [
+      "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
     // A view opened for the caller: what it is let do there is what the caller may call.
@@ -466,11 +466,12 @@ test("a peer hears who holds a terminal's keyboard, who asks for it and the term
   expect(heard).toEqual(["in-1 held by Ana", "in-1 asked by Ana", "in-1 100x30", "in-1 held by the host"]);
 });
 
-test("a peer is told the last lines of its workspace's tiles alone, and may watch only those", async () => {
+test("a peer is told the last lines of its workspace's tiles alone, and may watch or read only those", async () => {
   const { server, client } = connect("view");
   const heard: Array<Record<string, string>> = [];
   client.on("tile.lines", ({ lines }) => heard.push(lines));
   expect(await code(client.call("tile.watchLines", ["in-1", "out-1"]))).toBe("FORBIDDEN");
+  expect(await code(client.call("tile.readLines", ["out-1"]))).toBe("FORBIDDEN");
   expect(ran).toEqual([]);
   await client.call("tile.watchLines", ["in-1"]);
   expect(ran.map((r) => r.what)).toEqual(["tile.watchLines"]);

@@ -1,8 +1,7 @@
 /**
  * What each agent tile waits on, from the agent feed the window follows already (Workspace.tsx's
- * `agent.list` and `agent.changed`): its wait as the feed tells it (`AgentItem.waiting`), and
- * whether its agent keeps a conversation, whose screen's last line is its own chrome. A row reads
- * one tile here (docs/design/last-line-2026-10-23.md §2).
+ * `agent.list` and `agent.changed`): its wait as the feed tells it (`AgentItem.waiting`). A row
+ * reads one tile here (docs/design/last-line-2026-10-23.md §2).
  *
  * The feed tells every change of every agent, most of them of its state alone. A tile's entry is
  * given back as the same object while what a row says of it is the same (the wait's kind, `since`,
@@ -16,8 +15,6 @@ export type AgentWait = NonNullable<AgentItem["waiting"]>;
 export interface TileWait {
   /** What it waits on, while it waits. */
   waiting?: AgentWait;
-  /** Its agent keeps a conversation (`AgentItem.conversation`). */
-  converses: boolean;
 }
 
 const waits = new Map<string, TileWait>();
@@ -35,9 +32,8 @@ function put(tile: string, next: TileWait | undefined): void {
 /** The feed told `agent` as it is now. */
 export function tellAgent(agent: AgentItem): void {
   const now = waits.get(agent.tile);
-  const converses = !!agent.conversation;
-  if (now && now.converses === converses && sameWait(now.waiting, agent.waiting)) return;
-  put(agent.tile, { ...(agent.waiting ? { waiting: agent.waiting } : {}), converses });
+  if (now && sameWait(now.waiting, agent.waiting)) return;
+  put(agent.tile, agent.waiting ? { waiting: agent.waiting } : {});
 }
 
 /** The agent in `tile` went. */

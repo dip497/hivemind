@@ -4,8 +4,9 @@ import type { Cursor } from "./pty-protocol.js";
 /** Where a session's cursor is, as the daemon tells it (`x`, `y`: its column, and its row down from
  *  the top visible row), and for the line its screen ends on: `top`, the row the input it is in
  *  starts on (a prompt the shell marked, a command line that wraps), at most `y`; `hidden`, its
- *  program hid it (a prompt or an input box shows it). */
-export interface ScreenCursor extends Cursor { top: number; hidden: boolean }
+ *  program hid it (a prompt or an input box shows it); `marked`, the shell marked where its prompt
+ *  starts (OSC 133 `A`), so `top` holds every row of it. */
+export interface ScreenCursor extends Cursor { top: number; hidden: boolean; marked?: true }
 
 /** A session's visible rows as text, and its cursor: a `Viewport` that always knows its cursor. */
 export interface ScreenRows { text: string; cursor: ScreenCursor }

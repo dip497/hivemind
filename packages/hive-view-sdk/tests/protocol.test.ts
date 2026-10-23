@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, MAX_SURFACE_RECTS, MAX_SURFACE_RADIUS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
+  ACTIVITY_MAX_TILES, CUSTOM_DATA_MAX_BYTES, LAYOUT_MAX_BYTES, LINE_SLOT_MIN_H, MAX_LINE_RECTS, MAX_SURFACE_RECTS, MAX_SURFACE_RADIUS, NAME_MAX, PROMPT_MAX, SHARE_MAX_BYTES,
   customDataProblem, customNameMatches, isCustomEventName, isDay, parseHostMessage, parsePluginMessage, promptProblem, refusal,
   type HostScope, type PluginMessage,
 } from "../src/protocol.js";
@@ -27,6 +27,8 @@ describe("parsePluginMessage", () => {
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, chrome: "none" }] },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: 14 }] },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, inert: true }] },
+      { type: "lineRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 300, h: LINE_SLOT_MIN_H }] },
+      { type: "lineRects", rects: [] },
       { type: "revealed", requestId: 3, rect: null },
       { type: "revealed", requestId: 3, rect: { x: 0, y: 0, w: 1, h: 1 } },
       { type: "framesDrawn", count: 0 },
@@ -65,6 +67,10 @@ describe("parsePluginMessage", () => {
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: -1 }] },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, radius: "8" }] },
       { type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 3, h: 4, inert: false }] },
+      { type: "lineRects", rects: [{ tileId: "t1", x: 1, y: 2, w: 300, h: LINE_SLOT_MIN_H - 1 }] },
+      { type: "lineRects", rects: [{ tileId: "t", x: 0, y: 0, w: 1, h: 20 }, { tileId: "t", x: 0, y: 30, w: 1, h: 20 }] },
+      { type: "lineRects", rects: Array.from({ length: MAX_LINE_RECTS + 1 }, (_, i) => ({ tileId: `t${i}`, x: 0, y: 0, w: 1, h: 20 })) },
+      { type: "lineRects", rects: [{ x: 0, y: 0, w: 1, h: 20 }] },
       { type: "revealed", requestId: "3", rect: null },
       { type: "framesDrawn", count: -1 },
       { type: "layout", data: "x".repeat(LAYOUT_MAX_BYTES + 1) },
@@ -80,6 +86,9 @@ describe("parsePluginMessage", () => {
   test("normalises: drops extra rect fields, truncates long error text", () => {
     const r = parsePluginMessage({ type: "surfaceRects", rects: [{ tileId: "t", x: 1, y: 2, w: 3, h: 4, evil: "x" }] });
     expect(r.ok && r.msg).toEqual({ type: "surfaceRects", rects: [{ tileId: "t", x: 1, y: 2, w: 3, h: 4 }] });
+    // A line slot is never inert: the host's Allow and Deny always take the pointer.
+    const l = parsePluginMessage({ type: "lineRects", rects: [{ tileId: "t", x: 1, y: 2, w: 3, h: 24, inert: true }] });
+    expect(l.ok && l.msg).toEqual({ type: "lineRects", rects: [{ tileId: "t", x: 1, y: 2, w: 3, h: 24 }] });
     const e = parsePluginMessage({ type: "error", message: "y".repeat(5000) });
     expect(e.ok && e.msg.type === "error" && e.msg.message.length).toBe(2000);
   });

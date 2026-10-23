@@ -296,7 +296,7 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
       return forbidden(elsewhere);
     }
     if (peer.actor.access !== "owner" && WHOLE_WORKSPACE.test(method) && place !== peer.repo) return forbidden(elsewhere);
-    if ((method === "terminal.watchActivity" || method === "tile.watchLines") && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return forbidden(notOfThis("a tile there is not"));
+    if ((method === "terminal.watchActivity" || method === "tile.watchLines" || method === "tile.readLines") && Array.isArray(params[0]) && !params[0].every((t) => peer.holds(String(t)))) return forbidden(notOfThis("a tile there is not"));
     if ((method === "link.connect" || (method === "link.disconnect" && params[1] != null)) && !peer.holds(String(params[1]))) return notHeld(String(params[1]));
     return null;
   };

@@ -10,6 +10,7 @@
  *   host.send({ type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "shell", name: "sh" }] });
  *   await host.settle();
  *   host.rects;     // the live surfaces the view asked for
+ *   host.lines;     // the line slots it asked for (1.17, a host with `lineSlots`)
  *   host.refused;   // what the app would have refused, and why: [] for a view that behaves
  *
  * What it does not do is the app's: start tiles, or refuse a kind of tile the app cannot spawn.
@@ -18,7 +19,7 @@ import type { SettingValue } from "./settings.js";
 import { connect, type ViewClient } from "./client.js";
 import {
   PORT_HANDSHAKE, PROTOCOL_VERSION, VIEW_FEATURES, parsePluginMessage, refusal,
-  type CommandKeys, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type SurfaceRect,
+  type CommandKeys, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type SurfaceRect, type LineRect,
   type ViewDevice, type ViewEventKind, type ViewFeature, type ViewPermission, type ViewRect, type ViewTheme,
 } from "./protocol.js";
 
@@ -109,6 +110,7 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
   const host = {
     received, refused, commands,
     rects: [] as SurfaceRect[],
+    lines: [] as LineRect[],
     layout: undefined as unknown,
     subscribed: { status, events: null as { kinds: ViewEventKind[]; custom: string[] } | null, activity: [] as string[], presence: false, participants: false, widgets: false, issues: false },
     pressed: [] as ({ id: string; action: unknown } | { id: string; click: true })[],
@@ -156,6 +158,11 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
       case "subscribeStatus": status.add(m.tileId); return;
       case "unsubscribeStatus": status.delete(m.tileId); return;
       case "surfaceRects": host.rects = m.rects.filter((rect) => tiles.has(rect.tileId)); return;
+      // As the app's phone and remote screens do, a host without the feature draws none.
+      case "lineRects":
+        if (!features.includes("lineSlots")) { refused.push("lineRects: UNSUPPORTED here"); return; }
+        host.lines = m.rects.filter((rect) => tiles.has(rect.tileId));
+        return;
       case "revealed": {
         const done = reveals.get(m.requestId);
         if (!done) { refused.push(`revealed: unknown requestId ${m.requestId}`); return; }

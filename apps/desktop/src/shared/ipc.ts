@@ -741,6 +741,8 @@ export interface HiveIpc {
   /** Watch the last lines of these tiles (bare ids), in place of those this window watched (none:
    *  it watches none). Answered with each one's line now, for those that showed one. */
   tileLinesWatch(tileIds: string[]): Promise<{ lines: LastLines }>;
+  /** The last lines of these tiles now, once, watching nothing: an agent's words read first. */
+  tileLinesRead(tileIds: string[]): Promise<{ lines: LastLines }>;
   /** The watched tiles whose last line changed, each with its line now ("": it shows none). */
   onTileLines(cb: (change: { lines: LastLines }) => void): () => void;
   presenceNow(): Promise<ViewPresence>;
