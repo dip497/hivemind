@@ -1,0 +1,56 @@
+[
+ {
+  "application": {
+   "name": "My Acme Tracker",
+   "type": "com.acme.tracker"
+  },
+  "globalId": "system=http://www.mycompany.com/support&id=1",
+  "id": 10000,
+  "object": {
+   "icon": {
+    "title": "Support Ticket",
+    "url16x16": "http://www.mycompany.com/support/ticket.png"
+   },
+   "status": {
+    "icon": {
+     "link": "http://www.mycompany.com/support?id=1&details=closed",
+     "title": "Case Closed",
+     "url16x16": "http://www.mycompany.com/support/resolved.png"
+    },
+    "resolved": true
+   },
+   "summary": "Customer support issue",
+   "title": "TSTSUP-111",
+   "url": "http://www.mycompany.com/support?id=1"
+  },
+  "relationship": "causes",
+  "self": "https://your-domain.atlassian.net/rest/api/issue/MKY-1/remotelink/10000"
+ },
+ {
+  "application": {
+   "name": "My Acme Tester",
+   "type": "com.acme.tester"
+  },
+  "globalId": "system=http://www.anothercompany.com/tester&id=1234",
+  "id": 10001,
+  "object": {
+   "icon": {
+    "title": "Test Case",
+    "url16x16": "http://www.anothercompany.com/tester/images/testcase.gif"
+   },
+   "status": {
+    "icon": {
+     "link": "http://www.anothercompany.com/tester/person?accountId=5b10a2844c20165700ede21g",
+     "title": "Tested by Mia Krystof",
+     "url16x16": "http://www.anothercompany.com/tester/images/person/mia.gif"
+    },
+    "resolved": false
+   },
+   "summary": "Test that the submit button saves the item",
+   "title": "Test Case #1234",
+   "url": "http://www.anothercompany.com/tester/testcase/1234"
+  },
+  "relationship": "is tested by",
+  "self": "https://your-domain.atlassian.net/rest/api/issue/MKY-1/remotelink/10001"
+ }
+]

@@ -834,6 +834,22 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/jira-fake:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/sdk:
     dependencies:
       zod:
