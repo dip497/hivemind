@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: an agent's notification shows in every view, not only the canvas, and goes away on its own there. Switching back to the canvas no longer shows every notification from the time you spent in another view at once, and app notices such as an update stack above agent notifications instead of covering them.
 - Fixed: a browser tile no longer loads its page again when you switch to another tab or view and back; a playing video keeps playing and a half-filled form keeps its text.
 ### Added
 
