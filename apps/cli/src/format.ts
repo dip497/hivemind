@@ -60,7 +60,8 @@ export function renderIssueList(items: Array<IssueSummary & { statusName?: strin
       const a = i.assignee ? c(C.cyan, ` @${i.assignee.id}`) : "";
       const gh = i.github ? c(C.dim, ` gh#${i.github}`) : "";
       const parent = i.parent ? c(C.dim, ` ↳${i.parent}`) : "";
-      return `${id}  ${state}  ${i.title}${labels}${a}${gh}${parent}`;
+      const archived = i.external?.archived ? c(C.dim, ` (archived: ${i.external.archived.reason})`) : "";
+      return `${id}  ${state}  ${i.title}${labels}${a}${gh}${parent}${archived}`;
     })
     .join("\n");
 }

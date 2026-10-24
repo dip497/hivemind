@@ -93,6 +93,20 @@ describe("with a workflow.yaml", () => {
     expect(run(ws, "statuses", "validate", "--file", dropped).json).toMatchObject({ error: { message: expect.stringContaining("issue TT-1 is in status jira:10006") } });
   }, SLOW);
 
+  test("an archived mirrored issue in a status the file lacks is a problem too: it can come back into scope", async () => {
+    const { ws, root } = await workspace(WORKFLOW);
+    const p = path.join(root, "mirror", "jira-acme-PAY", "PAY-1.md");
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, [
+      "---", "id: PAY-1", "title: Left scope", "state: done", "status: jira:10006", "parent: null", "labels: []", "assignee: null", "github: null",
+      "external:", "  provider: jira", "  source: 'jira:acme/PAY'", "  id: '1'", "  key: PAY-1", "  archived:", "    reason: left scope", "    at: '2026-10-23T00:00:00.000Z'",
+      "created: '2026-10-13T08:00:00.000Z'", "updated: '2026-10-22T09:14:00.000Z'", "---", "",
+    ].join("\n"));
+    const dropped = path.join(ws, "dropped.yaml");
+    await fs.writeFile(dropped, WORKFLOW.replace("Done, category: done", "Shipped, category: done").replace("jira:10006", "jira:20000"));
+    expect(run(ws, "statuses", "validate", "--file", dropped).json).toMatchObject({ error: { message: expect.stringContaining("issue PAY-1 is in status jira:10006") } });
+  }, SLOW);
+
   test("edit saves only a valid workflow; an invalid edit waits in the draft and the file stays", async () => {
     const { ws, root } = await workspace();
     const file = path.join(root, "workflow.yaml");

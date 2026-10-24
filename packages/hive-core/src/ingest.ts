@@ -245,6 +245,8 @@ export async function ingestRecords(root: string, source: string, records: reado
   const bad = prefixes.find((p) => !EXTERNAL_PREFIX_RE.test(p));
   if (bad) throw new HiveError("bad_request", `not a tracker key prefix: ${bad}`);
 
+  await refuseSharedFolder(root, source);
+
   const report: IngestReport = { source, dryRun: !!opts.dryRun, created: [], updated: [], unchanged: [], conflicts: [], archived: [], notes: [] };
   if (opts.dryRun) {
     await apply(root, source, provider, parsed, report, false);
@@ -268,6 +270,59 @@ export async function ingestRecords(root: string, source: string, records: reado
   );
 }
 
+/**
+ * Two source ids that differ only in punctuation (`jira:acme/PAY`, `jira:acme-PAY`) have the same
+ * folder name. A folder is one source's: the ledger and the mirrored files say whose, and another
+ * source is refused rather than mixed into it.
+ */
+async function refuseSharedFolder(root: string, source: string): Promise<void> {
+  let owner: string | undefined;
+  try {
+    const l = JSON.parse(await fs.readFile(ledgerPath(root, source), "utf8")) as { source?: unknown };
+    if (typeof l?.source === "string" && l.source !== source) owner = l.source;
+  } catch {
+    /* no ledger yet */
+  }
+  if (!owner) {
+    const dir = mirrorDir(root, source) + path.sep;
+    for (const [p, e] of await scanIssueFiles(root)) {
+      if (p.startsWith(dir) && e.external && e.external.source !== source) { owner = e.external.source; break; }
+    }
+  }
+  if (owner) {
+    throw new HiveError(
+      "slug_taken",
+      `${source} would share the folder ${path.basename(mirrorDir(root, source))} with ${owner}, which already syncs into it — name this source with an id that differs from ${owner} in more than punctuation`,
+    );
+  }
+}
+
+const SWAP_ATTEMPTS = 3;
+
+/**
+ * Put `text` in `file` (through a temp file and a rename, so no reader sees half of it), but only
+ * if `holder` — the file the issue was read from — still holds `expected`; with no holder, only if
+ * `file` doesn't exist yet. Checked after the temp file is written, right before the rename, so
+ * the window left for a write to slip in is that one step. Returns whether it was written.
+ */
+async function swapIn(file: string, text: string, holder: string | undefined, expected: string | undefined): Promise<boolean> {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.tmp`;
+  try {
+    await fs.writeFile(tmp, text, "utf8");
+    const now = await fs.readFile(holder ?? file, "utf8").catch(() => undefined);
+    if (holder ? now !== expected : now !== undefined) {
+      await fs.rm(tmp, { force: true });
+      return false;
+    }
+    await fs.rename(tmp, file);
+    return true;
+  } catch (e) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
+}
+
 async function apply(root: string, source: string, provider: string, records: IngestRecord[], report: IngestReport, write: boolean): Promise<void> {
   const dir = mirrorDir(root, source);
   const ledger = await readLedger(root, source);
@@ -283,153 +338,166 @@ async function apply(root: string, source: string, provider: string, records: In
   const now = () => new Date().toISOString();
   const who = provider;
 
-  for (const rec of records) {
+  records: for (const rec of records) {
     const extId = rec.external.id;
     const paths = byExternal.get(extId) ?? [];
     const entry = ledger.entries[extId];
 
-    // Read what is there. More than one file holds this issue only when a key move was killed
-    // between writing the new file and removing the old. Either one will do: the records replay
-    // from there to the same end, and the others are removed once the issue is written.
-    const primary = paths.find((p) => path.basename(p) === `${rec.external.key}.md`) ?? paths[0];
-    const before: Issue | null = primary ? (written.get(primary) ?? parseIssueFile(primary, await fs.readFile(primary, "utf8"))) : null;
-    const leftovers = paths.filter((p) => p !== primary);
+    // A hive write (an update, a comment) can land between reading the issue and renaming the new
+    // file over it. The rename happens only if the file still reads as it did; otherwise the record
+    // is applied again to what is there now, a few times at most.
+    for (let attempt = 0; ; attempt++) {
+      // Read what is there. More than one file holds this issue only when a key move was killed
+      // between writing the new file and removing the old. Either one will do: the records replay
+      // from there to the same end, and the others are removed once the issue is written.
+      const primary = paths.find((p) => path.basename(p) === `${rec.external.key}.md`) ?? paths[0];
+      const beforeRaw = primary && (write || !written.has(primary)) ? await fs.readFile(primary, "utf8") : undefined;
+      const before: Issue | null = primary ? (beforeRaw !== undefined ? parseIssueFile(primary, beforeRaw) : written.get(primary)!) : null;
+      const leftovers = paths.filter((p) => p !== primary);
 
-    // A record older than what was already applied changes nothing the tracker owns — not even the
-    // key — so replaying a sequence, in any order, ends where its newest records put it.
-    const highWater = [entry?.remoteUpdated, before?.external?.remoteUpdated].filter(Boolean).sort().pop();
-    const stale = !!before && !!highWater && !!rec.external.remoteUpdated && rec.external.remoteUpdated < highWater;
-    // Only a full, current record moves the key: an archive record names whatever key it last saw.
-    const key = before && (stale || !rec.title) ? before.id : rec.external.key;
-    const target = path.join(dir, `${key}.md`);
+      // A record older than what was already applied changes nothing the tracker owns — not even the
+      // key — so replaying a sequence, in any order, ends where its newest records put it.
+      const highWater = [entry?.remoteUpdated, before?.external?.remoteUpdated].filter(Boolean).sort().pop();
+      const stale = !!before && !!highWater && !!rec.external.remoteUpdated && rec.external.remoteUpdated < highWater;
+      // Only a full, current record moves the key: an archive record names whatever key it last saw.
+      const key = before && (stale || !rec.title) ? before.id : rec.external.key;
+      const target = path.join(dir, `${key}.md`);
 
-    if (!before && rec.archived) {
-      report.unchanged.push(key); // never mirrored: nothing to archive
-      continue;
-    }
-    if (!before) {
-      try {
-        await fs.stat(target);
-        // A file under this key that is not this issue: a key the tracker gave to another issue.
-        report.conflicts.push({ id: key, local: "another issue holds this key", remote: extId });
-        continue;
-      } catch {
-        /* free */
+      if (!before && rec.archived) {
+        report.unchanged.push(key); // never mirrored: nothing to archive
+        continue records;
       }
-    }
+      if (!before) {
+        try {
+          await fs.stat(target);
+          // A file under this key that is not this issue: a key the tracker gave to another issue.
+          report.conflicts.push({ id: key, local: "another issue holds this key", remote: extId });
+          continue records;
+        } catch {
+          /* free */
+        }
+      }
 
-    const at = now();
-    const issue: Issue = before
-      ? structuredClone(before)
-      : {
-          id: key, title: rec.title!, state: rec.status!.category, parent: null, labels: [], assignee: null, github: null,
-          created: at, updated: at, path: target, raw: "",
-          sections: { description: "", acceptanceCriteria: [], activity: [], extra: "" },
+      const at = now();
+      const issue: Issue = before
+        ? structuredClone(before)
+        : {
+            id: key, title: rec.title!, state: rec.status!.category, parent: null, labels: [], assignee: null, github: null,
+            created: at, updated: at, path: target, raw: "",
+            sections: { description: "", acceptanceCriteria: [], activity: [], extra: "" },
+          };
+      issue.path = target;
+      let conflict: IngestConflict | undefined;
+      let base: StatusBase = entry ? { remote: entry.remoteStatus, local: entry.localStatus } : { remote: before?.external?.remoteStatus, local: before?.external?.remoteStatus };
+      let comments = { ...(entry?.comments ?? {}) };
+      const notes: string[] = [];
+
+      // A key move: same external.id, new key. The old key stays reachable as an alias; the branch is
+      // left alone (it was named after the old key, and git knows it by that name).
+      for (const old of [before?.id, ...leftovers.map((p) => path.basename(p, ".md"))]) {
+        if (!old || old === key) continue;
+        issue.aliases = [...new Set([...(issue.aliases ?? []), old])];
+        if (old === before?.id) appendActivity(issue, who, `key changed: ${old} → ${key}`);
+      }
+      if (issue.aliases) {
+        issue.aliases = issue.aliases.filter((a) => a !== key);
+        if (issue.aliases.length === 0) delete issue.aliases;
+      }
+      issue.id = key;
+
+      if (rec.title && rec.status && !stale) {
+        const { remoteUpdated, ...ext } = rec.external;
+        issue.title = oneLine(rec.title);
+        if (rec.description !== undefined) issue.sections.description = quoteText((rec.description ?? "").trim());
+        if (rec.labels) issue.labels = rec.labels.map(oneLine);
+        issue.parent = ext.parentKey ?? null;
+        if (rec.acceptanceCriteria) issue.sections.acceptanceCriteria = mergeAcceptance(issue.sections.acceptanceCriteria, rec.acceptanceCriteria);
+        issue.external = {
+          ...ext,
+          provider,
+          source,
+          remoteStatus: rec.status.id,
+          ...(remoteUpdated ? { remoteUpdated } : {}),
+          ...(before?.external?.syncedAt ? { syncedAt: before.external.syncedAt } : {}),
+          archived: null,
         };
-    issue.path = target;
-    let conflict: IngestConflict | undefined;
-    let base: StatusBase = entry ? { remote: entry.remoteStatus, local: entry.localStatus } : { remote: before?.external?.remoteStatus, local: before?.external?.remoteStatus };
-    let comments = { ...(entry?.comments ?? {}) };
 
-    // A key move: same external.id, new key. The old key stays reachable as an alias; the branch is
-    // left alone (it was named after the old key, and git knows it by that name).
-    for (const old of [before?.id, ...leftovers.map((p) => path.basename(p, ".md"))]) {
-      if (!old || old === key) continue;
-      issue.aliases = [...new Set([...(issue.aliases ?? []), old])];
-      if (old === before?.id) appendActivity(issue, who, `key changed: ${old} → ${key}`);
-    }
-    if (issue.aliases) {
-      issue.aliases = issue.aliases.filter((a) => a !== key);
-      if (issue.aliases.length === 0) delete issue.aliases;
-    }
-    issue.id = key;
+        const local = before ? (before.status ?? before.state) : rec.status.id;
+        const s = resolveStatus({
+          remote: rec.status.id,
+          local,
+          base,
+          follows: (() => {
+            const j = findStatus(wf, local)?.jira;
+            return j && j !== "stay" ? j.follow : undefined;
+          })(),
+          remoteClosed: rec.status.category === "done" || rec.status.category === "cancelled",
+          localWork: !!(before?.branch || before?.pr),
+        });
+        if (s.take === "remote") {
+          issue.status = rec.status.id;
+          issue.state = categoryOf(wf, rec.status.id) ?? rec.status.category;
+        }
+        base = s.base;
+        if (s.note) {
+          appendActivity(issue, who, s.note);
+          notes.push(`${key}: ${s.note}`);
+        }
+        if (s.conflict) conflict = { id: key, ...s.conflict };
 
-    if (rec.title && rec.status && !stale) {
-      const { remoteUpdated, ...ext } = rec.external;
-      issue.title = oneLine(rec.title);
-      if (rec.description !== undefined) issue.sections.description = quoteText((rec.description ?? "").trim());
-      if (rec.labels) issue.labels = rec.labels.map(oneLine);
-      issue.parent = ext.parentKey ?? null;
-      if (rec.acceptanceCriteria) issue.sections.acceptanceCriteria = mergeAcceptance(issue.sections.acceptanceCriteria, rec.acceptanceCriteria);
-      issue.external = {
-        ...ext,
-        provider,
-        source,
-        remoteStatus: rec.status.id,
-        ...(remoteUpdated ? { remoteUpdated } : {}),
-        ...(before?.external?.syncedAt ? { syncedAt: before.external.syncedAt } : {}),
-        archived: null,
+        for (const c of [...(rec.comments ?? [])].sort((a, b) => (a.created < b.created ? -1 : 1))) {
+          const rowId = `${provider}-c-${c.id}`;
+          const body = quoteText(c.body.trim());
+          const h = hash(body);
+          const row = issue.sections.activity.find((a) => a.id === rowId);
+          // An edit is told by the ledger's hash, not by comparing with the row as read back.
+          if (row && comments[c.id] && comments[c.id] !== h) row.message = body;
+          if (!row) appendActivity(issue, `${oneLine(c.author)} (${provider})`, body, new Date(c.created), rowId);
+          comments[c.id] = h;
+        }
+      }
+
+      // Archived is a state, not an event: no activity row, so leaving and re-entering scope replays
+      // to the same file.
+      if (rec.archived && issue.external && issue.external.archived?.reason !== rec.archived.reason) {
+        issue.external = { ...issue.external, archived: { reason: rec.archived.reason, at } };
+      }
+
+      const changed = !before || leftovers.length > 0 || hash(projection(issue)) !== hash(projection(before));
+      if (changed) {
+        issue.updated = at;
+        issue.external = { ...issue.external!, syncedAt: at };
+        if (write) {
+          if (!(await swapIn(target, serializeIssue(issue), primary, beforeRaw))) {
+            if (attempt < SWAP_ATTEMPTS - 1) continue;
+            report.notes.push(`${key}: kept changing here while it was synced; left as it is until the next sync`);
+            continue records;
+          }
+          // Only once the issue is safe under its key: the files it moved from, and any a killed move left.
+          for (const p of [primary, ...leftovers]) if (p && p !== target) await fs.rm(p, { force: true });
+        }
+        written.set(target, issue);
+        const archivedNow = !!rec.archived && before?.external?.archived?.reason !== rec.archived.reason;
+        (archivedNow ? report.archived : before ? report.updated : report.created).push(key);
+      } else {
+        report.unchanged.push(key);
+      }
+      if (conflict) report.conflicts.push(conflict);
+      report.notes.push(...notes);
+      byExternal.set(extId, [target]);
+
+      ledger.entries[extId] = {
+        id: key,
+        ...((issue.external?.remoteUpdated ?? highWater) ? { remoteUpdated: (issue.external?.remoteUpdated ?? highWater)! } : {}),
+        remoteHash: hash(rec),
+        localHash: hash(trackerFields(issue)),
+        ...(base.remote !== undefined ? { remoteStatus: base.remote } : {}),
+        ...(base.local !== undefined ? { localStatus: base.local } : {}),
+        ...(conflict ? { conflict: { ...conflict, since: entry?.conflict?.since ?? at } } : {}),
+        ...(Object.keys(comments).length ? { comments } : {}),
       };
-
-      const local = before ? (before.status ?? before.state) : rec.status.id;
-      const s = resolveStatus({
-        remote: rec.status.id,
-        local,
-        base,
-        follows: (() => {
-          const j = findStatus(wf, local)?.jira;
-          return j && j !== "stay" ? j.follow : undefined;
-        })(),
-        remoteClosed: rec.status.category === "done" || rec.status.category === "cancelled",
-        localWork: !!(before?.branch || before?.pr),
-      });
-      if (s.take === "remote") {
-        issue.status = rec.status.id;
-        issue.state = categoryOf(wf, rec.status.id) ?? rec.status.category;
-      }
-      base = s.base;
-      if (s.note) {
-        appendActivity(issue, who, s.note);
-        report.notes.push(`${key}: ${s.note}`);
-      }
-      if (s.conflict) conflict = { id: key, ...s.conflict };
-
-      for (const c of [...(rec.comments ?? [])].sort((a, b) => (a.created < b.created ? -1 : 1))) {
-        const rowId = `${provider}-c-${c.id}`;
-        const body = quoteText(c.body.trim());
-        const h = hash(body);
-        const row = issue.sections.activity.find((a) => a.id === rowId);
-        // An edit is told by the ledger's hash, not by comparing with the row as read back.
-        if (row && comments[c.id] && comments[c.id] !== h) row.message = body;
-        if (!row) appendActivity(issue, `${oneLine(c.author)} (${provider})`, body, new Date(c.created), rowId);
-        comments[c.id] = h;
-      }
+      break;
     }
-
-    // Archived is a state, not an event: no activity row, so leaving and re-entering scope replays
-    // to the same file.
-    if (rec.archived && issue.external && issue.external.archived?.reason !== rec.archived.reason) {
-      issue.external = { ...issue.external, archived: { reason: rec.archived.reason, at } };
-    }
-
-    const changed = !before || leftovers.length > 0 || hash(projection(issue)) !== hash(projection(before));
-    if (changed) {
-      issue.updated = at;
-      issue.external = { ...issue.external!, syncedAt: at };
-      written.set(target, issue);
-      if (write) {
-        await writeFileAtomic(target, serializeIssue(issue));
-        // Only once the issue is safe under its key: the files it moved from, and any a killed move left.
-        for (const p of [primary, ...leftovers]) if (p && p !== target) await fs.rm(p, { force: true });
-      }
-      const archivedNow = !!rec.archived && before?.external?.archived?.reason !== rec.archived.reason;
-      (archivedNow ? report.archived : before ? report.updated : report.created).push(key);
-    } else {
-      report.unchanged.push(key);
-    }
-    if (conflict) report.conflicts.push(conflict);
-    byExternal.set(extId, [target]);
-
-    ledger.entries[extId] = {
-      id: key,
-      ...((issue.external?.remoteUpdated ?? highWater) ? { remoteUpdated: (issue.external?.remoteUpdated ?? highWater)! } : {}),
-      remoteHash: hash(rec),
-      localHash: hash(trackerFields(issue)),
-      ...(base.remote !== undefined ? { remoteStatus: base.remote } : {}),
-      ...(base.local !== undefined ? { localStatus: base.local } : {}),
-      ...(conflict ? { conflict: { ...conflict, since: entry?.conflict?.since ?? at } } : {}),
-      ...(Object.keys(comments).length ? { comments } : {}),
-    };
   }
   if (write) await writeFileAtomic(ledgerPath(root, source), JSON.stringify(ledger, null, 2) + "\n");
 }

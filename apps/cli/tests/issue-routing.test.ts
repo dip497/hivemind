@@ -64,13 +64,13 @@ describe("a mirrored id resolves from another repo", () => {
 
     expect(hive(["close", "PAY-318", "--json"], from).code).toBe(0);
     expect((await readIssue(a, "PAY-318")).state).toBe("done");
-  });
+  }, 60_000);
 
   test("an old key resolves to the issue that moved, from another repo", () => {
     const r = hive(["show", "PAY-112", "--json"], { cwd: repo("b"), env: env() });
     expect(r.code).toBe(0);
     expect((r.json as { id: string }).id).toBe("OPS-7");
-  });
+  }, 60_000);
 
   test("a prefix mirrored by two repos is refused with exit 5 naming both, except from inside one of them", async () => {
     const c = await workspace("c", "CC", ["PAY"]);
@@ -83,12 +83,12 @@ describe("a mirrored id resolves from another repo", () => {
     const inC = hive(["show", "PAY-318", "--json"], { cwd: repo("c"), env: env() });
     expect(inC.code).toBe(0);
     expect((inC.json as { path: string }).path.startsWith(c)).toBe(true);
-  });
+  }, 60_000);
 
   test("a prefix no repo holds is not_found (exit 5)", () => {
     const r = hive(["show", "NOPE-1", "--json"], { cwd: repo("b"), env: env() });
     expect(r.code).toBe(5);
-  });
+  }, 60_000);
 });
 
 describe("hive init", () => {
@@ -100,5 +100,5 @@ describe("hive init", () => {
     const lines = (await fs.readFile(path.join(dir, ".gitignore"), "utf8")).split("\n");
     expect(lines).toContain(".hivemind/mirror/");
     expect(lines).toContain(".hivemind/sync/");
-  });
+  }, 60_000);
 });

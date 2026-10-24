@@ -44,6 +44,7 @@ export const ingestCmd = defineCommand({
       return ok(ctx, report, () => render(report));
     } catch (e) {
       if (e instanceof SyncLockedError) return err(ctx, "sync_locked", e.message, undefined, "wait for that sync to finish; a lock whose process is gone is taken over");
+      if (e instanceof HiveError && e.code === "slug_taken") return err(ctx, e.code, e.message, undefined, "use another source id, e.g. add the site's name: jira:acme-cloud/PAY");
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "ingest_failed";
       return err(ctx, code, msg);

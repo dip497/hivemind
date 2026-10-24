@@ -57,7 +57,8 @@ async function problemsWith(root: string, text: string): Promise<{ workflow?: Wo
   const { workflow, problems } = parseWorkflow(text);
   if (!workflow) return { problems };
   const ids = new Set(workflow.statuses.map((s) => s.id));
-  for (const i of await listIssues(root)) {
+  // archived mirrored issues too: one can come back into scope in the status it has
+  for (const i of await listIssues(root, { archived: true })) {
     if (i.status && !ids.has(i.status)) problems.push(`issue ${i.id} is in status ${i.status}, which the workflow does not have (keep it, marked retired: true)`);
   }
   return problems.length ? { problems } : { workflow, problems };
