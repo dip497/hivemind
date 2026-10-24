@@ -157,7 +157,7 @@ test("the views here that say they work on a phone are offered with the page to 
   const sdk = await file("priya-board", "__sdk.js");
   assert.deepEqual([sdk.text, sdk.type], [SDK, "text/javascript; charset=utf-8"]);
   const entry = await file("priya-queue", "__entry.html");
-  assert.ok(entry.text.includes(`<script type="module" nonce="${entry.nonce}" src="./view.js"></script>`), entry.text);
+  assert.ok(entry.text.includes(`<script type="module" src="./view.js"></script>`), entry.text);
   assert.equal(((await c.call("view.file", ["priya-board", "whole.bin"], phone)) as { data: string }).data.length, Math.ceil((4 * 1024 * 1024) / 3) * 4);
   for (const [view, at] of [["priya-board", "../desk-only/index.html"], ["priya-board", "leak.txt"], ["priya-board", "big.bin"], ["priya-board", "big.html"], ["priya-board", "gone.js"], ["priya-board", "__entry.html"], ["desk-only", "index.html"], ["bad", "index.html"]]) {
     assert.equal(await code(c.call("view.file", [view, at], phone)), view === "bad" ? "NOT_FOUND" : "BAD_REQUEST", `${view} ${at}`);

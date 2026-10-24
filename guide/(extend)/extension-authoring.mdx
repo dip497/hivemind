@@ -205,6 +205,7 @@ Selection and focus need none.
 | `permissions` | what it may do (above) |
 | `"settings"` | fields the app draws on the view's Settings page: see [Plugin settings](/plugin-settings) |
 | `"tokens"` | colours of its own that follow the theme and the person can change: see [A view's own colours](/plugin-settings#a-views-own-colours) |
+| `"files"` | `true` when it `fetch`es its own files; without it every `fetch` is refused |
 | `"commands"` | what an agent can run in it (`hm.onCommand(name, handler)`), optionally with `"keys": "mod+alt+k"` |
 | `"toolbar"` | `"top"`, `"bottom"` (the default), `"hidden"` or `"off"` |
 | `"widgets": "left"` | start widget cards down the left edge over the view instead of the right, for a view that keeps its own panels on the right; a card the person moved stays put |
@@ -218,7 +219,8 @@ Selection and focus need none.
 
 The page runs on its own `hm-view://<id>` origin with a strict content policy: no `window.hive`,
 no Node, no network, no inline scripts, and no notifications, camera, microphone or location.
-It may `fetch` its own files, from its own origin: `fetch("./levels.json")` works, and another
+It loads its scripts, styles, pictures and fonts from its own files only, and may `fetch` them
+when its `hivemind-view.json` says `"files": true`: `fetch("./levels.json")` works, and another
 view's files or any other address are refused.
 Malformed messages, floods or runaway CPU switch it off for the session and return you to the
 canvas.
@@ -226,7 +228,8 @@ canvas.
 - Name your files relatively (`./main.js`, `fetch("./data.json")`): in a browser tab the app
   serves views under a path.
 - Fetching its own files needs Hivemind 2026.10.6 or newer, and works in the app and a browser
-  tab. On the phone page it is refused: bundle what the phone must show.
+  tab. Check `hm.supports("ownFiles")` before you fetch: on the phone page, and in a window that
+  shows another computer's view, it is refused, so bundle what those must show.
 - Draw on change, and stop work while `document.hidden`.
 - A form's `submit` event fires, in the app and on the phone page, and the form goes nowhere:
   handle the event and call `preventDefault()`.

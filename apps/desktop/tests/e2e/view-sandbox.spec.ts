@@ -1,6 +1,6 @@
 // What a view's frame may do: its own form submits (the frame allows forms, and its CSP still sends
-// them nowhere), it fetches its own files and no other view's, and it is refused what the app's
-// permission handlers keep from views, here notifications.
+// them nowhere), it fetches and loads its own files and no other view's, and it is refused what the
+// app's permission handlers keep from views, here notifications.
 import { test, expect, _electron as electron, type ElectronApplication, type Page, type Frame } from "@playwright/test";
 import fs from "node:fs";
 import os from "node:os";
@@ -72,4 +72,19 @@ test("a view fetches its own files, and is refused another view's and the networ
   expect(await read("./missing.json")).toBe("status 404");
   expect(await read("hm-view://sandbox-neighbour/data.json")).toBe("refused");
   expect(await read("https://example.com/")).toBe("refused");
+  // An encoded step out of its folder is its own handler's to answer, with a status, never the neighbour's file.
+  expect(await read("./..%2fsandbox-neighbour%2fdata.json")).toMatch(/^status 4\d\d$/);
+  expect(await read("./..%2f..%2fsandbox-neighbour%2fdata.json")).toMatch(/^status 4\d\d$/);
+  // It said it fetches (`"files": true`), and the app says it may.
+  expect(await view.evaluate(() => (window as unknown as { features: () => string[] }).features())).toContain("ownFiles");
+});
+
+test("a view loads its own pictures, stylesheets and modules, and is refused another view's", async () => {
+  const load = (kind: string, url: string) => view.evaluate(([k, u]) => (window as unknown as { load: (k: string, u: string) => Promise<string> }).load(k!, u!), [kind, url]);
+  expect(await load("image", "./pic.png")).toBe("loaded");
+  expect(await load("style", "./style.css")).toBe("loaded");
+  expect(await load("module", "./mod.js")).toBe("sandbox-probe");
+  expect(await load("image", "hm-view://sandbox-neighbour/pic.png")).toBe("refused");
+  expect(await load("style", "hm-view://sandbox-neighbour/style.css")).toBe("refused");
+  expect(await load("module", "hm-view://sandbox-neighbour/mod.js")).toBe("refused");
 });

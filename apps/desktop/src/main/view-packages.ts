@@ -19,7 +19,7 @@ import { handle, handleEffect } from "./app-ipc.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listInstalledViews, readViewPackage, type InstalledView } from "@hivemind/core/views";
 import { installPackage, removePlugin } from "@hivemind/core/package-install";
-import { VIEW_SCHEME, entryUrl, newNonce, ownFiles, pluginCsp, serveViewFile } from "@hivemind/core/view-files";
+import { VIEW_SCHEME, entryUrl, newNonce, ownFiles, pluginCsp, serveViewFile, type ViewAddress } from "@hivemind/core/view-files";
 import { viewHost } from "@hivemind/view-sdk/manifest";
 import type { ViewFile, ViewListing } from "@hivemind/workspace-api/views";
 import { elsewhere } from "./shared-workspaces.js";
@@ -40,7 +40,7 @@ async function remoteCall<T>(method: string, params: unknown[]): Promise<T> {
 
 /** Origin host → the package behind it, from the last scan. Only these are served. The host is
  *  not always the id (`@owner/name` is served as `owner--name`), so the id travels with it. */
-const served = new Map<string, { id: string; dir?: string; repo?: string }>();
+const served = new Map<string, { id: string; dir?: string; repo?: string; own: ViewAddress }>();
 
 /** The views that come with the app, built beside its main bundle (scripts/build-views.mjs). */
 export const appViewsDir = (): string => fileURLToPath(new URL("../views", import.meta.url));
@@ -59,14 +59,14 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
         const page = new URL(entryUrl(v.id, v.entry));
         page.searchParams.set("workspace", remote);
         const url = page.toString();
-        served.set(viewHost(v.id), { id: v.id, repo: remote });
+        served.set(viewHost(v.id), { id: v.id, repo: remote, own: { at: ownFiles(v.id), fetch: v.manifest.files === true } });
         hosted.push({ id: v.id, dir: "", source: "host", manifest: v.manifest, ...(v.icon ? { icon: v.icon } : {}), error: null, url });
       }
     } catch { /* a disconnected host leaves the built-in and local views available */ }
   }
   const local = await Promise.all(views.filter((v) => !hosted.some((h) => h.id === v.id)).map(async (v) => {
     if (v.error || !v.manifest) return { ...v, url: null };
-    served.set(viewHost(v.id), { id: v.id, dir: v.dir });
+    served.set(viewHost(v.id), { id: v.id, dir: v.dir, own: { at: ownFiles(v.id), fetch: v.manifest.files === true } });
     const entry = await stat(path.join(v.dir, v.manifest.entry)).catch(() => null);
     const revision = entry ? `${entry.mtimeMs}-${entry.ctimeMs}-${entry.size}` : "missing";
     const url = new URL(entryUrl(v.id, v.manifest.entry));
@@ -82,7 +82,7 @@ export function registerViewScheme(): void {
   protocol.registerSchemesAsPrivileged([
     // corsEnabled: a view's page is sandboxed to an opaque origin, and loading a module
     // script is always a CORS request — so without it Chromium refuses the view's own code
-    // and it never starts. The boundary is the sandbox + CSP (connect-src: its own origin only), not this.
+    // and it never starts. The boundary is the sandbox + CSP (its own origin only), not this.
     { scheme: VIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
   ]);
 }
@@ -109,14 +109,14 @@ export function handleViewProtocol(): void {
         const nonce = /'nonce-([\w+/=-]+)'/.exec(file.csp)?.[1];
         if (!nonce) return new Response("bad view file", { status: 400 });
         return new Response(Buffer.from(file.data, "base64"), { status: 200, headers: {
-          "Content-Security-Policy": pluginCsp(nonce, ownFiles(source.id)), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+          "Content-Security-Policy": pluginCsp(nonce, source.own), "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
           "Access-Control-Allow-Origin": "*", "Content-Type": file.type,
         } });
       }
       const dir = source.dir;
       if (!dir) return new Response("unknown view", { status: 404 });
-      // A view may fetch its own files, from its own origin: the CSP names no other.
-      const file = await serveViewFile(dir, rel, { js: u.searchParams.get("js"), sdk: viewSdk, files: ownFiles(source.id) });
+      // A view loads from its own origin and no other view's, and fetches there when it says it does.
+      const file = await serveViewFile(dir, rel, { js: u.searchParams.get("js"), sdk: viewSdk, own: source.own });
       if (file.status !== 200) return new Response(file.status === 400 ? "bad entry" : file.status === 403 ? "forbidden" : "not found", { status: file.status });
       // The files are the view's published code; who may run them is the CSP's call.
       const headers = { "Content-Security-Policy": file.csp, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" };

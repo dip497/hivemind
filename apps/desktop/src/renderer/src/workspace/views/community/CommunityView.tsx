@@ -46,7 +46,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const { link, ready, send, dialogs } = usePluginLink({
       pluginId: pkg.id, record: { kind: "view", id: pkg.id }, name: manifest.name, capabilities,
       fields: viewSettingFields(manifest), tokens: manifest.tokens, layoutId: pkg.id, personal: manifest.layout === "personal", props: { model, commands }, root: rootRef,
-      onSurfaceRects: setRects, onLineRects: setLines, commands: manifest.commands, instance: { id: pkg.id, label: manifest.name },
+      onSurfaceRects: setRects, onLineRects: setLines, ownFiles: manifest.files === true, commands: manifest.commands, instance: { id: pkg.id, label: manifest.name },
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
         disableCommunityView(pkg.id, reason);

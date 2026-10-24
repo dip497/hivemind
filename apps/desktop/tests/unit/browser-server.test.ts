@@ -17,6 +17,8 @@ fs.writeFileSync(path.join(dir, "secret.txt"), "not served");
 
 const calls: Array<{ ch: string; args: unknown[] }> = [];
 const asked: Array<{ url: string; range: string | null }> = [];
+/** A view's policy as the app's handler writes it: its own address in each list that names one. */
+const cspOf = (own: string) => `default-src 'none'; script-src ${own} 'nonce-n'; img-src ${own} data:; connect-src ${own}`;
 const server = await serveBrowser({
   port: 0,
   // A name as a browser reaches it: `tailscale serve --https=8444` gives one with its port.
@@ -37,7 +39,7 @@ const server = await serveBrowser({
   },
   schemes: (scheme) => scheme === "hm-plugin" || scheme === "hm-view" ? (req: Request) => {
     asked.push({ url: req.url, range: req.headers.get("range") });
-    return new Response(`served ${req.url}`, { headers: { "content-type": "text/javascript", "content-security-policy": `default-src 'none'; script-src 'self'; connect-src ${new URL(req.url).protocol}//${new URL(req.url).host}` } });
+    return new Response(`served ${req.url}`, { headers: { "content-type": "text/javascript", "content-security-policy": cspOf(`${new URL(req.url).protocol}//${new URL(req.url).host}`) } });
   } : undefined,
   onTab: () => {},
   onError: () => {},
@@ -210,8 +212,14 @@ test("a view's files need the views key, which a sandboxed frame can carry, and 
   const file = await request({ path: `/hm-view/${key}/windows/index.html?r=1`, headers: { origin: "null" } });
   assert.equal(file.status, 200);
   assert.equal(file.body, "served hm-view://windows/index.html?r=1");
-  // Its policy lets it fetch its own files, at its own path on this server: not 'self', which is every view's.
-  assert.equal(file.headers["content-security-policy"], `default-src 'none'; script-src 'self'; connect-src http://${here}/hm-view/${key}/windows/`);
+  // Its policy names its own files, at its own path on this server, in every list: not 'self', which is every view's.
+  assert.equal(file.headers["content-security-policy"], cspOf(`http://${here}/hm-view/${key}/windows/`));
+  // An encoded step out of its folder stays a request to its own view's handler, which refuses it.
+  asked.length = 0;
+  await request({ path: `/hm-view/${key}/windows/..%2fother%2fx`, headers: { origin: "null" } });
+  await request({ path: `/hm-view/${key}/windows/..%2f..%2fother%2fx`, headers: { origin: "null" } });
+  assert.deepEqual(asked.map((a) => new URL(a.url).host), ["windows", "windows"]);
+  assert.ok(asked.every((a) => a.url.startsWith("hm-view://windows/")), JSON.stringify(asked));
 
   const asCookie = `hive-${server.port}=${key}`;
   assert.equal((await request({ headers: { cookie: asCookie } })).status, 401);

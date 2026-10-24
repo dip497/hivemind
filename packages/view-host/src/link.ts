@@ -139,6 +139,10 @@ export interface LinkDeps {
   /** Where the view reserves room for tiles' last lines, which the host draws there, said to it as
    *  the feature `lineSlots` (1.17); none: this host draws none (a phone's, a remote screen's). */
   onLineRects?: (rects: LineRect[]) => void;
+  /** The view may `fetch` its own files here, said to it as the feature `ownFiles` (1.17): its
+   *  manifest says `"files": true` and this screen's policy names its files (the app's window and a
+   *  browser tab; not a phone's, nor a screen whose host serves it). */
+  ownFiles?: boolean;
   onLayout: (data: unknown) => void;
   onFramesDrawn: (count: number) => void;
   onError: (message: string) => void;
@@ -210,6 +214,7 @@ export class CommunityLink {
     if (deps.commands.wakeAgent && deps.commands.sleepAgent) this.features.push("sleep");
     if (deps.commands.openHostMenu) this.features.push("hostMenu");
     if (deps.onLineRects) this.features.push("lineSlots");
+    if (deps.ownFiles) this.features.push("ownFiles");
     this.scope = {
       capabilities: deps.capabilities, features: this.features,
       hasTile: (id) => deps.hasTile(id), hasFrame: (id) => deps.hasFrame(id), announced: (id) => this.announced.has(id),

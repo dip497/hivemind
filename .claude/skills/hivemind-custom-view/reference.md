@@ -37,7 +37,8 @@ adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone)
 `tokens` (`theme.tokens`: the view's own colours from its manifest's `tokens`, resolved, set as
 `--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback); 1.17 adds `lineSlots`
 (the host draws each tile's last line in the rects `lineRects` reserves; the computer's windows,
-not the phone). A
+not the phone) and `ownFiles` (the view may `fetch` its own files: it says `"files": true`, and the
+screen is the app's window or a browser tab, not the phone nor another computer's view). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
@@ -115,6 +116,7 @@ is not something a view chooses. `spawnAgent` takes a catalog id, never a comman
   "widgets": "left",        // optional: start the app's widget cards down the left edge (default: right)
   "settings": [],           // optional: fields the app draws (boolean, number/slider, text, choice, color, multi, list; section, showIf) — guide /plugin-settings
   "tokens": [],             // optional: your own colours, {id, label, dark, light}, "#rrggbb" or "=accent"; read var(--hm-token-<id>)
+  "files": true,            // optional: it fetch()es its own files (Hivemind 2026.10.6+); without it connect-src is 'none'
   "author": "Ada",          // optional provenance, shown where the user decides to trust you
   "homepage": "https://…",  // https only — the host opens it in the user's browser
   "license": "MIT"          // a short identifier, not a sentence
@@ -176,15 +178,21 @@ are confined to the package dirs from the last scan, and every response carries:
 
 ```
 default-src 'none';
-script-src hm-view: 'nonce-…' 'wasm-unsafe-eval';
-style-src hm-view: 'unsafe-inline';
-img-src hm-view: data: blob:;
-font-src hm-view: data:;
-media-src hm-view: data: blob:;
+script-src hm-view://<host> 'nonce-…' 'wasm-unsafe-eval';
+style-src hm-view://<host> 'unsafe-inline';
+img-src hm-view://<host> data: blob:;
+font-src hm-view://<host> data:;
+media-src hm-view://<host> data: blob:;
 worker-src blob:;
 connect-src hm-view://<host>; frame-src 'none'; object-src 'none';
 form-action 'none'; base-uri 'none';
 ```
+
+`connect-src` is `'none'` unless the manifest says `"files": true`. In a browser tab every
+`hm-view://<host>` above is the view's own path on the tab's server. On a phone, which serves one
+view per origin, the lists say `'self' hm-view:` and `connect-src 'none'`. The nonce is on the
+SDK's import map only, never on a module script: a module's imports inherit its nonce, and would
+then reach any address.
 
 Containment is checked on the **resolved** path with symlinks followed: a link inside a
 downloaded package pointing outside it is a 403, not a read.

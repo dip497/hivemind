@@ -69,6 +69,8 @@ export interface PluginLinkOptions {
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
   /** Where it reserves room for tiles' last lines, which the host draws (1.17); absent: it draws none. */
   onLineRects?: (rects: LineRect[]) => void;
+  /** It may fetch its own files (a view whose manifest says `"files": true`), feature `ownFiles`. */
+  ownFiles?: boolean;
   /** What an agent may run in it while it runs (its manifest's `commands`), and which copy this is. */
   commands?: readonly PluginCommand[];
   instance?: { id: string; label: string };
@@ -183,6 +185,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     onReady: () => setReady(true),
     ...(o.onSurfaceRects ? { onSurfaceRects: (r: SurfaceRect[]) => enqueue(() => optsRef.current.onSurfaceRects?.(r)) } : {}),
     ...(o.onLineRects ? { onLineRects: (r: LineRect[]) => enqueue(() => optsRef.current.onLineRects?.(r)) } : {}),
+    ...(o.ownFiles ? { ownFiles: true } : {}),
     onLayout: (data) => saveViewLayout(layoutSpec(optsRef.current.layoutId, optsRef.current.personal), layoutKeyRef.current, data),
     onFramesDrawn: () => { /* read from stats by the perf harness */ },
     onError: (message) => console.warn(`[hivemind] plugin "${o.pluginId}": ${message}`),

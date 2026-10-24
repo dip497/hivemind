@@ -292,7 +292,8 @@ Concretely:
 
 | You wrote | What happens |
 | --- | --- |
-| `fetch("./data.json")`, XHR of your own files | works from Hivemind 2026.10.6, in the app and a browser tab: `connect-src` names your own origin (`hm-view://<host>`, or your path in a tab) and nothing else. Refused on the phone page; bundle what the phone shows |
+| `fetch("./data.json")`, XHR of your own files | declare `"files": true` in `hivemind-view.json` and check `hm.supports("ownFiles")`. Works from Hivemind 2026.10.6, in the app and a browser tab: `connect-src` names your own origin (`hm-view://<host>`, or your path in a tab) and nothing else. Refused on the phone page and without the declaration; bundle what the phone shows |
+| `<img>`, `<link rel=stylesheet>`, `import()` of another view's files | refused: every source list names your own origin only |
 | `fetch()` of anything else / WebSocket | refused, another view's files too. There is no network, by design |
 | `<link>` to Google Fonts, a CDN script | loads nothing, no error worth reading |
 | `<iframe>` | `frame-src 'none'` |

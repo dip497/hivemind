@@ -46,16 +46,33 @@ test("a view reads its own files only: another view's folder beside it, even one
   }
 });
 
-test("a view may fetch from its own address and nowhere else: not another view's, not the scheme, not 'self' in a tab", () => {
-  const connect = (csp: string) => csp.split("; ").find((d) => d.startsWith("connect-src "));
+test("a view loads only from its own address, fetches there only when it says so, and nowhere else: not another view's, not the scheme, not 'self' in a tab", () => {
+  const dir = (csp: string, name: string) => csp.split("; ").find((d) => d.startsWith(`${name} `));
+  const SOURCES = ["script-src", "style-src", "img-src", "font-src", "media-src"];
   expect(ownFiles("@ada/graph")).toBe("hm-view://ada--graph");
-  expect(connect(pluginCsp("n", ownFiles("@ada/graph")))).toBe("connect-src hm-view://ada--graph");
-  // Without an address, as on a phone, it fetches nothing.
-  expect(connect(pluginCsp("n"))).toBe("connect-src 'none'");
-  // A browser tab serves every view under one server: the view's own path there, and only connect-src changes.
-  const tab = withOwnFiles(pluginCsp("n", ownFiles("orbit")), "https://box:7000/hm-view/key/orbit/");
-  expect(connect(tab)).toBe("connect-src https://box:7000/hm-view/key/orbit/");
-  expect(tab.replace(connect(tab)!, "")).toBe(pluginCsp("n", ownFiles("orbit")).replace("connect-src hm-view://orbit", ""));
+  const fetches = pluginCsp("n", { at: ownFiles("@ada/graph"), fetch: true });
+  expect(dir(fetches, "connect-src")).toBe("connect-src hm-view://ada--graph");
+  // Every source list names the view's own address, not the whole scheme or 'self'.
+  expect(dir(fetches, "script-src")).toBe("script-src hm-view://ada--graph 'nonce-n' 'wasm-unsafe-eval'");
+  expect(dir(fetches, "style-src")).toBe("style-src hm-view://ada--graph 'unsafe-inline'");
+  expect(dir(fetches, "img-src")).toBe("img-src hm-view://ada--graph data: blob:");
+  expect(dir(fetches, "font-src")).toBe("font-src hm-view://ada--graph data:");
+  expect(dir(fetches, "media-src")).toBe("media-src hm-view://ada--graph data: blob:");
+  // A view that does not say `"files": true` loads its own files but fetches nothing.
+  const quiet = pluginCsp("n", { at: ownFiles("@ada/graph"), fetch: false });
+  expect(dir(quiet, "connect-src")).toBe("connect-src 'none'");
+  expect(dir(quiet, "img-src")).toBe("img-src hm-view://ada--graph data: blob:");
+  // Without an address, as on a phone, it fetches nothing and loads from its own origin.
+  expect(dir(pluginCsp("n"), "connect-src")).toBe("connect-src 'none'");
+  expect(dir(pluginCsp("n"), "img-src")).toBe("img-src 'self' hm-view: data: blob:");
+  // A browser tab serves every view under one server: the view's own path there, in every list.
+  const at = "https://box:7000/hm-view/key/orbit/";
+  const tab = withOwnFiles(pluginCsp("n", { at: "hm-view://orbit", fetch: true }), at);
+  expect(dir(tab, "connect-src")).toBe(`connect-src ${at}`);
+  for (const name of SOURCES) expect(dir(tab, name)).toStartWith(`${name} ${at} `);
+  expect(tab).not.toContain("hm-view://");
+  expect(tab).not.toContain("'self'");
+  expect(dir(withOwnFiles(pluginCsp("n", { at: "hm-view://orbit", fetch: false }), at), "connect-src")).toBe("connect-src 'none'");
 });
 
 test("a file's type is its extension's, and anything else is bytes", () => {
@@ -67,14 +84,16 @@ test("the bootstrap page carries the response nonce, is laid out at its screen's
   const nonce = newNonce();
   expect(nonce).toMatch(/^[A-Za-z0-9+/]+=*$/);
   expect(nonce).not.toBe(newNonce());
-  const html = entryPage("dist/view.js", nonce)!;
-  expect(html).toMatch(new RegExp(`<script type="module" nonce="${escape(nonce)}" src="\\./dist/view\\.js"></script>`));
+  const html = entryPage("dist/view.js")!;
+  // No nonce on the module: its imports would inherit it and reach any address.
+  expect(html).toContain(`<script type="module" src="./dist/view.js"></script>`);
+  expect(html).not.toContain("nonce");
   expect(html).toContain(`<meta name="viewport" content="width=device-width, initial-scale=1">`);
   // A body an Android web view gives no height must not hide the view's content.
   expect(html).not.toContain("overflow:hidden");
-  expect(entryPage("../x.js", nonce)).toBeNull();
-  expect(entryPage("/abs/x.js", nonce)).toBeNull();
-  expect(entryPage("x.html", nonce)).toBeNull();
+  expect(entryPage("../x.js")).toBeNull();
+  expect(entryPage("/abs/x.js")).toBeNull();
+  expect(entryPage("x.html")).toBeNull();
   const csp = pluginCsp(nonce);
   // The view's own origin (a phone's web view) and the app's scheme (its sandboxed iframe), and nothing else.
   expect(csp).toMatch(new RegExp(`script-src 'self' hm-view: 'nonce-${escape(nonce)}' 'wasm-unsafe-eval'`));
@@ -121,7 +140,7 @@ test("each request is served as on every screen: the SDK, the page running the e
   const nonce = nonceOf(entry.csp);
   expect(entry.csp).toBe(pluginCsp(nonce));
   expect(entry.text).toContain(`<script type="importmap" nonce="${nonce}">`);
-  expect(entry.text).toContain(`<script type="module" nonce="${nonce}" src="./view.js"></script>`);
+  expect(entry.text).toContain(`<script type="module" src="./view.js"></script>`);
   expect(await serve("__entry.html", null)).toEqual({ status: 400 });
   expect(await serve("__entry.html", "../x.js")).toEqual({ status: 400 });
 
@@ -137,9 +156,10 @@ test("each request is served as on every screen: the SDK, the page running the e
 
   expect(await serve("assets/a.png")).toMatchObject({ status: 200, type: "image/png", file: fs.realpathSync(path.join(dir, "assets", "a.png")) });
   // Every response names where the view may fetch, when the screen gives it one.
-  const own = await serveViewFile(dir, "assets/a.png", { js: null, sdk, files: ownFiles("orbit") });
+  const own = await serveViewFile(dir, "assets/a.png", { js: null, sdk, own: { at: ownFiles("orbit"), fetch: true } });
   if (own.status !== 200) throw new Error(`the file: ${own.status}`);
-  expect(own.csp).toBe(pluginCsp(nonceOf(own.csp), ownFiles("orbit")));
+  expect(own.csp).toContain("; connect-src hm-view://orbit;");
+  expect(own.csp).toContain("; img-src hm-view://orbit data: blob:;");
   expect(await serve("leak.txt")).toEqual({ status: 403 });
   expect(await serve("missing.js")).toEqual({ status: 404 });
 });

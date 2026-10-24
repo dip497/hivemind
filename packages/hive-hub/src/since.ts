@@ -13,6 +13,8 @@ export const SINCE = {
   "view.widgets": "2026.10.6",
   /** A view's own colours (view protocol 1.16). */
   "view.tokens": "2026.10.6",
+  /** A view that fetches its own files (`"files": true`, view protocol 1.17, feature `ownFiles`). */
+  "view.files": "2026.10.6",
   /** A package's `themes` member. */
   "package.themes": "2026.10.6",
 } as const satisfies Record<string, string>;

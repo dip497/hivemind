@@ -61,6 +61,12 @@ describe("what a view asks of the app around it", () => {
     expect(edge("top")).toEqual(['"widgets" must be "left" or "right"']);
     expect(edge(undefined)).toBeUndefined();
   });
+  it("keeps whether it fetches its own files, and refuses anything but true or false", () => {
+    const files = (v: unknown) => { const r = validateViewManifest({ ...base, files: v }); return r.ok ? r.manifest.files : r.errors; };
+    expect([true, false].map(files)).toEqual([true, false]);
+    expect(files("yes")).toEqual(['"files" must be true or false']);
+    expect(files(undefined)).toBeUndefined();
+  });
   it("refuses a rail or a layout it cannot mean", () => {
     expect(read({ layers: "left" })).toEqual(['"layers" must be true or false']);
     expect(read({ layout: "mine" })).toEqual(['"layout" must be "shared" or "personal"']);
