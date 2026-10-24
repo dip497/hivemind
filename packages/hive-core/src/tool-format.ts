@@ -131,7 +131,8 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
     };
   }
   // A tool switched off is stored as its key, false, beside the settings: one name, one meaning.
-  const settings = parseSettingFields(raw.settings);
+  // A tool plugin's secrets are read by its service alone.
+  const settings = parseSettingFields(raw.settings, { secrets: true });
   const clash = settings.find((f) => tools.some((t) => t.key === f.id));
   if (clash) throw new Error(`setting "${clash.id}" has the name of one of its tools`);
   const apiVersion = typeof raw.apiVersion === "number" ? raw.apiVersion : 0;

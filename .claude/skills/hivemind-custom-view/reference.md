@@ -33,7 +33,11 @@ one wins.
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
 `history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
 `participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run); 1.15
-adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone). A
+adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone); 1.16 adds
+`workflow` (`hm.issues.workflow()` answers the workspace's statuses, and each issue says its
+`status` and `statusName`); 1.17 adds `startWork` (`hm.issues.checkStart(id)` answers the
+start-work guard's findings, `hm.issues.start(id, {ack, assignMe, agent})` starts work with the
+person's answers, and an issue says its tracker `external` and its `branch`). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |

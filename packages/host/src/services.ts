@@ -55,6 +55,10 @@ export interface ServicesOptions {
   logDir: string;
   /** Something about a service changed. */
   onChange?(): void;
+  /** The host's own JavaScript runtime, for a service whose command is `node` on a machine with
+   *  none on PATH: the app's Electron, run as Node (`ELECTRON_RUN_AS_NODE=1`). None under `hive
+   *  host`, which then says how to get one. */
+  node?: { file: string; env: Record<string, string> };
 }
 
 const WIN = process.platform === "win32";
@@ -80,8 +84,8 @@ export function serviceEnv(from: NodeJS.ProcessEnv, own: Record<string, string>)
   return { ...env, ...own };
 }
 
-/** What to start for `want`, or why it cannot start. */
-function program(want: WantedService, env: NodeJS.ProcessEnv): { file: string; args: string[] } | { why: string } {
+/** What to start for `want`, or why it cannot start; `env`: what it adds to the environment. */
+function program(want: WantedService, env: NodeJS.ProcessEnv, node: ServicesOptions["node"]): { file: string; args: string[]; env?: Record<string, string> } | { why: string } {
   const [bin, ...args] = want.service.command as [string, ...string[]];
   if (bin.startsWith("./")) {
     const file = path.join(want.dir, bin.slice(2));
@@ -91,9 +95,12 @@ function program(want: WantedService, env: NodeJS.ProcessEnv): { file: string; a
     return { why: `${bin} is not in the plugin's folder` };
   }
   const file = findBin(bin, { env });
-  if (!file) return { why: `${bin} is not installed on this machine` };
   // A .cmd/.bat shim starts only through cmd.exe, which parses its arguments again.
-  if (/\.(cmd|bat)$/i.test(file)) return { why: `${bin} is a script shim here, which a service cannot run without a shell` };
+  const shim = !!file && /\.(cmd|bat)$/i.test(file);
+  // Node a service needs comes with the app: a machine that installed the app alone has none.
+  if (bin === "node" && (!file || shim) && node) return { file: node.file, args, env: node.env };
+  if (!file) return { why: bin === "node" ? "node is not installed on this machine: install Node.js (https://nodejs.org), or run the service in the app, which brings its own" : `${bin} is not installed on this machine` };
+  if (shim) return { why: `${bin} is a script shim here, which a service cannot run without a shell` };
   return { file, args };
 }
 
@@ -141,11 +148,12 @@ class Runner {
     const { want, o } = this;
     if (want.workspaces.length === 0) return this.set({ state: "stopped", why: "no workspace is picked for it" });
     if (!(ROLES as readonly string[]).includes(want.service.role)) return this.set({ state: "stopped", why: `it asks for the role "${want.service.role}", which is none of ${ROLES.join(", ")}` });
-    const found = program(want, process.env);
+    const found = program(want, process.env, o.node);
     if ("why" in found) return this.set({ state: "stopped", why: found.why });
-    const { grant, token } = o.grants.create({ name: `${want.name} service`, repos: want.workspaces, role: want.service.role as Role }, want.plugin);
+    // Named for its plugin: what it writes (an issue's activity) is signed so.
+    const { grant, token } = o.grants.create({ name: `${want.plugin} (service)`, repos: want.workspaces, role: want.service.role as Role }, want.plugin);
     this.grant = grant.id;
-    const env = serviceEnv(process.env, { HIVE_DRIVE_SOCK: o.driveSock, HIVE_DRIVE_TOKEN: token, HIVE_WORKSPACES: grant.repos.join(path.delimiter) });
+    const env = serviceEnv(process.env, { ...found.env, HIVE_DRIVE_SOCK: o.driveSock, HIVE_DRIVE_TOKEN: token, HIVE_WORKSPACES: grant.repos.join(path.delimiter) });
     let child: ChildProcess;
     try {
       // Its own process group, so stopping it stops what it started. Its stdin is a pipe that

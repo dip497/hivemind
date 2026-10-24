@@ -143,7 +143,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "workflow", /** 1.17 */ "startWork"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -271,8 +271,27 @@ export interface ViewIssueSummary {
   labels: string[];
   assignee: ViewIssueAssignee | null;
   github?: number | null;
+  /** 1.16: the workflow status the issue is in (an id `issues.workflow` lists) and its name.
+   *  `state` is always that status's category. A host before 1.16 sends neither. */
+  status?: string;
+  statusName?: string;
+  /** 1.17: an issue mirrored from a tracker: its key there, and who it is assigned to there
+   *  (`null`: nobody; `me`: the person whose sign-in the sync uses). */
+  external?: { provider: string; key: string; url?: string; assignee?: { name: string; me?: boolean } | null };
+  /** The git branch the issue's work is on, and its pull request as the PR watcher last saw it
+   *  (design jira-sync §11), when it has them. A host sends every key of the issue's file. */
+  branch?: string;
+  pr?: ViewIssuePr;
   created: string;
   updated: string;
+}
+export interface ViewIssuePr {
+  repo: string;
+  number: number;
+  url: string;
+  state: "open" | "draft" | "merged" | "closed";
+  review?: "approved" | "changes_requested" | "review_required";
+  checks?: "passing" | "failing" | "pending";
 }
 /** An issue in full: its description, acceptance criteria and activity. */
 export interface ViewIssue extends ViewIssueSummary {
@@ -283,8 +302,75 @@ export interface ViewIssue extends ViewIssueSummary {
     activity: { at: string; who: string; message: string }[];
   };
 }
+// ── protocol 1.16 (additive) ────────────────────────────────────────────────
+// `workflow` in `hello.features`: the workspace's statuses (`issues.workflow`), each in one of the
+// six categories (`ISSUE_STATES`), in the order a board shows them, and its board columns and
+// per-type transitions when it has them. A workspace with no workflow of its own has one status per
+// category, whose id is the category (`custom: false`). `issues.update(id, { status })` moves an
+// issue to a status by id or name; its state follows.
+
+export interface ViewWorkflowStatus {
+  id: string;
+  name: string;
+  category: ViewIssueState;
+  /** `#rrggbb` the tracker gives it; absent: the category's colour. */
+  color?: string;
+  /** Who owns it: `hive` (the person) or a tracker (`jira`). */
+  source: string;
+  /** Gone from the tracker, kept while an issue still uses it. */
+  retired?: boolean;
+}
+export interface ViewWorkflow {
+  custom: boolean;
+  /** Category order, then the workflow's own. */
+  statuses: ViewWorkflowStatus[];
+  /** The tracker's board: each column holds one or more statuses. */
+  board?: { columns: { name: string; statuses: string[] }[] };
+  /** Per issue type: its statuses, its first one, and the moves between them its tracker allows. */
+  issueTypes: Record<string, { statuses: string[]; initial?: string; transitions: { id: string; name?: string; from: "*" | string[]; to: string }[] }>;
+}
+
+/** The statuses a move from `from` reaches directly by the issue type's transitions, global ones
+ *  included; undefined when the workflow knows none for that type (every status is then a target). */
+export function transitionTargets(wf: Pick<ViewWorkflow, "issueTypes">, issueType: string | undefined, from: string): string[] | undefined {
+  const t = issueType ? wf.issueTypes[issueType] : undefined;
+  if (!t || t.transitions.length === 0) return undefined;
+  return [...new Set(t.transitions.filter((tr) => tr.from === "*" || tr.from.includes(from)).map((tr) => tr.to))].filter((s) => s !== from);
+}
+
+// ── protocol 1.17 (additive) ────────────────────────────────────────────────
+// `startWork` in `hello.features`: before work starts on an issue — "Work on this", a move into an
+// in-progress status — the view asks the host's start-work guard (`issues.checkStart`), shows the
+// person every finding with what can be done about it, and starts with their answer
+// (`issues.start`). The host builds the agent's prompt from the issue; the person reads it before
+// the agent starts, as with any prompt a view writes.
+
+/** The checks of the start-work guard, by name. */
+export const START_CHECKS = ["unassigned", "assigned-other", "in-progress-other", "closed", "not-in-sprint", "blocked", "flagged", "no-permission", "parent-closed", "claimed-elsewhere", "agent-active"] as const;
+export type ViewStartCheck = (typeof START_CHECKS)[number];
+/** What can be done about a finding. */
+export type ViewStartAction = "assign-me" | "start" | "start-local" | "reopen" | "open-blocker" | "focus-tile" | "cancel";
+export interface ViewStartFinding {
+  check: ViewStartCheck;
+  /** `info` never stops a start; `warn` needs the person's yes; `block` can't be started past. */
+  severity: "info" | "warn" | "block";
+  message: string;
+  actions: ViewStartAction[];
+  /** The blocker for `open-blocker`, the tile for `focus-tile`. */
+  target?: string;
+}
+/** What starting would do, and what stands in its way (`issues.checkStart`). */
+export interface ViewStartPlan { id: string; findings: ViewStartFinding[]; branch: string; status: string; prompt: string }
+/** What `issues.start` did: nothing, with what is `left` to confirm; or the start. */
+export type ViewStartAnswer =
+  | { started: false; id: string; findings: ViewStartFinding[]; left: ViewStartFinding[] }
+  | { started: true; id: string; findings: ViewStartFinding[]; status: string; branch?: string; frame?: string; tile?: string; assigned?: boolean };
+/** `issues.start`'s options: the checks the person said yes to, "Assign to me", and whether an agent
+ *  starts (`agent: false`: the guard and the move alone, as a drag into an in-progress column). */
+export interface ViewStartOptions { ack?: ViewStartCheck[]; assignMe?: boolean; agent?: false | { program?: string } }
+
 /** The issue calls a view can make. */
-export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move", "workspaces", /** 1.12 */ "status", "setUp"] as const;
+export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move", "workspaces", /** 1.12 */ "status", "setUp", /** 1.16 */ "workflow", /** 1.17 */ "checkStart", "start"] as const;
 export type IssueCall = (typeof ISSUE_CALLS)[number];
 /** The most an `issue` request's arguments may take, as JSON. */
 export const ISSUE_ARGS_MAX = 256 * 1024;

@@ -1,0 +1,165 @@
+{
+ "expand": "schema,names",
+ "issueErrors": [],
+ "issues": [
+  {
+   "expand": "",
+   "fields": {
+    "summary": "My first example issue",
+    "project": {
+     "avatarUrls": {
+      "16x16": "https://your-domain.atlassian.net/secure/projectavatar?size=xsmall&pid=10000",
+      "24x24": "https://your-domain.atlassian.net/secure/projectavatar?size=small&pid=10000",
+      "32x32": "https://your-domain.atlassian.net/secure/projectavatar?size=medium&pid=10000",
+      "48x48": "https://your-domain.atlassian.net/secure/projectavatar?size=large&pid=10000"
+     },
+     "id": "10000",
+     "insight": {
+      "lastIssueUpdateTime": "2021-04-22T05:37:05.000+0000",
+      "totalIssueCount": 100
+     },
+     "key": "EX",
+     "name": "Example",
+     "projectCategory": {
+      "description": "First Project Category",
+      "id": "10000",
+      "name": "FIRST",
+      "self": "https://your-domain.atlassian.net/rest/api/3/projectCategory/10000"
+     },
+     "self": "https://your-domain.atlassian.net/rest/api/3/project/EX",
+     "simplified": false,
+     "style": "classic"
+    },
+    "assignee": {
+     "accountId": "5b10a2844c20165700ede21g",
+     "active": true,
+     "avatarUrls": {
+      "16x16": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=16&s=16",
+      "24x24": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=24&s=24",
+      "32x32": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=32&s=32",
+      "48x48": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=48&s=48"
+     },
+     "displayName": "Mia Krystof",
+     "emailAddress": "mia@example.com",
+     "self": "https://your-domain.atlassian.net/rest/api/3/user?accountId=5b10a2844c20165700ede21g",
+     "timeZone": "Australia/Sydney"
+    }
+   },
+   "id": "10002",
+   "key": "EX-1",
+   "self": "https://your-domain.atlassian.net/rest/api/3/issue/10002"
+  },
+  {
+   "expand": "",
+   "fields": {
+    "summary": "My second example issue",
+    "project": {
+     "avatarUrls": {
+      "16x16": "https://your-domain.atlassian.net/secure/projectavatar?size=xsmall&pid=10001",
+      "24x24": "https://your-domain.atlassian.net/secure/projectavatar?size=small&pid=10001",
+      "32x32": "https://your-domain.atlassian.net/secure/projectavatar?size=medium&pid=10001",
+      "48x48": "https://your-domain.atlassian.net/secure/projectavatar?size=large&pid=10001"
+     },
+     "id": "10001",
+     "insight": {
+      "lastIssueUpdateTime": "2021-04-22T05:37:05.000+0000",
+      "totalIssueCount": 100
+     },
+     "key": "ABC",
+     "name": "Alphabetical",
+     "projectCategory": {
+      "description": "First Project Category",
+      "id": "10000",
+      "name": "FIRST",
+      "self": "https://your-domain.atlassian.net/rest/api/3/projectCategory/10000"
+     },
+     "self": "https://your-domain.atlassian.net/rest/api/3/project/ABC",
+     "simplified": false,
+     "style": "classic"
+    },
+    "assignee": {
+     "accountId": "5b10a2844c20165700ede21g",
+     "active": true,
+     "avatarUrls": {
+      "16x16": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=16&s=16",
+      "24x24": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=24&s=24",
+      "32x32": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=32&s=32",
+      "48x48": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=48&s=48"
+     },
+     "displayName": "Mia Krystof",
+     "emailAddress": "mia@example.com",
+     "self": "https://your-domain.atlassian.net/rest/api/3/user?accountId=5b10a2844c20165700ede21g",
+     "timeZone": "Australia/Sydney"
+    }
+   },
+   "id": "10005",
+   "key": "EX-2",
+   "self": "https://your-domain.atlassian.net/rest/api/3/issue/10003"
+  },
+  {
+   "expand": "",
+   "fields": {
+    "summary": "My fourth example issue",
+    "project": {
+     "avatarUrls": {
+      "16x16": "https://your-domain.atlassian.net/secure/projectavatar?size=xsmall&pid=10002",
+      "24x24": "https://your-domain.atlassian.net/secure/projectavatar?size=small&pid=10002",
+      "32x32": "https://your-domain.atlassian.net/secure/projectavatar?size=medium&pid=10002",
+      "48x48": "https://your-domain.atlassian.net/secure/projectavatar?size=large&pid=10002"
+     },
+     "deleted": true,
+     "deletedBy": {
+      "accountId": "5b10a2844c20165700ede21g",
+      "accountType": "atlassian",
+      "active": false,
+      "avatarUrls": {
+       "16x16": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=16&s=16",
+       "24x24": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=24&s=24",
+       "32x32": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=32&s=32",
+       "48x48": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=48&s=48"
+      },
+      "displayName": "Mia Krystof",
+      "key": "",
+      "name": "",
+      "self": "https://your-domain.atlassian.net/rest/api/3/user?accountId=5b10a2844c20165700ede21g"
+     },
+     "deletedDate": "2022-11-11T13:35:29.000+0000",
+     "id": "10002",
+     "insight": {
+      "lastIssueUpdateTime": "2021-04-22T05:37:05.000+0000",
+      "totalIssueCount": 100
+     },
+     "key": "MKY",
+     "name": "Example",
+     "projectCategory": {
+      "description": "First Project Category",
+      "id": "10000",
+      "name": "FIRST",
+      "self": "https://your-domain.atlassian.net/rest/api/3/projectCategory/10000"
+     },
+     "retentionTillDate": "2023-01-10T13:35:29.000+0000",
+     "self": "https://your-domain.atlassian.net/rest/api/3/project/MKY",
+     "simplified": false,
+     "style": "classic"
+    },
+    "assignee": {
+     "accountId": "5b10a2844c20165700ede21g",
+     "active": true,
+     "avatarUrls": {
+      "16x16": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=16&s=16",
+      "24x24": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=24&s=24",
+      "32x32": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=32&s=32",
+      "48x48": "https://avatar-management--avatars.server-location.prod.public.atl-paas.net/initials/MK-5.png?size=48&s=48"
+     },
+     "displayName": "Mia Krystof",
+     "emailAddress": "mia@example.com",
+     "self": "https://your-domain.atlassian.net/rest/api/3/user?accountId=5b10a2844c20165700ede21g",
+     "timeZone": "Australia/Sydney"
+    }
+   },
+   "id": "10005",
+   "key": "EX-4",
+   "self": "https://your-domain.atlassian.net/rest/api/3/issue/10005"
+  }
+ ]
+}

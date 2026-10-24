@@ -24,10 +24,31 @@ const LEAST: Record<string, Role> = {
   "file.read": "view",
   "issue.list": "view",
   "issue.read": "view",
+  // Mirroring a tracker's issues (a sync service at edit role, design jira-sync §5.4).
+  "issue.ingest": "edit",
+  "issue.workflow": "view",
+  // Writing issues is editing the workspace: a service (a tool plugin's grant) and a guest who may
+  // edit, each signed as itself in the issue's activity.
+  "issue.create": "edit",
+  "issue.update": "edit",
+  "issue.setState": "edit",
+  "issue.comment": "edit",
+  // The start-work guard reads; starting work starts an agent; assigning makes the person at this
+  // machine the tracker's assignee, which no guest asks (issue-start.ts) (0.35).
+  "issue.checkStart": "view",
+  "issue.start": "agents",
+  "issue.assignMe": "agents",
+  "issue.provideStart": "view",
   "review.list": "view",
   // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile
   // shows it (M4). Nothing of the host's is changed.
   "git.handOff": "edit",
+  // A tool plugin's service, of its own plugin alone (the host checks its grant's plugin): what
+  // it is set to and its secrets, and the commands it answers (`plugin-services.ts`).
+  "plugin.options": "view",
+  "secret.get": "view",
+  "plugin.serve": "view",
+  "plugin.answer": "view",
   // How the host looks: a guest shows its workspace that way.
   "appearance.get": "view",
   // Being there: where one's pointer is, and what one has selected.

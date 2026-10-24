@@ -8,7 +8,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
+    "./issue-id": "./src/issue-id.ts",
     "./storage": "./src/storage.ts",
+    "./mirror": "./src/mirror.ts",
+    "./ingest": "./src/ingest.ts",
+    "./sync-lock": "./src/sync-lock.ts",
     "./query": "./src/query.ts",
     "./agent-context": "./src/agent-context.ts",
     "./registry": "./src/registry.ts",
@@ -41,7 +45,13 @@
     "./tool-format": "./src/tool-format.ts",
     "./tool-packages": "./src/tool-packages.ts",
     "./tool-registry": "./src/tool-registry.ts",
-    "./tile-id": "./src/tile-id.ts"
+    "./tile-id": "./src/tile-id.ts",
+    "./workflow": "./src/workflow.ts",
+    "./workflow-model": "./src/workflow-model.ts",
+    "./start-guard": "./src/start-guard.ts",
+    "./json": "./src/json.ts",
+    "./pr": "./src/pr.ts",
+    "./complete": "./src/complete.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -52,6 +62,7 @@
     "@hivemind/hub": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
+    "js-yaml": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
   },

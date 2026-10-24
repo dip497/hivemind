@@ -7,6 +7,7 @@ import { ensureAgentCatalog } from "../agent-catalog.js";
 import { spawnSync } from "node:child_process";
 import {
   HiveError,
+  type IssueState,
   readConfig,
   requireRoot,
   writeAgentContext,
@@ -33,7 +34,7 @@ const contextCmd = defineCommand({
         : undefined;
       const p = await writeAgentContext(
         root,
-        states ? { includeStates: states as ("todo" | "in_progress" | "in_review")[] } : undefined
+        states ? { includeStates: states as IssueState[] } : undefined
       );
       return ok(ctx, { path: p }, () => `✓ ${p} regenerated`);
     } catch (e) {

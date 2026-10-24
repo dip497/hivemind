@@ -36,7 +36,7 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE`, `SYNC_LOCKED`, `NEEDS_CONFIRM` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it; `ingest` while another sync of that source runs; starting work on an issue the person must confirm first (`warnings`: each finding, `fix`: the flags; [Before work starts](/issues#before-work-starts)) |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 9 | `ASLEEP` | the agent is asleep: `send`, `keys`, `read` and `connect` to it are refused (a `report` to it waits in its inbox); the fix is `hive ctl wake <tile>` |
 | 1 | `FAILED` | other |
@@ -64,15 +64,28 @@ hive init                               # refresh the agentic stack
 hive add skill                          # refresh the skills only
 hive guide agents                       # print the agent guide this hive ships (also work, browser, workflow)
 
-hive new "Title" [--label l …] [--parent ID] [--state backlog] [--github N]
+hive new "Title" [--label l …] [--parent ID] [--state backlog | --status "To Do"] [--github N]
           [--assignee claude --assignee-type agent] [--assignee-model m]
           [--description d] [--ac "criterion one || criterion two"]
-hive list [--state todo] [--assignee id] [--label l] [--parent none|ID]
+hive list [--state todo] [--category in_review] [--status "Code Review"]
+          [--assignee id] [--label l] [--parent none|ID] [--archived]
 hive show MYP-1
-hive update MYP-1 [--state s] [--title t] [--assignee id|none]
+hive update MYP-1 [--state s | --status "Code Review"] [--title t] [--assignee id|none]
                  [--add-label l] [--rm-label l] [--github N|none] [--note "…"]
+                 [--ack check,… | --force] [--assign-me]   # into progress: see set-state
 hive close MYP-1 [--reason "…"] [--note "…"]   # --reason → cancelled, else done
 hive reopen MYP-1 [--state todo] [--note "…"]
+# show, update, close, reopen, list --parent and new --parent find the issue in whichever
+# registered repo holds it; an id more than one repo holds exits 5 naming each
+
+hive ingest --source jira:acme/PAY [--dry-run] --json < records.ndjson
+                                        # mirror another tracker's issues: one record per line,
+                                        # kept by their own keys in .hivemind/mirror/ (gitignored);
+                                        # prints {created, updated, unchanged, conflicts, archived}
+
+hive statuses show                      # the workspace's statuses in board order, each with its state
+hive statuses validate [--file f]       # exit 1 naming each problem in .hivemind/workflow.yaml
+hive statuses edit [--from f]           # $EDITOR on workflow.yaml (or install f); saved only once valid
 
 hive task MYP-3 add "Subtask" [--assignee id] [--state todo]   # sub-issues: MYP-3.1, …
 hive task MYP-3 done 2                          # tail number or full id
@@ -93,12 +106,45 @@ hive resolve "text"                     # expand @ID mentions to markdown links
 ```
 
 ```text
-hive ctl set-state MYP-1 in_progress [--note "…"]
+hive ctl set-state MYP-1 in_progress [--note "…"] [--ack check,… | --force] [--assign-me]
+                                        # into progress, the start-work guard asks first: exit 7
+                                        # NEEDS_CONFIRM, each finding in "warnings", until the
+                                        # person's answer is a flag (--force: every warning, never
+                                        # an agent already on it). Checks: unassigned, assigned-other,
+                                        # in-progress-other, closed, not-in-sprint, blocked, flagged,
+                                        # no-permission, parent-closed, claimed-elsewhere, agent-active
 hive ctl add-comment MYP-1 "root cause found in …"
 hive ctl mark-acceptance MYP-1 0 [--undone]   # 0-based index from hive show --json
 hive ctl delete-issue MYP-1                   # irreversible
 hive ctl list-workspaces                      # prefix, title and folder of each
+hive ctl complete MYP-1 [--summary "…"] [--ac-note "…"] [--draft] [--base main]
+                                              # check the work, then hand it on by on_complete
 ```
+
+`hive ctl complete` runs from the issue's worktree (found from its `branch:`) or anywhere its
+workspace is found from. It refuses (exit 1, with a `fix`) until the tree is clean, the branch has
+commits ahead of the base, every acceptance criterion is ticked or `--ac-note` says why not, and
+`check` in `.hivemind/config.yaml` exits 0. Then, by `on_complete`: `pr` (default) pushes the
+branch, opens the PR and moves the issue by `local.onPrOpened` in `workflow.yaml` (else to
+`in_review`); `draft_pr` opens a draft; `review` only moves it to `in_review`. When `gh` is not
+installed or not signed in it exits 6, and the issue moves to `in_review` with a note.
+
+```text
+hive pr create MYP-1 [--draft] [--base main] [--summary "…"]   # push -u, gh pr create; writes pr + github
+hive pr status MYP-1                     # state, review decision, checks, as GitHub has them (reads only)
+hive pr sync [MYP-1]                     # the PR watcher's pass: merged → local.onPrMerged (done),
+                                         # closed → local.onPrClosed (in_progress)
+hive pr cleanup MYP-1                    # after the merge: remove the worktree and the local branch
+```
+
+| `.hivemind/config.yaml` | Values |
+|---|---|
+| `on_complete` | `pr` (default) · `draft_pr` · `review` |
+| `pr_base` | the branch PRs target (default: the remote's default branch) |
+| `pr_push_remote` | the git remote the branch is pushed to (default: git's `pushRemote` / `pushDefault`, else the remote GitHub says you can push to: your fork) |
+| `pr_repo` | the repository the PR opens on, `owner/repo` (default: the fork's parent when you push to a fork, else the repository you push to) |
+| `check` | a command `complete` runs in the worktree first, e.g. `pnpm test` |
+| `cleanup` | after a merge: `ask` (default: a note and a notification) · `auto` · `never` |
 
 ## `hive ctl`: agents and tiles
 
@@ -116,11 +162,18 @@ hive ctl frames                         # frames an agent may start in: id, name
 hive ctl frame add --folder /srv/web [--machine build] [--name web]
                                         # a frame on that folder, on a saved machine or one of
                                         # your devices by id or name; → {"frame","path","opened"}
+hive ctl frame add --worktree <branch> [--base main] [--name n]
+                                        # a frame on the branch's worktree, made when there is none
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                [--frame <id or name>] [--mode plan] [--model sonnet]
                [--no-report] [--supervise all|Bash,Edit] [--resume <session>]
                                         # → {"tile":…}; workers auto-report by default;
                                         # --mode yolo: the agent asks nothing
+hive ctl spawn --issue MYP-1 [--agent claude] [--base main] [--ack check,… | --force] [--assign-me]
+                                        # the start-work guard, then the branch's worktree frame
+                                        # (branch_template, default {key}-{slug}), the issue moved
+                                        # into progress, and the agent there with a task made from
+                                        # it; → {"started","tile","frame","branch","status",…}
 hive ctl sessions [agent] [--cwd dir] [--limit 100]
                                         # past sessions in a folder, to --resume
 hive ctl send <tileId> "text" [--interrupt]   # after its turn; --interrupt: stop the turn first
@@ -158,7 +211,10 @@ hive ctl workflow --shape fanout|pipeline|mapreduce
                   [--reduce-prompt "Merge {results}"]
                   [--agent claude] [--model m] [--frame f] [--supervise all]
                   [--max-concurrent 6] [--timeout 10m] [--close] [--repo dir]
-                                        # per-worker timeout; blocks until all replies
+                  [--ack check,… | --force]
+                                        # per-worker timeout; blocks until all replies; an item
+                                        # that is an issue the start-work guard refuses is left
+                                        # out and listed in "skipped"
 hive ctl approve <reqId> allow|deny|always|never [--reason "…"]
 hive ctl report "summary" [--tile id]   # to the inbox of the tile that spawned you ($HIVEMIND_TILE)
 hive ctl open-review --file plan.md|--plan "…" [--cwd dir] [--timeout 30m] [--tile id]
@@ -224,6 +280,7 @@ hive plugins show claude                # its settings: each one's value and wha
 hive plugins enable @hivemind/web        # or disable; a package by its id switches all it holds
                                         # one plugin of a package can be switched off alone, on only while its package is on
 hive plugins set @you/board columns all # checked against what the setting takes
+printf %s "$TOKEN" | hive plugins set @acme/jira token  # a secret: on stdin, never as an argument
 hive plugins reset @you/board [columns] # back to its default
 hive plugins workspaces <tool> <folder>…   # the workspaces a tool's service drives (hive host)
 hive plugins workspaces <tool> --none   # it drives none: its service stops

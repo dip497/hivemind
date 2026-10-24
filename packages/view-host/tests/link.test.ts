@@ -228,6 +228,10 @@ test("1.3: hello features list only what is wired; status carries since", () => 
   assert.deepEqual(bare.link.features, ["invoke", "surfaces", "sleep", "hostMenu"]);
   const h = harness([], ["t1"], { sinceOf: (id) => (id === "t1" ? { since: 42, exact: false } : undefined), history: async () => ({}) as never });
   assert.deepEqual(h.link.features, ["since", "history", "invoke", "surfaces", "sleep", "hostMenu"]);
+  // Issues served: the workflow call (1.16) and the start-work guard's (1.17) come with them, as the
+  // one issues service answers them.
+  const issues = harness([], ["t1"], { issues: { subscribe: () => () => {}, call: async () => null } });
+  assert.deepEqual(issues.link.features, ["issues", "workflow", "startWork", "invoke", "surfaces", "sleep", "hostMenu"]);
   h.link.handle({ type: "ready", v: 1 });
   h.link.handle({ type: "subscribeStatus", tileId: "t1" });
   h.statusCbs.get("t1")!("question", {});

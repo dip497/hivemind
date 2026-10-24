@@ -1,4 +1,4 @@
-# Workspace API (0.33)
+# Workspace API (0.35)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -28,6 +28,7 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `UNAVAILABLE` | It needs one of the person's windows, and none is open here (0.23). |
 | `OCCLUDED` | Something is drawn over the tile `tile.look` would picture (a pinned tile, a dialog): the message names it, and nothing was pictured (0.32). |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |
+| `NEEDS_CONFIRM` | Starting work on an issue needs the person to confirm first (design jira-sync §10): `hive` prints each finding of the start-work guard in `warnings` (`{check, severity, message, actions}`) and the flags that go on in `fix` (0.35). `issue.start` itself answers `{started: false, left}` instead. |
 
 A **notice** is a call that asks for no answer, `{method, params}` sent one way: the hot path (a
 keystroke, a resize, flow control) and what a client tells the host about itself. A host never
@@ -64,7 +65,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.33", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.35", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -73,7 +74,11 @@ The first line says who connects: `{"hello": {"token", "workspace"?}}`.
   a guest at the grant's role (Peers, below): what the role does not name is `FORBIDDEN`, and it
   hears the events of that workspace's tiles alone. Unlike a guest's, its calls and answers name
   the workspace and its files by their paths here. It is recorded in the audit log as a peer whose
-  `person` and `device` are `client:<grant id>` and whose `client` is the grant's name.
+  `person` and `device` are `client:<grant id>` and whose `client` is the grant's name; a service's
+  grant is named `@owner/name (service)` (0.34), and so signs what it writes to issues. A service
+  asks of its own plugin alone what it is set to (`plugin.options`) and its secrets (`secret.get`),
+  and says which commands it answers (`plugin.serve`, 0.34). While a grant is connected it hears
+  `issue.changed` for its workspace.
 - **An agent's tile token** (`HCP_TOKEN`) is that agent (0.23), given the socket's path as
   `HIVE_DRIVE_SOCK`. It drives the workspace its tile is in, and names no other: the host answers `{"hello": {"api", "as": {"agent", "role":
   "agents", "workspace"}}}` and serves it as a program at the role `agents`, while its tile is
@@ -139,7 +144,7 @@ starting an agent, never sizes one but by fitting it, nor gives or takes a keybo
 peer's role on the workspace (design §6) before it runs, and one the role does not allow is
 `FORBIDDEN` (a notice is dropped): reads, watching terminals and showing a community view are anyone's with access; typing
 into, resizing and fitting a terminal, and asking for its keyboard or handing it on, *Can use terminals*;
-handing a branch of one's own to the host (`git.handOff`, M4), and opening a tool's tile (`tool.open`, 0.23), *Can edit board*;
+handing a branch of one's own to the host (`git.handOff`, M4), opening a tool's tile (`tool.open`, 0.23), and writing issues (`issue.create`, `issue.update`, `issue.setState`, `issue.comment`, 0.34), *Can edit board*;
 answering an agent's plan or what it waits on (`agent.answer`), sending one a message
 (`agent.send`), starting one, interrupting its turn and closing it (`agent.start`,
 `agent.interrupt`, `agent.close`, 0.11), naming one, typing keys to it and piping one's replies to another (`agent.rename`, `agent.keys`, `link.*`, 0.23; both ends of a pipe its workspace's), and opening and closing tiles, *Can drive agents*; anything else is the
@@ -218,16 +223,22 @@ sends, and one participant per device.
 
 | `file.read` | `repo`, `file` | the file's text | read |
 | `file.write` | `repo`, `file`, `contents` | `null` | target the file |
-| `issue.list` | `root` | `[{id, title, state, parent, labels, assignee, github, created, updated, path}]` | read |
+| `issue.list` | `root` | `[{id, title, state, status?, parent, labels, assignee, github, created, updated, path}]` (`status` as the file has it, 0.34) | read |
 | `issue.read` | `root`, `id` | the issue, with its `sections` (`description`, `acceptanceCriteria`, `activity`, `extra`) | read |
-| `issue.create` | `root`, `{title, state?, parent?, labels?, assignee?, description?, acceptanceCriteria?, github?}` | the issue | target its id |
-| `issue.update` | `root`, `id`, a patch of `title`, `state`, `parent`, `labels`, `assignee`, `github`, `description`, `acceptanceCriteria`, `extra` | the issue | target `id` |
+| `issue.workflow` | `root` | `{custom, statuses: [{id, name, category, color?, source, retired?}], board?: {columns: [{name, statuses}]}, issueTypes: {<type>: {statuses, initial?, transitions: [{id, name?, from, to}]}}}` (0.34): the workspace's statuses from its `workflow.yaml`, category order then the file's; with no file `custom` is false and there is one status per state, its id the state | read |
+| `issue.create` | `root`, `{title, state?, status?, parent?, labels?, assignee?, description?, acceptanceCriteria?, github?}` | the issue | target its id |
+| `issue.update` | `root`, `id`, a patch of `title`, `state`, `status`, `parent`, `labels`, `assignee`, `github`, `description`, `acceptanceCriteria`, `extra` | the issue: a `status` (id or name, 0.34) sets `state` to its category, and a `state` alone moves to that state's first status; an unknown status is `FAILED`, naming the ones there are | target `id` |
 | `issue.setState` | `root`, `id`, `state`, `note`? | the issue | target `id`, detail the state |
 | `issue.comment` | `root`, `id`, `message` | the issue | target `id` |
+| `issue.create`, `issue.update`, `issue.setState`, `issue.comment` (0.34) | as above | at the `edit` role for a peer (a service's grant, a guest): its activity is signed by the caller, `ui` for the person's own windows and devices, else the peer's name (a guest's, a service's `@owner/name (service)`, an agent's tile's) | as above |
 | `issue.delete` | `root`, `id` | `null` | target `id` |
 | `issue.link` | `root`, `id`, `other`, `type` | `{from, to, type, reciprocal}` | target `id->other`, detail the type |
 | `issue.unlink` | `root`, `id`, `other` | `{removed}` | target `id->other` |
 | `issue.move` | `root`, `id`, `prefix`, `mode` (`move` \| `copy`) | `{newId, newIssue, mode, from}` | target `id`, detail `move to PREFIX` |
+| `issue.ingest` | `root`, `source`, `records`, `{dryRun?}`? | `{source, dryRun, created, updated, unchanged, conflicts, archived, notes}` (records as `hive ingest` takes them; edit role) | target `source` |
+| `issue.checkStart` | `root`, `id` | `{id, findings: [{check, severity, message, actions, target?}], branch, status, prompt}` (0.35): the start-work guard's findings (design jira-sync §10; `severity` `info` never stops a start, `warn` needs an ack, `block` can't be forced), the branch the work goes on (`branch_template`, default `{key}-{slug}`), the status it moves to, and the prompt its agent is given, the issue's text fenced as quoted data. An agent's own tile is not "an agent on it". A tracker's provider re-fetches an issue synced more than 60 s ago first | read |
+| `issue.start` | `repo`, `id`, `{ack?: [check], force?, assignMe?, base?, agent?: {program?, model?, mode?, name?} \| false}`? | `{started: false, id, findings, left}` when findings are left after `ack` (`force` acks every warning; a `block` is never dropped; `assignMe` answers the assignee ones), and nothing was done; else `{started: true, id, findings, status, branch?, frame?, tile?, assigned?}` (0.35): "Assign to me" through the tracker's provider when asked, the branch's worktree frame (`frame.open`, an existing worktree reused), `branch:` and the start status written on the issue, and an agent there started with `issue` (`agent.start`), its prompt `issue.checkStart`'s. `agent: false` does the guard, the assignment and the status only. `agents` role | target `id`, detail the tile |
+| `issue.assignMe` | `root`, `id` | the issue, after its tracker's provider made the person its assignee (0.35); `UNSUPPORTED` when no service provides it for the issue's source; `FORBIDDEN` to a guest, as `issue.start`'s `assignMe` is: it makes the person at this machine the assignee (`agents` role) | target `id` |
 | `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]` | read |
 | `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments) | target `repo` |
 
@@ -322,9 +333,12 @@ says it is asked at the machine itself.
 | `tile.focus` | `tile` | `null`: the tile brought forward in the window showing it | — |
 | `tile.look` | `tile` | `{tile, state, reason?, drew, console, png, width, height}` (0.32): the tile brought into view in the window, waited for (8 s at most) until its plugin drew or failed, then pictured: `png` base64, cropped to its box. `state` is its plugin's (`null` for a tile no plugin draws, which counts as drawn); `console` the last 100 lines its plugin's code wrote and the errors it threw, oldest first, kept in the window and read only here. An agent looks only at its own workspace's tiles. The tile is raised above the others first; `OCCLUDED`, naming it, when anything else is still drawn over part of it, a notification too (nothing the person sees is hidden for a picture); `UNSUPPORTED` where no window shows tiles | read |
 | `plugin.list` | | `{plugins: [{plugin, kind, instance, label, state, reason?, since, drew, commands}], views: [{id, label, active}]}`: every plugin running in a window (a tool's tile, a widget with code, a community view), `state` `starting` until its code connects, then `ready`; `drew` once a tool's tile painted its first content (0.32); `failed` with its `reason` when it did not start in 15 s or was disabled; and the views the window can show (0.27) | read |
-| `plugin.commands` | | the commands each ready plugin running in a window offers | read |
+| `plugin.commands` | | the commands each ready plugin running in a window offers, then each service's (`kind` `service`, 0.34) | read |
+| `plugin.options` | | `{values, secrets}` (0.34): a tool plugin's service, of its own plugin alone: its settings as the person set them, each checked against its field, its secrets left out, and the names of its secrets that are set. After it asks, each change is sent to it as `options.changed`. `FORBIDDEN` for any caller but a service | read |
+| `secret.get` | `name` | the secret setting `name` of the service's own plugin, or null (0.34). `FORBIDDEN` for any caller but a service; `UNAVAILABLE` when it was kept in a keychain this process cannot reach (set in the app, read under `hive host`), saying how to set it again | read |
+| `secret.set` | `key` (`tool:@owner/name`), `name`, `value` (null: take it away) | `{kept}`: `keychain` (the app's safeStorage), `file` (`secrets.json` beside `settings.json`, 0600: `hive host`, or no keychain), null when taken away (0.34). The person's alone | target `key.name`; its value is never recorded |
 | `plugin.open` | `plugin` (`tool:<owner>/<name>[/<tool>]`, `widget:@<owner>/<name>` or `view:<id>`), `frame`? (a tool's tile's) | what opening it answers: a tool's tile placed (`{tile}`), a widget added to the board (`{widget}`), a view switched to (`{view}`); for one with code, once it can be called or 10 s pass, with its `instance`, `state`, `reason`? and `commands` (0.27) | target the plugin |
-| `plugin.call` | `plugin`, `command`, `args`?, `tile`? | `{result}`: what the plugin's command answers, run in a window. One still starting is waited for; the whole call has 30 s in the window. Refused `NOT_FOUND` (not running, no such copy or command), `BAD_REQUEST` (two copies and no `tile`, an argument over 64 KB), `TIMEOUT` (still starting, or no answer in time), `FAILED` (the plugin failed, or refused: its own words) | target the plugin |
+| `plugin.call` | `plugin`, `command`, `args`?, `tile`? | `{result}`: what the plugin's command answers, run in a window; when no window runs it (`NOT_FOUND`, or `UNAVAILABLE` under `hive host`) and no `tile` is named, by the plugin's service when it serves that command (0.34), 30 s at most. One still starting is waited for; the whole call has 30 s in the window. Refused `NOT_FOUND` (not running, no such copy or command), `BAD_REQUEST` (two copies and no `tile`, an argument over 64 KB), `TIMEOUT` (still starting, or no answer in time), `FAILED` (the plugin failed, or refused: its own words) | target the plugin |
 | `plugin.close` | `instance` (a running plugin's instance, a widget's id on the board, or the plugin as `plugin.open` takes it), `plugin`? | `{closed, plugin, kind}` once it stopped: a tool's tile closed, a widget taken off the board (one drawn without code too), a view left for the canvas (0.27). A plugin named as `plugin.open` takes it must have one copy open: two are `BAD_REQUEST`, naming their instances; none is `NOT_FOUND` | target the instance |
 | `view.emit` | `name`, `data`?, `view`? | `{id, delivered, view, reason?, buffered?}`: the event sent to the view open in the window, or kept for it until it listens (`view`: only while that one is open) | — |
 | `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |
@@ -342,6 +356,9 @@ layout the store cannot hold is `BAD_REQUEST`.
 
 | Notice | Params | What it does |
 |---|---|---|
+| `plugin.serve` | `[{name, description, args?}]` | a tool plugin's service answers these commands of its own plugin (0.34); the last to say so does, until its connection goes. Each call comes as `plugin.called` |
+| `plugin.answer` | `call`, `{result}` or `{error: {code?, message}}` | a service's answer to `plugin.called` `call`; only the connection asked answers, once (0.34) |
+| `issue.provideStart` | `root`, `source`, `{refresh?, checks?, assignMe?}` | a tool plugin's service is the tracker for issues of its workspace (`root`) whose `external.source` starts with `source` (`jira:acme/PAY`), until its connection goes (0.35): the start-work guard runs each named command (one it serves, `plugin.serve`) as `plugin.called` with `{root, id}` — `refresh` to mirror the issue again through `issue.ingest` when it is stale, `checks` answering more findings, `assignMe` to make the person the assignee |
 | `terminal.write` | `tile`, `data`, `paste`? | types `data` (`paste`: hands it over as one block), when the client has the terminal's keyboard: the host's own clients until it is given away, and then its holder alone. One of the host's own clients that types sizes it at once to the size it last said (`terminal.resize`); an answer (`agent.answer`) is no typing |
 | `terminal.keyboard.ask` | `tile` | asks for the terminal's keyboard: its holder is sent `terminal.keyboard.asked` (the host's clients showing it, while the host holds it) |
 | `terminal.keyboard.give` | `tile`, `to` | hands the keyboard the client holds (or the host's, from a host's client) to `to`, the id of one who asked; everyone is told (`terminal.keyboard`). It comes back to the host when the host takes it, when its holder goes, and after five minutes without their typing |
@@ -388,6 +405,9 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size (on a participant's machine, as that machine says it), and to one that opens it: a client whose own differs draws it at this size |
 | `terminal.typing` | `tile`, `{id, person, name}` | to each client that opened the terminal but the one typing, as someone types into it: at most once a second while the same one types on. A client says so on the terminal for a moment, and does not draw that person's pointer meanwhile |
 | `file.changed` | `repo`, `{paths}` | to each client watching the repo (the app's window watches the one it opens), at most one every 300 ms |
+| `issue.changed` | `repo`, `{id, root, change, fields, by}` | to every client of the workspace while something follows it (a window showing it, a service's grant or a guest connected to it), for every write to an issue file under `.hivemind/issues` or `.hivemind/mirror` (0.34): the app's, a peer's, `hive` or an agent writing the file itself. `change` `created`, `updated` or `deleted`; `fields` the frontmatter keys and body sections that differ from what it held (all it has, when new); `by` who signed its newest activity row (null when deleted). Not sent for `.hivemind/sync/`, nor to a guest when the workspace's issues are kept in a folder above it |
+| `plugin.called` | `{call, command, args}` | to a tool plugin's service, a command it serves to run; it answers with `plugin.answer` (0.34) |
+| `options.changed` | `{values, secrets}` | to a tool plugin's service that asked `plugin.options`, as the person changes its settings or secrets (0.34) |
 | `store.changed` | `{repo, part, objects?}` (`core`, `board` or `view:<id>`) | to every client but the one whose write it was, on each change to a workspace's layouts; for the board, `objects` names the objects that changed (0.28; none: any may have) |
 | `presence.changed` | `repo`, `[{id, person, name, color, cursor, over, selection}]` | to every client, as someone in the workspace moves, selects, arrives or leaves (at once after a quiet spell, and at most every 50 ms): everyone there now, one per connection (`id`), `person` their key |
 | `appearance.changed` | `appearance` | to every client, when what `appearance.get` answers changes (0.17); a client checks it as settings are, whoever sent it |

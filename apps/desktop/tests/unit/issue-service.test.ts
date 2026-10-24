@@ -12,6 +12,9 @@ const touched: string[] = [];
 const at = (what: string) => (root: string, id: string) => { touched.push(`${what} ${root} ${id}`); return Promise.resolve({ id, path: "p", raw: "r" }); };
 
 (globalThis as unknown as { window: unknown }).window = {
+  // What every window has, for the modules issue-service imports (the settings store listens for unload).
+  addEventListener: () => {},
+  removeEventListener: () => {},
   hive: {
     resolveIssueRoot: (id: string) => Promise.resolve({ root: id.startsWith("OTH-") ? OTHER : HERE }),
     readIssue: at("read"),
@@ -22,8 +25,17 @@ const at = (what: string) => (root: string, id: string) => { touched.push(`${wha
     linkIssue: at("link"),
     unlinkIssue: at("unlink"),
     moveIssue: at("move"),
+    issueWorkflow: () => workflow,
+    listIssues: () => Promise.resolve(list),
+    onFsChanged: (_dir: string, cb: (e: { paths: string[] }) => void) => { fsFollowers.add(cb); return () => fsFollowers.delete(cb); },
+    onIssueChanged: (_root: string, cb: () => void) => { issueFollowers.add(cb); return () => issueFollowers.delete(cb); },
   },
 };
+const fsFollowers = new Set<(e: { paths: string[] }) => void>();
+const issueFollowers = new Set<() => void>();
+/** What the app answers `issueWorkflow` with: none until a test sets one (a broken workflow.yaml). */
+let workflow: Promise<unknown> = Promise.reject(new Error("no workflow"));
+let list: unknown[] = [];
 
 const { issueService } = await import("../../src/renderer/src/workspace/issue-service");
 
@@ -43,4 +55,47 @@ test("a plugin reads another workspace's issue but writes only to its own", asyn
     `update ${HERE} OTH-1`, `setState ${HERE} OTH-1`, `comment ${HERE} OTH-1`, `delete ${HERE} OTH-1`,
     `link ${HERE} OTH-1`, `unlink ${HERE} OTH-1`, `move ${HERE} OTH-1`,
   ]);
+});
+
+test("each issue a plugin is sent names its status by the workspace's workflow, and the workflow is the app's", async () => {
+  const view = {
+    custom: true,
+    statuses: [
+      { id: "jira:1", name: "To Do", category: "todo", source: "jira" },
+      { id: "jira:2", name: "Code Review", category: "in_review", source: "jira" },
+      { id: "hive:pr", name: "PR Created", category: "in_review", source: "hive" },
+    ],
+    issueTypes: {},
+  };
+  workflow = Promise.resolve(view);
+  const at = { parent: null, labels: [], assignee: null, created: "2026-10-24T00:00:00.000Z", updated: "2026-10-24T00:00:00.000Z", path: "/here/.hivemind/issues/X.md" };
+  // One with its own status; one written before the workflow, in its category's first status.
+  list = [{ id: "HM-1", title: "a", state: "in_review", status: "hive:pr", ...at }, { id: "HM-2", title: "b", state: "in_review", ...at }];
+  const sent = await new Promise<Array<Record<string, unknown>>>((resolve) => { const off = issueService(() => HERE, () => null).subscribe((l) => { off(); resolve(l as never); }); });
+  assert.deepEqual(sent.map((i) => [i.id, i.status, i.statusName, "path" in i]), [["HM-1", "hive:pr", "PR Created", false], ["HM-2", "jira:2", "Code Review", false]]);
+  assert.equal(await issueService(() => HERE, () => null).call("workflow", []), view);
+});
+
+// The list a plugin shows follows the issues (`issue.changed`) and the workflow, whose file no issue
+// event covers: editing workflow.yaml redraws the columns. Other files under .hivemind (a sync's
+// bookkeeping, a stray workflow.yaml deeper down) do not re-list.
+test("a plugin's issues are sent again when an issue or the workspace's workflow.yaml changes, not for other files", async () => {
+  workflow = Promise.reject(new Error("no workflow"));
+  list = [];
+  let sends = 0;
+  const off = issueService(() => HERE, () => null).subscribe(() => { sends++; });
+  const settle = () => new Promise((r) => setTimeout(r, 300));
+  await settle();
+  const base = sends;
+  for (const f of fsFollowers) f({ paths: [`${HERE}/sync/jira-acme-PAY/ledger.json`, `${HERE}/issues/sub/workflow.yaml`] });
+  await settle();
+  assert.equal(sends, base, "bookkeeping and nested files don't re-list");
+  for (const f of fsFollowers) f({ paths: [`${HERE}/workflow.yaml`] });
+  await settle();
+  assert.equal(sends, base + 1, "the workflow re-lists");
+  for (const f of issueFollowers) f();
+  await settle();
+  assert.equal(sends, base + 2, "an issue change re-lists");
+  off();
+  assert.equal(fsFollowers.size + issueFollowers.size, 0, "both feeds stop when the plugin goes");
 });

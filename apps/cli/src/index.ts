@@ -14,6 +14,7 @@ import { listCmd } from "./commands/list.js";
 import { showCmd } from "./commands/show.js";
 import { updateCmd } from "./commands/update.js";
 import { closeCmd, reopenCmd } from "./commands/close.js";
+import { ingestCmd } from "./commands/ingest.js";
 import { taskCmd } from "./commands/task.js";
 import { linkCmd } from "./commands/link.js";
 import { relateCmd } from "./commands/relate.js";
@@ -42,6 +43,8 @@ import { grantCmd } from "./commands/grant.js";
 import { migrateOnStart } from "./migrate-on-start.js";
 import { migrationsCmd } from "./commands/migrations.js";
 import { guideCmd } from "./commands/guide.js";
+import { statusesCmd } from "./commands/statuses.js";
+import { prCmd } from "./commands/pr.js";
 import { runCli } from "./cli-runner.js";
 
 /**
@@ -72,6 +75,7 @@ const main = defineCommand({
     update: updateCmd,
     close: closeCmd,
     reopen: reopenCmd,
+    ingest: ingestCmd,
     task: taskCmd,
     link: linkCmd,
     relate: relateCmd,
@@ -102,6 +106,8 @@ const main = defineCommand({
     push: pushCmd,
     migrations: migrationsCmd,
     guide: guideCmd,
+    statuses: statusesCmd,
+    pr: prCmd,
   },
 });
 

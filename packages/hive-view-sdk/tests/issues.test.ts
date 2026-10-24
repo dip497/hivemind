@@ -38,3 +38,15 @@ test("a view without it can neither read nor hear the issues, and the host refus
   expect(host.subscribed.issues).toBeFalsy();
   expect(host.refused).toEqual(['subscribeIssues needs permission "workspace:issues"', 'issue read needs permission "workspace:issues"']);
 });
+
+// 1.16: the workflow is asked only of a host that says it has one; an older host would refuse the
+// call as malformed, so the client answers UNSUPPORTED instead of sending it.
+test("issues.workflow reaches a host with `workflow`, and is UNSUPPORTED before 1.16", async () => {
+  const wf = { custom: false, statuses: [{ id: "todo", name: "Todo", category: "todo", source: "hive" }], issueTypes: {} };
+  const host = fakeHost({ features: ["issues", "workflow"], capabilities: ["workspace:issues"], answers: { issue: (a) => ((a as { call: string }).call === "workflow" ? wf : null) } });
+  const hm = await host.connect();
+  expect(await hm.issues.workflow()).toEqual(wf);
+  const old = fakeHost({ features: ["issues"], capabilities: ["workspace:issues"], answers: { issue: () => wf } });
+  const hmOld = await old.connect();
+  await expect(hmOld.issues.workflow()).rejects.toMatchObject({ code: "UNSUPPORTED" });
+});

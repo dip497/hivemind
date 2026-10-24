@@ -257,6 +257,9 @@ catalogs:
     gray-matter:
       specifier: 4.0.3
       version: 4.0.3
+    js-yaml:
+      specifier: 3.15.2
+      version: 3.15.2
     loro-crdt:
       specifier: 1.16.4
       version: 1.16.4
@@ -734,6 +737,9 @@ importers:
       gray-matter:
         specifier: 'catalog:'
         version: 4.0.3
+      js-yaml:
+        specifier: 'catalog:'
+        version: 3.15.2
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
@@ -830,6 +836,22 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/jira-fake:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@hivemind/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.19.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

@@ -199,7 +199,7 @@ function computer() {
       ])),
     },
   };
-  const server = new WorkspaceServer([...workspaceDomains, terminals], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
+  const server = new WorkspaceServer([...workspaceDomains(), terminals], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   // The agent of t1 waits on the person; t2's works.
   let statuses: WaitingStatus[] = [
     { tileId: "t1", status: { state: "waiting", kind: "permission", since: T, title: "Editing Nav.tsx" } },
@@ -789,7 +789,7 @@ async function guestWindows({ early = false } = {}) {
       screen: (_, lines) => (cb) => { cb(lines === undefined ? "screen" : `screen with ${lines} lines`); return true; },
     },
   });
-  const server = new WorkspaceServer([...workspaceDomains, terminals.domain], intents);
+  const server = new WorkspaceServer([...workspaceDomains(), terminals.domain], intents);
   const links = new PeerLinks({ store, changes: () => () => {}, lists, server, machines: { self: () => ({ device: idOf(newSeed()), name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined } });
   const [computerEnd, herComputer] = linkPair(hers, idOf(newSeed()));
   links.serve(computerEnd);

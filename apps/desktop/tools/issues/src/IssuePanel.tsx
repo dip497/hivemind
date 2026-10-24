@@ -4,18 +4,20 @@
  * a link or "New issue"; it reads and writes through the plugin's `hm`.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Play, FileQuestion, X } from "@hivemind/app-ui";
+import { Play, FileQuestion, GitBranch, X } from "@hivemind/app-ui";
+import { TrackerAssignee } from "./IssueCard";
 import { Button, Dialog, DialogContent, DialogTitle, Input, Label, MarkdownPreview, MenuItem, Textarea, Loading, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hivemind/app-ui";
-import { useIssue, useIssueList, write, type AcceptanceItem, type Issue, type IssueState } from "./data";
+import { issueTypeOf, moveTo, statusById, statusOfIssue, transitionTargets, useIssue, useIssueList, useWorkflow, write, type AcceptanceItem, type Issue, type WorkflowStatus } from "./data";
 import type { PanelProps } from "./data";
-import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StateIcon } from "./StateMeta";
+import { HiveOnlyMark, StatusIcon, statusColor } from "./StateMeta";
 import { AssigneePicker, LabelPicker, ParentPicker } from "./pickers";
 import { SubIssueTree } from "./SubIssueTree";
-import { workPrompt } from "./IssuesTile";
+import { isIssueId } from "@hivemind/core/issue-id";
+import { PrRow } from "./PrBits";
 
 type LinkType = "relates" | "blocks" | "blocked-by" | "duplicates" | "parent-of" | "child-of";
 
-export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps) {
+export function IssuePanel({ hm, workflow, params, close: onClose, openPanel, workOn }: PanelProps) {
   const id = (params as { id?: string } | null)?.id ?? null;
   const { issue, loading: isLoading, error } = useIssue(id);
   const isError = !!error;
@@ -73,10 +75,10 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
               <div className="ml-auto flex items-center gap-1">
                 <Button
                   onClick={() => {
-                    void write("Starting an agent", Promise.resolve().then(() => hm.commands.spawnAgent(null, null, { prompt: workPrompt(issue), name: issue.id })));
                     onClose();
+                    workOn(issue);
                   }}
-                  title="Start an agent and tell it to work on this issue (you send or cancel it)"
+                  title="Start an agent on this issue, in its own worktree (you read its prompt first)"
                 >
                   <Play fill="currentColor" strokeWidth={0} />
                   Work on this
@@ -145,10 +147,10 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
                 </Section>
               </div>
               <aside className="px-5 py-6 space-y-4 overflow-y-auto bg-[var(--color-bg2)]">
-                <PropRow label="State">
-                  <StateSelect
-                    value={issue.state}
-                    onChange={(s) => { void write("Changing the state", hm.issues.setState(issue.id, s, "set from the issue panel")); }}
+                <PropRow label={workflow.custom ? "Status" : "State"}>
+                  <StatusSelect
+                    issue={issue}
+                    onChange={(s) => { void write("Changing the state", moveTo(hm, workflow, issue.id, s, "set from the issue panel")); }}
                   />
                 </PropRow>
                 <PropRow label="Assignee">
@@ -178,7 +180,21 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
                 <PropRow label="Updated">
                   <span className="text-label text-[var(--color-fg2)]">{relTime(issue.updated)}</span>
                 </PropRow>
-                {issue.github != null && (
+                {issue.external && (
+                  <PropRow label={issue.external.provider === "jira" ? "Jira" : issue.external.provider}>
+                    <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]" data-tracker-row>
+                      <span className="font-mono">{issue.external.key}</span>
+                      <TrackerAssignee issue={issue} />
+                      {issue.external.assignee && <span>{issue.external.assignee.me ? "you" : issue.external.assignee.name}</span>}
+                    </span>
+                  </PropRow>
+                )}
+                {issue.branch && <BranchRow hm={hm} branch={issue.branch} />}
+                {issue.pr ? (
+                  <PropRow label="Pull request">
+                    <PrRow issue={issue} />
+                  </PropRow>
+                ) : issue.github != null && (
                   <PropRow label="GitHub">
                     <span className="font-mono text-count text-[var(--color-info)]">#{issue.github}</span>
                   </PropRow>
@@ -189,6 +205,21 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The branch an issue's work goes on, and its worktree's frame when there is one on the board. */
+function BranchRow({ hm, branch }: { hm: PanelProps["hm"]; branch: string }) {
+  const [frame, setFrame] = useState<string | null>(null);
+  useEffect(() => hm.on("structure", ({ frames }) => setFrame(frames.find((f) => f.branch === branch)?.id ?? null)), [hm, branch]);
+  return (
+    <PropRow label="Branch">
+      <span className="inline-flex items-center gap-1.5 min-w-0" data-branch-row={branch}>
+        <GitBranch size={12} className="shrink-0 text-[var(--color-fg3)]" />
+        <span className="font-mono text-count text-[var(--color-fg2)] truncate">{branch}</span>
+        {frame && <Button size="xs" variant="link" onClick={() => hm.commands.selectFrame(frame)} data-open-worktree>Open worktree</Button>}
+      </span>
+    </PropRow>
   );
 }
 
@@ -210,7 +241,10 @@ function PropRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function StateSelect({ value, onChange }: { value: IssueState; onChange: (s: IssueState) => void }) {
+/** The issue's status, and every status it may move to: with the transitions its tracker allows,
+ *  those first and the rest greyed ("no direct transition"); without them, every status. */
+function StatusSelect({ issue, onChange }: { issue: Issue; onChange: (s: WorkflowStatus) => void }) {
+  const wf = useWorkflow();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -221,30 +255,44 @@ function StateSelect({ value, onChange }: { value: IssueState; onChange: (s: Iss
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
   }, [open]);
+  const here = statusOfIssue(issue);
+  const value = statusById(wf, here, issue.state);
+  const legal = transitionTargets(wf, issueTypeOf(wf, issue), here);
+  const options = wf.statuses.filter((s) => !s.retired || s.id === here);
+  const ordered = legal ? [...options.filter((s) => s.id === here || legal.includes(s.id)), ...options.filter((s) => s.id !== here && !legal.includes(s.id))] : options;
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
         className="w-full inline-flex items-center gap-1.5 px-2 py-1 text-label bg-[var(--color-bg3)] border border-[var(--color-line2)] rounded-md hover:border-[var(--color-fg3)] cursor-pointer"
-        style={{ color: STATE_COLOR[value] }}
+        style={{ color: statusColor(value) }}
+        data-status-select={value.id}
       >
-        <StateIcon state={value} size={12} />
-        <span>{STATE_LABEL[value]}</span>
+        <StatusIcon status={value} size={12} />
+        <span>{value.name}</span>
         <svg width="9" height="9" viewBox="0 0 10 10" className="ml-auto text-[var(--color-fg3)]"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" /></svg>
       </button>
       {open && (
-        <div className="hm-popover absolute z-30 mt-1 w-full">
-          {STATE_ORDER.map((s) => (
-            <MenuItem
-              key={s}
-              size="sm"
-              onClick={() => { onChange(s); setOpen(false); }}
-              style={{ color: STATE_COLOR[s] }}
-            >
-              <StateIcon state={s} size={12} />
-              <span>{STATE_LABEL[s]}</span>
-            </MenuItem>
-          ))}
+        <div className="hm-popover absolute z-30 mt-1 w-full max-h-[320px] overflow-y-auto">
+          {ordered.map((s) => {
+            const direct = !legal || s.id === here || legal.includes(s.id);
+            return (
+              <MenuItem
+                key={s.id}
+                size="sm"
+                variant={direct ? "default" : "muted"}
+                onClick={() => { onChange(s); setOpen(false); }}
+                style={direct ? { color: statusColor(s) } : undefined}
+                title={direct ? undefined : "No direct transition from where it is"}
+                data-status={s.id}
+              >
+                <StatusIcon status={s} size={12} />
+                <span>{s.name}</span>
+                {wf.custom && s.source === "hive" && <HiveOnlyMark />}
+                {!direct && <span className="ml-auto text-chip text-[var(--color-fg3)]">no direct transition</span>}
+              </MenuItem>
+            );
+          })}
         </div>
       )}
     </div>
@@ -460,7 +508,7 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
 
   async function submitLink() {
     const other = linkId.trim().toUpperCase();
-    if (!/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/.test(other)) return;
+    if (!isIssueId(other)) return;
     setPending(true);
     const done = await write("Linking the issue", hm.issues.link(issue.id, other, linkType));
     setPending(false);
