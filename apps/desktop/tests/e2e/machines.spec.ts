@@ -333,6 +333,9 @@ test("removing a machine in use asks first, says what it touches, and leaves its
   await page.keyboard.press("Escape");
   // Its frame is back at the machine's address, where it still runs, and can be saved again.
   const chip = page.locator('.react-flow__node-frame button[aria-label="machine localhost"]');
+  // The tests before put four terminals in its frame, wider than the window, and its chip sits at the
+  // header's right end: its row in Layers brings it into view first.
+  await page.locator('.hm-layers section[data-machine-group]:not([data-machine-group="local"]) button[title^="Focus "]').click();
   expect(await binding(chip)).toMatch(/^ssh:\/\/[^/]*localhost:\d+\//);
   await chip.click();
   await page.getByRole("dialog", { name: "machine" }).getByRole("button", { name: "Save as a machine…" }).click();
