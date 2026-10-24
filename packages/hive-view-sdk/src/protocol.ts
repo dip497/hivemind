@@ -315,6 +315,14 @@ export interface ViewWorkflow {
   issueTypes: Record<string, { statuses: string[]; initial?: string; transitions: { id: string; name?: string; from: "*" | string[]; to: string }[] }>;
 }
 
+/** The statuses a move from `from` reaches directly by the issue type's transitions, global ones
+ *  included; undefined when the workflow knows none for that type (every status is then a target). */
+export function transitionTargets(wf: Pick<ViewWorkflow, "issueTypes">, issueType: string | undefined, from: string): string[] | undefined {
+  const t = issueType ? wf.issueTypes[issueType] : undefined;
+  if (!t || t.transitions.length === 0) return undefined;
+  return [...new Set(t.transitions.filter((tr) => tr.from === "*" || tr.from.includes(from)).map((tr) => tr.to))].filter((s) => s !== from);
+}
+
 /** The issue calls a view can make. */
 export const ISSUE_CALLS = ["read", "create", "update", "setState", "comment", "delete", "link", "unlink", "move", "workspaces", /** 1.12 */ "status", "setUp", /** 1.16 */ "workflow"] as const;
 export type IssueCall = (typeof ISSUE_CALLS)[number];

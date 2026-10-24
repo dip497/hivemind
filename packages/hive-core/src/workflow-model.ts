@@ -241,10 +241,5 @@ export function workflowView(wf: Workflow): WorkflowView {
   return view;
 }
 
-/** The statuses a move from `from` can reach directly, by the issue type's transitions; undefined
- *  when the workflow knows none for that type (every status is then a target). */
-export function transitionTargets(view: Pick<WorkflowView, "issueTypes">, issueType: string | undefined, from: string): string[] | undefined {
-  const t = issueType ? view.issueTypes[issueType] : undefined;
-  if (!t || t.transitions.length === 0) return undefined;
-  return [...new Set(t.transitions.filter((tr) => tr.from === "*" || tr.from.includes(from)).map((tr) => tr.to))].filter((s) => s !== from);
-}
+/** One rule for core, the app and views: it lives with the view protocol's workflow shape. */
+export { transitionTargets } from "@hivemind/view-sdk/protocol";

@@ -1,4 +1,4 @@
-import type { IssueState } from "./data";
+import type { IssueState, WorkflowStatus } from "./data";
 
 export const STATE_COLOR: Record<IssueState, string> = {
   backlog: "var(--color-state-backlog)",
@@ -9,6 +9,10 @@ export const STATE_COLOR: Record<IssueState, string> = {
   cancelled: "var(--color-state-cancelled)",
 };
 
+/** A status's colour: its own (a tracker's), else its state's. */
+export const statusColor = (s: Pick<WorkflowStatus, "category" | "color">): string => s.color ?? STATE_COLOR[s.category];
+
+/** The categories' names, for filtering by state when a workflow names its statuses otherwise. */
 export const STATE_LABEL: Record<IssueState, string> = {
   backlog: "Backlog",
   todo: "Todo",
@@ -36,19 +40,8 @@ export const STATE_ORDER: IssueState[] = [
   "cancelled",
 ];
 
-export function StateDot({ state, pulse = false, size = 8 }: { state: IssueState; pulse?: boolean; size?: number }) {
-  return (
-    <span
-      aria-hidden
-      className={`inline-block rounded-full shrink-0 ${pulse ? "animate-pulse" : ""}`}
-      style={{ width: size, height: size, background: STATE_COLOR[state] }}
-    />
-  );
-}
-
 /** Plane-style ring icon — hollow for not-started, half for in-progress/review, filled for done */
-export function StateIcon({ state, size = 14 }: { state: IssueState; size?: number }) {
-  const color = STATE_COLOR[state];
+export function StateIcon({ state, size = 14, color = STATE_COLOR[state] }: { state: IssueState; size?: number; color?: string }) {
   const group = STATE_GROUP[state];
   if (group === "completed") {
     return (
@@ -91,18 +84,24 @@ export function StateIcon({ state, size = 14 }: { state: IssueState; size?: numb
   );
 }
 
-export function StateChip({ state }: { state: IssueState }) {
+/** A status as a small icon in its colour, its name on hover: what a card or row shows. */
+export function StatusIcon({ status, size = 12 }: { status: WorkflowStatus; size?: number }) {
+  return (
+    <span title={status.name} className="inline-flex shrink-0" data-status={status.id}>
+      <StateIcon state={status.category} size={size} color={statusColor(status)} />
+    </span>
+  );
+}
+
+/** Marks a status that exists only in hive (not in the tracker a workflow mirrors). */
+export function HiveOnlyMark() {
   return (
     <span
-      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-count font-medium border"
-      style={{
-        color: STATE_COLOR[state],
-        background: `color-mix(in oklab, ${STATE_COLOR[state]} 14%, transparent)`,
-        borderColor: `color-mix(in oklab, ${STATE_COLOR[state]} 24%, transparent)`,
-      }}
+      title="Only in hive: the tracker does not have this status"
+      className="px-1 rounded text-chip font-mono uppercase text-[var(--color-fg3)] border border-[var(--color-line2)]"
+      data-hive-only
     >
-      <StateIcon state={state} size={11} />
-      {STATE_LABEL[state]}
+      hive
     </span>
   );
 }

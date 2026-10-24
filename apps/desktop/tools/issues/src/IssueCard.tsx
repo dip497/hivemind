@@ -1,7 +1,13 @@
 import type { DragEvent, KeyboardEvent } from "react";
 import { Play } from "@hivemind/app-ui";
-import { useOpenIssue, type IssueSummary } from "./data";
-import { StateIcon, LabelChip, Avatar } from "./StateMeta";
+import { statusById, statusOfIssue, useOpenIssue, useWorkflow, type IssueSummary } from "./data";
+import { StatusIcon, LabelChip, Avatar } from "./StateMeta";
+
+/** The status icon of an issue, in its status's colour. */
+export function IssueStatusIcon({ issue, size }: { issue: Pick<IssueSummary, "state" | "status">; size: number }) {
+  const wf = useWorkflow();
+  return <StatusIcon status={statusById(wf, statusOfIssue(issue), issue.state)} size={size} />;
+}
 import { Button } from "@hivemind/app-ui";
 
 const onActivate = (fn: () => void) => (e: KeyboardEvent) => {
@@ -44,8 +50,11 @@ export function IssueCard({
       }`}
     >
       <div className="flex items-center gap-1.5">
-        <StateIcon state={issue.state} size={11} />
+        <IssueStatusIcon issue={issue} size={11} />
         <span className="font-mono text-count text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
+        {issue.statusName && issue.status !== issue.state && (
+          <span className="text-chip text-[var(--color-fg3)] truncate" data-card-status>{issue.statusName}</span>
+        )}
         <Button reveal="hidden"
           size="xs"
           className="nodrag ml-auto"
@@ -93,7 +102,7 @@ export function IssueRow({ issue, onWork }: { issue: IssueSummary; onWork: () =>
       title={`open ${issue.id}`}
       className="nodrag group flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-[var(--color-bg3)] border border-transparent hover:border-[var(--color-line2)] cursor-pointer hm-soft"
     >
-      <StateIcon state={issue.state} size={12} />
+      <IssueStatusIcon issue={issue} size={12} />
       <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums w-20 shrink-0">{issue.id}</span>
       <span className="text-label text-[var(--color-fg)] truncate flex-1 min-w-0">{issue.title}</span>
       {issue.labels.slice(0, 2).map((l) => (
