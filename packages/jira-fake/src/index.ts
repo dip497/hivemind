@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { SiteZ, type Site } from "./site.js";
 
 export * from "./site.js";
+export { createFakeJira, type FakeJira, type FakeJiraCredentials, type FakeJiraOptions, type LoggedRequest, type WriteWindow } from "./server.js";
 
 export const FIXTURES_DIR = join(import.meta.dirname, "..", "fixtures");
 
