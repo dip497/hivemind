@@ -6,7 +6,7 @@
 import { defineCommand } from "citty";
 import {
   HiveError, PrError, applyPrStates, cleanupWork, completeIssue, createPullRequest, fetchPrStates, followsPr, issueRootFrom,
-  prStatus, readIssue, requireRoot, syncPullRequests, workOf, writeAgentContext, type PrChange,
+  prStatus, readIssue, syncPullRequests, workOf, workspaceRootFrom, writeAgentContext, type PrChange,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { detectWho } from "../who.js";
@@ -119,7 +119,7 @@ const sync = defineCommand({
         if (!issue.pr) throw new PrError("not_found", `${id} has no PR`, `hive pr create ${id}`);
         changes = followsPr(issue) ? await applyPrStates(root, [issue], await fetchPrStates([issue.pr], path.dirname(root))) : [];
       } else {
-        root = await requireRoot();
+        root = await workspaceRootFrom(process.cwd());
         changes = await syncPullRequests(root);
       }
       if (changes.length) await writeAgentContext(root).catch(() => {});

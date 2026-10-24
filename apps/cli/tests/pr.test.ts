@@ -212,7 +212,8 @@ describe("hive pr", () => {
     expect((await readIssue(s.root, s.id)).state).toBe("in_review");
 
     fs.writeFileSync(path.join(s.shim, "graphql.json"), merged(7, "MERGED"));
-    const r = run(s, ["pr", "sync", "--json"], s.repo);
+    // From the worktree, whose own .hivemind holds no issues: the main checkout's are the ones.
+    const r = run(s, ["pr", "sync", "--json"], s.wt);
     expect([r.code, r.json]).toEqual([0, { changes: [{ id: s.id, event: "merged", movedTo: "done", pr: expect.objectContaining({ state: "merged", checks: "passing" }) }] }]);
     expect((await readIssue(s.root, s.id)).state).toBe("done");
     expect(run(s, ["pr", "sync", "--json"], s.repo).json).toEqual({ changes: [] });

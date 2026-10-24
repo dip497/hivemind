@@ -4,7 +4,7 @@
 // nothing waits on a prompt: a `gh` that is not signed in is a refusal that says how to sign in.
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { HiveError, commentOnIssue, findRoot, listIssues, locateIssue, readConfig, readIssue, updateIssue } from "./storage.js";
+import { HiveError, commentOnIssue, findRoot, listIssues, locateIssue, readConfig, readIssue, requireRoot, updateIssue } from "./storage.js";
 import { rootForIdHere } from "./json.js";
 import { defaultStatus, isBuiltinWorkflow, issueTypeOf, loadWorkflow } from "./workflow.js";
 import type { IssueState, Issue, IssueSummary, PrRef } from "./types.js";
@@ -104,6 +104,20 @@ export async function issueRootFrom(id: string, cwd: string): Promise<string> {
   }
   if (typeof here === "string") return here;
   throw here;
+}
+
+/** The workspace a command over every issue acts on from `cwd`: from a linked git worktree, the
+ *  main checkout's (where the issues live) when it has one; else the one `cwd` is in. */
+export async function workspaceRootFrom(cwd: string): Promise<string> {
+  const [common, top] = await Promise.all([
+    ok(git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])),
+    ok(git(cwd, ["rev-parse", "--show-toplevel"])),
+  ]);
+  if (common && top && path.resolve(path.dirname(common)) !== path.resolve(top)) {
+    const main = await findRoot(path.dirname(common));
+    if (main) return main;
+  }
+  return requireRoot(cwd);
 }
 
 /** Each worktree of the repository at `cwd`, with the branch it has checked out. */
