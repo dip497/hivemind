@@ -437,6 +437,8 @@ export async function cleanupWork(root: string, id: string, who = "hive"): Promi
   const issue = await readIssue(root, id);
   if (issue.pr?.state !== "merged") throw new PrError("failed", `${id}'s PR is ${issue.pr ? issue.pr.state : "not opened"}: only merged work is cleaned up`, issue.pr ? `hive pr sync, once it is merged` : `hive pr create ${id}`);
   if (!issue.branch) return { removed: null, branch: null };
+  // From the issue's file, and about to be an argument: never an option.
+  if (issue.branch.startsWith("-")) throw new PrError("bad_request", `${id}'s branch "${issue.branch}" is not a branch name`);
   const repo = path.dirname(root);
   const all = await worktrees(repo);
   const main = all[0]?.path;
