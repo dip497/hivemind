@@ -145,7 +145,7 @@ export function IssuesTile({ hm, selected, workflowError }: TileProps & { workfl
             tracker={{ value: trackerAssignee, onChange: setTrackerP }}
             rightSlot={
               <>
-                <span className="text-count text-[var(--color-fg3)] tabular-nums">{issues.length}</span>
+                <span className="text-count text-[var(--color-fg3)] tabular-nums" data-issue-count>{issues.length}</span>
                 <GroupByMenu value={groupBy} onChange={setGroupP} />
                 <ViewSwitcher value={view} onChange={setViewP} views={["board", "list"]} />
                 <Button size="sm" className="nodrag" onClick={newIssue}>+ New</Button>
