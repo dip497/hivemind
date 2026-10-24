@@ -1,4 +1,4 @@
-import { type Assignee, type IssueState } from "@hivemind/core";
+import { mentionRe, type Assignee, type IssueState } from "@hivemind/core";
 import { getCatalog } from "@hivemind/agents";
 
 const STATES: IssueState[] = [
@@ -43,7 +43,7 @@ export function stripAt(s: string): string {
 
 /** Extract all @ID mentions from a text blob (returns deduped, in-order). */
 export function extractMentions(text: string): string[] {
-  const re = /@([A-Z][A-Z0-9]{1,9}-\d+(?:\.\d+)*)/g;
+  const re = mentionRe();
   const seen = new Set<string>();
   const out: string[] = [];
   let m: RegExpExecArray | null;

@@ -10,6 +10,8 @@
  *   │   └── PAY-122/        <- sub-issue directory (children of PAY-122)
  *   │       ├── PAY-122.1.md
  *   │       └── PAY-122.2.md
+ *   ├── mirror/<source-slug>/ <- issues mirrored from a tracker, by its key (mirror.ts)
+ *   │   └── JIRA-318.md
  *   └── .agent.md            <- auto-generated context for AI agents
  */
 
@@ -35,6 +37,8 @@ import {
   type LayoutLine,
   type PrRef,
 } from "./types.js";
+import { ISSUE_ID_RE } from "./issue-id.js";
+import { MIRROR_DIR } from "./mirror.js";
 
 const DIR = ".hivemind";
 
@@ -215,22 +219,33 @@ export async function allocateId(root: string): Promise<{ id: string; cfg: Confi
   return run;
 }
 
+/** Read-modify-write config.yaml, serialized with id allocation and migrations (all three rewrite
+ *  it, and a write that interleaves with another loses its change). Returns the config as written. */
+export async function updateConfig(root: string, mutate: (cfg: Config) => Config): Promise<Config> {
+  const prev = allocChains.get(root) ?? Promise.resolve();
+  const run = prev.then(async () => {
+    const next = mutate(await readConfig(root));
+    await writeConfig(root, next);
+    return next;
+  });
+  allocChains.set(root, run.then(() => undefined, () => undefined));
+  return run;
+}
+
 // ── issues: paths ──────────────────────────────────────────────────
 
 /**
- * Resolve the on-disk path for an issue id. Sub-issues live in directories
- * named after their parent: e.g. PAY-122/PAY-122.1.md.
+ * The on-disk path for a LOCAL issue id (where a new one is written). Sub-issues live in
+ * directories named after their parent: e.g. PAY-122/PAY-122.1.md. To find an existing issue,
+ * which may be mirrored or named by an alias, use `locateIssue`.
  *
  * - "PAY-118"    → .hivemind/issues/PAY-118.md
  * - "PAY-122.1"  → .hivemind/issues/PAY-122/PAY-122.1.md
  * - "PAY-1.2.3"  → .hivemind/issues/PAY-1/PAY-1.2/PAY-1.2.3.md
  */
-// Issue id format: prefix (one uppercase letter + 1-9 uppercase/digit chars) +
-// "-" + decimal number, optionally followed by dotted sub-decimals. Validates
-// every callsite (CLI + IPC) so a malicious id like "../../etc/passwd" can't
-// escape `.hivemind/issues/` and the resulting `fs.unlink`/`fs.writeFile` /
+// Issue id format: issue-id.ts. Validates every callsite (CLI + IPC) so a malicious id like
+// "../../etc/passwd" can't escape `.hivemind/` and the resulting `fs.unlink`/`fs.writeFile` /
 // `fs.readFile` is bounded. (Defense-in-depth — IPC validates separately.)
-const ISSUE_ID_RE = /^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/;
 // ── workspace format ──────────────────────────────────────────────
 
 /** The on-disk format this build reads and writes. A workspace written at an earlier format is
@@ -314,12 +329,43 @@ export function issuePath(root: string, id: string): string {
   return path.join(dir, ...segs, `${id}.md`);
 }
 
-/** Read an issue file by id (throws HiveError if missing). */
+const exists = (p: string): Promise<boolean> => fs.stat(p).then((s) => s.isFile(), () => false);
+
+/**
+ * Where the file of issue `id` is, or null: the one id → path lookup every reader goes through.
+ * A local issue is at `issuePath`; a mirrored one at `mirror/<slug>/<id>.md`; an earlier id (a Jira
+ * key before the issue moved) resolves to the issue whose `aliases` hold it. The alias step reads
+ * the cached listing, so only a miss costs a folder walk.
+ */
+export async function locateIssue(root: string, id: string): Promise<string | null> {
+  const local = issuePath(root, id);
+  if (await exists(local)) return local;
+  if (!id.includes(".")) {
+    for (const slug of await subdirs(path.join(root, MIRROR_DIR))) {
+      const p = path.join(root, MIRROR_DIR, slug, `${id}.md`);
+      if (await exists(p)) return p;
+    }
+  }
+  for (const [p, e] of await scanIssueFiles(root)) if (e.aliases.includes(id)) return p;
+  return null;
+}
+
+async function subdirs(dir: string): Promise<string[]> {
+  try {
+    return (await fs.readdir(dir, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/** Read an issue file by id, alias or mirrored key (throws HiveError if missing). */
 export async function readIssue(root: string, id: string): Promise<Issue> {
-  const p = issuePath(root, id);
+  assertValidIssueId(id);
   await ensureWorkspaceCurrent(root);
+  const p = await locateIssue(root, id);
   let raw: string;
   try {
+    if (!p) throw new Error("missing");
     raw = await fs.readFile(p, "utf8");
   } catch {
     throw new HiveError("not_found", `issue ${id} not found`);
@@ -478,15 +524,17 @@ export async function writeIssue(issue: Issue): Promise<void> {
 }
 
 export async function deleteIssueFile(root: string, id: string): Promise<void> {
-  const p = issuePath(root, id);
+  assertValidIssueId(id);
+  const p = await locateIssue(root, id);
   try {
+    if (!p) throw new Error("missing");
     await fs.unlink(p);
   } catch {
     throw new HiveError("not_found", `issue ${id} not found`);
   }
   // Clean up empty parent dirs (best-effort, ignore errors).
   let dir = path.dirname(p);
-  const issuesRoot = path.join(root, "issues");
+  const issuesRoot = path.join(root, p.startsWith(path.join(root, MIRROR_DIR) + path.sep) ? MIRROR_DIR : "issues");
   while (dir.startsWith(issuesRoot) && dir !== issuesRoot) {
     try {
       const entries = await fs.readdir(dir);
@@ -501,42 +549,83 @@ export async function deleteIssueFile(root: string, id: string): Promise<void> {
 
 // ── issues: list / summary ────────────────────────────────────────
 
+/** What the listing keeps per file, until the file's mtime, size or inode changes. */
+export interface ScannedFile {
+  mtimeMs: number;
+  size: number;
+  ino: number;
+  /** Null for a file that isn't a valid issue (skipped by the list view). */
+  summary: IssueSummary | null;
+  aliases: string[];
+  /** `external.source` + `external.id` of a mirrored issue: the sync's identity for it. */
+  external?: { source: string; id: string };
+}
+
+/** Per root: every issue file seen by the last scan. Files that are gone drop out on the next one. */
+const scans = new Map<string, Map<string, ScannedFile>>();
+
 /**
- * Walk .hivemind/issues/ and return frontmatter-only summaries. Faster than
- * full parse; used by `list` and by chokidar-fed UI queries.
+ * Every issue file under `issues/` and `mirror/`, parsed once per change. A file is re-read only
+ * when its mtime, size or inode changed (an atomic rename changes the inode), so listing 500
+ * unchanged issues costs 500 `stat`s, not 500 reads and YAML parses.
+ */
+export async function scanIssueFiles(root: string): Promise<Map<string, ScannedFile>> {
+  const files = [...(await walk(path.join(root, "issues"), ".md")), ...(await walk(path.join(root, MIRROR_DIR), ".md"))];
+  const before = scans.get(root);
+  const now = new Map<string, ScannedFile>();
+  for (const p of files) {
+    try {
+      const st = await fs.stat(p);
+      const hit = before?.get(p);
+      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size && hit.ino === st.ino) {
+        now.set(p, hit);
+        continue;
+      }
+      now.set(p, { mtimeMs: st.mtimeMs, size: st.size, ino: st.ino, ...summarize(p, await fs.readFile(p, "utf8")) });
+    } catch {
+      /* skip unreadable or vanished files */
+    }
+  }
+  scans.set(root, now);
+  return now;
+}
+
+function summarize(p: string, raw: string): Pick<ScannedFile, "summary" | "aliases" | "external"> {
+  const fm = IssueFrontmatterZ.safeParse(readFrontmatter(raw).data);
+  if (!fm.success) return { summary: null, aliases: [] }; // skip invalid files in list view
+  const d = fm.data;
+  const summary: IssueSummary = {
+    id: d.id,
+    title: d.title,
+    state: d.state,
+    parent: d.parent,
+    labels: d.labels,
+    assignee: d.assignee,
+    github: d.github,
+    created: d.created,
+    updated: d.updated,
+    path: p,
+  };
+  // Only the ones the file has, so a summary is the same shape it always was without them.
+  for (const k of ["links", "status", "external", "branch", "pr", "aliases"] as const) {
+    if (d[k] !== undefined) Object.assign(summary, { [k]: d[k] });
+  }
+  return {
+    summary,
+    aliases: d.aliases ?? [],
+    ...(d.external ? { external: { source: d.external.source, id: d.external.id } } : {}),
+  };
+}
+
+/**
+ * Frontmatter-only summaries of every issue, local (`issues/`) and mirrored (`mirror/`). Used by
+ * `list` and by chokidar-fed UI queries. An unchanged file gives back the same summary object as
+ * last time, so treat them as read-only.
  */
 export async function listIssues(root: string): Promise<IssueSummary[]> {
   await ensureWorkspaceCurrent(root);
-  const issuesDir = path.join(root, "issues");
-  const files = await walk(issuesDir, ".md");
   const out: IssueSummary[] = [];
-  for (const p of files) {
-    try {
-      const raw = await fs.readFile(p, "utf8");
-      const fm = IssueFrontmatterZ.safeParse(readFrontmatter(raw).data);
-      if (!fm.success) continue; // skip invalid files in list view
-      const d = fm.data;
-      const summary: IssueSummary = {
-        id: d.id,
-        title: d.title,
-        state: d.state,
-        parent: d.parent,
-        labels: d.labels,
-        assignee: d.assignee,
-        github: d.github,
-        created: d.created,
-        updated: d.updated,
-        path: p,
-      };
-      // Only the ones the file has, so a summary is the same shape it always was without them.
-      for (const k of ["links", "status", "external", "branch", "pr", "aliases"] as const) {
-        if (d[k] !== undefined) Object.assign(summary, { [k]: d[k] });
-      }
-      out.push(summary);
-    } catch {
-      /* skip unreadable files */
-    }
-  }
+  for (const e of (await scanIssueFiles(root)).values()) if (e.summary) out.push(e.summary);
   // Stable ID-major-first sort.
   out.sort((a, b) => compareIds(a.id, b.id));
   return out;
@@ -855,7 +944,8 @@ export interface CreateIssueOpts {
  */
 export async function createIssue(root: string, opts: CreateIssueOpts): Promise<Issue> {
   let finalId: string;
-  if (opts.parent) {
+  // Dotted sub-issue ids are local only: a child of a mirrored issue gets an id of its own.
+  if (opts.parent && !(await isMirrored(root, opts.parent))) {
     finalId = await nextSubIssueId(root, opts.parent);
   } else {
     const { id } = await allocateId(root);
@@ -890,6 +980,26 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
   };
   await writeIssue(issue);
   return issue;
+}
+
+async function isMirrored(root: string, id: string): Promise<boolean> {
+  const p = await locateIssue(root, id).catch(() => null);
+  return !!p && p.startsWith(path.join(root, MIRROR_DIR) + path.sep);
+}
+
+/** Write `text` to `file` atomically: a sibling temp file renamed over it, so a reader (or a
+ *  process killed mid-write) never sees half a file. The temp name doesn't end in `.md`, so a
+ *  leftover one is never listed as an issue. */
+export async function writeFileAtomic(file: string, text: string): Promise<void> {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.tmp`;
+  try {
+    await fs.writeFile(tmp, text, "utf8");
+    await fs.rename(tmp, file);
+  } catch (e) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
 }
 
 /** Find the next available `.N` suffix under an existing parent issue. */

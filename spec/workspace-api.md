@@ -228,6 +228,7 @@ sends, and one participant per device.
 | `issue.link` | `root`, `id`, `other`, `type` | `{from, to, type, reciprocal}` | target `id->other`, detail the type |
 | `issue.unlink` | `root`, `id`, `other` | `{removed}` | target `id->other` |
 | `issue.move` | `root`, `id`, `prefix`, `mode` (`move` \| `copy`) | `{newId, newIssue, mode, from}` | target `id`, detail `move to PREFIX` |
+| `issue.ingest` | `root`, `source`, `records`, `{dryRun?}`? | `{source, dryRun, created, updated, unchanged, conflicts, archived, notes}` (records as `hive ingest` takes them; edit role) | target `source` |
 | `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]` | read |
 | `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments) | target `repo` |
 

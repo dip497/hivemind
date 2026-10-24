@@ -14,6 +14,7 @@ import { listCmd } from "./commands/list.js";
 import { showCmd } from "./commands/show.js";
 import { updateCmd } from "./commands/update.js";
 import { closeCmd, reopenCmd } from "./commands/close.js";
+import { ingestCmd } from "./commands/ingest.js";
 import { taskCmd } from "./commands/task.js";
 import { linkCmd } from "./commands/link.js";
 import { relateCmd } from "./commands/relate.js";
@@ -72,6 +73,7 @@ const main = defineCommand({
     update: updateCmd,
     close: closeCmd,
     reopen: reopenCmd,
+    ingest: ingestCmd,
     task: taskCmd,
     link: linkCmd,
     relate: relateCmd,

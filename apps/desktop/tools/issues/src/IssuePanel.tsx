@@ -11,6 +11,7 @@ import type { PanelProps } from "./data";
 import { STATE_COLOR, STATE_LABEL, STATE_ORDER, StateIcon } from "./StateMeta";
 import { AssigneePicker, LabelPicker, ParentPicker } from "./pickers";
 import { SubIssueTree } from "./SubIssueTree";
+import { isIssueId } from "@hivemind/core/issue-id";
 import { workPrompt } from "./IssuesTile";
 
 type LinkType = "relates" | "blocks" | "blocked-by" | "duplicates" | "parent-of" | "child-of";
@@ -460,7 +461,7 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
 
   async function submitLink() {
     const other = linkId.trim().toUpperCase();
-    if (!/^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/.test(other)) return;
+    if (!isIssueId(other)) return;
     setPending(true);
     const done = await write("Linking the issue", hm.issues.link(issue.id, other, linkType));
     setPending(false);
