@@ -132,7 +132,8 @@ When the user asks you to work on an issue (e.g. \`PAY-42\`):
 3. Plan briefly (one comment via \`hive ctl add-comment\`).
 4. Execute. Tick each criterion as you go (\`hive ctl mark-acceptance PAY-42 <n>\`).
 5. Comment progress at meaningful checkpoints (file:line refs).
-6. **Every session MUST end with \`hive ctl set-state\`** — \`in_review\` (done, awaiting review),
+6. **Every session MUST end with \`hive ctl complete PAY-42\`** (work finished: it checks the work, then
+   opens the PR or moves the issue to review, as the workspace's \`on_complete\` says) **or \`hive ctl set-state\`** —
    \`done\` (only with explicit authority), \`in_progress\` (will resume), or \`cancelled\` with \`--note\`.
 
 Do not exit a session silently.
