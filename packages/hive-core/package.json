@@ -54,6 +54,7 @@
     "@hivemind/hub": "workspace:*",
     "@hivemind/view-sdk": "workspace:*",
     "gray-matter": "catalog:",
+    "js-yaml": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"
   },

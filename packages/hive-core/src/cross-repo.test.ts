@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { writeConfig } from "./storage.js";
-import { createIssue, readIssue, listIssues } from "./storage.js";
+import { createIssue, readIssue, listIssues, updateIssue } from "./storage.js";
 import {
   listWorkspaces,
   prefixOf,
@@ -150,6 +150,29 @@ describe("transferIssue", () => {
     expect(dest.links).toEqual([{ id: src.id, type: "moved-from" }]);
     await expect(readIssue(a, src.id)).rejects.toThrow(/not found/);
     expect(await listIssues(a)).toEqual([]);
+  });
+
+  test("a transfer keeps what the file holds; a copy leaves the original's tracker link, PR and earlier ids behind", async () => {
+    for (const mode of ["move", "copy"] as const) {
+      const a = await mkWorkspace(`alpha-${mode}`, "ALPHA");
+      const b = await mkWorkspace(`beta-${mode}`, "BETA");
+      const src = await createIssue(a, { title: "Carry me", branch: "ALPHA-1-carry" });
+      const pr = { repo: "acme/alpha", number: 3, url: "https://github.com/acme/alpha/pull/3", state: "open" as const };
+      await updateIssue(a, src.id, { pr, aliases: ["OLD-9"] });
+      const raw = await fs.readFile(src.path, "utf8");
+      await fs.writeFile(src.path, raw.replace("\nupdated:", "\nstatus: review\nexternal: { provider: jira, source: jira:acme/AL, id: '7', key: AL-7 }\nx_note: keep\nupdated:")
+        .replace("## Activity", "## Acceptance criteria\n\nProse.\n\n- [ ] crit\n\n## Activity") + "\n## Notes\n\nafter activity\n");
+      const res = await transferIssue(a, src.id, "BETA", { mode, actor: "tester" });
+      const dest = await readIssue(b, res.newId);
+      const moved = mode === "move";
+      expect([mode, dest.status, dest.x_note, dest.branch, dest.external?.key, dest.pr?.number, dest.aliases]).toEqual([
+        mode, "review", "keep", undefined, moved ? "AL-7" : undefined, moved ? 3 : undefined, moved ? ["OLD-9"] : undefined,
+      ]);
+      expect([dest.sections.acceptanceCriteria, dest.sections.acceptanceLayout, dest.sections.extra]).toEqual([
+        [{ done: false, text: "crit" }], ["Prose.", "", { indent: "" }], "## Notes\n\nafter activity",
+      ]);
+      expect(dest.sections.activity[0]!.at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    }
   });
 
   test("move refuses an issue with sub-issues", async () => {
