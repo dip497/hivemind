@@ -23,7 +23,8 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
-import { GEIST_FONT, MONO_FONT, OLD_UI_FONT_DEFAULT, PRESETS, SYSTEM_MONO_FONT, UI_FONT, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { NAMED_FONTS, fontNameOf, type FontSlot } from "@hivemind/core/font-names";
 import { cssColorToHex } from "@hivemind/core/css-color";
 import { accentOf } from "@hivemind/core/appearance-extra";
 import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
@@ -173,19 +174,20 @@ export function AccentPicker({ t }: { t: ThemeState }) {
 
 // ── corners and fonts ───────────────────────────────────────────────────────
 
-// The system font is the default (DESIGN.md); the font list most settings.json files hold reads as it.
-const UI_FONTS = [{ id: "system", label: "System", value: UI_FONT, also: [OLD_UI_FONT_DEFAULT] }, { id: "geist", label: "Geist", value: GEIST_FONT }];
-const MONO_FONTS = [{ id: "jetbrains", label: "JetBrains Mono", value: MONO_FONT }, { id: "system", label: "System", value: SYSTEM_MONO_FONT }];
-
-/** A font: one of the faces named here, or any CSS font list the person types (Custom). */
-function FontRow({ id, label, hint, value, fonts, onChange }: {
-  id: string; label: string; hint: string; value: string;
-  fonts: { id: string; label: string; value: string; also?: string[] }[]; onChange: (v: string) => void;
+/** A font, as core names it (`fontNameOf`): a face named here, the face a theme brought (by its
+ *  family, with the theme that set it), or any CSS font list the person types (Custom, its field
+ *  holding the whole list, the closed select reading its first family). */
+function FontRow({ id, slot, label, hint, value, onChange }: {
+  id: string; slot: FontSlot; label: string; hint: string; value: string; onChange: (v: string) => void;
 }) {
-  const named = fonts.find((f) => f.value === value || f.also?.includes(value));
-  const [chosen, setCustom] = useState(!named);
-  // A font set elsewhere (a theme, `hive config set`) that is none of these is shown as Custom.
-  const custom = chosen || !named;
+  const name = fontNameOf(slot, value, useSettings().appearanceExtra);
+  const fonts = NAMED_FONTS[slot];
+  // Custom… chosen over a face opens the field on that face's list. The row stays mounted through
+  // Apply and Revert, so the choice is dropped the moment the value moves (a theme, Revert, `hive
+  // config set`): the same list coming back later is named afresh, not Custom again.
+  const [customFor, setCustomFor] = useState<string | null>(null);
+  if (customFor !== null && customFor !== value) setCustomFor(null);
+  const custom = name.kind === "custom" || customFor === value;
   return (
     <div className="settings-row">
       <div><label htmlFor={id}>{label}</label><p>{hint}</p></div>
@@ -198,15 +200,18 @@ function FontRow({ id, label, hint, value, fonts, onChange }: {
           />
         )}
         <Select
-          value={custom ? "custom" : named!.id}
+          value={custom ? "custom" : name.kind === "named" ? name.id : "face"}
           onValueChange={(v) => {
             const f = fonts.find((x) => x.id === v);
-            setCustom(!f);
+            setCustomFor(v === "custom" ? value : null);
             if (f) onChange(f.value);
           }}
         >
-          <SelectTrigger id={id} data-font-select={id} className="min-w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger id={id} data-font-select={id} className="min-w-40">
+            {custom ? <SelectValue>{name.kind === "custom" ? name.label : "Custom…"}</SelectValue> : <SelectValue />}
+          </SelectTrigger>
           <SelectContent>
+            {name.kind === "face" && <SelectItem value="face">{name.label}</SelectItem>}
             {fonts.map((f) => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
             <SelectItem value="custom">Custom…</SelectItem>
           </SelectContent>
@@ -220,8 +225,8 @@ export function ShapeAndTypeControls({ t }: { t: ThemeState }) {
   return (
     <>
       <Slider label="Corners" value={t.radius} min={0} max={24} suffix="px" onChange={(v) => setTheme({ radius: v })} />
-      <FontRow id="ui-font" label="Interface font" hint="Menus, panels and Settings." value={t.uiFont} fonts={UI_FONTS} onChange={(v) => setTheme({ uiFont: v })} />
-      <FontRow id="mono-font" label="Code font" hint="Terminals, code and diffs." value={t.monoFont} fonts={MONO_FONTS} onChange={(v) => setTheme({ monoFont: v })} />
+      <FontRow id="ui-font" slot="ui" label="Interface font" hint="Menus, panels and Settings." value={t.uiFont} onChange={(v) => setTheme({ uiFont: v })} />
+      <FontRow id="mono-font" slot="mono" label="Code font" hint="Terminals, code and diffs." value={t.monoFont} onChange={(v) => setTheme({ monoFont: v })} />
     </>
   );
 }

@@ -26,12 +26,13 @@ const PKG = fs.mkdtempSync(path.join(os.tmpdir(), "hm-themes-pkg-"));
 const BG = "#0e1a24";
 const BRAND = "#c08552";
 const FAMILY = "Harbour Display";
+const MONO_FAMILY = "Harbour Mono";
 const JPEG = Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=", "base64");
 const theme = {
   format: 1, name: "Harbour", mode: "dark",
   palette: { bg: BG, bg2: "#14242f", bg3: "#1b2e3b", bg4: "#233847", line: "#233847", line2: "#2f4757", fg: "#eef3f6", fg2: "#c3cfd6", fg3: "#8fa0ab", select: "#c3cfd6", ok: "#7fc49a", warn: "#e6b866", err: "#e08a7a" },
   accent: { brand: BRAND, accent: "#d9a273" },
-  fonts: { ui: { family: FAMILY, files: [{ path: "fonts/display.woff2" }] } },
+  fonts: { ui: { family: FAMILY, files: [{ path: "fonts/display.woff2" }] }, mono: { family: MONO_FAMILY, files: [{ path: "fonts/display.woff2" }] } },
   wallpaper: { image: "still.jpg", brightness: 0.8 },
 };
 fs.mkdirSync(path.join(PKG, "themes", "harbour", "fonts"), { recursive: true });
@@ -105,6 +106,10 @@ const appearance = async () => {
   await page.locator("[data-themes]").waitFor({ timeout: 10_000 });
 };
 const closeSettings = () => page.getByRole("button", { name: "Close", exact: true }).click();
+/** Appearance's Interface font row: what its closed select reads, and its field for a typed list. */
+const uiFontRow = () => ({ select: page.locator('[data-font-select="ui-font"]'), field: page.getByRole("textbox", { name: "Interface font, custom" }) });
+const monoFontRow = () => ({ select: page.locator('[data-font-select="mono-font"]'), field: page.getByRole("textbox", { name: "Code font, custom" }) });
+const applyHarbour = () => page.locator('[data-theme-option="@e2e/looks/harbour"]').getByRole("button", { name: "Apply Harbour" }).click();
 let before: Awaited<ReturnType<typeof painted>>;
 let bare: Awaited<ReturnType<typeof onCanvas>>;
 
@@ -141,6 +146,11 @@ test("applied from Appearance: its colours, its accent on the main button, its f
   await shot("themes-listed");
   await row.getByRole("button", { name: "Apply Harbour" }).click();
   await expect(page.locator('[data-theme-applied="@e2e/looks/harbour"]')).toBeVisible();
+  // The font row names the theme's face, with the theme; the list it is set as is not a typed one.
+  await expect(uiFontRow().select).toHaveText(`${FAMILY} · Harbour`);
+  await expect(uiFontRow().field).toHaveCount(0);
+  await expect(monoFontRow().select).toHaveText(`${MONO_FAMILY} · Harbour`);
+  await expect(monoFontRow().field).toHaveCount(0);
   await shot("themes-applied-settings");
   await closeSettings();
 
@@ -179,12 +189,55 @@ test("Revert to previous look puts back what was there", async () => {
   await appearance();
   await page.locator("[data-theme-revert]").click();
   await expect(page.locator("[data-theme-applied]")).toHaveCount(0);
+  await expect(uiFontRow().select).toHaveText("System");
+  await expect(uiFontRow().field).toHaveCount(0);
+  await expect(monoFontRow().select).toHaveText("JetBrains Mono");
   await closeSettings();
   await expect.poll(() => painted()).toEqual(before);
   await expect.poll(onCanvas).toEqual(bare);
   expect(onDisk().appearanceExtra ?? {}).toEqual({});
   // Neither look names the theme's files any more.
   expect(fs.readdirSync(MEDIA).filter((f) => f.startsWith("theme-"))).toEqual([]);
+});
+
+test("a font list of the person's own is Custom: its field holds the list, the closed select its first family", async () => {
+  const was = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--font-ui-user").trim());
+  const typed = `"Iosevka Term", ${was}`;
+  await page.evaluate((v) => window.hive.settingsSet("appearance.uiFont", v), typed);
+  await appearance();
+  await expect(uiFontRow().select).toHaveText("Iosevka Term");
+  await expect(uiFontRow().field).toHaveValue(typed);
+  await shot("themes-font-custom");
+  await closeSettings();
+  await page.evaluate((v) => window.hive.settingsSet("appearance.uiFont", v), was);
+  await expect.poll(() => painted()).toEqual(before);
+});
+
+test("Custom… opened and left untyped is forgotten once the font changes: Apply and Revert name the font, the same list coming back too", async () => {
+  const chooseCustom = async () => {
+    await uiFontRow().select.click();
+    await page.getByRole("option", { name: "Custom…" }).click();
+    await expect(uiFontRow().field).toHaveCount(1);
+  };
+  await appearance();
+  // On the system font: Custom… opened, then a theme and back.
+  await chooseCustom();
+  await applyHarbour();
+  await expect(uiFontRow().select).toHaveText(`${FAMILY} · Harbour`);
+  await page.locator("[data-theme-revert]").click();
+  await expect(uiFontRow().select).toHaveText("System");
+  await expect(uiFontRow().field).toHaveCount(0);
+  // On the theme's face: Custom… opened, Revert, and the theme applied again.
+  await applyHarbour();
+  await chooseCustom();
+  await page.locator("[data-theme-revert]").click();
+  await expect(uiFontRow().select).toHaveText("System");
+  await applyHarbour();
+  await expect(uiFontRow().select).toHaveText(`${FAMILY} · Harbour`);
+  await expect(uiFontRow().field).toHaveCount(0);
+  await page.locator("[data-theme-revert]").click();
+  await expect(page.locator("[data-theme-applied]")).toHaveCount(0);
+  await closeSettings();
 });
 
 test("applied again, its package removed: the look stays, and Appearance says so", async () => {
@@ -197,6 +250,7 @@ test("applied again, its package removed: the look stays, and Appearance says so
   hive("plugins", "remove", "package:@e2e/looks");
   await appearance();
   await expect(page.locator('[data-theme-applied="@e2e/looks/harbour"]')).toContainText("(its package was removed)");
+  await expect(uiFontRow().select).toHaveText(`${FAMILY} · Harbour`);
   await expect(page.locator('[data-theme-option="@e2e/looks/harbour"]')).toHaveCount(0);
   await shot("themes-package-removed");
   await closeSettings();

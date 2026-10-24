@@ -23,6 +23,7 @@
     "./theme-format": "./src/theme-format.ts",
     "./theme-folder": "./src/theme-folder.ts",
     "./theme-apply": "./src/theme-apply.ts",
+    "./font-names": "./src/font-names.ts",
     "./notification-settings": "./src/notification-settings.ts",
     "./css-color": "./src/css-color.ts",
     "./settings": "./src/settings.ts",
