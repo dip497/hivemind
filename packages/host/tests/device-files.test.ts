@@ -59,7 +59,7 @@ function devices(from = LAPTOP) {
   git("commit", "-q", "-m", "one");
   fs.writeFileSync(path.join(repo, "notes.md"), "one\ntwo\n");
   const [laptopEnd, desktopEnd] = linkPair(from, DESKTOP);
-  const server = new WorkspaceServer([...workspaceDomains], new Intents(new AuditLog({ file: path.join(tmp, `audit-${Math.random()}.jsonl`) })));
+  const server = new WorkspaceServer(workspaceDomains(), new Intents(new AuditLog({ file: path.join(tmp, `audit-${Math.random()}.jsonl`) })));
   serveFiles(desktopEnd, server, (device) => (device === LAPTOP ? PERSON : null));
   let dialled = 0;
   const folders = deviceFolders({ mine: (device) => device === DESKTOP, dial: async () => { dialled++; return laptopEnd; } });
@@ -102,7 +102,7 @@ test("a device answers only the person's own devices, and only about folders", a
 
   // The person's own: a call that is not about a folder is refused.
   const d = devices();
-  const server = new WorkspaceServer([...workspaceDomains], new Intents(new AuditLog({ file: path.join(tmp, "audit-x.jsonl") })));
+  const server = new WorkspaceServer(workspaceDomains(), new Intents(new AuditLog({ file: path.join(tmp, "audit-x.jsonl") })));
   const [laptopEnd, desktopEnd] = linkPair(LAPTOP, DESKTOP);
   serveFiles(desktopEnd, server, () => PERSON);
   const answers: string[] = [];

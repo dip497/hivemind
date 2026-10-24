@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
-import type { IssueState, IssueSummary } from "./data";
-import { STATE_LABEL, STATE_ORDER, StateIcon, LabelChip, Avatar } from "./StateMeta";
+import { statusOfIssue, useWorkflow, type IssueSummary } from "./data";
+import { StatusIcon, LabelChip, Avatar } from "./StateMeta";
 import { Button } from "@hivemind/app-ui";
 import { Input } from "@hivemind/app-ui";
 import { MenuItem } from "@hivemind/app-ui";
 import { Popover } from "@hivemind/app-ui";
+import { hasMirrored, trackerAssigneeLabel, trackerPeople, type TrackerAssignee } from "./tracker";
 
 export interface Filters {
   q: string;
-  states: Set<IssueState>;
+  /** Status ids (with no workflow of its own, the states). */
+  states: Set<string>;
   labels: Set<string>;
   assignees: Set<string>;
   /** When true, BoardView/ListView render the Cancelled column/group. */
@@ -26,7 +28,7 @@ export const emptyFilters = (): Filters => ({
 export function applyFilters(issues: IssueSummary[], f: Filters): IssueSummary[] {
   const q = f.q.trim().toLowerCase();
   return issues.filter((i) => {
-    if (f.states.size > 0 && !f.states.has(i.state)) return false;
+    if (f.states.size > 0 && !f.states.has(statusOfIssue(i))) return false;
     if (f.labels.size > 0 && !i.labels.some((l) => f.labels.has(l))) return false;
     if (f.assignees.size > 0 && !(i.assignee && f.assignees.has(i.assignee.id))) return false;
     if (q && !i.title.toLowerCase().includes(q) && !i.id.toLowerCase().includes(q)) return false;
@@ -39,12 +41,17 @@ export function FilterBar({
   filters,
   onChange,
   rightSlot,
+  tracker,
 }: {
   issues: IssueSummary[];
   filters: Filters;
   onChange: (f: Filters) => void;
   rightSlot?: React.ReactNode;
+  /** Whose mirrored issues are shown (design jira-sync §7.1); offered once an issue is mirrored. */
+  tracker?: { value: TrackerAssignee; onChange: (v: TrackerAssignee) => void };
 }) {
+  const wf = useWorkflow();
+  const statusWord = wf.custom ? "Status" : "State";
   const allLabels = useMemo(() => {
     const s = new Set<string>();
     issues.forEach((i) => i.labels.forEach((l) => s.add(l)));
@@ -67,7 +74,7 @@ export function FilterBar({
 
   const activeChips: { kind: string; value: string; remove: () => void }[] = [];
   filters.states.forEach((s) =>
-    activeChips.push({ kind: "state", value: STATE_LABEL[s], remove: () => setField("states", toggleIn(filters.states, s)) }),
+    activeChips.push({ kind: statusWord.toLowerCase(), value: wf.statuses.find((x) => x.id === s)?.name ?? s, remove: () => setField("states", toggleIn(filters.states, s)) }),
   );
   filters.labels.forEach((l) =>
     activeChips.push({ kind: "label", value: l, remove: () => setField("labels", toggleIn(filters.labels, l)) }),
@@ -81,14 +88,14 @@ export function FilterBar({
       <div className="flex items-center gap-2 flex-wrap">
         <SearchInput value={filters.q} onChange={(q) => setField("q", q)} />
         <Dropdown
-          label="State"
+          label={statusWord}
           count={filters.states.size}
-          options={STATE_ORDER.map((s) => ({
-            key: s,
-            label: STATE_LABEL[s],
-            selected: filters.states.has(s),
-            icon: <StateIcon state={s} size={11} />,
-            toggle: () => setField("states", toggleIn(filters.states, s)),
+          options={wf.statuses.filter((s) => !s.retired).map((s) => ({
+            key: s.id,
+            label: s.name,
+            selected: filters.states.has(s.id),
+            icon: <StatusIcon status={s} size={11} />,
+            toggle: () => setField("states", toggleIn(filters.states, s.id)),
           }))}
         />
         {allLabels.length > 0 && (
@@ -118,6 +125,7 @@ export function FilterBar({
             }))}
           />
         )}
+        {tracker && hasMirrored(issues) && <TrackerAssigneeMenu issues={issues} value={tracker.value} onChange={tracker.onChange} />}
         <Button
           variant={filters.showCancelled ? "secondary" : "ghost"}
           size="xs"
@@ -152,6 +160,45 @@ export function FilterBar({
         </div>
       )}
     </div>
+  );
+}
+
+/** Whose mirrored issues the board shows: Me (the default), Unassigned, Anyone, or one person. */
+function TrackerAssigneeMenu({ issues, value, onChange }: { issues: IssueSummary[]; value: TrackerAssignee; onChange: (v: TrackerAssignee) => void }) {
+  const people = trackerPeople(issues);
+  const options: Array<{ key: TrackerAssignee; label: string }> = [
+    { key: "me", label: "Me" }, { key: "unassigned", label: "Unassigned" }, { key: "anyone", label: "Anyone" },
+    ...people.map((p) => ({ key: p.key, label: p.name })),
+  ];
+  return (
+    <Popover
+      width={200}
+      align="left"
+      trigger={
+        <span data-tracker-filter={value} title="Whose issues from the tracker the board shows"
+          className="inline-flex items-center gap-1.5 px-2 py-1 text-label rounded-md border cursor-pointer hm-soft bg-[var(--color-bg3)] border-[var(--color-line2)] text-[var(--color-fg)]">
+          <span className="text-[var(--color-fg2)]">Assigned to</span>
+          {trackerAssigneeLabel(value, issues)}
+          <svg width="9" height="9" viewBox="0 0 10 10" className="text-[var(--color-fg3)]">
+            <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+          </svg>
+        </span>
+      }
+    >
+      {(close) => (
+        <div className="flex flex-col gap-0.5 max-h-[280px] overflow-y-auto">
+          {options.map((o, i) => (
+            <div key={o.key}>
+              {i === 3 && <div className="my-1 h-px bg-[var(--color-line)]" />}
+              <MenuItem size="sm" variant={o.key === value ? "default" : "muted"} selected={o.key === value} data-tracker-option={o.key}
+                onClick={() => { onChange(o.key); close(); }}>
+                <span>{o.label}</span>
+              </MenuItem>
+            </div>
+          ))}
+        </div>
+      )}
+    </Popover>
   );
 }
 

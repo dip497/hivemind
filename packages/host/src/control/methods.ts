@@ -12,7 +12,7 @@ import path from "node:path";
 import { speaksFor } from "@hivemind/agent-host/hooks/token";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { ApiError } from "@hivemind/workspace-api/protocol";
-import { LOOK_MS, PLUGIN_CALL_HOST_MS, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
+import { LOOK_MS, PLUGIN_CALL_HOST_MS, PLUGIN_CALL_MS, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
 import type { HcpCall } from "./protocol.js";
 import type { TurnTracker } from "./turn-tracker.js";
 import type { OutputRecorder } from "./output-recorder.js";
@@ -129,6 +129,9 @@ export interface MethodDeps {
   /** Run a renderer verb (returns its result); rejects/throws ApiError on
    *  no-renderer / timeout. */
   callRenderer: (method: string, params: unknown, timeoutMs: number) => Promise<unknown>;
+  /** Tool plugins' services that answer commands (`plugin-services.ts`): a plugin call that no
+   *  window runs is answered there, under `hive host` too. */
+  services?: { call(plugin: string, command: string, args: unknown, ms: number): Promise<unknown> | null; commands(): Array<{ plugin: string; commands: unknown[] }> };
   /** A picture of the window `callRenderer` reaches, of `rect` in its page's CSS pixels; absent
    *  where no window shows tiles (a headless host). */
   captureWindow?: (rect: TileRect) => Promise<{ png: string; width: number; height: number }>;
@@ -305,7 +308,7 @@ export interface Dispatcher {
   /** Spawn an agent, without recording it: the caller has (M5). */
   spawn: (opts: {
     agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
-    supervise?: string | true; report?: boolean; parent?: string; repo: string;
+    supervise?: string | true; report?: boolean; parent?: string; repo: string; issue?: string;
   }) => Promise<string>;
   /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
   parentOf: (bare: string) => string | undefined;
@@ -401,6 +404,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     /** The workspace to open it in (a person's spawn from another of their devices, M5), not the
      *  caller's or the one the user's window shows. */
     repo?: string;
+    /** The issue it is started to work: recorded on its tile (design jira-sync §11.1). */
+    issue?: string;
   }): Promise<string> => {
     // An agent that starts one is its tile: the child is a level below it, beside it on the board.
     const tile = opts.parent && !isClient(opts.parent) ? opts.parent : undefined;
@@ -468,6 +473,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const tileId = openTile(place, (ws) => ({
       id: mintId(`tile-${def.id}`), kind: AGENT_TILE_KIND,
       ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
+      ...(opts.issue ? { issue: opts.issue } : {}),
     }), { name, prompt, background: opts.report === false, by: openedBy(opts.parent) });
     const res = { tileId };
     const spawner = tile && tile !== res.tileId ? tile : undefined;
@@ -1119,7 +1125,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     },
     // Every plugin running in the window, with its state; and what the ready ones let an agent run.
     pluginList: async () => await deps.callRenderer("plugin.list", {}, RENDERER_TIMEOUT) as PluginList,
-    pluginCommands: () => deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT),
+    // The services' commands after the window's: none runs in a window under `hive host`.
+    async pluginCommands() {
+      const served = (deps.services?.commands() ?? []).map(({ plugin, commands }) => ({ plugin, kind: "service", instance: "service", label: `${plugin} (service)`, commands }));
+      const inWindow = await deps.callRenderer("plugin.commands", {}, RENDERER_TIMEOUT).catch((e: unknown) => {
+        if (served.length && e instanceof ApiError && e.code === "UNAVAILABLE") return { plugins: [] };
+        throw e;
+      }) as { plugins?: unknown[] };
+      return served.length ? { ...inWindow, plugins: [...(inWindow.plugins ?? []), ...served] } : inWindow;
+    },
     // Get a plugin running, so its commands can be called: a tool's tile opened (`@owner/name`, its
     // first tool, or `@owner/name/tool`), a widget added to the board, a view switched to. The id
     // alone is enough; `<kind>:` names one where two kinds have it.
@@ -1143,7 +1157,15 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       if (typeof command !== "string" || !COMMAND_NAME_RE.test(command)) throw new ApiError("BAD_REQUEST", "command must be one of the plugin's command names");
       if (tile != null && (typeof tile !== "string" || !tile || tile.length > 256)) throw new ApiError("BAD_REQUEST", "tile must be an id");
       if (!callBucket.take()) throw new ApiError("RATE_LIMITED", `at most ${EMIT_RATE.perSecond} plugin calls a second`);
-      return await deps.callRenderer("plugin.call", { plugin, command, args: args ?? null, ...(tile ? { tile } : {}) }, PLUGIN_CALL_HOST_MS);
+      try {
+        return await deps.callRenderer("plugin.call", { plugin, command, args: args ?? null, ...(tile ? { tile } : {}) }, PLUGIN_CALL_HOST_MS);
+      } catch (e) {
+        // No window runs it (or none is open): its service, when it answers that command. A call
+        // for one tile is that tile's.
+        const served = !tile && e instanceof ApiError && (e.code === "NOT_FOUND" || e.code === "UNAVAILABLE") ? deps.services?.call(plugin, command, args ?? null, PLUGIN_CALL_MS) : null;
+        if (!served) throw e;
+        return { result: await served };
+      }
     },
     pluginClose: async (instance, plugin) => await deps.callRenderer("plugin.close", { instance, ...(plugin ? { plugin } : {}) }, RENDERER_TIMEOUT) as { closed: string; plugin: string; kind: string },
     focus(tile) {

@@ -184,4 +184,24 @@ hive.on("start", () => hive.render({ type: "text", text: "here" }));
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 120_000);
+
+  // A tool's service is a program the app runs on its own (often a bundle built and checked where
+  // its source is): its code isn't checked against the tile SDK, and a starter's tile still is.
+  test("a tool's service program is not type-checked as tile code; its tile still is", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-check-service-"));
+    const dir = path.join(tmp, "tally");
+    try {
+      expect(hive(["plugins", "new", "tool", "tally", "--owner", "ada"], { cwd: tmp }).code).toBe(0);
+      const manifest = JSON.parse(fs.readFileSync(path.join(dir, "hivemind-tool.json"), "utf8"));
+      fs.writeFileSync(path.join(dir, "hivemind-tool.json"), JSON.stringify({ ...manifest, service: { command: ["node", "service.mjs"], role: "view" } }));
+      fs.writeFileSync(path.join(dir, "service.mjs"), "export const total = (a, b) => a.nope + b;\n");
+      const clean = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect(((clean.json as Report).problems).filter((p) => p.file === "service.mjs")).toEqual([]);
+      fs.writeFileSync(path.join(dir, "extra.mjs"), "export const total = (a, b) => a.nope + b;\n");
+      const r = hive(["plugins", "check", dir, "--json"], { cwd: tmp });
+      expect((r.json as Report).problems).toContainEqual(expect.objectContaining({ step: "types", file: "extra.mjs" }));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120_000);
 });

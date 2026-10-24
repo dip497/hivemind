@@ -1,8 +1,9 @@
 // A tool plugin's service on a machine with no desktop: `hive host` runs it once the plugin is
 // switched on and a workspace is picked with `hive plugins workspaces`, each read from the
 // settings the app and `hive config` keep; the service drives that workspace as its own grant;
-// switched off, it stops and its grant is taken back; it stops with the host, and starts with it
-// again, nothing changed.
+// `hive ctl plugin call` reaches the commands it serves, with no window anywhere; switched off, it
+// stops and its grant is taken back; it stops with the host, and starts with it again, nothing
+// changed.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
@@ -56,7 +57,15 @@ describe.skipIf(!unix)("a tool plugin's service under hive host", () => {
       const net = require("node:net");
       process.stdin.on("end", () => process.exit(0)).resume();
       const c = net.connect(process.env.HIVE_DRIVE_SOCK, () => c.write(JSON.stringify({ hello: { token: process.env.HIVE_DRIVE_TOKEN } }) + "\\n"));
-      c.on("data", (d) => { for (const l of String(d).split("\\n")) if (l.includes('"hello"')) console.log("hello " + JSON.stringify(JSON.parse(l).hello.as ?? JSON.parse(l))); });
+      c.on("data", (d) => { for (const l of String(d).split("\\n")) {
+        if (l.includes('"hello"')) {
+          console.log("hello " + JSON.stringify(JSON.parse(l).hello.as ?? JSON.parse(l)));
+          c.write(JSON.stringify({ method: "plugin.serve", params: [[{ name: "ping", description: "answers pong" }]] }) + "\\n");
+        } else if (l.includes('"plugin.called"')) {
+          const { call, args } = JSON.parse(l).params[0];
+          c.write(JSON.stringify({ method: "plugin.answer", params: [call, { result: { pong: args } }] }) + "\\n");
+        }
+      } });
       c.on("error", (e) => console.log("drive " + e.message));
     `);
     expect(run("plugins", "install", plugin).code).toBe(0);
@@ -73,9 +82,12 @@ describe.skipIf(!unix)("a tool plugin's service under hive host", () => {
     const picked = run("plugins", "workspaces", "tool:@acme/watcher", repo);
     expect(picked.json).toMatchObject({ workspaces: [repo] });
     await until(() => log().includes("hello "), "the service's hello");
-    expect(log()).toContain(`hello ${JSON.stringify({ client: "Watcher service", role: "view", workspace: repo })}`);
+    expect(log()).toContain(`hello ${JSON.stringify({ client: "@acme/watcher (service)", role: "view", workspace: repo })}`);
     expect(ours()).toMatchObject([{ repos: [repo], role: "view" }]);
     const pid = Number(/started, pid (\d+)/.exec(log())![1]);
+    // No window here: `hive ctl plugin call` reaches the service, which answers.
+    await until(() => (run("ctl", "plugin", "commands").json as { plugins?: Array<{ plugin: string }> })?.plugins?.some((p) => p.plugin === "@acme/watcher"), "the service serving its commands");
+    expect(run("ctl", "plugin", "call", "@acme/watcher", "ping", '{"n":1}').json).toEqual({ result: { pong: { n: 1 } } });
 
     expect(run("plugins", "disable", "tool:@acme/watcher").code).toBe(0);
     await until(() => !alive(pid), "the service stopping when switched off");

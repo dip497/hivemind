@@ -6,7 +6,10 @@ import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/pl
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
-import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
+import { installToolPackageIpc, handleToolProtocol, listTools, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
+import { appSecrets, installSecretsIpc } from "./secrets.js";
+import { PluginServices, optionsOf } from "@hivemind/host/plugin-services";
+import { pluginKey } from "@hivemind/core/plugin-settings";
 import { installServicesIpc, startServices, stopServices } from "./services.js";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { actionsFor } from "../shared/keymap.js";
@@ -31,6 +34,8 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   findRoot,
+  ignoreSyncFolders,
+  LOCAL_PREFIX_RE,
   listWorkspaces,
   forgetWorkspace,
   registerWorkspace,
@@ -63,7 +68,9 @@ const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
-import { registerAgentNotifications } from "./agent-notify.js";
+import { IssueWatch } from "@hivemind/host/issue-watch";
+import { PrWatch } from "@hivemind/host/pr-watch";
+import { notifyPlain, registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
@@ -109,6 +116,7 @@ import { answers } from "@hivemind/host/answers";
 import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder } from "@hivemind/host/needs";
 import { workspaceSummaries } from "@hivemind/host/home";
 import { agentControl } from "@hivemind/host/agent-control";
+import { issueStart, issueStartOver, issueTiles } from "@hivemind/host/issue-start";
 import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
@@ -476,7 +484,12 @@ handle("resolveProject", wrap(async (e, rootHint?: string) => {
     await openJoined(moved.slice("hive://".length), (event) => workspaceServer.relay(event));
     return { root: null, cwd: moved, repoPath: moved };
   }
-  if (repoPath) watchRepo(repoPath, workspaceIpc.connect(e.sender));
+  if (repoPath) {
+    const window = workspaceIpc.connect(e.sender);
+    watchRepo(repoPath, window);
+    // Its issues, whoever writes them (an agent's `hive` included), while the window shows it.
+    if (root) issueWatch.follow(repoPath, root, window.closed);
+  }
   // Index this workspace so cross-repo move/link/open can resolve its prefix.
   if (root) await registerWorkspace(root).catch(() => {});
   return { root, cwd, repoPath };
@@ -807,7 +820,7 @@ handleEffect(
   (dir, prefix) => ({ target: named(dir), detail: named(prefix)?.toUpperCase() }),
   wrap(async (_e, dir: string, prefixRaw: string) => {
     const prefix = String(prefixRaw).toUpperCase();
-    if (!/^[A-Z][A-Z0-9]{1,9}$/.test(prefix)) {
+    if (!LOCAL_PREFIX_RE.test(prefix)) {
       throw new Error(`prefix must be UPPERCASE 2-10 chars (got: ${prefix})`);
     }
     const root = path.join(dir, ".hivemind");
@@ -816,6 +829,8 @@ handleEffect(
     await fsp.mkdir(path.join(root, "issues"), { recursive: true });
     await writeConfig(root, { prefix, next_id: 1, agents: {}, format: WORKSPACE_FORMAT });
     await writeAgentContext(root);
+    // Mirrored issues and sync state are per machine (design jira-sync §5.3), as `hive init` does.
+    await ignoreSyncFolders(root);
     // Install the agentic stack by default — a brand-new workspace should be
     // agent-ready so "Work on this" actually works (the agent gets the hive
     // skills + CLAUDE.md section). Idempotent.
@@ -1056,6 +1071,7 @@ const control: ControlPlane = new ControlPlane({
   methods: () => ({
     reported: (tile, message) => agentFeed()?.report(toBareId(tile), message),
     callRenderer: hcpCallRenderer,
+    services: pluginServices,
     captureWindow: async (rect) => {
       const win = userWindow();
       if (!win) throw new ApiError("UNAVAILABLE", "hivemind window not open");
@@ -1339,8 +1355,38 @@ const placesHere = new StartPlaces({
   photos: () => path.join(app.getPath("userData"), "photos"),
 });
 const widgetDomain = widgets(() => workspaceServer, widgetAsset, listWidgets, (repo) => workspaceStore().getObjects(repo));
+// What a tool plugin's service asks of its own plugin (its options, its secrets), and the commands
+// it answers when no window runs the plugin.
+const pluginServices = new PluginServices({
+  pluginOfGrant: (id) => grants().list().find((g) => g.id === id)?.plugin,
+  options: async (plugin) => optionsOf(plugin, (await listTools()).find((p) => p.id === plugin)?.settings ?? [], getAppSettings().plugins.state, appSecrets().names(pluginKey("tool", plugin))),
+  secret: (plugin, name) => appSecrets().get(pluginKey("tool", plugin), name),
+  setSecret: (key, name, value) => appSecrets().set(key, name, value),
+  secretFields: async (plugin) => ((await listTools()).find((p) => p.id === plugin)?.settings ?? []).filter((f) => f.type === "secret").map((f) => f.id),
+});
+onSettingsChange(() => void pluginServices.settingsChanged());
+const agentsHere = agentControl({
+  programs: async () => {
+    await shellEnvReady;
+    return spawnableAgents().filter((d) => !!findBin(d.bin));
+  },
+  core: (repo) => workspaceStore().getCore(repo),
+  repos: () => workspaceStore().repos(),
+  machines: knownMachines,
+  places: placesHere,
+  openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
+  start: (repo, start) => control.start(repo, start),
+  status: (bare) => control.status.get(bare),
+  interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
+  // As the person types: an interrupt key ends the turn in the agent's status too.
+  type: (bare, data) => control.typed(`hm:${bare}`, data),
+  close: (bare) => control.close(bare),
+  folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
+});
+const framesHere = framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn });
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
-  ...workspaceDomains,
+  pluginServices.domain(),
+  ...workspaceDomains((c) => whoIs(c).name),
   layouts.domain,
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
@@ -1356,24 +1402,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // Agents started, interrupted and closed from another of the person's devices, and what they
   // changed (M5, spec/agents.md).
   placesHere.domain(),
-  agentControl({
-    programs: async () => {
-      await shellEnvReady;
-      return spawnableAgents().filter((d) => !!findBin(d.bin));
-    },
-    core: (repo) => workspaceStore().getCore(repo),
-    repos: () => workspaceStore().repos(),
-    machines: knownMachines,
-    places: placesHere,
-    openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
-    start: (repo, start) => control.start(repo, start),
-    status: (bare) => control.status.get(bare),
-    interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
-    // As the person types: an interrupt key ends the turn in the agent's status too.
-    type: (bare, data) => control.typed(`hm:${bare}`, data),
-    close: (bare) => control.close(bare),
-    folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
-  }),
+  agentsHere,
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
   controlApi({
     control: () => control.api(),
@@ -1418,10 +1447,17 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     grants,
     elsewhere: (method, params) => askDrive(driveSockPath(app.getPath("userData")), readOrCreateToken(app.getPath("userData")), method, params),
   }),
-  framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn }),
+  framesHere,
+  // Starting work on an issue: the guard, its worktree frame, an agent on it (design jira-sync §11.1).
+  issueStart({ activeTiles: () => issueTiles(heldBoards(workspaceStore())), ...issueStartOver(framesHere, agentsHere), services: pluginServices, nameOf: (c) => whoIs(c).name }),
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
+// Every write to the issues of a workspace a window shows, or a service or guest is connected to.
+// The PRs of those issues, read from GitHub every 3 minutes while any is open (design jira-sync §11.4).
+const prWatch = new PrWatch({ notify: notifyPlain, log: (m) => console.warn(m) });
+const issueWatch = new IssueWatch({ publish: (repo, change) => workspaceServer.publish("issue.changed", repo, change), watching: prWatch });
+const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
 // A folder on another of the person's devices is answered there (M4); one of a workspace joined
 // from elsewhere, by its host.
 const onDevices = deviceFolders({ mine: isYourDevice, dial: dialDevice });
@@ -1607,6 +1643,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       onStatus: (listener) => { control.status.subscribe(listener); },
       workers: { parent: (bare) => control.parentOf(bare) },
       waits: control.waits,
+      follow: followIssues,
       home: {
         links: () => control.links(),
         linkState,
@@ -1626,6 +1663,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installPluginSwitchIpc();
     installPackagesIpc();
     installServicesIpc();
+    installSecretsIpc(() => void pluginServices.settingsChanged());
+    // A tool's tile asking its own service (`host.call`); the window names the plugin, from the tile's package.
+    handle("tools:call", (_e, call: { plugin?: unknown; command?: unknown; args?: unknown } | null) => pluginServices.tileCall(call?.plugin, call?.command, call?.args));
     installPluginCatalogIpc();
     installQuitIpc({
       agent: (s) => !!agentForCmd(s.cmd) || control.agentOf.has(toBareId(s.id)),
@@ -2015,6 +2055,7 @@ function startHcpControlPlane(): void {
       nameOf: (tile) => control.labelOf(tile),
       places: (repo) => frameWorktrees(workspaceStore().getCore(repo)),
       workspaceId: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null,
+      follow: followIssues,
       onWarn: (m) => console.warn(`[drive] ${m}`),
     });
     void drive.serving.then(servedDrive);

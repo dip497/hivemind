@@ -63,11 +63,17 @@ import { daemonSessions } from "./daemon-sessions.js";
 import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
+import { IssueWatch } from "./issue-watch.js";
+import { PrWatch } from "./pr-watch.js";
+import { PluginServices, optionsOf } from "./plugin-services.js";
+import { Secrets, secretsPath } from "./secrets.js";
+import { pluginKey } from "@hivemind/core/plugin-settings";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks, tellGuestOf } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder } from "./needs.js";
 import { agentControl } from "./agent-control.js";
+import { issueStart, issueStartOver, issueTiles } from "./issue-start.js";
 import { StartPlaces } from "./start-places.js";
 import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
@@ -283,8 +289,43 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // Its widgets run on the person's own devices that have a workspace open: it has no window.
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const grants = new Grants(path.join(o.dir, "grants.json"));
+  // Its plugins' secrets: no system keychain here, so in a file only the person reads.
+  const secrets = new Secrets();
+  // What a tool plugin's service asks of its own plugin, and the commands it answers: with no
+  // window here, every plugin call a service serves is answered there.
+  const pluginServices = new PluginServices({
+    pluginOfGrant: (id) => grants.list().find((g) => g.id === id)?.plugin,
+    options: async (plugin) => optionsOf(plugin, (await listToolPackages()).find((p) => p.id === plugin)?.settings ?? [], (await readSettings(settingsPath())).plugins.state, secrets.names(pluginKey("tool", plugin))),
+    secret: (plugin, name) => secrets.get(pluginKey("tool", plugin), name),
+    setSecret: (key, name, value) => {
+      const kept = secrets.set(key, name, value);
+      if (kept === "file") o.onWarn(`${name} of ${key} is kept in ${secretsPath()}, readable by you alone (0600): hive host has no system keychain`);
+      return kept;
+    },
+    secretFields: async (plugin) => ((await listToolPackages()).find((p) => p.id === plugin)?.settings ?? []).filter((f) => f.type === "secret").map((f) => f.id),
+  });
+  const agentsHere = agentControl({
+    programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
+    core: (repo) => store.getCore(repo),
+    repos: () => store.repos(),
+    machines,
+    places,
+    openFrame: (repo, frame) => { store.addFrame(repo, frame, { writer: "frames" }); },
+    start: (repo, start) => control.start(repo, start),
+    status: (bare) => control.status.get(bare),
+    interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
+    // As the person types: an interrupt key ends the turn in the agent's status too.
+    type: (bare, data) => control.typed(`hm:${bare}`, data),
+    close: (bare) => control.close(bare),
+    folderOf: (bare) => runsIn(heldBoards(store), bare),
+  });
+  const framesHere = framesDomain({
+    store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare),
+    machines: () => [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...devices.list().filter((d) => d.kind !== "phone").map((d) => ({ id: d.device, name: d.name }))],
+  });
   const api: WorkspaceServer = new WorkspaceServer([
-    ...workspaceDomains,
+    pluginServices.domain(),
+    ...workspaceDomains((c) => who(c).name),
     layouts.domain,
     agents({
       statuses: () => control.status.all(), links: () => control.links(),
@@ -301,10 +342,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       grants: () => grants,
       elsewhere: (method, params) => askDrive(driveSockPath(o.dir), readOrCreateToken(o.dir), method, params),
     }),
-    framesDomain({
-      store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare),
-      machines: () => [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...devices.list().filter((d) => d.kind !== "phone").map((d) => ({ id: d.device, name: d.name }))],
-    }),
+    framesHere,
+    // Starting work on an issue: the guard, its worktree frame, an agent on it (design jira-sync §11.1).
+    issueStart({ activeTiles: () => issueTiles(heldBoards(store)), ...issueStartOver(framesHere, agentsHere), services: pluginServices, nameOf: (c) => who(c).name }),
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).
@@ -319,21 +359,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // Agents started, interrupted and closed from another of the person's devices, and what they
     // changed (M5, spec/agents.md).
     places.domain(),
-    agentControl({
-      programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
-      core: (repo) => store.getCore(repo),
-      repos: () => store.repos(),
-      machines,
-      places,
-      openFrame: (repo, frame) => { store.addFrame(repo, frame, { writer: "frames" }); },
-      start: (repo, start) => control.start(repo, start),
-      status: (bare) => control.status.get(bare),
-      interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
-      // As the person types: an interrupt key ends the turn in the agent's status too.
-      type: (bare, data) => control.typed(`hm:${bare}`, data),
-      close: (bare) => control.close(bare),
-      folderOf: (bare) => runsIn(heldBoards(store), bare),
-    }),
+    agentsHere,
     // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
     controlApi({
       control: () => control.api(),
@@ -415,6 +441,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     methods: () => ({
       reported: (tile, message) => agentFeed?.report(toBareId(tile), message),
       callRenderer: () => Promise.reject(new ApiError("UNAVAILABLE", "there is no window here: hive host runs none")),
+      services: pluginServices,
       reloadSettings: () => catalog.current().then(() => { syncServices(); return { ok: true }; }),
       defaultAgentId: () => preferredAgent(catalog.settings().agents.defaultAgent, (d) => !!findBin(d.bin))?.id,
       agentInstalled: (def, { folder }) => places.installedAt(def, folder),
@@ -438,6 +465,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     onError: (e) => o.onWarn(`the control plane is off: ${e.message}. \`hive ctl\` cannot reach this host`),
   });
 
+  // Every write to a followed workspace's issues, told to its clients: a service's, a guest's.
+  // And their PRs, read from GitHub every 3 minutes while any is open (design jira-sync §11.4).
+  const prWatch = new PrWatch({ log: o.onWarn });
+  const issueWatch = new IssueWatch({ publish: (repo, change) => api.publish("issue.changed", repo, change), watching: prWatch });
+  const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
+
   // Programs drive the workspaces here through the workspace API, held to what they were granted.
   const driveSock = driveSockPath(o.dir);
   const drive = serveDrive(driveSock, {
@@ -449,6 +482,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     nameOf: (tile) => control.labelOf(tile),
     places: (repo) => frameWorktrees(store.getCore(repo)),
     workspaceId: (repo) => store.ownership(repo)?.workspaceId ?? null,
+    follow: followIssues,
     onWarn: o.onWarn,
   });
 
@@ -465,8 +499,20 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const servicesWatched = [settingsFile, recordsFile()];
   void drive.serving.then((mine) => {
     if (!mine) return;
-    services = new Services({ driveSock, grants, logDir: path.join(o.dir, "services") });
-    for (const f of servicesWatched) fs.watchFile(f, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) syncServices(); });
+    // No window shows why a service is not running here: it is said, once each time it changes.
+    const said = new Map<string, string>();
+    services = new Services({
+      driveSock, grants, logDir: path.join(o.dir, "services"),
+      onChange: () => {
+        for (const st of services?.states() ?? []) {
+          const line = st.state === "running" ? "" : st.why ?? "";
+          if (said.get(st.plugin) === line) continue;
+          said.set(st.plugin, line);
+          if (line) o.onWarn(`${st.plugin}'s service is ${st.state}: ${line}`);
+        }
+      },
+    });
+    for (const f of servicesWatched) fs.watchFile(f, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) { syncServices(); void pluginServices.settingsChanged(); } });
     syncServices();
   });
 
@@ -496,6 +542,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     changes: heard.changes,
     lists,
     server: api,
+    follow: followIssues,
     // The person's devices run terminals here, in frames on this machine (M3).
     daemon: o.daemon,
     hosting,
@@ -698,6 +745,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       await services?.stop();
       hcp.close();
       drive.close();
+      issueWatch.close();
+      prWatch.close();
       endpoint.close();
       elsewhere.close();
       store.flush();

@@ -18,7 +18,7 @@ import {
   CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
-  ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
+  ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary, type ViewWorkflow, type ViewStartAnswer, type ViewStartOptions, type ViewStartPlan,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -136,8 +136,9 @@ export const CLIENT_VALUES = Object.keys(CLIENT_VALUES_UNTIL_KNOWN) as (keyof ty
 /** The workspace's issue methods (1.9), each answered with what the workspace's own returns. */
 export interface ViewIssues {
   read(id: string): Promise<ViewIssue>;
-  create(issue: { title: string; state?: ViewIssueState; parent?: string; labels?: string[]; assignee?: ViewIssueAssignee | null; description?: string; acceptanceCriteria?: { done: boolean; text: string }[] }): Promise<ViewIssue>;
-  /** Change its fields: title, labels, assignee, parent, description, acceptance criteria. */
+  create(issue: { title: string; state?: ViewIssueState; /** 1.16 */ status?: string; parent?: string; labels?: string[]; assignee?: ViewIssueAssignee | null; description?: string; acceptanceCriteria?: { done: boolean; text: string }[] }): Promise<ViewIssue>;
+  /** Change its fields: title, labels, assignee, parent, description, acceptance criteria; and
+   *  (1.16) `status`, a status id or name, which sets the state to its category. */
   update(id: string, patch: Record<string, unknown>): Promise<ViewIssue>;
   /** A new state, with a note in the same activity entry. */
   setState(id: string, state: ViewIssueState, note?: string): Promise<ViewIssue>;
@@ -154,6 +155,14 @@ export interface ViewIssues {
   status(): Promise<ViewIssuesStatus>;
   /** 1.12: start keeping issues in this workspace's folder, their ids starting `prefix`. */
   setUp(prefix: string): Promise<ViewIssuesStatus>;
+  /** 1.16 (feature `workflow`): the workspace's statuses, board columns and transitions. */
+  workflow(): Promise<ViewWorkflow>;
+  /** 1.17 (feature `startWork`): the start-work guard's findings for an issue, and what starting it
+   *  would do. */
+  checkStart(id: string): Promise<ViewStartPlan>;
+  /** 1.17 (feature `startWork`): start work on an issue with the person's answers: its branch's
+   *  worktree, its start status, and an agent there (the person reads its prompt first). */
+  start(id: string, opts?: ViewStartOptions): Promise<ViewStartAnswer>;
 }
 
 /** Whether a workspace keeps issues: `ready` once set up; `folder` names where they would live. */
@@ -494,7 +503,10 @@ class Client implements ViewClient {
   private issueCall(call: IssueCall, args: unknown[]): Promise<unknown> {
     this.need("workspace:issues", `issues.${call}`);
     if (!this.supports("issues")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no issues"));
-    return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), 30_000);
+    if (call === "workflow" && !this.supports("workflow")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no workflows (protocol 1.16)"));
+    if ((call === "checkStart" || call === "start") && !this.supports("startWork")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no start-work guard (protocol 1.17)"));
+    // A start waits on the person reading its agent's prompt.
+    return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), call === "start" ? 15 * 60_000 : 30_000);
   }
 
   pressWidget(id: string, action: unknown): void {

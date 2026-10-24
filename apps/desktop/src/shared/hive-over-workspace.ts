@@ -4,6 +4,7 @@
  */
 import type { WorkspaceClient } from "@hivemind/workspace-api/client";
 import type { Role } from "@hivemind/workspace-host/access";
+import type { IssueChange } from "@hivemind/workspace-api/methods";
 import type { HiveApi } from "./ipc.js";
 
 export function hiveOverWorkspace(workspace: WorkspaceClient) {
@@ -30,15 +31,23 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
   const terminalData = byKey("terminal.data");
   const terminalExit = byKey("terminal.exit");
   const fileChanged = byKey("file.changed");
+  // An issue's change, by the `.hivemind` it is kept in: that is what a plugin's issues know.
+  const issueChanged = new Map<string, Set<(change: IssueChange) => void>>();
+  workspace.on("issue.changed", (_repo, change) => {
+    for (const cb of issueChanged.get(change.root) ?? []) cb(change);
+  });
 
   return {
     listIssues: (root) => workspace.call("issue.list", root),
     readIssue: (root, id) => workspace.call("issue.read", root, id),
+    issueWorkflow: (root) => workspace.call("issue.workflow", root),
     updateIssueState: (root, id, state, note) => workspace.call("issue.setState", root, id, state, note),
     createIssue: (root, opts) => workspace.call("issue.create", root, opts),
     updateIssue: (root, id, patch) => workspace.call("issue.update", root, id, patch),
     commentOnIssue: (root, id, message) => workspace.call("issue.comment", root, id, message),
     deleteIssue: (root, id) => workspace.call("issue.delete", root, id),
+    checkStartWork: (root, id) => workspace.call("issue.checkStart", root, id),
+    startIssue: (repo, id, opts) => workspace.call("issue.start", repo, id, opts),
     moveIssue: (root, id, destPrefix, mode) => workspace.call("issue.move", root, id, destPrefix, mode),
     linkIssue: (root, id, otherId, type) => workspace.call("issue.link", root, id, otherId, type),
     unlinkIssue: (root, id, otherId) => workspace.call("issue.unlink", root, id, otherId),
@@ -138,5 +147,14 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     onPtyData: terminalData.on,
     onPtyExit: terminalExit.on,
     onFsChanged: fileChanged.on,
+    onIssueChanged: (root, cb) => {
+      let set = issueChanged.get(root);
+      if (!set) issueChanged.set(root, (set = new Set()));
+      set.add(cb);
+      return () => {
+        set!.delete(cb);
+        if (set!.size === 0 && issueChanged.get(root) === set) issueChanged.delete(root);
+      };
+    },
   } satisfies Partial<HiveApi>;
 }

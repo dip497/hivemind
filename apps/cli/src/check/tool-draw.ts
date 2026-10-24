@@ -91,6 +91,9 @@ export async function drawTool(pkg: ToolPackage): Promise<Problem[]> {
     repoPath: dir, cwd: dir,
     run: async () => ({ code: 0, stdout: "", stderr: "" }),
     openFile: () => {}, openUrl: () => {},
+    // A check draws the tile once with no service running: a call is answered as the app answers
+    // one to a service that isn't running.
+    call: async (command) => { throw Object.assign(new Error(`no service answers ${command} while the plugin is checked`), { code: "UNAVAILABLE" }); },
   };
   const problems: Problem[] = [];
   for (const kind of kinds) {

@@ -58,6 +58,8 @@ export interface TileRecord {
   sleeping?: string;
   /** Agent only: when it was put to sleep (ms since epoch), while it sleeps. */
   sleptAt?: number;
+  /** Agent only: the issue it was started to work (design jira-sync §11.1), e.g. `PAY-318`. */
+  issue?: string;
 }
 
 /** The kind every agent's tile has, whatever runs in it: the historical id, kept for saved

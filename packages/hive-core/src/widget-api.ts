@@ -138,6 +138,9 @@ interface IssueSummary {
   id: string;
   title: string;
   state: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled";
+  /** The workflow status id and its name (\`issues.workflow\` lists them); \`state\` is its category. */
+  status?: string;
+  statusName?: string;
   parent: string | null;
   labels: string[];
   assignee: Assignee | null;

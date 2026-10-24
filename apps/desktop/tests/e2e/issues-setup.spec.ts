@@ -90,6 +90,10 @@ test("the Issues tool keeps issues in its folder when asked, and then its issues
 
   const cfg = await fs.readFile(path.join(workspace, ".hivemind", "config.yaml"), "utf8");
   expect(cfg).toMatch(/next_id:\s*1/);
+  // Mirrored issues and sync state stay out of git, as `hive init` keeps them (design jira-sync §5.3).
+  const gitignore = (await fs.readFile(path.join(workspace, ".gitignore"), "utf8")).split("\n");
+  expect(gitignore).toContain(".hivemind/mirror/");
+  expect(gitignore).toContain(".hivemind/sync/");
 
   // The tile is the issue list now, empty, and makes one.
   await expect(setup).toHaveCount(0);

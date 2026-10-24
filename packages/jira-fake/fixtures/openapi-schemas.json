@@ -1,0 +1,1432 @@
+{
+ "source": {
+  "platform": "1001.0.0-SNAPSHOT-12ca6ec572dce8558d78a98d942a1c3f7f182787",
+  "software": "1001.0.0"
+ },
+ "v3": {
+  "roots": {
+   "myself": {
+    "$ref": "#/components/schemas/User"
+   },
+   "search/jql": {
+    "$ref": "#/components/schemas/SearchAndReconcileResults"
+   },
+   "issue/bulkfetch": {
+    "$ref": "#/components/schemas/BulkIssueResults"
+   },
+   "transitions": {
+    "$ref": "#/components/schemas/Transitions"
+   },
+   "project/statuses": {
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/IssueTypeWithStatus"
+    }
+   },
+   "StatusDetails": {
+    "$ref": "#/components/schemas/StatusDetails"
+   },
+   "UserDetails": {
+    "$ref": "#/components/schemas/UserDetails"
+   },
+   "IssueTypeDetails": {
+    "$ref": "#/components/schemas/IssueTypeDetails"
+   }
+  },
+  "components": {
+   "schemas": {
+    "User": {
+     "additionalProperties": false,
+     "properties": {
+      "accountId": {
+       "maxLength": 128,
+       "type": "string"
+      },
+      "accountType": {
+       "enum": [
+        "atlassian",
+        "app",
+        "customer",
+        "unknown"
+       ],
+       "type": "string"
+      },
+      "active": {
+       "type": "boolean"
+      },
+      "appType": {
+       "type": "string"
+      },
+      "applicationRoles": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/SimpleListWrapperApplicationRole"
+        }
+       ]
+      },
+      "avatarUrls": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/AvatarUrlsBean"
+        }
+       ]
+      },
+      "displayName": {
+       "type": "string"
+      },
+      "emailAddress": {
+       "type": "string"
+      },
+      "expand": {
+       "type": "string"
+      },
+      "groups": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/SimpleListWrapperGroupName"
+        }
+       ]
+      },
+      "guest": {
+       "type": "boolean"
+      },
+      "key": {
+       "type": "string"
+      },
+      "locale": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "self": {
+       "type": "string"
+      },
+      "timeZone": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "SimpleListWrapperApplicationRole": {
+     "additionalProperties": false,
+     "properties": {
+      "callback": {
+       "$ref": "#/components/schemas/ListWrapperCallbackApplicationRole"
+      },
+      "items": {
+       "items": {
+        "$ref": "#/components/schemas/ApplicationRole"
+       },
+       "type": "array"
+      },
+      "max-results": {
+       "type": "integer"
+      },
+      "pagingCallback": {
+       "$ref": "#/components/schemas/ListWrapperCallbackApplicationRole"
+      },
+      "size": {
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "ListWrapperCallbackApplicationRole": {
+     "additionalProperties": false,
+     "type": "object"
+    },
+    "ApplicationRole": {
+     "additionalProperties": false,
+     "properties": {
+      "defaultGroups": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array",
+       "uniqueItems": true
+      },
+      "defaultGroupsDetails": {
+       "items": {
+        "$ref": "#/components/schemas/GroupName"
+       },
+       "type": "array"
+      },
+      "defined": {
+       "type": "boolean"
+      },
+      "groupDetails": {
+       "items": {
+        "$ref": "#/components/schemas/GroupName"
+       },
+       "type": "array"
+      },
+      "groups": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array",
+       "uniqueItems": true
+      },
+      "hasUnlimitedSeats": {
+       "type": "boolean"
+      },
+      "key": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "numberOfSeats": {
+       "type": "integer"
+      },
+      "platform": {
+       "type": "boolean"
+      },
+      "remainingSeats": {
+       "type": "integer"
+      },
+      "selectedByDefault": {
+       "type": "boolean"
+      },
+      "userCount": {
+       "type": "integer"
+      },
+      "userCountDescription": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "GroupName": {
+     "additionalProperties": false,
+     "properties": {
+      "groupId": {
+       "nullable": true,
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "self": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "AvatarUrlsBean": {
+     "additionalProperties": false,
+     "properties": {
+      "16x16": {
+       "type": "string"
+      },
+      "24x24": {
+       "type": "string"
+      },
+      "32x32": {
+       "type": "string"
+      },
+      "48x48": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "SimpleListWrapperGroupName": {
+     "additionalProperties": false,
+     "properties": {
+      "callback": {
+       "$ref": "#/components/schemas/ListWrapperCallbackGroupName"
+      },
+      "items": {
+       "items": {
+        "$ref": "#/components/schemas/GroupName"
+       },
+       "type": "array"
+      },
+      "max-results": {
+       "type": "integer"
+      },
+      "pagingCallback": {
+       "$ref": "#/components/schemas/ListWrapperCallbackGroupName"
+      },
+      "size": {
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "ListWrapperCallbackGroupName": {
+     "additionalProperties": false,
+     "type": "object"
+    },
+    "SearchAndReconcileResults": {
+     "additionalProperties": false,
+     "properties": {
+      "isLast": {
+       "type": "boolean"
+      },
+      "issues": {
+       "items": {
+        "$ref": "#/components/schemas/IssueBean"
+       },
+       "type": "array"
+      },
+      "names": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "nextPageToken": {
+       "type": "string"
+      },
+      "schema": {
+       "additionalProperties": {
+        "$ref": "#/components/schemas/JsonTypeBean"
+       },
+       "type": "object"
+      },
+      "warnings": {
+       "items": {
+        "$ref": "#/components/schemas/SearchWarning"
+       },
+       "type": "array"
+      }
+     },
+     "type": "object"
+    },
+    "IssueBean": {
+     "additionalProperties": false,
+     "properties": {
+      "changelog": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/PageOfChangelogs"
+        }
+       ]
+      },
+      "editmeta": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/IssueUpdateMetadata"
+        }
+       ]
+      },
+      "expand": {
+       "type": "string"
+      },
+      "fields": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "fieldsToInclude": {
+       "$ref": "#/components/schemas/IncludedFields"
+      },
+      "id": {
+       "type": "string"
+      },
+      "key": {
+       "type": "string"
+      },
+      "names": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "operations": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/Operations"
+        }
+       ]
+      },
+      "properties": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "renderedFields": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "schema": {
+       "additionalProperties": {
+        "$ref": "#/components/schemas/JsonTypeBean"
+       },
+       "type": "object"
+      },
+      "self": {
+       "type": "string"
+      },
+      "transitions": {
+       "items": {
+        "$ref": "#/components/schemas/IssueTransition"
+       },
+       "type": "array"
+      },
+      "versionedRepresentations": {
+       "additionalProperties": {
+        "additionalProperties": {},
+        "type": "object"
+       },
+       "type": "object"
+      }
+     },
+     "type": "object"
+    },
+    "PageOfChangelogs": {
+     "additionalProperties": false,
+     "properties": {
+      "histories": {
+       "items": {
+        "$ref": "#/components/schemas/Changelog"
+       },
+       "type": "array"
+      },
+      "maxResults": {
+       "type": "integer"
+      },
+      "startAt": {
+       "type": "integer"
+      },
+      "total": {
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "Changelog": {
+     "additionalProperties": false,
+     "properties": {
+      "author": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/UserDetails"
+        }
+       ]
+      },
+      "created": {
+       "type": "string"
+      },
+      "historyMetadata": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/HistoryMetadata"
+        }
+       ]
+      },
+      "id": {
+       "type": "string"
+      },
+      "items": {
+       "items": {
+        "$ref": "#/components/schemas/ChangeDetails"
+       },
+       "type": "array"
+      }
+     },
+     "type": "object"
+    },
+    "UserDetails": {
+     "additionalProperties": false,
+     "properties": {
+      "accountId": {
+       "maxLength": 128,
+       "type": "string"
+      },
+      "accountType": {
+       "type": "string"
+      },
+      "active": {
+       "type": "boolean"
+      },
+      "avatarUrls": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/AvatarUrlsBean"
+        }
+       ]
+      },
+      "displayName": {
+       "type": "string"
+      },
+      "emailAddress": {
+       "type": "string"
+      },
+      "key": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "self": {
+       "type": "string"
+      },
+      "timeZone": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "HistoryMetadata": {
+     "additionalProperties": true,
+     "properties": {
+      "activityDescription": {
+       "type": "string"
+      },
+      "activityDescriptionKey": {
+       "type": "string"
+      },
+      "actor": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/HistoryMetadataParticipant"
+        }
+       ]
+      },
+      "cause": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/HistoryMetadataParticipant"
+        }
+       ]
+      },
+      "description": {
+       "type": "string"
+      },
+      "descriptionKey": {
+       "type": "string"
+      },
+      "emailDescription": {
+       "type": "string"
+      },
+      "emailDescriptionKey": {
+       "type": "string"
+      },
+      "extraData": {
+       "additionalProperties": {
+        "type": "string"
+       },
+       "type": "object"
+      },
+      "generator": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/HistoryMetadataParticipant"
+        }
+       ]
+      },
+      "type": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "HistoryMetadataParticipant": {
+     "additionalProperties": true,
+     "properties": {
+      "avatarUrl": {
+       "type": "string"
+      },
+      "displayName": {
+       "type": "string"
+      },
+      "displayNameKey": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "type": {
+       "type": "string"
+      },
+      "url": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "ChangeDetails": {
+     "additionalProperties": false,
+     "properties": {
+      "field": {
+       "type": "string"
+      },
+      "fieldId": {
+       "type": "string"
+      },
+      "fieldtype": {
+       "type": "string"
+      },
+      "from": {
+       "type": "string"
+      },
+      "fromString": {
+       "type": "string"
+      },
+      "to": {
+       "type": "string"
+      },
+      "toString": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "IssueUpdateMetadata": {
+     "properties": {
+      "fields": {
+       "additionalProperties": {
+        "$ref": "#/components/schemas/FieldMetadata"
+       },
+       "type": "object"
+      }
+     },
+     "type": "object"
+    },
+    "FieldMetadata": {
+     "additionalProperties": false,
+     "properties": {
+      "allowedValues": {
+       "items": {},
+       "type": "array"
+      },
+      "autoCompleteUrl": {
+       "type": "string"
+      },
+      "configuration": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "defaultValue": {},
+      "hasDefaultValue": {
+       "type": "boolean"
+      },
+      "key": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "operations": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      "required": {
+       "type": "boolean"
+      },
+      "schema": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/JsonTypeBean"
+        }
+       ]
+      }
+     },
+     "required": [
+      "key",
+      "name",
+      "operations",
+      "required",
+      "schema"
+     ],
+     "type": "object"
+    },
+    "JsonTypeBean": {
+     "additionalProperties": false,
+     "properties": {
+      "configuration": {
+       "additionalProperties": {},
+       "type": "object"
+      },
+      "custom": {
+       "type": "string"
+      },
+      "customId": {
+       "type": "integer"
+      },
+      "items": {
+       "type": "string"
+      },
+      "system": {
+       "type": "string"
+      },
+      "type": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "type"
+     ],
+     "type": "object"
+    },
+    "IncludedFields": {
+     "additionalProperties": false,
+     "properties": {
+      "actuallyIncluded": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array",
+       "uniqueItems": true
+      },
+      "excluded": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array",
+       "uniqueItems": true
+      },
+      "included": {
+       "items": {
+        "type": "string"
+       },
+       "type": "array",
+       "uniqueItems": true
+      }
+     },
+     "type": "object"
+    },
+    "Operations": {
+     "additionalProperties": true,
+     "properties": {
+      "linkGroups": {
+       "items": {
+        "$ref": "#/components/schemas/LinkGroup"
+       },
+       "type": "array"
+      }
+     },
+     "type": "object"
+    },
+    "LinkGroup": {
+     "additionalProperties": false,
+     "properties": {
+      "groups": {
+       "items": {
+        "$ref": "#/components/schemas/LinkGroup"
+       },
+       "type": "array"
+      },
+      "header": {
+       "$ref": "#/components/schemas/SimpleLink"
+      },
+      "id": {
+       "type": "string"
+      },
+      "links": {
+       "items": {
+        "$ref": "#/components/schemas/SimpleLink"
+       },
+       "type": "array"
+      },
+      "styleClass": {
+       "type": "string"
+      },
+      "weight": {
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "SimpleLink": {
+     "additionalProperties": false,
+     "properties": {
+      "href": {
+       "type": "string"
+      },
+      "iconClass": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "label": {
+       "type": "string"
+      },
+      "styleClass": {
+       "type": "string"
+      },
+      "title": {
+       "type": "string"
+      },
+      "weight": {
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "IssueTransition": {
+     "additionalProperties": true,
+     "properties": {
+      "expand": {
+       "type": "string"
+      },
+      "fields": {
+       "additionalProperties": {
+        "$ref": "#/components/schemas/FieldMetadata"
+       },
+       "type": "object"
+      },
+      "hasScreen": {
+       "type": "boolean"
+      },
+      "id": {
+       "type": "string"
+      },
+      "isAvailable": {
+       "type": "boolean"
+      },
+      "isConditional": {
+       "type": "boolean"
+      },
+      "isGlobal": {
+       "type": "boolean"
+      },
+      "isInitial": {
+       "type": "boolean"
+      },
+      "looped": {
+       "type": "boolean"
+      },
+      "name": {
+       "type": "string"
+      },
+      "to": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/StatusDetails"
+        }
+       ]
+      }
+     },
+     "type": "object"
+    },
+    "StatusDetails": {
+     "additionalProperties": true,
+     "properties": {
+      "description": {
+       "type": "string"
+      },
+      "iconUrl": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "scope": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/Scope"
+        }
+       ]
+      },
+      "self": {
+       "type": "string"
+      },
+      "statusCategory": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/StatusCategory"
+        }
+       ]
+      }
+     },
+     "type": "object"
+    },
+    "Scope": {
+     "additionalProperties": true,
+     "properties": {
+      "project": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/ProjectDetails"
+        }
+       ]
+      },
+      "type": {
+       "enum": [
+        "PROJECT",
+        "TEMPLATE"
+       ],
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "ProjectDetails": {
+     "additionalProperties": false,
+     "properties": {
+      "avatarUrls": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/AvatarUrlsBean"
+        }
+       ]
+      },
+      "id": {
+       "type": "string"
+      },
+      "key": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "projectCategory": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/UpdatedProjectCategory"
+        }
+       ]
+      },
+      "projectTypeKey": {
+       "enum": [
+        "software",
+        "service_desk",
+        "business",
+        "product_discovery"
+       ],
+       "type": "string"
+      },
+      "self": {
+       "type": "string"
+      },
+      "simplified": {
+       "type": "boolean"
+      }
+     },
+     "type": "object"
+    },
+    "UpdatedProjectCategory": {
+     "additionalProperties": false,
+     "properties": {
+      "description": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "self": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "StatusCategory": {
+     "additionalProperties": true,
+     "properties": {
+      "colorName": {
+       "type": "string"
+      },
+      "id": {
+       "type": "integer"
+      },
+      "key": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "self": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "SearchWarning": {
+     "additionalProperties": false,
+     "properties": {
+      "details": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/SearchWarningLimitDetails"
+        }
+       ]
+      },
+      "message": {
+       "type": "string"
+      },
+      "type": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "SearchWarningLimitDetails": {
+     "additionalProperties": false,
+     "properties": {
+      "actual": {
+       "type": "integer"
+      },
+      "arguments": {
+       "type": "string"
+      },
+      "clause": {
+       "type": "string"
+      },
+      "limit": {
+       "type": "integer"
+      }
+     },
+     "type": "object"
+    },
+    "BulkIssueResults": {
+     "additionalProperties": false,
+     "properties": {
+      "issueErrors": {
+       "items": {
+        "$ref": "#/components/schemas/IssueError"
+       },
+       "type": "array"
+      },
+      "issues": {
+       "items": {
+        "$ref": "#/components/schemas/IssueBean"
+       },
+       "type": "array"
+      }
+     },
+     "type": "object"
+    },
+    "IssueError": {
+     "additionalProperties": false,
+     "properties": {
+      "errorMessage": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    },
+    "Transitions": {
+     "additionalProperties": false,
+     "properties": {
+      "expand": {
+       "type": "string"
+      },
+      "transitions": {
+       "items": {
+        "$ref": "#/components/schemas/IssueTransition"
+       },
+       "type": "array"
+      }
+     },
+     "type": "object"
+    },
+    "IssueTypeWithStatus": {
+     "additionalProperties": false,
+     "properties": {
+      "id": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "self": {
+       "type": "string"
+      },
+      "statuses": {
+       "items": {
+        "$ref": "#/components/schemas/StatusDetails"
+       },
+       "type": "array"
+      },
+      "subtask": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "id",
+      "name",
+      "self",
+      "statuses",
+      "subtask"
+     ],
+     "type": "object"
+    },
+    "IssueTypeDetails": {
+     "additionalProperties": false,
+     "properties": {
+      "avatarId": {
+       "type": "integer"
+      },
+      "description": {
+       "type": "string"
+      },
+      "entityId": {
+       "type": "string"
+      },
+      "hierarchyLevel": {
+       "type": "integer"
+      },
+      "iconUrl": {
+       "type": "string"
+      },
+      "id": {
+       "type": "string"
+      },
+      "name": {
+       "type": "string"
+      },
+      "scope": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/Scope"
+        }
+       ]
+      },
+      "self": {
+       "type": "string"
+      },
+      "subtask": {
+       "type": "boolean"
+      }
+     },
+     "type": "object"
+    }
+   }
+  }
+ },
+ "agile": {
+  "roots": {
+   "board/configuration": {
+    "additionalProperties": false,
+    "properties": {
+     "columnConfig": {
+      "additionalProperties": false,
+      "properties": {
+       "columns": {
+        "items": {
+         "additionalProperties": false,
+         "properties": {
+          "max": {
+           "type": "integer"
+          },
+          "min": {
+           "type": "integer"
+          },
+          "name": {
+           "type": "string"
+          },
+          "statuses": {
+           "items": {
+            "additionalProperties": false,
+            "properties": {
+             "id": {
+              "type": "string"
+             },
+             "self": {
+              "type": "string"
+             }
+            },
+            "type": "object"
+           },
+           "type": "array"
+          }
+         },
+         "type": "object"
+        },
+        "type": "array"
+       },
+       "constraintType": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "estimation": {
+      "additionalProperties": false,
+      "properties": {
+       "field": {
+        "additionalProperties": false,
+        "properties": {
+         "displayName": {
+          "type": "string"
+         },
+         "fieldId": {
+          "type": "string"
+         }
+        },
+        "type": "object"
+       },
+       "type": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "filter": {
+      "additionalProperties": false,
+      "properties": {
+       "id": {
+        "type": "string"
+       },
+       "self": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "id": {
+      "type": "integer"
+     },
+     "location": {
+      "additionalProperties": false,
+      "properties": {
+       "projectKeyOrId": {
+        "type": "string"
+       },
+       "type": {
+        "enum": [
+         "project",
+         "user"
+        ],
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "name": {
+      "type": "string"
+     },
+     "ranking": {
+      "additionalProperties": false,
+      "properties": {
+       "rankCustomFieldId": {
+        "type": "integer"
+       }
+      },
+      "type": "object"
+     },
+     "self": {
+      "type": "string"
+     },
+     "subQuery": {
+      "additionalProperties": false,
+      "properties": {
+       "query": {
+        "type": "string"
+       }
+      },
+      "type": "object"
+     },
+     "type": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "board": {
+    "additionalProperties": false,
+    "properties": {
+     "isLast": {
+      "type": "boolean"
+     },
+     "maxResults": {
+      "type": "integer"
+     },
+     "startAt": {
+      "type": "integer"
+     },
+     "total": {
+      "type": "integer"
+     },
+     "values": {
+      "items": {
+       "additionalProperties": false,
+       "properties": {
+        "admins": {
+         "allOf": [
+          {
+           "additionalProperties": false,
+           "properties": {
+            "groups": {
+             "items": {
+              "additionalProperties": false,
+              "properties": {
+               "name": {
+                "type": "string"
+               },
+               "self": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            },
+            "users": {
+             "items": {
+              "additionalProperties": false,
+              "properties": {
+               "accountId": {
+                "maxLength": 128,
+                "type": "string"
+               },
+               "active": {
+                "type": "boolean"
+               },
+               "avatarUrls": {
+                "allOf": [
+                 {
+                  "additionalProperties": false,
+                  "properties": {
+                   "16x16": {
+                    "type": "string"
+                   },
+                   "24x24": {
+                    "type": "string"
+                   },
+                   "32x32": {
+                    "type": "string"
+                   },
+                   "48x48": {
+                    "type": "string"
+                   }
+                  },
+                  "type": "object"
+                 }
+                ]
+               },
+               "displayName": {
+                "type": "string"
+               },
+               "key": {
+                "type": "string"
+               },
+               "name": {
+                "type": "string"
+               },
+               "self": {
+                "type": "string"
+               }
+              },
+              "type": "object"
+             },
+             "type": "array"
+            }
+           },
+           "type": "object"
+          }
+         ]
+        },
+        "canEdit": {
+         "type": "boolean"
+        },
+        "favourite": {
+         "type": "boolean"
+        },
+        "id": {
+         "type": "integer"
+        },
+        "isPrivate": {
+         "type": "boolean"
+        },
+        "location": {
+         "additionalProperties": false,
+         "properties": {
+          "avatarURI": {
+           "type": "string"
+          },
+          "displayName": {
+           "type": "string"
+          },
+          "name": {
+           "type": "string"
+          },
+          "projectId": {
+           "type": "integer"
+          },
+          "projectKey": {
+           "type": "string"
+          },
+          "projectName": {
+           "type": "string"
+          },
+          "projectTypeKey": {
+           "type": "string"
+          },
+          "userAccountId": {
+           "type": "string"
+          },
+          "userId": {
+           "type": "integer"
+          }
+         },
+         "type": "object"
+        },
+        "name": {
+         "type": "string"
+        },
+        "self": {
+         "type": "string"
+        },
+        "type": {
+         "type": "string"
+        }
+       },
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
+   "SprintBean": {
+    "$ref": "#/components/schemas/SprintBean"
+   }
+  },
+  "components": {
+   "schemas": {
+    "SprintBean": {
+     "additionalProperties": false,
+     "properties": {
+      "completeDate": {
+       "type": "string"
+      },
+      "createdDate": {
+       "type": "string"
+      },
+      "endDate": {
+       "type": "string"
+      },
+      "goal": {
+       "type": "string"
+      },
+      "id": {
+       "type": "integer"
+      },
+      "name": {
+       "type": "string"
+      },
+      "originBoardId": {
+       "type": "integer"
+      },
+      "self": {
+       "type": "string"
+      },
+      "startDate": {
+       "type": "string"
+      },
+      "state": {
+       "type": "string"
+      }
+     },
+     "type": "object"
+    }
+   }
+  }
+ }
+}

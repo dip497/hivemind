@@ -2,8 +2,10 @@ import { defineCommand } from "citty";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import {
   HiveError,
+  loadWorkflow,
   readIssue,
-  requireRoot,
+  resolveStatus,
+  rootForIdHere,
   updateIssue,
   writeAgentContext,
   type IssuePatch,
@@ -11,12 +13,15 @@ import {
 import { err, ok, renderIssue } from "../format.js";
 import { detectWho } from "../who.js";
 import { collectMulti, parseAssignee, parseState, stripAt } from "../parse.js";
+import { NeedsConfirmError, START_FLAGS, guardStart, startAcks, startsWork } from "../start-guard.js";
+import { EXIT, printFailure } from "../exit-codes.js";
 
 export const updateCmd = defineCommand({
   meta: { name: "update", description: "Update fields of an existing issue" },
   args: {
     id: { type: "positional", required: true, description: "Issue ID" },
-    state: { type: "string", description: "New state" },
+    state: { type: "string", description: "New state (with a workflow: that state's first status)" },
+    status: { type: "string", description: "New workflow status, by id or name (hive statuses show); its state follows" },
     title: { type: "string", description: "New title" },
     assignee: { type: "string", description: "Assignee id (or 'none' to unset)" },
     "assignee-type": { type: "string" },
@@ -25,13 +30,14 @@ export const updateCmd = defineCommand({
     "rm-label": { type: "string", description: "Remove a label (repeatable)" },
     github: { type: "string", description: "Linked GitHub issue/PR number (or 'none')" },
     note: { type: "string", description: "Free-text note appended to Activity" },
+    ...START_FLAGS,
     json: { type: "boolean" },
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
       const id = stripAt(String(args.id));
+      const root = await rootForIdHere(id);
       // The CLI validates/parses flags into a patch; core owns the diff,
       // canonical activity format, and write. We read once only to resolve the
       // add/remove-label SET semantics into a final labels array.
@@ -42,6 +48,10 @@ export const updateCmd = defineCommand({
         const ns = parseState(String(args.state));
         if (!ns) return err(ctx, "bad_state", `invalid state: ${args.state}`);
         patch.state = ns;
+      }
+      if (args.status !== undefined) {
+        if (args.state !== undefined) return err(ctx, "usage", "give --status or --state, not both: a status decides the state");
+        patch.status = String(args.status); // core resolves it, refusing one the workflow lacks
       }
       if (args.title !== undefined) patch.title = String(args.title);
       if (args.assignee !== undefined) {
@@ -78,10 +88,16 @@ export const updateCmd = defineCommand({
         return err(ctx, "noop", `no fields changed and no --note provided`);
       }
 
+      // Into the in-progress category, the start-work guard asks first (design jira-sync §10).
+      const acks = startAcks(args);
+      const into = patch.status !== undefined ? resolveStatus(loadWorkflow(root), patch.status)?.category : patch.state;
+      if (startsWork(issue, into)) await guardStart(root, id, acks, detectWho());
+
       const updated = await updateIssue(root, id, patch, detectWho(), note || undefined);
       await writeAgentContext(root);
       return ok(ctx, updated, () => renderIssue(updated));
     } catch (e) {
+      if (e instanceof NeedsConfirmError) return printFailure(ctx.json, e.failure, EXIT.refused);
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "update_failed";
       return err(ctx, code, msg);

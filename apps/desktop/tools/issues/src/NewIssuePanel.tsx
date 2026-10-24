@@ -16,17 +16,9 @@ import { Input } from "@hivemind/app-ui";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hivemind/app-ui";
 import { Label } from "@hivemind/app-ui";
 import { Textarea } from "@hivemind/app-ui";
-import { useIssueList, write, type Assignee, type IssueState } from "./data";
+import { useIssueList, write, type Assignee } from "./data";
 import type { PanelProps } from "./data";
 import { AssigneePicker, LabelPicker, ParentPicker } from "./pickers";
-
-const STATES: { value: IssueState; label: string }[] = [
-  { value: "backlog", label: "Backlog" },
-  { value: "todo", label: "Todo" },
-  { value: "in_progress", label: "In progress" },
-  { value: "in_review", label: "In review" },
-  { value: "done", label: "Done" },
-];
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -44,7 +36,7 @@ function PickerBox({ children }: { children: ReactNode }) {
   );
 }
 
-export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
+export function NewIssuePanel({ hm, workflow, close, openPanel }: PanelProps) {
   const allIssues = useIssueList() ?? [];
   const [pending, setPending] = useState(false);
   const allLabels = useMemo(() => Array.from(new Set(allIssues.flatMap((i) => i.labels))).sort(), [allIssues]);
@@ -54,7 +46,9 @@ export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
   );
 
   const [title, setTitle] = useState("");
-  const [state, setState] = useState<IssueState>("todo");
+  // A new issue starts in Todo's first status; cancelled ones are not offered, as before.
+  const choices = workflow.statuses.filter((s) => s.category !== "cancelled" && !s.retired);
+  const [status, setStatus] = useState(() => (choices.find((s) => s.category === "todo") ?? choices[0])!.id);
   const [description, setDescription] = useState("");
   const [labels, setLabels] = useState<string[]>([]);
   const [assignee, setAssignee] = useState<Assignee | null>(null);
@@ -66,7 +60,7 @@ export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
     setPending(true);
     const issue = await write("Creating the issue", hm.issues.create({
       title: title.trim(),
-      state,
+      ...(workflow.custom ? { status } : { state: choices.find((s) => s.id === status)!.category }),
       description: description.trim() || undefined,
       labels: labels.length ? labels : undefined,
       assignee: assignee ?? undefined,
@@ -101,11 +95,11 @@ export function NewIssuePanel({ hm, close, openPanel }: PanelProps) {
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="State">
-                <Select value={state} onValueChange={(v) => setState(v as IssueState)}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <Field label={workflow.custom ? "Status" : "State"}>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger className="w-full" data-new-status><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {STATES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                    {choices.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </Field>

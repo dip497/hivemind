@@ -15,6 +15,7 @@ import { ViewSwitcher, type ViewKind } from "./ViewSwitcher";
 import { BoardView } from "./BoardView";
 import { ListView } from "./ListView";
 import { GROUP_BY_LABEL, GROUP_BY_ORDER, type GroupBy } from "./grouping";
+import { DEFAULT_TRACKER_ASSIGNEE, isTrackerAssignee, matchesTrackerAssignee, type TrackerAssignee } from "./tracker";
 
 /** Centered, teaching empty/placeholder state. */
 function TileEmpty({
@@ -91,24 +92,27 @@ function SetUpIssues({ hm, status, onReady }: { hm: ViewClient; status: ViewIssu
   );
 }
 
-interface Saved { view?: ViewKind; groupBy?: GroupBy }
+interface Saved { view?: ViewKind; groupBy?: GroupBy; trackerAssignee?: TrackerAssignee }
 
-/** "Work on it": an agent in this tile's frame, told the issue (the person sends or cancels it). */
+/** "Work on it" from a host before the start-work guard (protocol 1.17): an agent in this tile's
+ *  frame, told the issue (the person sends or cancels it). */
 export function workPrompt(issue: Pick<IssueSummary, "id" | "title">): string {
   return `Work on ${issue.id}: load it with \`hive show ${issue.id} --json\`, complete the acceptance criteria, and end with \`hive ctl set-state\`. Title: "${issue.title}".`;
 }
 
-export function IssuesTile({ tile, hm, selected }: TileProps) {
-  const { openPanel } = useIssuesPlugin();
+export function IssuesTile({ hm, selected, workflowError }: TileProps & { workflowError?: string | null }) {
+  const { openPanel, workOn, answerFor, saveLayout, layout } = useIssuesPlugin();
   const list = useIssueList();
   const issues = list ?? [];
-  const saved = (hm.hello.layout ?? {}) as Saved;
+  const saved = layout as Saved;
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [view, setView] = useState<ViewKind>(saved.view ?? "board");
   const [groupBy, setGroupBy] = useState<GroupBy>(saved.groupBy ?? "state");
-  const save = (next: Saved) => hm.setLayout({ view, groupBy, ...next });
-  const setViewP = (v: ViewKind) => { setView(v); save({ view: v }); };
-  const setGroupP = (g: GroupBy) => { setGroupBy(g); save({ groupBy: g }); };
+  // Whose mirrored issues show, kept with the tile like its view: the Issues tile is one per workspace.
+  const [trackerAssignee, setTrackerAssignee] = useState<TrackerAssignee>(isTrackerAssignee(saved.trackerAssignee) ? saved.trackerAssignee : DEFAULT_TRACKER_ASSIGNEE);
+  const setViewP = (v: ViewKind) => { setView(v); saveLayout({ view: v }); };
+  const setGroupP = (g: GroupBy) => { setGroupBy(g); saveLayout({ groupBy: g }); };
+  const setTrackerP = (t: TrackerAssignee) => { setTrackerAssignee(t); saveLayout({ trackerAssignee: t }); };
 
   // Whether this workspace keeps issues; an older app does not say, and always does.
   const [status, setStatus] = useState<ViewIssuesStatus | null>(null);
@@ -118,10 +122,7 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
     return () => { live = false; };
   }, [hm]);
 
-  const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
-  const workOn = (issue: IssueSummary) => {
-    void write("Starting an agent", Promise.resolve().then(() => hm.commands.spawnAgent(null, tile.frameId, { prompt: workPrompt(issue), name: issue.id })));
-  };
+  const filtered = useMemo(() => applyFilters(issues, filters).filter((i) => matchesTrackerAssignee(i, trackerAssignee)), [issues, filters, trackerAssignee]);
   const newIssue = () => openPanel("new");
 
   return (
@@ -132,13 +133,19 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
         <SetUpIssues hm={hm} status={status} onReady={setStatus} />
       ) : (
         <>
+          {workflowError && (
+            <div role="alert" className="px-4 py-1.5 text-count text-[var(--color-warn)] border-b border-[var(--color-line)] bg-[var(--color-bg2)]" data-workflow-error>
+              The workflow could not be read, so the board shows the six states: {workflowError}. Run <code className="font-mono">hive statuses validate</code>.
+            </div>
+          )}
           <FilterBar
             issues={issues}
             filters={filters}
             onChange={setFilters}
+            tracker={{ value: trackerAssignee, onChange: setTrackerP }}
             rightSlot={
               <>
-                <span className="text-count text-[var(--color-fg3)] tabular-nums">{issues.length}</span>
+                <span className="text-count text-[var(--color-fg3)] tabular-nums" data-issue-count>{issues.length}</span>
                 <GroupByMenu value={groupBy} onChange={setGroupP} />
                 <ViewSwitcher value={view} onChange={setViewP} views={["board", "list"]} />
                 <Button size="sm" className="nodrag" onClick={newIssue}>+ New</Button>
@@ -157,7 +164,7 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
           ) : (
             <div className="flex-1 overflow-auto p-2">
               {view === "board" ? (
-                <BoardView issues={filtered} groupBy={groupBy} showCancelled={filters.showCancelled} selected={selected} onWork={workOn} />
+                <BoardView issues={filtered} groupBy={groupBy} showCancelled={filters.showCancelled} selected={selected} onWork={workOn} answerFor={answerFor} />
               ) : (
                 <ListView issues={filtered} groupBy={groupBy} showCancelled={filters.showCancelled} onWork={workOn} />
               )}

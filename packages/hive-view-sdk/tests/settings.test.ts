@@ -2,7 +2,7 @@
 // stored value read through its field, so a value an older version stored never reaches the view
 // in a shape the view does not expect.
 import { describe, expect, test } from "bun:test";
-import { parseSettingFields, parseSettingValue, resolveSettings } from "../src/settings.js";
+import { parseSettingFields, parseSettingValue, resolveSettings, secretsSet } from "../src/settings.js";
 
 describe("what a plugin declares it can be set to", () => {
   test("each field is checked on its own: a malformed one is left out, the rest kept", () => {
@@ -44,5 +44,19 @@ describe("what a plugin declares it can be set to", () => {
     expect(() => parseSettingValue(model!, "haiku")).toThrow("model is one of: opus, sonnet");
     expect(() => parseSettingValue(loud!, "yes")).toThrow("loud is true or false");
     expect(() => parseSettingValue(fps!, "fast")).toThrow("fps is a number");
+  });
+
+  test("a secret is a tool plugin's alone; settings say only whether it is set, its plugin's settings never hold it, and a command line may not give it", () => {
+    const declared = [{ id: "token", type: "secret", label: "API token" }, { id: "site", type: "text", default: "" }];
+    expect(parseSettingFields(declared).map((f) => f.id)).toEqual(["site"]); // a view's or a widget's: nothing would read it
+    const fields = parseSettingFields(declared, { secrets: true });
+    expect(fields.map((f) => [f.id, f.type])).toEqual([["token", "secret"], ["site", "text"]]);
+    // A value written into settings.json by hand is not read as the secret.
+    for (const stored of [{ token: true, site: "acme" }, { token: "hunter2", site: "acme" }]) {
+      expect(resolveSettings(fields, stored)).toEqual({ site: "acme" });
+    }
+    expect(secretsSet(fields, { token: true })).toEqual({ token: true });
+    expect(secretsSet(fields, { token: "hunter2" })).toEqual({ token: false });
+    expect(() => parseSettingValue(fields[0]!, "hunter2")).toThrow("token is a secret: give it on stdin");
   });
 });

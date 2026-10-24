@@ -1,5 +1,10 @@
 export * from "./types.js";
+export * from "./issue-id.js";
+export * from "./workflow.js";
 export * from "./storage.js";
+export * from "./mirror.js";
+export * from "./ingest.js";
+export * from "./sync-lock.js";
 export * from "./query.js";
 export * from "./agent-context.js";
 export * from "./registry.js";
@@ -14,3 +19,6 @@ export * from "./machines.js";
 export * from "./ssh.js";
 export * from "./ipc.js";
 export * as templates from "./templates.js";
+export * from "./start-guard.js";
+export * from "./pr.js";
+export * from "./complete.js";

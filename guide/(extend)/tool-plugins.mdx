@@ -191,7 +191,7 @@ Next: [Publish a plugin](/publish-to-hivehub) on HiveHub, or ship it with your w
 |---|---|
 | `tile` | `{ id, kind, name, frameId }` |
 | `hm` | the client a view has (`@hivemind/view-sdk`): frames, tiles, agents' status and events, commands, its settings, and its saved state, kept per tile (`hm.hello.layout`, `hm.setLayout`). Each is held to the permissions the manifest declares. |
-| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (see [Running programs](#running-programs)), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser |
+| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (see [Running programs](#running-programs)), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser, `call(command, args)` to its own [service](#a-service-that-keeps-running) |
 | `selected` | it has the person's focus |
 
 A tile imports the app's own React and parts from `hm-plugin://host/`: `react.js`,
@@ -292,7 +292,8 @@ useEffect(() => hm.onCommand("list", () => trees), [hm, trees]);
 ```
 
 `hive ctl plugin call @dip497/worktrees list` prints what the handler returns. It works while a tile
-of the tool is open. With two open, name one with `--tile`.
+of the tool is open. With two open, name one with `--tile`. With none open, the tool's
+[service](#a-service-that-keeps-running) answers it, if it serves that command: under `hive host` too.
 
 ### A service that keeps running
 
@@ -315,7 +316,33 @@ pick the workspaces it may drive, on the tool's page. Where `hive host` runs it,
 
 It restarts after a crash (after 1 s, then 2, 4… up to a minute). It stays stopped after a clean
 exit, or when its token is revoked. It should exit when its standard input closes. Its output is
-on its page.
+on its page; it is written as printed, so never print a token.
+
+`node` in its command needs no Node.js on the machine: the app runs it with its own runtime.
+`hive host` uses the `node` on `PATH`, and says so when there is none.
+
+What a service asks of its own tool, on its connection:
+
+| Call | What it does |
+|---|---|
+| `plugin.options` | `{values, secrets}`: what the person set the tool's `settings` to, and which of its secrets are set. After it asks, each change comes as the event `options.changed`; a change does not restart it. |
+| `secret.get(name)` | one of the tool's `secret` settings, or null. Never another plugin's. |
+| `plugin.serve` (notice) | `[{name, description}]`: the commands it answers. Each call comes as the event `plugin.called {call, command, args}`; it answers with the notice `plugin.answer(call, {result} \| {error: {code, message}})`, within 30 s. |
+| `issue.create`, `issue.update`, `issue.setState`, `issue.comment` | at the `edit` role: written into the issue's activity as `@owner/name (service)`. |
+
+The tool's own tiles reach its service with `host.call(command, args)`: the answer, or an error
+saying why there is none (the service is off, or not switched on for this workspace). A tile reaches
+only its own tool's service. A service that drives several workspaces answers on the connection it
+served last, so a tile names its own in the arguments (`{ ...args, workspace: host.repoPath }`).
+
+Every write to the workspace's issues, from the app, `hive` or an agent, comes as the event
+`issue.changed {id, root, change, fields, by}`.
+
+A setting of type `secret` (tools only) is an API token or a password. You type it on the tool's
+page, where it is never shown again, or pipe it in: `printf %s "$TOKEN" | hive plugins set
+@acme/jira token`. It is kept in the system keychain, or, where there is none (`hive host`, a Linux
+with no keyring), in `secrets.json` beside `settings.json`, readable by you alone. `settings.json`
+says only that it is set, and the tool's tiles never see it.
 
 ### On a shared canvas
 

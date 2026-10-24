@@ -1,0 +1,12 @@
+{
+ "permissions": {
+  "EDIT_ISSUES": {
+   "description": "Ability to edit issues.",
+   "havePermission": true,
+   "id": "12",
+   "key": "EDIT_ISSUES",
+   "name": "Edit Issues",
+   "type": "PROJECT"
+  }
+ }
+}

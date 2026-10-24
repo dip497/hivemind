@@ -1,4 +1,6 @@
 /** What `hive plugins new` writes for a tool and for a widget: a plugin that works as written. */
+import fs from "node:fs";
+import path from "node:path";
 import { TOOL_API_VERSION } from "@hivemind/core/tool-format";
 import { TOOL_MANIFEST } from "@hivemind/core/tool-packages";
 import { WIDGET_TYPES } from "@hivemind/core/widget-api";
@@ -35,7 +37,24 @@ export const TOOL_TYPE_SETUP: TypeSetup = {
   },
   files: () => ({ "types/host.d.ts": HOST_TYPES, ...typeFiles(["view-sdk", "tile-sdk"]) }),
   isSource: (rel) => /^[^/]+\.m?js$/.test(rel),
+  skip: (dir) => serviceFiles(dir),
 };
+
+/** The files of a tool's folder its manifest's `service.command` runs (`["node", "service.mjs"]`,
+ *  `["./bin/sync"]`): a program apart from the tile, not checked against the tile SDK. */
+function serviceFiles(dir: string): string[] {
+  let command: unknown;
+  try {
+    command = (JSON.parse(fs.readFileSync(path.join(dir, TOOL_MANIFEST), "utf8")) as { service?: { command?: unknown } }).service?.command;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(command)) return [];
+  return command
+    .filter((a): a is string => typeof a === "string" && !a.startsWith("-"))
+    .map((a) => path.posix.normalize(a.replace(/^\.\//, "")))
+    .filter((rel) => !rel.startsWith("..") && !path.isAbsolute(rel) && fs.existsSync(path.join(dir, rel)));
+}
 
 /** What a widget's code is checked against. Its code is a script, not a module: it reads no
  *  other file (`noResolve`), so its own `/// <reference>` to hive.d.ts is the CLI's copy too. */
@@ -55,6 +74,7 @@ declare module "hm-plugin://host/react.js" {
   export function useMemo<T>(make: () => T, deps: readonly unknown[]): T;
   export function useCallback<T extends (...args: never[]) => unknown>(fn: T, deps: readonly unknown[]): T;
   export function useRef<T>(initial: T): { current: T };
+  export function useReducer<S, A>(reducer: (state: S, action: A) => S, initial: S): [S, (action: A) => void];
   export function createElement(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
   export const Fragment: unknown;
   const React: { createElement: typeof createElement; Fragment: unknown };

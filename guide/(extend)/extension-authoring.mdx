@@ -155,6 +155,8 @@ Check `hm.supports("<feature>")` before using a newer feature.
 | Who else is here | `hm.onParticipants(cb)` (`participants`) |
 | The canvas's widgets | `hm.onWidgets(cb)`, `hm.pressWidget(id, action)` (`widgets`) |
 | Issues | `hm.onIssues(cb)`, `hm.issues.read(id)`, `create`, `update`, … (`issues`) |
+| Draw the workspace's own columns | `hm.issues.workflow()` gives its statuses in board order, each with its category; `hm.issues.update(id, { status })` moves an issue to one (`workflow`) |
+| Start work on an issue | `hm.issues.checkStart(id)` gives the start-work guard's findings, each with what can be done; `hm.issues.start(id, { ack, assignMe })` starts it with the person's answers, its agent's task read by them first ([Before work starts](/issues#before-work-starts)) (`startWork`) |
 | Its settings | `hm.settings`, `hm.on("settings", cb)` (`settings`) |
 | Draw your own toolbar | `"toolbar": "off"`, then `hm.commands.openHostMenu("views", rect)`, `"add"`, `"appearance"` or `"settings"` opens the app's own (`hostMenu`) |
 | Messages from your scripts | `hm.onCustom("ci.*", cb)`, sent by `hive ctl view emit ci.build '{…}'` |

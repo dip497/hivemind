@@ -21,6 +21,9 @@ export interface TypeSetup {
   files(): Record<string, string>;
   /** Whether a file of the plugin, by its path in the folder, is its code. */
   isSource(rel: string): boolean;
+  /** Code files of the plugin at `dir` that are not checked here: a tool's service program, which
+   *  the app runs apart from the tile (often a bundle built and type-checked where its source is). */
+  skip?(dir: string): string[];
 }
 
 const OWN_CONFIGS = ["tsconfig.json", "jsconfig.json"];
@@ -39,7 +42,7 @@ function localTsc(dir: string): string | null {
 
 /** The plugin's code files by their real paths, and those that are links to outside its folder. */
 function sourcesIn(root: string, setup: TypeSetup): { files: string[]; outside: string[] } {
-  const types = new Set(Object.keys(setup.files()));
+  const types = new Set([...Object.keys(setup.files()), ...(setup.skip?.(root) ?? [])]);
   const files: string[] = [], outside: string[] = [];
   const walk = (rel: string) => {
     for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
@@ -90,7 +93,8 @@ export function checkTypes(dir: string, setup: TypeSetup, noun: string): TypesRe
     const args = [...(tsc ? [tsc] : ["x", "--package", FETCHED, "tsc"]), "-p", path.join(cwd, "tsconfig.json"), "--pretty", "false"];
     // What it needs to run and to find its download cache, and none of the person's secrets.
     const env = { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? os.homedir(), BUN_BE_BUN: "1" };
-    const r = spawnSync(process.execPath, args, { cwd, encoding: "utf8", env, timeout: 180_000 });
+    // A plugin with many problems prints a lot: it is still a result, not a TypeScript that did not run.
+    const r = spawnSync(process.execPath, args, { cwd, encoding: "utf8", env, timeout: 180_000, maxBuffer: 64 * 1024 * 1024 });
     if (r.error) return { ran: false, note, why: `TypeScript did not run: ${r.error.message}`, problems: [] };
     const out = `${r.stdout}\n${r.stderr}`;
     const problems: Problem[] = [];

@@ -10,6 +10,8 @@
  *   │   └── PAY-122/        <- sub-issue directory (children of PAY-122)
  *   │       ├── PAY-122.1.md
  *   │       └── PAY-122.2.md
+ *   ├── mirror/<source-slug>/ <- issues mirrored from a tracker, by its key (mirror.ts)
+ *   │   └── JIRA-318.md
  *   └── .agent.md            <- auto-generated context for AI agents
  */
 
@@ -17,6 +19,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import matter from "gray-matter";
+// @ts-ignore js-yaml 3 ships no types (and every package compiling this source would need them);
+// the part used is typed where it is cast below.
+import jsyamlUntyped from "js-yaml";
 import YAML from "yaml";
 import { z } from "zod";
 import {
@@ -29,7 +34,11 @@ import {
   type IssuePatch,
   type IssueSections,
   type IssueSummary,
+  type LayoutLine,
+  type PrRef,
 } from "./types.js";
+import { ISSUE_ID_RE } from "./issue-id.js";
+import { MIRROR_DIR } from "./mirror.js";
 
 const DIR = ".hivemind";
 
@@ -119,7 +128,9 @@ export async function readConfig(root: string): Promise<Config> {
     // surfaces as a raw stack trace in the UI. Instead, fill in defaults
     // and write the repaired config back so the next read is clean.
     const obj = (typeof parsed === "object" && parsed !== null ? parsed : {}) as Record<string, unknown>;
+    const { format: _format, ...rest } = obj; // keys this build doesn't name are kept
     const repaired: Config = {
+      ...rest,
       prefix: deriveDefaultPrefix(typeof obj.prefix === "string" ? obj.prefix : undefined, root),
       next_id:
         typeof obj.next_id === "number" && Number.isInteger(obj.next_id) && obj.next_id > 0
@@ -208,22 +219,33 @@ export async function allocateId(root: string): Promise<{ id: string; cfg: Confi
   return run;
 }
 
+/** Read-modify-write config.yaml, serialized with id allocation and migrations (all three rewrite
+ *  it, and a write that interleaves with another loses its change). Returns the config as written. */
+export async function updateConfig(root: string, mutate: (cfg: Config) => Config): Promise<Config> {
+  const prev = allocChains.get(root) ?? Promise.resolve();
+  const run = prev.then(async () => {
+    const next = mutate(await readConfig(root));
+    await writeConfig(root, next);
+    return next;
+  });
+  allocChains.set(root, run.then(() => undefined, () => undefined));
+  return run;
+}
+
 // ── issues: paths ──────────────────────────────────────────────────
 
 /**
- * Resolve the on-disk path for an issue id. Sub-issues live in directories
- * named after their parent: e.g. PAY-122/PAY-122.1.md.
+ * The on-disk path for a LOCAL issue id (where a new one is written). Sub-issues live in
+ * directories named after their parent: e.g. PAY-122/PAY-122.1.md. To find an existing issue,
+ * which may be mirrored or named by an alias, use `locateIssue`.
  *
  * - "PAY-118"    → .hivemind/issues/PAY-118.md
  * - "PAY-122.1"  → .hivemind/issues/PAY-122/PAY-122.1.md
  * - "PAY-1.2.3"  → .hivemind/issues/PAY-1/PAY-1.2/PAY-1.2.3.md
  */
-// Issue id format: prefix (one uppercase letter + 1-9 uppercase/digit chars) +
-// "-" + decimal number, optionally followed by dotted sub-decimals. Validates
-// every callsite (CLI + IPC) so a malicious id like "../../etc/passwd" can't
-// escape `.hivemind/issues/` and the resulting `fs.unlink`/`fs.writeFile` /
+// Issue id format: issue-id.ts. Validates every callsite (CLI + IPC) so a malicious id like
+// "../../etc/passwd" can't escape `.hivemind/` and the resulting `fs.unlink`/`fs.writeFile` /
 // `fs.readFile` is bounded. (Defense-in-depth — IPC validates separately.)
-const ISSUE_ID_RE = /^[A-Z][A-Z0-9]{1,9}-\d+(\.\d+)*$/;
 // ── workspace format ──────────────────────────────────────────────
 
 /** The on-disk format this build reads and writes. A workspace written at an earlier format is
@@ -307,12 +329,43 @@ export function issuePath(root: string, id: string): string {
   return path.join(dir, ...segs, `${id}.md`);
 }
 
-/** Read an issue file by id (throws HiveError if missing). */
+const exists = (p: string): Promise<boolean> => fs.stat(p).then((s) => s.isFile(), () => false);
+
+/**
+ * Where the file of issue `id` is, or null: the one id → path lookup every reader goes through.
+ * A local issue is at `issuePath`; a mirrored one at `mirror/<slug>/<id>.md`; an earlier id (a Jira
+ * key before the issue moved) resolves to the issue whose `aliases` hold it. The alias step reads
+ * the cached listing, so only a miss costs a folder walk.
+ */
+export async function locateIssue(root: string, id: string): Promise<string | null> {
+  const local = issuePath(root, id);
+  if (await exists(local)) return local;
+  if (!id.includes(".")) {
+    for (const slug of await subdirs(path.join(root, MIRROR_DIR))) {
+      const p = path.join(root, MIRROR_DIR, slug, `${id}.md`);
+      if (await exists(p)) return p;
+    }
+  }
+  for (const [p, e] of await scanIssueFiles(root)) if (e.aliases.includes(id)) return p;
+  return null;
+}
+
+async function subdirs(dir: string): Promise<string[]> {
+  try {
+    return (await fs.readdir(dir, { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/** Read an issue file by id, alias or mirrored key (throws HiveError if missing). */
 export async function readIssue(root: string, id: string): Promise<Issue> {
-  const p = issuePath(root, id);
+  assertValidIssueId(id);
   await ensureWorkspaceCurrent(root);
+  const p = await locateIssue(root, id);
   let raw: string;
   try {
+    if (!p) throw new Error("missing");
     raw = await fs.readFile(p, "utf8");
   } catch {
     throw new HiveError("not_found", `issue ${id} not found`);
@@ -320,40 +373,149 @@ export async function readIssue(root: string, id: string): Promise<Issue> {
   return parseIssueFile(p, raw);
 }
 
+/** Frontmatter is read as YAML 1.2 core: no timestamp type, so `due: 2026-11-01` and an unquoted
+ *  `created: 2026-10-01T00:00:00Z` stay strings (js-yaml's default schema made them `Date`s, which
+ *  `IsoZ` refused, and `listIssues` skipped the file). The engine is passed as an option, which
+ *  turns off gray-matter's content cache — the one that handed every caller the same `data`
+ *  object — so it keeps a bounded cache of its own and returns a copy: a loose schema keeps nested
+ *  objects by reference, and the long-running app must not mutate a cached one. js-yaml, not the
+ *  `yaml` package, which parses a frontmatter six times slower, on a path that reruns on every
+ *  change in the app. */
+const jsyaml = jsyamlUntyped as {
+  CORE_SCHEMA: object;
+  load(str: string, opts?: { schema?: object }): unknown;
+  safeDump(obj: unknown, opts?: { schema?: object }): string;
+};
+const MATTER_OPTS = {
+  engines: { yaml: (s: string): object => readYaml(s) },
+};
+const yamlCache = new Map<string, unknown>();
+const YAML_CACHE_MAX = 4096;
+
+function readYaml(s: string): Record<string, unknown> {
+  let data = yamlCache.get(s);
+  if (data === undefined) {
+    data = jsyaml.load(s, { schema: jsyaml.CORE_SCHEMA }) ?? {};
+    if (yamlCache.size >= YAML_CACHE_MAX) yamlCache.delete(yamlCache.keys().next().value!);
+    yamlCache.set(s, data);
+  }
+  return copyPlain(data) as Record<string, unknown>;
+}
+
+/** A deep copy of parsed YAML (plain objects, arrays, scalars): cheaper than `structuredClone`. */
+function copyPlain(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(copyPlain);
+  if (v && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) o[k] = copyPlain(x);
+    return o;
+  }
+  return v;
+}
+
+function readFrontmatter(raw: string): { data: Record<string, unknown>; content: string; matter: string } {
+  const parsed = matter(raw, MATTER_OPTS);
+  return { data: parsed.data, content: parsed.content, matter: parsed.matter };
+}
+
+/** A file's frontmatter as it was read (its text, and a copy of what it parsed to, since the
+ *  Issue's own values may be changed in place), so a write puts back every entry whose value didn't
+ *  change exactly as it was (quotes, flow style, comments): what hive doesn't own stays verbatim.
+ *  Held per Issue object from read to write (`updateIssue`, `commentOnIssue`, links all write the
+ *  object they read); split into entries only when it is written. */
+const readFrontmatters = new WeakMap<Issue, { text: string; data: Record<string, unknown> }>();
+
+interface FrontmatterSource {
+  /** Comment and blank lines before the first key. */
+  head: string;
+  entries: Array<{ key: string; text: string; value: unknown; gap: string }>;
+}
+/** Split frontmatter into top-level entries, or `undefined` when it isn't a plain block mapping
+ *  that splits cleanly (each entry must parse on its own to the key and value the whole did);
+ *  then a write dumps every key fresh, as it always did. */
+function frontmatterSource(text: string, data: Record<string, unknown>): FrontmatterSource | undefined {
+  const body = text.replace(/^\r?\n/, "").replace(/\n$/, "");
+  const lines = body.split("\n");
+  const starts: number[] = [];
+  lines.forEach((l, i) => { if (/^[^\s#\-.]/.test(l)) starts.push(i); });
+  const keys = Object.keys(data);
+  if (starts.length !== keys.length) return undefined;
+  const isGap = (l: string) => !l.trim() || l.startsWith("#");
+  const entries: FrontmatterSource["entries"] = [];
+  for (let n = 0; n < starts.length; n++) {
+    const end = n + 1 < starts.length ? starts[n + 1]! : lines.length;
+    let last = end;
+    while (last > starts[n]! + 1 && isGap(lines[last - 1]!)) last--;
+    const text = lines.slice(starts[n], last).join("\n") + "\n";
+    let one: unknown;
+    try { one = jsyaml.load(text, { schema: jsyaml.CORE_SCHEMA }); } catch { return undefined; }
+    const own = one && typeof one === "object" && !Array.isArray(one) ? Object.keys(one) : [];
+    if (own.length !== 1 || own[0] !== keys[n] || !sameValue((one as Record<string, unknown>)[keys[n]!], data[keys[n]!])) return undefined;
+    const gap = lines.slice(last, end).map((l) => l + "\n").join("");
+    entries.push({ key: keys[n]!, text, value: data[keys[n]!], gap });
+  }
+  return { head: lines.slice(0, starts[0] ?? lines.length).map((l) => l + "\n").join(""), entries };
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => sameValue(x, b[i]));
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(b)) {
+    const ka = Object.keys(a);
+    const o = b as Record<string, unknown>;
+    return ka.length === Object.keys(o).length && ka.every((k) => k in o && sameValue((a as Record<string, unknown>)[k], o[k]));
+  }
+  return false;
+}
+
 export function parseIssueFile(p: string, raw: string): Issue {
-  const parsed = matter(raw);
+  const parsed = readFrontmatter(raw);
   const fmResult = IssueFrontmatterZ.safeParse(parsed.data);
   if (!fmResult.success) {
     throw new HiveError("bad_issue", `${p}: invalid frontmatter: ${z.prettifyError(fmResult.error)}`);
   }
-  const sections = parseSections(parsed.content);
-  return {
+  const sections = parseSections(parsed.content, { mirrored: fmResult.data.external !== undefined });
+  const issue: Issue = {
     ...fmResult.data,
     path: p,
     sections,
     raw: parsed.content,
   };
+  readFrontmatters.set(issue, { text: parsed.matter, data: copyPlain(parsed.data) as Record<string, unknown> });
+  return issue;
 }
 
-/** Serialize an Issue back to a markdown file string. */
+/** Frontmatter keys in the order a new issue writes them; keys this build doesn't name follow. A
+ *  file that was read keeps its own order, and a key it didn't have goes after its keys. */
+const FRONTMATTER_ORDER = [
+  "id", "title", "state", "parent", "labels", "assignee", "github", "links", "created", "updated",
+  "status", "external", "branch", "pr", "aliases",
+] as const;
+
+/** Serialize an Issue back to a markdown file string. An entry whose value is what was read is
+ *  written back as it was; a changed or new one is dumped as before (js-yaml's default schema,
+ *  which quotes timestamp-like strings, so older builds read them as strings). */
 export function serializeIssue(issue: Issue): string {
-  const fm = IssueFrontmatterZ.parse({
-    id: issue.id,
-    title: issue.title,
-    state: issue.state,
-    parent: issue.parent,
-    labels: issue.labels,
-    assignee: issue.assignee,
-    github: issue.github,
-    links: issue.links,
-    created: issue.created,
-    updated: issue.updated,
-  }) as Record<string, unknown>;
+  const { path: _path, sections: _sections, raw: _raw, ...fields } = issue;
+  const parsed = IssueFrontmatterZ.parse(fields) as Record<string, unknown>;
   // Omit `links` entirely when empty/absent so issues without cross-repo links
   // don't grow a noisy `links: []` line across the whole vault on first save.
-  if (!Array.isArray(fm.links) || fm.links.length === 0) delete fm.links;
-  const body = serializeSections(issue.sections);
-  return matter.stringify(body, fm);
+  if (!Array.isArray(parsed.links) || parsed.links.length === 0) delete parsed.links;
+  const has = (k: string) => parsed[k] !== undefined;
+  const read = readFrontmatters.get(issue);
+  const source = read && frontmatterSource(read.text, read.data);
+  let yaml = source?.head ?? "";
+  const written = new Set<string>();
+  for (const e of source?.entries ?? []) {
+    if (has(e.key)) {
+      yaml += sameValue(e.value, parsed[e.key]) ? e.text : jsyaml.safeDump({ [e.key]: parsed[e.key] });
+      written.add(e.key);
+    }
+    yaml += e.gap;
+  }
+  const rest = [...FRONTMATTER_ORDER, ...Object.keys(parsed)].filter((k) => has(k) && !written.has(k));
+  for (const k of new Set(rest)) yaml += jsyaml.safeDump({ [k]: parsed[k] });
+  return `---\n${yaml}---\n${serializeSections(issue.sections)}`;
 }
 
 export async function writeIssue(issue: Issue): Promise<void> {
@@ -362,15 +524,17 @@ export async function writeIssue(issue: Issue): Promise<void> {
 }
 
 export async function deleteIssueFile(root: string, id: string): Promise<void> {
-  const p = issuePath(root, id);
+  assertValidIssueId(id);
+  const p = await locateIssue(root, id);
   try {
+    if (!p) throw new Error("missing");
     await fs.unlink(p);
   } catch {
     throw new HiveError("not_found", `issue ${id} not found`);
   }
   // Clean up empty parent dirs (best-effort, ignore errors).
   let dir = path.dirname(p);
-  const issuesRoot = path.join(root, "issues");
+  const issuesRoot = path.join(root, p.startsWith(path.join(root, MIRROR_DIR) + path.sep) ? MIRROR_DIR : "issues");
   while (dir.startsWith(issuesRoot) && dir !== issuesRoot) {
     try {
       const entries = await fs.readdir(dir);
@@ -385,38 +549,88 @@ export async function deleteIssueFile(root: string, id: string): Promise<void> {
 
 // ── issues: list / summary ────────────────────────────────────────
 
+/** What the listing keeps per file, until the file's mtime, size or inode changes. */
+export interface ScannedFile {
+  mtimeMs: number;
+  size: number;
+  ino: number;
+  /** Null for a file that isn't a valid issue (skipped by the list view). */
+  summary: IssueSummary | null;
+  aliases: string[];
+  /** `external.source` + `external.id` of a mirrored issue: the sync's identity for it. */
+  external?: { source: string; id: string };
+}
+
+/** Per root: every issue file seen by the last scan. Files that are gone drop out on the next one. */
+const scans = new Map<string, Map<string, ScannedFile>>();
+
 /**
- * Walk .hivemind/issues/ and return frontmatter-only summaries. Faster than
- * full parse; used by `list` and by chokidar-fed UI queries.
+ * Every issue file under `issues/` and `mirror/`, parsed once per change. A file is re-read only
+ * when its mtime, size or inode changed (an atomic rename changes the inode), so listing 500
+ * unchanged issues costs 500 `stat`s, not 500 reads and YAML parses.
  */
-export async function listIssues(root: string): Promise<IssueSummary[]> {
-  await ensureWorkspaceCurrent(root);
-  const issuesDir = path.join(root, "issues");
-  const files = await walk(issuesDir, ".md");
-  const out: IssueSummary[] = [];
+export async function scanIssueFiles(root: string): Promise<Map<string, ScannedFile>> {
+  const files = [...(await walk(path.join(root, "issues"), ".md")), ...(await walk(path.join(root, MIRROR_DIR), ".md"))];
+  const before = scans.get(root);
+  const now = new Map<string, ScannedFile>();
   for (const p of files) {
     try {
-      const raw = await fs.readFile(p, "utf8");
-      const parsed = matter(raw);
-      const fm = IssueFrontmatterZ.safeParse(parsed.data);
-      if (!fm.success) continue; // skip invalid files in list view
-      const d = fm.data;
-      out.push({
-        id: d.id,
-        title: d.title,
-        state: d.state,
-        parent: d.parent,
-        labels: d.labels,
-        assignee: d.assignee,
-        github: d.github,
-        created: d.created,
-        updated: d.updated,
-        path: p,
-      });
+      const st = await fs.stat(p);
+      const hit = before?.get(p);
+      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size && hit.ino === st.ino) {
+        now.set(p, hit);
+        continue;
+      }
+      now.set(p, { mtimeMs: st.mtimeMs, size: st.size, ino: st.ino, ...summarize(p, await fs.readFile(p, "utf8")) });
     } catch {
-      /* skip unreadable files */
+      /* skip unreadable or vanished files */
     }
   }
+  scans.set(root, now);
+  return now;
+}
+
+function summarize(p: string, raw: string): Pick<ScannedFile, "summary" | "aliases" | "external"> {
+  const fm = IssueFrontmatterZ.safeParse(readFrontmatter(raw).data);
+  if (!fm.success) return { summary: null, aliases: [] }; // skip invalid files in list view
+  const d = fm.data;
+  const summary: IssueSummary = {
+    id: d.id,
+    title: d.title,
+    state: d.state,
+    parent: d.parent,
+    labels: d.labels,
+    assignee: d.assignee,
+    github: d.github,
+    created: d.created,
+    updated: d.updated,
+    path: p,
+  };
+  // Only the ones the file has, so a summary is the same shape it always was without them.
+  for (const k of ["links", "status", "external", "branch", "pr", "aliases"] as const) {
+    if (d[k] !== undefined) Object.assign(summary, { [k]: d[k] });
+  }
+  return {
+    summary,
+    aliases: d.aliases ?? [],
+    ...(d.external ? { external: { source: d.external.source, id: d.external.id } } : {}),
+  };
+}
+
+/** Whether a listing shows an issue: an archived mirrored issue is hidden (design jira-sync §5.3,
+ *  §7.1) unless asked for, or unless it has local work here — a branch or a PR. */
+const listed = (i: IssueSummary, archived = false): boolean => archived || !i.external?.archived || !!i.branch || !!i.pr;
+
+/**
+ * Frontmatter-only summaries of every issue, local (`issues/`) and mirrored (`mirror/`). Used by
+ * `list` and by chokidar-fed UI queries. Archived mirrored issues are left out unless
+ * `archived: true` (they still read by id). An unchanged file gives back the same summary object
+ * as last time, so treat them as read-only.
+ */
+export async function listIssues(root: string, opts: { archived?: boolean } = {}): Promise<IssueSummary[]> {
+  await ensureWorkspaceCurrent(root);
+  const out: IssueSummary[] = [];
+  for (const e of (await scanIssueFiles(root)).values()) if (e.summary && listed(e.summary, opts.archived)) out.push(e.summary);
   // Stable ID-major-first sort.
   out.sort((a, b) => compareIds(a.id, b.id));
   return out;
@@ -456,23 +670,31 @@ async function walk(dir: string, ext: string): Promise<string[]> {
 
 // ── markdown body parsing ──────────────────────────────────────────
 
-// Accept any heading level (# … ######) so users can write `# Description`
-// without breaking parse. Serializer always emits `##`, so the file
-// normalises after one round-trip.
+// A local issue's headings may be at any level (# … ######), so users can write `# Description`
+// without breaking parse. Serializer always emits `##`, so the file normalises after one
+// round-trip.
 const SEC_DESC = /^#{1,6}\s+Description\s*$/im;
-// Accept a real markdown heading (`## Acceptance criteria`) OR a plain/bold
-// label line (`Acceptance criteria:` / `**Acceptance criteria:**`). Agents
-// (via hive_create_issue, which only had a free-text `description`) routinely
-// embed the checklist under a plain `Acceptance criteria:` line inside the
-// description — those items then never reached the dedicated section and the
-// board showed an empty Acceptance Criteria panel. Matching the label line
-// splits them out; serializeSections rewrites it canonically on next save.
-// Tested one trimmed line at a time with no overlapping quantifiers, so it stays linear.
-const SEC_AC_LINE = /^(?:#{1,6}\s+|\*\*\s*)?Acceptance\s+criteria\s*(?::\s*)?\**$/i;
 const SEC_ACT = /^#{1,6}\s+Activity\s*$/im;
+// A mirrored issue's description is the tracker's text, which holds headings of its own, so its
+// sections are found only at the level hive writes, and Activity — always written last — is the
+// last `## Activity`.
+const MIRRORED_DESC = /^##[ \t]+Description[ \t]*$/im;
+const MIRRORED_ACT = /^##[ \t]+Activity[ \t]*$/gim;
+const SEC_AC = /^##[ \t]+Acceptance[ \t]+criteria[ \t]*$/im;
+// A local issue also takes a plain or bold label line (`Acceptance criteria:` /
+// `**Acceptance criteria:**`) followed by checkboxes. Agents embed the checklist under one inside
+// the description, and the Acceptance Criteria panel showed empty. Only when a checkbox follows
+// it, and never in a mirrored issue: Jira descriptions hold that line over plain bullets
+// (jira-fake OPS-7), which must stay in the description. Tested one trimmed line at a time with
+// no overlapping quantifiers, so it stays linear.
+const SEC_AC_LABEL = /^(?:#{1,6}\s+|\*\*\s*)?Acceptance\s+criteria\s*(?::\s*)?\**$/i;
+/** A `#` or `##` heading inside Acceptance criteria or Activity starts a section we don't model. */
+const OTHER_SECTION = /^#{1,2}[ \t]+\S/;
 
-/** Split the body into our three known sections + extra. Tolerant: missing sections become empty. */
-export function parseSections(body: string): IssueSections {
+/** Split the body into our three known sections + extra. Tolerant: missing sections become empty.
+ *  Lossless: what a section holds beyond its entries is kept in its layout or in `extra`, so
+ *  `serializeSections` writes back what it read. */
+export function parseSections(body: string, opts: { mirrored?: boolean } = {}): IssueSections {
   const sections: IssueSections = {
     description: "",
     acceptanceCriteria: [],
@@ -488,16 +710,18 @@ export function parseSections(body: string): IssueSections {
       heads.push({ name, idx: m.index, end: m.index + m[0].length });
     }
   };
-  push("desc", SEC_DESC);
-  let lineStart = 0;
-  for (const line of body.split("\n")) {
-    if (SEC_AC_LINE.test(line.trim())) {
-      heads.push({ name: "ac", idx: lineStart, end: lineStart + line.length });
-      break;
-    }
-    lineStart += line.length + 1;
+  push("desc", opts.mirrored ? MIRRORED_DESC : SEC_DESC);
+  push("ac", SEC_AC);
+  if (!opts.mirrored && !heads.some((h) => h.name === "ac")) {
+    const label = acceptanceLabel(body);
+    if (label) heads.push({ name: "ac", ...label });
   }
-  push("act", SEC_ACT);
+  if (opts.mirrored) {
+    const last = [...body.matchAll(MIRRORED_ACT)].pop();
+    if (last) heads.push({ name: "act", idx: last.index, end: last.index + last[0].length });
+  } else {
+    push("act", SEC_ACT);
+  }
   heads.sort((a, b) => a.idx - b.idx);
 
   if (heads.length === 0) {
@@ -510,10 +734,19 @@ export function parseSections(body: string): IssueSections {
     const h = heads[i]!;
     const next = heads[i + 1];
     const sliceEnd = next ? next.idx : body.length;
-    const text = body.slice(h.end, sliceEnd).trim();
-    if (h.name === "desc") sections.description = text;
-    else if (h.name === "ac") sections.acceptanceCriteria = parseAcceptance(text);
-    else if (h.name === "act") sections.activity = parseActivity(text);
+    const slice = body.slice(h.end, sliceEnd);
+    if (h.name === "desc") {
+      sections.description = slice.trim();
+    } else if (h.name === "ac") {
+      const r = parseEntries(sectionLines(slice), parseTodo, "keep");
+      sections.acceptanceCriteria = r.entries;
+      if (r.layout) sections.acceptanceLayout = r.layout;
+    } else {
+      const r = parseEntries(sectionLines(slice), parseActivityRow, "cut");
+      sections.activity = r.entries;
+      if (r.layout) sections.activityLayout = r.layout;
+      sections.extra = r.rest;
+    }
   }
 
   // Text BEFORE the first known heading is also description.
@@ -525,23 +758,141 @@ export function parseSections(body: string): IssueSections {
   return sections;
 }
 
-const TODO_RE = /^- \[( |x|X)\]\s+(.*)$/;
-function parseAcceptance(text: string): AcceptanceItem[] {
-  const items: AcceptanceItem[] = [];
-  for (const line of text.split("\n")) {
-    const m = TODO_RE.exec(line.trim());
-    if (m) items.push({ done: m[1]!.toLowerCase() === "x", text: m[2]!.trim() });
+/** The first label line that has a checkbox as its next non-blank line. */
+function acceptanceLabel(body: string): { idx: number; end: number } | null {
+  const lines = body.split("\n");
+  let at = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (SEC_AC_LABEL.test(line.trim())) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j]!.trim()) j++;
+      if (j < lines.length && parseTodo(lines[j]!.trim())) return { idx: at, end: at + line.length };
+    }
+    at += line.length + 1;
   }
-  return items;
+  return null;
 }
 
-// Activity line: `- <ISO-8601 timestamp> · <who> · <message>`.
-const ACT_RE = /^-\s+(\S+)\s+·\s+(\S+)\s+·\s+(.+)$/;
-function parseActivity(text: string): ActivityEntry[] {
-  const out: ActivityEntry[] = [];
-  for (const line of text.split("\n")) {
-    const m = ACT_RE.exec(line.trim());
-    if (m) out.push({ at: m[1]!, who: m[2]!, message: m[3]! });
+/** A section's lines without the blank lines around them (an indented first line keeps its indent). */
+function sectionLines(slice: string): string[] {
+  const lines = slice.split("\n").map((l) => l.replace(/\r$/, ""));
+  while (lines.length && !lines[0]!.trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1]!.trim()) lines.pop();
+  return lines;
+}
+
+/** Read a section's entries. `layout` is returned only when the section holds anything that a
+ *  plain list of entries would not write back (a line that isn't an entry, an indented entry).
+ *  From a `#`/`##` heading on, lines are not entries: `"keep"` keeps them in the layout (they sit
+ *  before the next known section), `"cut"` returns them as `rest`. */
+function parseEntries<T>(
+  lines: string[],
+  parse: (trimmed: string) => T | null,
+  otherSection: "keep" | "cut",
+): { entries: T[]; layout?: LayoutLine[]; rest: string } {
+  const entries: T[] = [];
+  const layout: LayoutLine[] = [];
+  let plain = true;
+  let inOther = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (OTHER_SECTION.test(line)) {
+      if (otherSection === "cut") {
+        while (layout.length && typeof layout[layout.length - 1] === "string" && !(layout[layout.length - 1] as string).trim()) layout.pop();
+        return { entries, ...(plain ? {} : { layout }), rest: lines.slice(i).join("\n") };
+      }
+      inOther = true;
+    }
+    const entry = inOther ? null : parse(line.trim());
+    if (entry) {
+      const indent = line.slice(0, line.length - line.trimStart().length);
+      entries.push(entry);
+      layout.push({ indent });
+      if (indent) plain = false;
+    } else {
+      layout.push(line);
+      if (line.trim()) plain = false;
+    }
+  }
+  return { entries, ...(plain ? {} : { layout }), rest: "" };
+}
+
+const TODO_RE = /^- \[( |x|X)\]\s+(.*)$/;
+function parseTodo(line: string): AcceptanceItem | null {
+  const m = TODO_RE.exec(line);
+  return m ? { done: m[1]!.toLowerCase() === "x", text: m[2]!.trim() } : null;
+}
+
+// Activity row: `- <ISO-8601 timestamp> · <who> · <message>[ <!-- id:<row id> -->]`, one line.
+// `who` may hold spaces (`Jane Doe (jira)`) but not ` · `. A message's line breaks are written as
+// `<br>`, so a multi-line comment stays one row: an older build reads it as one longer line and
+// writes it back unchanged, and markdown renders the break. The trailing comment is the row's
+// stable id (a Jira comment's, say), invisible when rendered. Scanned by hand rather than with a
+// regex, so a long line stays linear.
+const ROW_ID_OPEN = "<!-- id:";
+const ROW_ID_CLOSE = " -->";
+function parseActivityRow(line: string): ActivityEntry | null {
+  if (!line.startsWith("-") || !/\s/.test(line[1] ?? "")) return null;
+  const sep1 = dotSeparator(line, 2);
+  if (!sep1) return null;
+  const sep2 = dotSeparator(line, sep1.end);
+  if (!sep2) return null;
+  const at = line.slice(2, sep1.start).trim();
+  const who = line.slice(sep1.end, sep2.start).trim();
+  let message = line.slice(sep2.end).trim();
+  if (!at || /\s/.test(at) || !who || !message) return null;
+  let id: string | undefined;
+  const open = message.lastIndexOf(ROW_ID_OPEN);
+  if (open >= 0 && message.endsWith(ROW_ID_CLOSE)) {
+    const candidate = message.slice(open + ROW_ID_OPEN.length, message.length - ROW_ID_CLOSE.length);
+    if (candidate && !/[\s<>]/.test(candidate)) {
+      id = candidate;
+      message = message.slice(0, open).trimEnd();
+    }
+  }
+  message = message.split("<br>").join("\n");
+  return id ? { at, who, message, id } : { at, who, message };
+}
+
+/** The next ` · ` (whitespace on both sides of the dot) at or after `from`. */
+function dotSeparator(line: string, from: number): { start: number; end: number } | null {
+  for (let i = line.indexOf("·", from); i >= 0; i = line.indexOf("·", i + 1)) {
+    if (i > from && /\s/.test(line[i - 1]!) && /\s/.test(line[i + 1] ?? "")) {
+      let end = i + 1;
+      while (end < line.length && /\s/.test(line[end]!)) end++;
+      return { start: i, end };
+    }
+  }
+  return null;
+}
+
+function formatActivityRow(e: ActivityEntry): string {
+  const who = e.who.replace(/\s+/g, " ");
+  const message = e.message.replace(/\r?\n/g, "<br>");
+  return `- ${e.at} · ${who} · ${message}${e.id ? ` ${ROW_ID_OPEN}${e.id}${ROW_ID_CLOSE}` : ""}`;
+}
+
+/** Write a section's entries into its layout: each slot takes the next entry (a slot left over
+ *  when entries were removed is dropped), and entries beyond the slots go at the end of the
+ *  section's own lines — before any unknown heading's block, which would swallow them. */
+function writeEntries<T>(entries: T[], layout: LayoutLine[] | undefined, fmt: (e: T) => string): string[] {
+  if (!layout) return entries.map(fmt);
+  const out: string[] = [];
+  let next = 0;
+  let insertAt = -1;
+  for (const l of layout) {
+    if (typeof l === "string") {
+      if (insertAt < 0 && OTHER_SECTION.test(l)) insertAt = out.length;
+      out.push(l);
+    } else if (next < entries.length) {
+      out.push(l.indent + fmt(entries[next++]!));
+    }
+  }
+  if (next < entries.length) {
+    let at = insertAt < 0 ? out.length : insertAt;
+    while (at > 0 && !out[at - 1]!.trim()) at--;
+    out.splice(at, 0, ...entries.slice(next).map(fmt));
   }
   return out;
 }
@@ -549,14 +900,10 @@ function parseActivity(text: string): ActivityEntry[] {
 export function serializeSections(s: IssueSections): string {
   const parts: string[] = [];
   if (s.description) parts.push(`## Description\n\n${s.description.trim()}`);
-  if (s.acceptanceCriteria.length > 0) {
-    const lines = s.acceptanceCriteria.map((a) => `- [${a.done ? "x" : " "}] ${a.text}`);
-    parts.push(`## Acceptance criteria\n\n${lines.join("\n")}`);
-  }
-  if (s.activity.length > 0) {
-    const lines = s.activity.map((e) => `- ${e.at} · ${e.who} · ${e.message}`);
-    parts.push(`## Activity\n\n${lines.join("\n")}`);
-  }
+  const ac = writeEntries(s.acceptanceCriteria, s.acceptanceLayout, (a) => `- [${a.done ? "x" : " "}] ${a.text}`);
+  if (ac.some((l) => l.trim())) parts.push(`## Acceptance criteria\n\n${ac.join("\n")}`);
+  const act = writeEntries(s.activity, s.activityLayout, formatActivityRow);
+  if (act.some((l) => l.trim())) parts.push(`## Activity\n\n${act.join("\n")}`);
   if (s.extra.trim()) parts.push(s.extra.trim());
   return parts.join("\n\n") + "\n";
 }
@@ -564,11 +911,11 @@ export function serializeSections(s: IssueSections): string {
 /** Append an activity line. Mutates the issue and returns it.
  *
  * `at` is stored as a full ISO-8601 timestamp WITH the `Z` (UTC) suffix, so every reader
- * parses it as UTC.
+ * parses it as UTC. `id` marks a row mirrored from elsewhere (see `ActivityEntry.id`).
  */
-export function appendActivity(issue: Issue, who: string, message: string, at?: Date): Issue {
+export function appendActivity(issue: Issue, who: string, message: string, at?: Date, id?: string): Issue {
   const ts = (at ?? new Date()).toISOString();
-  issue.sections.activity.push({ at: ts, who, message });
+  issue.sections.activity.push(id ? { at: ts, who, message, id } : { at: ts, who, message });
   issue.updated = new Date().toISOString();
   return issue;
 }
@@ -576,10 +923,29 @@ export function appendActivity(issue: Issue, who: string, message: string, at?: 
 // ── high-level issue helpers (used by IPC + CLI) ─────────────────────
 
 import { SAMPLE_ISSUE_BODY } from "./templates.js";
+import { defaultStatus, isBuiltinWorkflow, issueTypeOf, loadWorkflow, resolveStatus, statusChoices, statusOf, type Workflow, type WorkflowStatus } from "./workflow.js";
+
+/** The status `idOrName` names in the workspace's workflow, or a refusal naming the valid ones. */
+function namedStatus(wf: Workflow, idOrName: string): WorkflowStatus {
+  const s = resolveStatus(wf, idOrName);
+  if (!s) throw new HiveError("invalid_arg", `unknown status "${idOrName}"; this workspace has: ${statusChoices(wf)}`);
+  return s;
+}
+
+/** The workspace's workflow, an invalid `workflow.yaml` refused as a HiveError that says so. */
+function workflowAt(root: string): Workflow {
+  try {
+    return loadWorkflow(root);
+  } catch (e) {
+    throw new HiveError("bad_workflow", (e as Error).message);
+  }
+}
 
 export interface CreateIssueOpts {
   title: string;
   state?: IssueSummary["state"];
+  /** A workflow status id or name; it decides `state` (its category). */
+  status?: string;
   parent?: string;
   labels?: string[];
   assignee?: Issue["assignee"];
@@ -589,6 +955,8 @@ export interface CreateIssueOpts {
   acceptanceCriteria?: AcceptanceItem[];
   /** Linked GitHub issue/PR number. */
   github?: number | null;
+  /** The git branch the work happens on. */
+  branch?: string;
   /** Actor recorded in the creation activity entry. Default "ui". */
   who?: string;
 }
@@ -600,21 +968,35 @@ export interface CreateIssueOpts {
  */
 export async function createIssue(root: string, opts: CreateIssueOpts): Promise<Issue> {
   let finalId: string;
-  if (opts.parent) {
+  // Dotted sub-issue ids are local only: a child of a mirrored issue gets an id of its own.
+  if (opts.parent && !(await isMirrored(root, opts.parent))) {
     finalId = await nextSubIssueId(root, opts.parent);
   } else {
     const { id } = await allocateId(root);
     finalId = id;
   }
+  // The status decides the state. With a workflow file a new issue always gets a status (the
+  // state's default when none is named); without one, files keep only `state`, as before.
+  const wf = workflowAt(root);
+  let state = opts.state ?? "todo";
+  let status: string | undefined;
+  if (opts.status !== undefined) {
+    const s = namedStatus(wf, opts.status);
+    state = s.category;
+    status = s.id;
+  } else status = defaultStatus(wf, state)?.id;
+  if (isBuiltinWorkflow(wf)) status = undefined;
   const now = new Date().toISOString();
   const issue: Issue = {
     id: finalId,
     title: opts.title.trim() || "(untitled)",
-    state: opts.state ?? "todo",
+    state,
+    ...(status ? { status } : {}),
     parent: opts.parent ?? null,
     labels: opts.labels ?? [],
     assignee: opts.assignee ?? null,
     github: opts.github ?? null,
+    ...(opts.branch ? { branch: opts.branch } : {}),
     created: now,
     updated: now,
     path: issuePath(root, finalId),
@@ -634,6 +1016,26 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
   };
   await writeIssue(issue);
   return issue;
+}
+
+async function isMirrored(root: string, id: string): Promise<boolean> {
+  const p = await locateIssue(root, id).catch(() => null);
+  return !!p && p.startsWith(path.join(root, MIRROR_DIR) + path.sep);
+}
+
+/** Write `text` to `file` atomically: a sibling temp file renamed over it, so a reader (or a
+ *  process killed mid-write) never sees half a file. The temp name doesn't end in `.md`, so a
+ *  leftover one is never listed as an issue. */
+export async function writeFileAtomic(file: string, text: string): Promise<void> {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 10)}.tmp`;
+  try {
+    await fs.writeFile(tmp, text, "utf8");
+    await fs.rename(tmp, file);
+  } catch (e) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
+    throw e;
+  }
 }
 
 /** Find the next available `.N` suffix under an existing parent issue. */
@@ -680,9 +1082,27 @@ export async function updateIssue(
     summary.push(`title: "${issue.title}" → "${patch.title}"`);
     issue.title = patch.title;
   }
-  if (patch.state !== undefined && patch.state !== issue.state) {
-    summary.push(`state: ${issue.state} → ${patch.state}`);
-    issue.state = patch.state;
+  if (patch.status !== undefined || patch.state !== undefined) {
+    // A status sets the state to its category; a state alone lands on that category's default
+    // status (for the issue's type). Without a workflow file only `state` is written, as before.
+    const wf = workflowAt(root);
+    const custom = !isBuiltinWorkflow(wf);
+    const before = statusOf(wf, issue);
+    let next = { state: issue.state, status: before };
+    if (patch.status !== undefined) {
+      const s = namedStatus(wf, patch.status);
+      next = { state: s.category, status: s.id };
+    } else if (patch.state !== undefined && patch.state !== issue.state) {
+      const s = defaultStatus(wf, patch.state, issueTypeOf(wf, issue)) ?? defaultStatus(wf, patch.state);
+      next = { state: patch.state, status: s?.id ?? patch.state };
+    }
+    if (custom && next.status !== before) {
+      const name = (id: string) => wf.statuses.find((s) => s.id === id)?.name ?? id;
+      const moved = next.state !== issue.state ? ` (${issue.state} → ${next.state})` : "";
+      summary.push(`status: ${name(before)} → ${name(next.status)}${moved}`);
+    } else if (next.state !== issue.state) summary.push(`state: ${issue.state} → ${next.state}`);
+    if (custom && (next.status !== before || next.state !== issue.state)) issue.status = next.status;
+    issue.state = next.state;
   }
   if (patch.parent !== undefined && patch.parent !== issue.parent) {
     summary.push(`parent: ${issue.parent ?? "—"} → ${patch.parent ?? "—"}`);
@@ -705,6 +1125,22 @@ export async function updateIssue(
   if (patch.github !== undefined && patch.github !== issue.github) {
     summary.push(`github: ${issue.github ?? "—"} → ${patch.github ?? "—"}`);
     issue.github = patch.github;
+  }
+  if (patch.branch !== undefined && patch.branch !== (issue.branch ?? null)) {
+    summary.push(`branch: ${issue.branch ?? "—"} → ${patch.branch ?? "—"}`);
+    if (patch.branch === null) delete issue.branch;
+    else issue.branch = patch.branch;
+  }
+  if (patch.pr !== undefined && JSON.stringify(patch.pr) !== JSON.stringify(issue.pr ?? null)) {
+    const pr = (p: PrRef | null | undefined) =>
+      p ? `${p.repo}#${p.number} (${[p.state, p.review?.replace("_", " "), p.checks && `checks ${p.checks}`].filter(Boolean).join(", ")})` : "—";
+    summary.push(`pr: ${pr(issue.pr)} → ${pr(patch.pr)}`);
+    if (patch.pr === null) delete issue.pr;
+    else issue.pr = patch.pr;
+  }
+  if (patch.aliases !== undefined && JSON.stringify(patch.aliases) !== JSON.stringify(issue.aliases ?? [])) {
+    summary.push(`aliases: [${(issue.aliases ?? []).join(",")}] → [${patch.aliases.join(",")}]`);
+    issue.aliases = patch.aliases;
   }
   if (patch.description !== undefined) {
     issue.sections.description = patch.description;

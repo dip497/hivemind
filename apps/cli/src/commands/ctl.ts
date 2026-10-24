@@ -23,8 +23,8 @@ import path from "node:path";
 import { defineCommand, type ArgsDef, type ParsedArgs } from "citty";
 import fs from "node:fs";
 import {
-  HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, requireRoot, rootForId, updateIssue,
-  type IssueState,
+  CATEGORIES, HiveError, commentOnIssue, deleteIssue, isIssueId, issueToJson, listWorkspaces, needsConfirm, readIssue, rootForIdHere, updateIssue,
+  type IssueState, type StartAnswer,
 } from "@hivemind/core";
 import { HcpCliError, hcpCall, ownTile, sockPath } from "../hcp.js";
 import { EXIT, exitCodeFor, helpFor, printFailure, type Failure } from "../exit-codes.js";
@@ -39,6 +39,7 @@ import { isRemote } from "@hivemind/core/remote-uri";
 type Core = NonNullable<Result<"store.core">>;
 import { UnsupportedError, UsageError, boolFlag, emitArgs, durationFlag, intFlag, parseKeys, resolveAgent, superviseOf, workflowPlan } from "../ctl-args.js";
 import { readTurn, runWorkflow } from "../workflow.js";
+import { NeedsConfirmError, START_FLAGS, guardItems, guardStart, startAcks, startsWork } from "../start-guard.js";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import { detectWho } from "../who.js";
 import type { AgentItem, InboxMessage } from "@hivemind/workspace-api/agents";
@@ -49,8 +50,8 @@ import { listToolPackages } from "@hivemind/core/tool-packages";
 import { agentRows, tileRows, type AgentRow, type ToolOf } from "../tile-rows.js";
 import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
 import os from "node:os";
+import { completeCmd } from "./pr.js";
 
-const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
 /** Who signs Activity rows: an agent's id when run inside a spawned tile,
  *  else the human at the keyboard. */
@@ -72,6 +73,7 @@ function failureOf(e: unknown): Failure & { exit: number } {
       : undefined);
     return { code: e.code, message, ...(fix ? { fix } : {}), exit: e.exit };
   }
+  if (e instanceof NeedsConfirmError) return { ...e.failure, exit: EXIT.refused };
   if (e instanceof UsageError) return { code: "USAGE", message, fix: helpFor(), exit: EXIT.usage };
   if (e instanceof UnsupportedError) return { code: "UNSUPPORTED", message, exit: EXIT.refused };
   if (e instanceof HiveError) {
@@ -301,16 +303,23 @@ const tiles = defineCommand({
 const frames = sub("frames", "The workspace's frames, where an agent may be started (id, name, machine)", repoArg,
   (a) => onDrive(async (d) => ({ frames: ((await d.call("agent.startable", [await workspaceOf(d, a.repo)])) as { frames: unknown[] }).frames })));
 
-const frameAdd = sub("add", "Open a frame on a folder: on another machine with --machine (a saved machine or another of your devices, by id or name); prints { frame, path, opened }. A folder that has a frame already gives that frame", {
-  folder: { type: "string", required: true, description: "the folder, given in full (on that machine with --machine)" },
+const frameAdd = sub("add", "Open a frame on a folder: on another machine with --machine (a saved machine or another of your devices, by id or name), or on a worktree of the workspace with --worktree <branch>; prints { frame, path, opened }. A folder (or a branch) that has a frame already gives that frame", {
+  folder: { type: "string", description: "the folder, given in full (on that machine with --machine)" },
   machine: { type: "string", description: "the machine the folder is on, by its id or name (`hive machine list`, Settings ▸ Devices); default: this one" },
-  name: { type: "string", description: "the frame's name (default: the folder's)" },
+  worktree: { type: "string", description: "a branch: a frame on its worktree, made (with the branch, from --base) when there is none" },
+  base: { type: "string", description: "with --worktree: what a new branch starts from (default: what is checked out)" },
+  name: { type: "string", description: "the frame's name (default: the folder's, or the branch)" },
   ...repoArg,
-}, (a) => onDrive(async (d) => d.call("frame.open", [await workspaceOf(d, a.repo), {
-  path: String(a.folder),
-  ...(a.machine ? { machine: String(a.machine) } : {}),
-  ...(a.name ? { title: String(a.name) } : {}),
-}])));
+}, (a) => {
+  if (!a.folder === !a.worktree) throw new UsageError("give --folder or --worktree <branch>");
+  if (a.worktree && a.machine) throw new UsageError("--worktree makes a worktree of the workspace here: not with --machine");
+  if (a.base && !a.worktree) throw new UsageError("--base goes with --worktree");
+  return onDrive(async (d) => d.call("frame.open", [await workspaceOf(d, a.repo), {
+    ...(a.worktree ? { worktree: { branch: String(a.worktree), ...(a.base ? { base: String(a.base) } : {}) } } : { path: String(a.folder) }),
+    ...(a.machine ? { machine: String(a.machine) } : {}),
+    ...(a.name ? { title: String(a.name) } : {}),
+  }]));
+});
 
 const frame = defineCommand({
   meta: { name: "frame", description: "Make frames: `add` opens one on a folder, here or on another machine" },
@@ -352,10 +361,14 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tile }", {
   report: { type: "boolean", description: "worker auto-reports its finished reply to the caller (--no-report to disable)" },
   supervise: { type: "string", description: "broker the worker's tool permissions to this CLI/agent: 'all', or a comma-list of tools" },
   resume: { type: "string", description: "continue this session instead of starting one — ids from `hive ctl sessions <agent>`" },
+  issue: { type: "string", description: "work on this issue: the start-work guard first, then its branch's worktree frame, the issue moved to its start status, and the agent there with a prompt made from the issue; prints { tile, frame, branch, … }" },
+  base: { type: "string", description: "with --issue: what a new branch starts from (default: what is checked out)" },
+  ...START_FLAGS,
   ...repoArg,
 }, async (a) => {
   await ensureAgentCatalog(); // --agent may name an agent added from a manifest
   const program = resolveAgent(a.agent);
+  if (a.issue) return spawnOnIssue(String(a.issue), program, a);
   const report = boolFlag(a.report);
   const given = { prompt: a.prompt, name: a.name, mode: a.mode, model: a.model, resume: a.resume };
   return onDrive(async (d) => {
@@ -369,6 +382,24 @@ const spawn = sub("spawn", "Spawn an agent tile; prints { tile }", {
     }]);
   });
 });
+
+/** `hive ctl spawn --issue KEY`: the host's issue.start (design jira-sync §11.1), refused with
+ *  NEEDS_CONFIRM while the guard has findings the flags don't answer. */
+async function spawnOnIssue(id: string, program: string, a: Record<string, unknown>) {
+  if (!isIssueId(id)) throw new UsageError(`--issue takes an issue id, like PAY-42 (got ${id})`);
+  for (const f of ["prompt", "frame", "resume", "supervise"]) if (a[f]) throw new UsageError(`--issue starts the agent in the issue's own worktree with a prompt made from it: not with --${f}`);
+  const acks = startAcks(a);
+  return onDrive(async (d) => {
+    const repo = await workspaceOf(d, a.repo);
+    const agent = { program, ...Object.fromEntries(["model", "mode", "name"].filter((k) => typeof a[k] === "string" && a[k]).map((k) => [k, a[k]])) };
+    const r = await d.call("issue.start", [repo, id, { ack: acks.ack, force: acks.force, assignMe: acks.assignMe, ...(a.base ? { base: String(a.base) } : {}), agent }]) as StartAnswer;
+    if (!r.started) {
+      const { message, fix, warnings } = needsConfirm(r.id, r.left);
+      throw new NeedsConfirmError({ code: "NEEDS_CONFIRM", message, fix, warnings: warnings.map(({ check, severity, message, actions }) => ({ check, severity, message, actions })) });
+    }
+    return r;
+  });
+}
 
 const sessions = sub("sessions", "An agent's past sessions in a folder, newest first, to resume with `hive ctl spawn --resume <id>`", {
   agent: { type: "positional", required: false, description: "agent id (default: your default agent)" },
@@ -479,13 +510,19 @@ const workflow = sub("workflow", "Run a multi-agent workflow (fanout | pipeline 
   "max-concurrent": { type: "string", description: "max workers live at once (default 6, cap 12)" },
   timeout: { type: "string", description: "per-worker turn ceiling, e.g. 10m (default 10m)" },
   close: { type: "boolean", description: "close worker tiles after collecting their replies" },
+  ack: { type: "string", description: "items that are issues: acknowledge these checks of the start-work guard, comma-separated, after asking the person; an item with any other finding is skipped" },
+  force: { type: "boolean", description: "items that are issues: acknowledge every warning of the start-work guard (never a block). Only when the person says so" },
   ...repoArg,
 }, async (a) => {
   await ensureAgentCatalog();
   const plan = workflowPlan(a);
+  const acks = startAcks(a);
   return onDrive(async (d) => {
     const repo = await workspaceOf(d, a.repo);
-    return runWorkflow(d, repo, plan.frame ? { ...plan, frame: await frameIn(d, repo, plan.frame) } : plan);
+    // Items that are issues ask the start-work guard first: one it would refuse is skipped, and said.
+    const { items, skipped } = plan.shape === "pipeline" ? { items: plan.items, skipped: [] } : await guardItems(d, plan.items, acks, actor());
+    const run = await runWorkflow(d, repo, { ...plan, items, ...(plan.frame ? { frame: await frameIn(d, repo, plan.frame) } : {}) });
+    return skipped.length ? { ...run, skipped } : run;
   });
 });
 
@@ -630,14 +667,17 @@ const stream = defineCommand({
 
 // ── issues (same shapes as the retired MCP tools) ────────────────────────────
 
-const setState = sub("set-state", "Set an issue's state (optionally with a note); prints the issue", {
+const setState = sub("set-state", "Set an issue's state (optionally with a note); prints the issue. Into in_progress, the start-work guard asks first: exit 7 NEEDS_CONFIRM with its warnings until the person confirms (--ack, --assign-me, --force)", {
   id: { type: "positional", required: true },
-  state: { type: "positional", required: true, description: ISSUE_STATES.join(" | ") },
+  state: { type: "positional", required: true, description: `${CATEGORIES.join(" | ")} (with a workflow: that state's first status; hive update --status picks one)` },
   note: { type: "string", description: "activity comment explaining the change" },
+  ...START_FLAGS,
 }, async (a) => {
   const state = String(a.state) as IssueState;
-  if (!ISSUE_STATES.includes(state)) throw new UsageError(`state must be one of ${ISSUE_STATES.join(", ")}`);
-  const r = await rootForId(await requireRoot(), String(a.id));
+  if (!CATEGORIES.includes(state)) throw new UsageError(`state must be one of ${CATEGORIES.join(", ")}`);
+  const acks = startAcks(a);
+  const r = await rootForIdHere(String(a.id));
+  if (startsWork(await readIssue(r, String(a.id)), state)) await guardStart(r, String(a.id), acks, actor());
   await updateIssue(r, String(a.id), { state }, actor());
   if (a.note) await commentOnIssue(r, String(a.id), String(a.note), actor());
   return issueToJson(await readIssue(r, String(a.id)));
@@ -647,7 +687,7 @@ const addComment = sub("add-comment", "Append an activity comment to an issue", 
   id: { type: "positional", required: true },
   message: { type: "positional", required: true },
 }, async (a) => {
-  const r = await rootForId(await requireRoot(), String(a.id));
+  const r = await rootForIdHere(String(a.id));
   await commentOnIssue(r, String(a.id), String(a.message), actor());
   const after = await readIssue(r, String(a.id));
   return { activity: after.sections.activity.slice(-3) };
@@ -659,7 +699,7 @@ const markAcceptance = sub("mark-acceptance", "Tick (or untick) an acceptance cr
   undone: { type: "boolean", description: "reopen the criterion instead of marking it done" },
 }, async (a) => {
   const index = intFlag(a.index, "index", -1);
-  const r = await rootForId(await requireRoot(), String(a.id));
+  const r = await rootForIdHere(String(a.id));
   const cur = await readIssue(r, String(a.id));
   const ac = [...cur.sections.acceptanceCriteria];
   if (index < 0 || index >= ac.length) throw new UsageError(`acceptance index ${index} out of range (have ${ac.length} criteria)`);
@@ -673,7 +713,7 @@ const markAcceptance = sub("mark-acceptance", "Tick (or untick) an acceptance cr
 const deleteIssueCmd = sub("delete-issue", "Delete an issue file (irreversible)", {
   id: { type: "positional", required: true },
 }, async (a) => {
-  const r = await rootForId(await requireRoot(), String(a.id));
+  const r = await rootForIdHere(String(a.id));
   await deleteIssue(r, String(a.id));
   return { deleted: String(a.id) };
 });
@@ -832,6 +872,6 @@ export const ctlCmd = defineCommand({
     whoami, agents, tiles, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
-    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
+    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd, complete: completeCmd,
   },
 });
