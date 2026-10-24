@@ -48,9 +48,11 @@ test("switching between a pane's tabs resizes neither terminal: the one switched
     logs.push(log);
     await tabs.nth(i).click();
     await page.locator(`[data-community-slot="${await tabs.nth(i).getAttribute("data-tile-id")}"] .xterm-screen`).click();
-    await page.keyboard.type(`node -e 'process.stdout.on("resize",()=>require("fs").appendFileSync(${JSON.stringify(log)},"x"));setInterval(()=>{},1e6)'\n`);
+    // It makes its log once it listens.
+    await page.keyboard.type(`node -e 'const fs=require("fs");process.stdout.on("resize",()=>fs.appendFileSync(${JSON.stringify(log)},"x"));fs.writeFileSync(${JSON.stringify(log)},"");setInterval(()=>{},1e6)'\n`);
   }
   const told = () => logs.map((l) => (fs.existsSync(l) ? fs.readFileSync(l, "utf8").length : 0));
+  await expect.poll(() => logs.every((l) => fs.existsSync(l)), { timeout: 15_000 }).toBe(true);
   await page.waitForTimeout(800);
   const before = told();
   for (let k = 0; k < 4; k++) {
@@ -166,20 +168,28 @@ test("a closed pane gives its tabs to the one that takes its room; every tile is
   await expect(view().locator('[role="tab"]')).toHaveCount(3);
 });
 
-test("the view's keys work from inside a terminal, which never sees them", async () => {
+test("the view's keys are the program's while a terminal has focus, and the view's once it has not", async () => {
   await expect(panesOf()).toHaveCount(2);
+  // The closed pane's terminal leaves its slot a moment after the pane goes.
+  await expect(slots()).toHaveCount(2);
   const id = (await slots().first().getAttribute("data-community-slot"))!;
   await page.locator(`[data-community-slot="${id}"] .xterm-screen`).click();
-  // `cat -v` would quit on Ctrl+\, and show any other key it is given.
+  // `cat -v` quits on Ctrl+\ (its terminal's quit key).
   await page.keyboard.type("cat -v\n");
   await page.waitForTimeout(300);
+  // In the terminal the key is the program's, not the view's (9e2ee7f, #219): cat quit, no pane split.
+  await page.keyboard.press("Control+Backslash");
+  const screen = () => page.evaluate((tile) => ((document.querySelector(`[data-tile-slot="${tile}"] .xterm`)?.parentElement as unknown as { __hmScreen?: () => string } | undefined)?.__hmScreen?.() ?? ""), id);
+  await expect.poll(screen).toMatch(/Quit/);
+  await expect(panesOf()).toHaveCount(2);
+  // Focus in the view (a click on its pane's bar, past the tabs): the key is the view's, and splits
+  // the pane.
+  const pane = view().locator(".w-pane", { has: view().locator(`[role="tab"][data-tile-id="${id}"]`) });
+  const tabs = (await pane.locator(".w-tabs [role=tab]").last().boundingBox())!;
+  const bar = (await pane.locator(".w-bar").boundingBox())!;
+  await page.mouse.click(tabs.x + tabs.width + 12, bar.y + bar.height / 2);
   await page.keyboard.press("Control+Backslash");
   await expect(panesOf()).toHaveCount(3);
-  const screen = () => page.evaluate((tile) => ((document.querySelector(`[data-tile-slot="${tile}"] .xterm`)?.parentElement as unknown as { __hmScreen?: () => string } | undefined)?.__hmScreen?.() ?? ""), id);
-  await page.waitForTimeout(300);
-  expect(await screen()).not.toMatch(/Quit|\^\\/);
-  await page.locator(`[data-community-slot="${id}"] .xterm-screen`).click();
-  await page.keyboard.press("Control+C");
 });
 
 test("a tab dragged onto another pane's tabs joins them there; onto a pane's edge it splits that pane", async () => {
