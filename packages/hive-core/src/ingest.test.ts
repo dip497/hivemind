@@ -1,10 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import YAML from "yaml";
 import { ingestRecords, type IngestRecord } from "./ingest.js";
-import { listIssues, parseSections, readConfig, readIssue, writeConfig } from "./storage.js";
+import { commentOnIssue, listIssues, parseSections, readConfig, readIssue, updateIssue, writeConfig } from "./storage.js";
 import type { IssueState } from "./types.js";
 import { rootsForPrefix } from "./registry.js";
 import { SyncLockedError, withSyncLock } from "./sync-lock.js";
@@ -151,6 +151,72 @@ describe("ingest", () => {
     await expect(ingestRecords(other, SOURCE, [rec(), { external: { id: "1", key: "PAY-1" } }])).rejects.toThrow(/record 2/);
     expect(await exists(path.join(root, "mirror"))).toBe(false);
     expect(await exists(path.join(other, "mirror"))).toBe(false);
+  });
+
+  test("a hive write landing between ingest's read and its rename survives; the record is applied on top", async () => {
+    const root = await mkRoot();
+    await ingestRecords(root, SOURCE, [rec()]);
+    // When ingest writes its temp file for PAY-318, a person assigns the issue and comments on it.
+    const real = fs.writeFile.bind(fs);
+    let interleaved = 0;
+    const spy = spyOn(fs, "writeFile").mockImplementation((async (file: string, ...rest: unknown[]) => {
+      if (interleaved === 0 && /PAY-318\.md\..*\.tmp$/.test(String(file))) {
+        interleaved++;
+        await updateIssue(root, "PAY-318", { assignee: { type: "agent", id: "claude" } }, "ujjwal");
+        await commentOnIssue(root, "PAY-318", "picking this up", "ujjwal");
+      }
+      return (real as (...a: unknown[]) => Promise<void>)(file, ...rest);
+    }) as never);
+    try {
+      const r = await ingestRecords(root, SOURCE, [rec({ title: "Retry failed webhooks, with backoff", updated: "2026-10-23T09:00:00.000Z" })]);
+      expect(r.updated).toEqual(["PAY-318"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(interleaved).toBe(1);
+    const issue = await readIssue(root, "PAY-318");
+    expect(issue.title).toBe("Retry failed webhooks, with backoff");
+    expect(issue.assignee).toEqual({ type: "agent", id: "claude" });
+    expect(issue.sections.activity.map((a) => a.message)).toContain("picking this up");
+  });
+
+  test("an issue that changes here on every attempt is left as it is, with a note, after a few tries", async () => {
+    const root = await mkRoot();
+    await ingestRecords(root, SOURCE, [rec()]);
+    const real = fs.writeFile.bind(fs);
+    let writes = 0;
+    const spy = spyOn(fs, "writeFile").mockImplementation((async (file: string, ...rest: unknown[]) => {
+      if (/PAY-318\.md\..*\.tmp$/.test(String(file))) await commentOnIssue(root, "PAY-318", `busy ${++writes}`, "ujjwal");
+      return (real as (...a: unknown[]) => Promise<void>)(file, ...rest);
+    }) as never);
+    let r;
+    try {
+      r = await ingestRecords(root, SOURCE, [rec({ title: "newer", updated: "2026-10-23T09:00:00.000Z" })]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(writes).toBe(3);
+    expect(r.notes.join()).toContain("PAY-318: kept changing");
+    const issue = await readIssue(root, "PAY-318");
+    expect(issue.title).toBe("Retry failed webhooks"); // not overwritten
+    expect(issue.sections.activity.map((a) => a.message)).toEqual(expect.arrayContaining(["busy 1", "busy 2", "busy 3"]));
+  });
+
+  test("a source whose folder name is already another source's is refused, in a dry run too", async () => {
+    const root = await mkRoot();
+    await ingestRecords(root, SOURCE, [rec()]);
+    for (const dryRun of [true, false]) {
+      await expect(ingestRecords(root, "jira:acme-PAY", [rec({ key: "PAY-9", id: "9" })], { dryRun })).rejects.toThrow(/jira:acme\/PAY/);
+    }
+    expect(await exists(mirrorFile(root, "PAY-9"))).toBe(false);
+    // the ledger alone says whose the folder is when the mirror is gone (its entries are that source's)
+    const mirror = path.join(root, "mirror");
+    await fs.rename(mirror, `${mirror}.away`);
+    await expect(ingestRecords(root, "jira:acme-PAY", [rec({ key: "PAY-9", id: "9" })])).rejects.toThrow(/jira:acme\/PAY/);
+    // and the files alone when the ledger is gone
+    await fs.rename(`${mirror}.away`, mirror);
+    await fs.rm(path.join(root, "sync"), { recursive: true });
+    await expect(ingestRecords(root, "jira:acme-PAY", [rec({ key: "PAY-9", id: "9" })])).rejects.toThrow(/jira:acme\/PAY/);
   });
 
   test("refuses while another sync of the same source holds the lock", async () => {

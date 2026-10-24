@@ -26,8 +26,8 @@ async function workspace(name: string): Promise<string> {
   return repo;
 }
 
-function ingest(repo: string, args: string[], stdin: string) {
-  const r = spawnSync(...cmd(["ingest", "--source", "jira:acme/PAY", ...args, "--json"]), {
+function ingest(repo: string, args: string[], stdin: string, source = "jira:acme/PAY") {
+  const r = spawnSync(...cmd(["ingest", "--source", source, ...args, "--json"]), {
     cwd: repo, input: stdin, encoding: "utf8", timeout: 60_000, env: { ...sealedEnv(), XDG_CONFIG_HOME: xdg },
   });
   const last = (s: string) => { try { return JSON.parse(s.trim().split("\n").pop() || ""); } catch { return undefined; } };
@@ -54,7 +54,24 @@ describe("hive ingest", () => {
     expect(real.code).toBe(0);
     expect(real.json).toMatchObject({ source: "jira:acme/PAY", dryRun: false, created: ["PAY-318", "PAY-321"], updated: [], unchanged: [], conflicts: [], archived: [] });
     expect(await exists(mirrored(repo, "PAY-318"))).toBe(true);
-  });
+    // a source whose folder name another source already has is refused with what to do instead
+    const shared = ingest(repo, [], records, "jira:acme-PAY");
+    expect(shared.code).toBe(1);
+    expect(shared.json.error).toMatchObject({ code: "SLUG_TAKEN" });
+    expect(shared.json.error.fix).toContain("source id");
+  }, 60_000);
+
+  test("hive list leaves archived issues out; --archived lists them, marked", async () => {
+    const repo = await workspace("d");
+    expect(ingest(repo, [], records).code).toBe(0);
+    expect(ingest(repo, [], JSON.stringify({ external: { id: "10426", key: "PAY-321" }, archived: { reason: "no access" } })).code).toBe(0);
+    const run = (args: string[]) => spawnSync(...cmd(["list", ...args]), { cwd: repo, encoding: "utf8", env: { ...sealedEnv(), XDG_CONFIG_HOME: xdg } });
+    expect(JSON.parse(run(["--json"]).stdout).issues.map((i: { id: string }) => i.id)).toEqual(["PAY-318"]);
+    expect(JSON.parse(run(["--archived", "--json"]).stdout).issues.map((i: { id: string }) => i.id)).toEqual(["PAY-318", "PAY-321"]);
+    const text = run(["--archived"]).stdout;
+    expect(text.split("\n").find((l) => l.includes("PAY-321"))).toContain("(archived: no access)");
+    expect(text.split("\n").find((l) => l.includes("PAY-318"))).not.toContain("archived");
+  }, 60_000);
 
   test("a line that isn't JSON, or a record that doesn't parse, is a bad request (exit 2) naming it", async () => {
     const repo = await workspace("b");
@@ -65,7 +82,7 @@ describe("hive ingest", () => {
     expect(bad.code).toBe(2);
     expect(bad.json.error.message).toContain("record 2");
     expect(await exists(mirrored(repo, "PAY-1"))).toBe(false);
-  });
+  }, 60_000);
 
   test("another live sync of the source is refused with exit 7, SYNC_LOCKED", async () => {
     const repo = await workspace("c");
@@ -77,5 +94,5 @@ describe("hive ingest", () => {
     expect(r.code).toBe(7);
     expect(r.json.error.code).toBe("SYNC_LOCKED");
     expect(await exists(mirrored(repo, "PAY-318"))).toBe(false);
-  });
+  }, 60_000);
 });
