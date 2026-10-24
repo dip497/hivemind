@@ -293,7 +293,7 @@ export class ControlPlane {
    *  tile. The caller records it. */
   async start(repo: string, start: {
     program?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
-    supervise?: string | true; report?: boolean; parent?: string;
+    supervise?: string | true; report?: boolean; parent?: string; issue?: string;
   }): Promise<string> {
     await this.o.ready?.();
     const { program, ...rest } = start;

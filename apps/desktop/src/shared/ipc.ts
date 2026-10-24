@@ -6,6 +6,7 @@ import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { IssueChange } from "@hivemind/workspace-api/methods";
+import type { StartAnswer, StartCheck, StartPlan } from "@hivemind/core/start-guard";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { WorkflowView } from "@hivemind/core/workflow-model";
@@ -642,6 +643,11 @@ export interface HiveIpc {
   updateIssue(root: string, id: string, patch: IssuePatch): Promise<Issue>;
   commentOnIssue(root: string, id: string, message: string): Promise<Issue>;
   deleteIssue(root: string, id: string): Promise<void>;
+  /** The start-work guard's findings for an issue, and what starting it would do (design jira-sync §10). */
+  checkStartWork(root: string, id: string): Promise<StartPlan>;
+  /** Start work on an issue of the workspace at `repo`: the guard, its worktree frame, its start
+   *  status and an agent there (`agent: false`: no agent, no worktree). */
+  startIssue(repo: string, id: string, opts: { ack?: StartCheck[]; assignMe?: boolean; agent?: false | { program?: string } }): Promise<StartAnswer>;
 
   // ── cross-repo (registry + transfer + links) ───────────────
   /** Every registered workspace (other repos) whose root still exists. */

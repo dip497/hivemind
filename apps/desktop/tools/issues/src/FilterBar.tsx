@@ -175,7 +175,7 @@ function TrackerAssigneeMenu({ issues, value, onChange }: { issues: IssueSummary
       width={200}
       align="left"
       trigger={
-        <span data-tracker-assignee={value} title="Whose issues from the tracker the board shows"
+        <span data-tracker-filter={value} title="Whose issues from the tracker the board shows"
           className="inline-flex items-center gap-1.5 px-2 py-1 text-label rounded-md border cursor-pointer hm-soft bg-[var(--color-bg3)] border-[var(--color-line2)] text-[var(--color-fg)]">
           <span className="text-[var(--color-fg2)]">Assigned to</span>
           {trackerAssigneeLabel(value, issues)}

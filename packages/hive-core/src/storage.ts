@@ -1132,7 +1132,8 @@ export async function updateIssue(
     else issue.branch = patch.branch;
   }
   if (patch.pr !== undefined && JSON.stringify(patch.pr) !== JSON.stringify(issue.pr ?? null)) {
-    const pr = (p: PrRef | null | undefined) => (p ? `${p.repo}#${p.number} (${p.state})` : "—");
+    const pr = (p: PrRef | null | undefined) =>
+      p ? `${p.repo}#${p.number} (${[p.state, p.review?.replace("_", " "), p.checks && `checks ${p.checks}`].filter(Boolean).join(", ")})` : "—";
     summary.push(`pr: ${pr(issue.pr)} → ${pr(patch.pr)}`);
     if (patch.pr === null) delete issue.pr;
     else issue.pr = patch.pr;
