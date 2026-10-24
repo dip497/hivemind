@@ -15,7 +15,7 @@ import { catalogKey, cleanError, useCatalogInstall, useInstalledVersion, type Ca
 import { OpenStartView, startViewOf } from "./plugins/open-start-view";
 import { memberFormat } from "@hivemind/hub";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./plugins/PluginList";
-import { useSettingsNavigate } from "./settings-panels";
+import { useSettingsNavigate } from "./settings-navigate";
 
 type Entry = CatalogEntry;
 

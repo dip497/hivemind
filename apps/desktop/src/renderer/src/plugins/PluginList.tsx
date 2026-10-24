@@ -8,7 +8,7 @@ import { ChevronRight } from "../components/icons";
 import { Badge } from "../components/ui/badge";
 import { MenuItem } from "../components/ui/menu-item";
 import { ShowMore } from "../components/ui/show-more";
-import { useSettingsNavigate } from "../settings-panels";
+import { useSettingsNavigate } from "../settings-navigate";
 import { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 import { PLUGIN_TABS, TAB_LABEL, type PluginKind, type PluginTab } from "./kinds";
 

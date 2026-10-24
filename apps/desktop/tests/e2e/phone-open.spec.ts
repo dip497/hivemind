@@ -17,9 +17,15 @@ test.afterEach(async () => {
 });
 
 const claude = { id: "claude", label: "Claude Code", options: [{ id: "mode", label: "Permission mode", values: ["plan"] }] };
-/** What this browser keeps once paired and once Start was answered. */
+/** What this browser keeps once paired and once Start was answered: kept as a browser paired before
+ *  there were accounts kept it (the page moves it into its person's account as it opens, #217), with
+ *  the certificate every pairing gives (crates/hive-phone/src/pairing.rs). */
 const KEPT = {
-  paired: { with: { device: "c".repeat(64), name: "desk", relay: null, kind: "app" }, certificate: null, network: null, admission: "" },
+  paired: {
+    with: { device: "c".repeat(64), name: "desk", relay: null, kind: "app" },
+    certificate: { v: 1, person: "a".repeat(64), device: "b".repeat(64), issued_at: 1_760_000_000_000, signature: "d".repeat(128) },
+    network: null, admission: "",
+  },
   first: { shown: { needs: [], working: [], pinned: [], machines: [], tree: [] }, overview: { agents: [], needs: [], working: 0 } },
   "start-kept": { held: [{ workspace: "w0", name: "api" }], places: { w0: { machines: [{ id: "", name: "desk", programs: [claude], folders: [{ path: "/home/p/api", name: "api", kind: "project", frame: "f-api" }] }] } } },
 };

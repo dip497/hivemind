@@ -29,7 +29,8 @@ import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, ShapeAndTypeControls, TerminalColors,
 } from "./appearance-controls";
 import { ThemeList } from "./appearance-themes";
-import { createContext, Fragment, useContext } from "react";
+import { Fragment } from "react";
+import { SettingsNavigate } from "./settings-navigate";
 import { pluginPage } from "./settings-registry";
 import { doesWhat, KEYMAP, keysLabel, reachesApp, type KeyOS, type Where } from "../../shared/keymap";
 import { keyOS } from "./shortcut";
@@ -164,16 +165,13 @@ function ShortcutPrefs() {
   );
 }
 
-/** The lazy half of the Settings dialog — one chunk, loaded when it opens
- *  (App.tsx keeps only the cheap pages, so the entry bundle does not grow). */
-const NavigateContext = createContext<(id: string) => void>(() => {});
-export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
-
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
 export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "connect", "api", "plugins", "browser", "servers"] as const;
 
+/** The lazy half of the Settings dialog — one chunk, loaded when it opens
+ *  (App.tsx keeps only the cheap pages, so the entry bundle does not grow). */
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
-  return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
+  return <SettingsNavigate.Provider value={navigate}>{renderPage(page)}</SettingsNavigate.Provider>;
 }
 
 function renderPage(page: string) {

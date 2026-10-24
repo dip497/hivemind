@@ -260,7 +260,7 @@ function dividerEl(key: string): HTMLElement {
       render();
     };
     const up = (ev: PointerEvent) => {
-      el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); el.removeEventListener("pointercancel", up);
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
       // Where it was let go: the moves just before may have been merged into this one.
       if (ev.type === "pointerup") tree = resize(base, d.path, d.i, ((d.dir === "row" ? ev.clientX : ev.clientY) - start) / span);
       el.toggleAttribute("data-dragging", false);
@@ -268,9 +268,12 @@ function dividerEl(key: string): HTMLElement {
       gripped = el.matches(":hover");
       change(tree);
     };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
+    // Followed on the window, not the grip: the grip can lose its capture partway (seen in the app's
+    // window with no change to the page), and its moves and its release would then go elsewhere,
+    // leaving the drag held short of where it was let go.
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   });
   return el;
 }

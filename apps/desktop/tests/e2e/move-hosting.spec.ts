@@ -30,7 +30,7 @@ const hostEnv = () => ({ ...process.env, HIVEMIND_APP_DATA: path.join(root, "ser
 const hive = (...args: string[]) => spawnSync(HIVE, args, { env: hostEnv(), encoding: "utf8", timeout: 60_000 });
 interface HostStatus { running: boolean; device: string; devices: unknown[]; workspaces: Array<{ repo: string; workspace: string | null }> }
 const status = (): HostStatus | undefined => {
-  try { return (JSON.parse(hive("host", "status", "--json").stdout) as { data?: HostStatus }).data; } catch { return undefined; }
+  try { return (JSON.parse(hive("host", "status", "--json").stdout) as HostStatus); } catch { return undefined; }
 };
 const read = (file: string) => (fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : "");
 
@@ -96,7 +96,7 @@ async function sharedAndPaired(profile?: string) {
     pairing.stdout!.on("data", (d: Buffer) => {
       out += d.toString();
       const nl = out.indexOf("\n");
-      if (nl >= 0) resolve((JSON.parse(out.slice(0, nl)) as { data: { offer: { link: string } } }).data.offer);
+      if (nl >= 0) resolve((JSON.parse(out.slice(0, nl)) as { offer: { link: string } }).offer);
     });
   });
   await enterCode(laptop, offer.link);

@@ -13,7 +13,7 @@ import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugi
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import { Switch } from "../components/ui/switch";
-import { useSettingsNavigate } from "../settings-panels";
+import { useSettingsNavigate } from "../settings-navigate";
 import { setPluginOption, switchPlugin, useSettings } from "../settings-store";
 import { AgentActions, AgentMark, AgentPage } from "../settings-agents";
 import { ViewActions, ViewMark, ViewPage } from "../settings-views";

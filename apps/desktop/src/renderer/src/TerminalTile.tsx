@@ -13,7 +13,7 @@ import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl } from "./tile-font";
-import { actionKey, IS_MAC, onShortcut } from "./shortcut";
+import { actionKey, IS_MAC, onShortcut, runShortcut } from "./shortcut";
 import { actionsFor } from "../../shared/keymap";
 import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
@@ -885,6 +885,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         case "font-bigger": font.inc(); return true;
         case "font-smaller": font.dec(); return true;
         case "font-reset": font.reset(); return true;
+        // The slot bar of the view this terminal is docked in undocks it (slot-chrome.tsx).
+        case "undock": return runShortcut("undock");
         default: return false;
       }
     }
