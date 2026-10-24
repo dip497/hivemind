@@ -34,6 +34,7 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
   return {
     listIssues: (root) => workspace.call("issue.list", root),
     readIssue: (root, id) => workspace.call("issue.read", root, id),
+    issueWorkflow: (root) => workspace.call("issue.workflow", root),
     updateIssueState: (root, id, state, note) => workspace.call("issue.setState", root, id, state, note),
     createIssue: (root, opts) => workspace.call("issue.create", root, opts),
     updateIssue: (root, id, patch) => workspace.call("issue.update", root, id, patch),

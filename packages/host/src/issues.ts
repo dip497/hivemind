@@ -13,6 +13,7 @@ import { commentOnIssue, createIssue, deleteIssue, listIssues, readIssue, update
 import { linkIssues, transferIssue, unlinkIssues } from "@hivemind/core/cross-repo";
 import { writeAgentContext } from "@hivemind/core/agent-context";
 import { ingestRecords } from "@hivemind/core/ingest";
+import { workflowStatuses } from "@hivemind/core/workflow";
 
 type IssueMethod = Extract<Method, `issue.${string}`>;
 
@@ -33,6 +34,7 @@ export const issues: Domain<IssueMethod> = {
   answers: {
     "issue.list": (_, root) => listIssues(rootOf(root)),
     "issue.read": (_, root, id) => readIssue(rootOf(root), idOf(id)),
+    "issue.workflow": (_, root) => workflowStatuses(rootOf(root)),
     "issue.create": (_, root, issue) => {
       const r = rootOf(root);
       return changed(r, createIssue(r, shaped(NewIssueZ, issue, "issue")));

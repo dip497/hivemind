@@ -918,10 +918,29 @@ export function appendActivity(issue: Issue, who: string, message: string, at?: 
 // ── high-level issue helpers (used by IPC + CLI) ─────────────────────
 
 import { SAMPLE_ISSUE_BODY } from "./templates.js";
+import { defaultStatus, isBuiltinWorkflow, issueTypeOf, loadWorkflow, resolveStatus, statusChoices, statusOf, type Workflow, type WorkflowStatus } from "./workflow.js";
+
+/** The status `idOrName` names in the workspace's workflow, or a refusal naming the valid ones. */
+function namedStatus(wf: Workflow, idOrName: string): WorkflowStatus {
+  const s = resolveStatus(wf, idOrName);
+  if (!s) throw new HiveError("invalid_arg", `unknown status "${idOrName}"; this workspace has: ${statusChoices(wf)}`);
+  return s;
+}
+
+/** The workspace's workflow, an invalid `workflow.yaml` refused as a HiveError that says so. */
+function workflowAt(root: string): Workflow {
+  try {
+    return loadWorkflow(root);
+  } catch (e) {
+    throw new HiveError("bad_workflow", (e as Error).message);
+  }
+}
 
 export interface CreateIssueOpts {
   title: string;
   state?: IssueSummary["state"];
+  /** A workflow status id or name; it decides `state` (its category). */
+  status?: string;
   parent?: string;
   labels?: string[];
   assignee?: Issue["assignee"];
@@ -951,11 +970,23 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
     const { id } = await allocateId(root);
     finalId = id;
   }
+  // The status decides the state. With a workflow file a new issue always gets a status (the
+  // state's default when none is named); without one, files keep only `state`, as before.
+  const wf = workflowAt(root);
+  let state = opts.state ?? "todo";
+  let status: string | undefined;
+  if (opts.status !== undefined) {
+    const s = namedStatus(wf, opts.status);
+    state = s.category;
+    status = s.id;
+  } else status = defaultStatus(wf, state)?.id;
+  if (isBuiltinWorkflow(wf)) status = undefined;
   const now = new Date().toISOString();
   const issue: Issue = {
     id: finalId,
     title: opts.title.trim() || "(untitled)",
-    state: opts.state ?? "todo",
+    state,
+    ...(status ? { status } : {}),
     parent: opts.parent ?? null,
     labels: opts.labels ?? [],
     assignee: opts.assignee ?? null,
@@ -1046,9 +1077,27 @@ export async function updateIssue(
     summary.push(`title: "${issue.title}" → "${patch.title}"`);
     issue.title = patch.title;
   }
-  if (patch.state !== undefined && patch.state !== issue.state) {
-    summary.push(`state: ${issue.state} → ${patch.state}`);
-    issue.state = patch.state;
+  if (patch.status !== undefined || patch.state !== undefined) {
+    // A status sets the state to its category; a state alone lands on that category's default
+    // status (for the issue's type). Without a workflow file only `state` is written, as before.
+    const wf = workflowAt(root);
+    const custom = !isBuiltinWorkflow(wf);
+    const before = statusOf(wf, issue);
+    let next = { state: issue.state, status: before };
+    if (patch.status !== undefined) {
+      const s = namedStatus(wf, patch.status);
+      next = { state: s.category, status: s.id };
+    } else if (patch.state !== undefined && patch.state !== issue.state) {
+      const s = defaultStatus(wf, patch.state, issueTypeOf(wf, issue)) ?? defaultStatus(wf, patch.state);
+      next = { state: patch.state, status: s?.id ?? patch.state };
+    }
+    if (custom && next.status !== before) {
+      const name = (id: string) => wf.statuses.find((s) => s.id === id)?.name ?? id;
+      const moved = next.state !== issue.state ? ` (${issue.state} → ${next.state})` : "";
+      summary.push(`status: ${name(before)} → ${name(next.status)}${moved}`);
+    } else if (next.state !== issue.state) summary.push(`state: ${issue.state} → ${next.state}`);
+    if (custom && (next.status !== before || next.state !== issue.state)) issue.status = next.status;
+    issue.state = next.state;
   }
   if (patch.parent !== undefined && patch.parent !== issue.parent) {
     summary.push(`parent: ${issue.parent ?? "—"} → ${patch.parent ?? "—"}`);

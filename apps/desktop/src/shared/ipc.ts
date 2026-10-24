@@ -7,6 +7,7 @@ import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRe
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
+import type { WorkflowView } from "@hivemind/core/workflow-model";
 import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -611,6 +612,8 @@ export interface HiveIpc {
   // ── hive-core (issues) ───────────────────────────
   listIssues(root: string): Promise<IssueSummary[]>;
   readIssue(root: string, id: string): Promise<Issue>;
+  /** The workspace's statuses, board columns and transitions (its `workflow.yaml`, else the six states). */
+  issueWorkflow(root: string): Promise<WorkflowView>;
   updateIssueState(
     root: string,
     id: string,
@@ -622,6 +625,7 @@ export interface HiveIpc {
     opts: {
       title: string;
       state?: IssueSummary["state"];
+      status?: string;
       parent?: string;
       labels?: string[];
       assignee?: Issue["assignee"];

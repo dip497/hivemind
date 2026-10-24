@@ -90,3 +90,24 @@ test("a sync service at edit role mirrors a tracker's issues with issue.ingest; 
   assert.deepEqual((ok.result as { created: string[] }).created, ["PAY-318"]);
   assert.equal((await result<Issue>("issue.read", root, "PAY-318")).title, "Retry failed webhooks");
 });
+
+test("a status reaches core through the API, sets the state, and the workflow is read as the window lists it", async () => {
+  const root = await makeWorkspace();
+  fs.writeFileSync(path.join(root, "workflow.yaml"), [
+    "version: 1",
+    "statuses:",
+    ...["backlog", "todo", "in_progress", "done", "cancelled"].map((c) => `  - { id: "s:${c}", name: ${c}, category: ${c} }`),
+    '  - { id: "jira:10004", name: QA, category: in_review, source: jira }',
+  ].join("\n"));
+  const { id, state } = await result<Issue>("issue.create", root, { title: "x", status: "qa" });
+  assert.equal(state, "in_review");
+  await result("issue.update", root, id, { status: "s:done" });
+  const issue = await result<Issue & { status?: string }>("issue.read", root, id);
+  assert.deepEqual([issue.state, issue.status], ["done", "s:done"]);
+  // Refused by core, as every core refusal is: FAILED, naming the statuses there are.
+  const refused = await ask("issue.update", root, id, { status: "Shipped" });
+  assert.match("error" in refused ? refused.error.message : "", /unknown status "Shipped".*QA \(jira:10004\)/);
+  const wf = await result<{ custom: boolean; statuses: Array<{ id: string }> }>("issue.workflow", root);
+  assert.equal(wf.custom, true);
+  assert.deepEqual(wf.statuses.map((s) => s.id), ["s:backlog", "s:todo", "s:in_progress", "jira:10004", "s:done", "s:cancelled"]);
+});

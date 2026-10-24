@@ -218,10 +218,11 @@ sends, and one participant per device.
 
 | `file.read` | `repo`, `file` | the file's text | read |
 | `file.write` | `repo`, `file`, `contents` | `null` | target the file |
-| `issue.list` | `root` | `[{id, title, state, parent, labels, assignee, github, created, updated, path}]` | read |
+| `issue.list` | `root` | `[{id, title, state, status?, parent, labels, assignee, github, created, updated, path}]` (`status` as the file has it, 0.34) | read |
 | `issue.read` | `root`, `id` | the issue, with its `sections` (`description`, `acceptanceCriteria`, `activity`, `extra`) | read |
-| `issue.create` | `root`, `{title, state?, parent?, labels?, assignee?, description?, acceptanceCriteria?, github?}` | the issue | target its id |
-| `issue.update` | `root`, `id`, a patch of `title`, `state`, `parent`, `labels`, `assignee`, `github`, `description`, `acceptanceCriteria`, `extra` | the issue | target `id` |
+| `issue.workflow` | `root` | `{custom, statuses: [{id, name, category, color?, source, retired?}], board?: {columns: [{name, statuses}]}, issueTypes: {<type>: {statuses, initial?, transitions: [{id, name?, from, to}]}}}` (0.34): the workspace's statuses from its `workflow.yaml`, category order then the file's; with no file `custom` is false and there is one status per state, its id the state | read |
+| `issue.create` | `root`, `{title, state?, status?, parent?, labels?, assignee?, description?, acceptanceCriteria?, github?}` | the issue | target its id |
+| `issue.update` | `root`, `id`, a patch of `title`, `state`, `status`, `parent`, `labels`, `assignee`, `github`, `description`, `acceptanceCriteria`, `extra` | the issue: a `status` (id or name, 0.34) sets `state` to its category, and a `state` alone moves to that state's first status; an unknown status is `FAILED`, naming the ones there are | target `id` |
 | `issue.setState` | `root`, `id`, `state`, `note`? | the issue | target `id`, detail the state |
 | `issue.comment` | `root`, `id`, `message` | the issue | target `id` |
 | `issue.delete` | `root`, `id` | `null` | target `id` |

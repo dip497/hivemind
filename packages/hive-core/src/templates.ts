@@ -69,6 +69,9 @@ inline.
 ### Conventions
 
 - **State** values: \`backlog | todo | in_progress | in_review | done | cancelled\`.
+- **Status**: a workspace with \`.hivemind/workflow.yaml\` has its own statuses (e.g. Code Review),
+  each in one of those states. \`hive statuses show\` lists them; \`hive update <ID> --status "Code Review"\`
+  moves an issue to one, and a \`--state\` change picks that state's default status.
 - **Assignee** is polymorphic — either a member or an agent (\`--assignee claude\`
   treats it as an agent automatically; \`--assignee-type member --assignee sarah\`
   for humans). Multica-style.
@@ -217,6 +220,7 @@ Too big? \`hive new "<title>" --parent $KEY --ac "criterion one || criterion two
 | \`hive new "<title>" [--parent id] [--ac "a || b"] [--description …] [--label l] [--state s] --json\` | New issue / sub-task (+ acceptance checklist). |
 | \`hive update <id> [--title …] [--assignee …] [--add-label …] [--note …]\` | Patch fields (use \`ctl set-state\` for state). |
 | \`hive ctl set-state <id> <state> [--note …]\` | Change state + log it. |
+| \`hive update <id> --status "<name or id>"\` · \`hive statuses show\` | A workspace with its own workflow: move to one of its statuses (the state follows); list them. |
 | \`hive ctl add-comment <id> "<md>"\` | Append to the activity log. |
 | \`hive ctl mark-acceptance <id> <index> [--undone]\` | Tick / untick a 0-based criterion. |
 | \`hive relate\` · \`hive move\` · \`hive ctl list-workspaces\` | Cross-repo links, transfers, discovery. |

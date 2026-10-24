@@ -215,6 +215,8 @@ export const IssuePatchZ = z
   .object({
     title: z.string().min(1),
     state: IssueStateZ,
+    /** A workflow status id or name; it sets `state` to its category (design jira-sync §4.3). */
+    status: z.string().min(1),
     parent: z.string().nullable(),
     labels: z.array(z.string()),
     assignee: AssigneeZ.nullable(),
@@ -234,6 +236,8 @@ export type IssuePatch = z.infer<typeof IssuePatchZ>;
 export const NewIssueZ = z.object({
   title: z.string(),
   state: IssueStateZ.optional(),
+  /** A workflow status id or name; when given, `state` is its category. */
+  status: z.string().min(1).optional(),
   parent: IssueIdZ.optional(),
   labels: z.array(z.string()).optional(),
   assignee: AssigneeZ.nullable().optional(),

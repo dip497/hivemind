@@ -1,19 +1,10 @@
-import { mentionRe, type Assignee, type IssueState } from "@hivemind/core";
+import { CATEGORIES, mentionRe, type Assignee, type IssueState } from "@hivemind/core";
 import { getCatalog } from "@hivemind/agents";
 
-const STATES: IssueState[] = [
-  "backlog",
-  "todo",
-  "in_progress",
-  "in_review",
-  "done",
-  "cancelled",
-];
-
+/** A state (a workflow's category), hyphenated or underscored. */
 export function parseState(s: string): IssueState | null {
-  // Accept hyphenated and underscored synonyms.
   const norm = s.toLowerCase().replace(/-/g, "_");
-  return (STATES as string[]).includes(norm) ? (norm as IssueState) : null;
+  return (CATEGORIES as readonly string[]).includes(norm) ? (norm as IssueState) : null;
 }
 
 /** Per call: a module-scope copy of the catalog goes stale. */

@@ -103,6 +103,25 @@ Every change is a line in the issue's activity, signed by the person or agent wh
   <img src="/images/app/issues-board.dark.webp" alt="The Issues tile: Backlog and Todo columns, three issue cards, and a work button on the first card." />
 </Frame>
 
+## Use your own statuses
+
+A project can name its own steps, such as Code Review and QA. Each status sits in one of the six
+states, and the board shows a column for each status in state order.
+
+```bash
+hive statuses edit                       # opens .hivemind/workflow.yaml; saved only once it is valid
+hive statuses show                       # the statuses, each with its state
+hive update MYP-3 --status "Code Review" # the state follows: in_review
+hive list --status "Code Review"         # or --category in_review
+```
+
+- Every state needs at least one status, and ids must be unique: `hive statuses validate` names
+  any problem.
+- `--state` and `hive ctl set-state` still work, and pick the first status of that state.
+- `board.columns` in the file groups several statuses into one column. Dropping a card there asks
+  which status.
+- With no `workflow.yaml` the statuses are the six states, as above.
+
 ## Split and link issues
 
 ```bash
@@ -121,6 +140,7 @@ ids from another project, run `hive workspace register` in both, then `hive work
 .hivemind/
 ├── issues/MYP-1.md   one file per issue (sub-issues in issues/MYP-1/)
 ├── config.yaml       prefix and next id
+├── workflow.yaml     your own statuses, when you made them
 ├── review.json       comments left on a diff
 └── .agent.md         a summary of open issues for agents (not committed)
 ```
