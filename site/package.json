@@ -22,7 +22,7 @@
     "social-card": "node scripts/social-card.mjs"
   },
   "dependencies": {
-    "astro": "7.3.1",
+    "astro": "7.3.3",
     "sharp": "^0.35.5"
   },
   "engines": {
