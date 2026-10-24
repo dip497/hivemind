@@ -5,10 +5,11 @@
  * issue method. What reaches a plugin never says where the workspace is on disk, and it writes
  * only to this workspace.
  */
-import type { IssueCall, ViewIssue, ViewIssueSummary } from "@hivemind/view-sdk/protocol";
+import type { IssueCall, ViewIssue, ViewIssueSummary, ViewStartAnswer, ViewStartOptions } from "@hivemind/view-sdk/protocol";
 import type { LinkServices } from "@hivemind/view-host/link";
 import type { Issue, IssueSummary } from "@hivemind/core/types";
 import { statusOf, type WorkflowView } from "@hivemind/core/workflow-model";
+import { agentToStart } from "../agent-plugins";
 
 /** The status an issue is in and its name (protocol 1.16), by the workspace's workflow; none when
  *  the workflow could not be read (a broken `workflow.yaml`: the `workflow` call says why). */
@@ -32,8 +33,10 @@ export function suggestedPrefix(folder: string | null): string {
 /** The issues service for the workspace whose `.hivemind` is `root()`, as asked each time. Only
  *  `read` reaches another of the host's workspaces (a link's other end), found by the id's prefix.
  *  A workspace that keeps no issues yet is set up by the plugin (`setUp`) in `folder()`; the app
- *  hears of it by `hivemind:issues-set-up`. */
-export function issueService(root: () => string | null, folder: () => string | null): NonNullable<LinkServices["issues"]> {
+ *  hears of it by `hivemind:issues-set-up`. Starting work on an issue (1.17) starts an agent with
+ *  a prompt the host makes from the issue: the person reads it first (`confirm`), as any prompt a
+ *  plugin writes. */
+export function issueService(root: () => string | null, folder: () => string | null, confirm?: LinkServices["confirmPrompt"]): NonNullable<LinkServices["issues"]> {
   const listeners = new Set<() => void>();
   const changed = () => { for (const l of listeners) l(); };
   // Set up here before the app re-reads the workspace: this service already knows where.
@@ -51,6 +54,20 @@ export function issueService(root: () => string | null, folder: () => string | n
   const status = () => {
     const dir = folder();
     return { ready: !!current(), folder: dir ? dir.split(/[\\/]/).filter(Boolean).pop() ?? null : null, suggested: suggestedPrefix(dir) };
+  };
+  /** Start work on `id` with the person's answers; an agent's prompt is theirs to read first. A
+   *  prompt they decline starts nothing (`started: false`, nothing `left`). */
+  const startWork = async (here: string, id: string, o: ViewStartOptions): Promise<ViewStartAnswer> => {
+    const repo = folder();
+    if (!repo) throw Object.assign(new Error("this workspace has no folder on this computer"), { code: "BAD_REQUEST" });
+    // What the view sends is checked by the host (`issue.start`).
+    const opts = { ack: Array.isArray(o.ack) ? o.ack : [], assignMe: o.assignMe === true };
+    if (o.agent === false) return window.hive.startIssue(repo, id, { ...opts, agent: false });
+    const program = (typeof o.agent?.program === "string" && o.agent.program) || agentToStart()?.id;
+    if (!confirm) throw Object.assign(new Error("prompts are not available"), { code: "UNSUPPORTED" });
+    const plan = await window.hive.checkStartWork(here, id);
+    if (!(await confirm({ agent: program ?? null, frameId: null, text: plan.prompt }))) return { started: false, id, findings: plan.findings, left: [] };
+    return window.hive.startIssue(repo, id, { ...opts, agent: program ? { program } : {} });
   };
   return {
     subscribe(cb) {
@@ -111,6 +128,8 @@ export function issueService(root: () => string | null, folder: () => string | n
         case "link": return wrote(window.hive.linkIssue(r, str(a, "id"), str(b, "other"), c as Parameters<typeof window.hive.linkIssue>[3]));
         case "unlink": return wrote(window.hive.unlinkIssue(r, str(a, "id"), str(b, "other")));
         case "move": return wrote(window.hive.moveIssue(r, str(a, "id"), str(b, "prefix"), c === "copy" ? "copy" : "move"));
+        case "checkStart": return window.hive.checkStartWork(here, str(a, "id"));
+        case "start": return wrote(startWork(here, str(a, "id"), (b ?? {}) as ViewStartOptions));
       }
     },
   };

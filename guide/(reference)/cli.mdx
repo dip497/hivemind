@@ -36,7 +36,7 @@ Every `hive` command exits with one of these. This is the one list; other pages 
 | 4 | `TIMEOUT` | a wait ran out (`read`, `open-review`, `workflow`) |
 | 5 | `NOT_FOUND` | no such tile, frame, issue or workspace |
 | 6 | `FORBIDDEN` | a bad or missing token, or a call the caller may not make |
-| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE`, `SYNC_LOCKED` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it; `ingest` while another sync of that source runs |
+| 7 | `UNSUPPORTED`, `RATE_LIMITED`, `DEPTH_EXCEEDED`, `OCCLUDED`, `PART_OF_A_PACKAGE`, `SYNC_LOCKED`, `NEEDS_CONFIRM` | refused — the runtime cannot do this, or not now; `read` of an idle agent with nothing new; `sleep` or `wake` that did nothing for a reason other than it being so already; `tile look` of a tile something is drawn over; a plugin that is part of a package changes only with it; `ingest` while another sync of that source runs; starting work on an issue the person must confirm first (`warnings`: each finding, `fix`: the flags; [Before work starts](/issues#before-work-starts)) |
 | 8 | | `read` only: the agent stopped to wait on an answer (a question, a permission) |
 | 9 | `ASLEEP` | the agent is asleep: `send`, `keys`, `read` and `connect` to it are refused (a `report` to it waits in its inbox); the fix is `hive ctl wake <tile>` |
 | 1 | `FAILED` | other |
@@ -72,6 +72,7 @@ hive list [--state todo] [--category in_review] [--status "Code Review"]
 hive show MYP-1
 hive update MYP-1 [--state s | --status "Code Review"] [--title t] [--assignee id|none]
                  [--add-label l] [--rm-label l] [--github N|none] [--note "…"]
+                 [--ack check,… | --force] [--assign-me]   # into progress: see set-state
 hive close MYP-1 [--reason "…"] [--note "…"]   # --reason → cancelled, else done
 hive reopen MYP-1 [--state todo] [--note "…"]
 # show, update, close, reopen, list --parent and new --parent find the issue in whichever
@@ -105,7 +106,13 @@ hive resolve "text"                     # expand @ID mentions to markdown links
 ```
 
 ```text
-hive ctl set-state MYP-1 in_progress [--note "…"]
+hive ctl set-state MYP-1 in_progress [--note "…"] [--ack check,… | --force] [--assign-me]
+                                        # into progress, the start-work guard asks first: exit 7
+                                        # NEEDS_CONFIRM, each finding in "warnings", until the
+                                        # person's answer is a flag (--force: every warning, never
+                                        # an agent already on it). Checks: unassigned, assigned-other,
+                                        # in-progress-other, closed, not-in-sprint, blocked, flagged,
+                                        # no-permission, parent-closed, claimed-elsewhere, agent-active
 hive ctl add-comment MYP-1 "root cause found in …"
 hive ctl mark-acceptance MYP-1 0 [--undone]   # 0-based index from hive show --json
 hive ctl delete-issue MYP-1                   # irreversible
@@ -128,11 +135,18 @@ hive ctl frames                         # frames an agent may start in: id, name
 hive ctl frame add --folder /srv/web [--machine build] [--name web]
                                         # a frame on that folder, on a saved machine or one of
                                         # your devices by id or name; → {"frame","path","opened"}
+hive ctl frame add --worktree <branch> [--base main] [--name n]
+                                        # a frame on the branch's worktree, made when there is none
 hive ctl spawn [--agent claude] [--prompt "…"] [--name "title"]
                [--frame <id or name>] [--mode plan] [--model sonnet]
                [--no-report] [--supervise all|Bash,Edit] [--resume <session>]
                                         # → {"tile":…}; workers auto-report by default;
                                         # --mode yolo: the agent asks nothing
+hive ctl spawn --issue MYP-1 [--agent claude] [--base main] [--ack check,… | --force] [--assign-me]
+                                        # the start-work guard, then the branch's worktree frame
+                                        # (branch_template, default {key}-{slug}), the issue moved
+                                        # into progress, and the agent there with a task made from
+                                        # it; → {"started","tile","frame","branch","status",…}
 hive ctl sessions [agent] [--cwd dir] [--limit 100]
                                         # past sessions in a folder, to --resume
 hive ctl send <tileId> "text" [--interrupt]   # after its turn; --interrupt: stop the turn first
@@ -170,7 +184,10 @@ hive ctl workflow --shape fanout|pipeline|mapreduce
                   [--reduce-prompt "Merge {results}"]
                   [--agent claude] [--model m] [--frame f] [--supervise all]
                   [--max-concurrent 6] [--timeout 10m] [--close] [--repo dir]
-                                        # per-worker timeout; blocks until all replies
+                  [--ack check,… | --force]
+                                        # per-worker timeout; blocks until all replies; an item
+                                        # that is an issue the start-work guard refuses is left
+                                        # out and listed in "skipped"
 hive ctl approve <reqId> allow|deny|always|never [--reason "…"]
 hive ctl report "summary" [--tile id]   # to the inbox of the tile that spawned you ($HIVEMIND_TILE)
 hive ctl open-review --file plan.md|--plan "…" [--cwd dir] [--timeout 30m] [--tile id]

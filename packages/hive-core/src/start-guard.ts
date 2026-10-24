@@ -4,6 +4,7 @@
 // core so the CLI can ask it with no host running. A tracker adds its own checks, a live refresh
 // and "Assign to me" through a provider, matched on the issue's `external.source`.
 import type { Issue, IssueState } from "./types.js";
+import { START_CHECKS as VIEW_START_CHECKS, type ViewStartCheck } from "@hivemind/view-sdk/protocol";
 import { readIssue } from "./storage.js";
 import { rootForId } from "./json.js";
 import { categoryOf, defaultStatus, issueTypeOf, loadWorkflow, statusOf, transitionTargets } from "./workflow.js";
@@ -109,6 +110,11 @@ export const START_CHECKS: readonly StartCheck[] = [
   "unassigned", "assigned-other", "in-progress-other", "closed", "not-in-sprint", "blocked", "flagged",
   "no-permission", "parent-closed", "claimed-elsewhere", "agent-active",
 ];
+
+// Views name the checks too (protocol 1.17): the two lists are one, or this does not compile.
+const _toViews: readonly ViewStartCheck[] = START_CHECKS;
+const _fromViews: readonly StartCheck[] = VIEW_START_CHECKS;
+void _toViews; void _fromViews;
 
 const DEFAULT_STALE_MS = 60_000;
 

@@ -18,7 +18,7 @@ import {
   CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
-  ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary, type ViewWorkflow,
+  ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary, type ViewWorkflow, type ViewStartAnswer, type ViewStartOptions, type ViewStartPlan,
 } from "./protocol.js";
 
 /** A request the host refused or could not answer (`UNSUPPORTED` when it lacks the feature). */
@@ -157,6 +157,12 @@ export interface ViewIssues {
   setUp(prefix: string): Promise<ViewIssuesStatus>;
   /** 1.16 (feature `workflow`): the workspace's statuses, board columns and transitions. */
   workflow(): Promise<ViewWorkflow>;
+  /** 1.17 (feature `startWork`): the start-work guard's findings for an issue, and what starting it
+   *  would do. */
+  checkStart(id: string): Promise<ViewStartPlan>;
+  /** 1.17 (feature `startWork`): start work on an issue with the person's answers: its branch's
+   *  worktree, its start status, and an agent there (the person reads its prompt first). */
+  start(id: string, opts?: ViewStartOptions): Promise<ViewStartAnswer>;
 }
 
 /** Whether a workspace keeps issues: `ready` once set up; `folder` names where they would live. */
@@ -498,7 +504,9 @@ class Client implements ViewClient {
     this.need("workspace:issues", `issues.${call}`);
     if (!this.supports("issues")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no issues"));
     if (call === "workflow" && !this.supports("workflow")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no workflows (protocol 1.16)"));
-    return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), 30_000);
+    if ((call === "checkStart" || call === "start") && !this.supports("startWork")) return Promise.reject(new HostError("UNSUPPORTED", "this host has no start-work guard (protocol 1.17)"));
+    // A start waits on the person reading its agent's prompt.
+    return this.request((requestId) => ({ type: "request", requestId, name: "issue", args: [{ call, args }] }), call === "start" ? 15 * 60_000 : 30_000);
   }
 
   pressWidget(id: string, action: unknown): void {

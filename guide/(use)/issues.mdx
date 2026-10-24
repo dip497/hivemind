@@ -59,8 +59,14 @@ hive reopen MYP-1                 # back to todo
 ## Hand an issue to an agent
 
 1. On the Issues board, press **work** on a card. In an open issue, press **Work on this**.
-2. Check: an agent's tile opens with the issue as its task, ready for you to send.
-3. Send it. The agent follows the steps below and ticks each criterion on the board.
+2. If the issue needs a word from you first, a dialog says why. See [Before work starts](#before-work-starts).
+3. Read the agent's task, made from the issue, and press **Send**.
+4. Check: the agent's tile opens in a frame of its own, on a git worktree of the branch
+   `MYP-42-<title>`, and the issue moves to In progress with that branch on it. In a folder that
+   isn't a git repository, the agent starts in the workspace's frame instead.
+
+From a terminal or an agent, `hive ctl spawn --issue MYP-42` does the same. The agent follows the
+steps below and ticks each criterion on the board.
 
 An agent started with `hive init`'s skills follows these steps:
 
@@ -88,6 +94,33 @@ An agent started with `hive init`'s skills follows these steps:
 
 `.hivemind/.agent.md` sums up the open issues, so a new agent session reads one file.
 `hive agent context` writes it again.
+
+### Before work starts
+
+Starting work asks first when the issue may not be yours to start. It asks on **work**, on a drag
+into an in-progress column, and on `hive ctl set-state … in_progress`, `hive update --state` or
+`--status` into progress, `hive ctl spawn --issue` and `hive ctl workflow`.
+
+| It says | Because | You can |
+|---|---|---|
+| Assigned to nobody | the tracker has no assignee | **Assign to me and start**, **Start anyway** |
+| Assigned to someone else, or already in progress by them | the tracker's assignee isn't you | **Start anyway**, **Assign to me and start** |
+| Already done or cancelled | it is closed | **Reopen and start** |
+| Not in the active sprint | it is in the backlog or a later sprint | **Start** |
+| Blocked by another issue | a `blocked-by` link to an issue that isn't done | **Start anyway**, **Open** the blocker |
+| Flagged | the tracker flags it as an impediment | **Start anyway** |
+| You may not move or be assigned it | the tracker's permissions | **Start locally only** |
+| Its parent is done | a sub-task of a closed issue | **Start** |
+| Another install is on it | someone else's hivemind claimed it | **Start anyway** |
+| An agent here is already on it | a tile was started on this issue | **Focus that tile**; this one can't be started past |
+
+An issue kept only in this workspace is checked for the closed, blocked, parent and agent rows.
+**Don't warn me for unassigned issues in this workspace** turns off the first row for that board.
+**Assign to me** needs the tracker's plugin running in the app or `hive host`.
+
+From the CLI the same checks exit 7 with `NEEDS_CONFIRM`, each in `warnings`. Ask the person, then
+run the command again with `--ack <check>` for what they said yes to, or `--assign-me`. `--force`
+says yes to every warning, never to an agent already on it.
 
 ## Move an issue through its states
 
