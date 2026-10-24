@@ -25,6 +25,15 @@ export interface Issues {
   frameId: string | null;
   workflow: ViewWorkflow;
   openPanel(id: "issue" | "new", params?: unknown): void;
+  /** "Work on this": the start-work guard first (StartWork.tsx). */
+  workOn(issue: ViewIssueSummary): void;
+  /** The guard's say on moving an issue into progress: the person's answer, null when they
+   *  cancelled, "legacy" from a host with no guard. */
+  answerFor(issue: ViewIssueSummary, verb: "move"): Promise<{ ack: string[]; assignMe: boolean } | null | "legacy">;
+  /** Save part of how the tile is set (its view, grouping, what not to warn of), the rest kept. */
+  saveLayout(patch: Record<string, unknown>): void;
+  /** How the tile was set when it opened. */
+  layout: Record<string, unknown>;
 }
 /** What a dialog is handed. */
 export interface PanelProps extends Issues {

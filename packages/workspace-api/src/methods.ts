@@ -5,6 +5,7 @@
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { IngestReport } from "@hivemind/core/ingest";
+import type { StartAnswer, StartCheck, StartPlan } from "@hivemind/core/start-guard";
 import type { WorkflowView } from "@hivemind/core/workflow-model";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
@@ -95,6 +96,17 @@ export interface WorkspaceMethods {
   /** Upsert issues mirrored from an external tracker (`source`, e.g. `jira:acme/PAY`) — what
    *  `hive ingest` does, for a service on the drive socket. */
   "issue.ingest": (root: string, source: string, records: unknown[], opts?: { dryRun?: boolean }) => IngestReport;
+  /** (0.35) The start-work guard's findings for an issue (design jira-sync §10), and what starting
+   *  it would do: its branch, the status it moves to, the prompt its agent gets. */
+  "issue.checkStart": (root: string, id: string) => StartPlan;
+  /** (0.35) Start work on an issue of the workspace at `repo` (design jira-sync §11.1): the guard,
+   *  then "Assign to me" if asked, the branch's worktree frame, `branch:` and the start status, and
+   *  an agent there with `tile.issue` (`agent: false`: only the guard and the status). `started:
+   *  false` with what is `left` when the person must confirm first (`ack` those checks, `force`
+   *  every warning; a block can't be forced). */
+  "issue.start": (repo: string, id: string, opts?: { ack?: StartCheck[]; force?: boolean; assignMe?: boolean; base?: string; agent?: false | { program?: string; model?: string; mode?: string; name?: string } }) => StartAnswer;
+  /** (0.35) "Assign to me" in the issue's tracker, through the service that provides it. */
+  "issue.assignMe": (root: string, id: string) => Issue;
   /** The repo's review comments, resolved ones included. */
   "review.list": (repo: string) => ReviewComment[];
   /** Replace the repo's review comments. */
@@ -353,6 +365,11 @@ export interface WorkspaceNotices {
   /** (0.34) A tool plugin's service answers these commands of its own plugin: `hive ctl plugin
    *  call` runs one there when no window runs the plugin (`plugin.called`). */
   "plugin.serve": (commands: PluginCommand[]) => void;
+  /** (0.35) A tool plugin's service is the tracker for issues of `source` (`jira:acme/PAY`, or a
+   *  prefix of it) in its workspace at `root`: the start-work guard re-fetches a stale one, asks its
+   *  checks, and assigns through the commands named, each called with `{root, id}`
+   *  (`plugin.called`). Until its connection goes. */
+  "issue.provideStart": (root: string, source: string, commands: { refresh?: string; checks?: string; assignMe?: string }) => void;
   /** (0.34) A service's answer to the call `call` it was sent. */
   "plugin.answer": (call: number, answer: ServiceAnswer) => void;
   /** The screen the view of the caller's session `session` is shown on now: its host tells the view

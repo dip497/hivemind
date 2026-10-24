@@ -135,7 +135,7 @@ export function viewLinkServices(opts: {
   issueFolder: () => string | null;
 }): LinkServices {
   return {
-    issues: issueService(opts.issueRoot, opts.issueFolder),
+    issues: issueService(opts.issueRoot, opts.issueFolder, opts.confirmPrompt),
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
     widgets: {
       subscribe: (cb) => {

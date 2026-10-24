@@ -4,7 +4,7 @@
  * fail, starts an agent on them with what GitHub says (the review comments, the failing logs)
  * read through `gh` in the tile's folder.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, ExternalLink, MessageSquare, Wrench } from "@hivemind/app-ui";
 import { PROMPT_MAX, type ViewIssuePr } from "@hivemind/view-sdk/protocol";
 import { useIssuesPlugin, write, type Issue } from "./data";
@@ -58,13 +58,16 @@ function prompt(head: string, said: string, tailLine: string): string {
 export function PrRow({ issue }: { issue: Issue }) {
   const { hm, host, frameId } = useIssuesPlugin();
   const [busy, setBusy] = useState<"review" | "ci" | null>(null);
+  // The agent works in the issue's worktree: its frame when one is on the board, else this tile's.
+  const [worktreeFrame, setWorktreeFrame] = useState<string | null>(null);
+  useEffect(() => (issue.branch ? hm.on("structure", ({ frames }) => setWorktreeFrame(frames.find((f) => f.branch === issue.branch)?.id ?? null)) : undefined), [hm, issue.branch]);
   const pr = issue.pr;
   if (!pr) return null;
   const look = LOOK[pr.state];
   const open = pr.state === "open" || pr.state === "draft";
   const where = issue.branch ? ` The work is on branch \`${issue.branch}\`: work in its worktree (\`git worktree list\` shows where), commit as "${issue.id}: …"` : "";
   const finish = `When it is done, finish with \`hive ctl complete ${issue.id}\` (it pushes to the open PR).`;
-  const spawn = (text: string) => hm.commands.spawnAgent(null, frameId, { prompt: text, name: issue.id });
+  const spawn = (text: string) => hm.commands.spawnAgent(null, worktreeFrame ?? frameId, { prompt: text, name: issue.id });
 
   const addressReview = async () => {
     setBusy("review");

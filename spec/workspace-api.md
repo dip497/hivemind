@@ -1,4 +1,4 @@
-# Workspace API (0.34)
+# Workspace API (0.35)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -28,6 +28,7 @@ every call, and a method that returns nothing answers `{"result": null}`. `code`
 | `UNAVAILABLE` | It needs one of the person's windows, and none is open here (0.23). |
 | `OCCLUDED` | Something is drawn over the tile `tile.look` would picture (a pinned tile, a dialog): the message names it, and nothing was pictured (0.32). |
 | `FAILED` | It ran and failed: git refused, a file could not be written. `message` says why, ending in the system's code when there is one (`… (ENOENT)`). |
+| `NEEDS_CONFIRM` | Starting work on an issue needs the person to confirm first (design jira-sync §10): `hive` prints each finding of the start-work guard in `warnings` (`{check, severity, message, actions}`) and the flags that go on in `fix` (0.35). `issue.start` itself answers `{started: false, left}` instead. |
 
 A **notice** is a call that asks for no answer, `{method, params}` sent one way: the hot path (a
 keystroke, a resize, flow control) and what a client tells the host about itself. A host never
@@ -64,7 +65,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.34", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.35", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -235,6 +236,9 @@ sends, and one participant per device.
 | `issue.unlink` | `root`, `id`, `other` | `{removed}` | target `id->other` |
 | `issue.move` | `root`, `id`, `prefix`, `mode` (`move` \| `copy`) | `{newId, newIssue, mode, from}` | target `id`, detail `move to PREFIX` |
 | `issue.ingest` | `root`, `source`, `records`, `{dryRun?}`? | `{source, dryRun, created, updated, unchanged, conflicts, archived, notes}` (records as `hive ingest` takes them; edit role) | target `source` |
+| `issue.checkStart` | `root`, `id` | `{id, findings: [{check, severity, message, actions, target?}], branch, status, prompt}` (0.35): the start-work guard's findings (design jira-sync §10; `severity` `info` never stops a start, `warn` needs an ack, `block` can't be forced), the branch the work goes on (`branch_template`, default `{key}-{slug}`), the status it moves to, and the prompt its agent is given, the issue's text fenced as quoted data. An agent's own tile is not "an agent on it". A tracker's provider re-fetches an issue synced more than 60 s ago first | read |
+| `issue.start` | `repo`, `id`, `{ack?: [check], force?, assignMe?, base?, agent?: {program?, model?, mode?, name?} \| false}`? | `{started: false, id, findings, left}` when findings are left after `ack` (`force` acks every warning; a `block` is never dropped; `assignMe` answers the assignee ones), and nothing was done; else `{started: true, id, findings, status, branch?, frame?, tile?, assigned?}` (0.35): "Assign to me" through the tracker's provider when asked, the branch's worktree frame (`frame.open`, an existing worktree reused), `branch:` and the start status written on the issue, and an agent there started with `issue` (`agent.start`), its prompt `issue.checkStart`'s. `agent: false` does the guard, the assignment and the status only. `agents` role | target `id`, detail the tile |
+| `issue.assignMe` | `root`, `id` | the issue, after its tracker's provider made the person its assignee (0.35); `UNSUPPORTED` when no service provides it for the issue's source; `FORBIDDEN` to a guest, as `issue.start`'s `assignMe` is: it makes the person at this machine the assignee (`agents` role) | target `id` |
 | `review.list` | `repo` | `[{id, file, startLine, endLine, side, body, author, at, resolved?, summary?, replies?}]` | read |
 | `review.save` | `repo`, `comments` | `null` (the list replaces the repo's comments) | target `repo` |
 
@@ -354,6 +358,7 @@ layout the store cannot hold is `BAD_REQUEST`.
 |---|---|---|
 | `plugin.serve` | `[{name, description, args?}]` | a tool plugin's service answers these commands of its own plugin (0.34); the last to say so does, until its connection goes. Each call comes as `plugin.called` |
 | `plugin.answer` | `call`, `{result}` or `{error: {code?, message}}` | a service's answer to `plugin.called` `call`; only the connection asked answers, once (0.34) |
+| `issue.provideStart` | `root`, `source`, `{refresh?, checks?, assignMe?}` | a tool plugin's service is the tracker for issues of its workspace (`root`) whose `external.source` starts with `source` (`jira:acme/PAY`), until its connection goes (0.35): the start-work guard runs each named command (one it serves, `plugin.serve`) as `plugin.called` with `{root, id}` — `refresh` to mirror the issue again through `issue.ingest` when it is stale, `checks` answering more findings, `assignMe` to make the person the assignee |
 | `terminal.write` | `tile`, `data`, `paste`? | types `data` (`paste`: hands it over as one block), when the client has the terminal's keyboard: the host's own clients until it is given away, and then its holder alone. One of the host's own clients that types sizes it at once to the size it last said (`terminal.resize`); an answer (`agent.answer`) is no typing |
 | `terminal.keyboard.ask` | `tile` | asks for the terminal's keyboard: its holder is sent `terminal.keyboard.asked` (the host's clients showing it, while the host holds it) |
 | `terminal.keyboard.give` | `tile`, `to` | hands the keyboard the client holds (or the host's, from a host's client) to `to`, the id of one who asked; everyone is told (`terminal.keyboard`). It comes back to the host when the host takes it, when its holder goes, and after five minutes without their typing |

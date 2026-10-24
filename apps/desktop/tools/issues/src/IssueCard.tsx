@@ -18,6 +18,19 @@ const onActivate = (fn: () => void) => (e: KeyboardEvent) => {
   }
 };
 
+/** Which tracker an issue is mirrored from: its key is the id beside it. */
+function TrackerChip({ provider }: { provider: string }) {
+  return <span className="text-chip font-medium uppercase tracking-wide text-[var(--color-fg3)] border border-[var(--color-line2)] rounded px-1" title={`Mirrored from ${provider}`} data-tracker={provider}>{provider}</span>;
+}
+
+/** Who the tracker has it assigned to: an avatar, "you", or an Unassigned chip. Nothing for a local issue. */
+export function TrackerAssignee({ issue }: { issue: Pick<IssueSummary, "external"> }) {
+  const a = issue.external?.assignee;
+  if (a === undefined) return null;
+  if (a === null) return <span className="text-chip text-[var(--color-warn)] border border-[var(--color-line2)] rounded-full px-1.5" title={`Assigned to nobody in ${issue.external!.provider}`} data-unassigned>Unassigned</span>;
+  return <span title={`${a.me ? "You" : a.name}, in ${issue.external!.provider}`} data-tracker-assignee={a.me ? "me" : a.name}><Avatar id={a.name} size={16} /></span>;
+}
+
 /** Board card — id + state icon, title, labels, assignee, work button. Draggable
  *  only when the tile is focused (so it doesn't fight canvas pan). */
 export function IssueCard({
@@ -56,6 +69,7 @@ export function IssueCard({
         {issue.statusName && issue.status !== issue.state && (
           <span className="text-chip text-[var(--color-fg3)] truncate" data-card-status>{issue.statusName}</span>
         )}
+        {issue.external && <TrackerChip provider={issue.external.provider} />}
         <Button reveal="hidden"
           size="xs"
           className="nodrag ml-auto"
@@ -71,7 +85,7 @@ export function IssueCard({
         </Button>
       </div>
       <div className="mt-1.5 text-label text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
-      {(issue.labels.length > 0 || issue.assignee || issue.pr) && (
+      {(issue.labels.length > 0 || issue.assignee || issue.pr || issue.external?.assignee !== undefined) && (
         <div className="mt-2 flex items-center gap-1 flex-wrap">
           {issue.pr && <PrBadge pr={issue.pr} />}
           {issue.labels.slice(0, 3).map((l) => (
@@ -80,11 +94,10 @@ export function IssueCard({
           {issue.labels.length > 3 && (
             <span className="text-chip text-[var(--color-fg3)]">+{issue.labels.length - 3}</span>
           )}
-          {issue.assignee && (
-            <span className="ml-auto">
-              <Avatar id={issue.assignee.id} size={16} />
-            </span>
-          )}
+          <span className="ml-auto inline-flex items-center gap-1">
+            <TrackerAssignee issue={issue} />
+            {issue.assignee && <Avatar id={issue.assignee.id} size={16} />}
+          </span>
         </div>
       )}
     </div>

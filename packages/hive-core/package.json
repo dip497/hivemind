@@ -49,6 +49,7 @@
     "./workflow": "./src/workflow.ts",
     "./workflow-model": "./src/workflow-model.ts",
     "./start-guard": "./src/start-guard.ts",
+    "./json": "./src/json.ts",
     "./pr": "./src/pr.ts",
     "./complete": "./src/complete.ts"
   },

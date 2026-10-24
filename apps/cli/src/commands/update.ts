@@ -2,7 +2,9 @@ import { defineCommand } from "citty";
 import { ensureAgentCatalog } from "../agent-catalog.js";
 import {
   HiveError,
+  loadWorkflow,
   readIssue,
+  resolveStatus,
   rootForIdHere,
   updateIssue,
   writeAgentContext,
@@ -11,6 +13,8 @@ import {
 import { err, ok, renderIssue } from "../format.js";
 import { detectWho } from "../who.js";
 import { collectMulti, parseAssignee, parseState, stripAt } from "../parse.js";
+import { NeedsConfirmError, START_FLAGS, guardStart, startAcks, startsWork } from "../start-guard.js";
+import { EXIT, printFailure } from "../exit-codes.js";
 
 export const updateCmd = defineCommand({
   meta: { name: "update", description: "Update fields of an existing issue" },
@@ -26,6 +30,7 @@ export const updateCmd = defineCommand({
     "rm-label": { type: "string", description: "Remove a label (repeatable)" },
     github: { type: "string", description: "Linked GitHub issue/PR number (or 'none')" },
     note: { type: "string", description: "Free-text note appended to Activity" },
+    ...START_FLAGS,
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -83,10 +88,16 @@ export const updateCmd = defineCommand({
         return err(ctx, "noop", `no fields changed and no --note provided`);
       }
 
+      // Into the in-progress category, the start-work guard asks first (design jira-sync §10).
+      const acks = startAcks(args);
+      const into = patch.status !== undefined ? resolveStatus(loadWorkflow(root), patch.status)?.category : patch.state;
+      if (startsWork(issue, into)) await guardStart(root, id, acks, detectWho());
+
       const updated = await updateIssue(root, id, patch, detectWho(), note || undefined);
       await writeAgentContext(root);
       return ok(ctx, updated, () => renderIssue(updated));
     } catch (e) {
+      if (e instanceof NeedsConfirmError) return printFailure(ctx.json, e.failure, EXIT.refused);
       const msg = e instanceof HiveError ? e.message : (e as Error).message;
       const code = e instanceof HiveError ? e.code : "update_failed";
       return err(ctx, code, msg);

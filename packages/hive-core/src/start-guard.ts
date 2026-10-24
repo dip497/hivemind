@@ -3,7 +3,11 @@
 // / `hive update --status`, `hive ctl spawn --issue`, `hive ctl workflow` over issues. It lives in
 // core so the CLI can ask it with no host running. A tracker adds its own checks, a live refresh
 // and "Assign to me" through a provider, matched on the issue's `external.source`.
-import type { Issue } from "./types.js";
+import type { Issue, IssueState } from "./types.js";
+import { START_CHECKS as VIEW_START_CHECKS, type ViewStartCheck } from "@hivemind/view-sdk/protocol";
+import { readIssue } from "./storage.js";
+import { rootForId } from "./json.js";
+import { categoryOf, defaultStatus, issueTypeOf, loadWorkflow, statusOf, transitionTargets } from "./workflow.js";
 
 /** The checks of design §10, by name: what `--ack` takes. */
 export type StartCheck =
@@ -85,7 +89,209 @@ export function unacknowledged(findings: StartFinding[], ack: { checks?: StartCh
   return findings.filter((f) => f.severity === "block" || (f.severity === "warn" && !ack.force && !(ack.checks ?? []).includes(f.check)));
 }
 
-/** Check whether work on `id` may start (design §10). Implemented in P1 (HIVEMI-1.6). */
-export async function checkStartWork(_root: string, _id: string, _ctx: StartContext): Promise<StartVerdict> {
-  throw new Error("checkStartWork: not implemented yet (P1)");
+/** What a start would do, and what stands in its way. */
+export interface StartPlan {
+  id: string;
+  findings: StartFinding[];
+  /** The branch its work goes on: the one already written on the issue, else the template's. */
+  branch: string;
+  /** The status starting moves it to; unchanged when it is already in progress. */
+  status: string;
+  prompt: string;
+}
+
+/** What `issue.start` answers (design §11.1): refused with what is left to confirm, or what it did. */
+export type StartAnswer =
+  | { started: false; id: string; findings: StartFinding[]; left: StartFinding[] }
+  | { started: true; id: string; findings: StartFinding[]; status: string; branch?: string; frame?: string; tile?: string; assigned?: boolean };
+
+/** Every check's name, in the order of design §10's table: what `--ack` accepts. */
+export const START_CHECKS: readonly StartCheck[] = [
+  "unassigned", "assigned-other", "in-progress-other", "closed", "not-in-sprint", "blocked", "flagged",
+  "no-permission", "parent-closed", "claimed-elsewhere", "agent-active",
+];
+
+// Views name the checks too (protocol 1.17): the two lists are one, or this does not compile.
+const _toViews: readonly ViewStartCheck[] = START_CHECKS;
+const _fromViews: readonly StartCheck[] = VIEW_START_CHECKS;
+void _toViews; void _fromViews;
+
+const DEFAULT_STALE_MS = 60_000;
+
+/** A link to an issue that blocks this one, as a tracker hands it over before both ends are
+ *  mirrored (`external.links`, design §6.4): hive's link type, or Jira's own `Blocks` + `inward`. */
+interface ExternalLink { id?: unknown; key?: unknown; type?: unknown; direction?: unknown; category?: unknown }
+
+const closedCategory = (s: unknown): boolean => s === "done" || s === "cancelled";
+
+/** The issues `issue` says block it: hive's `links`, then the tracker's `external.links`. A tracker
+ *  link may say its other end's category, which is used when that end isn't mirrored here. */
+function blockersOf(issue: Issue): { id: string; category?: string }[] {
+  const out = new Map<string, { id: string; category?: string }>();
+  for (const l of issue.links ?? []) if (l.type === "blocked-by") out.set(l.id, { id: l.id });
+  const ext = (issue.external as { links?: unknown } | undefined)?.links;
+  for (const raw of Array.isArray(ext) ? (ext as ExternalLink[]) : []) {
+    const id = typeof raw?.key === "string" ? raw.key : typeof raw?.id === "string" ? raw.id : undefined;
+    if (!id || out.has(id)) continue;
+    const blockedBy = raw.type === "blocked-by" || (typeof raw.type === "string" && raw.type.toLowerCase() === "blocks" && raw.direction === "inward");
+    if (blockedBy) out.set(id, { id, ...(typeof raw.category === "string" ? { category: raw.category } : {}) });
+  }
+  return [...out.values()];
+}
+
+/** The category of another issue, wherever it is kept (here, or a workspace the registry knows);
+ *  undefined when it can't be read. */
+async function categoryElsewhere(root: string, id: string): Promise<IssueState | undefined> {
+  try {
+    return (await readIssue(await rootForId(root, id), id)).state;
+  } catch {
+    try {
+      return (await readIssue(root, id)).state;
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+/** The tracker permissions the sync read for this issue, when it read them: a list of the ones
+ *  held, or a map of each to whether it is. */
+function permissionsOf(issue: Issue): ((p: string) => boolean) | undefined {
+  const p = (issue.external as { permissions?: unknown } | undefined)?.permissions;
+  if (Array.isArray(p)) return (name) => p.includes(name);
+  if (p && typeof p === "object") return (name) => (p as Record<string, unknown>)[name] === true;
+  return undefined;
+}
+
+/** The checks design §10 makes from the issue as it is kept: a mirrored issue's tracker fields, its
+ *  links, its parent and the agents working it here. A local issue gets #4, #6, #9 and #11. */
+async function fieldChecks(root: string, issue: Issue, ctx: StartContext, provider: StartWorkProvider | undefined): Promise<StartFinding[]> {
+  const out: StartFinding[] = [];
+  const ext = issue.external;
+  const mirrored = !!ext;
+  const can = permissionsOf(issue);
+  // "Assign to me" needs a tracker that can, and (when the sync says) the right to assign.
+  const assignable = !!provider?.assignMe && (!can || can("ASSIGN_ISSUES"));
+  const assign = (actions: StartAction[]): StartAction[] => (assignable ? actions : actions.filter((a) => a !== "assign-me"));
+
+  if (mirrored && ext.assignee === null) {
+    out.push({ check: "unassigned", severity: "warn", message: `${issue.id} is assigned to nobody in ${ext.provider}`, actions: assign(["assign-me", "start", "cancel"]) });
+  } else if (mirrored && ext.assignee && ext.assignee.me !== true) {
+    const who = ext.assignee.name;
+    out.push(
+      issue.state === "in_progress"
+        ? { check: "in-progress-other", severity: "warn", message: `${who} already has ${issue.id} in progress`, actions: assign(["start", "assign-me", "cancel"]) }
+        : { check: "assigned-other", severity: "warn", message: `${issue.id} is assigned to ${who} in ${ext.provider}`, actions: assign(["start", "assign-me", "cancel"]) },
+    );
+  }
+
+  if (closedCategory(issue.state)) {
+    // Reopening needs a way out of the status it is in, when the workflow lists the type's transitions.
+    let reopen = true;
+    if (mirrored) {
+      const wf = loadWorkflow(root);
+      const targets = transitionTargets(wf, issueTypeOf(wf, issue), statusOf(wf, issue));
+      if (targets) reopen = targets.some((t) => !closedCategory(categoryOf(wf, t)));
+    }
+    out.push({ check: "closed", severity: "warn", message: `${issue.id} is already ${issue.state === "done" ? "done" : "cancelled"}`, actions: reopen ? ["reopen", "cancel"] : ["cancel"] });
+  }
+
+  if (mirrored && ext.sprint !== undefined && ext.sprint?.state !== "active") {
+    out.push({ check: "not-in-sprint", severity: "info", message: ext.sprint ? `${issue.id} is in ${ext.sprint.name}, which is not the active sprint` : `${issue.id} is in the backlog, not in a sprint`, actions: ["start", "cancel"] });
+  }
+
+  for (const b of blockersOf(issue)) {
+    const category = (await categoryElsewhere(root, b.id)) ?? b.category;
+    if (closedCategory(category)) continue;
+    out.push({ check: "blocked", severity: "warn", message: category ? `${issue.id} is blocked by ${b.id}, which is not resolved` : `${issue.id} is blocked by ${b.id}, which isn't kept here, so whether it is resolved is unknown`, actions: ["start", "open-blocker", "cancel"], target: b.id });
+  }
+
+  if (mirrored && issue.labels.some((l) => l.toLowerCase() === "flagged")) {
+    out.push({ check: "flagged", severity: "warn", message: `${issue.id} is flagged as an impediment`, actions: ["start", "cancel"] });
+  }
+
+  if (mirrored && can) {
+    const missing = ["TRANSITION_ISSUES", "ASSIGNABLE_USER"].filter((p) => !can(p));
+    if (missing.length) {
+      out.push({ check: "no-permission", severity: "info", message: `you may not ${missing.map((p) => (p === "TRANSITION_ISSUES" ? `move ${issue.id} in ${ext.provider}` : `be assigned ${issue.id}`)).join(" or ")}`, actions: ["start-local", "cancel"] });
+    }
+  }
+
+  const parent = issue.parent ?? ext?.parentKey;
+  if (parent) {
+    const category = await categoryElsewhere(root, parent);
+    if (closedCategory(category)) {
+      out.push({ check: "parent-closed", severity: "info", message: `${issue.id}'s parent ${parent} is already ${category === "done" ? "done" : "cancelled"}`, actions: ["start", "cancel"], target: parent });
+    }
+  }
+
+  const claim = (ext as { claimedBy?: unknown } | undefined)?.claimedBy as { by?: unknown; branch?: unknown; me?: unknown } | undefined;
+  if (mirrored && claim && typeof claim === "object" && claim.me !== true && !(issue.branch && claim.branch === issue.branch)) {
+    const by = typeof claim.by === "string" ? claim.by : "another install";
+    out.push({ check: "claimed-elsewhere", severity: "warn", message: `${by} is already working ${issue.id}${typeof claim.branch === "string" ? ` on ${claim.branch}` : ""}`, actions: ["start", "cancel"] });
+  }
+
+  const active = (ctx.activeTiles ?? []).find((t) => t.issue === issue.id || (issue.aliases ?? []).includes(t.issue));
+  if (active) {
+    out.push({ check: "agent-active", severity: "block", message: `an agent here is already working ${issue.id} (tile ${active.tile})`, actions: ["focus-tile", "cancel"], target: active.tile });
+  }
+  return out;
+}
+
+/** A provider's findings, kept only when they name a check and a severity it may give. */
+function sane(f: unknown): f is StartFinding {
+  const x = f as StartFinding | null;
+  return !!x && START_CHECKS.includes(x.check) && ["info", "warn", "block"].includes(x.severity) && typeof x.message === "string" && Array.isArray(x.actions);
+}
+
+/**
+ * Check whether work on `id` may start (design §10): every finding, each with its severity and
+ * what can be done about it. A mirrored issue synced longer ago than `staleAfterMs` is re-fetched
+ * through its tracker's provider first. Nothing here touches the network but a provider.
+ */
+export async function checkStartWork(root: string, id: string, ctx: StartContext): Promise<StartVerdict> {
+  let issue = await readIssue(root, id);
+  const provider = providerFor(issue);
+  const now = (ctx.now ?? new Date()).getTime();
+  const synced = issue.external?.syncedAt ? Date.parse(issue.external.syncedAt) : NaN;
+  if (provider?.refresh && issue.external && !(now - synced <= (ctx.staleAfterMs ?? DEFAULT_STALE_MS))) {
+    issue = await provider.refresh(root, issue);
+  }
+  const findings = await fieldChecks(root, issue, ctx, provider);
+  if (provider?.checks) {
+    const own = new Set(findings.map((f) => f.check));
+    for (const f of await provider.checks(root, issue, ctx)) if (sane(f) && !own.has(f.check)) findings.push(f);
+  }
+  findings.sort((a, b) => START_CHECKS.indexOf(a.check) - START_CHECKS.indexOf(b.check));
+  return { issue, findings };
+}
+
+/** The status starting work moves an issue to: its type's first `in_progress` status (design §11.1). */
+export function startStatus(root: string, issue: Pick<Issue, "external">): string {
+  const wf = loadWorkflow(root);
+  return (defaultStatus(wf, "in_progress", issueTypeOf(wf, issue)) ?? defaultStatus(wf, "in_progress"))?.id ?? "in_progress";
+}
+
+/** Why a start was refused for what is left after the acks, said for an agent: the message, the
+ *  flags that go on (`fix`), and each finding (`warnings`). */
+export function needsConfirm(id: string, left: StartFinding[]): { message: string; fix: string; warnings: StartFinding[] } {
+  const blocked = left.filter((f) => f.severity === "block");
+  const warn = left.filter((f) => f.severity === "warn");
+  const message = blocked.length
+    ? `can't start ${id}: ${blocked.map((f) => f.message).join("; ")}`
+    : `starting ${id} needs the person to confirm: ${warn.map((f) => f.message).join("; ")}`;
+  const fix = blocked.length
+    ? "this can't be forced: work in the tile that has it (`hive ctl focus <tile>`), or close it first"
+    : `ask the person; then re-run with ${[...new Set(warn.map((f) => f.check))].map((c) => `--ack ${c}`).join(" ")}${warn.some((f) => f.actions.includes("assign-me")) ? " or --assign-me" : ""} (never --force on your own)`;
+  return { message, fix, warnings: left };
+}
+
+/** The branch an issue's work goes on (design §11.1): `branch_template` (default `{key}-{slug}`)
+ *  with the key and a slug of the title filled in, kept to what git takes in a branch name. */
+export function branchFor(template: string | undefined, issue: Pick<Issue, "id" | "title">): string {
+  const slug = issue.title.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48).replace(/-+$/, "");
+  const name = (template || "{key}-{slug}").replaceAll("{key}", issue.id).replaceAll("{slug}", slug);
+  // git refuses `..`, a leading `-` or `.`, a trailing `/` or `.lock`, spaces and ~^:?*[\ — and the
+  // template may leave a dangling separator when the title had nothing to slug.
+  const clean = name.replace(/[\s~^:?*[\\\x00-\x1f\x7f]+/g, "-").replace(/\.{2,}/g, ".").replace(/\/{2,}/g, "/").replace(/^[-./]+|[-./]+$/g, "").replace(/\.lock$/, "");
+  return clean || issue.id;
 }

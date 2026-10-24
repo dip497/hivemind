@@ -99,7 +99,7 @@ for one taken as typed. A command that has not answered within 1.5 s adds its ow
 workspace's frames, as the board orders them.
 
 `agent.start(workspace, start)` starts one there, as `hive ctl spawn` does: `start` is `{ program,
-frame?, folder?, images?, prompt?, model?, mode?, name?, resume?, supervise?, report? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
+frame?, folder?, images?, prompt?, model?, mode?, name?, resume?, supervise?, report?, issue? }`, `program` one `agent.startable` lists, `frame` one of its frames (none: the
 workspace's first frame, or none when it has none), `folder` (0.8) one of "Places" below, not with
 `frame`, and `program` then one found on its machine, `images` (0.8) at most 4 photos `{ "type":
 "image/png" | "image/jpeg" | "image/webp" | "image/gif", "data": "<base64>" }` of at most 5 MB
@@ -110,7 +110,8 @@ most 200 characters. `supervise` (0.5) is `true` (the tools its manifest says ar
 `"all"`, or a list of tool names: before using one it waits on its starter (an `approval` wait),
 which answers with `agent.answer`. A program that starts it on the drive socket is its starter, and
 is told what it reports (`hive ctl report`): the workspace's readers get an `agent.event` of kind
-`reported`, unless `report` is `false`.
+`reported`, unless `report` is `false`. `issue` (workspace API 0.35) is the id of the issue it is started to work, recorded on its tile as
+`issue`: the start-work guard reads it, so a second start on that issue is refused while it runs.
 It starts as the person launches it at their desktop, with the options they saved for that agent
 and these on top: never in its unattended mode unless `mode` says so, or an agent on the drive
 socket starts it (`hive ctl spawn`) unsupervised, where no one is at its tile. It answers `{ "tile":

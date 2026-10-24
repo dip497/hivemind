@@ -13,6 +13,7 @@ import type { KeptCore, FrameRecord } from "@hivemind/workspace-doc/shapes";
 import { ApiError, fields, flag, text, written } from "@hivemind/workspace-api/protocol";
 import type { Domain } from "@hivemind/workspace-api/server";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
+import { ISSUE_ID_RE } from "@hivemind/core/issue-id";
 import { changesIn, type Changes } from "./agent-diff.js";
 import { imagesOf, withPhotos, type StartPlaces } from "./start-places.js";
 
@@ -31,6 +32,8 @@ export interface Start {
   supervise?: string | true;
   report?: boolean;
   parent?: string;
+  /** The issue it works (0.35): recorded on its tile as `issue`. */
+  issue?: string;
 }
 
 export interface AgentControlOptions {
@@ -102,9 +105,12 @@ function startOf(value: unknown, programs: readonly AgentProviderDef[], core: Ke
   const resume = choice(s.resume, "start.resume");
   const supervise = superviseOf(s.supervise);
   const report = flag(s.report, "start.report");
+  const issue = s.issue == null ? undefined : text(s.issue, "start.issue");
+  if (issue !== undefined && !ISSUE_ID_RE.test(issue)) throw new ApiError("BAD_REQUEST", "start.issue is an issue id, like PAY-42");
   return {
     program, ...(frame ? { frame } : {}), ...(folder ? { folder } : {}), ...(images?.length ? { images } : {}), ...(prompt ? { prompt } : {}), ...(model ? { model } : {}), ...(mode ? { mode } : {}),
     ...(name ? { name } : {}), ...(resume ? { resume } : {}), ...(supervise ? { supervise } : {}), ...(report === false ? { report } : {}),
+    ...(issue ? { issue } : {}),
   };
 }
 

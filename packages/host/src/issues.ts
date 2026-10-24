@@ -17,7 +17,8 @@ import { writeAgentContext } from "@hivemind/core/agent-context";
 import { ingestRecords } from "@hivemind/core/ingest";
 import { workflowStatuses } from "@hivemind/core/workflow";
 
-type IssueMethod = Extract<Method, `issue.${string}`>;
+/** `issue-start.ts` answers the start-work methods. */
+type IssueMethod = Exclude<Extract<Method, `issue.${string}`>, "issue.checkStart" | "issue.start" | "issue.assignMe">;
 
 const rootOf = (v: unknown) => text(v, "root");
 const idOf = (v: unknown) => text(v, "id");

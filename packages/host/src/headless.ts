@@ -73,6 +73,7 @@ import { answers } from "./answers.js";
 import { PeerLinks, tellGuestOf } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder } from "./needs.js";
 import { agentControl } from "./agent-control.js";
+import { issueStart, issueStartOver, issueTiles } from "./issue-start.js";
 import { StartPlaces } from "./start-places.js";
 import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
@@ -302,6 +303,25 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       return kept;
     },
   });
+  const agentsHere = agentControl({
+    programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
+    core: (repo) => store.getCore(repo),
+    repos: () => store.repos(),
+    machines,
+    places,
+    openFrame: (repo, frame) => { store.addFrame(repo, frame, { writer: "frames" }); },
+    start: (repo, start) => control.start(repo, start),
+    status: (bare) => control.status.get(bare),
+    interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
+    // As the person types: an interrupt key ends the turn in the agent's status too.
+    type: (bare, data) => control.typed(`hm:${bare}`, data),
+    close: (bare) => control.close(bare),
+    folderOf: (bare) => runsIn(heldBoards(store), bare),
+  });
+  const framesHere = framesDomain({
+    store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare),
+    machines: () => [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...devices.list().filter((d) => d.kind !== "phone").map((d) => ({ id: d.device, name: d.name }))],
+  });
   const api: WorkspaceServer = new WorkspaceServer([
     pluginServices.domain(),
     ...workspaceDomains((c) => who(c).name),
@@ -321,10 +341,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       grants: () => grants,
       elsewhere: (method, params) => askDrive(driveSockPath(o.dir), readOrCreateToken(o.dir), method, params),
     }),
-    framesDomain({
-      store: () => store, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare),
-      machines: () => [...savedMachines.list.map((m) => ({ id: m.id, name: m.label })), ...devices.list().filter((d) => d.kind !== "phone").map((d) => ({ id: d.device, name: d.name }))],
-    }),
+    framesHere,
+    // Starting work on an issue: the guard, its worktree frame, an agent on it (design jira-sync §11.1).
+    issueStart({ activeTiles: () => issueTiles(heldBoards(store)), ...issueStartOver(framesHere, agentsHere), services: pluginServices, nameOf: (c) => who(c).name }),
     // A participant's branch, handed off from their machine (M4).
     handOff({ who, place: (repo, tile, name) => { store.addTile(repo, tile, { name }, HANDED_OFF); } }),
     // What an agent here waits on the person for, answered from another of their devices (M5).
@@ -339,21 +358,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     // Agents started, interrupted and closed from another of the person's devices, and what they
     // changed (M5, spec/agents.md).
     places.domain(),
-    agentControl({
-      programs: () => spawnableAgents().filter((d) => !!findBin(d.bin)),
-      core: (repo) => store.getCore(repo),
-      repos: () => store.repos(),
-      machines,
-      places,
-      openFrame: (repo, frame) => { store.addFrame(repo, frame, { writer: "frames" }); },
-      start: (repo, start) => control.start(repo, start),
-      status: (bare) => control.status.get(bare),
-      interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
-      // As the person types: an interrupt key ends the turn in the agent's status too.
-      type: (bare, data) => control.typed(`hm:${bare}`, data),
-      close: (bare) => control.close(bare),
-      folderOf: (bare) => runsIn(heldBoards(store), bare),
-    }),
+    agentsHere,
     // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
     controlApi({
       control: () => control.api(),
