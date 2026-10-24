@@ -49,6 +49,7 @@ import { listToolPackages } from "@hivemind/core/tool-packages";
 import { agentRows, tileRows, type AgentRow, type ToolOf } from "../tile-rows.js";
 import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
 import os from "node:os";
+import { completeCmd } from "./pr.js";
 
 
 /** Who signs Activity rows: an agent's id when run inside a spawned tile,
@@ -831,6 +832,6 @@ export const ctlCmd = defineCommand({
     whoami, agents, tiles, frames, frame, "open-tool": openTool, spawn, sessions, send, keys, read, stream, workflow, approve, approval, report, inbox, "open-review": openReview,
     focus, close, sleep, wake, rename, connect, disconnect, view, plugin, tile,
     "set-state": setState, "add-comment": addComment, "mark-acceptance": markAcceptance,
-    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd,
+    "delete-issue": deleteIssueCmd, "list-workspaces": listWorkspacesCmd, complete: completeCmd,
   },
 });

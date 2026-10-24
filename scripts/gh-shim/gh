@@ -1,0 +1,31 @@
+#!/bin/sh
+# A stand-in for the GitHub CLI, for tests of `hive pr`, `hive ctl complete` and the PR watcher:
+# put this folder first on PATH and point GH_SHIM at a state folder. Each call appends its argv to
+# $GH_SHIM/calls (arguments split by \037, one call per line); answers come from files there:
+#   auth-fail          present → `gh auth status` says it is not signed in
+#   pr-view.json       `gh pr view` prints it (absent → no PR for the branch)
+#   pr-url             the URL `gh pr create` prints (default https://github.com/acme/widgets/pull/7)
+#   create-fail        present → `gh pr create` fails
+#   graphql.json       `gh api graphql` prints it
+# `gh pr create` saves its body (stdin) as $GH_SHIM/body.md.
+state="${GH_SHIM:?GH_SHIM names the shim state folder}"
+for a in "$@"; do printf '%s\037' "$a" >> "$state/calls"; done
+printf '\n' >> "$state/calls"
+case "$1 $2" in
+  "auth status")
+    if [ -e "$state/auth-fail" ]; then echo "You are not logged into any GitHub hosts. To log in, run: gh auth login" >&2; exit 1; fi
+    echo "Logged in to github.com account shim" >&2; exit 0 ;;
+  "pr view")
+    if [ -e "$state/pr-view.json" ]; then cat "$state/pr-view.json"; exit 0; fi
+    echo "no pull requests found for branch \"$3\"" >&2; exit 1 ;;
+  "pr create")
+    cat > "$state/body.md"
+    if [ -e "$state/create-fail" ]; then echo "pull request create failed: GraphQL: something went wrong" >&2; exit 1; fi
+    if [ -e "$state/pr-url" ]; then cat "$state/pr-url"; else echo "https://github.com/acme/widgets/pull/7"; fi
+    exit 0 ;;
+  "api graphql")
+    if [ -e "$state/graphql.json" ]; then cat "$state/graphql.json"; exit 0; fi
+    echo '{"data":{}}'; exit 0 ;;
+esac
+echo "gh shim: no answer for: $*" >&2
+exit 1

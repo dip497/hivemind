@@ -105,6 +105,10 @@ export const PrRefZ = z
     number: z.number().int().positive(),
     url: z.string().url(),
     state: z.enum(["open", "draft", "merged", "closed"]),
+    /** GitHub's review decision, as the PR watcher last saw it (a badge; it never moves the issue). */
+    review: z.enum(["approved", "changes_requested", "review_required"]).optional(),
+    /** The head commit's checks, as the PR watcher last saw them. */
+    checks: z.enum(["passing", "failing", "pending"]).optional(),
   })
   .loose();
 export type PrRef = z.infer<typeof PrRefZ>;
