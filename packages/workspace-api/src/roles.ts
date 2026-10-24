@@ -34,6 +34,12 @@ const LEAST: Record<string, Role> = {
   // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile
   // shows it (M4). Nothing of the host's is changed.
   "git.handOff": "edit",
+  // A tool plugin's service, of its own plugin alone (the host checks its grant's plugin): what
+  // it is set to and its secrets, and the commands it answers (`plugin-services.ts`).
+  "plugin.options": "view",
+  "secret.get": "view",
+  "plugin.serve": "view",
+  "plugin.answer": "view",
   // How the host looks: a guest shows its workspace that way.
   "appearance.get": "view",
   // Being there: where one's pointer is, and what one has selected.

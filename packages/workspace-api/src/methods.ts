@@ -15,7 +15,8 @@ import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
 import type { ClientGrant, NewGrant } from "./grants.js";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
-import type { PluginList, TileLook } from "./plugins.js";
+import type { PluginList, PluginOptions, ServiceAnswer, ServiceCall, TileLook } from "./plugins.js";
+import type { PluginCommand } from "@hivemind/view-sdk/commands";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -206,6 +207,14 @@ export interface WorkspaceMethods {
   /** (0.27) Stop the running plugin `instance` (as `plugin.list` names it): a tool's tile closed, a
    *  widget taken off the board, a view left for the canvas. */
   "plugin.close": (instance: string, plugin?: string) => { closed: string; plugin: string; kind: string };
+  /** (0.34) A tool plugin's service, of its own plugin: what it is set to, and once asked, each
+   *  change after it as `options.changed`. */
+  "plugin.options": () => PluginOptions;
+  /** (0.34) A tool plugin's service: one of its own plugin's `secret` settings (null: not set). */
+  "secret.get": (name: string) => string | null;
+  /** (0.34) The person: set a plugin's secret (null: take it away), by its settings key
+   *  (`tool:@owner/name`): how it is kept, in the system keychain or in a file only they can read. */
+  "secret.set": (key: string, name: string, value: string | null) => { kept: "keychain" | "file" | null };
   /** Bring a tile into view and give it the keyboard. */
   "tile.focus": (tile: string) => null;
   /** (0.32) Bring a tile into view, wait for its plugin to draw, and answer a picture of it with its
@@ -334,6 +343,11 @@ export interface WorkspaceNotices {
   "widget.press": (repo: string, id: string, press: WidgetPress) => void;
   /** What the view of the caller's session `session` posts to its host (P8). */
   "view.post": (session: string, message: PluginMessage, workspace?: string) => void;
+  /** (0.34) A tool plugin's service answers these commands of its own plugin: `hive ctl plugin
+   *  call` runs one there when no window runs the plugin (`plugin.called`). */
+  "plugin.serve": (commands: PluginCommand[]) => void;
+  /** (0.34) A service's answer to the call `call` it was sent. */
+  "plugin.answer": (call: number, answer: ServiceAnswer) => void;
   /** The screen the view of the caller's session `session` is shown on now: its host tells the view
    *  (`resize`, `theme`) what changed (0.14). */
   "view.screen": (session: string, screen: ViewScreen, workspace?: string) => void;
@@ -385,6 +399,10 @@ export interface WorkspaceEvents {
   "widget.runner": (repo: string) => void;
   /** (0.19) To the window that runs `repo`'s widgets: someone pressed the widget `id`. */
   "widget.pressed": (repo: string, id: string, press: WidgetPress) => void;
+  /** (0.34) To a tool plugin's service: run one of the commands it serves, and answer. */
+  "plugin.called": (call: ServiceCall) => void;
+  /** (0.34) To a tool plugin's service that read its options: the person changed them. */
+  "options.changed": (options: PluginOptions) => void;
   /** (0.17) The host's look changed (`appearance.get`). */
   "appearance.changed": (appearance: Appearance) => void;
   /** Someone asks to join `repo`: to its owner's clients, the first answer counting (M3). */

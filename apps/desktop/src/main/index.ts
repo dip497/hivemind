@@ -6,7 +6,10 @@ import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/pl
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
-import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
+import { installToolPackageIpc, handleToolProtocol, listTools, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
+import { appSecrets, installSecretsIpc } from "./secrets.js";
+import { PluginServices, optionsOf } from "@hivemind/host/plugin-services";
+import { pluginKey } from "@hivemind/core/plugin-settings";
 import { installServicesIpc, startServices, stopServices } from "./services.js";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { actionsFor } from "../shared/keymap.js";
@@ -1062,6 +1065,7 @@ const control: ControlPlane = new ControlPlane({
   methods: () => ({
     reported: (tile, message) => agentFeed()?.report(toBareId(tile), message),
     callRenderer: hcpCallRenderer,
+    services: pluginServices,
     captureWindow: async (rect) => {
       const win = userWindow();
       if (!win) throw new ApiError("UNAVAILABLE", "hivemind window not open");
@@ -1345,7 +1349,17 @@ const placesHere = new StartPlaces({
   photos: () => path.join(app.getPath("userData"), "photos"),
 });
 const widgetDomain = widgets(() => workspaceServer, widgetAsset, listWidgets, (repo) => workspaceStore().getObjects(repo));
+// What a tool plugin's service asks of its own plugin (its options, its secrets), and the commands
+// it answers when no window runs the plugin.
+const pluginServices = new PluginServices({
+  pluginOfGrant: (id) => grants().list().find((g) => g.id === id)?.plugin,
+  options: async (plugin) => optionsOf(plugin, (await listTools()).find((p) => p.id === plugin)?.settings ?? [], getAppSettings().plugins.state, appSecrets().names(pluginKey("tool", plugin))),
+  secret: (plugin, name) => appSecrets().get(pluginKey("tool", plugin), name),
+  setSecret: (key, name, value) => appSecrets().set(key, name, value),
+});
+onSettingsChange(() => void pluginServices.settingsChanged());
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
+  pluginServices.domain(),
   ...workspaceDomains((c) => whoIs(c).name),
   layouts.domain,
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
@@ -1636,6 +1650,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installPluginSwitchIpc();
     installPackagesIpc();
     installServicesIpc();
+    installSecretsIpc(() => void pluginServices.settingsChanged());
     installPluginCatalogIpc();
     installQuitIpc({
       agent: (s) => !!agentForCmd(s.cmd) || control.agentOf.has(toBareId(s.id)),

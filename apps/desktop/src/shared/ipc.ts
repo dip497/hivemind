@@ -425,6 +425,9 @@ export interface HiveIpc {
   serviceLog(plugin: string): Promise<string>;
   /** A service started, stopped or is starting again. */
   onServicesChanged(cb: () => void): () => void;
+  /** Set (null: take away) a tool plugin's `secret` setting: kept in the system keychain, or in a
+   *  file only the person reads where there is none. The value never comes back to a window. */
+  setPluginSecret(plugin: string, field: string, value: string | null): Promise<{ kept: "keychain" | "file" | null }>;
   /** Ids of installed agents whose manifest differs from the one the catalog lists. */
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
