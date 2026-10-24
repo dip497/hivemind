@@ -110,7 +110,8 @@ export const BoardZ = z.object({
   name: z.string(),
   type: z.enum(["scrum", "kanban", "simple"]),
   projectKey: z.string(),
-  filter: z.object({ id: Id, jql: z.string() }),
+  /** `shared: false` = the filter isn't shared with myself: GET filter/{id} refuses it (design §6.1). */
+  filter: z.object({ id: Id, jql: z.string(), shared: z.boolean().default(true) }),
   /** Kanban only: the board's sub-filter (hides done work after N days by default). */
   subQuery: z.string().optional(),
   columns: z.array(z.object({ name: z.string(), statuses: z.array(Id), min: z.number().optional(), max: z.number().optional() })).min(1),

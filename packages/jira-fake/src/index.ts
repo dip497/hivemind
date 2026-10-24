@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { SiteZ, type Site } from "./site.js";
 
 export * from "./site.js";
+export { createFakeJira, type FakeJira, type FakeJiraCredentials, type FakeJiraOptions, type JiraReply, type LoggedRequest, type WriteWindow } from "./server.js";
+export { createFakeRovoMcp, type FakeRovoMcp, type FakeRovoMcpOAuth, type FakeRovoMcpOptions, type McpLoggedRequest, type RegisteredClient } from "./mcp-server.js";
+export { ROVO } from "./mcp-tools.js";
 
 export const FIXTURES_DIR = join(import.meta.dirname, "..", "fixtures");
 
