@@ -617,15 +617,20 @@ function summarize(p: string, raw: string): Pick<ScannedFile, "summary" | "alias
   };
 }
 
+/** Whether a listing shows an issue: an archived mirrored issue is hidden (design jira-sync §5.3,
+ *  §7.1) unless asked for, or unless it has local work here — a branch or a PR. */
+const listed = (i: IssueSummary, archived = false): boolean => archived || !i.external?.archived || !!i.branch || !!i.pr;
+
 /**
  * Frontmatter-only summaries of every issue, local (`issues/`) and mirrored (`mirror/`). Used by
- * `list` and by chokidar-fed UI queries. An unchanged file gives back the same summary object as
- * last time, so treat them as read-only.
+ * `list` and by chokidar-fed UI queries. Archived mirrored issues are left out unless
+ * `archived: true` (they still read by id). An unchanged file gives back the same summary object
+ * as last time, so treat them as read-only.
  */
-export async function listIssues(root: string): Promise<IssueSummary[]> {
+export async function listIssues(root: string, opts: { archived?: boolean } = {}): Promise<IssueSummary[]> {
   await ensureWorkspaceCurrent(root);
   const out: IssueSummary[] = [];
-  for (const e of (await scanIssueFiles(root)).values()) if (e.summary) out.push(e.summary);
+  for (const e of (await scanIssueFiles(root)).values()) if (e.summary && listed(e.summary, opts.archived)) out.push(e.summary);
   // Stable ID-major-first sort.
   out.sort((a, b) => compareIds(a.id, b.id));
   return out;

@@ -93,6 +93,20 @@ describe("mirrored issues are issues", () => {
   });
 });
 
+describe("archived mirrored issues", () => {
+  test("are left out of listings unless asked for, or unless they have local work; they still read by id", async () => {
+    const root = await mkRoot();
+    const archived = ["  archived:", "    reason: left scope", "    at: '2026-10-23T00:00:00.000Z'"];
+    await mirrorFile(root, "jira-acme-PAY", "PAY-1");
+    await mirrorFile(root, "jira-acme-PAY", "PAY-2", archived);
+    await mirrorFile(root, "jira-acme-PAY", "PAY-3", [...archived, "branch: PAY-3-work"]);
+    await mirrorFile(root, "jira-acme-PAY", "PAY-4", [...archived, "pr:", "  repo: acme/payments", "  number: 7", "  url: https://github.com/acme/payments/pull/7", "  state: open"]);
+    expect((await listIssues(root)).map((i) => i.id)).toEqual(["PAY-1", "PAY-3", "PAY-4"]);
+    expect((await listIssues(root, { archived: true })).map((i) => i.id)).toEqual(["PAY-1", "PAY-2", "PAY-3", "PAY-4"]);
+    expect((await readIssue(root, "PAY-2")).external?.archived?.reason).toBe("left scope");
+  });
+});
+
 describe("listIssues cache", () => {
   test("a file edited in place is read again, even at the same size", async () => {
     const root = await mkRoot();

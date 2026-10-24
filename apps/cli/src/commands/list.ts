@@ -10,6 +10,7 @@ export const listCmd = defineCommand({
     assignee: { type: "string", description: "Filter by assignee id" },
     label: { type: "string", description: "Filter by label" },
     parent: { type: "string", description: "Filter by parent (use 'none' for top-level)" },
+    archived: { type: "boolean", description: "Also list mirrored issues archived because they left scope or can't be read" },
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -19,7 +20,7 @@ export const listCmd = defineCommand({
       const parentId = args.parent ? stripAt(String(args.parent)) : "";
       const byId = parentId && parentId !== "none" && parentId !== "null";
       const root = byId ? await rootForIdHere(parentId) : await requireRoot();
-      const all = await listIssues(root);
+      const all = await listIssues(root, { archived: !!args.archived });
 
       const filter: {
         state?: ReturnType<typeof parseState>[];
