@@ -60,8 +60,7 @@ import { FileTree, clampFilesW, type FileRow } from "./code/FileTree";
 import { BranchPicker } from "./code/BranchPicker";
 import { collectChanges, collectMatches, hashNum } from "./code/diff-search";
 import {
-  PIERRE_CSS_VARS,
-  PIERRE_THEME,
+  PIERRE_OPTIONS,
   workerHighlighterOptions,
   workerPoolOptions,
 } from "./pierre-codeview";
@@ -518,7 +517,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const themeMode = useThemeField("mode");
   const options: CodeViewOptions<ReviewComment, undefined> = useMemo(
     () => ({
-      theme: PIERRE_THEME,
+      ...PIERRE_OPTIONS,
       themeType: themeMode,
       diffStyle: layout,
       overflow,
@@ -718,10 +717,14 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     },
   ];
 
+  // The diff's size, on the tile and on its fullscreen body (portalled out of the tile): every other
+  // part of a diff's look is one rule on Pierre's host (styles.css, `diffs-container`).
+  const diffFont = { "--hm-diff-font-size": `${font.size}px` } as React.CSSProperties;
+
   return (
     <div
       className="hm-glass-surface flex flex-col h-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl overflow-hidden"
-      style={{ ...PIERRE_CSS_VARS, "--diffs-font-size": `${font.size}px` } as React.CSSProperties}
+      style={diffFont}
       onKeyDownCapture={(e) => {
         handleFontKey(e, font);
         // n / p (or j / k) step through changes — but not while typing in the
@@ -1251,7 +1254,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             hostRef={overlayHostRef}
             onClose={() => setOverlay(false)}
           >
-            <div className="h-full w-full flex flex-col overflow-hidden">{diffBody}</div>
+            <div className="h-full w-full flex flex-col overflow-hidden" style={diffFont}>{diffBody}</div>
           </FullscreenShell>
         ) : diffBody;
        })()}

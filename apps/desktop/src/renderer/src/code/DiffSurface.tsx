@@ -13,7 +13,7 @@ import { CodeView } from "@pierre/diffs/react";
 import type { CodeViewItem } from "@pierre/diffs";
 import { Button } from "../components/ui/button";
 import { useThemeField } from "../theme-store";
-import { PIERRE_THEME } from "../pierre-codeview";
+import { PIERRE_OPTIONS } from "../pierre-codeview";
 
 const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
 
@@ -81,7 +81,7 @@ export function DiffSurface({
           <CodeView
             className="h-full w-full overflow-y-auto"
             items={items}
-            options={{ theme: PIERRE_THEME, themeType: mode, overflow: "scroll" }}
+            options={{ ...PIERRE_OPTIONS, themeType: mode, overflow: "scroll" }}
           />
         )}
       </div>

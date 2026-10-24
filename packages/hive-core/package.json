@@ -25,6 +25,7 @@
     "./theme-apply": "./src/theme-apply.ts",
     "./notification-settings": "./src/notification-settings.ts",
     "./css-color": "./src/css-color.ts",
+    "./diff-colours": "./src/diff-colours.ts",
     "./settings": "./src/settings.ts",
     "./packages": "./src/packages.ts",
     "./installed-packages": "./src/installed-packages.ts",

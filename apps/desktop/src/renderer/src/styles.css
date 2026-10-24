@@ -215,18 +215,9 @@
   --color-bracket-match: color-mix(in oklab, var(--color-brand) 25%, transparent);
   --color-grid-dot: oklch(0.70 0.012 260 / 0.10);
 
-  /* Syntax colours, for the editor and a diff (pierre-codeview.ts), drawn on a preset's bg2. Each
-     keeps its hue at OKLCH L 0.82, so it reads at 4.5:1 on every dark preset's bg2 and on a diff's
-     changed row and word (tests/unit/diff-contrast.test.ts). A comment is fg2 lifted toward fg:
-     fg2 alone reads 4.0:1 on Solarized Dark's added row. */
-  --color-syntax-keyword: #d6b1ff;
-  --color-syntax-string: #51e57c;
-  --color-syntax-number: #feb251;
-  --color-syntax-function: #9cc7ff;
-  --color-syntax-type: #50dec9;
-  --color-syntax-property: #99c8fe;
-  --color-syntax-tag: #fea4cf;
-  --color-syntax-comment: color-mix(in lab, var(--color-fg2) 70%, var(--color-fg));
+  /* The syntax colours (--color-syntax-*) and a diff's (--color-diff-*) are worked out from the
+     palette by @hivemind/core/diff-colours and painted by theme-store, so each reads on the look's
+     own bg2 and on a diff's changed rows, a theme's too. */
 }
 
 @layer base {
@@ -524,15 +515,6 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --hm-highlight-glass: inset 0 0 0 0 transparent;
   --color-grid-dot: oklch(0.35 0.012 260 / 0.16);
   --color-scrim: oklch(0.2 0.01 260 / 0.35);
-  /* Syntax at L 0.45: 4.5:1 on the light bg2 and on a diff's changed row and word. */
-  --color-syntax-keyword: #6f16b8;
-  --color-syntax-string: #04663c;
-  --color-syntax-number: #7b4702;
-  --color-syntax-function: #064abb;
-  --color-syntax-type: #015f77;
-  --color-syntax-property: #0d4eb2;
-  --color-syntax-tag: #9a035d;
-  --color-syntax-comment: var(--color-fg2);
   /* Issue states, labels and people's initials, drawn dark on the light page: 4.5:1 on Clean
      Light's bg, bg2 and bg3, and a label's text on its chip in every hue. */
   --color-state-backlog:   oklch(0.52 0.013 231.77);
@@ -546,15 +528,6 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --color-label-edge: oklch(0.80 0.04 0 / 0.5);
   --color-label-dot:  oklch(0.60 0.15 0);
   --color-person:     oklch(0.48 0.13 0);
-  /* A diff on the light page: ok and err darkened to L 0.5 at most, its rows tinted with them at
-     L 0.6 (Pierre mixes 12% of it into the page), a changed word at 20% over that. */
-  --color-diff-added:   oklch(from var(--color-ok) min(l, 0.5) c h);
-  --color-diff-removed: oklch(from var(--color-err) min(l, 0.5) c h);
-  --color-diff-added-tint:   oklch(from var(--color-ok) 0.6 c h);
-  --color-diff-removed-tint: oklch(from var(--color-err) 0.6 c h);
-  --color-diff-changed-tint: oklch(from var(--color-brand) 0.6 c h);
-  --color-diff-added-word:   oklch(from var(--color-ok) 0.6 c h / 0.2);
-  --color-diff-removed-word: oklch(from var(--color-err) 0.6 c h / 0.2);
 }
 :focus-visible {
   outline: 2px solid var(--color-focus);
@@ -958,20 +931,6 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --color-label-edge: oklch(0.34 0.03 0 / 0.4);
   --color-label-dot:  oklch(0.72 0.15 0);
   --color-person:     oklch(0.78 0.13 0);
-  /* A diff (pierre-codeview.ts), on the preset's bg2. Added and removed are the palette's ok and
-     err, its +N and −N counts and changed line numbers drawn in them; a preset's err is drawn for a
-     status mark, not for text, so each is lifted to L 0.72 at least (Nord's err reads 3.2:1 on its
-     bg2 as it is, 4.8:1 lifted). A changed row is tinted with them at L 0.5, which Pierre mixes 20%
-     into the page, and a changed word takes 25% more: a bright green (Dracula's, L 0.88) tints a
-     row no lighter than a dim one, so the syntax on it still reads at 4.5:1. The light page has its
-     own (:root[data-theme-mode="light"]); tests/unit/diff-contrast.test.ts holds every preset. */
-  --color-diff-added:   oklch(from var(--color-ok) max(l, 0.74) c h);
-  --color-diff-removed: oklch(from var(--color-err) max(l, 0.74) c h);
-  --color-diff-added-tint:   oklch(from var(--color-ok) 0.5 c h);
-  --color-diff-removed-tint: oklch(from var(--color-err) 0.5 c h);
-  --color-diff-changed-tint: oklch(from var(--color-brand) 0.5 c h);
-  --color-diff-added-word:   oklch(from var(--color-ok) 0.5 c h / 0.25);
-  --color-diff-removed-word: oklch(from var(--color-err) 0.5 c h / 0.25);
 }
 
 /* The master switch. Recolor the panel TOKENS to translucent variants of the
@@ -989,8 +948,9 @@ html.glass-on {
    tile draws and wash text out over a busy wallpaper. How see-through a tile's content
    is belongs to "Frost tool content" alone — html.content-glass sets those backgrounds
    explicitly, from the surface source at --content-opacity. Scoped to the tile surface,
-   so a pinned or docked tile gets it too. */
-html.glass-on .hm-tile-surface {
+   so a pinned or docked tile gets it too, and to the fullscreen panel that stands for a tile. */
+html.glass-on .hm-tile-surface,
+html.glass-on .hm-term-fs-panel {
   --color-bg2: var(--surface-2);
   --color-bg3: var(--surface-3);
   --color-bg4: var(--surface-4);
@@ -1111,6 +1071,41 @@ html.content-glass .cm-editor,
 html.content-glass .cm-editor .cm-scroller,
 html.content-glass .cm-gutters {
   background-color: transparent !important;
+}
+/* Every diff (Pierre's `diffs-container`, wherever it mounts: a tile, fullscreen, a tool) takes the
+   app's type and the diff's colours (theme-store paints them from @hivemind/core/diff-colours).
+   Pierre mixes each row's tint into the page itself (20% dark, 12% light), and a changed word's
+   highlight over it; a removed line's hatched bar keeps Pierre's own dark stripe (PIERRE_OPTIONS
+   in pierre-codeview.ts). The Diff tile sets its own size (--hm-diff-font-size). */
+diffs-container {
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: var(--hm-diff-font-size, var(--text-body));
+  --diffs-line-height: 1.6;
+  --diffs-tab-size: 2;
+  --diffs-min-number-column-width: 3ch;
+  --diffs-header-font-family: var(--font-sans);
+  --diffs-gap-inline: 8px;
+  --diffs-gap-block: 8px;
+  /* Solid: Pierre sets the +N/−N, the bars and the changed line numbers in them. */
+  --diffs-addition-color-override: var(--color-diff-added);
+  --diffs-deletion-color-override: var(--color-diff-removed);
+  --diffs-modified-color-override: var(--color-diff-changed);
+  --diffs-fg-number-override: var(--color-diff-number);
+  --diffs-bg-addition-override: var(--color-diff-added-tint);
+  --diffs-bg-addition-number-override: var(--color-diff-added-tint);
+  --diffs-bg-deletion-override: var(--color-diff-removed-tint);
+  --diffs-bg-deletion-number-override: var(--color-diff-removed-tint);
+  --diffs-bg-addition-emphasis-override: var(--color-diff-added-word);
+  --diffs-bg-deletion-emphasis-override: var(--color-diff-removed-word);
+  --conflict-bg-current-override: var(--color-diff-added-tint);
+  --conflict-bg-current-number-override: var(--color-diff-added-tint);
+  --conflict-bg-current-header-override: var(--color-diff-added-tint);
+  --conflict-bg-incoming-override: var(--color-diff-changed-tint);
+  --conflict-bg-incoming-number-override: var(--color-diff-changed-tint);
+  --conflict-bg-incoming-header-override: var(--color-diff-changed-tint);
+  /* A selected line: the accent, which is the person's, not a signal. */
+  --diffs-bg-selection-override: color-mix(in srgb, var(--color-brand) 22%, transparent);
+  --diffs-bg-selection-number-override: color-mix(in srgb, var(--color-brand) 34%, transparent);
 }
 /* A diff's page (every Pierre surface, `diffs-container`) is the preset's bg2, through the theme in
    pierre-codeview.ts, which reads it as `--diffs-background`. Glass on the content clears it, so the

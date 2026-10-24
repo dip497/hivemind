@@ -13,7 +13,7 @@ import type { ViewClient } from "@hivemind/view-sdk";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import * as ui from "../plugin-ui";
-import { PIERRE_CSS_VARS, PIERRE_THEME, workerHighlighterOptions, workerPoolOptions } from "../pierre-codeview";
+import { PIERRE_OPTIONS, workerHighlighterOptions, workerPoolOptions } from "../pierre-codeview";
 import type { HostModuleName } from "../../../shared/plugin-host";
 import { useThemeField } from "../theme-store";
 
@@ -35,8 +35,8 @@ function PatchView({ patch, className }: { patch: string; className?: string }) 
   if (!items.length) return <div className={className}>No changes.</div>;
   return (
     <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
-      <CodeView className={className ?? "h-full w-full overflow-y-auto"} items={items} style={PIERRE_CSS_VARS}
-        options={{ theme: PIERRE_THEME, themeType: mode, overflow: "scroll" }} />
+      <CodeView className={className ?? "h-full w-full overflow-y-auto"} items={items}
+        options={{ ...PIERRE_OPTIONS, themeType: mode, overflow: "scroll" }} />
     </WorkerPoolContextProvider>
   );
 }

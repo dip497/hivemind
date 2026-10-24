@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { seedAgents } from "./helpers/agents";
+import { near as nearDrawn, readDiff } from "./helpers/diff";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-tool-plugins-"));
 const xdg = path.join(root, "config");
@@ -138,6 +139,20 @@ test("the app's diff view in a tool draws on the preset's page, its changes in t
     expect(contrast(d.added, d.ground!), `+N on ${id}`).toBeGreaterThanOrEqual(4.5);
     expect(contrast(d.removed, d.ground!), `−N on ${id}`).toBeGreaterThanOrEqual(4.5);
     expect(d.code).toBe(d.mono);
+    // What Pierre draws is what the colours were worked out for: an added row is the page mixed
+    // with the added tint, and the fixture's `// it leaks` is in the comment colour.
+    // Polled: the highlighting comes from a worker after the lines are drawn.
+    const wired = async () => {
+      const r = await readDiff(tile());
+      if (!r) return "not drawn";
+      if (!nearDrawn(r.addedRow, r.addedRowWant)) return `an added row ${r.addedRow} for ${r.addedRowWant}`;
+      if (!nearDrawn(r.comment, r.commentWant)) return `a comment ${r.comment} for ${r.commentWant}`;
+      // A removed line's bar stays hatched: its dark stripe is the page with some of the removed
+      // colour, not the removed row's tint, which sat next to the bright stripe.
+      if (!nearDrawn(r.darkStripe, r.darkStripeWant)) return `a removed bar's dark stripe ${r.darkStripe} for ${r.darkStripeWant}`;
+      return "as worked out";
+    };
+    await expect.poll(wired, { message: `what the diff draws on ${id}`, timeout: 15_000 }).toBe("as worked out");
   };
   // Glass off, so the page is opaque and the counts' contrast is what is drawn. Put back however
   // this ends: the tests after it share the app.

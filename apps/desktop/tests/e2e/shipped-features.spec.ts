@@ -5,6 +5,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { launchWindow, type AppWindow } from "./helpers/window";
 import { reveal } from "./helpers/canvas";
+import { near, readDiff } from "./helpers/diff";
 import { execSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -78,6 +79,22 @@ test("diff tile renders per-file headers with +/- counts and review controls", a
   // off-screen file out of the DOM, so assert the count chip, not its header).
   const chrome = await page.evaluate(() => document.querySelector(".react-flow__node-workbench")?.textContent || "");
   expect(chrome).toMatch(/2f/);
+});
+
+test("a fullscreen diff keeps the tile's page and its changed rows' tints", async () => {
+  // Fullscreen draws the diff in a panel portalled out of the tile, where nothing the tile set
+  // reaches it; with glass on (the default), the panel is the tile's opaque bg2 too.
+  await openDiff();
+  // Its button shows on hover in the Code tile's bar.
+  await page.getByRole("button", { name: "fullscreen diff" }).first().dispatchEvent("click");
+  const panel = page.locator(".hm-term-fs-panel");
+  await expect.poll(() => readDiff(panel), { timeout: 12_000 }).not.toBeNull();
+  const d = (await readDiff(panel))!;
+  expect(d.bg2[3], "the panel's bg2 is opaque, as a tile's is").toBe(255);
+  expect(near(d.page, d.bg2, 1), `the page ${d.page} is bg2 ${d.bg2}`).toBe(true);
+  expect(near(d.addedRow, d.addedRowWant), `an added row ${d.addedRow} for ${d.addedRowWant}`).toBe(true);
+  await page.getByTitle("Leave fullscreen").dispatchEvent("click");
+  await expect(panel).toHaveCount(0);
 });
 
 test("in-diff search finds line matches and navigates", async () => {

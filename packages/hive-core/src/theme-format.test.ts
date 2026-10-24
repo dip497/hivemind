@@ -118,7 +118,8 @@ describe("contrast", () => {
   // thumb (ringed in bg2), the selected tile's handle. Each surface white in turn, the other black,
   // where #949494 and #959595 both read: only the white one holds the accent to 3:1.
   test.each([
-    ["on the page (bg)", { bg2: "#000000", fg: "#767676" }, /accent.brand on bg is 2.99:1/],
+    // bg3 black with bg2: a diff's +N/−N sit on both, and nothing reads on black and white at once.
+    ["on the page (bg)", { bg2: "#000000", bg3: "#000000", fg: "#767676" }, /accent.brand on bg is 2.99:1/],
     ["on the panels and menus (bg2)", { bg: "#000000", fg: "#767676", fg2: "#949494" }, /accent.brand on bg2 is 2.99:1/],
   ])("an accent at 3:1 %s passes; a step below is refused, naming the surface", (_on, palette, why) => {
     expect(contrastRatio("#949494", "#ffffff")!).toBeGreaterThanOrEqual(3);

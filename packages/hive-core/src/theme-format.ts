@@ -10,6 +10,7 @@
  * a theme naming one is refused here, so an author learns it does nothing yet.
  */
 import { contrastRatio, cssColorToOklab, parseCssColor } from "./css-color.js";
+import { diffContrastProblem } from "./diff-colours.js";
 import { FAMILY_RE, MAX_FACE_FILES, STYLE_RE, WEIGHT_RE, accentOf, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
 import { ACCENTS, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
 
@@ -217,6 +218,8 @@ function themeOf(raw: unknown, files: readonly ThemeFolderFile[]): Theme {
   const palette = Object.fromEntries(PALETTE_KEYS.map((k) => [k, opaque(palIn[k], `palette.${k}`)])) as Palette;
   const low = contrastProblem(palette);
   if (low) refuse(`palette: ${low}`);
+  const diff = diffContrastProblem(palette, raw.mode as Theme["mode"]);
+  if (diff) refuse(`palette: ${diff}`);
   const accent = accentOfTheme(raw.accent, palette);
   let radius: number | undefined;
   if (raw.radius !== undefined) {
