@@ -15,10 +15,10 @@
  */
 import { useSyncExternalStore } from "react";
 import {
-  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, guestTheme, nestAppearance, presetPatch,
+  ACCENTS, ANCHORS, PALETTE_KEYS, WALLPAPERS, flattenAppearance, getPath, guestTheme, nestAppearance,
   type AccentId, type Appearance, type FlatTheme, type MediaAnchor, type MediaFit, type MediaLayer, type ThemePreset, type WallpaperId,
 } from "@hivemind/core/settings-schema";
-import { accentOf, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
+import { accentOf, presetPaths, withPreset, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
 import { contrastRatio } from "@hivemind/core/css-color";
 import { getSettings, patchSettingsMany, subscribeSettings } from "./settings-store";
 
@@ -233,8 +233,13 @@ export function setTheme(patch: Partial<ThemeState>): void {
 
 /** Choose a preset for the person's own theme (what is shown may be a host's). */
 export function choosePreset(p: ThemePreset): void {
-  // A preset's accent is its id: a custom accent would win over it. A theme left behind is forgotten.
-  setTheme({ ...presetPatch(p, own), accentCustom: undefined, ...(own.themeId ? { themeId: undefined } : {}) });
+  // What `hive theme use` writes, path for path (`presetPaths`), each whether or not it reads as
+  // changed here: an accent or mode a newer build wrote reads as the default, and the preset
+  // replaces it. A preset's accent is its id, so the custom accent goes; a theme left behind is
+  // forgotten. The settings' change repaints the person's own theme.
+  const cur = getSettings();
+  const next = withPreset(cur, p);
+  patchSettingsMany(presetPaths(p, cur.appearance).map((path) => ({ path, value: getPath(next, path) })));
 }
 
 /** Paint with any colour as the accent, kept in `appearanceExtra.accent`; null goes back to the

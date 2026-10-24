@@ -306,16 +306,6 @@ export function applyPreset(a: Appearance, preset: ThemePreset): Appearance {
   };
 }
 
-/** What choosing a preset changes in the flat theme `cur`, as a patch. */
-export function presetPatch(preset: ThemePreset, cur: FlatTheme): Partial<FlatTheme> {
-  const l = lookAfter({ glass: cur.glass, wallpaper: cur.wallpaper, radius: cur.radius }, cur.lookBefore, cur.preset, preset);
-  return {
-    preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent,
-    terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] },
-    glass: l.glass, wallpaper: l.wallpaper, radius: l.radius, lookBefore: l.before,
-  };
-}
-
 /** xterm `ITheme` for an appearance. Key order matches the pre-2.0 literal
  *  (the golden test compares them deeply). */
 export function terminalThemeFor(t: TerminalPalette): Record<string, string> {
@@ -640,15 +630,34 @@ export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: st
   };
 }
 
+/** The look in a theme file: a bare appearance, or a whole settings.json's `appearance`. */
+const themeFileOf = (raw: unknown): Record<string, unknown> => {
+  const file = isObj(raw) && isObj(raw.appearance) ? raw.appearance : raw;
+  return isObj(file) ? file : {};
+};
+
+/** The keys of the appearance a theme file names, the only ones `importAppearance` reads. */
+export function themeKeysIn(raw: unknown): string[] {
+  return Object.keys(themeFileOf(raw)).filter((k) => THEME_KEYS.has(k));
+}
+
+/** What importing the theme file `raw` writes, by dotted path, for every writer of an import
+ *  (`hive theme import`, the app's Import): each key it names, and the memory of the look before,
+ *  which an import forgets. Every other key of the appearance stays as the file has it, a newer
+ *  build's wallpaper, corners or layers included. */
+export function themeImportPaths(raw: unknown): string[] {
+  return [...themeKeysIn(raw), "lookBefore"].map((k) => `appearance.${k}`);
+}
+
 /** A theme file applied over the person's own appearance `cur`: a bare appearance, or a whole
  *  settings.json (its `appearance`). Only the keys this build knows are read from it, checked as
  *  settings are. What it leaves out is kept as `cur` has it, the
  *  media too, so a file of `exportAppearance` never removes yours. A file that sets none of them
  *  (a package.json picked by mistake) is not a theme: it throws, and nothing changes. */
 export function importAppearance(raw: unknown, cur: Appearance): Appearance {
-  const file = isObj(raw) && isObj(raw.appearance) ? raw.appearance : raw;
+  const file = themeFileOf(raw);
   // Anything else in the file (a settings.json's `v` and `views`, a package.json's `name`) is not the look.
-  const p = isObj(file) ? Object.fromEntries(Object.entries(file).filter(([k]) => THEME_KEYS.has(k))) : {};
+  const p = Object.fromEntries(themeKeysIn(raw).map((k) => [k, file[k]]));
   if (Object.keys(p).length === 0) throw new Error(`not a hivemind theme: it sets none of ${[...THEME_KEYS].join(", ")}`);
   const a = mergeAppearance(p, cur);
   const w = isObj(p.wallpaper) ? p.wallpaper : {};
@@ -689,10 +698,11 @@ const ANY_FIELD = Symbol("any field id");
 /** The maps whose keys are ids (a view's, a plugin's): any key in one that such an id can be is a
  *  setting, and below it what one entry holds. Merging drops any other, so it would be set to
  *  nothing. */
+// Each entry names every key of its type (`satisfies`), so a key added to the type is settable here.
 const ID_MAPS = new Map<string, { test(id: string): boolean; what: string; entry: Record<string, unknown> }>([
-  ["views.chrome", { ...VIEW_ID, entry: { island: "top" } }],
-  ["views.toolbars", { ...VIEW_ID, entry: { actions: [], labels: true } }],
-  ["plugins.state", { test: isPluginKey, what: "a plugin's key (kind:id, such as agent:claude)", entry: { enabled: true, options: ANY_FIELD, workspaces: [] } }],
+  ["views.chrome", { ...VIEW_ID, entry: { island: "top" } satisfies Record<keyof Required<ViewsSettings["chrome"][string]>, unknown> }],
+  ["views.toolbars", { ...VIEW_ID, entry: { actions: [], labels: true } satisfies Record<keyof Required<ToolbarPreferences>, unknown> }],
+  ["plugins.state", { test: isPluginKey, what: "a plugin's key (kind:id, such as agent:claude)", entry: { enabled: true, options: ANY_FIELD, workspaces: [] } satisfies Record<keyof Required<PluginState>, unknown> }],
 ]);
 
 /** Sections whose parts are absent until set (`appearanceExtra.accent`). */
@@ -904,19 +914,20 @@ export function nestAppearance(f: FlatTheme): Appearance {
 
 export function getPath(obj: unknown, path: string): unknown {
   let o: unknown = obj;
-  for (const k of path.split(".").filter(Boolean)) { if (!isObj(o) && !Array.isArray(o)) return undefined; o = (o as Record<string, unknown>)[k]; }
+  // Own keys only: an inherited `constructor` is not a setting.
+  for (const k of path.split(".").filter(Boolean)) { if ((!isObj(o) && !Array.isArray(o)) || !Object.hasOwn(o, k)) return undefined; o = (o as Record<string, unknown>)[k]; }
   return o;
 }
 
-/** Immutable set at a dotted path; refuses prototype keys. */
+/** Immutable set at a dotted path; refuses `__proto__`, the one key that is not data. */
 export function setPath<T>(obj: T, path: string, value: unknown): T {
   const keys = path.split(".").filter(Boolean);
   if (keys.length === 0) return obj;
-  if (keys.some((k) => k === "__proto__" || k === "constructor" || k === "prototype")) throw new Error(`refusing to set "${path}"`);
+  if (keys.includes("__proto__")) throw new Error(`refusing to set "${path}"`);
   const rec = (o: unknown, i: number): unknown => {
     const k = keys[i]!;
     const base = isObj(o) ? { ...o } : {};
-    base[k] = i === keys.length - 1 ? value : rec(isObj(o) ? o[k] : undefined, i + 1);
+    base[k] = i === keys.length - 1 ? value : rec(isObj(o) && Object.hasOwn(o, k) ? o[k] : undefined, i + 1);
     return base;
   };
   return rec(obj, 0) as T;

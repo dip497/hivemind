@@ -138,4 +138,26 @@ describe("hive config / hive theme", () => {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   }, 30_000);
+  test("theme use and import on a newer build's look: a preset replaces the accent and mode it does not know, an import writes only what its file names", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-theme-newer-"));
+    const env = { XDG_CONFIG_HOME: tmp, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(tmp, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(tmp, "no-drive.sock") };
+    const file = path.join(tmp, "hivemind", "settings.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const layers = [{ id: "l1", url: "hive-media://a.png", kind: "lottie", opacity: 0.5, fit: "cover", size: 1, anchor: "center", blend: "screen" }];
+    const newer = { v: 2, appearance: { preset: "harbour", mode: "dim", accent: "saffron", wallpaper: { kind: "aurora-2", brightness: 0.7 }, radius: 40, overlayMedia: layers }, appearanceExtra: { accent: { brand: "#ff5500", accent: "#ff7700" } } };
+    try {
+      fs.writeFileSync(file, JSON.stringify(newer));
+      const palette = path.join(tmp, "palette.json");
+      fs.writeFileSync(palette, JSON.stringify({ palette: { bg: "#000000" } }));
+      expect(hive(["theme", "import", palette], { cwd: tmp, env }).code).toBe(0);
+      let a = JSON.parse(fs.readFileSync(file, "utf8")).appearance;
+      expect([a.palette.bg, a.mode, a.accent, a.wallpaper, a.radius, a.overlayMedia]).toEqual(["#000000", "dim", "saffron", newer.appearance.wallpaper, 40, layers]);
+      expect(hive(["theme", "use", "clean"], { cwd: tmp, env }).code).toBe(0);
+      const s = JSON.parse(fs.readFileSync(file, "utf8"));
+      a = s.appearance;
+      expect([a.preset, a.mode, a.accent, a.wallpaper.kind, a.glass.enabled, a.radius, s.appearanceExtra]).toEqual(["clean", "dark", "graphite", "none", false, 40, {}]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

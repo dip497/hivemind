@@ -21,8 +21,8 @@ import { ChevronDown } from "./components/icons";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import { getSettings, patchSettings } from "./settings-store";
-import { exportAppearance, importAppearance } from "@hivemind/core/settings-schema";
+import { getSettings, patchSettingsMany } from "./settings-store";
+import { exportAppearance, getPath, importAppearance, themeImportPaths } from "@hivemind/core/settings-schema";
 import { setTheme, useTheme } from "./theme-store";
 import {
   AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, ShapeAndTypeControls, TerminalColors,
@@ -57,7 +57,9 @@ function AppearancePrefs() {
       const raw: unknown = JSON.parse(await f.text());
       // A theme file or a whole settings.json, checked; the wallpaper media and overlays a theme
       // file leaves out stay yours.
-      patchSettings("appearance", importAppearance(raw, getSettings().appearance));
+      // Only the keys it names are written (`themeImportPaths`), as `hive theme import` does.
+      const appearance = importAppearance(raw, getSettings().appearance);
+      patchSettingsMany(themeImportPaths(raw).map((path) => ({ path, value: getPath({ appearance }, path) })));
       toast.success(`Imported ${f.name}`);
     } catch { toast.error("That file is not a hivemind theme."); }
   };

@@ -145,3 +145,24 @@ export function withPreset<S extends { appearance: Appearance; appearanceExtra: 
   const { accent: _a, theme: _t, ...rest } = s.appearanceExtra;
   return { ...s, appearance: applyPreset(s.appearance, preset), appearanceExtra: rest };
 }
+
+/** What choosing `preset` over the appearance `cur` writes (`withPreset`), by dotted path, for
+ *  every writer of a preset (`hive theme use`, the app's picker). Its colours, accent, mode and
+ *  id, and the custom accent and theme record it drops, are written even where they read the same
+ *  here: an id this build does not know (a newer build's accent or mode) reads as the default, and
+ *  choosing a preset replaces it. The glass, wallpaper and corners only where the preset's look
+ *  sets them or puts them back, so a newer build's wallpaper stays under a colour preset; the
+ *  memory of the look before only where it changes, and then whole. */
+export function presetPaths(preset: ThemePreset, cur: Appearance): string[] {
+  const next = applyPreset(cur, preset);
+  const look = preset.look ?? {};
+  const changed = (k: keyof typeof look, was: unknown, now: unknown) => look[k] !== undefined || was !== now;
+  return [
+    ...(["preset", "mode", "palette", "accent", "terminal"] as const).map((k) => `appearance.${k}`),
+    ...(changed("glass", cur.glass.enabled, next.glass.enabled) ? ["appearance.glass.enabled"] : []),
+    ...(changed("wallpaper", cur.wallpaper.kind, next.wallpaper.kind) ? ["appearance.wallpaper.kind"] : []),
+    ...(changed("radius", cur.radius, next.radius) ? ["appearance.radius"] : []),
+    ...(JSON.stringify(cur.lookBefore) !== JSON.stringify(next.lookBefore) ? ["appearance.lookBefore"] : []),
+    "appearanceExtra.accent", "appearanceExtra.theme",
+  ];
+}
