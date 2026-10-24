@@ -13,6 +13,7 @@ import { AssigneePicker, LabelPicker, ParentPicker } from "./pickers";
 import { SubIssueTree } from "./SubIssueTree";
 import { isIssueId } from "@hivemind/core/issue-id";
 import { workPrompt } from "./IssuesTile";
+import { PrRow } from "./PrBits";
 
 type LinkType = "relates" | "blocks" | "blocked-by" | "duplicates" | "parent-of" | "child-of";
 
@@ -179,7 +180,11 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel }: 
                 <PropRow label="Updated">
                   <span className="text-label text-[var(--color-fg2)]">{relTime(issue.updated)}</span>
                 </PropRow>
-                {issue.github != null && (
+                {issue.pr ? (
+                  <PropRow label="Pull request">
+                    <PrRow issue={issue} />
+                  </PropRow>
+                ) : issue.github != null && (
                   <PropRow label="GitHub">
                     <span className="font-mono text-count text-[var(--color-info)]">#{issue.github}</span>
                   </PropRow>

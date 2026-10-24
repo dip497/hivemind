@@ -275,8 +275,20 @@ export interface ViewIssueSummary {
    *  `state` is always that status's category. A host before 1.16 sends neither. */
   status?: string;
   statusName?: string;
+  /** The git branch the issue's work is on, and its pull request as the PR watcher last saw it
+   *  (design jira-sync §11), when it has them. A host sends every key of the issue's file. */
+  branch?: string;
+  pr?: ViewIssuePr;
   created: string;
   updated: string;
+}
+export interface ViewIssuePr {
+  repo: string;
+  number: number;
+  url: string;
+  state: "open" | "draft" | "merged" | "closed";
+  review?: "approved" | "changes_requested" | "review_required";
+  checks?: "passing" | "failing" | "pending";
 }
 /** An issue in full: its description, acceptance criteria and activity. */
 export interface ViewIssue extends ViewIssueSummary {

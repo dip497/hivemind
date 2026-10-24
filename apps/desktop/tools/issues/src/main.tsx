@@ -15,7 +15,10 @@ type Open = { id: "issue" | "new"; params?: unknown } | null;
 function Tile(props: TileProps) {
   const [open, setOpen] = useState<Open>(null);
   const { workflow, error } = useWorkflowOf(props.hm);
-  const ctx = useMemo<Issues>(() => ({ hm: props.hm, workflow, openPanel: (id, params) => setOpen({ id, params }) }), [props.hm, workflow]);
+  const ctx = useMemo<Issues>(
+    () => ({ hm: props.hm, host: props.host, frameId: props.tile.frameId, workflow, openPanel: (id, params) => setOpen({ id, params }) }),
+    [props.hm, props.host, props.tile.frameId, workflow],
+  );
   const close = () => setOpen(null);
   return (
     <IssuesContext.Provider value={ctx}>
