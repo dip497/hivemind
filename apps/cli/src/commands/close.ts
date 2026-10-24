@@ -2,7 +2,7 @@ import { defineCommand } from "citty";
 import {
   HiveError,
   readIssue,
-  requireRoot,
+  rootForIdHere,
   updateIssue,
   writeAgentContext,
 } from "@hivemind/core";
@@ -24,8 +24,8 @@ export const closeCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
       const id = stripAt(String(args.id));
+      const root = await rootForIdHere(id);
       const issue = await readIssue(root, id);
       const next = args.reason ? "cancelled" : "done";
       if (issue.state === next) {
@@ -54,8 +54,8 @@ export const reopenCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
       const id = stripAt(String(args.id));
+      const root = await rootForIdHere(id);
       const issue = await readIssue(root, id);
       const target = args.state ? String(args.state) : "todo";
       if (!["backlog", "todo", "in_progress", "in_review"].includes(target)) {

@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { HiveError, filterIssues, listIssues, requireRoot } from "@hivemind/core";
+import { HiveError, filterIssues, listIssues, requireRoot, rootForIdHere } from "@hivemind/core";
 import { err, ok, renderIssueList } from "../format.js";
 import { parseState, stripAt } from "../parse.js";
 
@@ -15,7 +15,10 @@ export const listCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
+      // `--parent <id>` lists that issue's children wherever it lives (design jira-sync §5.2).
+      const parentId = args.parent ? stripAt(String(args.parent)) : "";
+      const byId = parentId && parentId !== "none" && parentId !== "null";
+      const root = byId ? await rootForIdHere(parentId) : await requireRoot();
       const all = await listIssues(root);
 
       const filter: {

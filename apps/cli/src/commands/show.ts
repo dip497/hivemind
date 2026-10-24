@@ -1,5 +1,5 @@
 import { defineCommand } from "citty";
-import { HiveError, readIssue, requireRoot } from "@hivemind/core";
+import { HiveError, readIssue, rootForIdHere } from "@hivemind/core";
 import { err, ok, renderIssue } from "../format.js";
 import { stripAt } from "../parse.js";
 
@@ -15,8 +15,8 @@ export const showCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
       const id = stripAt(String(args.id));
+      const root = await rootForIdHere(id);
       const issue = await readIssue(root, id);
       return ok(ctx, issue, () => renderIssue(issue));
     } catch (e) {

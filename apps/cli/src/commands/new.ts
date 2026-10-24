@@ -5,6 +5,7 @@ import {
   createIssue,
   readIssue,
   requireRoot,
+  rootForIdHere,
   writeAgentContext,
 } from "@hivemind/core";
 import { err, ok, renderIssue } from "../format.js";
@@ -32,7 +33,8 @@ export const newCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
+      // A sub-issue is created where its parent lives (design jira-sync §5.2).
+      const root = args.parent ? await rootForIdHere(stripAt(String(args.parent))) : await requireRoot();
 
       // Validate parent if given.
       let parent: string | null = null;

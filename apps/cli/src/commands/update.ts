@@ -3,7 +3,7 @@ import { ensureAgentCatalog } from "../agent-catalog.js";
 import {
   HiveError,
   readIssue,
-  requireRoot,
+  rootForIdHere,
   updateIssue,
   writeAgentContext,
   type IssuePatch,
@@ -30,8 +30,8 @@ export const updateCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
       const id = stripAt(String(args.id));
+      const root = await rootForIdHere(id);
       // The CLI validates/parses flags into a patch; core owns the diff,
       // canonical activity format, and write. We read once only to resolve the
       // add/remove-label SET semantics into a final labels array.
