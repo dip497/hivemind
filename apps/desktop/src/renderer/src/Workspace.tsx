@@ -106,6 +106,7 @@ import { AgentToasts } from "./workspace/agent-toasts";
 import { openAppearanceSettings } from "./workspace/chrome-store";
 import { openViewMenu } from "./workspace/standard-toolbar";
 import { loadCommunityViews } from "./workspace/views/community/registry";
+import { useStartViewOffers } from "./plugins/open-start-view";
 import { agentScanProblems, syncAgentPlugins } from "./agent-plugins";
 import {
   FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
@@ -657,6 +658,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // Community views (sandboxed packages) come and go with the repo; the
   // registry is an external store, so this also re-renders the switchers.
   useViews();
+  // "Open Archipelago?" for a package installed outside Settings (`hive plugins install`).
+  useStartViewOffers();
   useEffect(() => {
     const viewRoot = joinedId(repoPath) ? repoPath : root;
     void loadCommunityViews(viewRoot);

@@ -475,6 +475,10 @@ export interface HiveIpc {
   reviewPackageFolder?(): Promise<PackageReview | null>;
   /** Install the folder last reviewed. */
   installPackageFolder?(token: string): Promise<void>;
+  /** The packages whose start view (`startup.view`) this window should offer now, given the views
+   *  it loaded and the one it shows; each is recorded as offered, so it is offered once. Only the
+   *  window the person is at is offered any. */
+  startViewOffers?(registered: string[], showing: string | null): Promise<Array<{ package: string; name: string; view: string }>>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── identity (R3) ─────────────────────────────────────────
