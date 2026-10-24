@@ -315,6 +315,21 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
       havePermission: projects.some((p) => can(p, k)),
     }])) });
   });
+  // Filters visible to myself (a board filter not shared with myself isn't listed). `jql` only with
+  // `expand=jql`, as the spec's FilterDetails says.
+  route("GET", "/rest/api/{v}/filter/search", ({ c, q }) => {
+    const ids = list(q, "id");
+    const name = (q.get("filterName") ?? "").toLowerCase();
+    const project = q.get("projectId");
+    const withJql = list(q, "expand").includes("jql");
+    const all = site.boards
+      .filter((b) => b.filter.shared !== false && (!ids.length || ids.includes(b.filter.id)) && (!name || `filter for ${b.name}`.toLowerCase().includes(name))
+        && (!project || site.projects.find((p) => p.key === b.projectKey)?.id === project))
+      .map((b) => ({ self: `${c.base}/rest/api/${c.v}/filter/${b.filter.id}`, id: b.filter.id, name: `Filter for ${b.name}`, ...(withJql ? { jql: b.filter.jql } : {}) }));
+    const startAt = Number(q.get("startAt") ?? 0), maxResults = Number(q.get("maxResults") ?? 50);
+    const values = all.slice(startAt, startAt + maxResults);
+    return json(200, { self: `${c.base}/rest/api/${c.v}/filter/search`, maxResults, startAt, total: all.length, isLast: startAt + values.length >= all.length, values });
+  });
   route("GET", "/rest/api/{v}/filter/:id", ({ c, p }) => {
     const b = site.boards.find((b) => b.filter.id === p.id);
     if (!b || b.filter.shared === false) return errors(400, [`The selected filter is not available to you, perhaps it has been deleted or had its permissions changed.`]);

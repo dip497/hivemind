@@ -415,6 +415,11 @@ const HANDLERS: Record<string, Handler> = {
     rest(ctx, "PUT", `/rest/api/3/issue/${issueRef(a)}/properties/${enc(String(a.propertyKey))}`, a.value);
     return ok({ key: a.propertyKey, value: a.value });
   },
+  // ASSUMED: the filter search REST call, always with each filter's JQL ("returning their IDs and JQL").
+  listJiraFilters: (ctx, a) => ok(rest(ctx, "GET", `/rest/api/3/filter/search${qs({
+    id: (a.id as unknown[] | undefined)?.join(","), filterName: a.filterName, projectId: a.projectId, accountId: a.accountId, orderBy: a.orderBy,
+    startAt: a.startAt, maxResults: a.maxResults, expand: [...new Set(["jql", ...String(a.expand ?? "").split(",").filter(Boolean)])].join(","),
+  })}`)),
   getJiraWorkflows: (ctx, a) => {
     const p = a.projectIdOrKey ? ctx.site.projects.find((x) => x.key === String(a.projectIdOrKey).toUpperCase() || x.id === a.projectIdOrKey) : undefined;
     const pairs = p ? p.issueTypes.filter((t) => !a.issueTypeId || t.id === a.issueTypeId).map((t) => ({ projectId: p.id, issueTypeId: t.id })) : [];
