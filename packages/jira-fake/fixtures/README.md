@@ -234,7 +234,9 @@ await rovo.close();
 - `fixtures/rovo-mcp-tools.json`, built by `bun scripts/extract-rovo-tools.ts` from two captures
   of the live server published in clssck/atl-cli: `mcp/tools-v2.json` (a `tools/list` of plain
   `/v2/mcp`: the 21 primary tools with their full `inputSchema`s) and `mcp/operations-v2.json`
-  (`discover` on all 192 operations, 2026-10-22: runner and inputs). A third capture
+  (`discover` on all 192 operations, 2026-10-22: runner and inputs). Those captures are © their authors under the MIT licence
+  (github.com/clssck/atl-cli/blob/main/LICENSE); the tool schemas themselves are Atlassian's
+  published interface. A third capture
   (Team-Commonly/commonly, 2026-10-19) gave `expires_in: 28800` and the granted scopes.
 - One third-party live report (evanstern/praxisflux, 2026-09-09) for the transitions entries and
   search paging.
