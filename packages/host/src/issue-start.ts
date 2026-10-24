@@ -10,7 +10,8 @@
  *   confirm answers `{ started: false, left }`, never half-starts.
  * - `issue.assignMe`: "Assign to me" alone, for `hive ctl set-state --assign-me`.
  * - `issue.provideStart`: a tool plugin's service says it is the tracker for issues of a source
- *   (`jira:`), so the guard re-fetches them, asks its checks, and assigns through it.
+ *   (`jira:acme/PAY`) in its workspace, so the guard re-fetches them, asks its checks, and assigns
+ *   through it.
  *
  * The guard is core's (`start-guard.ts`); what it can't know in core — the agents here and the
  * trackers' services — this adds. Electron-free.
@@ -145,8 +146,9 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
       "issue.assignMe": (_root, id) => ({ target: named(id) }),
     },
     notices: {
-      "issue.provideStart": (from, source, commands) => {
+      "issue.provideStart": (from, root, source, commands) => {
         const plugin = o.services.pluginOf(from);
+        text(root, "root"); // the workspace it provides for, which a grant's connection may name alone
         const src = text(source, "source");
         if (!/^[a-z][a-z0-9-]*:/.test(src)) throw new Error(`${plugin}'s service: a source is <provider>:…, e.g. jira:`);
         const c = fields(commands, "commands") as Provided;

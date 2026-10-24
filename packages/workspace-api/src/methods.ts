@@ -365,10 +365,11 @@ export interface WorkspaceNotices {
   /** (0.34) A tool plugin's service answers these commands of its own plugin: `hive ctl plugin
    *  call` runs one there when no window runs the plugin (`plugin.called`). */
   "plugin.serve": (commands: PluginCommand[]) => void;
-  /** (0.35) A tool plugin's service is the tracker for issues of `source` (`jira:`): the start-work
-   *  guard re-fetches a stale one, asks its checks, and assigns through the commands named, each
-   *  called with `{root, id}` (`plugin.called`). Until its connection goes. */
-  "issue.provideStart": (source: string, commands: { refresh?: string; checks?: string; assignMe?: string }) => void;
+  /** (0.35) A tool plugin's service is the tracker for issues of `source` (`jira:acme/PAY`, or a
+   *  prefix of it) in its workspace at `root`: the start-work guard re-fetches a stale one, asks its
+   *  checks, and assigns through the commands named, each called with `{root, id}`
+   *  (`plugin.called`). Until its connection goes. */
+  "issue.provideStart": (root: string, source: string, commands: { refresh?: string; checks?: string; assignMe?: string }) => void;
   /** (0.34) A service's answer to the call `call` it was sent. */
   "plugin.answer": (call: number, answer: ServiceAnswer) => void;
   /** The screen the view of the caller's session `session` is shown on now: its host tells the view

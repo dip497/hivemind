@@ -136,7 +136,7 @@ test("a tracker's service assigns: Assign to me goes through the command it prov
   });
   server.connect(service);
   server.notice("plugin.serve", [[{ name: "assign-me", description: "assign the issue to me in Jira" }]], service);
-  server.notice("issue.provideStart", ["jira:", { assignMe: "assign-me" }], service);
+  server.notice("issue.provideStart", [root, SOURCE, { assignMe: "assign-me" }], service);
 
   await ingestRecords(root, SOURCE, [pay399(null)]);
   const plan = result<StartPlan>(await call(person, "issue.checkStart", root, "PAY-399"));
