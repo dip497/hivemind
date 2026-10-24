@@ -222,7 +222,9 @@ test("Address review starts its agent in the issue's worktree frame", async () =
   expect((hive(["show", "PAY-318"]).json as { pr?: { review?: string } }).pr?.review).toBe("changes_requested");
   const card = cardOf("PAY-318");
   await expect(card.locator('[data-pr-review="changes_requested"]')).toBeVisible({ timeout: 15_000 });
-  await card.click();
+  // The first agent's tile lies over the Issues tile on the canvas: open the card from the keyboard.
+  await card.focus();
+  await page.keyboard.press("Enter");
   await page.locator("[data-address-review]").click();
   const prompt = page.locator("[data-prompt-dialog]");
   await expect(prompt).toBeVisible({ timeout: 15_000 });
