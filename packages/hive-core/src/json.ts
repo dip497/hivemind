@@ -22,6 +22,12 @@ export function issueToJson(i: Issue) {
     created: i.created,
     updated: i.updated,
     links: i.links ?? [],
+    // Present only when the issue has them (JSON drops `undefined`), so a plain issue's shape is unchanged.
+    status: i.status,
+    external: i.external,
+    branch: i.branch,
+    pr: i.pr,
+    aliases: i.aliases,
     description: i.sections.description,
     acceptanceCriteria: i.sections.acceptanceCriteria,
     activity: i.sections.activity,

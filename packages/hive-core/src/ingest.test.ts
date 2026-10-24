@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import YAML from "yaml";
 import { ingestRecords, type IngestRecord } from "./ingest.js";
-import { listIssues, readConfig, readIssue, writeConfig } from "./storage.js";
+import { listIssues, parseSections, readConfig, readIssue, writeConfig } from "./storage.js";
 import type { IssueState } from "./types.js";
 import { rootsForPrefix } from "./registry.js";
 import { SyncLockedError, withSyncLock } from "./sync-lock.js";
@@ -140,6 +140,8 @@ describe("ingest", () => {
     const issue = await readIssue(root, "PAY-318");
     expect(issue.sections.activity.filter((a) => a.who === "claude")).toEqual([]);
     expect(issue.sections.description).toContain("approved for release");
+    // nor for a reader that doesn't know the file is mirrored (an older build reads it this way)
+    expect(parseSections(issue.raw).activity.filter((a) => a.who === "claude")).toEqual([]);
   });
 
   test("refuses a project whose key is this workspace's own prefix, and a malformed record, writing nothing", async () => {
