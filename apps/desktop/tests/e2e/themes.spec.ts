@@ -9,7 +9,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { installPlugin } from "./helpers/install";
-import { cssColorToHex } from "@hivemind/core/css-color";
+import { contrastRatio, cssColorToHex, parseCssColor } from "@hivemind/core/css-color";
 
 test.use({ trace: "off" });
 
@@ -73,12 +73,40 @@ const painted = () => page.evaluate(() => {
     canvas: getComputedStyle(document.querySelector(".react-flow")!).backgroundColor,
   };
 });
+/** What the canvas draws straight on the wallpaper, each with its colour and what is right behind
+ *  it: the tile count's words and the frame's name on their backing, and the selected tile's handle
+ *  (a mark in the accent) inside its ring. `behind` is null when nothing solid is (the picture or
+ *  the page shows through), and `contrast` is then not measured. */
+const onCanvas = async () => {
+  const s = await page.evaluate(() => {
+    const css = (el: Element | null | undefined, pseudo?: string) => (el ? getComputedStyle(el, pseudo) : null);
+    const count = css(document.querySelector("[data-tile-count]"));
+    const label = document.querySelector("[data-frame-label]");
+    const title = css(label?.querySelector('button[title="Double-click to rename"]'));
+    const handle = css(document.querySelector(".react-flow__node .hm-node-selected"), "::after");
+    return {
+      count: count && [count.color, count.backgroundColor],
+      frame: title && [title.color, css(label)!.backgroundColor],
+      // A ring is the first shadow, unblurred, spread round the mark: its colour and width.
+      handle: handle && [handle.backgroundColor, /^((?:rgba?|oklch|color)\([^)]*\)) 0px 0px 0px ([\d.]+)px/.exec(handle.boxShadow)?.slice(1) ?? null] as const,
+    };
+  });
+  const solid = (c: string) => { const p = parseCssColor(c); return p && !p.alpha ? cssColorToHex(c, "") : null; };
+  const read = (ink: string, under: string | null) => ({ behind: under && solid(under), contrast: under && solid(under) ? Math.floor(contrastRatio(ink, under)! * 100) / 100 : null });
+  const [mark, ring] = s.handle ?? [];
+  return {
+    count: s.count && read(s.count[0], s.count[1]),
+    frame: s.frame && read(s.frame[0], s.frame[1]),
+    handle: mark ? { ...read(mark, ring?.[0] ?? null), ring: ring ? Number(ring[1]) : 0 } : null,
+  };
+};
 const appearance = async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "appearance" } })));
   await page.locator("[data-themes]").waitFor({ timeout: 10_000 });
 };
 const closeSettings = () => page.getByRole("button", { name: "Close", exact: true }).click();
 let before: Awaited<ReturnType<typeof painted>>;
+let bare: Awaited<ReturnType<typeof onCanvas>>;
 
 test.beforeAll(async () => {
   if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
@@ -91,6 +119,14 @@ test.beforeAll(async () => {
   await page.evaluate(() => window.hive.settingsSet("appearance.glass.enabled", false));
   await expect.poll(() => painted().then((p) => p.glass)).toBe(false);
   before = await painted();
+  // A terminal, selected, in its project's frame: the canvas's own words and marks (the tile count,
+  // the frame's name, the selected tile's handle) as they are with no wallpaper.
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  const tile = page.locator(".react-flow__node-terminal").first();
+  await tile.waitFor({ timeout: 15_000 });
+  if (!(await tile.locator(".hm-node-selected").count())) await tile.click();
+  await expect(tile.locator(".hm-node-selected")).toHaveCount(1);
+  bare = await onCanvas();
 });
 
 test.afterAll(async () => {
@@ -125,12 +161,27 @@ test("applied from Appearance: its colours, its accent on the main button, its f
   await shot("themes-applied-canvas");
 });
 
+test("over its wallpaper, the canvas's own words and marks have the panel colour behind them: the tile count, the frame's name, the selected tile's handle", async () => {
+  // With no wallpaper they sit on the page, nothing of their own behind them.
+  expect(bare).toEqual({ count: { behind: null, contrast: null }, frame: { behind: null, contrast: null }, handle: { behind: null, contrast: null, ring: 0 } });
+  // Over a picture, whatever it holds there: the theme's own panel colour, solid, so words keep
+  // 4.5:1 and the accent's mark 3:1 (the theme check holds brand on bg2 to 3:1).
+  const c = await onCanvas();
+  expect(c).toMatchObject({ count: { behind: theme.palette.bg2 }, frame: { behind: theme.palette.bg2 }, handle: { behind: theme.palette.bg2 } });
+  expect(c.count!.contrast).toBeGreaterThanOrEqual(4.5);
+  expect(c.frame!.contrast).toBeGreaterThanOrEqual(4.5);
+  expect(c.handle!.contrast).toBeGreaterThanOrEqual(3);
+  expect(c.handle!.ring).toBeGreaterThanOrEqual(2);
+  await shot("themes-canvas-backing");
+});
+
 test("Revert to previous look puts back what was there", async () => {
   await appearance();
   await page.locator("[data-theme-revert]").click();
   await expect(page.locator("[data-theme-applied]")).toHaveCount(0);
   await closeSettings();
   await expect.poll(() => painted()).toEqual(before);
+  await expect.poll(onCanvas).toEqual(bare);
   expect(onDisk().appearanceExtra ?? {}).toEqual({});
   // Neither look names the theme's files any more.
   expect(fs.readdirSync(MEDIA).filter((f) => f.startsWith("theme-"))).toEqual([]);

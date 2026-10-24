@@ -164,6 +164,9 @@ function paintTheme(t: ThemeState): void {
   root.classList.toggle("content-glass", glass && t.contentGlass);
   // A theme's wallpaper without glass: the canvas clears to show it, the panels stay solid.
   root.classList.toggle("wallpaper-on", !glass && wallpaperDrawn(t) && (!pluginScene || t.pluginSurfaces === "theme"));
+  // Any picture behind the canvas, with glass or without: what the canvas draws straight on it (the
+  // tile count, a frame's name, the selected tile's handle) takes a backing (styles.css).
+  root.classList.toggle("wallpaper-drawn", wallpaperDrawn(t));
   root.dataset.themeMode = t.mode;
   // shadcn's `dark:` variant and Sonner read the class; the page starts dark (index.html).
   root.classList.toggle("dark", t.mode !== "light");

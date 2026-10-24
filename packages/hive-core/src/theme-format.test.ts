@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { contrastRatio } from "./css-color";
-import { checkTheme, themeFiles, themeFromLook, type ThemeFolderFile } from "./theme-format";
-import { CLEAN_LIGHT, DEFAULT_APPEARANCE, PRESETS, SIGNAL, applyPreset } from "./settings-schema";
+import { contrastRatio, cssColorToOklab } from "./css-color";
+import { checkTheme, themeFiles, themeFromLook, themeSwatches, type ThemeFolderFile } from "./theme-format";
+import { ACCENTS, CLEAN_LIGHT, DEFAULT_APPEARANCE, PRESETS, SIGNAL, applyPreset, type AccentId } from "./settings-schema";
+import type { AccentColors } from "./appearance-extra";
 
 const FILES: ThemeFolderFile[] = [
   { path: "fonts/display.woff2", bytes: 30_000 },
@@ -66,7 +67,7 @@ describe("checkTheme", () => {
     ["an accent id it does not know", { accent: "teal" }, /accent is one of/],
     ["amber as the accent", { accent: "amber" }, /amber is the colour of an agent waiting on you/],
     ["the accent in the colour of needs you", { accent: { brand: SIGNAL.palette.warn, accent: "#d9a273" } }, /accent.brand is the colour of an agent waiting on you/],
-    ["an accent too faint to see", { accent: { brand: "#16222c", accent: "#d9a273" } }, /accent.brand on bg is .*:1; .* needs at least 3:1/],
+    ["an accent too faint to see", { accent: { brand: "#16222c", accent: "#d9a273" } }, /accent.brand on bg2? is .*:1; .* needs at least 3:1/],
     ["a terminal without 16 colours", { terminal: { ...FULL.terminal, ansi: ["#000"] } }, /16 ANSI colours/],
     ["corners past 24", { radius: 40 }, /radius is from 0 to 24/],
     ["a font that is not woff2", { fonts: { ui: { family: "X", files: [{ path: "notes.txt" }] } } }, /is not a .woff2 font/],
@@ -113,16 +114,46 @@ describe("contrast", () => {
     expect(onWhite(below)).toMatch(why);
   });
 
-  test("an accent at 3:1 on its page passes; a step below is refused", () => {
+  // The accent is a mark on the page and on the panels and menus: a switch that is on, a slider's
+  // thumb (ringed in bg2), the selected tile's handle. Each surface white in turn, the other black,
+  // where #949494 and #959595 both read: only the white one holds the accent to 3:1.
+  test.each([
+    ["on the page (bg)", { bg2: "#000000", fg: "#767676" }, /accent.brand on bg is 2.99:1/],
+    ["on the panels and menus (bg2)", { bg: "#000000", fg: "#767676", fg2: "#949494" }, /accent.brand on bg2 is 2.99:1/],
+  ])("an accent at 3:1 %s passes; a step below is refused, naming the surface", (_on, palette, why) => {
     expect(contrastRatio("#949494", "#ffffff")!).toBeGreaterThanOrEqual(3);
-    expect(onWhite({}, { brand: "#949494", accent: "#949494" })).toBeNull();
-    expect(onWhite({}, { brand: "#959595", accent: "#959595" })).toMatch(/accent.brand on bg is 2.99:1/);
+    expect(onWhite(palette, { brand: "#949494", accent: "#949494" })).toBeNull();
+    expect(onWhite(palette, { brand: "#959595", accent: "#959595" })).toMatch(why);
   });
 
   test("a light theme passes the same pairs, and fails them the same way", () => {
     const light = theme({ mode: "light", palette: { ...CLEAN_LIGHT.palette }, accent: "graphite", wallpaper: { kind: "none" } });
     expect(problem(light)).toBeNull();
     expect(problem({ ...light, palette: { ...CLEAN_LIGHT.palette, fg: "oklch(0.75 0.006 250)" } })).toMatch(/fg on bg is .*:1/);
+  });
+});
+
+describe("themeSwatches", () => {
+  // Every look Settings ▸ Appearance shows a strip for: each preset, and a theme from a package.
+  const looks = [...Object.values(PRESETS).map((p) => ({ name: p.id, palette: p.palette, accent: p.accent as AccentId | AccentColors })), { name: "a theme", palette: FULL.palette, accent: FULL.accent }];
+  const lab = (c: string) => cssColorToOklab(c)!;
+
+  test("a look's strip starts with its page, its text and its accent", () => {
+    for (const l of looks) {
+      const brand = typeof l.accent === "string" ? ACCENTS[l.accent].brand : l.accent.brand;
+      expect({ look: l.name, first: themeSwatches(l).slice(0, 3) }).toEqual({ look: l.name, first: [l.palette.bg, l.palette.fg, brand] });
+    }
+  });
+
+  test("no two of a strip's five colours look alike (0.05 apart in OKLab, as the app tells the accent from warn)", () => {
+    for (const l of looks) {
+      const s = themeSwatches(l);
+      expect(s).toHaveLength(5);
+      for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) {
+        const [a, b] = [lab(s[i]!), lab(s[j]!)];
+        expect({ look: l.name, pair: [i, j], apart: Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) >= 0.05 }).toEqual({ look: l.name, pair: [i, j], apart: true });
+      }
+    }
   });
 });
 

@@ -43,8 +43,13 @@ export const CONTRAST_PAIRS = [
   { fg: "fg", bg: "bg2", least: 4.5 },
   { fg: "fg2", bg: "bg", least: 3 },
 ] as const satisfies readonly { fg: keyof Palette; bg: keyof Palette; least: number }[];
-/** An accent is a mark (a switch that is on, the focus ring): 3:1 against the page. */
+/** An accent is a mark: 3:1 against every surface it is drawn on. */
 export const ACCENT_CONTRAST = 3;
+/** Where the accent is drawn as a mark (apps/desktop styles.css): on the page (`bg`: the canvas,
+ *  Settings), and on the panels and menus (`bg2`: the Layers panel, a popover's switch that is on).
+ *  A slider's thumb is ringed in `bg2` wherever it sits, and so is the selected tile's handle over a
+ *  picture, so `bg2` is under them too. */
+export const ACCENT_SURFACES = ["bg", "bg2"] as const satisfies readonly (keyof Palette)[];
 /** How close in OKLab an accent may come to the colour of "needs you" (`warn`). */
 const WARN_DISTANCE = 0.05;
 
@@ -145,9 +150,23 @@ function accentOfTheme(v: unknown, palette: Palette): AccentId | AccentColors {
       refuse(`accent.${k} is the colour of an agent waiting on you (palette.warn); a theme's accent is another colour`);
     }
   }
-  const mark = contrastRatio(colours.brand, palette.bg)!;
-  if (mark < ACCENT_CONTRAST) refuse(`accent.brand on bg is ${fixed(mark)}:1; a switch or focus ring in it needs at least ${ACCENT_CONTRAST}:1`);
+  const mark = accentMark(colours.brand, palette);
+  if (mark && mark.ratio < ACCENT_CONTRAST) refuse(`accent.brand on ${mark.on} is ${fixed(mark.ratio)}:1; a switch that is on or a slider's thumb in it needs at least ${ACCENT_CONTRAST}:1`);
   return typeof v === "string" ? (v as AccentId) : colours;
+}
+
+/** How an accent's `brand` reads as a mark: its lowest contrast with a surface it is drawn on
+ *  (`ACCENT_SURFACES`), and which surface that is; null when a colour cannot be read. The theme
+ *  check refuses below `ACCENT_CONTRAST`, and Settings ▸ Appearance says so of a colour the person
+ *  picks. */
+export function accentMark(brand: string, palette: Pick<Palette, (typeof ACCENT_SURFACES)[number]>): { on: (typeof ACCENT_SURFACES)[number]; ratio: number } | null {
+  let low: { on: (typeof ACCENT_SURFACES)[number]; ratio: number } | null = null;
+  for (const on of ACCENT_SURFACES) {
+    const ratio = contrastRatio(brand, palette[on]);
+    if (ratio === null) return null;
+    if (!low || ratio < low.ratio) low = { on, ratio };
+  }
+  return low;
 }
 
 function terminalOf(v: unknown): TerminalPalette {
@@ -259,10 +278,13 @@ export function themeFiles(t: Theme): string[] {
   ];
 }
 
-/** Five colours that show a theme at a glance, as presets are shown. */
-export function themeSwatches(t: Pick<Theme, "palette" | "terminal" | "accent">): string[] {
+/** Five colours that tell a look apart at a glance, for a preset and a theme alike (Settings ▸
+ *  Appearance): its page, its text, its accent, and its colours for done and failed. Not its panels
+ *  or its terminal's ground, which sit so near the page in most looks that a strip of them reads as
+ *  one colour three times. */
+export function themeSwatches(t: Pick<Theme, "palette" | "accent">): string[] {
   const { brand } = typeof t.accent === "string" ? accentOf({ accent: t.accent }) : accentOf({ accent: "graphite" }, { accent: t.accent });
-  return [t.palette.bg, t.palette.bg3, t.terminal?.background ?? t.palette.bg2, brand, t.palette.fg];
+  return [t.palette.bg, t.palette.fg, brand, t.palette.ok, t.palette.err];
 }
 
 /** A `theme.json` for the look in use (`hive plugins new theme`): its colours, accent, terminal,
