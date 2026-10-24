@@ -112,8 +112,9 @@ export function pressIs(c: Chord, e: KeyPress, mac: boolean): boolean {
   // A letter is the one the layout types; its place only when the layout types no Latin letter
   // there (Cyrillic, or Option on a Mac).
   if (/^[a-z]$/.test(c.key)) return /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() === c.key : e.code === `Key${c.key.toUpperCase()}`;
-  // A digit is its place, on the top row (where AZERTY types it with shift) or the number pad.
-  if (/^[0-9]$/.test(c.key)) return e.code === `Digit${c.key}` || e.code === `Numpad${c.key}`;
+  // A digit is its place on the top row (where AZERTY types it with shift), or the number pad's key
+  // while Num Lock makes it type that digit: off, Numpad1 is End and Numpad4 is ArrowLeft.
+  if (/^[0-9]$/.test(c.key)) return e.code === `Digit${c.key}` || (e.code === `Numpad${c.key}` && e.key === c.key);
   // A sign is the one the layout types: `-` is right of `0` on a US keyboard and of `.` on a German
   // one, and the number pad has `-` and `+`. Its US place only when the layout types no other sign
   // there (`ß`, a dead key, Option's own), or shift made it its US pair (`+` over `=`).

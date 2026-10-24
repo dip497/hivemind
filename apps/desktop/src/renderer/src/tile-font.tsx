@@ -55,10 +55,9 @@ export function handleFontKey(
   f: Pick<TileFont, "inc" | "dec" | "reset">,
 ): boolean {
   if (!(e.ctrlKey || e.metaKey)) return false;
-  // The keymap names - = and 0 by their place on the keyboard; what the key types counts too, so a
-  // layout whose - sits elsewhere (German, French) and the numpad size the text as well.
-  const typed = e.key === "=" || e.key === "+" ? "font-bigger" : e.key === "-" || e.key === "_" ? "font-smaller" : e.key === "0" ? "font-reset" : null;
-  for (const action of [...actionsFor(e, "terminal", keyOS() === "mac"), ...(typed ? [typed] : [])]) {
+  // The terminal's own rule, so a layout whose - sits elsewhere (German, French) and the number pad
+  // size an editor's text exactly when they size a terminal's.
+  for (const action of actionsFor(e, "terminal", keyOS() === "mac")) {
     const run = action === "font-bigger" ? f.inc : action === "font-smaller" ? f.dec : action === "font-reset" ? f.reset : null;
     if (!run) continue;
     e.preventDefault();

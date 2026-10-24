@@ -137,9 +137,19 @@ const READ: ReadonlyArray<Binding & { chord: Chord }> = KEYMAP.map((b) => {
   return { ...b, chord };
 });
 
-/** What this key press does `where`, in the order to try them; none: it is the tile's. */
+/** The rows whose key is a sign (`-`, `=`, `+`, `,` …), not a letter, digit or named key. */
+const SIGNED = READ.filter((b) => b.chord.key.length === 1 && !/^[a-z0-9]$/.test(b.chord.key));
+
+/** What this key press does `where`, in the order to try them; none: it is the tile's.
+ *
+ *  A digit is matched by its place and a sign by what the layout types, so one press can be both:
+ *  French Ctrl+6 types `-`. The sign wins, wherever its row is: that press sizes the text and zooms
+ *  out, and tile 6 has no key on that layout. A digit key typing a sign no row names (AZERTY's
+ *  Ctrl+1 typing `&`) is still the digit. */
 export function actionsFor(press: KeyPress, where: Where, mac: boolean): Action[] {
-  return READ.filter((b) => b.where === where && pressIs(b.chord, press, mac)).map((b) => b.action);
+  const sign = SIGNED.some((b) => pressIs(b.chord, press, mac));
+  return READ.filter((b) => b.where === where && pressIs(b.chord, press, mac) && !(sign && /^[0-9]$/.test(b.chord.key)))
+    .map((b) => b.action);
 }
 
 /** Whose key names a label uses. */
