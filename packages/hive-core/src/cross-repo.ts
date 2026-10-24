@@ -18,7 +18,7 @@ import {
   writeIssue,
 } from "./storage.js";
 import { writeAgentContext } from "./agent-context.js";
-import { prefixOf, resolveWorkspaceByPrefix } from "./registry.js";
+import { prefixOf, resolveWorkspaceByPrefix, rootsForPrefix } from "./registry.js";
 import type { Issue, IssueLink, LinkType } from "./types.js";
 import { stat } from "node:fs/promises";
 import path from "node:path";
@@ -66,14 +66,17 @@ function removeLinksTo(issue: Issue, targetId: string): number {
 async function rootForIdOrThrow(id: string): Promise<string> {
   const prefix = prefixOf(id);
   if (!prefix) throw new HiveError("invalid_arg", `malformed issue id: ${id}`);
-  const ws = await resolveWorkspaceByPrefix(prefix);
-  if (!ws) {
+  // the workspace that owns the prefix, or the one that mirrors it (registry `externals`)
+  const roots = await rootsForPrefix(prefix);
+  if (roots.length !== 1) {
     throw new HiveError(
       "unknown_workspace",
-      `no registered workspace for prefix '${prefix}' (from ${id}) — open it in hivemind or run \`hive workspace register\` in that repo`,
+      roots.length
+        ? `more than one workspace holds '${prefix}' (from ${id}): ${roots.join(", ")}`
+        : `no registered workspace for prefix '${prefix}' (from ${id}) — open it in hivemind or run \`hive workspace register\` in that repo`,
     );
   }
-  return ws.root;
+  return roots[0]!;
 }
 
 /** Resolve an issue ref that may live in another workspace. Returns the owning
@@ -224,7 +227,13 @@ export async function transferIssue(
     opts.mode === "move"
       ? { id, type: "moved-from" }
       : { id, type: "relates" };
+  // Every frontmatter key travels except the ones rebuilt below and `branch` (a branch of the source
+  // repo, like `github`). A copy is a new issue, so it leaves behind what names the original: its
+  // tracker link, its PR and its earlier ids.
+  const { path: _p, sections: _s, raw: _r, branch: _b, external, pr, aliases, ...carried } = src;
   const newIssue: Issue = {
+    ...carried,
+    ...(opts.mode === "move" ? { external, pr, aliases } : {}),
     id: newId,
     title: src.title,
     state: src.state,
@@ -239,14 +248,15 @@ export async function transferIssue(
     sections: {
       description: src.sections.description,
       acceptanceCriteria: src.sections.acceptanceCriteria.map((a) => ({ ...a })),
+      ...(src.sections.acceptanceLayout ? { acceptanceLayout: [...src.sections.acceptanceLayout] } : {}),
       activity: [
         {
-          at: now.replace("T", " ").slice(0, 16),
+          at: now,
           who: actor,
           message: `${opts.mode === "move" ? "moved" : "copied"} from ${id} (${prefixOf(id)})`,
         },
       ],
-      extra: "",
+      extra: src.sections.extra,
     },
     raw: "",
   };

@@ -161,6 +161,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     services: () => port.invoke("services:list"),
     serviceLog: (plugin) => port.invoke("services:log", plugin),
     onServicesChanged: (cb) => port.on("services:changed", () => cb()),
+    setPluginSecret: (plugin, field, value) => port.invoke("secrets:set", plugin, field, value),
     outdatedAgents: () => port.invoke("plugins:outdated"),
     reviewCatalogPlugin: (type, id) => port.invoke("plugins:review", type, id),
     installCatalogAgent: (token) => port.invoke("plugins:install-agent", token),

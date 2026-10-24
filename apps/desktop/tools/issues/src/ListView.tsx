@@ -1,4 +1,4 @@
-import type { IssueSummary } from "./data";
+import { useWorkflow, type IssueSummary } from "./data";
 import { groupIssues, type GroupBy } from "./grouping";
 import { IssueRow } from "./IssueCard";
 
@@ -16,7 +16,7 @@ export function ListView({
   showCancelled: boolean;
   onWork: (i: IssueSummary) => void;
 }) {
-  const groups = groupIssues(issues, groupBy, showCancelled).filter(
+  const groups = groupIssues(issues, groupBy, showCancelled, useWorkflow()).filter(
     (g) => g.items.length > 0 || groupBy === "state",
   );
   return (

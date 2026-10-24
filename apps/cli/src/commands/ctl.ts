@@ -23,7 +23,7 @@ import path from "node:path";
 import { defineCommand, type ArgsDef, type ParsedArgs } from "citty";
 import fs from "node:fs";
 import {
-  HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, requireRoot, rootForId, updateIssue,
+  CATEGORIES, HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, rootForIdHere, updateIssue,
   type IssueState,
 } from "@hivemind/core";
 import { HcpCliError, hcpCall, ownTile, sockPath } from "../hcp.js";
@@ -50,7 +50,6 @@ import { agentRows, tileRows, type AgentRow, type ToolOf } from "../tile-rows.js
 import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
 import os from "node:os";
 
-const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
 /** Who signs Activity rows: an agent's id when run inside a spawned tile,
  *  else the human at the keyboard. */
@@ -632,12 +631,12 @@ const stream = defineCommand({
 
 const setState = sub("set-state", "Set an issue's state (optionally with a note); prints the issue", {
   id: { type: "positional", required: true },
-  state: { type: "positional", required: true, description: ISSUE_STATES.join(" | ") },
+  state: { type: "positional", required: true, description: `${CATEGORIES.join(" | ")} (with a workflow: that state's first status; hive update --status picks one)` },
   note: { type: "string", description: "activity comment explaining the change" },
 }, async (a) => {
   const state = String(a.state) as IssueState;
-  if (!ISSUE_STATES.includes(state)) throw new UsageError(`state must be one of ${ISSUE_STATES.join(", ")}`);
-  const r = await rootForId(await requireRoot(), String(a.id));
+  if (!CATEGORIES.includes(state)) throw new UsageError(`state must be one of ${CATEGORIES.join(", ")}`);
+  const r = await rootForIdHere(String(a.id));
   await updateIssue(r, String(a.id), { state }, actor());
   if (a.note) await commentOnIssue(r, String(a.id), String(a.note), actor());
   return issueToJson(await readIssue(r, String(a.id)));
@@ -647,7 +646,7 @@ const addComment = sub("add-comment", "Append an activity comment to an issue", 
   id: { type: "positional", required: true },
   message: { type: "positional", required: true },
 }, async (a) => {
-  const r = await rootForId(await requireRoot(), String(a.id));
+  const r = await rootForIdHere(String(a.id));
   await commentOnIssue(r, String(a.id), String(a.message), actor());
   const after = await readIssue(r, String(a.id));
   return { activity: after.sections.activity.slice(-3) };
@@ -659,7 +658,7 @@ const markAcceptance = sub("mark-acceptance", "Tick (or untick) an acceptance cr
   undone: { type: "boolean", description: "reopen the criterion instead of marking it done" },
 }, async (a) => {
   const index = intFlag(a.index, "index", -1);
-  const r = await rootForId(await requireRoot(), String(a.id));
+  const r = await rootForIdHere(String(a.id));
   const cur = await readIssue(r, String(a.id));
   const ac = [...cur.sections.acceptanceCriteria];
   if (index < 0 || index >= ac.length) throw new UsageError(`acceptance index ${index} out of range (have ${ac.length} criteria)`);
@@ -673,7 +672,7 @@ const markAcceptance = sub("mark-acceptance", "Tick (or untick) an acceptance cr
 const deleteIssueCmd = sub("delete-issue", "Delete an issue file (irreversible)", {
   id: { type: "positional", required: true },
 }, async (a) => {
-  const r = await rootForId(await requireRoot(), String(a.id));
+  const r = await rootForIdHere(String(a.id));
   await deleteIssue(r, String(a.id));
   return { deleted: String(a.id) };
 });

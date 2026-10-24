@@ -223,6 +223,9 @@ export interface PeerLinksOptions {
   shown?(repo: string): LayersShown | undefined;
   /** What the tile `tile` of `held` last said, or its screen last showed (Home's last line). */
   line?(held: HeldBoard[], tile: string): string | undefined;
+  /** Someone connected to the workspace at `repo`: they are told what changes there (its
+   *  issues) until `until` aborts, as they go. */
+  follow?(repo: string, until: AbortSignal): void;
 }
 
 interface Served { workspace: string; person: string; link: Link; stop(): void }
@@ -458,6 +461,11 @@ export class PeerLinks {
         places: () => frameWorktrees(store.getCore(repo)),
         ...(terminals === null ? {} : { hears: (event: string) => event.startsWith("terminal.") === terminals }),
       }));
+      if (this.o.follow) {
+        const gone = new AbortController();
+        void link.closed.then(() => gone.abort());
+        this.o.follow(repo, gone.signal);
+      }
       const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);
       const who = `${link.peer.slice(0, 8)}… in ${hello.workspace.slice(0, 8)}…`;

@@ -21,7 +21,7 @@ import { takeLines } from "./control/protocol.js";
 import type { Grants } from "./grants.js";
 
 /** The workspace API version the drive socket speaks. */
-export const DRIVE_API = "0.33";
+export const DRIVE_API = "0.34";
 /** How long a connection may take to say who it is. */
 const HELLO_WITHIN_MS = 10_000;
 /** What may wait unread for a connection before it is closed: a program that stopped reading. */
@@ -42,6 +42,9 @@ export interface DriveOptions {
   places?(repo: string): string[];
   /** The workspace's id, once it has one. */
   workspaceId?(repo: string): string | null;
+  /** A program holding a grant connected to the workspace at `repo`: it is told of what changes
+   *  there (its issues) until `until` aborts, as it goes. */
+  follow?(repo: string, until: AbortSignal): void;
   onWarn?(message: string): void;
 }
 
@@ -157,6 +160,11 @@ export function serveDrive(sockPath: string, o: DriveOptions): DriveServer {
         socket.on("close", () => clearTimeout(ends));
       }
       o.grants.used(grant.id);
+      if (o.follow) {
+        const gone = new AbortController();
+        void closed.then(() => gone.abort());
+        o.follow(repo, gone.signal);
+      }
       write(JSON.stringify({ hello: { api: DRIVE_API, as: { client: grant.name, role: grant.role, workspace: repo } } }));
       serve(repo, { kind: "peer", person: `client:${grant.id}`, device: `client:${grant.id}`, access: grant.role, client: grant.name }, () => o.grants.live(grant.id));
     }

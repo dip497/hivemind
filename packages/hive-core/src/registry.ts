@@ -13,11 +13,17 @@
  * The registry is a cache/index, never the source of truth — issue files on
  * disk remain authoritative. A stale entry (root no longer exists) is treated
  * as absent and pruned lazily.
+ *
+ * Prefixes mirrored from an external tracker (`PAY` for Jira's `PAY-318`) are
+ * not owned by one workspace: two repos may mirror the same project. They live
+ * in their own map, `externals: {PAY: [root, …]}`, refreshed from each
+ * workspace's config.yaml `external_prefixes` (design jira-sync §5.2).
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { readConfig } from "./storage.js";
+import { issuePrefix } from "./issue-id.js";
 
 export interface WorkspaceEntry {
   /** Config prefix — the registry key and the issue-id prefix. */
@@ -35,6 +41,8 @@ export interface WorkspaceEntry {
 interface RegistryFile {
   version: 1;
   workspaces: Record<string, WorkspaceEntry>;
+  /** External prefix → the `.hivemind` roots that mirror it. */
+  externals?: Record<string, string[]>;
 }
 
 /** Resolve the registry file path, honoring `$XDG_CONFIG_HOME`. */
@@ -48,7 +56,8 @@ async function readRegistry(): Promise<RegistryFile> {
     const raw = await fs.readFile(registryPath(), "utf8");
     const parsed = JSON.parse(raw) as Partial<RegistryFile>;
     if (parsed && typeof parsed === "object" && parsed.workspaces) {
-      return { version: 1, workspaces: parsed.workspaces };
+      const externals = parsed.externals && typeof parsed.externals === "object" ? parsed.externals : undefined;
+      return { version: 1, workspaces: parsed.workspaces, ...(externals ? { externals } : {}) };
     }
   } catch {
     /* missing or corrupt → fresh */
@@ -66,9 +75,26 @@ async function writeRegistry(reg: RegistryFile): Promise<void> {
   await fs.rename(tmp, p);
 }
 
+/** Make `root` listed under exactly the external prefixes `prefixes`. Returns whether anything changed. */
+function setExternals(reg: RegistryFile, root: string, prefixes: readonly string[]): boolean {
+  const ext = (reg.externals ??= {});
+  let changed = false;
+  for (const p of prefixes) {
+    const roots = (ext[p] ??= []);
+    if (!roots.includes(root)) { roots.push(root); changed = true; }
+  }
+  for (const [p, roots] of Object.entries(ext)) {
+    if (prefixes.includes(p) || !roots.includes(root)) continue;
+    ext[p] = roots.filter((r) => r !== root);
+    if (ext[p]!.length === 0) delete ext[p];
+    changed = true;
+  }
+  return changed;
+}
+
 /** Upsert a workspace into the registry from its `.hivemind` root. Reads the
- *  config to learn the prefix. Idempotent; skips the disk write when the entry
- *  is already present with the same root+repo (only `lastSeen` would change). */
+ *  config to learn the prefix and the external prefixes it mirrors. Idempotent;
+ *  skips the disk write when nothing but `lastSeen` would change. */
 export async function registerWorkspace(root: string): Promise<WorkspaceEntry> {
   const cfg = await readConfig(root);
   const repo = path.dirname(root);
@@ -82,10 +108,9 @@ export async function registerWorkspace(root: string): Promise<WorkspaceEntry> {
   const reg = await readRegistry();
   const prev = reg.workspaces[cfg.prefix];
   const unchanged = prev && prev.root === root && prev.repo === repo && prev.title === entry.title;
-  if (!unchanged) {
-    reg.workspaces[cfg.prefix] = entry;
-    await writeRegistry(reg);
-  }
+  if (!unchanged) reg.workspaces[cfg.prefix] = entry;
+  const externalsChanged = setExternals(reg, root, cfg.external_prefixes ?? []);
+  if (!unchanged || externalsChanged) await writeRegistry(reg);
   return entry;
 }
 
@@ -93,16 +118,16 @@ export async function registerWorkspace(root: string): Promise<WorkspaceEntry> {
 export async function forgetWorkspace(repo: string): Promise<void> {
   const reg = await readRegistry();
   const prefixes = Object.keys(reg.workspaces).filter((p) => reg.workspaces[p]!.repo === repo);
-  if (!prefixes.length) return;
   for (const p of prefixes) delete reg.workspaces[p];
+  const externalsChanged = setExternals(reg, path.join(repo, ".hivemind"), []);
+  if (!prefixes.length && !externalsChanged) return;
   await writeRegistry(reg);
 }
 
 /** Extract the workspace prefix from an issue id (`MANAGEARK-3` → `MANAGEARK`,
  *  `PAY-1.2` → `PAY`). Returns null if the id isn't well-formed. */
 export function prefixOf(id: string): string | null {
-  const m = /^([A-Z][A-Z0-9]{1,9})-\d+(\.\d+)*$/.exec(id.trim());
-  return m ? m[1]! : null;
+  return issuePrefix(id);
 }
 
 /** True when the entry's root still exists on disk. */
@@ -123,13 +148,26 @@ export async function resolveWorkspaceByPrefix(prefix: string): Promise<Workspac
   return (await entryAlive(e)) ? e : null;
 }
 
-/** Resolve the `.hivemind` root that owns an issue id, via its prefix.
- *  Returns null if the id is malformed or its workspace isn't registered. */
+/** Every live `.hivemind` root that holds issues with `prefix`: the workspace that owns it as its
+ *  own prefix, and every workspace that mirrors it. Deduplicated, owner first. */
+export async function rootsForPrefix(prefix: string): Promise<string[]> {
+  const reg = await readRegistry();
+  const owner = reg.workspaces[prefix];
+  const candidates = [...(owner ? [owner.root] : []), ...(reg.externals?.[prefix] ?? [])];
+  const out: string[] = [];
+  for (const root of new Set(candidates)) {
+    if (await entryAlive({ root } as WorkspaceEntry)) out.push(root);
+  }
+  return out;
+}
+
+/** Resolve the `.hivemind` root that holds an issue id, via its prefix. Returns null if the id is
+ *  malformed, no registered workspace holds the prefix, or more than one does. */
 export async function resolveRootForIssue(id: string): Promise<string | null> {
   const prefix = prefixOf(id);
   if (!prefix) return null;
-  const e = await resolveWorkspaceByPrefix(prefix);
-  return e?.root ?? null;
+  const roots = await rootsForPrefix(prefix);
+  return roots.length === 1 ? roots[0]! : null;
 }
 
 /** List all registered workspaces whose roots still exist (lazily prunes dead

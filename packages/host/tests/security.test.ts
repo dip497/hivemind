@@ -16,7 +16,7 @@ import { workspaceDomains } from "../src/domains.ts";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-security-")));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
-const server = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+const server = new WorkspaceServer(workspaceDomains(), new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
 /** The app's window, as a connection: the person at this machine. */
 const window = { actor: { kind: "person" } as const, send: () => {}, closed: new AbortController().signal };
 const ask = (method: string, ...params: unknown[]) => server.answer(method, params, window);

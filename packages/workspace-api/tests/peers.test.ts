@@ -591,3 +591,17 @@ test("the host's folder never reaches a peer: answers, errors and events name th
   expect(heard.join()).not.toContain(REPO);
   expect(heard.join()).toContain(`in ${workspaceUrl(W)}/src`);
 });
+
+test("a guest hears an issue changed in its workspace, by whoever wrote it, named by its id; never one of another workspace, nor of issues kept in a folder above it", async () => {
+  const { server, client } = connect("view");
+  const heard: unknown[] = [];
+  client.on("issue.changed", (repo, change) => heard.push([repo, change]));
+  await client.call("file.read", workspaceUrl(W), "a.ts"); // connected
+  const change = (root: string, id: string) => ({ id, root, change: "updated" as const, fields: ["state"], by: "@acme/jira (service)" });
+  server.publish("issue.changed", REPO, change(`${REPO}/.hivemind`, "TT-1"));
+  server.publish("issue.changed", "/work/other", change("/work/other/.hivemind", "OT-1"));
+  // A repo whose issues are its parent folder's: the host's own folder, never told.
+  server.publish("issue.changed", REPO, change("/work/.hivemind", "UP-1"));
+  await client.call("status.all"); // an answer comes after the events sent before it
+  expect(heard).toEqual([[workspaceUrl(W), change(`${workspaceUrl(W)}/.hivemind`, "TT-1")]]);
+});
