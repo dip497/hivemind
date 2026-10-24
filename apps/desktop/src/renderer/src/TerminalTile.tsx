@@ -324,7 +324,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       if (statusWrapRef.current) statusWrapRef.current.style.display = s === "idle" ? "none" : "inline-flex";
       paintGlyph(dot, look);
       label.textContent = statusWord(s, { failed });
-      label.style.color = LOOKS[look].color;
+      label.style.color = LOOKS[look].text;
       lastStatusRef.current = s;
     };
     const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;

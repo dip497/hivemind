@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { contrastRatio, cssColorToOklab, cssColorToRgb } from "./css-color";
-import { checkTheme, statusInk, themeFiles, themeFromLook, themeSwatches, type ThemeFolderFile } from "./theme-format";
+import { accentMarkInk, checkTheme, statusInk, statusTextInk, themeFiles, themeFromLook, themeSwatches, type ThemeFolderFile } from "./theme-format";
 import { ACCENTS, CLEAN_LIGHT, DEFAULT_APPEARANCE, PRESETS, SIGNAL, applyPreset, type AccentId } from "./settings-schema";
 import type { AccentColors } from "./appearance-extra";
 
@@ -181,24 +181,55 @@ describe("statusInk", () => {
     "pale dark": { ...PRESETS.dracula!.palette, bg2: "#363642", bg3: "#424250", bg4: "#50505e", err: "#ff2020", warn: "#ffcc00" },
     "bright light": { ...CLEAN_LIGHT.palette, bg2: "#ffffff", bg3: "#f0f0f0", bg4: "#dedede", err: "#ff6b6b", warn: "#ffd23f" },
   };
-  const hue = (c: string) => { const [, a, b] = cssColorToOklab(c)!; return { h: (Math.atan2(b, a) * 180) / Math.PI, c: Math.hypot(a, b) }; };
-  const chip = (c: string, row: string) => { const a = cssColorToRgb(c)!, b = cssColorToRgb(row)!; return `rgb(${a.map((x, i) => Math.round(x * 0.16 + b[i]! * 0.84)).join(" ")})`; };
+  const all = { ...PALETTES, ...Object.fromEntries(Object.entries(PRESETS).map(([id, p]) => [id, p.palette])) };
+  const lch = (c: string) => { const [, a, b] = cssColorToOklab(c)!; return { h: (Math.atan2(b, a) * 180) / Math.PI, c: Math.hypot(a, b) }; };
+  const chip = (c: string, under: string) => { const a = cssColorToRgb(c)!, b = cssColorToRgb(under)!; return `rgb(${a.map((x, i) => Math.round(x * 0.16 + b[i]! * 0.84)).join(" ")})`; };
 
-  test("a package theme's status reads on its chip and as a mark on every row, in its own hue", () => {
-    for (const [name, p] of Object.entries(PALETTES)) {
+  test("a chip's word reads on its own fill over the panel, and its mark on every row and header", () => {
+    for (const [name, p] of Object.entries(all)) {
       for (const base of [p.err, p.warn]) {
         const ink = statusInk(base, p);
-        for (const row of [p.bg2, p.bg3, p.bg4]) {
-          expect({ name, base, row, word: contrastRatio(ink, chip(ink, row))! >= 4.5, mark: contrastRatio(ink, row)! >= 3 }).toEqual({ name, base, row, word: true, mark: true });
-        }
-        const before = hue(base), after = hue(ink);
-        expect(after.c).toBeGreaterThan(0.02);
+        expect({ name, base, word: contrastRatio(ink, chip(ink, p.bg2))! >= 4.5 && contrastRatio(ink, p.bg2)! >= 4.5 }).toEqual({ name, base, word: true });
+        for (const row of [p.bg2, p.bg3, p.bg4]) expect({ name, base, row, mark: contrastRatio(ink, row)! >= 3 }).toEqual({ name, base, row, mark: true });
+      }
+    }
+  });
+
+  test("a status keeps its hue and at least half its chroma, so failed stays red in every preset", () => {
+    for (const [name, { palette: p }] of Object.entries(PRESETS)) {
+      for (const base of [p.err, p.warn]) {
+        const before = lch(base), after = lch(statusInk(base, p));
+        expect({ name, base, chroma: after.c >= before.c / 2 }).toEqual({ name, base, chroma: true });
         expect(Math.abs(((after.h - before.h + 540) % 360) - 180)).toBeLessThan(8);
       }
     }
   });
 
+  test("a word straight on a header or a selected row reads on each", () => {
+    for (const [name, p] of Object.entries(all)) {
+      const ink = statusTextInk(p.err, p);
+      for (const row of [p.bg2, p.bg3, p.bg4]) expect({ name, row, word: contrastRatio(ink, row)! >= 4.5 }).toEqual({ name, row, word: true });
+    }
+  });
+
   test("a colour that already reads is the palette's own", () => {
     expect(statusInk(SIGNAL.palette.warn, SIGNAL.palette)).toBe(SIGNAL.palette.warn);
+  });
+
+  test("a theme's accent may not be the needs-you colour as it is drawn, not only the palette's warn", () => {
+    const p = PRESETS["solarized-dark"]!.palette;
+    const drawn = statusInk(p.warn, p);
+    expect(drawn).not.toBe(p.warn);
+    const r = checkTheme({ ...FULL, palette: p, accent: { brand: drawn, accent: drawn } }, FILES);
+    expect("problem" in r ? r.problem : "").toContain("waiting on you");
+  });
+
+  test("the accent's mark reads at 3:1 on the page, the panels and a header", () => {
+    for (const [name, p] of Object.entries(all)) {
+      for (const brand of ["#7c6aa8", "#3b82f6", "#9a9a9a"]) {
+        const ink = accentMarkInk(brand, p);
+        for (const on of [p.bg, p.bg2, p.bg3]) expect({ name, brand, on, mark: contrastRatio(ink, on)! >= 3 }).toEqual({ name, brand, on, mark: true });
+      }
+    }
   });
 });

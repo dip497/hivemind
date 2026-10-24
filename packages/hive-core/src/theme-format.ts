@@ -143,11 +143,13 @@ function accentOfTheme(v: unknown, palette: Palette): AccentId | AccentColors {
     colours = { brand: opaque(v.brand, "accent.brand"), accent: opaque(v.accent, "accent.accent"), ...(v.working !== undefined ? { working: opaque(v.working, "accent.working") } : {}) };
   }
   // The accent is the person's, never a signal (apps/desktop/DESIGN.md): not the colour of "needs you".
-  const warn = cssColorToOklab(palette.warn);
+  // Needs-you is drawn in the palette's warn fitted to it (`statusInk`, `statusTextInk`), which can
+  // sit well away from warn itself, so the accent is kept from all three.
+  const needs = [palette.warn, statusInk(palette.warn, palette), statusTextInk(palette.warn, palette)].map(cssColorToOklab);
   for (const k of ["brand", "accent"] as const) {
     const c = cssColorToOklab(colours[k]);
-    if (warn && c && Math.hypot(c[0] - warn[0], c[1] - warn[1], c[2] - warn[2]) < WARN_DISTANCE) {
-      refuse(`accent.${k} is the colour of an agent waiting on you (palette.warn); a theme's accent is another colour`);
+    if (c && needs.some((w) => w && Math.hypot(c[0] - w[0], c[1] - w[1], c[2] - w[2]) < WARN_DISTANCE)) {
+      refuse(`accent.${k} is the colour of an agent waiting on you (palette.warn, as needs-you is drawn); a theme's accent is another colour`);
     }
   }
   const mark = accentMark(colours.brand, palette);
@@ -169,18 +171,21 @@ export function accentMark(brand: string, palette: Pick<Palette, (typeof ACCENT_
   return low;
 }
 
-/** What a status is drawn on in a list (Layers, Home, the slot bar): a row at rest, under the
- *  pointer and selected (graphite-sheet, -card and -hover in apps/desktop/DESIGN.md). A hovered and
- *  a selected row paint the solid surface, glass on or off. */
+/** What a status mark is drawn on in a list (Layers, Home, the slot bar): a row at rest, under the
+ *  pointer and selected (graphite-sheet, -card and -hover in apps/desktop/DESIGN.md), and a tile's
+ *  header (graphite-card). Rows and headers paint the solid surface, glass on or off. */
 export const STATUS_SURFACES = ["bg2", "bg3", "bg4"] as const satisfies readonly (keyof Palette)[];
 /** Unread and finished-since-you-looked: a clear blue whatever the accent (apps/desktop styles.css
  *  `--color-unread`, DESIGN.md Unread Blue), before `statusInk` fits it to a palette. */
 export const UNREAD_BLUE = "oklch(0.70 0.14 250)";
-/** A status chip's fill: its colour at this share over the row (`color-mix(in srgb, <status> 16%,
- *  transparent)`). */
+/** A status chip's fill: its colour at this share over the panel colour (`color-mix(in srgb,
+ *  <status> 16%, var(--surface-2))`), opaque, so its word reads the same on any row under it. */
 export const CHIP_TINT = 0.16;
-/** A chip's word on its own fill, and a status mark on the row. */
+/** A word on its chip or on a surface, and a mark on a surface. */
 export const STATUS_CONTRAST = { word: 4.5, mark: 3 } as const;
+/** Where the accent is drawn as a small mark beyond `ACCENT_SURFACES`: a pin, a check or a frame's
+ *  server icon on a tile's header, a toast's icon on its card (`bg3`). */
+export const ACCENT_MARK_SURFACES = ["bg", "bg2", "bg3"] as const satisfies readonly (keyof Palette)[];
 
 /** `color` over `surface` at `share`, as `color-mix(in srgb, …)` paints it; null when unreadable. */
 function tint(color: string, share: number, surface: string): string | null {
@@ -188,22 +193,17 @@ function tint(color: string, share: number, surface: string): string | null {
   return c && s ? cssColorToHex(`rgb(${c.map((x, i) => x * share + s[i]! * (1 - share)).join(" ")})`, "") : null;
 }
 
-/** Whether a status in `color` reads on every surface it is drawn on: its word on its chip, its
- *  mark on the row. */
-function statusReads(color: string, palette: Pick<Palette, (typeof STATUS_SURFACES)[number]>): boolean {
-  return STATUS_SURFACES.every((on) => {
-    const chip = tint(color, CHIP_TINT, palette[on]);
-    return chip !== null && (contrastRatio(color, chip) ?? 0) >= STATUS_CONTRAST.word && (contrastRatio(color, palette[on]) ?? 0) >= STATUS_CONTRAST.mark;
-  });
-}
+const atLeast = (a: string, b: string | null, least: number) => b !== null && (contrastRatio(a, b) ?? 0) >= least;
+/** A status's mark reads at 3:1 on every surface in `STATUS_SURFACES`. */
+const marksRead = (c: string, p: Pick<Palette, (typeof STATUS_SURFACES)[number]>) =>
+  STATUS_SURFACES.every((on) => atLeast(c, p[on], STATUS_CONTRAST.mark));
 
-/** A status colour as the app paints it for `palette`: `color` itself when it reads on every
- *  surface in `STATUS_SURFACES` (`STATUS_CONTRAST`), else the nearest colour of its hue and chroma
- *  that does, lighter on a dark palette and darker on a light one, as `#rrggbb` (what was measured
- *  is what is painted, never a browser's gamut mapping of it). A preset's `err` drawn for its page
- *  then still reads on a selected row, and so does a package theme's. */
-export function statusInk(color: string, palette: Pick<Palette, "fg" | (typeof STATUS_SURFACES)[number]>): string {
-  if (statusReads(color, palette)) return color;
+/** `color` itself when `reads` holds for it, else the nearest colour of its hue that does, moved in
+ *  lightness away from the surfaces (lighter on a dark palette, darker on a light one) with as much
+ *  of its chroma as sRGB shows there, as `#rrggbb` (what was measured is what is painted, never a
+ *  browser's gamut mapping of it); the palette's text colour when none does. */
+function fitInk(color: string, palette: Pick<Palette, "fg" | "bg4">, reads: (c: string) => boolean): string {
+  if (reads(color)) return color;
   const lab = cssColorToOklab(color), fg = cssColorToOklab(palette.fg), under = cssColorToOklab(palette.bg4);
   if (!lab || !fg || !under) return color;
   const [l, a, b] = lab;
@@ -211,9 +211,32 @@ export function statusInk(color: string, palette: Pick<Palette, "fg" | (typeof S
   const step = fg[0] > under[0] ? 0.005 : -0.005;
   for (let next = l + step; next > 0 && next < 1; next += step) {
     const ink = inGamut(next, chroma, hue);
-    if (statusReads(ink, palette)) return ink;
+    if (reads(ink)) return ink;
   }
   return palette.fg;
+}
+
+/** A status colour as chips and marks paint it for `palette` (`--color-status-failed`, the attention
+ *  and unread colours): its word at 4.5:1 on its own chip and on the panel, its mark at 3:1 on every
+ *  row and header. It is fitted to the panel, not the lightest surface, so a red stays red: a word
+ *  drawn straight on a header or a selected row takes `statusTextInk`. Views are told this one. */
+export function statusInk(color: string, palette: Pick<Palette, "fg" | (typeof STATUS_SURFACES)[number]>): string {
+  return fitInk(color, palette, (c) =>
+    atLeast(c, tint(c, CHIP_TINT, palette.bg2), STATUS_CONTRAST.word) && atLeast(c, palette.bg2, STATUS_CONTRAST.word) && marksRead(c, palette));
+}
+
+/** A status word drawn straight on any surface in `STATUS_SURFACES` (a tile header's label, a row's
+ *  line under the pointer or selected): 4.5:1 on each, so paler than `statusInk` where those
+ *  surfaces are light. */
+export function statusTextInk(color: string, palette: Pick<Palette, "fg" | (typeof STATUS_SURFACES)[number]>): string {
+  return fitInk(color, palette, (c) => STATUS_SURFACES.every((on) => atLeast(c, palette[on], STATUS_CONTRAST.word)));
+}
+
+/** The accent as a small mark (`--color-brand-mark`): `brand` itself when it reads at 3:1 on every
+ *  surface in `ACCENT_MARK_SURFACES`, else the nearest colour of its hue that does. A theme's accent
+ *  is checked on `ACCENT_SURFACES` and a picked one only warned about, so the mark is fitted here. */
+export function accentMarkInk(brand: string, palette: Pick<Palette, "fg" | "bg4" | (typeof ACCENT_MARK_SURFACES)[number]>): string {
+  return fitInk(brand, palette, (c) => ACCENT_MARK_SURFACES.every((on) => atLeast(c, palette[on], STATUS_CONTRAST.mark)));
 }
 
 /** The colour at lightness `l` and hue `h` with as much of chroma `c` as sRGB can show, as

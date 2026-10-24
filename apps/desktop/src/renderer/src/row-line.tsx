@@ -44,7 +44,7 @@ export const RowLine = memo(function RowLine({ tileId, show }: { tileId: string;
   return (
     <>
       <span ref={el} id={lineId(tileId)} data-layer-line={waiting ? "waiting" : "line"} className={`truncate font-mono text-count leading-4 ${waiting ? "" : "text-[var(--color-fg2)]"}`}
-        style={waiting ? { color: LOOKS.needs.color } : undefined}>
+        style={waiting ? { color: LOOKS.needs.text } : undefined}>
         {text}
       </span>
       {/* The ghost button's text, not its box, lines up with the line above. */}
@@ -67,7 +67,7 @@ export function CardLine({ tileId }: { tileId: string }) {
   return (
     <>
       <p data-layers-card-line={waiting ? "waiting" : "line"} className={`mt-3 line-clamp-12 whitespace-pre-wrap break-all font-mono text-count leading-4 ${waiting ? "" : "text-[var(--color-fg2)]"}`}
-        style={waiting ? { color: LOOKS.needs.color } : undefined}>
+        style={waiting ? { color: LOOKS.needs.text } : undefined}>
         {text}
       </p>
       {about?.more && <p className="mt-1 text-count text-[var(--color-fg3)]">Only its first {REVIEW_MAX.toLocaleString()} characters are shown.</p>}

@@ -154,6 +154,12 @@
   --color-status-idle:      var(--color-fg3);
   --color-status-exited:    var(--color-fg3);
   --color-status-failed:    var(--color-err);
+  /* A status word straight on a header or a selected row, and the accent as a small mark: the theme
+     store fits each to the palette (core's statusTextInk, accentMarkInk); these are first paint. */
+  --color-status-failed-text:    var(--color-status-failed);
+  --color-status-attention-text: var(--color-status-attention);
+  --color-unread-text:           var(--color-unread);
+  --color-brand-mark:            var(--color-brand);
 
   /* Issue states (tools/issues): Plane's five groups (backlog, unstarted, started, completed,
      cancelled), with In progress and In review apart. No state's hue is near a preset's warn, the
@@ -321,7 +327,7 @@ html.glass-on .hm-toast {
   backdrop-filter: blur(var(--glass-blur)) saturate(145%);
 }
 /* The single accent — applied to exactly two marks (icon, TTL line). */
-.hm-toast-icon { color: var(--color-brand); }
+.hm-toast-icon { color: var(--color-brand-mark); }
 .hm-toast-verb { color: var(--color-fg2); }
 /* Auto-dismiss progress line — shrinks 100%→0 over --ttl (set inline to match
    the JS dismiss timer exactly, both via toastTtlMs). */

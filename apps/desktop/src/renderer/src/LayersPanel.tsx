@@ -113,7 +113,9 @@ interface Props {
 // One status, one word, shape and colour, shared with every other surface (workspace/status-look).
 const NEEDS_YOU = (s: TileStatusKind | null): boolean => statusLook(s) === "needs";
 /** A status pill: the look's colour on a tint of it. */
-const pillStyle = (look: StatusLook) => ({ color: LOOKS[look].color, background: `color-mix(in srgb, ${LOOKS[look].color} 16%, transparent)` });
+/** A status chip: its colour on an opaque 16% fill over the panel colour, so its word reads the same
+ *  on a row at rest, under the pointer or selected (core's statusInk is fitted to that fill). */
+const pillStyle = (look: StatusLook) => ({ color: LOOKS[look].color, background: `color-mix(in srgb, ${LOOKS[look].color} 16%, var(--surface-2))` });
 
 /**
  * The panel's one type and icon scale: the title 15px semibold; a row (an action, a group, a tile)
@@ -1365,14 +1367,14 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
         ? <span className="shrink-0 normal-case tracking-normal font-normal text-count tabular-nums font-mono" data-machine-state>{statusWords(s, on)}</span>
         : on && s.state === "attention"
         ? <button type="button" onClick={retry} data-machine-state
-            className="shrink-0 rounded px-1 normal-case tracking-normal font-normal text-count text-[var(--color-status-attention)] hover:bg-[var(--surface-3)]">Sign in</button>
+            className="shrink-0 rounded px-1 normal-case tracking-normal font-normal text-count text-[var(--color-status-attention-text)] hover:bg-[var(--surface-3)]">Sign in</button>
         // Online or away, the dot says it; words only for what is under way or paused.
         : <span className={`shrink-0 normal-case tracking-normal font-normal text-count text-[var(--color-fg3)] ${on && QUIET.has(s.state) ? "sr-only" : m ? "group-hover/mach:invisible group-focus-within/mach:invisible" : ""}`} data-machine-state>
             {statusWords(s, on)}
           </span>
       )}
       {needsYou > 0 && (
-        <span className="shrink-0 flex items-center gap-0.5 font-mono tracking-normal text-[var(--color-status-attention)]" title={`${needsYou} need you on ${group.label}`} data-machine-needs-you>
+        <span className="shrink-0 flex items-center gap-0.5 font-mono tracking-normal text-[var(--color-status-attention-text)]" title={`${needsYou} need you on ${group.label}`} data-machine-needs-you>
           <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-status-attention)" }} />
           {needsYou}
         </span>

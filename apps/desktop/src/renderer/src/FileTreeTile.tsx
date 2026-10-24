@@ -57,7 +57,8 @@ const STATUS_LETTER: Record<GitFileStatus, string> = {
 };
 
 const STATUS_COLOR: Record<GitFileStatus, string> = {
-  modified: "var(--color-warn)",
+  // Not amber: a modified file does not wait on the person (DESIGN.md, The One Voice Rule).
+  modified: "var(--color-fg2)",
   added: "var(--color-ok)",
   deleted: "var(--color-err)",
   // Not --color-info: on a light page that is the accent, held to 3:1 as a mark, not 4.5:1 as text.
@@ -187,7 +188,7 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false }: Props
           "--trees-theme-input-fg": "var(--color-fg)",
           "--trees-theme-focus-ring": "var(--color-brand)",
           "--trees-theme-scrollbar-thumb": "var(--color-line2)",
-          "--trees-theme-git-modified-fg": "var(--color-warn)",
+          "--trees-theme-git-modified-fg": "var(--color-fg2)",
           "--trees-theme-git-renamed-fg": "var(--color-fg2)",
           "--trees-theme-git-untracked-fg": "var(--color-ok)",
           "--trees-theme-git-ignored-fg": "var(--color-fg3)",
@@ -228,7 +229,7 @@ export function FileTreeTile({ repoPath, onSelectFile, embedded = false }: Props
                   </span>
                 </div>
                 {gitStatus.length > 0 && (
-                  <span className="font-mono text-count text-[var(--color-warn)] tabular-nums">
+                  <span className="font-mono text-count text-[var(--color-fg2)] tabular-nums">
                     {gitStatus.length} changed
                   </span>
                 )}

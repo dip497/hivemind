@@ -157,7 +157,7 @@ export function WorktreePicker({ repoPath, activePath, onAttach, onCreate }: Wor
                 <span className="flex flex-col min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 text-label text-[var(--color-fg)]">
                     <span className="truncate font-medium">{baseName(w.path)}</span>
-                    {active && <Check className="shrink-0 text-[var(--color-brand)]" />}
+                    {active && <Check className="shrink-0 text-[var(--color-brand-mark)]" />}
                   </span>
                   <span className="truncate text-chip font-mono text-[var(--color-fg3)]">
                     {w.branch ?? "detached"} · {w.head.slice(0, 7)} · {truncPath(w.path)}

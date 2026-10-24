@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MachineDot, statusWords } from "../../src/renderer/src/machines/status.tsx";
+import { LOOKS } from "../../src/renderer/src/workspace/status-look.tsx";
 import type { MachineState } from "../../src/shared/ipc";
 
 const STATES: MachineState[] = ["idle", "connecting", "online", "reconnecting", "offline", "attention", "no-hive"];
@@ -25,11 +26,19 @@ test("each machine state, and paused, has its own shape and its own word", () =>
 test("a mark shown without its word carries the word as its name; beside its word it is hidden", () => {
   for (const c of CASES) {
     const word = statusWords({ state: c.state, at: 0 }, c.enabled);
-    assert.match(dot(c), new RegExp(`role="img" aria-label="${word}"`), `${c.state}${c.enabled ? "" : " paused"}`);
+    const html = dot(c), name = `${c.state}${c.enabled ? "" : " paused"}`;
+    assert.match(html, /\brole="img"/, name);
+    assert.match(html, new RegExp(`\\baria-label="${word}"`), name);
     assert.match(dot(c, false), /aria-hidden="true"/);
   }
 });
 
 test("only signing in pulses: it is the one machine state that waits on the person", () => {
   assert.deepEqual(CASES.filter((c) => dot(c).includes("animate-pulse")).map((c) => c.state), ["attention"]);
+});
+
+test("only signing in is drawn in the needs-you colour; no other machine state is amber", () => {
+  const color = (html: string) => /style="color:([^"]+)"/.exec(html)?.[1];
+  const amber = new Set([LOOKS.needs.color, LOOKS.needs.text, "var(--color-warn)"]);
+  assert.deepEqual(CASES.filter((c) => amber.has(color(dot(c))!)).map((c) => c.state), ["attention"]);
 });

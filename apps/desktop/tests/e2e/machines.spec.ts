@@ -253,6 +253,15 @@ test("the server goes away and comes back: chip and banner say so, the job never
     await expect(mark).toHaveAttribute("data-machine-look", "reconnecting");
     await expect(mark).toHaveAttribute("aria-hidden", "true");
     await expect(mark).not.toHaveClass(/animate-pulse/);
+    const [drawn, amber] = await mark.evaluate((el) => {
+      const probe = document.createElement("i");
+      probe.style.color = "var(--color-status-attention)";
+      el.parentElement!.append(probe);
+      const out = [getComputedStyle(el).color, getComputedStyle(probe).color];
+      probe.remove();
+      return out;
+    });
+    expect(drawn).not.toBe(amber);
   }
   await expect(page.locator('button[aria-label="machine build-box"]')).toContainText("reconnecting…");
   await page.screenshot({ path: test.info().outputPath("machine-reconnecting.png") });

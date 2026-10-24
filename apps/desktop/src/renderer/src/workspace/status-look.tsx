@@ -13,16 +13,18 @@ import { STATUS_MARKS } from "@hivemind/view-sdk/status";
 export type StatusLook = "working" | "needs" | "done" | "failed" | "idle" | "exited";
 
 /** The word, mark and pulse come from the SDK's one table, which views draw from too; the colour is
- *  the app's own token for the tone. */
-const look = (tone: keyof typeof STATUS_MARKS, color: string) => {
+ *  the app's own token for the tone. `color` paints a mark and a chip (its word on its own fill);
+ *  `text` a word drawn straight on a header or a row, which the theme store fits to the lightest of
+ *  them (`--color-status-*-text`). */
+const look = (tone: keyof typeof STATUS_MARKS, color: string, text = color) => {
   const m = STATUS_MARKS[tone];
-  return { word: m.word, color, shape: m.path, pulse: m.pulse };
+  return { word: m.word, color, text, shape: m.path, pulse: m.pulse };
 };
-export const LOOKS: Record<StatusLook, { word: string; color: string; shape: string; pulse: boolean }> = {
+export const LOOKS: Record<StatusLook, { word: string; color: string; text: string; shape: string; pulse: boolean }> = {
   working: look("working", "var(--color-status-working)"),
-  needs: look("attention", "var(--color-status-attention)"),
-  done: look("done", "var(--color-unread)"),
-  failed: look("failed", "var(--color-status-failed)"),
+  needs: look("attention", "var(--color-status-attention)", "var(--color-status-attention-text)"),
+  done: look("done", "var(--color-unread)", "var(--color-unread-text)"),
+  failed: look("failed", "var(--color-status-failed)", "var(--color-status-failed-text)"),
   idle: look("idle", "var(--color-status-idle)"),
   exited: look("exited", "var(--color-status-exited)"),
 };
