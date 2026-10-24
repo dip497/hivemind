@@ -27,6 +27,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - A view can ask for widget cards down the left edge instead of the right, with `"widgets": "left"` in its `hivemind-view.json`, so they stay off a terminal it docks on the right. A card you moved stays where you put it.
 - A photo or video wallpaper no longer shows bright square blocks while it moves: its brightness is now a dark layer over it, not a filter on the moving picture.
 
+- A tool plugin's service can keep a secret of its own plugin's, such as a sign-in it was given (`secret.set` over the drive socket), and nothing of another plugin's; the audit log names the service as the one that set it.
 - Install on a HiveHub plugin's own page installs it, after the same review as the list and the Add menu, instead of only going back to the list.
 
 ### Changed

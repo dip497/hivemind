@@ -2,8 +2,9 @@
 // §12.7): it reads its own plugin's options and secret, never another plugin's; it creates an
 // issue signed as itself; it serves commands, and `hive ctl plugin call` reaches it when no window
 // runs the plugin (as under `hive host`); a change the person makes to its settings is told to it;
-// a program that holds no service's grant is refused all of it; and `node` it needs comes from
-// the host's own runtime where the machine has none.
+// a program that holds no service's grant is refused all of it; it keeps a secret of its own
+// plugin's (a sign-in), never another's; and `node` it needs comes from the host's own runtime
+// where the machine has none.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -40,6 +41,7 @@ const plugins = new PluginServices({
   options: async (plugin) => ({ values: values[plugin] ?? {}, secrets: secrets.names(`tool:${plugin}`) }),
   secret: (plugin, name) => secrets.get(`tool:${plugin}`, name),
   setSecret: (key, name, value) => secrets.set(key, name, value),
+  secretFields: async (plugin) => (plugin === "@acme/ci" ? ["token", "session"] : ["token"]),
 });
 const server = new WorkspaceServer([...workspaceDomains(), plugins.domain()], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
 const drive = serveDrive(sock, { server, installToken: () => "install-token", grants, repos: () => [repo], workspaceOf: () => null, nameOf: (t) => t });
@@ -73,6 +75,8 @@ async function run(workspace) {
   say({ secret: (await call("secret.get", "token")).result });
   const made = await call("issue.create", workspace + "/.hivemind", { title: "from the service" });
   say({ issue: made.result ? made.result.id : made.error });
+  const set = async (...p) => { const r = await call("secret.set", ...p); return r.error ? r.error.code : r.result; };
+  say({ sets: [await set("tool:@acme/ci", "session", "signed-in"), await set("tool:@acme/other", "token", "mine-now"), await set("tool:@acme/ci", "undeclared", "x"), await set("tool:@acme/ci", "session", null), await set("tool:@acme/ci", "session", "again")] });
   send({ method: "plugin.serve", params: [[{ name: "echo", description: "answers what it is given" }]] });
   say({ serving: true });
 }
@@ -114,6 +118,19 @@ test("a service reads its own options and secret, never another plugin's, and wr
   assert.ok(!services.log("@acme/ci").includes("someone-elses"));
 });
 
+test("a service keeps a declared secret of its own plugin, signed as itself; never another plugin's, nor one its plugin does not declare", async () => {
+  const sets = said().find((m) => m.sets)?.sets;
+  assert.deepEqual(sets, [{ kept: "file" }, "FORBIDDEN", "FORBIDDEN", { kept: null }, { kept: "file" }]);
+  assert.equal(secrets.get("tool:@acme/ci", "session"), "again");
+  assert.equal(secrets.get("tool:@acme/other", "token"), "someone-elses");
+  assert.equal(secrets.get("tool:@acme/ci", "undeclared"), null);
+  const service = grants.list().find((g) => g.plugin === "@acme/ci")!;
+  const audit = fs.readFileSync(path.join(tmp, "audit.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { verb: string; target?: string; outcome: string; actor: { person?: string } });
+  const kept = audit.filter((r) => r.verb === "secret.set" && r.target === "tool:@acme/ci.session");
+  assert.deepEqual(kept.map((r) => [r.actor.person, r.outcome]), [[`client:${service.id}`, "ok"], [`client:${service.id}`, "ok"], [`client:${service.id}`, "ok"]]);
+  assert.ok(!fs.readFileSync(path.join(tmp, "audit.jsonl"), "utf8").includes("signed-in"), "the value is never recorded");
+});
+
 test("a change to its settings is told to it; a change to another plugin's is not", async () => {
   const before = said().filter((m) => m.changed).length;
   values["@acme/other"] = { x: true };
@@ -121,7 +138,7 @@ test("a change to its settings is told to it; a change to another plugin's is no
   values["@acme/ci"] = { site: "acme.example", every: 10 };
   await plugins.settingsChanged();
   await until("it was told", () => said().filter((m) => m.changed).length > before);
-  assert.deepEqual(said().filter((m) => m.changed).slice(before).map((m) => m.changed), [{ values: { site: "acme.example", every: 10 }, secrets: ["token"] }]);
+  assert.deepEqual(said().filter((m) => m.changed).slice(before).map((m) => m.changed), [{ values: { site: "acme.example", every: 10 }, secrets: ["session", "token"] }]);
 });
 
 test("`plugin call` with no window reaches the service, as under `hive host`; what it answers, or why it failed, comes back", async () => {
@@ -165,7 +182,7 @@ test("a tool's own tile reaches its service directly (host.call): its answer, it
   assert.equal(await codeOf(plugins.tileCall("", "echo", null)), "BAD_REQUEST");
 });
 
-test("a program holding no service's grant, and the person, are refused a service's methods; only the person sets a secret", async () => {
+test("a program holding no service's grant, and the person, are refused a service's methods; a program sets no secret, the person any", async () => {
   const program = grants.create({ name: "a program", repos: [repo], role: "edit" });
   for (const [method, ...params] of [["plugin.options"], ["secret.get", "token"]] as const) {
     assert.equal(await codeOf(askDrive(sock, program.token, method, [...params])), "FORBIDDEN", `${method} by a program`);

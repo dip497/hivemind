@@ -41,6 +41,8 @@ const LEAST: Record<string, Role> = {
   // it is set to and its secrets, and the commands it answers (`plugin-services.ts`).
   "plugin.options": "view",
   "secret.get": "view",
+  // The person, or a service for its own plugin's declared secrets (a sign-in it keeps).
+  "secret.set": "view",
   "plugin.serve": "view",
   "plugin.answer": "view",
   // How the host looks: a guest shows its workspace that way.
