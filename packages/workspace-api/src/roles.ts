@@ -33,10 +33,11 @@ const LEAST: Record<string, Role> = {
   "issue.update": "edit",
   "issue.setState": "edit",
   "issue.comment": "edit",
-  // The start-work guard reads; starting work starts an agent; assigning writes the tracker (0.35).
+  // The start-work guard reads; starting work starts an agent; assigning makes the person at this
+  // machine the tracker's assignee, which no guest asks (issue-start.ts) (0.35).
   "issue.checkStart": "view",
   "issue.start": "agents",
-  "issue.assignMe": "edit",
+  "issue.assignMe": "agents",
   "issue.provideStart": "view",
   "review.list": "view",
   // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile

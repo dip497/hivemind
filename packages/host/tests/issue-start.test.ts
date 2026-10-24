@@ -148,6 +148,11 @@ test("a tracker's service assigns: Assign to me goes through the command it prov
   assert.deepEqual({ state: now.state, me: now.external?.assignee?.me }, { state: "in_progress", me: true });
   assert.equal(store.getCore(repo)!.frames.filter((f) => f.branch).length, 1, "agent: false opens no worktree");
 
+  // A guest, even one who may drive agents, does not make the host's person the assignee.
+  const guest = as({ kind: "peer", person: "p-guest", device: "d-guest", access: "agents" });
+  const refused = await call(guest, "issue.assignMe", root, "PAY-399");
+  assert.equal("error" in refused && refused.error.code, "FORBIDDEN");
+
   service.end();
   const gone = await call(person, "issue.assignMe", root, "PAY-399");
   assert.equal("error" in gone && gone.error.code, "UNSUPPORTED");

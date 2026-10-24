@@ -68,6 +68,13 @@ function signer(from: Connection, nameOf: NameOf | undefined): string {
   return nameOf?.(from)?.trim() || actor.client || actor.person;
 }
 
+/** "Assign to me" makes the person at this machine the tracker's assignee: theirs to ask, their
+ *  devices', or an agent's or program's on this machine; never a guest's. */
+function mayAssign(from: Connection): boolean {
+  const a = from.actor;
+  return a.kind !== "peer" || a.access === "owner" || !!a.client || !!a.tile;
+}
+
 function checksOf(v: unknown, name: string): StartCheck[] {
   if (v == null) return [];
   if (!Array.isArray(v) || !v.every((c) => typeof c === "string" && (START_CHECKS as readonly string[]).includes(c))) {
@@ -94,7 +101,8 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
     return { id: issue.id, findings, branch, status, prompt: issueStartPrompt(issue, git ? branch : undefined), issue, git };
   };
 
-  const assignMe = async (root: string, issue: Issue): Promise<void> => {
+  const assignMe = async (from: Connection, root: string, issue: Issue): Promise<void> => {
+    if (!mayAssign(from)) throw new ApiError("FORBIDDEN", "Assign to me makes the person at this machine the assignee: only they, or their agents, may ask it");
     const p = providerFor(issue);
     if (!p?.assignMe) {
       throw new ApiError("UNSUPPORTED", issue.external
@@ -110,9 +118,9 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
         const { issue: _, git: __, ...p } = await plan(from, text(root, "root"), text(id, "id"));
         return p;
       },
-      "issue.assignMe": async (_from, root, id) => {
+      "issue.assignMe": async (from, root, id) => {
         const r = text(root, "root");
-        await assignMe(r, await readIssue(r, text(id, "id")));
+        await assignMe(from, r, await readIssue(r, text(id, "id")));
         return readIssue(r, text(id, "id"));
       },
       "issue.start": async (from, repo, id, opts): Promise<StartAnswer> => {
@@ -128,7 +136,7 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
         if (wantAssign) left = left.filter((f) => !ASSIGNMENT.includes(f.check));
         if (left.length) return { started: false, id: p.id, findings: p.findings, left };
 
-        if (wantAssign) await assignMe(root, p.issue);
+        if (wantAssign) await assignMe(from, root, p.issue);
         const who = signer(from, o.nameOf);
         let frame: { frame: string; path: string } | undefined;
         if (spawn && !path.isAbsolute(at)) throw new ApiError("UNSUPPORTED", "work on an issue is started in a workspace on this machine");
