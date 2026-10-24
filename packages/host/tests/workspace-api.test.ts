@@ -48,10 +48,15 @@ test("an issue change that is not in the issue's shape is a bad request, and the
   const issue = await result<Issue>("issue.read", root, id);
   assert.deepEqual([issue.title, issue.state, issue.labels, issue.github], ["first", "todo", ["a"], null]);
   assert.deepEqual((await result<Issue[]>("issue.list", root)).map((i) => i.id), [id]);
-  // What is well formed is written.
-  await result("issue.update", root, id, { title: "renamed", state: "in_progress", github: 12 });
+  // What is well formed is written, and what the file holds that the patch doesn't name stays.
+  fs.writeFileSync(issue.path, fs.readFileSync(issue.path, "utf8").replace("\nupdated:", "\nx_note: keep\nupdated:"));
+  await result("issue.update", root, id, { title: "renamed", state: "in_progress", github: 12, branch: "X-1-renamed", aliases: ["OLD-1"] });
   const renamed = await result<Issue>("issue.read", root, id);
-  assert.deepEqual([renamed.title, renamed.state, renamed.github], ["renamed", "in_progress", 12]);
+  assert.deepEqual(
+    [renamed.title, renamed.state, renamed.github, renamed.branch, renamed.aliases, renamed.x_note],
+    ["renamed", "in_progress", 12, "X-1-renamed", ["OLD-1"], "keep"],
+  );
+  assert.equal((await result<Issue>("issue.create", root, { title: "branched", branch: "X-2-branched" })).branch, "X-2-branched");
 });
 
 test("a new issue's activity is signed by the host's window, not by a name the call gives", async () => {

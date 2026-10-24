@@ -30,6 +30,7 @@ import {
   type IssueSections,
   type IssueSummary,
   type LayoutLine,
+  type PrRef,
 } from "./types.js";
 
 const DIR = ".hivemind";
@@ -120,7 +121,9 @@ export async function readConfig(root: string): Promise<Config> {
     // surfaces as a raw stack trace in the UI. Instead, fill in defaults
     // and write the repaired config back so the next read is clean.
     const obj = (typeof parsed === "object" && parsed !== null ? parsed : {}) as Record<string, unknown>;
+    const { format: _format, ...rest } = obj; // keys this build doesn't name are kept
     const repaired: Config = {
+      ...rest,
       prefix: deriveDefaultPrefix(typeof obj.prefix === "string" ? obj.prefix : undefined, root),
       next_id:
         typeof obj.next_id === "number" && Number.isInteger(obj.next_id) && obj.next_id > 0
@@ -321,8 +324,36 @@ export async function readIssue(root: string, id: string): Promise<Issue> {
   return parseIssueFile(p, raw);
 }
 
-export function parseIssueFile(p: string, raw: string): Issue {
+/** Parse a file's frontmatter without the two gray-matter traps. `matter()` caches by content and
+ *  hands every caller the same `data` object, so it is copied before anything (a loose schema keeps
+ *  nested objects like `external` by reference) can mutate the cache in the long-running app. An
+ *  unquoted ISO timestamp comes back as a `Date`, which `IsoZ` refuses — and `listIssues` would
+ *  skip the file — so under the keys the schema times, a `Date` becomes its ISO string. A `Date`
+ *  under a key we don't name stays a `Date`, and is written back as a YAML timestamp. */
+function readFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {
   const parsed = matter(raw);
+  const data: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(parsed.data)) data[k] = copyYaml(v, TIMED_KEYS.has(k));
+  return { data, content: parsed.content };
+}
+
+const TIMED_KEYS = new Set(["created", "updated", "external", "pr"]);
+
+/** A deep copy of parsed YAML (plain objects, arrays, scalars, `Date`). A hand copy rather than
+ *  `structuredClone`, which made `listIssues` a quarter slower; it runs on every change in the app. */
+function copyYaml(v: unknown, iso: boolean): unknown {
+  if (v instanceof Date) return iso && !Number.isNaN(v.getTime()) ? v.toISOString() : new Date(v.getTime());
+  if (Array.isArray(v)) return v.map((x) => copyYaml(x, iso));
+  if (v && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) o[k] = copyYaml(x, iso);
+    return o;
+  }
+  return v;
+}
+
+export function parseIssueFile(p: string, raw: string): Issue {
+  const parsed = readFrontmatter(raw);
   const fmResult = IssueFrontmatterZ.safeParse(parsed.data);
   if (!fmResult.success) {
     throw new HiveError("bad_issue", `${p}: invalid frontmatter: ${z.prettifyError(fmResult.error)}`);
@@ -336,20 +367,19 @@ export function parseIssueFile(p: string, raw: string): Issue {
   };
 }
 
+/** Frontmatter keys in the order they are written; keys this build doesn't name follow, as read. */
+const FRONTMATTER_ORDER = [
+  "id", "title", "state", "parent", "labels", "assignee", "github", "links", "created", "updated",
+  "status", "external", "branch", "pr", "aliases",
+] as const;
+
 /** Serialize an Issue back to a markdown file string. */
 export function serializeIssue(issue: Issue): string {
-  const fm = IssueFrontmatterZ.parse({
-    id: issue.id,
-    title: issue.title,
-    state: issue.state,
-    parent: issue.parent,
-    labels: issue.labels,
-    assignee: issue.assignee,
-    github: issue.github,
-    links: issue.links,
-    created: issue.created,
-    updated: issue.updated,
-  }) as Record<string, unknown>;
+  const { path: _path, sections: _sections, raw: _raw, ...fields } = issue;
+  const parsed = IssueFrontmatterZ.parse(fields) as Record<string, unknown>;
+  const fm: Record<string, unknown> = {};
+  for (const k of FRONTMATTER_ORDER) if (parsed[k] !== undefined) fm[k] = parsed[k];
+  for (const [k, v] of Object.entries(parsed)) if (!(k in fm) && v !== undefined) fm[k] = v;
   // Omit `links` entirely when empty/absent so issues without cross-repo links
   // don't grow a noisy `links: []` line across the whole vault on first save.
   if (!Array.isArray(fm.links) || fm.links.length === 0) delete fm.links;
@@ -398,11 +428,10 @@ export async function listIssues(root: string): Promise<IssueSummary[]> {
   for (const p of files) {
     try {
       const raw = await fs.readFile(p, "utf8");
-      const parsed = matter(raw);
-      const fm = IssueFrontmatterZ.safeParse(parsed.data);
+      const fm = IssueFrontmatterZ.safeParse(readFrontmatter(raw).data);
       if (!fm.success) continue; // skip invalid files in list view
       const d = fm.data;
-      out.push({
+      const summary: IssueSummary = {
         id: d.id,
         title: d.title,
         state: d.state,
@@ -413,7 +442,12 @@ export async function listIssues(root: string): Promise<IssueSummary[]> {
         created: d.created,
         updated: d.updated,
         path: p,
-      });
+      };
+      // Only the ones the file has, so a summary is the same shape it always was without them.
+      for (const k of ["links", "status", "external", "branch", "pr", "aliases"] as const) {
+        if (d[k] !== undefined) Object.assign(summary, { [k]: d[k] });
+      }
+      out.push(summary);
     } catch {
       /* skip unreadable files */
     }
@@ -689,6 +723,8 @@ export interface CreateIssueOpts {
   acceptanceCriteria?: AcceptanceItem[];
   /** Linked GitHub issue/PR number. */
   github?: number | null;
+  /** The git branch the work happens on. */
+  branch?: string;
   /** Actor recorded in the creation activity entry. Default "ui". */
   who?: string;
 }
@@ -715,6 +751,7 @@ export async function createIssue(root: string, opts: CreateIssueOpts): Promise<
     labels: opts.labels ?? [],
     assignee: opts.assignee ?? null,
     github: opts.github ?? null,
+    ...(opts.branch ? { branch: opts.branch } : {}),
     created: now,
     updated: now,
     path: issuePath(root, finalId),
@@ -805,6 +842,21 @@ export async function updateIssue(
   if (patch.github !== undefined && patch.github !== issue.github) {
     summary.push(`github: ${issue.github ?? "—"} → ${patch.github ?? "—"}`);
     issue.github = patch.github;
+  }
+  if (patch.branch !== undefined && patch.branch !== (issue.branch ?? null)) {
+    summary.push(`branch: ${issue.branch ?? "—"} → ${patch.branch ?? "—"}`);
+    if (patch.branch === null) delete issue.branch;
+    else issue.branch = patch.branch;
+  }
+  if (patch.pr !== undefined && JSON.stringify(patch.pr) !== JSON.stringify(issue.pr ?? null)) {
+    const pr = (p: PrRef | null | undefined) => (p ? `${p.repo}#${p.number} (${p.state})` : "—");
+    summary.push(`pr: ${pr(issue.pr)} → ${pr(patch.pr)}`);
+    if (patch.pr === null) delete issue.pr;
+    else issue.pr = patch.pr;
+  }
+  if (patch.aliases !== undefined && JSON.stringify(patch.aliases) !== JSON.stringify(issue.aliases ?? [])) {
+    summary.push(`aliases: [${(issue.aliases ?? []).join(",")}] → [${patch.aliases.join(",")}]`);
+    issue.aliases = patch.aliases;
   }
   if (patch.description !== undefined) {
     issue.sections.description = patch.description;

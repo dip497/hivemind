@@ -21,6 +21,7 @@ import {
   writeIssue,
   WORKSPACE_FORMAT,
 } from "./storage.js";
+import YAML from "yaml";
 import type { Issue } from "./types.js";
 
 async function mkRoot(): Promise<string> {
@@ -155,6 +156,17 @@ describe("readConfig self-heal", () => {
     expect(cfg.prefix).toMatch(/^[A-Z][A-Z0-9]{1,9}$/);
     expect(cfg.prefix).not.toBe("123");
   });
+  test("keys it doesn't name survive the repair", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(path.join(root, "config.yaml"), "next_id: 4\nagents:\n  claude: { bin: /bin/claude, flags: [--x] }\njira:\n  sources: [jira:acme/PAY]\n", "utf8");
+    const cfg = await readConfig(root);
+    const after = YAML.parse(await fs.readFile(path.join(root, "config.yaml"), "utf8"));
+    expect([cfg.jira, after.jira, after.agents]).toEqual([
+      { sources: ["jira:acme/PAY"] },
+      { sources: ["jira:acme/PAY"] },
+      { claude: { bin: "/bin/claude", flags: ["--x"] } },
+    ]);
+  });
 });
 
 describe("allocateId", () => {
@@ -177,6 +189,15 @@ describe("allocateId", () => {
     expect((await readConfig(root)).next_id).toBe(N + 1);
     const nums = ids.map((id) => Number(id.split("-")[1])).sort((a, b) => a - b);
     expect(nums).toEqual(Array.from({ length: N }, (_, i) => i + 1)); // exactly 1..N
+  });
+
+  test("keeps config keys it doesn't name", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(path.join(root, "config.yaml"), `prefix: PAY\nnext_id: 3\nformat: ${WORKSPACE_FORMAT}\nagents: {}\nmirror:\n  commit: true\n`, "utf8");
+    await allocateId(root);
+    expect(YAML.parse(await fs.readFile(path.join(root, "config.yaml"), "utf8"))).toEqual({
+      prefix: "PAY", next_id: 4, format: WORKSPACE_FORMAT, agents: {}, mirror: { commit: true },
+    });
   });
 });
 
@@ -440,7 +461,7 @@ describe("appendActivity", () => {
   test("a format-1 workspace is brought to format 2 once: activity rows rewritten to ISO, nothing else", async () => {
     const root = await mkRoot();
     const cfgFile = path.join(root, "config.yaml");
-    await fs.writeFile(cfgFile, "prefix: PAY\nnext_id: 2\nagents: {}\n");
+    await fs.writeFile(cfgFile, "prefix: PAY\nnext_id: 2\nagents: {}\nmirror: { commit: true }\n");
     const md = `---
 id: PAY-1
 title: T
@@ -469,6 +490,7 @@ updated: "2026-05-17T10:00:00Z"
     expect(after).toContain("- 2026-05-17T10:00:00.000Z · ui · created");
     expect(after).toContain("- 2026-05-17 10:00 · a note that only looks like a row");
     expect((await readConfig(root)).format).toBe(WORKSPACE_FORMAT);
+    expect((await readConfig(root)).mirror).toEqual({ commit: true });
   });
   test("a workspace written by a newer build is refused, not misread", async () => {
     const root = await mkRoot();
@@ -544,6 +566,79 @@ describe("serializeIssue round-trip is stable", () => {
     expect(back.github).toBe(487);
     expect(back.sections.description).toBe("D body.");
   });
+
+  // A mirrored issue as a sync or a hand edit leaves it: the new typed fields, keys this build
+  // doesn't name, and timestamps without quotes (gray-matter reads those as `Date`).
+  const MIRRORED = `---
+id: PAY-7
+title: Mirrored
+state: in_review
+parent: null
+labels: []
+assignee: null
+github: null
+links:
+  - id: PAY-1
+    type: relates
+created: 2026-05-17T10:00:00.000Z
+updated: 2026-05-17T10:00:00.000Z
+status: hive:pr-created
+external:
+  provider: jira
+  source: jira:acme/PAY
+  id: "10423"
+  key: PAY-318
+  remoteUpdated: 2026-10-22T09:14:00.000Z
+  customfield_10016: 3
+branch: PAY-318-retry
+pr: { repo: acme/payments, number: 1187, url: "https://github.com/acme/payments/pull/1187", state: open }
+aliases: [PAY-300]
+jira:
+  rank: "0|hzzzzz"
+x_note: keep me
+---
+
+## Description
+
+D.
+`;
+
+  test("keys this build doesn't name, the new fields and unquoted timestamps survive an update", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED, "utf8");
+    const [summary] = await listIssues(root);
+    expect(summary).toMatchObject({
+      id: "PAY-7",
+      created: "2026-05-17T10:00:00.000Z",
+      links: [{ id: "PAY-1", type: "relates" }],
+      status: "hive:pr-created",
+      external: { key: "PAY-318", remoteUpdated: "2026-10-22T09:14:00.000Z" },
+      branch: "PAY-318-retry",
+      pr: { number: 1187, state: "open" },
+      aliases: ["PAY-300"],
+    });
+    await updateIssue(root, "PAY-7", { title: "Mirrored, renamed" }, "cli:bob");
+    const text = await fs.readFile(issuePath(root, "PAY-7"), "utf8");
+    const keys = [...text.split("---")[1]!.matchAll(/^(\w+):/gm)].map((m) => m[1]);
+    expect(keys).toEqual([
+      "id", "title", "state", "parent", "labels", "assignee", "github", "links", "created", "updated",
+      "status", "external", "branch", "pr", "aliases", "jira", "x_note",
+    ]);
+    expect(text).toContain("  remoteUpdated: '2026-10-22T09:14:00.000Z'");
+    const back = await readIssue(root, "PAY-7");
+    expect([back.title, back.jira, back.x_note, back.external?.customfield_10016, back.external?.remoteUpdated]).toEqual([
+      "Mirrored, renamed", { rank: "0|hzzzzz" }, "keep me", 3, "2026-10-22T09:14:00.000Z",
+    ]);
+  });
+
+  test("two reads of one file share no objects, so changing one doesn't change the next", async () => {
+    // gray-matter caches by content and returns the same `data` object every time.
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED, "utf8");
+    const first = await readIssue(root, "PAY-7");
+    (first.jira as { rank: string }).rank = "changed in memory";
+    expect((await readIssue(root, "PAY-7")).jira).toEqual({ rank: "0|hzzzzz" });
+  });
 });
 
 describe("createIssue / updateIssue (CLI + UI write path)", () => {
@@ -583,6 +678,23 @@ describe("createIssue / updateIssue (CLI + UI write path)", () => {
     const updated = await updateIssue(root, created.id, { github: null }, "ui");
     expect(updated.github).toBe(null);
     expect(updated.sections.activity.map((a) => a.message)).toContain("github: 7 → —");
+  });
+
+  test("branch, pr and aliases are written, diffed in activity, and null removes branch", async () => {
+    const root = await mkRoot();
+    const created = await createIssue(root, { title: "t", branch: "PAY-1-t" });
+    const pr = { repo: "acme/payments", number: 1187, url: "https://github.com/acme/payments/pull/1187", state: "open" as const };
+    await updateIssue(root, created.id, { pr, aliases: ["OLD-1"] }, "cli:bob");
+    await updateIssue(root, created.id, { branch: null, pr: { ...pr, state: "merged" } }, "cli:bob");
+    await updateIssue(root, created.id, { pr: { ...pr, state: "merged" }, aliases: ["OLD-1"] }, "cli:bob");
+    const back = await readIssue(root, created.id);
+    expect([back.branch, back.pr?.state, back.aliases]).toEqual([undefined, "merged", ["OLD-1"]]);
+    expect(back.sections.activity.map((a) => a.message)).toEqual([
+      "created",
+      "pr: — → acme/payments#1187 (open) · aliases: [] → [OLD-1]",
+      "branch: PAY-1-t → — · pr: acme/payments#1187 (open) → acme/payments#1187 (merged)",
+    ]);
+    expect((await fs.readFile(back.path, "utf8")).split("---")[1]).not.toContain("branch:");
   });
 
   test("activity rows keep their ids and multi-line messages through a write", async () => {
