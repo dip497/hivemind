@@ -9,6 +9,8 @@ import { listIssues, readConfig } from "./storage.js";
 import { filterIssues } from "./query.js";
 import { availableCommands } from "./tool-plugins.js";
 import type { ToolsSettings } from "./settings-schema.js";
+import type { IssueState } from "./types.js";
+import { BUILTIN_WORKFLOW, loadWorkflow, statusOf, type Workflow } from "./workflow.js";
 
 const HEADER = `# .agent.md — auto-generated context
 
@@ -20,9 +22,7 @@ See \`hive --help\` for commands. To reference an issue, use \`@<ID>\` format
 
 export interface AgentContextOptions {
   /** Only include issues in these states. Defaults to active states. */
-  includeStates?: Array<
-    "backlog" | "todo" | "in_progress" | "in_review" | "done" | "cancelled"
-  >;
+  includeStates?: IssueState[];
   /** The user's tool settings, so an enabled plugin's commands are listed too.
    *  Without them only the built-ins are, which is every command that ships. */
   tools?: ToolsSettings;
@@ -34,8 +34,17 @@ export async function buildAgentContext(
 ): Promise<string> {
   const cfg = await readConfig(root);
   const all = await listIssues(root);
-  const states = opts.includeStates ?? ["todo", "in_progress", "in_review"];
+  const states: IssueState[] = opts.includeStates ?? ["todo", "in_progress", "in_review"];
   const active = filterIssues(all, { state: states });
+  // With a workflow of its own each line names its status; a broken workflow.yaml never stops
+  // this file being written (the write that changed an issue already happened).
+  let wf: Workflow = BUILTIN_WORKFLOW;
+  try { wf = loadWorkflow(root); } catch { /* listed by state alone */ }
+  const statusName = (i: (typeof active)[number]): string => {
+    if (wf === BUILTIN_WORKFLOW) return "";
+    const id = statusOf(wf, i);
+    return ` · ${wf.statuses.find((s) => s.id === id)?.name ?? id}`;
+  };
 
   const lines: string[] = [HEADER.trim(), ""];
   lines.push(`## Project`);
@@ -62,7 +71,7 @@ export async function buildAgentContext(
       const a = i.assignee ? ` · @${i.assignee.id}` : "";
       const gh = i.github ? ` · gh#${i.github}` : "";
       const child = i.parent ? ` · ↳ ${i.parent}` : "";
-      lines.push(`- \`@${i.id}\` — ${i.title}${labels}${a}${gh}${child}`);
+      lines.push(`- \`@${i.id}\` — ${i.title}${statusName(i)}${labels}${a}${gh}${child}`);
     }
     lines.push("");
   }

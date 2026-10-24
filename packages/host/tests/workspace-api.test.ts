@@ -10,6 +10,9 @@ import { WORKSPACE_FORMAT, writeConfig } from "@hivemind/core/storage";
 import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer } from "@hivemind/workspace-api/server";
+import { WorkspaceClient } from "@hivemind/workspace-api/client";
+import { peerTransport, servePeer } from "@hivemind/workspace-api/peers";
+import type { ApiError } from "@hivemind/workspace-api/protocol";
 import { workspaceDomains } from "../src/domains.ts";
 import { mayCall } from "@hivemind/workspace-api/roles";
 
@@ -17,7 +20,7 @@ const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-workspace-
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 // Review comments of a repo with no workspace go under the config dir: keep them in this test's.
 process.env.XDG_CONFIG_HOME = path.join(tmp, "config");
-const server = new WorkspaceServer(workspaceDomains, new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
+const server = new WorkspaceServer(workspaceDomains(), new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
 /** The app's window, as a connection: the person at this machine. */
 const window = { actor: { kind: "person" } as const, send: () => {}, closed: new AbortController().signal };
 const ask = (method: string, ...params: unknown[]) => server.answer(method, params, window);
@@ -89,4 +92,69 @@ test("a sync service at edit role mirrors a tracker's issues with issue.ingest; 
   assert.ok("result" in ok, JSON.stringify(ok));
   assert.deepEqual((ok.result as { created: string[] }).created, ["PAY-318"]);
   assert.equal((await result<Issue>("issue.read", root, "PAY-318")).title, "Retry failed webhooks");
+});
+
+test("a status reaches core through the API, sets the state, and the workflow is read as the window lists it", async () => {
+  const root = await makeWorkspace();
+  fs.writeFileSync(path.join(root, "workflow.yaml"), [
+    "version: 1",
+    "statuses:",
+    ...["backlog", "todo", "in_progress", "done", "cancelled"].map((c) => `  - { id: "s:${c}", name: ${c}, category: ${c} }`),
+    '  - { id: "jira:10004", name: QA, category: in_review, source: jira }',
+  ].join("\n"));
+  const { id, state } = await result<Issue>("issue.create", root, { title: "x", status: "qa" });
+  assert.equal(state, "in_review");
+  await result("issue.update", root, id, { status: "s:done" });
+  const issue = await result<Issue & { status?: string }>("issue.read", root, id);
+  assert.deepEqual([issue.state, issue.status], ["done", "s:done"]);
+  // Refused by core, as every core refusal is: FAILED, naming the statuses there are.
+  const refused = await ask("issue.update", root, id, { status: "Shipped" });
+  assert.match("error" in refused ? refused.error.message : "", /unknown status "Shipped".*QA \(jira:10004\)/);
+  const wf = await result<{ custom: boolean; statuses: Array<{ id: string }> }>("issue.workflow", root);
+  assert.equal(wf.custom, true);
+  assert.deepEqual(wf.statuses.map((s) => s.id), ["s:backlog", "s:todo", "s:in_progress", "jira:10004", "s:done", "s:cancelled"]);
+});
+
+test("a service and a guest who may edit write issues, each signed as itself; one who only views is refused, and nothing is written", async () => {
+  const root = await makeWorkspace();
+  const repo = path.dirname(root);
+  const names: Record<string, string> = { ["p".repeat(64)]: "Priya Nair" };
+  const named = new WorkspaceServer(workspaceDomains((c) => (c.actor.kind === "peer" ? c.actor.client ?? names[c.actor.person] : undefined)), new Intents(new AuditLog({ file: path.join(tmp, "audit-peers.jsonl") })));
+  /** A peer of `repo` at `access`: a tool plugin's service names its program, a guest is a person. */
+  const peer = (access: "view" | "edit", client?: string) => {
+    const toHost = new Set<(t: string) => void>();
+    const toPeer = new Set<(t: string) => void>();
+    const closed = new Promise<never>(() => {});
+    const end = (mine: Set<(t: string) => void>, theirs: Set<(t: string) => void>) => ({
+      send: (t: string) => queueMicrotask(() => { for (const l of theirs) l(t); }),
+      on: (l: (t: string) => void) => { mine.add(l); return () => { mine.delete(l); }; },
+      closed,
+    });
+    servePeer(named, end(toHost, toPeer), {
+      actor: { kind: "peer", person: client ? "client:g1" : "p".repeat(64), device: "d".repeat(64), access, ...(client ? { client } : {}) },
+      workspace: "w", repo, url: repo, holds: () => false,
+    });
+    return new WorkspaceClient(peerTransport(end(toPeer, toHost)));
+  };
+  const service = peer("edit", "@acme/jira (service)");
+  const made = await service.call("issue.create", root, { title: "from Jira" }) as Issue;
+  await service.call("issue.update", root, made.id, { labels: ["jira"] });
+  await service.call("issue.setState", root, made.id, "in_progress", "picked up");
+  await service.call("issue.comment", root, made.id, "synced");
+  await peer("edit").call("issue.comment", root, made.id, "looks right");
+  const viewer = peer("view");
+  for (const [method, ...params] of [["issue.create", root, { title: "x" }], ["issue.update", root, made.id, { title: "x" }], ["issue.setState", root, made.id, "done"], ["issue.comment", root, made.id, "x"]] as const) {
+    assert.equal(await (viewer.call as (m: string, ...p: unknown[]) => Promise<unknown>)(method, ...params).then(() => "answered", (e: ApiError) => e.code), "FORBIDDEN", method);
+  }
+  const issue = await result<Issue & { sections: { activity: Array<{ who: string; message: string }> } }>("issue.read", root, made.id);
+  assert.deepEqual(issue.sections.activity.map((a) => [a.who, a.message]), [
+    ["@acme/jira (service)", "created"],
+    ["@acme/jira (service)", "labels: [] → [jira]"],
+    ["@acme/jira (service)", "state: todo → in_progress"],
+    ["@acme/jira (service)", "picked up"],
+    ["@acme/jira (service)", "synced"],
+    ["Priya Nair", "looks right"],
+  ]);
+  assert.deepEqual([issue.title, issue.state, issue.labels], ["from Jira", "in_progress", ["jira"]]);
+  assert.deepEqual((await result<Issue[]>("issue.list", root)).map((i) => i.id), [made.id]);
 });

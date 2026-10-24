@@ -64,12 +64,13 @@ hive init                               # refresh the agentic stack
 hive add skill                          # refresh the skills only
 hive guide agents                       # print the agent guide this hive ships (also work, browser, workflow)
 
-hive new "Title" [--label l …] [--parent ID] [--state backlog] [--github N]
+hive new "Title" [--label l …] [--parent ID] [--state backlog | --status "To Do"] [--github N]
           [--assignee claude --assignee-type agent] [--assignee-model m]
           [--description d] [--ac "criterion one || criterion two"]
-hive list [--state todo] [--assignee id] [--label l] [--parent none|ID] [--archived]
+hive list [--state todo] [--category in_review] [--status "Code Review"]
+          [--assignee id] [--label l] [--parent none|ID] [--archived]
 hive show MYP-1
-hive update MYP-1 [--state s] [--title t] [--assignee id|none]
+hive update MYP-1 [--state s | --status "Code Review"] [--title t] [--assignee id|none]
                  [--add-label l] [--rm-label l] [--github N|none] [--note "…"]
 hive close MYP-1 [--reason "…"] [--note "…"]   # --reason → cancelled, else done
 hive reopen MYP-1 [--state todo] [--note "…"]
@@ -80,6 +81,10 @@ hive ingest --source jira:acme/PAY [--dry-run] --json < records.ndjson
                                         # mirror another tracker's issues: one record per line,
                                         # kept by their own keys in .hivemind/mirror/ (gitignored);
                                         # prints {created, updated, unchanged, conflicts, archived}
+
+hive statuses show                      # the workspace's statuses in board order, each with its state
+hive statuses validate [--file f]       # exit 1 naming each problem in .hivemind/workflow.yaml
+hive statuses edit [--from f]           # $EDITOR on workflow.yaml (or install f); saved only once valid
 
 hive task MYP-3 add "Subtask" [--assignee id] [--state todo]   # sub-issues: MYP-3.1, …
 hive task MYP-3 done 2                          # tail number or full id
@@ -231,6 +236,7 @@ hive plugins show claude                # its settings: each one's value and wha
 hive plugins enable @hivemind/web        # or disable; a package by its id switches all it holds
                                         # one plugin of a package can be switched off alone, on only while its package is on
 hive plugins set @you/board columns all # checked against what the setting takes
+printf %s "$TOKEN" | hive plugins set @acme/jira token  # a secret: on stdin, never as an argument
 hive plugins reset @you/board [columns] # back to its default
 hive plugins workspaces <tool> <folder>…   # the workspaces a tool's service drives (hive host)
 hive plugins workspaces <tool> --none   # it drives none: its service stops

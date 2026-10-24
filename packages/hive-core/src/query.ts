@@ -1,22 +1,30 @@
 import type { Issue, IssueSummary, IssueState, Assignee } from "./types.js";
+import { BUILTIN_WORKFLOW, statusOf, type Workflow } from "./workflow.js";
 
 export interface QueryFilter {
   state?: IssueState | IssueState[];
+  /** The category: the same as `state`, by the name the workflow gives it. */
+  category?: IssueState | IssueState[];
+  /** Workflow status ids; an issue written before the workflow is in its category's default. */
+  status?: string | string[];
   parent?: string | null;
   assignee?: string; // matches assignee.id
   label?: string;
   hasGithub?: boolean;
 }
 
+const many = <V>(v: V | V[]): V[] => (Array.isArray(v) ? v : [v]);
+
+/** `wf` is the workspace's workflow, which a `status` filter reads; without it statuses are states. */
 export function filterIssues<T extends IssueSummary | Issue>(
   issues: T[],
-  q: QueryFilter
+  q: QueryFilter,
+  wf: Workflow = BUILTIN_WORKFLOW,
 ): T[] {
   return issues.filter((i) => {
-    if (q.state) {
-      const states = Array.isArray(q.state) ? q.state : [q.state];
-      if (!states.includes(i.state)) return false;
-    }
+    if (q.state && !many(q.state).includes(i.state)) return false;
+    if (q.category && !many(q.category).includes(i.state)) return false;
+    if (q.status && !many(q.status).includes(statusOf(wf, i))) return false;
     if (q.parent !== undefined && i.parent !== q.parent) return false;
     if (q.assignee !== undefined) {
       const a = i.assignee as Assignee | null;

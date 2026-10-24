@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import {
+  CATEGORIES,
   HiveError,
   readIssue,
   rootForIdHere,
@@ -58,7 +59,7 @@ export const reopenCmd = defineCommand({
       const root = await rootForIdHere(id);
       const issue = await readIssue(root, id);
       const target = args.state ? String(args.state) : "todo";
-      if (!["backlog", "todo", "in_progress", "in_review"].includes(target)) {
+      if (!CATEGORIES.some((s) => s === target && s !== "done" && s !== "cancelled")) {
         return err(ctx, "bad_state", `reopen target must be active state (got ${target})`);
       }
       if (issue.state === target) {

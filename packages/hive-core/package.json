@@ -46,7 +46,8 @@
     "./tool-packages": "./src/tool-packages.ts",
     "./tool-registry": "./src/tool-registry.ts",
     "./tile-id": "./src/tile-id.ts",
-    "./workflow": "./src/workflow.ts"
+    "./workflow": "./src/workflow.ts",
+    "./workflow-model": "./src/workflow-model.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

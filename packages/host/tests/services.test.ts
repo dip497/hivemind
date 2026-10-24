@@ -88,10 +88,10 @@ test("a service drives the workspace picked for it as a grant of its own, with n
   await until("the service's first call", () => services.log("@acme/ci").includes("started by"));
   const log = services.log("@acme/ci");
   assert.match(log, new RegExp(`env  workspaces ${repoA}\\n`), "nothing of the app's environment but where and who");
-  assert.ok(log.includes(`as ${JSON.stringify({ client: "CI service", role: "agents", workspace: repoA })}\n`), "it is its grant, named for its plugin, in its workspace");
+  assert.ok(log.includes(`as ${JSON.stringify({ client: "@acme/ci (service)", role: "agents", workspace: repoA })}\n`), "it is its grant, named for its plugin, in its workspace");
   const [grant] = ours();
   assert.ok(grant, "its grant is listed, marked with its plugin");
-  assert.deepEqual([grant.name, grant.role, grant.repos], ["CI service", "agents", [repoA]]);
+  assert.deepEqual([grant.name, grant.role, grant.repos], ["@acme/ci (service)", "agents", [repoA]]);
   assert.match(log, new RegExp(`started by \\{"kind":"peer","person":"client:${grant.id}"`));
   assert.equal(state()?.state, "running");
 });

@@ -617,6 +617,8 @@ export interface NetworkSources {
   /** For Home (spec/home.md): the links between agents, how a remote frame's machine is linked,
    *  what the window's Layers panel shows of a workspace, and what a tile last said or showed. */
   home?: Pick<PeerLinksOptions, "links" | "linkState" | "line">;
+  /** A guest connected to a workspace here follows its issues while connected. */
+  follow?: PeerLinksOptions["follow"];
 }
 
 /** What each workspace's Layers panel shows, as the window last said, by folder: Home's order. */
@@ -661,14 +663,14 @@ export async function joinLink(text: unknown): Promise<JoinReply> {
   finally { if (joining.get(key) === attempt) joining.delete(key); }
 }
 
-export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, workers, waits, home }: NetworkSources): void {
+export function installNetworkIpc(server: WorkspaceServer, { daemon, granted, statuses, onStatus, workers, waits, home, follow }: NetworkSources): void {
   apiServer = server;
   daemonHere = daemon;
   // What an agent here waits on that the person's phone may allow or deny: its agent says which
   // of its keys do (spec/needs.md 0.5).
   const decides: Decides = (tile, status) => !!answerKeys(heldBoards(workspaceStore()), tile, status);
   peers = new PeerLinks({
-    store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted,
+    store: workspaceStore(), changes: onWorkspaceChange, lists: accessLists(), server, daemon, hosting: hostingHere(), granted, follow,
     phone: (device) => pairedDevices().list().some((d) => d.device === device && d.kind === "phone"),
     statuses, facts: (held) => ({ ...manifestFacts(held, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)), ...workers, wait: (tile) => waits?.of(tile), asked: (tile) => waits?.asked(tile) }),
     machines: knownMachines,

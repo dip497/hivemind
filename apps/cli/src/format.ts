@@ -45,14 +45,17 @@ export function err(ctx: OutCtx, code: string, message: string, exit?: number, f
   return printFailure(ctx.json, { code: code.toUpperCase(), message, ...(fix ? { fix } : {}) }, exit);
 }
 
-export function renderIssueList(items: IssueSummary[]): string {
+/** One line per issue; an issue that names its status (a workspace with its own workflow) shows
+ *  that, coloured by its state. */
+export function renderIssueList(items: Array<IssueSummary & { statusName?: string }>): string {
   if (items.length === 0) return c(C.dim, "no issues");
   const idW = Math.max(...items.map((i) => i.id.length));
-  const stateW = Math.max(...items.map((i) => i.state.length));
+  const shown = (i: IssueSummary & { statusName?: string }) => i.statusName ?? i.state;
+  const stateW = Math.max(...items.map((i) => shown(i).length));
   return items
     .map((i) => {
       const id = c(C.bold, i.id.padEnd(idW));
-      const state = c(stateColor[i.state], i.state.padEnd(stateW));
+      const state = c(stateColor[i.state], shown(i).padEnd(stateW));
       const labels = i.labels.length > 0 ? c(C.dim, ` [${i.labels.join(",")}]`) : "";
       const a = i.assignee ? c(C.cyan, ` @${i.assignee.id}`) : "";
       const gh = i.github ? c(C.dim, ` gh#${i.github}`) : "";
@@ -67,6 +70,7 @@ export function renderIssue(i: Issue): string {
   const lines: string[] = [];
   lines.push(`${c(C.bold, i.id)}  ${c(stateColor[i.state], i.state)}  ${i.title}`);
   const meta: string[] = [];
+  if (i.status && i.status !== i.state) meta.push(`status: ${i.status}`);
   if (i.parent) meta.push(`parent: ${i.parent}`);
   if (i.labels.length > 0) meta.push(`labels: ${i.labels.join(", ")}`);
   if (i.assignee) meta.push(`assignee: @${i.assignee.id} (${i.assignee.type})`);

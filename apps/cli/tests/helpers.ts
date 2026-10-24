@@ -15,7 +15,7 @@ function parse(status: number | null, stdout: string, stderr: string): Run {
   };
   return { code: status, stdout, stderr, json: lastJson(stdout) ?? lastJson(stderr) };
 }
-type Opts = { cwd?: string; env?: Record<string, string | undefined> };
+type Opts = { cwd?: string; env?: Record<string, string | undefined>; input?: string };
 
 /** The environment a run starts from: this process's, but never the tile it may run in, so no
  *  test reaches the app this suite was started from; a test names the sockets it means. */
@@ -36,7 +36,7 @@ function ownRoots(): NodeJS.ProcessEnv {
 
 /** Run `hive …` as a real subprocess (like an agent would); blocking flavour. */
 export function hive(args: string[], opts: Opts = {}): Run {
-  const r = spawnSync(...cmd(args), { cwd: opts.cwd ?? process.cwd(), env: { ...sealedEnv(), ...opts.env }, encoding: "utf8", timeout: 60_000 });
+  const r = spawnSync(...cmd(args), { cwd: opts.cwd ?? process.cwd(), env: { ...sealedEnv(), ...opts.env }, encoding: "utf8", timeout: 60_000, ...(opts.input === undefined ? {} : { input: opts.input }) });
   return parse(r.status, r.stdout, r.stderr);
 }
 
