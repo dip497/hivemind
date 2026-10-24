@@ -34,6 +34,15 @@ describe("a view's tokens", () => {
     expect(r.ok ? [] : r.errors).toEqual([1, 2, 3].map((i) => `tokens[${i}] is not a token: an id of lowercase letters, digits and dashes, and a dark and a light colour, each #rrggbb or =<app colour>`));
   });
 
+  test("a default naming what only looks like an app colour (=constructor, =toString) is refused, and never resolves to anything but a colour", () => {
+    const r = validateViewManifest({ ...base, tokens: [{ id: "a", label: "A", dark: "=constructor", light: "#ffffff" }, { id: "b", label: "B", dark: "=toString", light: "=__proto__" }, sea] });
+    expect(r.ok ? [] : r.errors).toEqual([0, 1].map((i) => `tokens[${i}] is not a token: an id of lowercase letters, digits and dashes, and a dark and a light colour, each #rrggbb or =<app colour>`));
+    // Declarations that got past a check (an older host's) still resolve to colours only.
+    const forged = [{ id: "a", label: "A", dark: "=constructor", light: "=constructor" }, { id: "b", label: "B", dark: "=info", light: "=info" }];
+    expect(resolveTokens(forged, "dark", { info: "not a colour" }, { "token-b": undefined })).toEqual({});
+    expect(resolveTokens(forged, "dark", { info: "#4284c5" }, Object.create({ "token-b": "#000000" }))).toEqual({ b: "#4284c5" });
+  });
+
   test("the theme paints each on the view's document, and one it no longer sends is taken off", () => {
     const props = new Map<string, string>();
     let next: ((t: ViewTheme) => void) | undefined;

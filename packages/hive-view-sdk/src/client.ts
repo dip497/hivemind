@@ -14,7 +14,7 @@
  */
 import type { SettingValue } from "./settings.js";
 import { chordMatches } from "./commands.js";
-import { tokenVar } from "./tokens.js";
+import { isTokenId, tokenVar } from "./tokens.js";
 import {
   CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, areFontFaces, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type ViewFontFace, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type LineRect, type CommandKeys,
@@ -720,7 +720,7 @@ export function applyThemeVars(client: ViewClient, root: HTMLElement = document.
     if (t.terminalBackground) root.style.setProperty("--hm-terminal-bg", t.terminalBackground);
     if (t.glass !== undefined) root.style.setProperty("--hm-glass", t.glass ? "1" : "0");
     // The view's own tokens; one the theme no longer sends goes, so its `var()` fallback shows.
-    const tokens = Object.entries(t.tokens ?? {}).filter(([k, v]) => /^[a-z][a-z0-9-]{0,31}$/.test(k) && /^#[0-9a-f]{6}$/i.test(v));
+    const tokens = Object.entries(t.tokens ?? {}).filter(([k, v]) => isTokenId(k) && /^#[0-9a-f]{6}$/i.test(v));
     for (const k of set) if (!tokens.some(([id]) => id === k)) root.style.removeProperty(tokenVar(k));
     set.clear();
     for (const [k, v] of tokens) { root.style.setProperty(tokenVar(k), v); set.add(k); }
