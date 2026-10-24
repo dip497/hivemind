@@ -17,6 +17,9 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import matter from "gray-matter";
+// @ts-ignore js-yaml 3 ships no types (and every package compiling this source would need them);
+// the part used is typed where it is cast below.
+import jsyamlUntyped from "js-yaml";
 import YAML from "yaml";
 import { z } from "zod";
 import {
@@ -324,32 +327,99 @@ export async function readIssue(root: string, id: string): Promise<Issue> {
   return parseIssueFile(p, raw);
 }
 
-/** Parse a file's frontmatter without the two gray-matter traps. `matter()` caches by content and
- *  hands every caller the same `data` object, so it is copied before anything (a loose schema keeps
- *  nested objects like `external` by reference) can mutate the cache in the long-running app. An
- *  unquoted ISO timestamp comes back as a `Date`, which `IsoZ` refuses — and `listIssues` would
- *  skip the file — so under the keys the schema times, a `Date` becomes its ISO string. A `Date`
- *  under a key we don't name stays a `Date`, and is written back as a YAML timestamp. */
-function readFrontmatter(raw: string): { data: Record<string, unknown>; content: string } {
-  const parsed = matter(raw);
-  const data: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(parsed.data)) data[k] = copyYaml(v, TIMED_KEYS.has(k));
-  return { data, content: parsed.content };
+/** Frontmatter is read as YAML 1.2 core: no timestamp type, so `due: 2026-11-01` and an unquoted
+ *  `created: 2026-10-01T00:00:00Z` stay strings (js-yaml's default schema made them `Date`s, which
+ *  `IsoZ` refused, and `listIssues` skipped the file). The engine is passed as an option, which
+ *  turns off gray-matter's content cache — the one that handed every caller the same `data`
+ *  object — so it keeps a bounded cache of its own and returns a copy: a loose schema keeps nested
+ *  objects by reference, and the long-running app must not mutate a cached one. js-yaml, not the
+ *  `yaml` package, which parses a frontmatter six times slower, on a path that reruns on every
+ *  change in the app. */
+const jsyaml = jsyamlUntyped as {
+  CORE_SCHEMA: object;
+  load(str: string, opts?: { schema?: object }): unknown;
+  safeDump(obj: unknown, opts?: { schema?: object }): string;
+};
+const MATTER_OPTS = {
+  engines: { yaml: (s: string): object => readYaml(s) },
+};
+const yamlCache = new Map<string, unknown>();
+const YAML_CACHE_MAX = 4096;
+
+function readYaml(s: string): Record<string, unknown> {
+  let data = yamlCache.get(s);
+  if (data === undefined) {
+    data = jsyaml.load(s, { schema: jsyaml.CORE_SCHEMA }) ?? {};
+    if (yamlCache.size >= YAML_CACHE_MAX) yamlCache.delete(yamlCache.keys().next().value!);
+    yamlCache.set(s, data);
+  }
+  return copyPlain(data) as Record<string, unknown>;
 }
 
-const TIMED_KEYS = new Set(["created", "updated", "external", "pr"]);
-
-/** A deep copy of parsed YAML (plain objects, arrays, scalars, `Date`). A hand copy rather than
- *  `structuredClone`, which made `listIssues` a quarter slower; it runs on every change in the app. */
-function copyYaml(v: unknown, iso: boolean): unknown {
-  if (v instanceof Date) return iso && !Number.isNaN(v.getTime()) ? v.toISOString() : new Date(v.getTime());
-  if (Array.isArray(v)) return v.map((x) => copyYaml(x, iso));
+/** A deep copy of parsed YAML (plain objects, arrays, scalars): cheaper than `structuredClone`. */
+function copyPlain(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(copyPlain);
   if (v && typeof v === "object") {
     const o: Record<string, unknown> = {};
-    for (const [k, x] of Object.entries(v)) o[k] = copyYaml(x, iso);
+    for (const [k, x] of Object.entries(v)) o[k] = copyPlain(x);
     return o;
   }
   return v;
+}
+
+function readFrontmatter(raw: string): { data: Record<string, unknown>; content: string; matter: string } {
+  const parsed = matter(raw, MATTER_OPTS);
+  return { data: parsed.data, content: parsed.content, matter: parsed.matter };
+}
+
+/** A file's frontmatter as it was read (its text, and a copy of what it parsed to, since the
+ *  Issue's own values may be changed in place), so a write puts back every entry whose value didn't
+ *  change exactly as it was (quotes, flow style, comments): what hive doesn't own stays verbatim.
+ *  Held per Issue object from read to write (`updateIssue`, `commentOnIssue`, links all write the
+ *  object they read); split into entries only when it is written. */
+const readFrontmatters = new WeakMap<Issue, { text: string; data: Record<string, unknown> }>();
+
+interface FrontmatterSource {
+  /** Comment and blank lines before the first key. */
+  head: string;
+  entries: Array<{ key: string; text: string; value: unknown; gap: string }>;
+}
+/** Split frontmatter into top-level entries, or `undefined` when it isn't a plain block mapping
+ *  that splits cleanly (each entry must parse on its own to the key and value the whole did);
+ *  then a write dumps every key fresh, as it always did. */
+function frontmatterSource(text: string, data: Record<string, unknown>): FrontmatterSource | undefined {
+  const body = text.replace(/^\r?\n/, "").replace(/\n$/, "");
+  const lines = body.split("\n");
+  const starts: number[] = [];
+  lines.forEach((l, i) => { if (/^[^\s#\-.]/.test(l)) starts.push(i); });
+  const keys = Object.keys(data);
+  if (starts.length !== keys.length) return undefined;
+  const isGap = (l: string) => !l.trim() || l.startsWith("#");
+  const entries: FrontmatterSource["entries"] = [];
+  for (let n = 0; n < starts.length; n++) {
+    const end = n + 1 < starts.length ? starts[n + 1]! : lines.length;
+    let last = end;
+    while (last > starts[n]! + 1 && isGap(lines[last - 1]!)) last--;
+    const text = lines.slice(starts[n], last).join("\n") + "\n";
+    let one: unknown;
+    try { one = jsyaml.load(text, { schema: jsyaml.CORE_SCHEMA }); } catch { return undefined; }
+    const own = one && typeof one === "object" && !Array.isArray(one) ? Object.keys(one) : [];
+    if (own.length !== 1 || own[0] !== keys[n] || !sameValue((one as Record<string, unknown>)[keys[n]!], data[keys[n]!])) return undefined;
+    const gap = lines.slice(last, end).map((l) => l + "\n").join("");
+    entries.push({ key: keys[n]!, text, value: data[keys[n]!], gap });
+  }
+  return { head: lines.slice(0, starts[0] ?? lines.length).map((l) => l + "\n").join(""), entries };
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => sameValue(x, b[i]));
+  if (a && b && typeof a === "object" && typeof b === "object" && !Array.isArray(b)) {
+    const ka = Object.keys(a);
+    const o = b as Record<string, unknown>;
+    return ka.length === Object.keys(o).length && ka.every((k) => k in o && sameValue((a as Record<string, unknown>)[k], o[k]));
+  }
+  return false;
 }
 
 export function parseIssueFile(p: string, raw: string): Issue {
@@ -359,32 +429,47 @@ export function parseIssueFile(p: string, raw: string): Issue {
     throw new HiveError("bad_issue", `${p}: invalid frontmatter: ${z.prettifyError(fmResult.error)}`);
   }
   const sections = parseSections(parsed.content, { mirrored: fmResult.data.external !== undefined });
-  return {
+  const issue: Issue = {
     ...fmResult.data,
     path: p,
     sections,
     raw: parsed.content,
   };
+  readFrontmatters.set(issue, { text: parsed.matter, data: copyPlain(parsed.data) as Record<string, unknown> });
+  return issue;
 }
 
-/** Frontmatter keys in the order they are written; keys this build doesn't name follow, as read. */
+/** Frontmatter keys in the order a new issue writes them; keys this build doesn't name follow. A
+ *  file that was read keeps its own order, and a key it didn't have goes after its keys. */
 const FRONTMATTER_ORDER = [
   "id", "title", "state", "parent", "labels", "assignee", "github", "links", "created", "updated",
   "status", "external", "branch", "pr", "aliases",
 ] as const;
 
-/** Serialize an Issue back to a markdown file string. */
+/** Serialize an Issue back to a markdown file string. An entry whose value is what was read is
+ *  written back as it was; a changed or new one is dumped as before (js-yaml's default schema,
+ *  which quotes timestamp-like strings, so older builds read them as strings). */
 export function serializeIssue(issue: Issue): string {
   const { path: _path, sections: _sections, raw: _raw, ...fields } = issue;
   const parsed = IssueFrontmatterZ.parse(fields) as Record<string, unknown>;
-  const fm: Record<string, unknown> = {};
-  for (const k of FRONTMATTER_ORDER) if (parsed[k] !== undefined) fm[k] = parsed[k];
-  for (const [k, v] of Object.entries(parsed)) if (!(k in fm) && v !== undefined) fm[k] = v;
   // Omit `links` entirely when empty/absent so issues without cross-repo links
   // don't grow a noisy `links: []` line across the whole vault on first save.
-  if (!Array.isArray(fm.links) || fm.links.length === 0) delete fm.links;
-  const body = serializeSections(issue.sections);
-  return matter.stringify(body, fm);
+  if (!Array.isArray(parsed.links) || parsed.links.length === 0) delete parsed.links;
+  const has = (k: string) => parsed[k] !== undefined;
+  const read = readFrontmatters.get(issue);
+  const source = read && frontmatterSource(read.text, read.data);
+  let yaml = source?.head ?? "";
+  const written = new Set<string>();
+  for (const e of source?.entries ?? []) {
+    if (has(e.key)) {
+      yaml += sameValue(e.value, parsed[e.key]) ? e.text : jsyaml.safeDump({ [e.key]: parsed[e.key] });
+      written.add(e.key);
+    }
+    yaml += e.gap;
+  }
+  const rest = [...FRONTMATTER_ORDER, ...Object.keys(parsed)].filter((k) => has(k) && !written.has(k));
+  for (const k of new Set(rest)) yaml += jsyaml.safeDump({ [k]: parsed[k] });
+  return `---\n${yaml}---\n${serializeSections(issue.sections)}`;
 }
 
 export async function writeIssue(issue: Issue): Promise<void> {

@@ -616,7 +616,7 @@ describe("serializeIssue round-trip is stable", () => {
   });
 
   // A mirrored issue as a sync or a hand edit leaves it: the new typed fields, keys this build
-  // doesn't name, and timestamps without quotes (gray-matter reads those as `Date`).
+  // doesn't name, a comment, and timestamps and dates without quotes.
   const MIRRORED = `---
 id: PAY-7
 title: Mirrored
@@ -628,9 +628,10 @@ github: null
 links:
   - id: PAY-1
     type: relates
-created: 2026-05-17T10:00:00.000Z
-updated: 2026-05-17T10:00:00.000Z
+created: 2026-10-01T00:00:00Z
+updated: 2026-10-01T00:00:00Z
 status: hive:pr-created
+# written by the Jira sync
 external:
   provider: jira
   source: jira:acme/PAY
@@ -643,21 +644,26 @@ pr: { repo: acme/payments, number: 1187, url: "https://github.com/acme/payments/
 aliases: [PAY-300]
 jira:
   rank: "0|hzzzzz"
+due: 2026-11-01
 x_note: keep me
 ---
 
 ## Description
 
 D.
+
+### Activity
+
+Steps from Jira.
 `;
 
-  test("keys this build doesn't name, the new fields and unquoted timestamps survive an update", async () => {
+  test("an update writes back every entry it didn't change byte for byte, unquoted dates and timestamps too", async () => {
     const root = await mkRoot();
     await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED, "utf8");
     const [summary] = await listIssues(root);
     expect(summary).toMatchObject({
       id: "PAY-7",
-      created: "2026-05-17T10:00:00.000Z",
+      created: "2026-10-01T00:00:00Z",
       links: [{ id: "PAY-1", type: "relates" }],
       status: "hive:pr-created",
       external: { key: "PAY-318", remoteUpdated: "2026-10-22T09:14:00.000Z" },
@@ -665,18 +671,56 @@ D.
       pr: { number: 1187, state: "open" },
       aliases: ["PAY-300"],
     });
-    await updateIssue(root, "PAY-7", { title: "Mirrored, renamed" }, "cli:bob");
+    const back = await updateIssue(root, "PAY-7", { title: "Mirrored renamed" }, "cli:bob");
+    const frontmatter = (text: string) => text.split("\n---\n")[0];
+    // Only what changed is written fresh, and a timestamp hive writes is quoted, so an older
+    // build (whose YAML reads an unquoted one as a date) still reads the file.
+    expect(frontmatter(await fs.readFile(issuePath(root, "PAY-7"), "utf8"))).toBe(
+      frontmatter(MIRRORED).replace("title: Mirrored\n", "title: Mirrored renamed\n").replace("updated: 2026-10-01T00:00:00Z", `updated: '${back.updated}'`),
+    );
+    const reread = await readIssue(root, "PAY-7");
+    expect(reread.sections.description).toBe("D.\n\n### Activity\n\nSteps from Jira.");
+    expect([reread.title, reread.due, reread.jira, reread.x_note, reread.external?.customfield_10016, reread.external?.remoteUpdated]).toEqual([
+      "Mirrored renamed", "2026-11-01", { rank: "0|hzzzzz" }, "keep me", 3, "2026-10-22T09:14:00.000Z",
+    ]);
+  });
+
+  test("a key the file didn't have goes after its own keys, and a removed one leaves the rest as they were", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED.replace("github: null\n", ""), "utf8");
+    await updateIssue(root, "PAY-7", { branch: null }, "cli:bob");
+    await updateIssue(root, "PAY-7", { github: 9, labels: ["sync", "2026-11-01"] }, "cli:bob");
     const text = await fs.readFile(issuePath(root, "PAY-7"), "utf8");
-    const keys = [...text.split("---")[1]!.matchAll(/^(\w+):/gm)].map((m) => m[1]);
+    const keys = [...text.split("\n---\n")[0]!.matchAll(/^(\w+):/gm)].map((m) => m[1]);
     expect(keys).toEqual([
-      "id", "title", "state", "parent", "labels", "assignee", "github", "links", "created", "updated",
-      "status", "external", "branch", "pr", "aliases", "jira", "x_note",
+      "id", "title", "state", "parent", "labels", "assignee", "links", "created", "updated",
+      "status", "external", "pr", "aliases", "jira", "due", "x_note", "github",
     ]);
-    expect(text).toContain("  remoteUpdated: '2026-10-22T09:14:00.000Z'");
+    // Written fresh, a date-like string is quoted: an older build's YAML would read it as a date.
+    expect(text).toContain("labels:\n  - sync\n  - '2026-11-01'\nassignee: null\nlinks:\n");
+    expect(text).toContain("x_note: keep me\ngithub: 9\n---\n");
+    expect(text).toContain("# written by the Jira sync\nexternal:\n  provider: jira\n");
+  });
+
+  test("an object read from a file and changed in place is written, and the entries around it stay as they were", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED, "utf8");
+    const issue = await readIssue(root, "PAY-7");
+    (issue.jira as { rank: string }).rank = "0|i00000";
+    issue.external!.customfield_10016 = 5;
+    await writeIssue(issue);
     const back = await readIssue(root, "PAY-7");
-    expect([back.title, back.jira, back.x_note, back.external?.customfield_10016, back.external?.remoteUpdated]).toEqual([
-      "Mirrored, renamed", { rank: "0|hzzzzz" }, "keep me", 3, "2026-10-22T09:14:00.000Z",
-    ]);
+    expect([back.jira, back.external?.customfield_10016]).toEqual([{ rank: "0|i00000" }, 5]);
+    expect(await fs.readFile(issuePath(root, "PAY-7"), "utf8")).toContain("\ncreated: 2026-10-01T00:00:00Z\n");
+  });
+
+  test("frontmatter that doesn't split into one entry per line-start is written fresh, losing nothing", async () => {
+    // A quoted title running over two lines: its second line starts at column 0.
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED.replace("title: Mirrored\n", 'title: "Mirrored\nacross lines"\n'), "utf8");
+    await updateIssue(root, "PAY-7", { labels: ["x"] }, "cli:bob");
+    const back = await readIssue(root, "PAY-7");
+    expect([back.title, back.labels, back.due, back.x_note]).toEqual(["Mirrored across lines", ["x"], "2026-11-01", "keep me"]);
   });
 
   test("two reads of one file share no objects, so changing one doesn't change the next", async () => {
