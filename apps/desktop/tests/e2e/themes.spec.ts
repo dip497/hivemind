@@ -105,6 +105,8 @@ const appearance = async () => {
   await page.locator("[data-themes]").waitFor({ timeout: 10_000 });
 };
 const closeSettings = () => page.getByRole("button", { name: "Close", exact: true }).click();
+/** Appearance's Interface font row: what its closed select reads, and its field for a typed list. */
+const uiFontRow = () => ({ select: page.locator('[data-font-select="ui-font"]'), field: page.getByRole("textbox", { name: "Interface font, custom" }) });
 let before: Awaited<ReturnType<typeof painted>>;
 let bare: Awaited<ReturnType<typeof onCanvas>>;
 
@@ -141,6 +143,9 @@ test("applied from Appearance: its colours, its accent on the main button, its f
   await shot("themes-listed");
   await row.getByRole("button", { name: "Apply Harbour" }).click();
   await expect(page.locator('[data-theme-applied="@e2e/looks/harbour"]')).toBeVisible();
+  // The font row names the theme's face, with the theme; the list it is set as is not a typed one.
+  await expect(uiFontRow().select).toHaveText(`${FAMILY} · Harbour`);
+  await expect(uiFontRow().field).toHaveCount(0);
   await shot("themes-applied-settings");
   await closeSettings();
 
@@ -179,12 +184,27 @@ test("Revert to previous look puts back what was there", async () => {
   await appearance();
   await page.locator("[data-theme-revert]").click();
   await expect(page.locator("[data-theme-applied]")).toHaveCount(0);
+  await expect(uiFontRow().select).toHaveText("System");
+  await expect(uiFontRow().field).toHaveCount(0);
   await closeSettings();
   await expect.poll(() => painted()).toEqual(before);
   await expect.poll(onCanvas).toEqual(bare);
   expect(onDisk().appearanceExtra ?? {}).toEqual({});
   // Neither look names the theme's files any more.
   expect(fs.readdirSync(MEDIA).filter((f) => f.startsWith("theme-"))).toEqual([]);
+});
+
+test("a font list of the person's own is Custom: its field holds the list, the closed select its first family", async () => {
+  const was = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--font-ui-user").trim());
+  const typed = `"Iosevka Term", ${was}`;
+  await page.evaluate((v) => window.hive.settingsSet("appearance.uiFont", v), typed);
+  await appearance();
+  await expect(uiFontRow().select).toHaveText("Iosevka Term");
+  await expect(uiFontRow().field).toHaveValue(typed);
+  await shot("themes-font-custom");
+  await closeSettings();
+  await page.evaluate((v) => window.hive.settingsSet("appearance.uiFont", v), was);
+  await expect.poll(() => painted()).toEqual(before);
 });
 
 test("applied again, its package removed: the look stays, and Appearance says so", async () => {
@@ -197,6 +217,7 @@ test("applied again, its package removed: the look stays, and Appearance says so
   hive("plugins", "remove", "package:@e2e/looks");
   await appearance();
   await expect(page.locator('[data-theme-applied="@e2e/looks/harbour"]')).toContainText("(its package was removed)");
+  await expect(uiFontRow().select).toHaveText(`${FAMILY} · Harbour`);
   await expect(page.locator('[data-theme-option="@e2e/looks/harbour"]')).toHaveCount(0);
   await shot("themes-package-removed");
   await closeSettings();
