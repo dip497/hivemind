@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: the large QR code in **Settings ▸ Connect** is white to its edges in every theme; in a dark one it sat in a dark ring, as the dialog's own surface drew over its paper. The widgets button (bottom right) and a package's **Roll back to …** button now light up on hover, as other buttons do.
 - Fixed: two messages sent to an agent one right after the other (from the phone, `hive ctl send` or another agent) reach it as two messages. Before, the second could be typed before the first was submitted, so the agent got both run together and then an empty line: `/clear` then `a fresh start` arrived as `/cleara fresh start`.
 - Fixed: a terminal opened or resumed while it was being resized no longer stays blank, missing what its program printed, for up to 30 seconds (a resumed agent showed only `[hivemind] spawned …`). The window that resized it could also stop showing new output.
 - Changed: a theme's accent is held to 3:1 on the panels and menus (`bg2`) as well as on the page (`bg`), since a switch that is on, a slider's thumb and the selected tile's handle are drawn on both. This is a stricter check: a theme that passed before may now be refused by `hive plugins check`, the install and HiveHub, which name the surface (none is published yet). **Settings ▸ Appearance** says when an accent you pick is hard to see on the panels too.

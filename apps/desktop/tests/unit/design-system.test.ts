@@ -165,7 +165,6 @@ const CONTROLS: Record<string, string | undefined> = {
 const PALETTES: Record<string, string> = {
   "src/renderer/src/frame-color.ts": "the frame colours a person picks",
   "src/renderer/src/multiplayer/people.ts": "the colours a person picks for themselves",
-  "src/renderer/src/components/qr-code.tsx": "a QR code is black on white for any scanner",
   "src/renderer/src/workspace/css-color.ts": "resolves a CSS colour on a canvas",
 };
 

@@ -705,7 +705,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             <div key={a.id} className="agent-added">
               <div className="agent-added-head">
                 <span className="agent-added-label">{a.label}</span>
-                <Button size="sm" variant="outline" aria-label={`Remove ${a.label}`} className="agent-added-remove"
+                <Button size="sm" variant="outline" aria-label={`Remove ${a.label}`} className="shrink-0"
                   onClick={() => void window.hive.removeAgent(a.id)
                     .then(() => { void syncAgentPlugins(); toast.dismiss(toastId); })
                     .catch(() => toast.error(`Could not remove ${a.label}.`))}>

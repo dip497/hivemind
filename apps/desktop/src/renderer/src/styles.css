@@ -141,6 +141,10 @@
   --color-info:   oklch(0.74 0.035 245);
   /* New for the person (an unread tile): a clear blue, whatever the accent; it marks, never fills. */
   --color-unread: oklch(0.70 0.14 250);
+  /* A QR code: dark modules on white in every theme and mode, or a phone's camera cannot read it.
+     No preset sets these. */
+  --color-qr-paper: #fff;
+  --color-qr-ink:   #000;
 
   /* Behind a terminal, before the theme store has painted the preset's own. */
   --color-terminal-bg: #1A1C1F;
@@ -376,7 +380,6 @@ html.glass-on .hm-toast {
 .agent-added-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .agent-added-label { font-weight: 600; }
 .agent-added-does { color: var(--color-fg2); margin-top: 2px; }
-.agent-added-remove { flex: none; }
 @media (prefers-reduced-motion: reduce) {
   /* Reduced motion is a gentler equivalent, NOT the absence of feedback: keep an
      opacity cross-fade (non-vestibular) and drop the slide/scale/blur. */
@@ -545,6 +548,11 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --color-diff-removed: var(--color-err);
 }
 :focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+/* An island that is one control (the widgets toggle) clips that control's ring: the island draws it. */
+.hm-island:has(> :only-child:focus-visible) {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }

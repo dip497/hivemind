@@ -75,8 +75,8 @@ export function WidgetLayer({ repo, board, packages, edge }: {
           spot={onScreen(spots[w.id] ?? stacked[w.id]!, sizes[w.id])} onMove={place} onSize={sized} onRemove={() => board.remove(w.id)}
           onOption={(option, value) => board.update(w.id, (o) => (o.kind === "widget" ? { ...o, options: { ...o.options, [option]: value } } : o))} />
       ))}
-      <div className="pointer-events-auto absolute bottom-4 right-4">
-        <Button variant="ghost" size="icon" className="hm-island rounded-xl" data-widgets-toggle
+      <div className="hm-island pointer-events-auto absolute bottom-4 right-4 size-control overflow-hidden">
+        <Button variant="ghost" size="icon" className="size-full" data-widgets-toggle
           aria-label={hidden ? `show widgets (${widgets.length})` : "hide widgets"} title={hidden ? "Show widgets" : "Hide widgets"}
           onClick={() => hide(!hidden)}>{hidden ? <LayoutGrid /> : <EyeOff />}</Button>
       </div>

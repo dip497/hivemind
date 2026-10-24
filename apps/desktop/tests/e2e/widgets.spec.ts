@@ -284,3 +284,62 @@ test("a widget with no card, sent to the right edge, reaches it however narrow i
     fs.rmSync(ud, { recursive: true, force: true });
   }
 });
+
+// The widgets toggle is a button filling a floating island that clips what overflows it, so the
+// focus ring, drawn outside the button, is the island's to draw: tabbed to, the ring is on screen.
+test("the widgets toggle, reached with Tab, shows its focus ring", async () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-focus-repo-"));
+  const ud = fs.mkdtempSync(path.join(os.tmpdir(), "hm-widget-focus-ud-"));
+  execSync("git init -q -b main && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m init", { cwd: repo });
+  const counter = path.join(ud, "src", "counter");
+  fs.mkdirSync(counter, { recursive: true });
+  fs.writeFileSync(path.join(counter, "widget.json"), JSON.stringify({ name: "Counter" }));
+  fs.writeFileSync(path.join(counter, "widget.js"), COUNTER);
+  installPlugin(path.join(ud, "config"), counter);
+  // No update to offer: its toast would sit over the toggle in the same corner.
+  const env = { ...process.env, XDG_CONFIG_HOME: path.join(ud, "config"), HIVEMIND_TEST_UPDATE: "{}" };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const app = await electron.launch({ args: [path.join(process.cwd(), "out/main/index.js"), "--no-sandbox", `--user-data-dir=${ud}`], cwd: repo, env });
+  try {
+    const page = await app.firstWindow();
+    await page.waitForSelector(".react-flow", { timeout: 30_000 });
+    await page.locator('[data-toolbar-action="board"]').first().click();
+    await page.locator('[data-board-choice="widget:counter"]').click();
+    await expect(page.locator('[data-widget-layer] [data-widget="counter"]')).toContainText("presses", { timeout: 10_000 });
+    const toggle = page.locator("[data-widgets-toggle]");
+    // Tab until the toggle has the keys, as a person does.
+    let reached = false;
+    for (let i = 0; i < 200 && !reached; i++) {
+      await page.keyboard.press("Tab");
+      reached = await toggle.evaluate((el) => el === document.activeElement);
+    }
+    expect(reached).toBe(true);
+    expect(await toggle.evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+    await page.waitForTimeout(300);
+    // Three pixels outside the island's top edge, against the page eight pixels out: a ring
+    // there differs from the page along most of the edge; with no ring the band is the page.
+    const box = (await toggle.locator("xpath=..").boundingBox())!;
+    const png = (await page.screenshot({ clip: { x: box.x - 8, y: box.y - 8, width: box.width + 16, height: box.height + 16 } })).toString("base64");
+    const ring = await page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      [c.width, c.height] = [img.width, img.height];
+      const g = c.getContext("2d")!;
+      g.drawImage(img, 0, 0);
+      const px = (x: number, y: number) => g.getImageData(x, y, 1, 1).data;
+      let n = 0;
+      for (let x = 12; x < img.width - 12; x++) {
+        const band = px(x, 5), page = px(x, 0);
+        if (Math.abs(band[0]! - page[0]!) + Math.abs(band[1]! - page[1]!) + Math.abs(band[2]! - page[2]!) > 60) n++;
+      }
+      return { n, of: img.width - 24 };
+    }, png);
+    expect(ring.n).toBeGreaterThan(ring.of * 0.6);
+  } finally {
+    await app.close();
+    fs.rmSync(repo, { recursive: true, force: true });
+    fs.rmSync(ud, { recursive: true, force: true });
+  }
+});

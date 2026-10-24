@@ -42,7 +42,7 @@ export function MakePluginDialog({ kind: initial, onStart, onClose }: { kind: Ma
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-[480px]" data-make-plugin>
-        <DialogTitle className="flex items-center gap-2"><Sparkles size={15} /> Make your own</DialogTitle>
+        <DialogTitle><span className="flex items-center gap-2"><Sparkles size={15} /> Make your own</span></DialogTitle>
         <DialogDescription>An agent builds it, installs it and checks it works. Say what it should do.</DialogDescription>
         <div role="radiogroup" aria-label="What to make" className="grid grid-cols-3 gap-1.5">
           {KINDS.map(([id, label, hint]) => (

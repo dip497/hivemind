@@ -94,7 +94,7 @@ export function AddDialog({ repoPath, onBoard, onTile, boardItems }: {
         <div className="flex h-[min(460px,70vh)] flex-col p-2">
           <div className="flex items-center gap-1.5 pb-2">
             <Input autoFocus value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }}
-              placeholder="Search tools and widgets" aria-label="Search tools and widgets" className="flex-1 text-label" />
+              placeholder="Search tools and widgets" aria-label="Search tools and widgets" size="list" className="flex-1" />
             <div role="tablist" aria-label="Show" className="flex gap-0.5 rounded-md bg-[var(--color-bg3)] p-0.5">
               {ADD_TABS.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} data-add-tab={id}
                 onClick={() => { setTab(id); setActive(0); }}

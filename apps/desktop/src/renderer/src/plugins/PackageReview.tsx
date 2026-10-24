@@ -72,7 +72,7 @@ export function PackageReview({ review: r, heading }: { review: Review; heading?
       <span className="package-review-asks" data-package-member={`${m.kind}:${m.id}`}>{m.permissions.length ? `May ${askedFor(m.permissions).join("; ")}` : "Asks for nothing more"}</span>
     </MemberLine>)}
   </ul>;
-  return <div className="package-review" data-package-review={r.id} data-review-kind={update ? "update" : "install"}>
+  return <div data-package-review={r.id} data-review-kind={update ? "update" : "install"}>
     {heading && <div className="settings-section-heading"><h3>{update ? `Update ${r.name}` : `Install ${r.name}`}</h3>
       <span>{update ? `${r.replaces!.version} → ${r.version}` : r.version}</span></div>}
     {!heading && update && <p className="package-review-versions">{r.replaces!.version} → {r.version}</p>}

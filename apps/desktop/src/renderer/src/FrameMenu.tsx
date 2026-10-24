@@ -174,15 +174,13 @@ export function FrameMenu({ frame, at, actions, arrange = false, onClose, onRena
         <Sub icon={<Palette />} label="Color" data="color">
           <div className="flex flex-wrap gap-1.5 p-1.5 w-[160px]">
             {FRAME_SWATCHES.map((c) => (
-              <DropdownMenuItem key={c.value} onSelect={() => actions.onColor(fid, c.value)} title={c.name} aria-label={`Set color ${c.name}`}
-                className="size-6 p-0 rounded-full shadow-[inset_0_0_0_1px_var(--color-line2)] transition-transform duration-150 hover:scale-110 focus:scale-110"
+              <DropdownMenuItem key={c.value} onSelect={() => actions.onColor(fid, c.value)} title={c.name} aria-label={`Set color ${c.name}`} variant="swatch"
                 style={{ background: c.value }} />
             ))}
           </div>
         </Sub>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => actions.onDelete(fid)} data-frame-menu-delete
-          className="text-destructive focus:bg-destructive/10 focus:text-destructive"><Trash />Delete frame…<DropdownMenuShortcut>D</DropdownMenuShortcut></DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => actions.onDelete(fid)} data-frame-menu-delete variant="destructive"><Trash />Delete frame…<DropdownMenuShortcut>D</DropdownMenuShortcut></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

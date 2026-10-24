@@ -1165,7 +1165,7 @@ function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <span className="relative inline-flex">
-        <Button variant="ghost" size="2xs" aria-label="View options" title="What is listed, grouped and ordered how" data-layers-view-menu aria-expanded={open} className="relative text-count font-medium" onClick={() => setOpen(true)}>
+        <Button variant="ghost" size="2xs" aria-label="View options" title="What is listed, grouped and ordered how" data-layers-view-menu aria-expanded={open} className="relative" onClick={() => setOpen(true)}>
           {prefs.groupBy === "none" ? "Not grouped" : `By ${choiceLabel("groupBy", prefs.groupBy).toLowerCase()}`}
           {filtered && <span className="text-[var(--color-brand)]">· filtered</span>}
           <ChevronDown size={11} />
@@ -1311,7 +1311,7 @@ function TileRailMenu({ tile, x, y, pinned, onPin, onUnread, onSnooze, onCloseTi
         {onCloseTile && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => run(keys.d)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+            <DropdownMenuItem onSelect={() => run(keys.d)} variant="destructive">
               <span className="shrink-0 grid place-items-center size-4"><Trash size={13} /></span>
               <span className="truncate">Close tile</span>
               <DropdownMenuShortcut>D</DropdownMenuShortcut>
