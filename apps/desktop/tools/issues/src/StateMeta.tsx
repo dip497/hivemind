@@ -87,7 +87,7 @@ export function StateIcon({ state, size = 14, color = STATE_COLOR[state] }: { st
 /** A status as a small icon in its colour, its name on hover: what a card or row shows. */
 export function StatusIcon({ status, size = 12 }: { status: WorkflowStatus; size?: number }) {
   return (
-    <span title={status.name} className="inline-flex shrink-0" data-status={status.id}>
+    <span title={status.name} className="inline-flex shrink-0">
       <StateIcon state={status.category} size={size} color={statusColor(status)} />
     </span>
   );

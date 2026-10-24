@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- A project can name its own issue statuses (Code Review, QA, PR Created…) in `.hivemind/workflow.yaml`, each in one of the six states: the Issues board shows a column per status (or the file's board columns, asking which status when a column holds several), the issue's status picker, filters and New issue list them, and `hive statuses show|validate|edit`, `hive update --status "Code Review"` and `hive list --status/--category` work with them from the CLI. Plugins read them with `hm.issues.workflow()` (view protocol 1.16, `workflow`), and each issue says its `status` and `statusName`; the workspace API has `issue.workflow`. A project without the file looks and works as before.
 - Fixed: your network server always serves the phone page of its own release, so the phone page gets new features (photos, say) when you upgrade instead of staying on the page copied when the server was set up. hive-net carries the page itself, and a running `hive-net serve` whose binary an upgrade replaces starts the new one in its place, on the same ports. Your phone stays signed in through it.
 - **Breaking:** `hive-net serve --phone` takes no folder: it serves the page hive-net carries. Serve a page built here with `--phone-folder <dir>`. A server set up before this release changes `--phone ~/hive-network/phone` to `--phone` in its service.
 - Fixed: on an iPhone, the phone page's text no longer gets larger after you turn the phone sideways and back.
