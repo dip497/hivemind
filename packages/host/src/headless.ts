@@ -300,6 +300,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       if (kept === "file") o.onWarn(`${name} of ${key} is kept in ${secretsPath()}, readable by you alone (0600): hive host has no system keychain`);
       return kept;
     },
+    secretFields: async (plugin) => ((await listToolPackages()).find((p) => p.id === plugin)?.settings ?? []).filter((f) => f.type === "secret").map((f) => f.id),
   });
   const api: WorkspaceServer = new WorkspaceServer([
     pluginServices.domain(),

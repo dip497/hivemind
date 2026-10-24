@@ -1360,6 +1360,7 @@ const pluginServices = new PluginServices({
   options: async (plugin) => optionsOf(plugin, (await listTools()).find((p) => p.id === plugin)?.settings ?? [], getAppSettings().plugins.state, appSecrets().names(pluginKey("tool", plugin))),
   secret: (plugin, name) => appSecrets().get(pluginKey("tool", plugin), name),
   setSecret: (key, name, value) => appSecrets().set(key, name, value),
+  secretFields: async (plugin) => ((await listTools()).find((p) => p.id === plugin)?.settings ?? []).filter((f) => f.type === "secret").map((f) => f.id),
 });
 onSettingsChange(() => void pluginServices.settingsChanged());
 const workspaceServer: WorkspaceServer = new WorkspaceServer([

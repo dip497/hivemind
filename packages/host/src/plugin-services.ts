@@ -12,7 +12,8 @@
  *
  * A service is its grant: the grant's plugin is the only one it speaks for, and a connection that
  * holds no service's grant (the person, an agent, another program) is refused. The person sets a
- * secret with `secret.set` (from `hive plugins set`); nobody else may. Electron-free.
+ * secret with `secret.set` (from `hive plugins set`); a service sets only its own plugin's declared
+ * secrets (the Jira service keeps its sign-in), signed in the audit log as itself. Electron-free.
  */
 import { parsePluginCommands, type PluginCommand } from "@hivemind/view-sdk/commands";
 import { FIELD_ID, pluginOptions, resolveSettings, type PluginState, type SettingField } from "@hivemind/core/plugin-settings";
@@ -30,6 +31,8 @@ export interface PluginServicesOptions {
   secret(plugin: string, name: string): string | null;
   /** Set (null: take away) a secret of a plugin, by its settings key (`tool:@owner/name`). */
   setSecret(key: string, name: string, value: string | null): KeptBy | null;
+  /** The ids of the `secret` fields the tool plugin `plugin` declares. */
+  secretFields(plugin: string): Promise<string[]>;
 }
 
 /** What a tool plugin is set to, as its service reads it: its fields' values (its secrets left out)
@@ -133,11 +136,18 @@ export class PluginServices {
             throw new ApiError("UNAVAILABLE", (e as Error).message);
           }
         },
-        "secret.set": (from, key, name, value) => {
-          if (!isPerson(from)) throw new ApiError("FORBIDDEN", "only the person at this machine sets a plugin's secrets");
+        "secret.set": async (from, key, name, value) => {
+          const k = text(key, "key"), field = text(name, "name");
+          if (!isPerson(from)) {
+            // A service keeps what it is given to keep (a sign-in), of its own plugin alone.
+            let plugin: string;
+            try { plugin = this.pluginOf(from); } catch { throw new ApiError("FORBIDDEN", "only the person at this machine, or a tool plugin's service for its own plugin, sets a plugin's secrets"); }
+            if (k !== `tool:${plugin}`) throw new ApiError("FORBIDDEN", `a service sets its own plugin's secrets (tool:${plugin}), not ${k}'s`);
+            if (!(await this.o.secretFields(plugin)).includes(field)) throw new ApiError("FORBIDDEN", `${field} is not one of ${plugin}'s secret settings`);
+          }
           if (value !== null && typeof value !== "string") throw new ApiError("BAD_REQUEST", "value is text, or null to take it away");
           try {
-            const kept = this.o.setSecret(text(key, "key"), text(name, "name"), value as string | null);
+            const kept = this.o.setSecret(k, field, value as string | null);
             void this.settingsChanged();
             return { kept };
           } catch (e) {
