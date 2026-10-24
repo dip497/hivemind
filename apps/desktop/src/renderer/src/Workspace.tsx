@@ -106,6 +106,7 @@ import { AgentToasts } from "./workspace/agent-toasts";
 import { openAppearanceSettings } from "./workspace/chrome-store";
 import { openViewMenu } from "./workspace/standard-toolbar";
 import { loadCommunityViews } from "./workspace/views/community/registry";
+import { StartViewOffers } from "./plugins/open-start-view";
 import { agentScanProblems, syncAgentPlugins } from "./agent-plugins";
 import {
   FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
@@ -1354,6 +1355,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
         onRestart={() => onRestart?.()}
         upgrading={upgrading}
       />
+      {/* "Open Archipelago?" for a package installed outside Settings (`hive plugins install`). */}
+      <StartViewOffers />
       <AgentToasts
         toasts={toasts}
         onDismiss={dismissToast}

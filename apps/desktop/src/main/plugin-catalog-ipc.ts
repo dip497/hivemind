@@ -16,7 +16,7 @@ import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
 import { listWidgets, readWidget } from "@hivemind/core/widgets";
 import { installPackage, reviewedOf, type Reviewed } from "@hivemind/core/package-install";
-import { packageReview } from "./packages-ipc.js";
+import { offeredInSettings, packageReview } from "./packages-ipc.js";
 import { widgetsChanged } from "./widgets.js";
 import { listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
 import { toolsChanged } from "./tool-packages.js";
@@ -255,7 +255,7 @@ export function installPluginCatalogIpc(): void {
     if (!pendingPackage || pendingPackage.token !== token || pendingPackage.sender !== event.sender) throw new Error("Review the package again before installing it.");
     const { dir, id, reviewed } = pendingPackage;
     pendingPackage = null;
-    try { await installPackage(dir, { id, reviewed }); await reloadSettings(); widgetsChanged(); toolsChanged(); }
+    try { await offeredInSettings(await installPackage(dir, { id, reviewed })); await reloadSettings(); widgetsChanged(); toolsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (event, token: string) => {

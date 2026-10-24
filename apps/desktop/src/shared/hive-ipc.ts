@@ -180,6 +180,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     rollbackPackage: (id) => port.invoke("plugins:rollback", id),
     reviewPackageFolder: local("plugins:review-folder", invoke("plugins:review-folder")),
     installPackageFolder: local("plugins:install-folder", invoke("plugins:install-folder")),
+    startViewOffers: local("plugins:start-view-offers", invoke("plugins:start-view-offers")),
     onViewRunaway: (cb) => port.on("views:runaway", cb),
     checkForUpdate: local("checkForUpdate", invoke("checkForUpdate")),
     runUpgrade: local("runUpgrade", invoke("runUpgrade")),
