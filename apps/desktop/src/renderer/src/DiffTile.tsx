@@ -61,6 +61,7 @@ import { BranchPicker } from "./code/BranchPicker";
 import { collectChanges, collectMatches, hashNum } from "./code/diff-search";
 import {
   PIERRE_CSS_VARS,
+  PIERRE_THEME,
   workerHighlighterOptions,
   workerPoolOptions,
 } from "./pierre-codeview";
@@ -517,7 +518,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   const themeMode = useThemeField("mode");
   const options: CodeViewOptions<ReviewComment, undefined> = useMemo(
     () => ({
-      theme: { dark: "pierre-dark", light: "pierre-light" },
+      theme: PIERRE_THEME,
       themeType: themeMode,
       diffStyle: layout,
       overflow,

@@ -13,14 +13,15 @@ import type { ViewClient } from "@hivemind/view-sdk";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import * as ui from "../plugin-ui";
-import { PIERRE_CSS_VARS, workerHighlighterOptions, workerPoolOptions } from "../pierre-codeview";
+import { PIERRE_CSS_VARS, PIERRE_THEME, workerHighlighterOptions, workerPoolOptions } from "../pierre-codeview";
 import type { HostModuleName } from "../../../shared/plugin-host";
 import { useThemeField } from "../theme-store";
 
 const MarkdownPreview = lazy(() => import("../markdown-preview").then((m) => ({ default: m.MarkdownPreview })));
 
-/** A patch drawn as the app's Diff tile draws one: in the person's code font, its changes in the
- *  palette's ok, err and brand (PIERRE_CSS_VARS), so a tool's diff follows the preset. */
+/** A patch drawn as the app's Diff tile draws one: on the preset's page, in its syntax colours and
+ *  the person's code font, its changes in the palette's ok, err and brand (pierre-codeview.ts), so a
+ *  tool's diff follows the preset. */
 function PatchView({ patch, className }: { patch: string; className?: string }) {
   const mode = useThemeField("mode");
   const items = useMemo(() => {
@@ -35,7 +36,7 @@ function PatchView({ patch, className }: { patch: string; className?: string }) 
   return (
     <WorkerPoolContextProvider poolOptions={workerPoolOptions} highlighterOptions={workerHighlighterOptions}>
       <CodeView className={className ?? "h-full w-full overflow-y-auto"} items={items} style={PIERRE_CSS_VARS}
-        options={{ theme: { dark: "pierre-dark", light: "pierre-light" }, themeType: mode, overflow: "scroll" }} />
+        options={{ theme: PIERRE_THEME, themeType: mode, overflow: "scroll" }} />
     </WorkerPoolContextProvider>
   );
 }
