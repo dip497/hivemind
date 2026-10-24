@@ -44,7 +44,8 @@ export const groups = {
   text: pick(["color-fg", "color-fg2", "color-fg3"]),
   brand: pick(["color-brand", "color-brand-hover", "color-select", "color-accent"]),
   semantic: pick(["color-ok", "color-warn", "color-err", "color-info"]),
-  status: byPrefix("color-status-"),
+  // The `-text` inks are these tones fitted to a palette at run time (theme-store), not tones of their own.
+  status: byPrefix("color-status-").filter((t) => !t.name.endsWith("-text")),
   motion: [...byPrefix("hm-ease-"), ...byPrefix("hm-dur-")],
   tracking: byPrefix("hm-track-"),
 };
