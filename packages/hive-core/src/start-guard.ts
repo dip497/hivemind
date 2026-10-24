@@ -88,6 +88,22 @@ export function unacknowledged(findings: StartFinding[], ack: { checks?: StartCh
   return findings.filter((f) => f.severity === "block" || (f.severity === "warn" && !ack.force && !(ack.checks ?? []).includes(f.check)));
 }
 
+/** What a start would do, and what stands in its way. */
+export interface StartPlan {
+  id: string;
+  findings: StartFinding[];
+  /** The branch its work goes on: the one already written on the issue, else the template's. */
+  branch: string;
+  /** The status starting moves it to; unchanged when it is already in progress. */
+  status: string;
+  prompt: string;
+}
+
+/** What `issue.start` answers (design §11.1): refused with what is left to confirm, or what it did. */
+export type StartAnswer =
+  | { started: false; id: string; findings: StartFinding[]; left: StartFinding[] }
+  | { started: true; id: string; findings: StartFinding[]; status: string; branch?: string; frame?: string; tile?: string; assigned?: boolean };
+
 /** Every check's name, in the order of design §10's table: what `--ack` accepts. */
 export const START_CHECKS: readonly StartCheck[] = [
   "unassigned", "assigned-other", "in-progress-other", "closed", "not-in-sprint", "blocked", "flagged",
@@ -261,4 +277,15 @@ export function needsConfirm(id: string, left: StartFinding[]): { message: strin
     ? "this can't be forced: work in the tile that has it (`hive ctl focus <tile>`), or close it first"
     : `ask the person; then re-run with ${[...new Set(warn.map((f) => f.check))].map((c) => `--ack ${c}`).join(" ")}${warn.some((f) => f.actions.includes("assign-me")) ? " or --assign-me" : ""} (never --force on your own)`;
   return { message, fix, warnings: left };
+}
+
+/** The branch an issue's work goes on (design §11.1): `branch_template` (default `{key}-{slug}`)
+ *  with the key and a slug of the title filled in, kept to what git takes in a branch name. */
+export function branchFor(template: string | undefined, issue: Pick<Issue, "id" | "title">): string {
+  const slug = issue.title.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48).replace(/-+$/, "");
+  const name = (template || "{key}-{slug}").replaceAll("{key}", issue.id).replaceAll("{slug}", slug);
+  // git refuses `..`, a leading `-` or `.`, a trailing `/` or `.lock`, spaces and ~^:?*[\ — and the
+  // template may leave a dangling separator when the title had nothing to slug.
+  const clean = name.replace(/[\s~^:?*[\\\x00-\x1f\x7f]+/g, "-").replace(/\.{2,}/g, ".").replace(/\/{2,}/g, "/").replace(/^[-./]+|[-./]+$/g, "").replace(/\.lock$/, "");
+  return clean || issue.id;
 }

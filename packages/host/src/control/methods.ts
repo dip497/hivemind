@@ -308,7 +308,7 @@ export interface Dispatcher {
   /** Spawn an agent, without recording it: the caller has (M5). */
   spawn: (opts: {
     agent?: string; frame?: string; prompt?: string; model?: string; mode?: string; name?: string; resume?: string;
-    supervise?: string | true; report?: boolean; parent?: string; repo: string;
+    supervise?: string | true; report?: boolean; parent?: string; repo: string; issue?: string;
   }) => Promise<string>;
   /** Who started `bare` and hears its reports: a tile, or a program (`client:<grant id>`). */
   parentOf: (bare: string) => string | undefined;
@@ -404,6 +404,8 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     /** The workspace to open it in (a person's spawn from another of their devices, M5), not the
      *  caller's or the one the user's window shows. */
     repo?: string;
+    /** The issue it is started to work: recorded on its tile (design jira-sync §11.1). */
+    issue?: string;
   }): Promise<string> => {
     // An agent that starts one is its tile: the child is a level below it, beside it on the board.
     const tile = opts.parent && !isClient(opts.parent) ? opts.parent : undefined;
@@ -471,6 +473,7 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
     const tileId = openTile(place, (ws) => ({
       id: mintId(`tile-${def.id}`), kind: AGENT_TILE_KIND,
       ...agentLaunch(def, { options, labels: ws.tiles.map((t) => t.label), prompt, resume }),
+      ...(opts.issue ? { issue: opts.issue } : {}),
     }), { name, prompt, background: opts.report === false, by: openedBy(opts.parent) });
     const res = { tileId };
     const spawner = tile && tile !== res.tileId ? tile : undefined;

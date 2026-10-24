@@ -115,6 +115,7 @@ import { answers } from "@hivemind/host/answers";
 import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder } from "@hivemind/host/needs";
 import { workspaceSummaries } from "@hivemind/host/home";
 import { agentControl } from "@hivemind/host/agent-control";
+import { issueStart, issueStartOver, issueTiles } from "@hivemind/host/issue-start";
 import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
@@ -1362,6 +1363,25 @@ const pluginServices = new PluginServices({
   setSecret: (key, name, value) => appSecrets().set(key, name, value),
 });
 onSettingsChange(() => void pluginServices.settingsChanged());
+const agentsHere = agentControl({
+  programs: async () => {
+    await shellEnvReady;
+    return spawnableAgents().filter((d) => !!findBin(d.bin));
+  },
+  core: (repo) => workspaceStore().getCore(repo),
+  repos: () => workspaceStore().repos(),
+  machines: knownMachines,
+  places: placesHere,
+  openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
+  start: (repo, start) => control.start(repo, start),
+  status: (bare) => control.status.get(bare),
+  interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
+  // As the person types: an interrupt key ends the turn in the agent's status too.
+  type: (bare, data) => control.typed(`hm:${bare}`, data),
+  close: (bare) => control.close(bare),
+  folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
+});
+const framesHere = framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn });
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
   pluginServices.domain(),
   ...workspaceDomains((c) => whoIs(c).name),
@@ -1380,24 +1400,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // Agents started, interrupted and closed from another of the person's devices, and what they
   // changed (M5, spec/agents.md).
   placesHere.domain(),
-  agentControl({
-    programs: async () => {
-      await shellEnvReady;
-      return spawnableAgents().filter((d) => !!findBin(d.bin));
-    },
-    core: (repo) => workspaceStore().getCore(repo),
-    repos: () => workspaceStore().repos(),
-    machines: knownMachines,
-    places: placesHere,
-    openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
-    start: (repo, start) => control.start(repo, start),
-    status: (bare) => control.status.get(bare),
-    interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
-    // As the person types: an interrupt key ends the turn in the agent's status too.
-    type: (bare, data) => control.typed(`hm:${bare}`, data),
-    close: (bare) => control.close(bare),
-    folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
-  }),
+  agentsHere,
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
   controlApi({
     control: () => control.api(),
@@ -1442,7 +1445,9 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     grants,
     elsewhere: (method, params) => askDrive(driveSockPath(app.getPath("userData")), readOrCreateToken(app.getPath("userData")), method, params),
   }),
-  framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn }),
+  framesHere,
+  // Starting work on an issue: the guard, its worktree frame, an agent on it (design jira-sync §11.1).
+  issueStart({ activeTiles: () => issueTiles(heldBoards(workspaceStore())), ...issueStartOver(framesHere, agentsHere), services: pluginServices, nameOf: (c) => whoIs(c).name }),
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
