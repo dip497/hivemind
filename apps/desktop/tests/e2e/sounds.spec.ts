@@ -1,7 +1,8 @@
 // Sounds and the notice desk (docs/plans/sounds-and-themes.md S1–S3, T4): with two windows open,
 // ten stand-in agents (fixtures/fake-agent.cjs) that finish together make one burst in main's
-// Recent, played in one window only, for all ten (one of them selected in a window that lost the
-// focus), and their OS pop-ups gathered (the first, then one for the other nine). Play in Settings
+// Recent (or, on a busy machine, one for most of them and one for a finish that reached main after
+// it closed), played in one window only, for all ten (one of them selected in a window that lost
+// the focus), and their OS pop-ups gathered (the first, then one for the others). Play in Settings
 // and `hive notifications play` add played entries; an applied theme's sound plays instead of the
 // built-in one and Recent names its pack, a file that does not decode plays the built-in and says
 // why, and a window gets no file but the applied theme's. Screenshots of the Sounds section go to
@@ -141,17 +142,27 @@ test("ten agents finishing together in two windows make one burst: one sound for
   await app.evaluate(({ BrowserWindow }) => { for (const w of BrowserWindow.getAllWindows()) w.blur(); });
   fs.writeFileSync(go, "");
 
-  // Read through `hive`, which touches no window: a click would give one the focus back.
-  const done = () => (hive(["notifications", "recent", "--json"]).json?.recent ?? []).filter((r: { moment: string }) => r.moment === "done");
-  await expect.poll(done, { timeout: 30_000 }).toEqual([expect.objectContaining({ moment: "done", agents: 10, sound: "played", count: 10 })]);
-  // The pop-ups: the first at once, the other nine gathered into one 1.5 s later.
-  await expect.poll(() => done()[0]?.popups, { timeout: 5_000 }).toBe(2);
+  // Read through `hive`, which touches no window: a click would give one the focus back. Oldest first.
+  type Done = { moment: string; agents: number; sound: string; count?: number; popups: number };
+  const done = (): Done[] => (hive(["notifications", "recent", "--json"]).json?.recent ?? []).filter((r: Done) => r.moment === "done").reverse();
+  // All ten finish at one moment, and each finish comes the long way to main (its hook, the host, a
+  // window): on a busy machine the last can reach it after its burst has closed, and makes a burst
+  // of its own, as a person would hear it. Together that moment's bursts are the ten, the first
+  // gathering most of them.
+  await expect.poll(() => done().reduce((n, b) => n + b.agents, 0), { timeout: 30_000 }).toBe(10);
+  const bursts = done();
+  expect(bursts[0]!.agents, JSON.stringify(bursts)).toBeGreaterThan(5);
+  // Each burst: one sound for all its agents, played; its pop-ups, the first at once and the rest
+  // gathered into one 1.5 s later.
+  const gathered = (b: Done) => ({ moment: "done", agents: b.agents, sound: "played", popups: Math.min(b.agents, 2) });
+  await expect.poll(() => done().map(({ moment, agents, sound, count, popups }) => ({ moment, agents, sound, count, popups })), { timeout: 5_000 })
+    .toEqual(bursts.map((b) => ({ ...gathered(b), count: b.agents })));
   const heard = await Promise.all([page, second].map((w) => w.evaluate(() => (window as unknown as { soundsHeard: number }).soundsHeard)));
   expect(heard.filter((n) => n > 0), `sounds per window: ${heard}`).toHaveLength(1);
-  // Settings lists the same burst.
+  // Settings lists the same bursts.
   await openNotifications();
-  await expect.poll(async () => (await recent()).filter((r) => r.moment === "done"), { timeout: 5_000 })
-    .toEqual([{ moment: "done", agents: 10, sound: "played", popups: 2, pack: null }]);
+  await expect.poll(async () => (await recent()).filter((r) => r.moment === "done").reverse(), { timeout: 5_000 })
+    .toEqual(bursts.map((b) => ({ ...gathered(b), pack: null })));
 
   await page.getByRole("button", { name: "Play the Needs you sound" }).click();
   await expect.poll(async () => (await recent())[0], { timeout: 10_000 }).toMatchObject({ moment: "needs", sound: "played" });

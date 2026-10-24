@@ -766,15 +766,15 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         bootSettle = setTimeout(releaseBoot, Math.max(BOOT_SETTLE_MS, bootAt + BOOT_MIN_MS - Date.now()));
       }
       flowPending += d.length;
+      // Once the reset is drawn. Not in a write of its own: a resize stops at an empty write and
+      // drops it with every write after it (see screen-worker's inTurn).
+      const had = keepPlace !== undefined && d.startsWith(SCREEN_RESET) ? keepPlace : undefined;
+      if (had !== undefined) keepPlace = undefined;
       term.write(d, () => {
         flowPending -= d.length;
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
+        if (had !== undefined) term.scrollToLine(Math.max(0, term.buffer.active.baseY - had));
       });
-      if (keepPlace !== undefined && d.startsWith(SCREEN_RESET)) {
-        const had = keepPlace;
-        keepPlace = undefined;
-        term.write("", () => term.scrollToLine(Math.max(0, term.buffer.active.baseY - had)));
-      }
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
       // An agent tile's status comes from the host; a plain shell uses the cheap heuristic.
       if (agent) agentDirty = true;
