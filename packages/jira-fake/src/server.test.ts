@@ -86,6 +86,23 @@ describe("auth", () => {
     expect((await get(granular, "/rest/agile/1.0/board?projectKeyOrId=PAY", { auth: granular.authorization("scoped"), gateway: true })).status).toBe(200);
   });
 
+  test("each Agile call needs its own granular scopes: the board list, its configuration and features, its sprints", async () => {
+    const statuses = async (scopes: string[]) => {
+      const f = await fake("cloud-scrum-company", { credentials: { scopes } });
+      const o = { auth: f.authorization("scoped"), gateway: true };
+      return [
+        (await get(f, "/rest/agile/1.0/board?projectKeyOrId=PAY", o)).status,
+        (await get(f, "/rest/agile/1.0/board/12/configuration", o)).status,
+        (await get(f, "/rest/agile/1.0/board/12/features", o)).status,
+        (await get(f, "/rest/agile/1.0/board/12/sprint?state=active", o)).status,
+        (await get(f, "/rest/api/3/myself", o)).status,
+      ];
+    };
+    expect(await statuses(["read:board-scope:jira-software", "read:project:jira"])).toEqual([200, 401, 401, 401, 200]);
+    expect(await statuses(["read:board-scope:jira-software", "read:project:jira", "read:board-scope.admin:jira-software"])).toEqual([200, 200, 200, 401, 200]);
+    expect(await statuses(["read:board-scope:jira-software", "read:project:jira", "read:board-scope.admin:jira-software", "read:sprint:jira-software"])).toEqual([200, 200, 200, 200, 200]);
+  });
+
   test("tenant_info gives the cloudId without credentials; Data Center has none", async () => {
     const f = await fake("cloud-scrum-company");
     expect(await get(f, "/_edge/tenant_info", { auth: null })).toMatchObject({ status: 200, body: { cloudId: SITES.get("cloud-scrum-company")!.cloudId } });
@@ -107,7 +124,10 @@ describe("identity and discovery", () => {
   });
 
   test("v2 serverInfo says Cloud only on Cloud", async () => {
-    expect((await get(await fake("cloud-kanban-team"), "/rest/api/2/serverInfo")).body.deploymentType).toBe("Cloud");
+    const cloud = await fake("cloud-kanban-team");
+    expect((await get(cloud, "/rest/api/2/serverInfo")).body.deploymentType).toBe("Cloud");
+    // The site's URL, also through the gateway (it names the site, not the API host).
+    expect((await get(cloud, "/rest/api/2/serverInfo", { auth: cloud.authorization("scoped"), gateway: true })).body.baseUrl).toBe("https://acme.atlassian.net");
     const dc = await get(await fake("dc-v2-wiki"), "/rest/api/2/serverInfo");
     expect(dc.body).toMatchObject({ version: "9.12.15", serverTime: "2026-10-24T08:00:00.000+0000" });
     expect("deploymentType" in dc.body).toBe(false);
