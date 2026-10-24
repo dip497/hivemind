@@ -297,6 +297,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     server: () => api, changed: () => homeLinesChanged(),
     transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
     runsHere: (bare) => !isRemote(runsIn(heldBoards(store), bare)),
+    reports: (bare) => !!manifestOf(heldBoards(store), bare)?.caps.turnSignal,
   });
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,

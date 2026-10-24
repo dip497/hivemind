@@ -13,7 +13,8 @@
  *
  * What an agent said is read only for a tile someone follows (a client's watch, or Home while a
  * phone follows it, `followAll`), when its own agent reports (`reported`: each tool use, each
- * reply), and only what it wrote since (`LastSaid`). A report of a tile no one follows marks it,
+ * reply; for an agent that reports nothing, each change of its screen), and only what it wrote
+ * since (`LastSaid`). A report of a tile no one follows marks it,
  * and it is read before its line is next told: to a one-shot read, to Home, to a new watch. An agent
  * that runs on another machine keeps no conversation here: its line is its screen's, as that
  * machine's daemon read it. Electron-free: main and `hive host` each make one.
@@ -45,6 +46,10 @@ export interface TileLinesOptions {
   /** Whether the agent of a tile runs on this machine, so its session file is here: one that runs
    *  elsewhere keeps no conversation here. None given: every one does. */
   runsHere?(bare: string): boolean;
+  /** Whether the agent of a tile reports what it does (its hooks signal its turns): what it said
+   *  is read as it reports. One that reports nothing is read as its screen changes. None given:
+   *  every one does. */
+  reports?(bare: string): boolean;
 }
 
 export class TileLines {
@@ -100,12 +105,14 @@ export class TileLines {
   }
 
   /** `bare`'s screen shows `said`, kept as one line of plain text: each client that watches it is
-   *  told, unless it showed that already or its line is what its agent said. */
+   *  told, unless it showed that already or its line is what its agent said. For an agent that
+   *  reports nothing, its screen changing is its report. */
   set(bare: string, said: string): void {
     const line = oneLine(said);
     if (this.screens.get(bare) === line) return;
     this.screens.set(bare, line);
     if (!this.said.keeps(bare)) this.lineChanged(bare);
+    else if (this.o.reports?.(bare) === false) this.reported(bare);
   }
 
   /** The agent of `bare` reported (a tool used, a turn ended, a reply), from `session`: what it

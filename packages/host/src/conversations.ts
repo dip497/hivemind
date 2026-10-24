@@ -99,6 +99,8 @@ interface SaidOf {
   /** When which file it keeps was last looked for, and the session its agent last reported from. */
   resolvedAt: number;
   reported?: string;
+  /** Asked for within 3 s of that look, its file not written yet: looked for once they are up. */
+  later?: ReturnType<typeof setTimeout>;
   /** Its agent reported while no one followed its tile: read before its line is next told. */
   stale: boolean;
   /** Called once no read of it is due. */
@@ -120,7 +122,9 @@ export interface LastSaidOptions {
  * only what was written since. Reads are asynchronous and one at a time for every tile here, so
  * fifty agents are never parsed at once, and a tile asked for again while it is read is read once
  * more after. Which file a tile's agent keeps is looked for once, then again when it reports
- * another session, or, while it keeps none yet, as it reports at most every 3 s: never on a timer.
+ * another session, or, while it keeps none yet, as it reports at most every 3 s (one report within
+ * the 3 s, once they are up); a tile found keeping no conversation is looked for again as it is
+ * asked for: never on a repeating timer.
  * An agent that reports while no one follows its tile is only marked (`stale`), and read once its
  * line is next asked for.
  */
@@ -131,9 +135,18 @@ export class LastSaid {
 
   constructor(private readonly o: LastSaidOptions) {}
 
-  /** Whether the agent of `bare` keeps a conversation. */
+  /** Whether the agent of `bare` keeps a conversation. One found keeping none is looked for again
+   *  each time it is asked for, as its tile may be asked for before the board holds it (its line
+   *  comes a moment after it starts): for a tile that keeps none, a lookup in what the boards keep,
+   *  no file read (~0.4 µs at 50 tiles). Found, its line is told: "" until it is read. */
   keeps(bare: string): boolean {
-    return this.of(bare).t !== null;
+    const s = this.tiles.get(bare);
+    if (!s) return this.of(bare).t !== null;
+    if (!s.t) {
+      this.resolve(bare, s);
+      if (s.t) this.o.said(bare, s.line ?? "");
+    }
+    return s.t !== null;
   }
 
   /** What the agent of `bare` last said, once read: "" when it keeps a conversation but has said
@@ -167,6 +180,7 @@ export class LastSaid {
     s.stale = false;
     this.reportedFrom(s, o.session);
     if (o.resolve || (!s.t?.file && Date.now() - s.resolvedAt >= RESOLVE_EVERY_MS)) s.resolve = true;
+    else if (s.t && !s.t.file) this.lookLater(bare, s);
     if (s.resolve) this.resolve(bare, s);
     if (!s.t) return;
     if (s.queued) { if (s.reading) s.again = true; return; }
@@ -190,6 +204,7 @@ export class LastSaid {
   /** `bare` is closed. */
   forget(bare: string): void {
     const s = this.tiles.get(bare);
+    clearTimeout(s?.later);
     this.tiles.delete(bare);
     for (const r of s?.settled ?? []) r();
   }
@@ -210,6 +225,18 @@ export class LastSaid {
     if (!session || session === s.reported) return;
     s.reported = session;
     if (session !== s.t?.session) s.resolve = true;
+  }
+
+  /** `s`'s agent, whose file is not written yet, asked to be read within 3 s of the last look for
+   *  it: it is looked for, and read, once the 3 s are up. An agent's first words are often written
+   *  in that time, and an agent that reports nothing may not report again (its screen still). */
+  private lookLater(bare: string, s: SaidOf): void {
+    if (s.later) return;
+    s.later = setTimeout(() => {
+      s.later = undefined;
+      if (this.tiles.get(bare) === s && !s.t?.file) this.refresh(bare);
+    }, RESOLVE_EVERY_MS - (Date.now() - s.resolvedAt));
+    (s.later as { unref?: () => void }).unref?.();
   }
 
   /** Look for which file `bare`'s agent keeps now: another one is read from its end. */
