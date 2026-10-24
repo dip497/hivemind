@@ -1,19 +1,22 @@
-// xterm's write buffer, in both packages the app loads (the renderer's terminal and the daemon's
-// screen), held to its contract: every write is parsed once and its callback fires once, whatever
-// a resize does in between. The patches in patches/@xterm__*.patch make it so; without them a
-// resize while a burst was paused parsed the chunks before the pause a second time, and an empty
-// write dropped every write queued behind it.
+// xterm's write buffer, in the bundles the app ships, held to its contract: every write is parsed
+// once and its callback fires once, whatever a resize does in between. The patches in
+// patches/@xterm__*.patch make it so; without them a resize while a burst was paused parsed the
+// chunks before the pause a second time, and an empty write dropped every write queued behind it.
+// The bundles: @xterm/headless's `main` (lib-headless/xterm-headless.js), which the screen worker
+// loads from node_modules and bun compiles into `hive`; and @xterm/xterm's `module`
+// (lib/xterm.mjs), which vite builds the renderer from. Node would resolve the bare
+// "@xterm/xterm" to its `main` (lib/xterm.js), which nothing ships, so the file is named.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as HeadlessNS from "@xterm/headless";
-import * as XtermNS from "@xterm/xterm";
+import * as XtermNS from "@xterm/xterm/lib/xterm.mjs";
 
 type Term = HeadlessNS.Terminal;
 type Ctor = new (o: { cols: number; rows: number; scrollback: number; allowProposedApi: boolean }) => Term;
-// Both are CommonJS bundles; node's ESM loader puts their exports under `default`.
+// The headless bundle is CommonJS: node's ESM loader puts its exports under `default`.
 const packages: [string, Ctor][] = [
   ["@xterm/headless", ((HeadlessNS as any).Terminal ?? (HeadlessNS as any).default.Terminal) as Ctor],
-  ["@xterm/xterm", ((XtermNS as any).Terminal ?? (XtermNS as any).default.Terminal) as Ctor],
+  ["@xterm/xterm (lib/xterm.mjs)", ((XtermNS as any).Terminal ?? (XtermNS as any).default.Terminal) as Ctor],
 ];
 
 function lines(t: Term): string[] {

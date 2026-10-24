@@ -2,7 +2,11 @@
 
 Text for an issue at github.com/xtermjs/xterm.js. Not filed. Our fix is the pnpm patches
 `patches/@xterm__headless@6.1.0-beta.313.patch` and `patches/@xterm__xterm@6.1.0-beta.315.patch`
-(`patchedDependencies` in `pnpm-workspace.yaml`). Drop them once a release carries the fix.
+(`patchedDependencies` in `pnpm-workspace.yaml`). Drop them once a release carries the fix. Each
+patches both bundles; the ones that ship are headless's `lib-headless/xterm-headless.js` (the
+screen worker and `hive`) and xterm's `lib/xterm.mjs` (vite's renderer build). Without the latter,
+a doubled callback in the renderer also subtracts its write from flow control twice
+(`TerminalTile.tsx`, `flowPending`), so the pty can be let go before the terminal has caught up.
 
 ---
 
