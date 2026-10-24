@@ -16,6 +16,7 @@
  * The guard is core's (`start-guard.ts`); what it can't know in core — the agents here and the
  * trackers' services — this adds. Electron-free.
  */
+import fs from "node:fs";
 import path from "node:path";
 import { ApiError, fields, flag, text } from "@hivemind/workspace-api/protocol";
 import { named, type Connection, type Domain } from "@hivemind/workspace-api/server";
@@ -42,6 +43,14 @@ export interface IssueStartOptions {
   /** The tool plugins' services, for `issue.provideStart`. */
   services: Pick<PluginServices, "call" | "pluginOf">;
   nameOf?: NameOf;
+}
+
+/** Whether `dir` is in a git work tree: a `.git` in it or a folder above. */
+function inGit(dir: string): boolean {
+  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, ".git"))) return true;
+    if (path.dirname(d) === d) return false;
+  }
 }
 
 const ASSIGNMENT: readonly StartCheck[] = ["unassigned", "assigned-other", "in-progress-other"];
@@ -76,11 +85,13 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
     return checkStartWork(root, id, { actor: signer(from, o.nameOf), activeTiles: o.activeTiles().filter((t) => t.tile !== self) });
   };
 
-  const plan = async (from: Connection, root: string, id: string): Promise<StartPlan & { issue: Issue }> => {
+  const plan = async (from: Connection, root: string, id: string): Promise<StartPlan & { issue: Issue; git: boolean }> => {
     const { issue, findings } = await verdict(from, root, id);
     const branch = issue.branch ?? branchFor((await readConfig(root)).branch_template, issue);
     const status = issue.state === "in_progress" ? (issue.status ?? issue.state) : startStatus(root, issue);
-    return { id: issue.id, findings, branch, status, prompt: issueStartPrompt(issue, branch), issue };
+    // A workspace that isn't in a git repository has no branches: its agent starts in its own frame.
+    const git = inGit(path.dirname(root));
+    return { id: issue.id, findings, branch, status, prompt: issueStartPrompt(issue, git ? branch : undefined), issue, git };
   };
 
   const assignMe = async (root: string, issue: Issue): Promise<void> => {
@@ -96,7 +107,7 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
   return {
     answers: {
       "issue.checkStart": async (from, root, id) => {
-        const { issue: _, ...p } = await plan(from, text(root, "root"), text(id, "id"));
+        const { issue: _, git: __, ...p } = await plan(from, text(root, "root"), text(id, "id"));
         return p;
       },
       "issue.assignMe": async (_from, root, id) => {
@@ -121,7 +132,7 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
         const who = signer(from, o.nameOf);
         let frame: { frame: string; path: string } | undefined;
         if (spawn && !path.isAbsolute(at)) throw new ApiError("UNSUPPORTED", "work on an issue is started in a workspace on this machine");
-        if (spawn) frame = await o.openWorktree(from, at, p.branch, typeof o2.base === "string" && o2.base ? o2.base : undefined);
+        if (spawn && p.git) frame = await o.openWorktree(from, at, p.branch, typeof o2.base === "string" && o2.base ? o2.base : undefined);
         const moved = p.issue.state !== "in_progress";
         const patch = { ...(moved ? { status: p.status } : {}), ...(frame && p.issue.branch !== p.branch ? { branch: p.branch } : {}) };
         if (Object.keys(patch).length) {
@@ -133,7 +144,7 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
           const agent = (o2.agent ?? {}) as Record<string, unknown>;
           if (typeof agent !== "object" || Array.isArray(agent)) throw new ApiError("BAD_REQUEST", "opts.agent is what to start ({program, model, mode, name}), or false");
           const pick = (k: string) => (typeof agent[k] === "string" && agent[k] ? { [k]: agent[k] } : {});
-          ({ tile } = await o.startAgent(from, at, { ...pick("program"), ...pick("model"), ...pick("mode"), name: typeof agent.name === "string" && agent.name ? agent.name : p.id, frame: frame!.frame, prompt: p.prompt, issue: p.id }));
+          ({ tile } = await o.startAgent(from, at, { ...pick("program"), ...pick("model"), ...pick("mode"), name: typeof agent.name === "string" && agent.name ? agent.name : p.id, ...(frame ? { frame: frame.frame } : {}), prompt: p.prompt, issue: p.id }));
         }
         return {
           started: true, id: p.id, findings: p.findings, status: moved ? p.status : (p.issue.status ?? p.issue.state),

@@ -152,3 +152,20 @@ test("a tracker's service assigns: Assign to me goes through the command it prov
   const gone = await call(person, "issue.assignMe", root, "PAY-399");
   assert.equal("error" in gone && gone.error.code, "UNSUPPORTED");
 });
+
+test("a workspace in no git repository starts the agent in its own frame, with no branch", async () => {
+  const plain = path.join(tmp, "notes");
+  const plainRoot = path.join(plain, ".hivemind");
+  fs.mkdirSync(path.join(plainRoot, "issues"), { recursive: true });
+  await writeConfig(plainRoot, { prefix: "NOTE", next_id: 1, agents: {} });
+  const { createIssue } = await import("@hivemind/core/storage");
+  await createIssue(plainRoot, { title: "Write the notes" });
+  store.setCore(plain, { frames: [{ id: "notes", title: "notes", workspacePath: plain }], tiles: [], tileNames: {}, editorTabs: {}, frameOf: {} }, {});
+
+  assert.doesNotMatch(result<StartPlan>(await call(person, "issue.checkStart", plainRoot, "NOTE-1")).prompt, /on the branch/);
+  const started = result<StartAnswer>(await call(person, "issue.start", plain, "NOTE-1", { agent: { program: "acme" } }));
+  assert.ok(started.started && started.tile && !started.frame && !started.branch);
+  assert.equal(store.getCore(plain)!.tiles.find((t) => t.id === started.tile)?.issue, "NOTE-1");
+  const issue = await readIssue(plainRoot, "NOTE-1");
+  assert.deepEqual({ state: issue.state, branch: issue.branch }, { state: "in_progress", branch: undefined });
+});
