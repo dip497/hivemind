@@ -56,7 +56,7 @@ unset ELECTRON_RUN_AS_NODE
 export XDG_SESSION_TYPE=x11
 unset WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS
 # Run from an agent's tile, every `hive` a spec starts would be that agent, not the person.
-for v in $(compgen -e | grep -E '^(HIVE_|HCP_)|^HIVEMIND_(TILE|BROWSER_TARGETS)$'); do unset "$v"; done
+for v in $(compgen -e | grep -E '^(HIVE_|HCP_)|^HIVEMIND_(TILE|BROWSER_TARGETS|BROWSER_CDP|BROWSER_CDP_PORT)$'); do unset "$v"; done
 display="${E2E_DISPLAY:-91}"
 log="$(mktemp "${TMPDIR:-/tmp}/hivemind-e2e-XXXXXX.log")"
 
