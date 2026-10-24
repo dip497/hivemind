@@ -990,7 +990,11 @@ export function makeDispatch(deps: MethodDeps): Dispatcher {
       let typed = false;
       const ok = deps.deliverToTile(pid, text, () => { typed = true; armRead(tile); sent(); }, photos);
       if (!ok) sent();
-      return { sent: ok, held: ok && !typed };
+      // Held: it waits for the turn running now to end. One for an agent at its prompt is typed
+      // once that prompt is read, a moment from now, and waits on nothing (#220 holds every
+      // message for an agent that reports its turns, its first too).
+      const state = deps.status.get(bareOf(tile))?.state;
+      return { sent: ok, held: ok && !typed && (state === "working" || state === "waiting") };
     },
 
     keys(tile, keys) {

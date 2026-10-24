@@ -127,6 +127,21 @@ test("send: writes text + carriage return", async () => {
   assert.deepEqual(writes, [["hm:t1", "hello"], ["hm:t1", "\r"]]);
 });
 
+test("send: held only while the agent's turn runs; at its prompt one that waits for the prompt to be read is not held", () => {
+  const writes: string[] = [];
+  // An agent that reports its turns: every message waits for its prompt, its first too.
+  const mailbox = new Mailbox((_id, data) => { writes.push(data); return true; }, SUBMIT_DELAY_MS, () => false, () => {}, () => true);
+  const { deps } = fakeDeps({ deliverToTile: (id: string, data: string, onSent?: () => void) => mailbox.deliver(id, data, onSent) });
+  const { api } = makeDispatch(deps);
+  deps.status.event("t1", { event: "session.started" });
+  assert.deepEqual(api.send("t1", "first"), { sent: true, held: false });
+  mailbox.setBusy("hm:t1");
+  deps.status.event("t1", { event: "turn.started" });
+  assert.deepEqual(api.send("t1", "second"), { sent: true, held: true });
+  assert.deepEqual(writes, []);
+  mailbox.forget("hm:t1");
+});
+
 test("output: the last lines a tile printed, escapes taken out; a tile open nowhere is NOT_FOUND", () => {
   const { deps, recorder } = fakeDeps({ sessionHeld: (pid: string) => pid === "hm:t1" });
   const { api } = makeDispatch(deps);
