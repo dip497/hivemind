@@ -134,6 +134,8 @@ hive pr cleanup MYP-1                    # after the merge: remove the worktree 
 |---|---|
 | `on_complete` | `pr` (default) · `draft_pr` · `review` |
 | `pr_base` | the branch PRs target (default: the remote's default branch) |
+| `pr_push_remote` | the git remote the branch is pushed to (default: git's `pushRemote` / `pushDefault`, else the remote GitHub says you can push to: your fork) |
+| `pr_repo` | the repository the PR opens on, `owner/repo` (default: the fork's parent when you push to a fork, else the repository you push to) |
 | `check` | a command `complete` runs in the worktree first, e.g. `pnpm test` |
 | `cleanup` | after a merge: `ask` (default: a note and a notification) · `auto` · `never` |
 

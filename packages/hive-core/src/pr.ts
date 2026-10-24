@@ -232,6 +232,88 @@ export function prBody(issue: Issue, opts: { summary?: string; acNote?: string }
   return parts.join("\n\n");
 }
 
+// ── where a branch is pushed, and where its PR opens ───────────────────────────────────────────
+
+/** A GitHub repository a remote names: `owner/repo` on `host`. */
+export interface RepoAt { host: string; repo: string }
+
+/** The repository a remote's URL names (`git@github.com:o/r.git`, `https://ghe.corp/o/r`), or
+ *  null for a URL that names none (a local path). */
+export function repoOfRemote(url: string): RepoAt | null {
+  const host = hostOfRemote(url);
+  const m = /[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url.trim());
+  return host && m ? { host, repo: `${m[1]}/${m[2]}` } : null;
+}
+
+/** Where `createPullRequest` pushes and opens the PR. `head` is `owner:branch` when the PR opens on
+ *  another repository than the branch is pushed to (a fork), as `gh pr create --head` takes it. */
+export interface PrTarget {
+  remote: string;
+  /** The PR's repository; null when the remotes name no GitHub repository (gh then uses the cwd's). */
+  prRepo: RepoAt | null;
+  head: string;
+  /** The pushed branch's owner, when it differs from the PR repository's. */
+  forkOwner?: string;
+}
+
+interface RepoFacts { nameWithOwner: string; viewerPermission?: string | null; isFork?: boolean; parent?: { name?: string; owner?: { login?: string }; nameWithOwner?: string } | null }
+const PUSHABLE = new Set(["ADMIN", "MAINTAIN", "WRITE"]);
+const ghRepoArg = (at: RepoAt) => (at.host === "github.com" ? at.repo : `${at.host}/${at.repo}`);
+const parseRepoArg = (s: string, host = "github.com"): RepoAt => {
+  const parts = s.split("/");
+  return parts.length === 3 ? { host: parts[0]!, repo: `${parts[1]}/${parts[2]}` } : { host, repo: s };
+};
+
+/**
+ * Where `branch` is pushed and where its PR opens (design jira-sync §11.3), for a fork setup too:
+ * `origin` the upstream you can't push to, `fork` yours. `pr_push_remote` / `pr_repo` in
+ * config.yaml decide when set; else git's own `branch.<b>.pushRemote` / `remote.pushDefault`, else
+ * the remote GitHub says you can push to (`branch.<b>.remote`, then `origin`, then any other); and
+ * the PR opens on that repository's parent when it is a fork, as `gh` does, else on it.
+ */
+export async function prTarget(root: string, cwd: string, branch: string): Promise<PrTarget> {
+  const cfg = await readConfig(root);
+  const names = ((await ok(git(cwd, ["remote"]))) ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+  const urls = new Map<string, RepoAt | null>();
+  // The URL as configured, not after `url.<x>.insteadOf` rewrites: what names the repository.
+  for (const r of names) urls.set(r, repoOfRemote((await ok(git(cwd, ["config", "--get", `remote.${r}.url`]))) ?? ""));
+  const facts = new Map<string, RepoFacts | null>();
+  const factsOf = async (at: RepoAt): Promise<RepoFacts | null> => {
+    const key = ghRepoArg(at);
+    if (!facts.has(key)) {
+      const r = await gh(cwd, ["repo", "view", key, "--json", "nameWithOwner,viewerPermission,isFork,parent"], undefined, 20_000);
+      let f: RepoFacts | null = null;
+      try { f = r.code === 0 ? (JSON.parse(r.stdout) as RepoFacts) : null; } catch { f = null; }
+      facts.set(key, f);
+    }
+    return facts.get(key)!;
+  };
+
+  let remote = cfg.pr_push_remote ?? (await ok(git(cwd, ["config", `branch.${branch}.pushRemote`]))) ?? (await ok(git(cwd, ["config", "remote.pushDefault"])));
+  if (remote && !names.includes(remote)) throw new PrError("failed", `the push remote ${remote} is not a remote of this repository`, `git remote add ${remote} <url>, or set pr_push_remote in .hivemind/config.yaml to one of: ${names.join(", ") || "(none)"}`);
+  if (!remote) {
+    const tracking = await ok(git(cwd, ["config", `branch.${branch}.remote`]));
+    const order = [...new Set([tracking, "origin", ...names].filter((r): r is string => !!r && names.includes(r)))];
+    for (const r of order) {
+      const at = urls.get(r);
+      if (at && PUSHABLE.has((await factsOf(at))?.viewerPermission ?? "")) { remote = r; break; }
+    }
+    // Nothing GitHub can tell (local remotes, gh offline): the tracking remote, else origin.
+    remote ??= order[0] ?? "origin";
+  }
+
+  const pushAt = urls.get(remote) ?? null;
+  let prRepo: RepoAt | null = cfg.pr_repo ? parseRepoArg(cfg.pr_repo, pushAt?.host) : null;
+  if (!prRepo && pushAt) {
+    const f = await factsOf(pushAt);
+    const parent = f?.isFork && f.parent ? (f.parent.nameWithOwner ?? (f.parent.owner?.login && f.parent.name ? `${f.parent.owner.login}/${f.parent.name}` : null)) : null;
+    prRepo = parent ? { host: pushAt.host, repo: parent } : pushAt;
+  }
+  const pushOwner = pushAt?.repo.split("/")[0];
+  const forked = !!(prRepo && pushAt && prRepo.repo.toLowerCase() !== pushAt.repo.toLowerCase());
+  return { remote, prRepo, head: forked ? `${pushOwner}:${branch}` : branch, ...(forked ? { forkOwner: pushOwner! } : {}) };
+}
+
 /** Refuse, after moving the issue to review with a note, when `gh` cannot open a PR here. */
 async function needGh(root: string, issue: Issue, cwd: string, who: string): Promise<void> {
   const remote = await ok(git(cwd, ["remote", "get-url", "origin"]));
@@ -256,24 +338,41 @@ export async function createPullRequest(root: string, id: string, opts: CreatePr
   if (branch === base) throw new PrError("failed", `${opts.cwd} is on ${base}, the base: a PR needs a branch of its own`, `git switch -c ${id}-<short-name>`);
   await needGh(root, issue, opts.cwd, who);
 
-  const remote = (await ok(git(opts.cwd, ["config", `branch.${branch}.remote`]))) || (await ok(git(opts.cwd, ["config", "remote.pushDefault"]))) || "origin";
+  const target = await prTarget(root, opts.cwd, branch);
+  const { remote } = target;
+  const repoArgs = target.prRepo ? ["--repo", ghRepoArg(target.prRepo)] : [];
   const pushed = await git(opts.cwd, ["push", "-u", remote, `HEAD:refs/heads/${branch}`], 180_000);
   if (pushed.code !== 0) throw new PrError("failed", `git push to ${remote} failed:\n${tail(pushed)}`, `fix the push (git push -u ${remote} ${branch}), then run this again`);
   await commentOnIssue(root, id, `pushed ${branch} to ${remote}`, who);
 
   let pr: PrRef | null = null;
   let reused = false;
-  const existing = await gh(opts.cwd, ["pr", "view", branch, "--json", "number,url,state,isDraft"]);
-  if (existing.code === 0) {
-    const j = JSON.parse(existing.stdout) as { number: number; url: string; state: string; isDraft: boolean };
-    const at = parsePrUrl(j.url);
-    if (at && j.state === "OPEN") {
-      pr = { repo: at.repo, number: j.number, url: j.url, state: j.isDraft ? "draft" : "open" };
-      reused = true;
+  if (target.forkOwner) {
+    // On the upstream, a branch name alone can be anyone's fork's: match the owner too.
+    const listed = await gh(opts.cwd, ["pr", "list", ...repoArgs, "--head", branch, "--state", "open", "--json", "number,url,isDraft,headRepositoryOwner"]);
+    if (listed.code === 0) {
+      let rows: { number: number; url: string; isDraft: boolean; headRepositoryOwner?: { login?: string } }[] = [];
+      try { rows = JSON.parse(listed.stdout); } catch { rows = []; }
+      const mine = rows.find((p) => p.headRepositoryOwner?.login?.toLowerCase() === target.forkOwner!.toLowerCase());
+      const at = mine ? parsePrUrl(mine.url) : null;
+      if (mine && at) {
+        pr = { repo: at.repo, number: mine.number, url: mine.url, state: mine.isDraft ? "draft" : "open" };
+        reused = true;
+      }
+    }
+  } else {
+    const existing = await gh(opts.cwd, ["pr", "view", branch, ...repoArgs, "--json", "number,url,state,isDraft"]);
+    if (existing.code === 0) {
+      const j = JSON.parse(existing.stdout) as { number: number; url: string; state: string; isDraft: boolean };
+      const at = parsePrUrl(j.url);
+      if (at && j.state === "OPEN") {
+        pr = { repo: at.repo, number: j.number, url: j.url, state: j.isDraft ? "draft" : "open" };
+        reused = true;
+      }
     }
   }
   if (!pr) {
-    const args = ["pr", "create", "--head", branch, "--base", base, "--title", `${id}: ${issue.title}`, "--body-file", "-", ...(opts.draft ? ["--draft"] : [])];
+    const args = ["pr", "create", ...repoArgs, "--head", target.head, "--base", base, "--title", `${id}: ${issue.title}`, "--body-file", "-", ...(opts.draft ? ["--draft"] : [])];
     const made = await gh(opts.cwd, args, prBody(issue, opts), 120_000);
     const url = made.stdout.trim().split("\n").reverse().find((l) => parsePrUrl(l));
     const at = url ? parsePrUrl(url) : null;

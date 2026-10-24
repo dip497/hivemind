@@ -237,3 +237,79 @@ describe("hive pr", () => {
     expect(git(s.repo, "branch", "--format=%(refname:short)")).toBe("main");
   });
 });
+
+// The person's own setup: `origin` is the upstream they can't push to, `fork` is theirs. The
+// remotes carry GitHub URLs (what hive reads to name the repositories); git's url.insteadOf sends
+// the pushes to two local bare repositories, so what lands where is checked for real.
+describe("a fork", () => {
+  const UPSTREAM = "https://github.com/acme/widgets.git";
+  const FORK = "https://github.com/krakujs/widgets.git";
+  const repoFacts = (s: Setup, name: string, facts: Record<string, unknown>) =>
+    fs.writeFileSync(path.join(s.shim, `repo-${name.replace("/", "--")}.json`), JSON.stringify({ nameWithOwner: name, ...facts }));
+  async function forked(o: Parameters<typeof setup>[0] = {}, gh = true) {
+    const s = await setup({ ac: true, ...o });
+    const fork = path.join(s.origin, "..", "fork.git");
+    git(path.dirname(fork), "clone", "-q", "--bare", s.origin, fork);
+    git(s.repo, "remote", "set-url", "origin", UPSTREAM);
+    git(s.repo, "remote", "add", "fork", FORK);
+    git(s.repo, "config", `url.${s.origin}.insteadOf`, UPSTREAM);
+    git(s.repo, "config", `url.${fork}.insteadOf`, FORK);
+    if (gh) {
+      repoFacts(s, "acme/widgets", { viewerPermission: "READ", isFork: false, parent: null });
+      repoFacts(s, "krakujs/widgets", { viewerPermission: "ADMIN", isFork: true, parent: { name: "widgets", owner: { login: "acme" } } });
+    }
+    fs.writeFileSync(path.join(s.shim, "pr-url"), "https://github.com/acme/widgets/pull/42\n");
+    const branchesOf = (bare: string) => git(bare, "branch", "--format=%(refname:short)").split("\n").sort();
+    return { s, upstream: () => branchesOf(s.origin), fork: () => branchesOf(fork) };
+  }
+  const created = (s: Setup) => ghCalls(s).find((c) => c[0] === "pr" && c[1] === "create");
+  const pairAfter = (argv: string[] | undefined, flag: string) => argv?.[argv.indexOf(flag) + 1];
+
+  test("the branch goes to the fork you can push to, the PR opens on the upstream as owner:branch, and sync reads it there", async () => {
+    const f = await forked();
+    const r = run(f.s, ["ctl", "complete", f.s.id, "--json"]);
+    expect([r.code, (r.json as { pr: { repo: string; number: number } }).pr]).toEqual([0, expect.objectContaining({ repo: "acme/widgets", number: 42 })]);
+    expect([f.fork(), f.upstream()]).toEqual([["TT-1-widgets", "main"], ["main"]]);
+    expect([pairAfter(created(f.s), "--repo"), pairAfter(created(f.s), "--head")]).toEqual(["acme/widgets", "krakujs:TT-1-widgets"]);
+    const issue = await readIssue(f.s.root, f.s.id);
+    expect(issue.sections.activity.map((a) => a.message)).toContain("pushed TT-1-widgets to fork");
+
+    // The watcher's pass asks the upstream, where the PR is.
+    fs.writeFileSync(path.join(f.s.shim, "graphql.json"), JSON.stringify({ data: { r0: { p42: {
+      url: "https://github.com/acme/widgets/pull/42", state: "MERGED", isDraft: false, merged: true, reviewDecision: null,
+      commits: { nodes: [{ commit: { statusCheckRollup: { state: "SUCCESS" } } }] },
+    } } } }));
+    expect(run(f.s, ["pr", "sync", "--json"], f.s.repo).code).toBe(0);
+    const query = ghCalls(f.s).filter((c) => c[1] === "graphql").at(-1)!.join(" ");
+    expect(query).toContain('repository(owner: "acme", name: "widgets")');
+    expect((await readIssue(f.s.root, f.s.id)).state).toBe("done");
+  });
+
+  test("an open PR from this fork's branch is reused; one from another fork with the same branch name is not", async () => {
+    const f = await forked();
+    const row = (n: number, owner: string) => ({ number: n, url: `https://github.com/acme/widgets/pull/${n}`, isDraft: false, headRepositoryOwner: { login: owner } });
+    fs.writeFileSync(path.join(f.s.shim, "pr-list.json"), JSON.stringify([row(5, "someone"), row(6, "krakujs")]));
+    const r = run(f.s, ["ctl", "complete", f.s.id, "--json"]);
+    expect([r.code, (r.json as { pr: { number: number } }).pr.number, created(f.s)]).toEqual([0, 6, undefined]);
+    const list = ghCalls(f.s).find((c) => c[1] === "list")!;
+    expect([pairAfter(list, "--repo"), pairAfter(list, "--head")]).toEqual(["acme/widgets", "TT-1-widgets"]);
+
+    const g = await forked();
+    fs.writeFileSync(path.join(g.s.shim, "pr-list.json"), JSON.stringify([row(5, "someone")]));
+    const r2 = run(g.s, ["ctl", "complete", g.s.id, "--json"]);
+    expect([r2.code, (r2.json as { pr: { number: number } }).pr.number, !!created(g.s)]).toEqual([0, 42, true]);
+  });
+
+  test("pr_push_remote and pr_repo in config.yaml decide over what the remotes and GitHub say", async () => {
+    const f = await forked({ config: { pr_push_remote: "fork", pr_repo: "other/widgets" } }, false);
+    fs.writeFileSync(path.join(f.s.shim, "pr-url"), "https://github.com/other/widgets/pull/9\n");
+    const r = run(f.s, ["ctl", "complete", f.s.id, "--json"]);
+    expect([r.code, (r.json as { pr: { repo: string } }).pr.repo]).toEqual([0, "other/widgets"]);
+    expect([f.fork(), f.upstream()]).toEqual([["TT-1-widgets", "main"], ["main"]]);
+    expect([pairAfter(created(f.s), "--repo"), pairAfter(created(f.s), "--head")]).toEqual(["other/widgets", "krakujs:TT-1-widgets"]);
+
+    const bad = await forked({ config: { pr_push_remote: "nope" } });
+    const r2 = run(bad.s, ["ctl", "complete", bad.s.id, "--json"]);
+    expect([r2.code, err(r2).message, err(r2).fix]).toEqual([1, expect.stringContaining("nope is not a remote"), expect.stringContaining("fork")]);
+  });
+});

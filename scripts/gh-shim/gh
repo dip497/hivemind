@@ -8,6 +8,8 @@
 #   create-fail        present → `gh pr create` fails
 #   graphql.json       `gh api graphql` prints it
 #   graphql-exit       its exit code then (gh exits 1 when GitHub answered `errors` beside `data`)
+#   repo-<owner>--<name>.json   `gh repo view <owner>/<name>` prints it (absent → not found)
+#   pr-list.json       `gh pr list` prints it (absent → [])
 # `gh pr create` saves its body (stdin) as $GH_SHIM/body.md.
 state="${GH_SHIM:?GH_SHIM names the shim state folder}"
 for a in "$@"; do printf '%s\037' "$a" >> "$state/calls"; done
@@ -23,6 +25,13 @@ case "$1 $2" in
     cat > "$state/body.md"
     if [ -e "$state/create-fail" ]; then echo "pull request create failed: GraphQL: something went wrong" >&2; exit 1; fi
     if [ -e "$state/pr-url" ]; then cat "$state/pr-url"; else echo "https://github.com/acme/widgets/pull/7"; fi
+    exit 0 ;;
+  "repo view")
+    f="$state/repo-$(printf '%s' "$3" | sed 's#.*/\([^/]*\)/\([^/]*\)$#\1--\2#; s#^\([^/]*\)/\([^/]*\)$#\1--\2#').json"
+    if [ -e "$f" ]; then cat "$f"; exit 0; fi
+    echo "GraphQL: Could not resolve to a Repository with the name '$3'." >&2; exit 1 ;;
+  "pr list")
+    if [ -e "$state/pr-list.json" ]; then cat "$state/pr-list.json"; else echo '[]'; fi
     exit 0 ;;
   "api graphql")
     if [ -e "$state/graphql.json" ]; then cat "$state/graphql.json"; exit "$(cat "$state/graphql-exit" 2>/dev/null || echo 0)"; fi

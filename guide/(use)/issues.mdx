@@ -98,6 +98,11 @@ agent runs on. While an issue's PR is open, the app reads it from GitHub every 3
 - **Changes requested or checks failing:** a badge on the card. In the issue, **Address review**
   or **Fix CI** starts an agent with the review comments or the failing checks.
 
+Working from a fork works with no setup: the branch is pushed to the remote you can push to (your
+fork) and the PR opens on the repository it was forked from, as `owner:branch`. To choose
+yourself, set `pr_push_remote` (a git remote) and `pr_repo` (`owner/repo`) in
+`.hivemind/config.yaml`.
+
 To only move finished work to review, with no PR, set `on_complete: review` in
 `.hivemind/config.yaml`. Every setting and `hive pr` command is in the
 [CLI reference](/cli#issues).
