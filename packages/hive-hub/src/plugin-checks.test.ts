@@ -181,6 +181,8 @@ describe("the oldest Hivemind a plugin needs", () => {
   test("a view or package lists the release that first accepts a field it uses; old-style ones list none", async () => {
     expect((await plugin(view({ widgets: "left" }))).minAppVersion).toBe(SINCE["view.widgets"]);
     expect((await plugin(view({ tokens: { accent: "#f80" } }))).minAppVersion).toBe(SINCE["view.tokens"]);
+    // A view that fetches its own files says so, and an app before it would refuse the field.
+    expect((await plugin(view({ files: true }))).minAppVersion).toBe(SINCE["view.files"]);
     expect((await plugin(view({ permissions: ["workspace:read"] }))).minAppVersion).toBeNull();
     expect((await plugin(widget())).minAppVersion).toBeNull();
     const kit = (members: object, files: Record<string, string>) => plugin({

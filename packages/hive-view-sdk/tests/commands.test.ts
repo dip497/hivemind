@@ -90,7 +90,8 @@ test("a sign or digit is matched as the layout types it, its US place only when 
   expect(is("mod++", press("+", "BracketRight", ctrl))).toBe(true);
   expect(is("mod+]", press("+", "BracketRight", ctrl))).toBe(false);
   expect(is("mod+-", press("ß", "Minus", ctrl))).toBe(true);
-  // French: `=` where US has `/`, `-` on the 6 key, digits with shift.
+  // French: `=` where US has `/`, `-` on the 6 key, digits with shift. (Which of mod+- and mod+6 the
+  // app's keymap takes for that press is the keymap's to say: actionsFor.)
   expect(is("mod+=", press("=", "Slash", ctrl))).toBe(true);
   expect(is("mod+-", press("-", "Digit6", ctrl))).toBe(true);
   expect(is("mod+0", press("à", "Digit0", ctrl))).toBe(true);
@@ -98,6 +99,10 @@ test("a sign or digit is matched as the layout types it, its US place only when 
   expect(is("mod+-", press("-", "NumpadSubtract", ctrl))).toBe(true);
   expect(is("mod++", press("+", "NumpadAdd", ctrl))).toBe(true);
   expect(is("mod+0", press("0", "Numpad0", ctrl))).toBe(true);
+  // With Num Lock off the pad's keys are End, ArrowDown, ArrowLeft, Home and Insert, not digits.
+  for (const [key, n] of [["End", 1], ["ArrowDown", 2], ["ArrowLeft", 4], ["Home", 7], ["Insert", 0]] as const) {
+    for (const mods of [{}, ctrl]) expect(is(`${"ctrl" in mods ? "mod+" : ""}${n}`, press(key, `Numpad${n}`, mods))).toBe(false);
+  }
   // US, with shift: its pair at its place.
   expect(is("mod+shift+=", press("+", "Equal", { ...ctrl, shift: true }))).toBe(true);
   expect(is("mod+shift+-", press("_", "Minus", { ...ctrl, shift: true }))).toBe(true);

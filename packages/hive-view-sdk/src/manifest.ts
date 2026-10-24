@@ -69,6 +69,9 @@ export interface ViewManifest {
   /** 1.16: colours of its own, each with a default in dark and light that may be one of the app's
    *  (`=accent`); the person can set each one, and the view reads `var(--hm-token-<id>)`. */
   tokens?: TokenDecl[];
+  /** 1.17 (feature `ownFiles`): it `fetch`es its own files (`fetch("./levels.json")`). Without it the
+   *  app lets it fetch nothing; its pages still load their scripts, styles, pictures and fonts. */
+  files?: boolean;
 }
 
 /** Every setting a view has: the ones it declares, then a colour for each of its tokens. The one
@@ -220,13 +223,18 @@ export function validateViewManifest(raw: unknown): ManifestResult {
       for (const i of checked.refused) errors.push(`tokens[${i}] is not a token: an id of lowercase letters, digits and dashes, and a dark and a light colour, each #rrggbb or =<app colour>`);
     }
   }
+  let files: boolean | undefined;
+  if (m.files !== undefined) {
+    if (typeof m.files !== "boolean") errors.push(`"files" must be true or false`);
+    else files = m.files;
+  }
   let assets: string | undefined;
   if (m.assets !== undefined) {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "description", "icon", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "widgets", "phone", "layers", "layout", "author", "homepage", "license", "settings", "tokens", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "description", "icon", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "widgets", "phone", "layers", "layout", "author", "homepage", "license", "settings", "tokens", "files", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(description ? { description } : {}), ...(icon ? { icon } : {}), ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}), ...(widgets ? { widgets } : {}),
-    ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}), ...(tokens?.length ? { tokens } : {}) } };
+    ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}), ...(tokens?.length ? { tokens } : {}), ...(files === undefined ? {} : { files }) } };
 }

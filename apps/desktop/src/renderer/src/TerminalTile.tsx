@@ -98,15 +98,6 @@ const SCREEN_RESET = "\x1bc";
 // so it follows the user's glass setting, not the per-view gate.
 /** Mounted tiles per session id: a tile shares its id with its remount. */
 const liveMounts = new Map<string, number>();
-/** Each session's mode 2031, by session id: what its program asked for outlives a remount of the
- *  tile (a view switch), and goes when the program exits. */
-const themeNotify = new Map<string, ThemeNotify>();
-const themeNotifyOf = (ptyId: string): ThemeNotify => {
-  let n = themeNotify.get(ptyId);
-  if (!n) themeNotify.set(ptyId, (n = new ThemeNotify(isDarkBackground(getTheme().terminal.background))));
-  return n;
-};
-
 /** Each mounted terminal's "your tile is closing", by tile id. */
 const closing = new Map<string, Set<() => void>>();
 
@@ -126,7 +117,6 @@ export function endTileSession(tileId: string, adopted: boolean): void {
   const mounts = closing.get(tileId);
   if (mounts?.size) for (const close of mounts) close();
   else if (!adopted) window.hive.ptyKill(toPtyId(tileId));
-  themeNotify.delete(toPtyId(tileId));
 }
 
 const termThemeFor = (t: ThemeState) => withScrollbar(terminalThemeFor(t.terminal));
@@ -253,7 +243,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     term.options.theme = { ...withScrollbar(terminalThemeFor(termPalette)), background: termBg };
     // A program that asked (mode 2031) hears the background went light or dark; the window whose
     // keys reach the session tells it, so two windows showing it do not say it twice.
-    const report = themeNotifyOf(ptyIdRef.current).theme(isDarkBackground(termPalette.background));
+    const report = themeNotifyRef.current?.theme(isDarkBackground(termPalette.background));
     if (report && kbRef.current.mayType) window.hive.ptyWrite(ptyIdRef.current, report);
   }, [termBg, termPalette]);
   // One session per tile, its id the tile's: the same tile reattaches to its session in the daemon
@@ -269,6 +259,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   const kb = useTerminalKeyboard(ptyId, cwd);
   const kbRef = useRef<TerminalKeyboard>(kb);
   kbRef.current = kb;
+  /** The mounted terminal's mode 2031 (theme-notify.ts). */
+  const themeNotifyRef = useRef<ThemeNotify | null>(null);
   // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
   const ownSizeRef = useRef<PtySize | null>(null);
   // The session has a size another screen gave it (a phone fitted it), not this window's.
@@ -381,7 +373,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       scrollback: SCROLLBACK,
       allowProposedApi: true,
       // A program may ask for keys by the kitty protocol: Shift+Enter, Ctrl+I and Tab stay apart.
-      vtExtensions: { kittyKeyboard: true },
+      // Mode 2031 is theme-notify.ts's alone: xterm's own reports on every colour change and reads a
+      // glass terminal's clear background as dark.
+      vtExtensions: { kittyKeyboard: true, colorSchemeQuery: false },
       // Render perf + UX tuning
       fastScrollSensitivity: 5,           // Alt-wheel jumps 5x faster
       scrollSensitivity: 1,
@@ -439,6 +433,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     fitRef.current = { fit: fitTerm, draw: drawTerm };
     fitTerm();
     termRef.current = term;
+    const notify = new ThemeNotify(isDarkBackground(getTheme().terminal.background));
+    themeNotifyRef.current = notify;
     /** Ask the session to take this tile's size, when it has not been asked already. Only while
      *  this window's keys reach it: the keyboard's holder sizes a session (R4). */
     const syncPtySize = (): void => {
@@ -798,7 +794,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         `\r\n\x1b[2m[hivemind] exited code=${code} signal=${signal ?? ""} — press Enter to restart\x1b[0m`,
       );
       exited = true;
-      themeNotify.delete(ptyId);
+      // Enter starts the next program in this session, which asks for itself.
+      notify.reset();
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) { clearInterval(agentPoll); agentPoll = undefined; }
       // Thread the exit code + a one-line detail so the awareness layer can
@@ -835,8 +832,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       window.hive.ptyWrite(ptyId, `\x1b]11;${reply}\x1b\\`);
       return true;
     });
-    // Mode 2031: the program asks to hear when the background goes light or dark, or asks now.
-    answerThemeNotify(term.parser, themeNotifyOf(ptyId), (reply) => { if (kbRef.current.mayType) window.hive.ptyWrite(ptyId, reply); });
+    // Mode 2031: the program asks to hear when the background goes light or dark, or asks now. One
+    // for this mount, the restarts in it too; a later mount learns the mode from the replay.
+    answerThemeNotify(term.parser, notify, (reply) => { if (kbRef.current.mayType) window.hive.ptyWrite(ptyId, reply); });
     // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
     // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
     // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls
@@ -1170,6 +1168,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       cancelMousePatch();
       term.dispose();
       termRef.current = null;
+      themeNotifyRef.current = null;
       fitRef.current = null;
       webglRef.current = null;
     };
@@ -1276,6 +1275,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     typedBefore.current = kb.mayType;
     if (kb.mayType) sentSizeRef.current = null;
     else askedRef.current = [];
+    // The background may have changed while another window had the keys: a program that asked hears it.
+    const report = kb.mayType ? themeNotifyRef.current?.now() : null;
+    if (report) window.hive.ptyWrite(ptyIdRef.current, report);
     try { fitRef.current?.fit(); syncSizeRef.current?.(); } catch { /* torn down */ }
   }, [kb.mayType]);
 

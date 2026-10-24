@@ -140,8 +140,8 @@ test("each font button's tooltip names a key that handleFontKey sizes the text w
 });
 
 test("the font keys size an editor's text on any layout and from the numpad, as they always did", () => {
-  // The keymap names - = and 0 by their place on a US keyboard; what the key types counts too, so a
-  // German or French layout (whose - sits elsewhere) and the numpad keep working.
+  // An editor's font keys are the terminal's (actionsFor at "terminal"): a sign is what the layout
+  // types, so a German or French layout (whose - sits elsewhere) and the numpad keep working.
   Object.defineProperty(globalThis, "navigator", { value: { platform: PLATFORM.linux }, configurable: true });
   const presses: [Partial<KeyPress>, string][] = [
     [{ key: "-", code: "Slash" }, "dec"],          // German

@@ -172,7 +172,7 @@ export function installPluginCatalogIpc(): void {
         const r = await installPackage(dir, { id: entry.id, dryRun: true });
         if (pendingPackage) await rm(pendingPackage.dir, { recursive: true, force: true }).catch(() => {});
         pendingPackage = { token: newNonce(), dir, id: entry.id, sender, reviewed: reviewedOf(r) };
-        return { type: "package", ...(await packageReview(r, pendingPackage.token, dir)) };
+        return { type: "package", ...(await packageReview(r, pendingPackage.token)) };
       } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
     }
     if (entry.type === "view") {

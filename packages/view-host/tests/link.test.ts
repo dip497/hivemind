@@ -562,3 +562,15 @@ test("1.10: an invoked command is answered by its result, or why it failed; one 
   h.link.dispose();
   await assert.rejects(pending, /stopped/);
 });
+
+test("1.17: a view is told it may fetch its own files only where the screen lets it", () => {
+  const link = (ownFiles?: boolean) => new CommunityLink({
+    pluginId: "p", capabilities: [], commands: {} as LinkDeps["commands"], hasTile: () => false, hasFrame: () => false,
+    onReady: () => {}, onLayout: () => {}, onFramesDrawn: () => {}, onError: () => {}, onDisable: () => {},
+    ...(ownFiles === undefined ? {} : { ownFiles }),
+  });
+  assert.ok(link(true).features.includes("ownFiles"));
+  // A phone's screen, or a view that did not say `"files": true`: its fetch reaches nothing.
+  assert.ok(!link(false).features.includes("ownFiles"));
+  assert.ok(!link().features.includes("ownFiles"));
+});
