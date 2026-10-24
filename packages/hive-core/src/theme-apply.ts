@@ -20,7 +20,8 @@ import path from "node:path";
 import { installedMembers } from "./installed-packages.js";
 import { lookExtraOf, THEME_SET_PATHS, type AppearanceExtra, type FaceSet, type FontFaces, type LookExtra, type ThemeRecord, type ThemeSetPath } from "./appearance-extra.js";
 import { holdLock, readSettings, settingsPath, updateSettings } from "./settings.js";
-import { MONO_FONT, UI_FONT, type Appearance, type Settings } from "./settings-schema.js";
+import { faceStack } from "./font-names.js";
+import type { Appearance, Settings } from "./settings-schema.js";
 import { MOMENTS, themeFiles, themeSwatches, type Theme, type ThemeFace } from "./theme-format.js";
 import { readThemeFolder } from "./theme-folder.js";
 
@@ -77,8 +78,6 @@ async function copyFiles(dir: string, theme: Theme, mediaDir: string): Promise<M
   return out;
 }
 
-const quoted = (family: string) => `"${family}"`;
-
 /** The parts of the look `theme` sets (`THEME_SET_PATHS`): the colours and the accent always,
  *  the rest only when it names them. Revert puts back these and nothing else. */
 export function themeSetPaths(theme: Theme): ThemeSetPath[] {
@@ -117,9 +116,8 @@ function themedLook(cur: Settings, theme: Theme, urls: Map<string, string>): { a
       accent: typeof theme.accent === "string" ? theme.accent : a.accent,
       terminal: theme.terminal ? { ...theme.terminal, ansi: [...theme.terminal.ansi] } : a.terminal,
       radius: theme.radius ?? a.radius,
-      // The theme's face first, the app's own after it while it loads or for a glyph it lacks.
-      uiFont: ui ? `${quoted(ui.family)}, ${UI_FONT}` : a.uiFont,
-      monoFont: mono ? `${quoted(mono.family)}, ${MONO_FONT}` : a.monoFont,
+      uiFont: ui ? faceStack("ui", ui.family) : a.uiFont,
+      monoFont: mono ? faceStack("mono", mono.family) : a.monoFont,
       wallpaper,
     },
     extra: {
