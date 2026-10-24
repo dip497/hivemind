@@ -473,7 +473,8 @@ test("a community view that says it works on a phone is offered there with its f
   await expect(run(HIVE_PHONE, ["views", workspace, "desk-only", "index.html", "--identity", phone])).rejects.toThrow(/no view desk-only here works on a phone/);
 
   // Opened on the phone's screen: once it says it is ready, it is told it is on a phone, that
-  // screen, that it may start agents and not rename tiles (a phone may not edit the board), and
+  // screen, that it may start agents, wake them and put them to sleep (#159) and not rename tiles (a
+  // phone may not edit the board), and
   // what the board holds.
   const shown = spawn(HIVE_PHONE, ["view", workspace, "priya-board", "--size", "390x844", "--identity", phone, "--json"]);
   procs.push(shown);
@@ -491,7 +492,7 @@ test("a community view that says it works on a phone is offered there with its f
   await expect.poll(structures, { timeout: 30_000 }).toEqual([[probe]]);
   expect(told[0]).toMatchObject({
     type: "hello", pluginId: "priya-board", capabilities: ["workspace:spawn"], device: { touch: true, compact: true }, viewport: { w: 390, h: 844 }, theme: { colors: {} },
-    features: ["agentStatus", "widgets", "invoke"],
+    features: ["agentStatus", "widgets", "invoke", "sleep"],
   });
   // A screen that places the view's live surfaces itself (as the phone's app does over its web
   // view) says so, and the view is told it may ask for them (workspace API 0.15, view protocol 1.6).
@@ -501,7 +502,7 @@ test("a community view that says it works on a phone is offered there with its f
   placing.stdout!.on("data", (b: Buffer) => { placed += b.toString(); });
   placing.stdin!.write(`${JSON.stringify({ type: "ready", v: 1 })}\n`);
   const placingHello = () => placed.split("\n").filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>).find((m) => m.type === "hello");
-  await expect.poll(() => placingHello()?.features, { timeout: 30_000 }).toEqual(["agentStatus", "widgets", "invoke", "surfaces"]);
+  await expect.poll(() => placingHello()?.features, { timeout: 30_000 }).toEqual(["agentStatus", "widgets", "invoke", "surfaces", "sleep"]);
   placing.stdin!.end();
 
   // What it may not do is refused: the rename never reaches the board. What it may, it does, as the
