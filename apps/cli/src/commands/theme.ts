@@ -14,7 +14,7 @@ import { promises as fs } from "node:fs";
 import {
   DEFAULT_APPEARANCE, HiveError, PRESETS, exportAppearance, importAppearance, readSettings, updateSettings,
 } from "@hivemind/core";
-import { IMPORT_EXTRA_PATHS, PRESET_PATHS, importedExtra, withPreset } from "@hivemind/core/appearance-extra";
+import { IMPORT_EXTRA_PARTS, PRESET_PATHS, importedExtra, withPreset } from "@hivemind/core/appearance-extra";
 import { applyTheme, listInstalledThemes, revertTheme, themeStatus } from "@hivemind/core/theme-apply";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
@@ -115,7 +115,7 @@ const importCmd = defineCommand({
     // A file that sets nothing of the look (a package.json picked by mistake) is refused before the
     // settings are touched; importAppearance says why.
     try { importAppearance(raw, DEFAULT_APPEARANCE); } catch (e) { return err(ctx, "invalid_theme", `cannot import ${args.file}: ${(e as Error).message}`); }
-    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance), appearanceExtra: importedExtra(raw, cur.appearanceExtra) }), undefined, ["appearance", ...IMPORT_EXTRA_PATHS]);
+    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance), appearanceExtra: importedExtra(raw, cur.appearanceExtra) }), undefined, ["appearance", ...IMPORT_EXTRA_PARTS.map((k) => `appearanceExtra.${k}`)]);
     const appearance = written.appearance;
     const rescanned = await reloadApp();
     return ok(ctx, { preset: appearance.preset, rescanned }, () => `imported ${args.file} (preset ${appearance.preset}); ${note(rescanned)}`);
