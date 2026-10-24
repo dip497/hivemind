@@ -5,7 +5,9 @@
  * `hive config get notifications` found nothing and the app never saw a change made there. On
  * Linux they are one file, and nothing moves.
  *
- * The data folder's file is backed up; the one settings.json only gains the section, and only
+ * The data folder's file is backed up, only when it holds a blob to move: on Linux, or once moved,
+ * there is no backup, so restoring 0006 never puts back a settings.json older than changes made
+ * since. The one settings.json only gains the section, and only
  * when it has none, or the defaults: any write by this build stores the section, so a `hive config
  * set` made while an older app held this migration back stored the defaults, not a choice. A
  * section someone changed wins. Run again after being cut off, it finds the section moved and only
@@ -44,6 +46,10 @@ export const m0006: Migration = {
   backsUp: ["settings.json"],
   // An older app still running reads and writes its notifications in the old file.
   movesFilesAnOlderAppReads: true,
+  async changesHere(ctx) {
+    const from = path.join(ctx.root, "settings.json");
+    return !(await samePath(from, settingsPath())) && "notifications" in ((await readJson(from)) ?? {});
+  },
   async run(ctx) {
     const from = path.join(ctx.root, "settings.json");
     const to = settingsPath();

@@ -9,6 +9,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { files, TestRoot } from "./fixtures/runs.js";
+import { restoreMigration } from "./manage.js";
 
 const FIXTURE = path.join(import.meta.dir, "fixtures", "0006", "before");
 const ID = "0006-notifications-into-settings";
@@ -52,7 +53,7 @@ describe("notifications move into the one settings.json", () => {
     expect(readData("settings.json")).toEqual({ browserCdp: true });
   });
 
-  test("one folder: the blob is already the section, and stays", () => {
+  test("one folder: the blob is already the section, and stays; no backup, so restoring 0006 keeps a later change", async () => {
     t = new TestRoot(path.join(FIXTURE, "data"));
     const before = t.read("settings.json").notifications;
     t.runOnce();
@@ -60,6 +61,11 @@ describe("notifications move into the one settings.json", () => {
     // Other migrations rewrite the file; the section keeps every value it had.
     expect(t.read("settings.json").notifications).toMatchObject(before);
     expect(t.read("settings.json").browserCdp).toBe(true);
+    expect(fs.existsSync(path.join(t.root, "migrations", "backups", ID))).toBe(false);
+    const file = path.join(t.root, "settings.json");
+    fs.writeFileSync(file, JSON.stringify({ ...t.read("settings.json"), appearance: { preset: "dracula" } }));
+    expect((await restoreMigration(ID, { config: t.root, data: t.root })).restored).toEqual([ID]);
+    expect(t.read("settings.json").appearance.preset).toBe("dracula");
   });
 
   test("killed at 20 points and run again, it ends as a clean run does", async () => {
