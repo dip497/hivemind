@@ -201,7 +201,9 @@ A tile imports the app's own React and parts from `hm-plugin://host/`: `react.js
 on this machine) and `useTileState(hm, key, initial)`, which keeps a value with the tile across
 restarts. `ui.js` is the
 app's whole UI kit (`Button`, `Input`, `Dialog…`, `DropdownMenu…`, `Switch`, `toast`, …). The
-built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the fullest example.
+built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the fullest example of
+how a tile is built. Its colours are not one to copy: it also paints with app variables outside
+the 11 below, which may change.
 
 Reach the app only through these, never `window.hive`.
 

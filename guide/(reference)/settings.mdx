@@ -43,15 +43,19 @@ Everything is one file you own. The app and the `hive` command both read and wri
 checked each time. A value out of range is set to the nearest allowed one; an unknown value falls
 back to its default. `hive config set` refuses a path that is not a setting, and lists the
 settings there. It also refuses a `<view>` that is not a view's id, a `<kind>:<id>` that is not
-a plugin's, and a key under either that is not one of its settings.
+a plugin's, and a key under either that is not one of its settings. A plugin's option ids are
+checked only as ids there; `hive plugins set` checks them against the plugin's own settings.
 
 A change writes only the settings it changes. Everything else in the file stays as it is, so a
 newer version and this one can share the file:
 
 - A key this version does not know stays, wherever it is: at the top of the file, in a section,
   or in a group such as `appearance.glass`.
-- A value this version does not know, such as a newer preset's id, reads as the default here and
-  stays in the file until you set that setting here.
+- A value this version does not know, such as a newer accent's, mode's or wallpaper's id, reads
+  as the default here and stays in the file until you set that setting here. A preset's id is
+  kept as written: one this version does not know shows as Custom.
+- Choosing a preset writes its colours, accent and mode, whatever they read as here. Importing a
+  theme writes only the keys its file names.
 - `v` is the file's format. A file from a newer version is read for the settings this version
   knows, and keeps its `v`; `hive config get` says so. A file without `v` is read as format 1.
   `v` is not a setting: the app keeps it.

@@ -142,9 +142,11 @@ and reads the app's own variables; these 11 are frozen for it: `--color-bg`, `--
 `--color-fg`, `--color-fg3`, `--color-line`, `--color-select`, `--color-ok`, `--color-warn`,
 `--color-err`, `--color-info`, `--font-mono`. Adding to either list is fine; removing or renaming
 one is a **Breaking:** CHANGELOG line and, for the view colours, a protocol version bump. Tests
-hold both: `packages/hive-view-sdk/tests/theme-colors.test.ts`,
-`apps/desktop/tests/unit/plugin-theme.test.ts`, `apps/desktop/tests/unit/tool-css-vars.test.ts`
-and e2e `plugin-contract.spec.ts`.
+hold both: `packages/hive-view-sdk/tests/theme-colors.test.ts` (each reaches a view as its
+variable), `apps/desktop/tests/unit/plugin-theme.test.ts` (the app asks its page for each),
+`apps/desktop/tests/unit/tool-css-vars.test.ts` (the stylesheet declares the 11), and e2e
+`plugin-contract.spec.ts` (on the built page, in a dark and a light preset with glass on and off:
+the 11 have values, and a view is told all 15 as `#rrggbb` in its hello and each theme).
 
 An agent's state is drawn the way the app draws it, never as your own dots: `STATUS_MARKS`
 (each tone's word, its shape as an SVG path, and whether it pulses: only `attention` does) and
