@@ -7,6 +7,8 @@
 import { z } from "zod";
 import { isSafeRelativePath, MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/view-sdk/manifest";
 import { TOOL_MANIFEST } from "@hivemind/core/tool-format";
+import { THEME_MANIFEST } from "@hivemind/core/theme-format";
+import { THEME_ID_RE } from "@hivemind/core/appearance-extra";
 import { UNSAFE_TEXT_RE } from "./index-format.js";
 
 /** The file holding a package's own manifest. */
@@ -18,6 +20,9 @@ const relative = z.string().refine((s) => isSafeRelativePath(s) && !UNSAFE_TEXT_
 const agentId = z.string().regex(/^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{1,63}$/);
 /** A member's id: `@owner/name`, the owner being the package's. */
 export const MEMBER_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
+/** A member's id as its kind writes it, one rule for the package check and the hub's index: a
+ *  theme's is `@owner/package/theme` (its folder in its package), every other kind's `@owner/name`. */
+export const memberIdRe = (kind: string): RegExp => (kind === "theme" ? THEME_ID_RE : MEMBER_ID);
 
 const folderEntry = z.strictObject({ path: relative });
 const presetEntry = z.strictObject({
@@ -28,16 +33,19 @@ export type AgentPreset = z.infer<typeof presetEntry>;
 export type FolderEntry = z.infer<typeof folderEntry>;
 
 /** Where a member's code runs, which decides how much trust it needs. `sandboxed`: in a sandbox
- *  that holds it to the permissions it asks for. Any other: in the app with the app's access, or
- *  as an agent's instructions. */
-export type MemberRuns = "sandboxed" | "in the app" | "as an agent's instructions";
+ *  that holds it to the permissions it asks for. `nothing: it is data`: it has no code (a theme).
+ *  Any other: in the app with the app's access, or as an agent's instructions. */
+export type MemberRuns = "sandboxed" | "in the app" | "as an agent's instructions" | "nothing: it is data";
+
+/** Whether a member that runs this way may arrive on without the person trusting who wrote it. */
+export const runsWithoutTrust = (runs: MemberRuns): boolean => runs === "sandboxed" || runs === "nothing: it is data";
 
 export interface MemberFormat {
-  kind: "tool" | "widget" | "view" | "agent-preset";
+  kind: "tool" | "widget" | "view" | "agent-preset" | "theme";
   /** What it is called in a sentence. */
   noun: string;
   /** The list in `hivemind-package.json` that names members of this kind. */
-  list: "tools" | "widgets" | "views" | "agents";
+  list: "tools" | "widgets" | "views" | "agents" | "themes";
   /** How one entry of that list is written. */
   entry: z.ZodType;
   /** The most one package may hold. */
@@ -53,6 +61,7 @@ export const MEMBER_FORMATS: readonly MemberFormat[] = [
   { kind: "widget", noun: "widget", list: "widgets", most: 16, manifest: "widget.json", runs: "sandboxed", entry: folderEntry },
   { kind: "view", noun: "view", list: "views", most: 8, manifest: VIEW_MANIFEST, runs: "sandboxed", entry: folderEntry },
   { kind: "agent-preset", noun: "agent preset", list: "agents", most: 16, runs: "as an agent's instructions", entry: presetEntry },
+  { kind: "theme", noun: "theme", list: "themes", most: 8, manifest: THEME_MANIFEST, runs: "nothing: it is data", entry: folderEntry },
 ];
 
 export const memberFormat = (kind: string): MemberFormat | undefined => MEMBER_FORMATS.find((k) => k.kind === kind);
@@ -80,7 +89,7 @@ export interface PackageManifest {
   version: string;
   replaces: string[];
   startup?: { view?: string; agents: string[]; maxConcurrent: number };
-  /** The members, by the list each kind is named in (`tools`, `widgets`, `views`, `agents`). */
+  /** The members, by the list each kind is named in (`tools`, `widgets`, `views`, `agents`, `themes`). */
   [list: string]: unknown;
 }
 

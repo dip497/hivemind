@@ -15,7 +15,9 @@
 :is(.settings-dialog, .theme-panel) :is(button, input):disabled { cursor: default; opacity: .45; }
 .settings-sidebar { width: 232px; flex-shrink: 0; padding: 28px 16px 20px; display: flex; flex-direction: column; background: var(--color-bg2); border-right: 1px solid var(--color-line2); }
 .settings-title { padding: 0 12px; margin-bottom: 28px; font-size: var(--text-row); font-weight: 600; }
-.settings-sidebar nav { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; min-height: 0; margin-right: -8px; padding-right: 8px; }
+/* It scrolls, so it cuts off what is drawn past its sides: 8px each side, past the sidebar's own
+   padding, keep a focus ring whole (2px set 2px out) and the scrollbar off the rows. */
+.settings-sidebar nav { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; min-height: 0; margin-inline: -8px; padding-inline: 8px; }
 .settings-sidebar nav button { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 8px 12px; border-radius: 6px; text-align: left; color: var(--color-fg2); }
 .settings-sidebar nav button:hover { background: var(--color-bg3); color: var(--color-fg); }
 .settings-sidebar nav button[aria-current] { background: var(--color-bg4); color: var(--color-fg); font-weight: 500; }
@@ -120,6 +122,8 @@
 .settings-swatch { width: 12px; height: 12px; border-radius: 4px; border: 1px solid var(--color-line2); }
 .settings-accents { display: flex; flex-wrap: wrap; gap: 9px; padding: 4px; }
 .settings-accent { width: 20px; height: 20px; border-radius: 50%; }
+/* The accent of your own: a wheel of the page's tones until one is picked, then that colour. */
+.settings-accent-custom { background: conic-gradient(var(--color-brand), var(--color-fg3), var(--color-bg4), var(--color-brand)); }
 .settings-wallpaper { min-width: 0; text-align: center; }
 .settings-wallpaper-preview { display: grid; place-items: center; height: 48px; border: 1px solid var(--color-line2); border-radius: 5px; color: var(--color-fg2); }
 .settings-wallpaper[aria-checked=true] .settings-wallpaper-preview { border-color: var(--color-brand); box-shadow: 0 0 0 1px var(--color-brand); }
@@ -158,7 +162,7 @@
 .plugin-row-go { color: var(--color-fg3); flex-shrink: 0; }
 .plugin-row[data-state=off] :is(.plugin-row-name, .plugin-row-mark) { color: var(--color-fg3); }
 .plugin-row[data-state=unavailable] .plugin-row-detail { color: var(--color-err); }
-.agent-badge { font-size: var(--text-count); font-weight: 500; padding: 2px 9px; border-radius: 10px; color: var(--color-brand); background: color-mix(in oklab, var(--color-brand) 16%, transparent); }
+.agent-badge { font-size: var(--text-count); font-weight: 500; padding: 2px 9px; border-radius: 10px; color: var(--color-fg); background: color-mix(in oklab, var(--color-brand) 16%, transparent); }
 .agent-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; padding: 0; list-style: none; }
 .agent-facts li { font-size: var(--text-count); padding: 3px 9px; border-radius: 10px; background: color-mix(in oklab, var(--color-ok) 12%, transparent); color: var(--color-fg); }
 .agent-facts li[data-limit] { background: var(--color-bg3); color: var(--color-fg2); }
@@ -364,17 +368,13 @@
    under 200; pressed, as large as the window allows. The code draws its own white. */
 /* Wider than 240 when a long code needs it to keep whole pixels a module. */
 .qr-code { display: grid; place-items: center; flex-shrink: 0; width: clamp(200px, 100%, 240px); min-width: min-content; aspect-ratio: 1; padding: 0; background: none; cursor: zoom-in; }
-.qr-code > svg { display: block; border-radius: 4px; }
-/* A scanner reads the code on white, whatever the theme. */
-.qr-large { --qr-paper: #fff; display: grid; place-items: center; width: min(92vw, 92vh); max-width: none; aspect-ratio: 1; background: var(--qr-paper); border-radius: 8px; overflow: hidden; }
-.qr-large > svg { display: block; }
+.qr-code > svg { border-radius: 4px; }
 
 /* A package of several: one row switched as one, its members under it. */
 .package-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 8px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; border-radius: 6px; }
 .package-members { margin-left: 22px; border-left: 1px solid var(--color-line2); padding-left: 4px; }
 .package-members .plugin-row:not(:has(> button)) { padding: 8px; }
 .package-members .settings-remove-confirm { margin: 8px; padding: 12px; border-radius: 6px; background: var(--color-bg2); }
-.package-rollback-open { align-self: flex-start; margin: 4px 0 6px 2px; color: var(--color-fg2); }
 
 /* A package's review, before it is installed or updated: one line per member, what it is and
    where it runs, then what it may do or what changed. */

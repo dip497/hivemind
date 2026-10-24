@@ -216,6 +216,14 @@ describe.skipIf(!built)("hive host", () => {
       const client = new WorkspaceClient(peerTransport(streamOf(opened, "api")));
       const start = () => client.call("terminal.open", { tileId: "hm:t-sh", cwd: url, cmd: "sh", args: ["-c", "sleep 2; pwd > ran.txt"], cols: 80, rows: 24 });
       await until(async () => (await start().then(() => true, () => false)) || null, "the host to start the shell");
+      // A terminal's output is measured for a device that watches it, as the app's is.
+      const levels: number[] = [];
+      client.on("terminal.activity", (l) => { if (l["t-busy"]) levels.push(l["t-busy"]); });
+      replicas.addTile(url, { id: "t-busy", kind: "shell", label: "busy", cmd: "sh" });
+      const busy = () => client.call("terminal.open", { tileId: "hm:t-busy", cwd: url, cmd: "sh", args: ["-c", "while :; do echo compiling module after module; done"], cols: 80, rows: 24 });
+      await until(async () => (await busy().then(() => true, () => false)) || null, "the host to start the busy shell");
+      client.notice("terminal.watchActivity", ["hm:t-busy"]);
+      expect(await until(() => levels.at(-1) ?? null, "a level for the busy terminal")).toBeGreaterThan(0);
       opened.close();
       laptop.stop();
       expect(await until(() => fs.existsSync(path.join(repo, "ran.txt")) && fs.readFileSync(path.join(repo, "ran.txt"), "utf8").trim(), "the shell to run on")).toBe(repo);

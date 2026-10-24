@@ -8,7 +8,7 @@ export const AGENT_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 /** Staged in a temporary folder; `type`, when given, is the kind it must be. */
 export async function stageFromRegistry(id: string, type?: "agent" | "view" | "widget" | "tool") {
-  const { appMeetsMinVersion, catalogIndexUrl, fetchCatalog, stageEntry } = await import("@hivemind/core/plugin-catalog");
+  const { catalogIndexUrl, fetchCatalog, needsNewerApp, stageEntry } = await import("@hivemind/core/plugin-catalog");
   const { plugins, skipped } = await fetchCatalog();
   const entry = plugins.find((e) => e.id === id);
   if (!entry) {
@@ -17,8 +17,7 @@ export async function stageFromRegistry(id: string, type?: "agent" | "view" | "w
     throw new Error(`${id} is not on the registry (${catalogIndexUrl()})`);
   }
   if (type && entry.type !== type) throw new Error(`${id} is a${entry.type === "agent" ? "n" : ""} ${entry.type} — use \`hive ${entry.type === "agent" ? "agents" : "plugins"} install ${id}\``);
-  if (!appMeetsMinVersion(pkg.version, entry.minAppVersion)) {
-    throw new Error(`${id} needs Hivemind ${entry.minAppVersion} or newer; this is ${pkg.version}`);
-  }
+  const tooNew = needsNewerApp(entry, pkg.version);
+  if (tooNew) throw new Error(tooNew);
   return { dir: await stageEntry(entry), entry };
 }

@@ -1,7 +1,7 @@
 /**
  * Shared tile fit-to-screen fullscreen — one component + one hook reused by every
  * tile kind, so the look (a frosted glass panel floating over a clean copy of the
- * live wallpaper) and the behavior (Esc to exit, font A−/A+) stay identical
+ * live wallpaper) and the behavior (the keys that leave, font A−/A+) stay identical
  * whether you fullscreen a terminal, an editor, or a diff.
  *
  * Two integration styles, both filling the SAME `hostRef` glass panel:
@@ -13,31 +13,31 @@
  *     `hostRef.current` while open — switching the portal container preserves the
  *     component's state.
  */
-import { onShortcut } from "./shortcut";
+import { actionKey, onShortcut } from "./shortcut";
 import { useEffect, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Wallpaper } from "./Wallpaper";
 import type { TileFont } from "./tile-font";
 import { setWorkspaceOccluded } from "./workspace-occlusion";
 
-/** Font A−/A+ for the (dark, on-wallpaper) fullscreen header. Font density only —
+/** Font A−/A+ for the fullscreen header. Font density only —
  *  in fullscreen the tile already fills the screen, so tile SCALE is moot. */
 function FsFontButtons({ font }: { font: TileFont }) {
   return (
     <span
-      className="nodrag inline-flex items-center rounded border border-white/20 overflow-hidden"
-      title="Font size (Ctrl/Cmd ±)"
+      className="nodrag inline-flex items-center rounded border border-[var(--color-line2)] overflow-hidden"
+      title={`Font size (${actionKey("font-bigger")} / ${actionKey("font-smaller")})`}
     >
       <button
         onClick={font.dec}
-        className="px-1.5 text-chip leading-none text-white/80 hover:bg-white/10 hover:text-white transition-colors h-5 grid place-items-center"
+        className="px-1.5 text-chip leading-none text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] transition-colors h-5 grid place-items-center"
         aria-label="decrease font size"
       >
         A−
       </button>
       <button
         onClick={font.inc}
-        className="px-1.5 text-count leading-none text-white/80 hover:bg-white/10 hover:text-white transition-colors h-5 grid place-items-center border-l border-white/20"
+        className="px-1.5 text-count leading-none text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] transition-colors h-5 grid place-items-center border-l border-[var(--color-line2)]"
         aria-label="increase font size"
       >
         A+
@@ -49,7 +49,8 @@ function FsFontButtons({ font }: { font: TileFont }) {
 /**
  * The fullscreen chrome. Portaled to document.body so it escapes react-flow's CSS
  * transform; renders a clean embedded wallpaper behind a frosted glass panel whose
- * `hostRef` div the caller fills (reparent or portal). Esc closes.
+ * `hostRef` div the caller fills (reparent or portal). Esc (outside a terminal or field) or the
+ * fit-to-screen key closes.
  */
 export function FullscreenShell({
   title,
@@ -81,19 +82,20 @@ export function FullscreenShell({
   }, []);
 
   return createPortal(
-    <div className="fixed inset-0 z-(--layer-fullscreen-tile) overflow-hidden">
+    <div className="fixed inset-0 z-(--layer-fullscreen-tile) overflow-hidden bg-[var(--color-bg)]">
       <Wallpaper embedded covering />
       <div className="relative z-10 flex h-full w-full flex-col gap-2 p-3">
-        <div className="h-7 flex items-center gap-2 px-1 text-count font-mono text-white/85 shrink-0">
-          <span className="font-semibold text-white/95">{title}</span>
+        <div className="h-7 flex items-center gap-2 px-1 text-count font-mono text-[var(--color-fg2)] shrink-0">
+          <span className="font-semibold text-[var(--color-fg)]">{title}</span>
           <span className="ml-auto flex items-center gap-2">
             <FsFontButtons font={font} />
             <button
               onClick={onClose}
-              className="nodrag rounded border border-white/20 px-1.5 h-5 grid place-items-center text-chip text-white/85 hover:bg-white/10 hover:text-white transition-colors"
-              title="Exit fullscreen (Esc)"
+              className="nodrag rounded border border-[var(--color-line2)] px-1.5 h-5 grid place-items-center text-chip text-[var(--color-fg2)] hover:bg-[var(--color-bg4)] hover:text-[var(--color-fg)] transition-colors"
+              title="Leave fullscreen"
             >
-              Esc ✕
+              {/* Esc leaves too, but not from inside a terminal or an editor: this key does. */}
+              {actionKey("fit-to-screen")} ✕
             </button>
           </span>
         </div>

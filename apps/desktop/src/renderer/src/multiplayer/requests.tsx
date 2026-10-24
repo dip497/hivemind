@@ -46,7 +46,7 @@ export function useRequestsShownHere(): void {
 export function ConnectRequest({ r, answer }: { r: ConnectAsking; answer: (a: ConnectAnswer) => void }) {
   const [role, setRole] = useState<GuestRole>("view");
   return (
-    <div className="hm-connect-request flex flex-col gap-2 p-3" data-connect-request={r.id}>
+    <div className="flex flex-col gap-2 p-3" data-connect-request={r.id}>
       <div className="flex flex-col">
         <p className="text-label font-medium">{r.name} wants to connect</p>
         <p className="text-count text-[var(--color-fg2)]">{KINDS[r.kind]}{r.profile ? ` · says it is ${r.profile.name}` : ""}</p>

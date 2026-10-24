@@ -135,3 +135,67 @@ test("a preserved terminal follows the view's opacity without another theme chan
   expect(await terminal.evaluate((el, previous) => el === previous, original)).toBe(true);
   await original?.dispose();
 });
+
+test("Copy JSON copies the look without the wallpaper's picture, and says so; Import… of that file keeps your picture, and of a file that is no theme changes nothing", async () => {
+  // A wallpaper picked before the media picker: its address names the home folder.
+  const picture = "hm-media://v/%2Fhome%2Falice%2Fcat.png";
+  hive("config", "set", "appearance.wallpaper", JSON.stringify({ kind: "image", imageSrc: picture, brightness: 0.8 }));
+  await expect(page.locator(".hm-wp-image")).toHaveCount(1);
+  await openSettings("appearance");
+  await page.getByRole("button", { name: "Copy JSON" }).click();
+  await expect(page.getByText("Left out the wallpaper picture")).toBeVisible();
+  const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+  expect([JSON.parse(copied).wallpaper, copied.includes("alice")]).toEqual([{ kind: "image", brightness: 0.8 }, false]);
+  // The file back, with other corners: the look changes and the picture stays.
+  const file = JSON.stringify({ ...JSON.parse(copied), radius: 3 });
+  await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "theme.json", mimeType: "application/json", buffer: Buffer.from(file) });
+  await expect(page.getByText("Imported theme.json")).toBeVisible();
+  await expect.poll(() => onDisk().appearance.radius, { timeout: 5_000 }).toBe(3);
+  expect(onDisk().appearance.wallpaper).toEqual({ kind: "image", imageSrc: picture, brightness: 0.8 });
+  await expect(page.locator(".hm-wp-image")).toHaveCount(1);
+  // A package.json picked by mistake sets nothing of the look: refused, and the look stays.
+  const before = onDisk().appearance;
+  const pkg = JSON.stringify({ name: "app", version: "1.0.0", scripts: { build: "tsc" } });
+  await page.locator('input[type="file"][accept*="json"]').setInputFiles({ name: "package.json", mimeType: "application/json", buffer: Buffer.from(pkg) });
+  await expect(page.getByText("That file is not a hivemind theme.")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(onDisk().appearance).toEqual(before);
+  await closeSettings();
+});
+
+test("increased contrast strengthens faint text and lines with glass off, over the preset's inline palette", async () => {
+  expect(hive("config", "set", "appearance.glass.enabled", "false").value).toBe(false);
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(false);
+  const read = () => page.evaluate(() => {
+    const s = getComputedStyle(document.documentElement);
+    const v = (name: string) => s.getPropertyValue(name).trim();
+    return { fg2: v("--color-fg2"), fg3: v("--color-fg3"), line: v("--color-line"), inline: document.documentElement.style.getPropertyValue("--color-fg3") !== "" };
+  });
+  const usual = await read();
+  expect(usual.inline, "the theme store writes the palette inline, which a plain stylesheet rule cannot beat").toBe(true);
+  expect(usual.fg3).not.toBe(usual.fg2);
+  await page.emulateMedia({ contrast: "more" });
+  try {
+    const more = await read();
+    expect(more.fg3, "faint text takes the secondary text colour").toBe(more.fg2);
+    expect(more.line, "lines are drawn stronger").not.toBe(usual.line);
+  } finally {
+    await page.emulateMedia({ contrast: null });
+  }
+});
+
+test("an accent of your own that is hard to see on the panels says so, by the rule a theme's accent is refused by", async () => {
+  // Signal: its page #0d0e10, its panels and menus #141517.
+  expect(hive("theme", "use", "signal").rescanned).toBe(true);
+  await expect.poll(preset, { timeout: 5_000 }).toBe("signal");
+  const own = (brand: string) => page.evaluate((b) => window.hive.settingsSet("appearanceExtra.accent", { brand: b, accent: b }), brand);
+  await openSettings("appearance");
+  const note = page.locator("[data-accent-faint]");
+  // 3.07:1 on the page, 2.90:1 on the panels, where a switch that is on and a slider's thumb are drawn.
+  await own("#606060");
+  await expect(note).toHaveText("Hard to see on the panels (2.9:1).");
+  await own("#808080");
+  await expect(note).toHaveCount(0);
+  await closeSettings();
+  expect(hive("theme", "use", "signal").rescanned).toBe(true);
+});

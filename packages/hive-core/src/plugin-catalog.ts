@@ -138,6 +138,12 @@ export async function fetchReadme(entry: CatalogEntry, indexUrl = catalogIndexUr
 // not fail once it is installed.
 export { appMeetsMinVersion };
 
+/** Why this app cannot install `entry`, said before anything is downloaded: a plugin that needs a
+ *  newer Hivemind fails at use, after the person has reviewed and installed it. Null when it can. */
+export function needsNewerApp(entry: Pick<CatalogEntry, "name" | "minAppVersion">, appVersion: string): string | null {
+  return appMeetsMinVersion(appVersion, entry.minAppVersion) ? null : `${entry.name} needs Hivemind ${entry.minAppVersion} or newer; this is ${appVersion}.`;
+}
+
 /** Whether an installed agent should become the catalog's current one. Two cases: it is
  *  `broken` — this app refuses its manifest, so it is doing nothing at all and the catalog's
  *  copy can only be better — or it is the catalog's copy and nobody edited it since: recorded

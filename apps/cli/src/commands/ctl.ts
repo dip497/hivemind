@@ -215,12 +215,12 @@ const whoami = defineCommand({
 
 type FeedEvent = { seq: number; kind: string; tile: string; detail?: string };
 
-/** One agent as a line: its tile, name, program, state, and what it waits on. */
-const agentLine = (a: AgentRow): string => `${a.tile}\t${a.name}\t${a.agent ?? "-"}\t${a.state}${a.waiting ? `\twaiting: ${a.waiting.kind}` : ""}`;
+/** One agent as a line: its tile, name, program, state, what it waits on, and its last line. */
+const agentLine = (a: AgentRow): string => `${a.tile}\t${a.name}\t${a.agent ?? "-"}\t${a.state}${a.waiting ? `\twaiting: ${a.waiting.kind}` : ""}${a.line ? `\tline: ${a.line}` : ""}`;
 
 // The workspace's agents, as the app's agent feed says; --watch follows what happens to them.
 const agents = defineCommand({
-  meta: { name: "agents", description: "The workspace's agents: tile, name, agent (the program, as spawn --agent takes it), workspace {id, name}, state (asleep when put to sleep) and what each waits on; --watch follows what happens to them" },
+  meta: { name: "agents", description: "The workspace's agents: tile, name, agent (the program, as spawn --agent takes it), workspace {id, name}, state (asleep when put to sleep), what each waits on and its last line; --watch follows what happens to them" },
   args: {
     ...repoArg,
     watch: { type: "boolean", description: "keep going: print each turn ended, wait and answer as it happens (one JSON per line with --json)" },
@@ -246,7 +246,10 @@ const agents = defineCommand({
         if (!inIt.length) { d.close(); throw new HcpCliError("NOT_FOUND", `no agent of the workspace at ${repo} is in session ${id}`, EXIT.notFound); }
         listed = { ...listed, agents: inIt };
       }
-      const rows = agentRows(listed.agents, await d.call("store.core", [repo]) as Core | null);
+      // Each one's last line, read once (a host before 0.35 has none to give).
+      const lines = await (d.call("tile.readLines", [listed.agents.map((a) => a.tile)]) as Promise<{ lines: Record<string, string> }>)
+        .then((r) => r.lines, () => ({}));
+      const rows = agentRows(listed.agents, await d.call("store.core", [repo]) as Core | null, lines);
       if (!args.watch) {
         d.close();
         if (json) return console.log(JSON.stringify({ seq: listed.seq, agents: rows }));

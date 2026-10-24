@@ -9,6 +9,7 @@ import {
   normalizeNotificationSettings,
   dndActive,
   shouldNotify,
+  widgetNotice,
   type NotificationSettings,
 } from "../../src/shared/notification-settings.ts";
 
@@ -70,6 +71,19 @@ test("DND disabled is a no-op regardless of window", () => {
   assert.equal(dndActive(s, new Date(2025, 0, 1, 3, 0)), false);
 });
 
+test("a widget's notice shows as the person allows OS pop-ups, outside DND, once per widget in 10 s, its text cut short", () => {
+  const noon = new Date(2025, 0, 1, 12, 0).getTime();
+  assert.equal(widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "Build passed", undefined, noon), "Build passed");
+  // A widget is never urgent: Do Not Disturb mutes it, as the master and pop-up switches do.
+  for (const s of [S({ enabled: false }), S({ osPopups: false }), S({ dnd: { enabled: true, start: "09:00", end: "17:00" } })]) {
+    assert.equal(widgetNotice(s, "Build passed", undefined, noon), null);
+  }
+  assert.equal(widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "again", noon - 9_000, noon), null);
+  assert.equal(widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "again", noon - 10_000, noon), "again");
+  const long = widgetNotice(DEFAULT_NOTIFICATION_SETTINGS, "x".repeat(5_000), undefined, noon) ?? "";
+  assert.deepEqual([[...long].length <= 200, long.endsWith("…")], [true, true]);
+});
+
 test("normalize backfills missing fields from an older settings blob", () => {
   const n = normalizeNotificationSettings({ enabled: false }); // pre-kinds/dnd shape
   assert.equal(n.enabled, false);
@@ -82,4 +96,29 @@ test("normalize backfills missing fields from an older settings blob", () => {
 test("normalize tolerates garbage without throwing", () => {
   assert.deepEqual(normalizeNotificationSettings(null), DEFAULT_NOTIFICATION_SETTINGS);
   assert.deepEqual(normalizeNotificationSettings("oops"), DEFAULT_NOTIFICATION_SETTINGS);
+});
+
+test("a blob from before sounds gets them off, needs you chosen, at 0.6, and pop-ups without text", () => {
+  // What every release up to 2026-10 stored (sound reserved, never played).
+  const n = normalizeNotificationSettings({ enabled: true, kinds: { needs: true, done: true, error: true }, dnd: { enabled: false, start: "22:00", end: "07:00" }, osPopups: true, inApp: true, sound: false });
+  assert.deepEqual([n.sound, n.sounds, n.volume, n.popupText], [false, { needs: true, done: false, error: false }, 0.6, false]);
+});
+
+test("bad values fall back each on its own: volume clamped, a time that is not HH:MM, a word for a switch", () => {
+  const n = normalizeNotificationSettings({ volume: 7, sounds: { done: "yes", error: true }, dnd: { start: "25:00", end: "6:30" } });
+  assert.equal(n.volume, 1);
+  assert.equal(normalizeNotificationSettings({ volume: -1 }).volume, 0);
+  assert.equal(normalizeNotificationSettings({ volume: Number.NaN }).volume, 0.6);
+  assert.deepEqual(n.sounds, { needs: true, done: false, error: true });
+  assert.deepEqual([n.dnd.start, n.dnd.end], ["22:00", "6:30"]);
+});
+
+test("a sound needs the master switch and its moment; DND mutes finished and failed, never needs you", () => {
+  const on = S({ sound: true, sounds: { needs: true, done: true, error: true } });
+  assert.equal(shouldNotify(S({ sounds: { needs: true, done: true, error: true } }), "needs", "sound"), false, "Play a sound is off");
+  assert.equal(shouldNotify(S({ sound: true, sounds: { needs: true, done: false, error: true } }), "done", "sound"), false);
+  assert.equal(shouldNotify(on, "done", "sound"), true);
+  const night = S({ sound: true, sounds: { needs: true, done: true, error: true }, dnd: { enabled: true, start: "22:00", end: "07:00" } });
+  const late = new Date(2025, 0, 1, 23, 0);
+  assert.deepEqual((["needs", "done", "error"] as const).map((k) => shouldNotify(night, k, "sound", late)), [true, false, false]);
 });

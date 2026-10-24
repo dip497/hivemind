@@ -58,7 +58,7 @@ async function letOthers(w: Page, frame: string, grant: "watch" | "terminals" | 
   await w.locator(`.react-flow__node-frame[data-id="${frame}"] [aria-label="machine This computer"]`).evaluate((b) => (b as HTMLElement).click());
   await w.locator(`[data-machine-grant="${grant}"]`).evaluate((b) => (b as HTMLElement).click());
   await expect(w.locator(`[data-machine-grant="${grant}"]`)).toHaveAttribute("aria-checked", "true");
-  await w.locator(".fixed.inset-0.z-\\[9998\\]").evaluate((b) => (b as HTMLElement).click());
+  await w.locator(".fixed.inset-0.z-\\(--layer-machines-panel\\)").evaluate((b) => (b as HTMLElement).click());
 }
 /** The tile `w` opened in `frame` by asking for a shell there. */
 async function openShell(w: Page, frame: string): Promise<string> {
@@ -211,7 +211,7 @@ test("a guest puts a frame of their own on their computer: a shell they open in 
   await guest.locator(`.react-flow__node-frame[data-id="${frame}"] [aria-label="machine This computer"]`).evaluate((b) => (b as HTMLElement).click());
   await guest.locator("[data-hand-off]").evaluate((b) => (b as HTMLElement).click());
   await expect(guest.locator("[data-hand-off-landed]")).toHaveAttribute("data-hand-off-landed", "handoff/priya/feature", { timeout: 30_000 });
-  await guest.locator(".fixed.inset-0.z-\\[9998\\]").evaluate((b) => (b as HTMLElement).click());
+  await guest.locator(".fixed.inset-0.z-\\(--layer-machines-panel\\)").evaluate((b) => (b as HTMLElement).click());
   expect(git(repo, "rev-parse", "handoff/priya/feature")).toBe(git(folder, "rev-parse", "feature"));
   expect({ head: git(repo, "rev-parse", "HEAD"), status: git(repo, "status", "--porcelain") }).toEqual(hostsOwn);
   let review = "";

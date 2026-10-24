@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { app } from "electron";
 import { handle, handleEffect, type Caller } from "./app-ipc.js";
-import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, stageEntry } from "@hivemind/core/plugin-catalog";
+import { appMeetsMinVersion, catalogAgentNeedsUpdate, catalogRepoHolds, fetchCatalog, fetchReadme, needsNewerApp, stageEntry } from "@hivemind/core/plugin-catalog";
 import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
 import { installAgent, readAgentManifest, removeAgent, userAgentsDir, AGENT_MANIFEST_FILE } from "@hivemind/agents/load";
 import { findBin, verifyAgent } from "@hivemind/agents/discover";
@@ -16,7 +16,7 @@ import { newNonce } from "@hivemind/core/view-files";
 import { reviewViewDir } from "./view-packages.js";
 import { listWidgets, readWidget } from "@hivemind/core/widgets";
 import { installPackage, reviewedOf, type Reviewed } from "@hivemind/core/package-install";
-import { packageReview } from "./packages-ipc.js";
+import { offeredInSettings, packageReview } from "./packages-ipc.js";
 import { widgetsChanged } from "./widgets.js";
 import { listToolPackages, readToolPackage } from "@hivemind/core/tool-packages";
 import { toolsChanged } from "./tool-packages.js";
@@ -136,11 +136,8 @@ export function installPluginCatalogIpc(): void {
     const sender = event.sender;
     const entry = catalog.find((e) => e.type === type && e.id === id);
     if (!entry) throw new Error("That plugin is not in the catalog. Refresh and try again.");
-    // Refuse before downloading: a plugin that needs a newer Hivemind fails at use, and by
-    // then the user has already reviewed and installed it.
-    if (!appMeetsMinVersion(app.getVersion(), entry.minAppVersion)) {
-      throw new Error(`${entry.name} needs Hivemind ${entry.minAppVersion} or newer; this is ${app.getVersion()}.`);
-    }
+    const tooNew = needsNewerApp(entry, app.getVersion());
+    if (tooNew) throw new Error(tooNew);
     const dir = await stageEntry(entry);
     if (entry.type === "widget") {
       try {
@@ -258,7 +255,7 @@ export function installPluginCatalogIpc(): void {
     if (!pendingPackage || pendingPackage.token !== token || pendingPackage.sender !== event.sender) throw new Error("Review the package again before installing it.");
     const { dir, id, reviewed } = pendingPackage;
     pendingPackage = null;
-    try { await installPackage(dir, { id, reviewed }); await reloadSettings(); widgetsChanged(); toolsChanged(); }
+    try { await offeredInSettings(await installPackage(dir, { id, reviewed })); await reloadSettings(); widgetsChanged(); toolsChanged(); }
     finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   });
   handleEffect("plugins:install-agent", (token) => ({ target: pendingAgent && pendingAgent.token === token ? pendingAgent.id : undefined }), async (event, token: string) => {

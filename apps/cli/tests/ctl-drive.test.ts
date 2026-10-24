@@ -71,6 +71,8 @@ beforeAll(async () => {
       tileNames: { "w-1": "worker", "sh-1": "build" },
       frameOf: { "w-1": "f1", "w-3": "f1", "me-1": "f1", "web-1": "f1" },
     })),
+    // Only me-1 has said something; the others showed no line yet.
+    answer("tile.readLines", (tiles) => ({ lines: (tiles as string[]).includes("me-1") ? { "me-1": "Done: 214 tests pass" } : {} })),
     answer("agent.answer", (_tile, since) => ({ answered: since === 77 })),
     answer("agent.approval", () => ({ request: "req-1", since: 77, tool: "Edit", summary: "src/nav.ts", input: '{\n  "new_string": "whole"\n}', expiresAt: 9 })),
     answer("agent.startable", () => ({ programs: [], frames: [{ id: "f1", name: "a", machine: "here" }] })),
@@ -123,9 +125,9 @@ beforeAll(async () => {
   server = new WorkspaceServer([{ answers, effects: {} }], new Intents(new AuditLog({ file: path.join(dir, "audit.jsonl") })));
   drive = serveDrive(sock, {
     server, installToken: () => TOKEN, grants, repos: () => [repoA, repoB],
-    // The agent, and the one it starts, are in workspace a.
+    // The agent, the one it starts and the workers it lists, are in workspace a.
     // b-1 is a tile of workspace b; any other is open in no workspace (closed, or never opened).
-    workspaceOf: (tile) => (tile === "me-1" || tile === "w-2" ? repoA : tile === "b-1" ? repoB : null), nameOf: (tile) => `the ${tile} agent`,
+    workspaceOf: (tile) => (["me-1", "w-1", "w-2", "w-3"].includes(String(tile)) ? repoA : tile === "b-1" ? repoB : null), nameOf: (tile) => `the ${tile} agent`,
   });
   while (!fs.existsSync(sock)) await new Promise((r) => setTimeout(r, 10));
 });
@@ -202,9 +204,12 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([notMine.code, (notMine.json as { error: { message: string } }).error.message]).toEqual([5, `no tile b-1 in this workspace (${repoA})`]);
   });
 
-  test("agents and tiles name each field as the flags that set it: name is the tile's (spawn --name), agent the program (spawn --agent), workspace its id and name; one put to sleep is asleep; tiles lists every tile, a tool with its plugin", async () => {
+  test("agents and tiles name each field as the flags that set it: name is the tile's (spawn --name), agent the program (spawn --agent), workspace its id and name; one put to sleep is asleep; each says its last line, as the host reads it once; tiles lists every tile, a tool with its plugin", async () => {
     const agents = await hive(["ctl", "agents", "--json"], { env: asAgent() });
-    expect([agents.code, agents.json]).toEqual([0, { seq: 3, agents: [row(repoA, worker, "asleep"), row(repoA, asking), row(repoA, { tile: "me-1", agent: "me", state: "working", session: "sess-42" } as never)] }]);
+    expect([agents.code, agents.json]).toEqual([0, { seq: 3, agents: [row(repoA, worker, "asleep"), row(repoA, asking), { ...row(repoA, { tile: "me-1", agent: "me", state: "working", session: "sess-42" } as never), line: "Done: 214 tests pass" }] }]);
+    expect(last("tile.readLines").params).toEqual([["w-1", "w-3", "me-1"]]);
+    const plain = await hive(["ctl", "agents"], { env: asAgent() });
+    expect(plain.stdout.trim().split("\n").at(-1)).toBe("me-1\tme\tclaude\tworking\tline: Done: 214 tests pass");
     const byName = (agents.json as { agents: Array<{ name: string; tile: string }> }).agents.find((a) => a.name === "worker");
     expect(byName?.tile).toBe("w-1");
     const tiles = await hive(["ctl", "tiles", "--json"], { env: asAgent() });
@@ -223,8 +228,8 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
 
   test("agents --session finds the agent in that session, as its hooks said it or as the app tracks its tile's; none is exit 5", async () => {
     const mine = await hive(["ctl", "agents", "--session", "sess-42", "--json"], { env: asAgent() });
-    expect([mine.code, mine.json]).toEqual([0, { seq: 3, agents: [row(repoA, { tile: "me-1", agent: "me", state: "working", session: "sess-42" } as never)] }]);
-    expect((await hive(["ctl", "agents", "--session", "sess-42"], { env: asAgent() })).stdout).toBe("me-1\tme\tclaude\tworking\n");
+    expect([mine.code, mine.json]).toEqual([0, { seq: 3, agents: [{ ...row(repoA, { tile: "me-1", agent: "me", state: "working", session: "sess-42" } as never), line: "Done: 214 tests pass" }] }]);
+    expect((await hive(["ctl", "agents", "--session", "sess-42"], { env: asAgent() })).stdout).toBe("me-1\tme\tclaude\tworking\tline: Done: 214 tests pass\n");
     // A session the app tracks for w-1 (resumed into it), which its status has not said.
     writeTrackedSession(path.join(dir, TILE_SESSIONS_DIR), "hm:w-1", "resumed-7");
     const tracked = await hive(["ctl", "agents", "--session", "resumed-7", "--repo", repoA, "--json"], { env: env() });

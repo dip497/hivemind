@@ -157,6 +157,18 @@ How to write one: [Add your own agent](/agent-providers).
 A package publishes as one listing with every member: commit it with each view's `dist/`, push,
 and run `hivehub publish <package folder>`. See [Packages](/packages).
 
+The listing holds the package's `hivemind-package.json`, its README and licence, and the files in
+its members' folders. A file beside them, such as a build script or the sources a view's `dist/`
+is built from, is left out, so nobody downloads it.
+
+## The oldest Hivemind it needs
+
+HiveHub works this out for you. A manifest field that is newer than some apps (a view's `widgets`
+or `tokens`, a package's `themes`) makes the listing need the Hivemind release that first reads it,
+and a package needs the newest of its members. Those three need **2026.10.6**. An older app says
+"needs Hivemind 2026.10.6 or newer" before it downloads anything. An agent or a tool says it
+itself with `minAppVersion` in its manifest.
+
 ## What people see when they install it
 
 The card shows your plugin's name and your one line. Before anything is added, people see what

@@ -1,49 +1,20 @@
-/** How a machine's connection state looks everywhere it appears: dot, words, colour. */
+/** How a machine's connection state looks everywhere it appears: its mark and its words, from the
+ *  app's status owner (`MACHINE_LOOKS`). */
 import { useState } from "react";
 import { Check, CloudServer, Container, Copy, Laptop, Monitor, Server } from "../components/icons";
 import type { MachineInfo, MachineStatus } from "../../../shared/ipc";
 import { Button } from "../components/ui/button";
-
-const COLOR: Record<MachineStatus["state"], string> = {
-  online: "var(--color-ok)",
-  connecting: "var(--color-warn)",
-  reconnecting: "var(--color-warn)",
-  // Away is ordinary (a laptop asleep, a box switched off); signing in is the one thing to do.
-  offline: "var(--color-fg3)",
-  attention: "var(--color-warn)",
-  "no-hive": "var(--color-warn)",
-  idle: "var(--color-fg3)",
-};
-
-export function statusColor(s: MachineStatus, enabled = true): string {
-  return enabled ? COLOR[s.state] : "var(--color-fg3)";
-}
+import { MACHINE_LOOKS, MachineGlyph, machineLook } from "../workspace/status-look";
 
 /** Short words for a chip or row: the round trip when connected, otherwise what is going on. */
 export function statusWords(s: MachineStatus, enabled = true): string {
-  if (!enabled) return "paused";
-  switch (s.state) {
-    case "online": return s.rttMs !== undefined ? `${s.rttMs} ms` : "online";
-    case "connecting": return "connecting…";
-    case "reconnecting": return "reconnecting…";
-    case "offline": return "offline";
-    case "attention": return "sign in";
-    case "no-hive": return "no hive";
-    case "idle": return "idle";
-  }
+  if (enabled && s.state === "online" && s.rttMs !== undefined) return `${s.rttMs} ms`;
+  return MACHINE_LOOKS[machineLook(s.state, enabled)].word;
 }
 
-export function MachineDot({ status, enabled = true, size = 7 }: { status: MachineStatus; enabled?: boolean; size?: number }) {
-  const busy = enabled && (status.state === "connecting" || status.state === "reconnecting");
-  const hollow = !enabled || status.state === "idle" || status.state === "no-hive";
-  const c = statusColor(status, enabled);
-  return (
-    <span
-      aria-hidden
-      className={`inline-block shrink-0 rounded-full ${busy ? "animate-pulse" : ""}`}
-      style={{ width: size, height: size, background: hollow ? "transparent" : c, boxShadow: hollow ? `inset 0 0 0 1.5px ${c}` : undefined }}
-    />
-  );
+/** A machine's mark. `named`: where no word stands beside it, the mark says its word itself. */
+export function MachineDot({ status, enabled = true, size = 7, named = false }: { status: MachineStatus; enabled?: boolean; size?: number; named?: boolean }) {
+  return <MachineGlyph look={machineLook(status.state, enabled)} size={size} named={named} />;
 }
 
 /** A command the user runs once by hand (ssh host-key / login), with a copy button. */

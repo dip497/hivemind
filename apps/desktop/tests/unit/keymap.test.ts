@@ -57,3 +57,32 @@ test("a letter is the one the layout types, its place only when the layout types
   // Russian: the key at C types "с", and Ctrl+C still copies.
   assert.deepEqual(on("terminal", "с", "KeyC", { ctrl: true }), ["copy"]);
 });
+
+test("a number pad key is a digit only while Num Lock makes it type one", () => {
+  // Num Lock off: the pad's 1, 2, 4, 7 and 0 are End, ArrowDown, ArrowLeft, Home and Insert.
+  const off: [string, string][] = [["End", "Numpad1"], ["ArrowDown", "Numpad2"], ["ArrowLeft", "Numpad4"], ["Home", "Numpad7"], ["Insert", "Numpad0"]];
+  for (const where of ["anywhere", "terminal", "canvas"] as const) {
+    for (const [key, code] of off) {
+      for (const ctrl of [false, true]) assert.deepEqual(on(where, key, code, { ctrl }), [], `${ctrl ? "Ctrl+" : ""}${key} on ${code} at ${where}`);
+    }
+  }
+  // Num Lock on: the digit, as the top row's.
+  assert.deepEqual(on("anywhere", "1", "Numpad1", { ctrl: true }), ["tile:1"]);
+  assert.deepEqual(on("canvas", "2", "Numpad2"), ["agent"]);
+  assert.deepEqual(on("terminal", "0", "Numpad0", { ctrl: true }), ["font-reset"]);
+});
+
+test("a digit key that types a sign a row names is that sign: French Ctrl+6 sizes text, not tile 6", () => {
+  // French AZERTY: the 6 key types "-" unshifted.
+  assert.deepEqual(on("anywhere", "-", "Digit6", { ctrl: true }), []);
+  assert.deepEqual(on("terminal", "-", "Digit6", { ctrl: true }), ["font-smaller"]);
+  assert.deepEqual(on("canvas", "-", "Digit6", { ctrl: true }), ["zoom-out"]);
+  // Signs no row names stay digits: AZERTY's Ctrl+1, 3, 4 and 5 type & " ' ( and go to tiles.
+  for (const [key, n] of [["&", 1], ["\"", 3], ["'", 4], ["(", 5]] as const) {
+    assert.deepEqual(on("anywhere", key, `Digit${n}`, { ctrl: true }), [`tile:${n}`], `${key} on Digit${n}`);
+  }
+  // Without ctrl no row names "-", so the canvas's bare 6 key still makes a frame.
+  assert.deepEqual(on("canvas", "-", "Digit6"), ["new-frame"]);
+  // A US 6 is tile 6.
+  assert.deepEqual(on("anywhere", "6", "Digit6", { ctrl: true }), ["tile:6"]);
+});

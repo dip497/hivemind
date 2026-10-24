@@ -1,9 +1,9 @@
 ---
 title: "Packages"
-description: "Put your tools, widgets and views in one package, check it, install it and publish it on HiveHub, all from the hive command."
+description: "Put your tools, widgets, views and themes in one package, check it, install it and publish it on HiveHub, all from the hive command."
 ---
 
-A package puts your own tools, widgets and views in one box that installs, switches on, updates
+A package puts your own tools, widgets, views and themes in one box that installs, switches on, updates
 and rolls back as one. You or your agent can write one from the `hive` command alone, from the
 first folder to its page on HiveHub.
 
@@ -11,10 +11,10 @@ first folder to its page on HiveHub.
 Build a Hivemind package that does what I describe, using the hive command.
 
 1. Run \`hive plugins new package <name>\`. If it asks for an owner, ask me for my GitHub login and pass \`--owner <login>\`. Read the PROMPT.md it writes in the new folder: it holds the whole guide.
-2. Add each member I asked for: \`hive plugins new tool <name> --in <package>\`, \`hive plugins new widget <name> --in <package>\` or \`hive plugins new view <name> --in <package>\`. Read each member's PROMPT.md before writing its code. For a view, run \`npm install\` in its folder once.
+2. Add each member I asked for: \`hive plugins new tool <name> --in <package>\`, \`hive plugins new widget <name> --in <package>\`, \`hive plugins new view <name> --in <package>\` or \`hive plugins new theme <name> --in <package>\`. Read each member's PROMPT.md before writing its code. For a view, run \`npm install\` in its folder once. A theme is one theme.json, described at https://hivemind.griiken.com/guide/packages.md#themes.
 3. Run \`hive plugins check <package>\` after each change, and fix every problem it reports at its file and line until it says ok.
 4. Run \`hive plugins install <package>\`. If it says the package is off, tell me and ask me to switch it on with \`hive plugins enable <package id>\`: only I decide to trust code.
-5. Open each member with \`hive ctl plugin open <kind>:<id>\`, and look at a tool's tile with \`hive ctl tile look <tile>\`.
+5. Open each member with \`hive ctl plugin open <kind>:<id>\`, and look at a tool's tile with \`hive ctl tile look <tile>\`. To show me a theme, ask me first, then run \`hive theme use <package id>/<theme>\`; \`hive theme revert\` puts my look back.
 
 At the end, tell me what the package holds and what each member asks for. Do not publish it unless I ask.
 `}</AgentPrompt>
@@ -22,8 +22,9 @@ At the end, tell me what the package holds and what each member asks for. Do not
 <Diagram name="packages-one-box" caption="A package is one box" />
 
 - A **package** is one folder. Its `hivemind-package.json` names its **tools**, **widgets**,
-  **views** and **agent presets**, each tool, widget and view in a folder of its own with its
-  own manifest. Every member's id has the package's owner: `@you/<name>`.
+  **views**, **agent presets** and **themes**, each tool, widget, view and theme in a folder of
+  its own with its own manifest. Every member's id has the package's owner: `@you/<name>`, and a
+  theme's `@you/kit/<name>`, after its folder in the package.
 - Package → **this machine**: `hive plugins install` puts the whole box in, with one switch, one
   version and a rollback.
 - Package → **HiveHub**: `hivehub publish` lists the whole box, with every member and what it
@@ -89,6 +90,17 @@ Which packages arrive switched off, and which updates need your trust again, are
     ```
 
     In the app, it is one row in **Settings → Plugins**, with one switch.
+
+    To open a view as soon as the package is in, name it in `hivemind-package.json`:
+    `"startup": { "view": "@you/board" }`. Once the package is on, the app asks **Open Board?**,
+    and **Open** shows it. **Settings → Plugins** asks under each install it makes. After
+    `hive plugins install`, the app asks in the corner of the window, at once if it is open, or
+    the next time it starts. It asks there once per view: an update or a rollback to a view it
+    offered before does not ask again.
+
+    The app never switches the view without you, since an agent may be the one installing. To
+    switch at once from a terminal, run the command the install prints:
+    `hive ctl plugin open view:@you/board`. `--json` gives it as `startView.open`.
   </Step>
   <Step title="Update it">
     Change a member, raise `version` in `hivemind-package.json`, check, and install again. When a
@@ -113,6 +125,77 @@ Which packages arrive switched off, and which updates need your trust again, are
     the `hivehub` command and signing in are in [Publish to HiveHub](/publish-to-hivehub).
   </Step>
 </Steps>
+
+## Themes
+
+A theme is a member that changes how the app looks: colours, an accent, and if you like terminal
+colours, corners, fonts and a wallpaper. It holds no code, so a package of only themes, views and
+widgets arrives switched on. How people apply one is in [Change how Hivemind looks](/appearance#themes).
+
+A theme is a folder in the package holding `theme.json`, named in `hivemind-package.json` (at most
+8 in a package):
+
+```json
+"themes": [{ "path": "themes/harbour" }]
+```
+
+Its id is the package's id and its folder: `@you/kit/harbour`. Start one from the look you use now:
+
+```bash
+hive plugins new theme harbour --in kit      # kit/themes/harbour/theme.json
+hive plugins check kit
+hive plugins install ./kit
+hive theme use @you/kit/harbour              # see it; hive theme revert goes back
+```
+
+Add font, wallpaper and sound files beside `theme.json`, and name them in it by their path in the
+folder.
+
+### theme.json
+
+| Field | Needed | Takes |
+|---|---|---|
+| `format` | yes | `1` |
+| `name` | yes | up to 60 characters |
+| `mode` | yes | `"dark"` or `"light"` |
+| `palette` | yes | all 13 colours: `bg`, `bg2`, `bg3`, `bg4`, `line`, `line2`, `fg`, `fg2`, `fg3`, `select`, `ok`, `warn`, `err` |
+| `accent` | yes | a built-in accent (`graphite`, `indigo`, `volt`, `ember`, `ice`, `pulse`, `rose`, `emerald`, `violet`), or `{ "brand", "accent", "working"? }` colours. `working` is the colour of an agent at work |
+| `terminal` | no | `background`, `foreground`, `cursor`, `selection` and `ansi`, the 16 terminal colours |
+| `radius` | no | corners, 0 to 24 |
+| `fonts` | no | `{ "ui"?, "mono"? }`, each `{ "family", "files": [{ "path", "weight"?, "style"? }] }`: 1 to 4 `.woff2` files of at most 400 KB each |
+| `wallpaper` | no | `{ "kind" }`, a built-in one (`none`, `aurora`, `ember`, `ice`, `mesh`, `sunset`, `forest`, `nebula`, `mono`), or `{ "image" }` (.png, .jpg, .webp, .avif or .gif) or `{ "video" }` (.webm or .mp4) naming a file in the folder, up to 2 MB; `brightness` 0.4 to 1.1 |
+| `sounds` | no | `{ "needs"?, "done"?, "error"? }`, each an `.ogg` or `.mp3` of at most 400 KB, copied with the theme |
+
+Colours are `#rrggbb`, `rgb()` or `oklch()`, and solid: a theme's colours have no transparency.
+A file may sit at most four folders deep in the theme's folder. The whole package is at most
+8 MB, the [limits HiveHub takes](/hivehub-api#limits). What a theme leaves out stays as the person
+has it, and **Revert to previous look** puts back only what it set. `icons`, `cursors`, `scene`, `mascot`,
+`screens` and `words` are kept for a later format and are refused.
+
+### What the check refuses
+
+`hive plugins check`, the install and HiveHub check a theme the same way, and `hive plugins check`
+sizes the package as HiveHub does. Each refusal names the field or the pair of colours.
+
+- `fg` on `bg`, and `fg` on `bg2`, below 4.5:1.
+- `fg2` on `bg` below 3:1.
+- The accent's `brand` below 3:1 on `bg` or on `bg2`, the panels and menus: a switch that is on, a
+  slider's thumb or the selected tile's handle in it would be hard to see.
+- An accent that is the colour of an agent waiting on you: `palette.warn`, the colour needs-you is drawn in for that palette (see below), or `amber`.
+- Panels on which a diff cannot be read. The app works out a diff's text, syntax colours, +N/−N,
+  line numbers, a folded run's words and a removed line's bar from `bg2`, `bg3`, `fg`, `fg2`, `ok`
+  and `err`, moving each away from its panel as far as it must; when none reaches 4.5:1 (3:1 for
+  the bar's stripes), the refusal names the pair. A mid-grey `bg2` such as `#666666` is refused,
+  even with white text on it.
+- A file it names that is not in the folder, has the wrong type or is too big.
+- A colour CSS would draw differently: a part too many, a unit a part does not take, or text after it.
+
+For its status chips, what a theme's `err` and `warn` need is fitted, not refused. When a failed or needs-you chip would
+read under 4.5:1 for its word on its own fill or on `bg2`, or under 3:1 for its mark on `bg2`, `bg3`
+or `bg4` (a row at rest, under the pointer and selected), the app draws it lighter in the same hue
+on a dark theme, or darker on a light one, keeping as much of its colour as it can. A status word
+drawn straight on a tile's header or a selected row is fitted to those too. A view is told the
+fitted failed and needs-you colours; its `done` is the palette's `ok`, as before.
 
 Every command on this page is in the [CLI reference](/cli#plugins).
 

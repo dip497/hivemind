@@ -201,9 +201,38 @@ A tile imports the app's own React and parts from `hm-plugin://host/`: `react.js
 on this machine) and `useTileState(hm, key, initial)`, which keeps a value with the tile across
 restarts. `ui.js` is the
 app's whole UI kit (`Button`, `Input`, `Dialog…`, `DropdownMenu…`, `Switch`, `toast`, …). The
-built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the fullest example.
+built-in Issues tile (`apps/desktop/tools/issues` in the repository) is the fullest example of
+how a tile is built. Its colours are not one to copy: it also paints with app variables outside
+the 11 below, which may change.
 
 Reach the app only through these, never `window.hive`.
+
+### Colours and type
+
+A tile paints with the app's own CSS variables, so it follows every theme, dark and light. These
+11 are the ones a tile may rely on: each keeps its name and has a value in every theme. Any other
+`--color-*` or `--font-*` in the app may change without notice.
+
+| Variable | What it is |
+|---|---|
+| `--color-bg` | the page |
+| `--color-bg3` | a card or a raised row |
+| `--color-fg` | text |
+| `--color-fg3` | quiet text: hints, counts, dates |
+| `--color-line` | borders and dividers |
+| `--color-select` | a selected row or text |
+| `--color-ok` | done, passed, added |
+| `--color-warn` | needs a look |
+| `--color-err` | failed, removed |
+| `--color-info` | a neutral mark, never words: it can be the person's accent, which is held to 3:1 only. Draw a link in `--color-fg`, underlined |
+| `--font-mono` | the code font |
+
+A release that removes or renames one says so with **Breaking:** in the CHANGELOG.
+
+A tile's code runs in the app's own page, so it gets the browser rights the app uses and no
+others: notifications and writing to the clipboard. The camera, the microphone, the location and
+reading the clipboard are refused. A page that needs them goes in a Browser tile, which asks you:
+`host.openUrl(url)`.
 
 ### Ids, opening and reinstalling
 
@@ -248,7 +277,8 @@ h(Frame, { src: "http://127.0.0.1:5173/", title: "Dev server" });
 
 Only `http://127.0.0.1:<port>` and `http://localhost:<port>` can be shown; any other address is
 blocked, and the tile stops and says so. `Frame` runs the page's scripts, forms and popups, and
-never lets it move the app's window.
+never lets it move the app's window. It gets no camera, microphone, location or notifications: a
+page that needs them goes in a Browser tile, which asks you.
 
 ### Look at it, and see what broke
 

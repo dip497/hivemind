@@ -87,6 +87,8 @@ spacing:
   lg: "16px"
   xl: "24px"
   row: "32px"
+  row-tall: "44px"
+  row-decide: "80px"
   control: "32px"
   control-compact: "28px"
 components:
@@ -131,6 +133,14 @@ components:
     backgroundColor: "{colors.graphite-card}"
   tile-row-selected:
     backgroundColor: "{colors.graphite-hover}"
+  tile-row-tall:
+    height: "{spacing.row-tall}"
+  tile-row-line:
+    textColor: "{colors.pencil-text}"
+    typography: "{typography.count}"
+  tile-row-line-waiting:
+    textColor: "{colors.signal-amber}"
+    typography: "{typography.count}"
   status-chip:
     typography: "{typography.chip}"
     rounded: "{rounded.full}"
@@ -173,17 +183,17 @@ The code is migrating to two settled decisions. The UI font moves from bundled G
 The palette is neutral graphite tinted a hair toward blue (hue 250), with colour kept for meaning. All values are oklch so blends and alpha mixes stay even. A preset may recolour every value; the meanings stay.
 
 ### Primary
-- **Steel Accent** (steel-accent; steel-accent-hover on hover): the user's accent, a quiet desaturated steel by default. It marks resize handles under the pointer and checkbox fills; never focus, which is the selection colour. The user may set it to grey, so it never carries meaning.
+- **Steel Accent** (steel-accent; steel-accent-hover on hover): the user's accent, a quiet desaturated steel by default. It marks resize handles under the pointer and checkbox fills; never focus, which is the selection colour. The user may set it to grey, so it never carries meaning. It is held to 3:1 as a mark only, so it never colours words: text is chalk or pencil, and a link is chalk with an underline. A small mark in it on a header or a card (a pin, a check, a toast's icon) takes `--color-brand-mark`, the accent fitted to 3:1 on the page, the panels and the cards.
 
 ### Tertiary
-- **Signal Amber** (signal-amber): needs-you, and nothing else. Blocked, asking and plan-review chips, the needs-you badge on the rail, the needs-you count. Nothing decorative borrows it.
+- **Signal Amber** (signal-amber): needs-you, and nothing else. Blocked, asking and plan-review chips, the needs-you badge on the rail, the needs-you count, and what such a row waits on, on its second line. Nothing decorative borrows it.
 - **Unread Blue** (unread-blue): a 6px dot after the name of a tile that finished since you last looked. It marks and never fills, and stays blue whatever the accent is.
 - **Sage Done** (sage-done): a finished agent.
 - **Brick Error** (brick-error): failed agents and destructive actions. Destructive hovers tint at 10%.
 - **Mist Info** (mist-info): neutral information.
 - **Working White** (working-white): the small dot for an agent at work. Being at work is not a call to action.
 
-Status chips use the status colour as text on a 16% mix of the same colour (`color-mix(in srgb, <status> 16%, transparent)`).
+Status chips use the status colour as text on an opaque 16% mix of it over the panel colour (`color-mix(in srgb, <status> 16%, var(--surface-2))`), so a chip reads the same on any row under it.
 
 ### Neutral
 - **Graphite Ground** (graphite-ground): the canvas and window behind everything.
@@ -218,12 +228,12 @@ Each step is a Tailwind token (`text-heading`, `text-title`, `text-row`, `text-b
 - **Body** (400, 13px, line-height 1.5): the app default. Buttons, inputs, Settings text.
 - **Label** (500, 12px, pencil-text): panel headings and menu items. Sentence case.
 - **Count** (400, 11px, tabular figures): counts, keycaps, secondary choices.
-- **Chip** (500, 10px): status chips and badge numbers only.
+- **Chip** (500, 10px): status chips, badge numbers and the initial on a person's disc only.
 
 Letter-spacing follows size: -0.014em at 16–23px, -0.005em at 12–15px, +0.01em at 11px and below.
 
 ### Named Rules
-**The Named Steps Rule.** Text is set only through the seven named steps, everywhere: the renderer, its CSS and the tools that ship with the app. The panel, menus and frame header use five of them (15, 14, 12, 11, 10); heading and body belong to pages and dialogs. `tests/unit/design-system.test.ts` fails on a literal size, a Tailwind size or an inline `fontSize`. A new size is a defect, not a variant. A tile's content (terminal, editor, diff) follows its own zoom, not the scale.
+**The Named Steps Rule.** Text is set only through the seven named steps, everywhere: the renderer, its CSS and the tools that ship with the app. The panel, menus and frame header use five of them (15, 14, 12, 11, 10); heading and body belong to pages and dialogs. `tests/unit/design-system.test.ts` fails on a literal size, a Tailwind size or an inline `fontSize` written as a number; a size worked out in code (`size * 0.5`) it cannot see, so review catches that. A new size is a defect, not a variant. A tile's content (terminal, editor, diff) follows its own zoom, not the scale.
 
 **The Sentence Case Rule.** No uppercase section labels anywhere. A heading is 12px medium pencil-text in sentence case.
 
@@ -231,7 +241,7 @@ Letter-spacing follows size: -0.014em at 16–23px, -0.005em at 12–15px, +0.01
 
 The canvas fills the window, and the chrome sits at its edges: the Layers sheet on the left, a floating tool island at top centre, and toasts bottom right. Nothing at page level scrolls; panes scroll inside themselves.
 
-The panel is a list of 32px rows set 8px in from the sheet's sides. Nested items indent 14px per level. Every row's name starts at the same x, after a 16px icon slot. Gaps inside a row are 10px; menus pad 4px and items pad 6px by 8px. Settings is a centred sheet (up to 1080 by 780px) with a 208px sidebar. Its page content is capped at 760px, with 28px between sections.
+The panel is a list of 32px rows set 8px in from the sheet's sides; a terminal's row is 44px (row-tall) while it shows a second line. Nested items indent 14px per level. Every row's name starts at the same x, after a 16px icon slot. Gaps inside a row are 10px; menus pad 4px and items pad 6px by 8px. Settings is a centred sheet (up to 1080 by 780px) with a 208px sidebar. Its page content is capped at 760px, with 28px between sections.
 
 Row chrome stays hidden until the row is hovered or focused: close buttons, keycap hints, the status chip of a non-urgent row. Needs-you chips never hide.
 
@@ -250,7 +260,8 @@ Depth is tonal first: four graphite steps from ground to hover. Soft shadows lif
 ### Overlays and tints
 - **Scrim** (`--color-scrim`, black at 55%): behind a modal dialog or Settings, and the minimap's off-screen area.
 - **Selection** (`--color-selection`, the text colour at 20%), **current line** (2.5%), **match** (`--color-match`, the info colour at 22%), **bracket match** (the accent at 25%): mixed from the theme's own colours, so a light or custom preset gets them too.
-- **Syntax** (`--color-syntax-*`): the editor's keyword, string, number, function, type, property and tag colours.
+- **Syntax** (`--color-syntax-*`): the keyword, string, number, function, type, property, tag and comment colours of the editor and every diff (the Diff tile, its fullscreen, a conflicted file, a tool's `PatchView`), drawn on bg2.
+- **Diff** (`--color-diff-*`): a diff's text, its added and removed words (the +N/−N, changed line numbers, a bar), the quieter line numbers and a conflict's incoming side, each side's row tint and changed-word highlight. Worked out from the palette by `@hivemind/core/diff-colours`, with the syntax, and painted by theme-store: each starts at its own lightness and moves away from the page only as far as 4.5:1 on bg2, bg3 (the Diff tile's header) and every changed row needs (3:1 between a removed bar's stripes). A theme no diff can be read on is refused. `packages/hive-core/src/diff-colours.test.ts` holds every preset.
 
 A colour is defined once, as a custom property in `styles.css` (a token) or in a palette a person picks from (frame colours, people's colours, wallpaper scenes, note paper). Anything else uses those names; the unit test above fails on a colour literal outside a definition.
 
@@ -296,13 +307,21 @@ The components are calm, exact and small. Nothing raises its voice until it need
 - **Menu item:** 12px, 6px by 8px, 6px corners, graphite-card on hover and focus. A shortcut sits at the far end in 11px pencil-text.
 
 ### Tile Row (signature)
-A 32px row: a 16px icon slot (an agent's own logo, or the tool's mark), the name at 14px, an unread dot, a spacer, then one status mark. Working is a working-white dot. Done or failed is a chip that hides on hover. Needs-you is an amber chip that pulses. Idle shows nothing. While Ctrl or ⌘ is held, an 18px keycap with the jump number replaces the status. The selected row takes graphite-hover with a 12% chalk inner ring.
+A 32px row: a 16px icon slot (an agent's own logo, or the tool's mark), the name at 14px, an unread dot, a spacer, then one status mark. Working is a working-white dot. Done or failed is a chip that hides on hover. Needs-you is an amber chip that pulses. Idle shows nothing. While Ctrl or ⌘ is held, an 18px keycap with the jump number replaces the status. The selected row takes graphite-hover with a 12% chalk inner ring. The failed, finished and needs-you colours are fitted to the preset (`statusInk` in core's `theme-format.ts`): a chip's word reads at 4.5:1 on its own fill and on the panel, and a mark at 3:1 on a row at rest, under the pointer and selected, in the colour's own hue with as much of its chroma as it can keep, so failed stays red. A status word drawn straight on a header or a selected row takes the text colour fitted to those surfaces (`statusTextInk`, `--color-status-*-text`).
+
+A terminal's row may say one more thing, on a second line under the name and lined up with it: what its screen last showed (`214 tests passed`), in 11px mono pencil-text (`text-count font-mono`), cut with an ellipsis. While its agent waits on the person, the line is what it waits on instead (`Bash: npm test`, `Asks: …`, Plan ready for review), in Signal Amber. The row grows to 44px (row-tall) only while it has a line; with none it stays 32px. The line never pulses or moves; for an agent that keeps a conversation it is the first line of what it last said. The View menu's **Lines** shows them for all agents, only for those that need you, or not at all.
+
+A permission the person can answer from the row (its agent says the keys, and the tool's input is known) adds a band under the line, lined up with it: compact 28px buttons (control-compact), ghost **Deny** then primary **Allow**, 6px apart and 6px under the line, and the row grows to 80px (row-decide). Allow is offered only while the input is one line and none of it is cut; otherwise the band is one ghost **Review**, which opens a popover with the whole input in mono and the same two buttons, the keyboard on Deny. The hover card shows a terminal's whole line, or the tool and all of its input, wrapped, up to six lines. An agent's toast says the same as its row: what it waits on, with the same band, or, once it finished, its line.
 
 ### Action Row (signature)
 The panel's start actions (New agent, New project, Add a tool or widget, New machine) use the tile row's shape, so the panel reads as one list. Their icon sits in a small tinted tile, the one place colour is decorative. Each action keeps its own fixed hue, never amber and never the unread blue. Its keycap hint appears only under the pointer or focus.
 
 ### Tool Island
 The workspace's tool bar floats at top centre: graphite-sheet, 12px corners, control-line edge, 6px padding and ghost icon buttons 2px apart.
+
+### Markers
+- **Modified marker:** a file with unsaved edits is a 6px pencil-text dot after its name, named "unsaved changes" for a screen reader. It is neutral: an unsaved file does not wait on the person, so it never takes amber. So is a file git calls modified, in the file tree.
+- **Machine link:** a machine's connection takes a status mark with a word, from the app's status owner (`workspace/status-look.tsx`, `MACHINE_LOOKS`): online a sage dot, connecting a half-filled dot, offline a dust square, paused two bars, idle a ring, and sign in the amber needs-you triangle, the one machine state that waits on the person. A mark shown without its word carries the word as its accessible name.
 
 ## Do's and Don'ts
 

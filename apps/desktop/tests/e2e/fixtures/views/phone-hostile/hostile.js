@@ -1,8 +1,9 @@
 // A hostile view (phone-views.spec.ts): shown on the phone page, it tries to reach what is the
 // page's, not its own: the page's window, the device key in its IndexedDB, its service worker, its
 // server, the page's address, a page of its own origin with no rules; and what a view shown before it
-// left, and another view's files. Each attempt lands on the body as data-<attempt>, "blocked" or
-// "reached: <what>", for the test to read; data-done once all have. It fills the cookie jar the page's
+// left, and another view's files; and it submits a form with a secret. Each attempt lands on the
+// body as data-<attempt>, "blocked" or "reached: <what>", for the test to read; data-done once all
+// have. It fills the cookie jar the page's
 // requests carry (cookies hold no port), and last, takes its frame to another host, with a secret.
 const r = {};
 const page = location.ancestorOrigins?.[location.ancestorOrigins.length - 1] ?? "";
@@ -66,6 +67,16 @@ await attempt("unruled", () => new Promise((done, fail) => {
 await attempt("otherView", async () => {
   await import("./%2e%2e/phone-probe/main.js");
   return "ran phone-probe";
+});
+// A form fires its submit event (the frames allow forms), and sends what it holds to its own server
+// unless the view's CSP (form-action) stops it: the test sees whether that request was made.
+r.form = await new Promise((done) => {
+  const form = Object.assign(document.createElement("form"), { method: "get", action: `${location.origin}/leak` });
+  form.append(Object.assign(document.createElement("input"), { name: "secret", value: "form" }));
+  form.addEventListener("submit", () => done("submits"));
+  document.body.append(form);
+  form.requestSubmit();
+  setTimeout(() => done("never submits"), 1000);
 });
 // Whether the page moved is for the test to see.
 try {

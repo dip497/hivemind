@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Palette, X } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section } from "./appearance-controls";
+import { ThemeList } from "./appearance-themes";
 import { useTheme } from "./theme-store";
 
 export const THEME_PANEL_EVENT = "hivemind:theme-panel";
@@ -43,6 +44,7 @@ export function ThemePanel() {
       <div className="flex-1 overflow-y-auto px-4 py-4 settings-stack">
         <Section title="Theme">
           <PresetRow t={t} />
+          <ThemeList />
           <AccentPicker t={t} />
         </Section>
         <Section title="Workspace">

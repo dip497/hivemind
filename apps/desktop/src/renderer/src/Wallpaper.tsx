@@ -1,6 +1,6 @@
 /** Workspace decoration. Its media and CSS motion pause when covered by Settings. */
 import { useEffect, useRef, useState } from "react";
-import { useTheme } from "./theme-store";
+import { useTheme, wallpaperDrawn } from "./theme-store";
 import { useWorkspaceOccluded } from "./workspace-occlusion";
 
 /**
@@ -10,7 +10,7 @@ import { useWorkspaceOccluded } from "./workspace-occlusion";
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
  */
 export function Wallpaper({ embedded = false, covering = false }: { embedded?: boolean; covering?: boolean } = {}): React.ReactElement | null {
-  const { glass, wallpaper, videoSrc, imageSrc } = useTheme();
+  const { glass, wallpaper, videoSrc, imageSrc, themeId } = useTheme();
   const cls = embedded ? " embedded" : "";
   const [inactive, setInactive] = useState(false);
   const occluded = useWorkspaceOccluded();
@@ -71,12 +71,12 @@ export function Wallpaper({ embedded = false, covering = false }: { embedded?: b
     return () => { stale = true; };
   }, [paused, videoSrc, wallpaper]);
 
-  // The built-in animated/photo/video wallpaper scene (or null when glass is off,
+  // The built-in animated/photo/video wallpaper scene (or null when glass is off and no theme set it,
   // no scene is chosen, or the picked media isn't ready). Computed as an element
   // so the user's OWN background media can render OVER it below without the early
   // returns swallowing it.
   const sceneEl: React.ReactElement | null = (() => {
-    if (!glass || wallpaper === "none") return null;
+    if (!wallpaperDrawn({ glass, wallpaper, themeId })) return null;
 
     // Photo scene: a static image, cover-fit + brightness-controlled like the video.
     if (wallpaper === "image") {

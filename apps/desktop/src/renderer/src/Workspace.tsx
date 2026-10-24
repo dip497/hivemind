@@ -37,6 +37,7 @@ import { PickerDialog } from "./picker-dialog";
 import { isPluginVerb, pluginVerb, type PluginVerbHost } from "./workspace/plugin-verbs";
 import type { LayerTile, LayerFrame } from "./LayersPanel";
 import { forgetStatus, statusOf, setHostedStatus, type TileStatusKind, subscribeTileStatus } from "./agent-status-bus";
+import { forgetAgent, forgetAgents, tellAgent } from "./agent-waits";
 import { ToolPlugins, WorkspacePropsContext } from "./tiles/tool-plugins";
 import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
@@ -105,6 +106,7 @@ import { AgentToasts } from "./workspace/agent-toasts";
 import { openAppearanceSettings } from "./workspace/chrome-store";
 import { openViewMenu } from "./workspace/standard-toolbar";
 import { loadCommunityViews } from "./workspace/views/community/registry";
+import { StartViewOffers } from "./plugins/open-start-view";
 import { agentScanProblems, syncAgentPlugins } from "./agent-plugins";
 import {
   FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
@@ -704,7 +706,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
             <div key={a.id} className="agent-added">
               <div className="agent-added-head">
                 <span className="agent-added-label">{a.label}</span>
-                <Button size="sm" variant="outline" aria-label={`Remove ${a.label}`} className="agent-added-remove"
+                <Button size="sm" variant="outline" aria-label={`Remove ${a.label}`} className="shrink-0"
                   onClick={() => void window.hive.removeAgent(a.id)
                     .then(() => { void syncAgentPlugins(); toast.dismiss(toastId); })
                     .catch(() => toast.error(`Could not remove ${a.label}.`))}>
@@ -843,23 +845,28 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   });
   // Tiles the control plane opens, which its host starts: announced before they reach the layout
-  // (whether to bring each forward), then laid out as they arrive.
+  // (whether to bring each forward), then laid out as they arrive. The notice and the layout come
+  // by different ways, so a notice can come after its tile: that one is laid out at once.
   const arrivals = useRef(new Map<string, Pick<TileOpened, "background" | "near" | "by">>());
+  const placeArrivedRef = useRef(placeArrived);
+  placeArrivedRef.current = placeArrived;
+  const placeArrivals = useCallback((held: TileInstance[]) => {
+    for (const [id, at] of arrivals.current) {
+      if (!held.some((t) => t.id === id)) continue;
+      arrivals.current.delete(id);
+      placeArrivedRef.current(id, at);
+    }
+  }, []);
   useEffect(() => {
     const off = window.hive.onHcpSpawned(({ tileId, repo, background, near, by }) => {
       if (repo !== persistKey) return;
       if (background) markBackgroundTile(tileId);
       arrivals.current.set(tileId, { background, near, by });
+      placeArrivals(tilesRef.current);
     });
     return () => { off(); arrivals.current.clear(); };
-  }, [persistKey]);
-  useEffect(() => {
-    for (const [id, at] of arrivals.current) {
-      if (!tiles.some((t) => t.id === id)) continue;
-      arrivals.current.delete(id);
-      placeArrived(id, at);
-    }
-  }, [tiles, placeArrived]);
+  }, [persistKey, placeArrivals]);
+  useEffect(() => placeArrivals(tiles), [tiles, placeArrivals]);
   // A session already running on a machine (the frame's machine chip) opens as a terminal in that frame.
   useEffect(() => {
     const onOpen = (e: Event) => {
@@ -956,7 +963,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   // Plan review: an agent waits on a person's review of its plan (M2). Every window showing the
   // agent opens the review beside it, on every machine the workspace is shared with, and the ones
   // waiting when it opens; once anyone answers, or the agent stops waiting, it closes, and the
-  // others are told who answered. The agent list says it all (`waiting.plan`).
+  // others are told who answered. The agent list says it all (`waiting.plan`). What every agent
+  // waits on is kept for the Layers rows too (agent-waits.ts): one feed for the window.
   useEffect(() => {
     if (!persistKey) return undefined;
     let live = true;
@@ -965,6 +973,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     const reviewOf = (agent: string) => tilesRef.current.find((t) => t.kind === "planReview" && t.review?.agentTileId === agent);
     const seen = (a: AgentItem | { gone: string }): void => {
       const agent = "gone" in a ? a.gone : a.tile;
+      if ("gone" in a) forgetAgent(agent); else tellAgent(a);
       const plan = "gone" in a || a.waiting?.kind !== "plan" || a.waiting.plan === undefined ? null : { since: a.waiting.since, plan: a.waiting.plan };
       const open = reviewOf(agent);
       if (open && open.review?.since !== plan?.since) closeTile(open.id);
@@ -979,7 +988,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       if (repo !== persistKey || e.kind !== "answered" || !reviewed.delete(e.tile)) return;
       if (e.by && e.by.person !== me) toast(`${e.by.name || "Someone"} ${e.detail === "allow" ? "approved the plan" : "asked for changes to the plan"}`);
     });
-    return () => { live = false; offChanged(); offEvent(); };
+    return () => { live = false; offChanged(); offEvent(); forgetAgents(); };
   }, [persistKey, openPlanReview, closeTile]);
 
   // HCP control plane: main forwards a verb only a window can carry out (focus a tile, a view's
@@ -1346,6 +1355,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
         onRestart={() => onRestart?.()}
         upgrading={upgrading}
       />
+      {/* "Open Archipelago?" for a package installed outside Settings (`hive plugins install`). */}
+      <StartViewOffers />
       <AgentToasts
         toasts={toasts}
         onDismiss={dismissToast}

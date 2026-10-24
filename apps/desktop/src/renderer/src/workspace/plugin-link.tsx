@@ -11,8 +11,9 @@ import { chordMatches, type PluginCommand } from "@hivemind/view-sdk/commands";
 import type { Running } from "@hivemind/view-host/instances";
 import { pluginInstances } from "./plugin-instances";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { PROTOCOL_VERSION, type HostMenu, type HostMessage, type ShareOutcome, type SurfaceRect, type ViewPermission, type ViewRect } from "@hivemind/view-sdk/protocol";
+import { PROTOCOL_VERSION, type HostMenu, type HostMessage, type ShareOutcome, type SurfaceRect, type LineRect, type ViewPermission, type ViewRect } from "@hivemind/view-sdk/protocol";
 import type { SettingField } from "@hivemind/view-sdk/settings";
+import { resolveTokens, type TokenDecl } from "@hivemind/view-sdk/tokens";
 import { CommunityLink } from "@hivemind/view-host/link";
 import { viewStructure } from "@hivemind/view-host/structure";
 import { isRemote } from "@hivemind/core/remote-uri";
@@ -31,6 +32,8 @@ import { loadViewLayout, saveViewLayout, type ViewLayoutSpec } from "./view-layo
 import { cssColorToHexString } from "./css-color";
 import { viewLinkServices } from "./view-services";
 import { readTheme } from "./plugin-theme";
+import { viewFontFaces } from "./view-fonts";
+import { getTheme, useThemeField } from "../theme-store";
 import { ShareDialog, type ShareChoice } from "./views/community/ShareDialog";
 import { PromptDialog, type PromptAsk } from "./views/community/PromptDialog";
 import { tileMarkSvg } from "../tiles/mark-svg";
@@ -49,6 +52,9 @@ export interface PluginLinkOptions {
   name: string;
   capabilities: ViewPermission[];
   fields: readonly SettingField[];
+  /** Its own colours (a view's manifest `tokens`), sent with the theme, resolved for it and for
+   *  what the person set (each is one of `fields`, `token-<id>`). */
+  tokens?: readonly TokenDecl[];
   /** Where its saved layout is kept (`hello.layout`, `setLayout`); `personal`: on this device. */
   layoutId: string;
   personal?: boolean;
@@ -61,6 +67,10 @@ export interface PluginLinkOptions {
   issueFolder?: () => string | null;
   /** Where it asks for live surfaces; absent: it places none. */
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
+  /** Where it reserves room for tiles' last lines, which the host draws (1.17); absent: it draws none. */
+  onLineRects?: (rects: LineRect[]) => void;
+  /** It may fetch its own files (a view whose manifest says `"files": true`), feature `ownFiles`. */
+  ownFiles?: boolean;
   /** What an agent may run in it while it runs (its manifest's `commands`), and which copy this is. */
   commands?: readonly PluginCommand[];
   instance?: { id: string; label: string };
@@ -174,6 +184,8 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     hasFrame: (id) => framesRef.current.some((f) => f.id === id),
     onReady: () => setReady(true),
     ...(o.onSurfaceRects ? { onSurfaceRects: (r: SurfaceRect[]) => enqueue(() => optsRef.current.onSurfaceRects?.(r)) } : {}),
+    ...(o.onLineRects ? { onLineRects: (r: LineRect[]) => enqueue(() => optsRef.current.onLineRects?.(r)) } : {}),
+    ...(o.ownFiles ? { ownFiles: true } : {}),
     onLayout: (data) => saveViewLayout(layoutSpec(optsRef.current.layoutId, optsRef.current.personal), layoutKeyRef.current, data),
     onFramesDrawn: () => { /* read from stats by the perf harness */ },
     onError: (message) => console.warn(`[hivemind] plugin "${o.pluginId}": ${message}`),
@@ -209,23 +221,48 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
   const settingsKey = JSON.stringify(settings);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  /** The theme as this plugin is told it: the app's, and its own tokens resolved in it. */
+  const theme = () => {
+    const t = readTheme(), tokens = optsRef.current.tokens;
+    return tokens?.length ? { ...t, tokens: resolveTokens(tokens, t.mode, t.colors, settingsRef.current) } : t;
+  };
+  // The theme's font faces (1.17): in hello when their bytes are read already, else in `fonts` once
+  // they are, and again only when they change.
+  const fontFaces = useThemeField("fontFaces");
+  const sentFonts = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) return;
+    const fonts = viewFontFaces(getTheme().fontFaces);
+    if (fonts.done) sentFonts.current = fonts.key;
     send({
-      type: "hello", v: PROTOCOL_VERSION, pluginId: o.pluginId, capabilities: o.capabilities, settings: settingsRef.current,
-      theme: readTheme(), layout: loadViewLayout(layoutSpec(o.layoutId, o.personal), layoutKey),
-      viewport: box(), visible: !document.hidden, features: [...link.features, "settings"],
+      type: "hello", v: PROTOCOL_VERSION, ...(fonts.done?.length ? { fontFaces: fonts.done } : {}), pluginId: o.pluginId, capabilities: o.capabilities, settings: settingsRef.current,
+      theme: theme(), layout: loadViewLayout(layoutSpec(o.layoutId, o.personal), layoutKey),
+      viewport: box(), visible: !document.hidden, features: [...link.features, "settings", "tokens", "fontFaces"],
       // A desktop: whether its pointer is a finger, never a phone's screen.
       device: { touch: matchMedia("(pointer: coarse)").matches, compact: false },
       keys: (o.commands ?? []).flatMap((c) => (c.keys ? [{ keys: c.keys, command: c.name }] : [])),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+  useEffect(() => {
+    if (!ready) return;
+    const fonts = viewFontFaces(fontFaces);
+    if (sentFonts.current === fonts.key) return;
+    let live = true;
+    void fonts.faces.then((faces) => {
+      if (!live || sentFonts.current === fonts.key) return;
+      sentFonts.current = fonts.key;
+      send({ type: "fonts", fontFaces: faces });
+    });
+    return () => { live = false; };
+  }, [ready, fontFaces, send]);
   const sentSettings = useRef(settingsKey);
   useEffect(() => {
     if (!ready || sentSettings.current === settingsKey) return;
     sentSettings.current = settingsKey;
     send({ type: "settings", settings: settingsRef.current });
+    // A token's colour is one of its settings: set, the theme it paints with changes too.
+    if (optsRef.current.tokens?.length) send({ type: "theme", theme: theme() });
   }, [ready, settingsKey, send]);
 
   // A frame bound to a machine carries that machine's name and link state; a local one carries nothing.
@@ -289,7 +326,7 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
     let themeTimer = 0;
     const mo = new MutationObserver(() => {
       if (!linkRef.current?.stats.ready || themeTimer) return;
-      themeTimer = window.setTimeout(() => { themeTimer = 0; send({ type: "theme", theme: readTheme() }); }, 50);
+      themeTimer = window.setTimeout(() => { themeTimer = 0; send({ type: "theme", theme: theme() }); }, 50);
     });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-preset", "style"] });
     return () => { ro.disconnect(); document.removeEventListener("visibilitychange", onVis); mo.disconnect(); if (themeTimer) clearTimeout(themeTimer); };

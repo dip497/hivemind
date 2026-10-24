@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { BUILTIN_WIDGETS } from "./widget-format.js";
+import { BUILTIN_WIDGETS, tintProblem, widgetTree } from "./widget-format.js";
 import { readWidget } from "./widgets.js";
 
 const dirs: string[] = [];
@@ -47,4 +47,12 @@ test("the commands its widget.json declares are read, in order, for an agent to 
   const commands = [{ name: "add", description: "Add a step.", args: "{ \"text\": string }" }, { name: "list", description: "Every step." }];
   const w = await readWidget(widget({ id: "@acme/steps", category: "agents", commands }));
   expect([w.category, w.commands.map((c) => c.name)]).toEqual(["agents", ["add", "list"]]);
+});
+
+test("a tint left empty or null is no tint, and no problem; a word that is not a note colour is one", async () => {
+  // A text option the person has not filled in draws its "$options.color" as "".
+  const pkg = await readWidget(widget({ options: [{ id: "color", label: "Colour", type: "text", default: "" }], draw: { type: "stack", tint: "$options.color", children: [] } }));
+  const drawn = widgetTree({ id: "w", widget: pkg.id }, pkg, undefined);
+  expect([tintProblem(drawn), tintProblem({ type: "stack", tint: null, children: [] })]).toEqual([null, null]);
+  expect(tintProblem({ ...(drawn as object), tint: "red" })).toContain('tint "red"');
 });

@@ -35,8 +35,8 @@ describe("the settings a view declares", () => {
     expect(ok.ok && ok.manifest.settings).toEqual([{ id: "columns", label: "Columns", type: "choice", values: ["todo", "all"], default: "todo" }]);
     const bad = validateViewManifest({ ...base, settings: [{ id: "max", type: "number", default: "lots" }, { id: "max", type: "boolean" }, { id: "max", type: "boolean" }] });
     expect(bad.ok ? [] : bad.errors).toEqual([
-      "settings[0] is not a field: an id, a type of boolean, number, text or choice, and a default that fits it",
-      "settings[2] is not a field: an id, a type of boolean, number, text or choice, and a default that fits it",
+      "settings[0] is not a field: an id, a type (boolean, number, text, choice, color, multi or list), a default that fits it, and a showIf that names a field before it",
+      "settings[2] is not a field: an id, a type (boolean, number, text, choice, color, multi or list), a default that fits it, and a showIf that names a field before it",
     ]);
     expect(validateViewManifest({ ...base, settings: {} }).ok).toBe(false);
   });
@@ -60,6 +60,12 @@ describe("what a view asks of the app around it", () => {
     expect(["left", "right"].map(edge)).toEqual(["left", "right"]);
     expect(edge("top")).toEqual(['"widgets" must be "left" or "right"']);
     expect(edge(undefined)).toBeUndefined();
+  });
+  it("keeps whether it fetches its own files, and refuses anything but true or false", () => {
+    const files = (v: unknown) => { const r = validateViewManifest({ ...base, files: v }); return r.ok ? r.manifest.files : r.errors; };
+    expect([true, false].map(files)).toEqual([true, false]);
+    expect(files("yes")).toEqual(['"files" must be true or false']);
+    expect(files(undefined)).toBeUndefined();
   });
   it("refuses a rail or a layout it cannot mean", () => {
     expect(read({ layers: "left" })).toEqual(['"layers" must be true or false']);

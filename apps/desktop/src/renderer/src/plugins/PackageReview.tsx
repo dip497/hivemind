@@ -5,7 +5,8 @@
  * only says them.
  */
 import { useState } from "react";
-import { Blocks, Bot, ChevronDown, ChevronRight, LayoutGrid, PanelsTopLeft, Wrench } from "../components/icons";
+import { Blocks, Bot, ChevronDown, ChevronRight, LayoutGrid, Palette, PanelsTopLeft, Wrench } from "../components/icons";
+import { runsWithoutTrust } from "@hivemind/hub";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import type { ReactNode } from "react";
 import type { PackageReview as Review } from "../../../shared/ipc";
@@ -13,11 +14,11 @@ import type { PackageReview as Review } from "../../../shared/ipc";
 type Runs = Review["members"][number]["runs"];
 type Change = Review["changes"][number];
 
-export const MEMBER_KIND: Record<string, string> = { tool: "Tool", widget: "Widget", view: "View", "agent-preset": "Agent preset" };
-export const RUNS_LABEL: Record<Runs, string> = { sandboxed: "Sandboxed", "in the app": "Runs in the app", "as an agent's instructions": "Agent instructions" };
+export const MEMBER_KIND: Record<string, string> = { tool: "Tool", widget: "Widget", view: "View", "agent-preset": "Agent preset", theme: "Theme" };
+export const RUNS_LABEL: Record<Runs, string> = { sandboxed: "Sandboxed", "in the app": "Runs in the app", "as an agent's instructions": "Agent instructions", "nothing: it is data": "No code" };
 
 export function MemberIcon({ kind, size = 16 }: { kind: string; size?: number }) {
-  const Icon = kind === "tool" ? Wrench : kind === "widget" ? LayoutGrid : kind === "view" ? PanelsTopLeft : kind === "agent-preset" ? Bot : Blocks;
+  const Icon = kind === "tool" ? Wrench : kind === "widget" ? LayoutGrid : kind === "view" ? PanelsTopLeft : kind === "agent-preset" ? Bot : kind === "theme" ? Palette : Blocks;
   return <Icon size={size} />;
 }
 
@@ -29,21 +30,21 @@ export function changeText(c: Pick<Change, "change" | "newPermissions" | "runs">
   if (c.change === "gone") return "Removed";
   if (c.change === "new") return c.newPermissions.length ? `New; may ${askedFor(c.newPermissions).join("; ")}` : "New";
   if (c.newPermissions.length) return `Now may ${askedFor(c.newPermissions).join("; ")}`;
-  return c.runs === "sandboxed" ? "Its files changed" : c.runs === "in the app" ? "Its code changed" : "Its instructions changed";
+  return c.runs === "sandboxed" || c.runs === "nothing: it is data" ? "Its files changed" : c.runs === "in the app" ? "Its code changed" : "Its instructions changed";
 }
 
 /** Why a change switches the package off, or null when it does not. */
 export function offBecause(c: Pick<Change, "change" | "newPermissions" | "runs" | "switchesOff">): string | null {
   if (!c.switchesOff) return null;
-  if (c.runs === "sandboxed") return "it asks for more";
+  if (runsWithoutTrust(c.runs)) return "it asks for more";
   return c.runs === "in the app" ? `${c.change === "new" ? "new" : "changed"} code that runs in the app` : "agents follow its instructions";
 }
 
 /** The line under the list: whether it is on afterwards, and why not. */
 function outcome(r: Review): string {
   if (!r.replaces) {
-    if (r.on) return "It arrives on: everything in it is sandboxed.";
-    const outside = r.members.filter((m) => m.runs !== "sandboxed").map((m) => m.name);
+    if (r.on) return "It arrives on: everything in it is sandboxed or has no code.";
+    const outside = r.members.filter((m) => !runsWithoutTrust(m.runs)).map((m) => m.name);
     return `It arrives off, because ${outside.join(" and ")} ${outside.length > 1 ? "run" : "runs"} outside the sandbox. Switch it on once you trust who wrote it.`;
   }
   if (!r.replaces.on) return "It stays off.";
@@ -71,7 +72,7 @@ export function PackageReview({ review: r, heading }: { review: Review; heading?
       <span className="package-review-asks" data-package-member={`${m.kind}:${m.id}`}>{m.permissions.length ? `May ${askedFor(m.permissions).join("; ")}` : "Asks for nothing more"}</span>
     </MemberLine>)}
   </ul>;
-  return <div className="package-review" data-package-review={r.id} data-review-kind={update ? "update" : "install"}>
+  return <div data-package-review={r.id} data-review-kind={update ? "update" : "install"}>
     {heading && <div className="settings-section-heading"><h3>{update ? `Update ${r.name}` : `Install ${r.name}`}</h3>
       <span>{update ? `${r.replaces!.version} → ${r.version}` : r.version}</span></div>}
     {!heading && update && <p className="package-review-versions">{r.replaces!.version} → {r.version}</p>}

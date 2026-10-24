@@ -12,7 +12,7 @@ export function inEditable(t: EventTarget | null): boolean {
   return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
 }
 
-/** A REAL text field (tile rename, palette search, issue forms) where every key
+/** A REAL text field (tile rename, a search box, issue forms) where every key
  *  — including "." and Escape — must type/act normally. EXCLUDES xterm's hidden
  *  helper textarea (`.xterm-helper-textarea`), which is canvas content you
  *  navigate FROM, not a field you type into. */

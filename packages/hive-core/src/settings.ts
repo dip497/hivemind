@@ -17,6 +17,11 @@
  * instead of interleaving). Callers pass a mutation, never a snapshot —
  * `patchSettingsFile` is the dotted-path form.
  *
+ * WHAT A WRITE KEEPS. A write applies only what it changed onto the file's own JSON
+ * (`writtenOnto`, settings-write.ts); normalising happens on read. So a key or value
+ * this build does not read — a newer build's, anywhere in the file — survives it,
+ * and the file's `v` is never lowered.
+ *
  * The lock is OWNERSHIP-SAFE: each acquisition writes a unique token and only
  * ever deletes a lock carrying that token, and a writer that cannot take the
  * lock within `LOCK_WAIT_MS` FAILS (`SettingsLockError`) instead of removing
@@ -28,6 +33,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "./settings-schema.js";
+import { assign, writtenOnto, type Touched } from "./settings-write.js";
 
 export function settingsPath(): string {
   if (process.env.HIVE_SETTINGS?.trim()) return path.resolve(process.env.HIVE_SETTINGS.trim());
@@ -41,32 +47,17 @@ export async function readSettings(file: string = settingsPath()): Promise<Setti
   catch { return mergeSettings(DEFAULT_SETTINGS); }
 }
 
-/** Atomic write: temp file in the same dir, then rename. Top-level keys the
- *  schema does not know (the app's pre-2.0 `browserCdp` flag lives in the same
- *  file) are carried over, so writing the theme never drops them. */
-export async function writeSettings(next: Settings, file: string = settingsPath()): Promise<void> {
-  await withLock(file, async () => writeBoth(mergeSettings(next), await unknownKeys(file), file));
+/** The file's JSON as it is, or undefined when it is missing or not JSON. */
+async function readRaw(file: string): Promise<unknown> {
+  try { return JSON.parse(await fs.readFile(file, "utf8")); } catch { return undefined; }
 }
 
-/** The actual atomic write: schema settings + the file's non-schema top-level
- *  keys (`browserCdp`, `notifications`, …), which the app has always kept in the
- *  same file. Callers that CHANGED the extras pass their new value — re-reading
- *  them here would drop the change they just made. */
-async function writeBoth(settings: Settings, extras: Record<string, unknown>, file: string): Promise<void> {
+/** Atomic write: temp file in the same dir, then rename. */
+async function writeRaw(json: Record<string, unknown>, file: string): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify({ ...extras, ...settings }, null, 2) + "\n", "utf8");
+  await fs.writeFile(tmp, JSON.stringify(json, null, 2) + "\n", "utf8");
   await fs.rename(tmp, file);
-}
-
-/** Top-level keys of the file that are not part of `Settings`. */
-async function unknownKeys(file: string): Promise<Record<string, unknown>> {
-  try {
-    const raw: unknown = JSON.parse(await fs.readFile(file, "utf8"));
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-    const known = new Set(Object.keys(DEFAULT_SETTINGS));
-    return Object.fromEntries(Object.entries(raw as Record<string, unknown>).filter(([k]) => !known.has(k)));
-  } catch { return {}; }
 }
 
 // ── serialized read/modify/write ────────────────────────────────────────────
@@ -233,27 +224,35 @@ export async function breakSettingsLock(file: string = settingsPath()): Promise<
 /**
  * Read the file, apply `mutate` to what is ACTUALLY on disk right now, write the
  * result — all while holding the lock, so a concurrent writer's change is never
- * overwritten by a stale snapshot. Returns the settings as written.
+ * overwritten by a stale snapshot. What the mutation changed is written onto the
+ * file's own JSON (`writtenOnto`), and each `touched` dotted path is written as
+ * `mutate` left it even where it reads the same (undefined removes the key, one
+ * this build does not read too); `touched` may be worked out from the settings as read, under
+ * the same lock (`presetPaths`). Returns the settings as the file now reads.
  */
 export async function updateSettings(
   mutate: (current: Settings) => Settings,
   file: string = settingsPath(),
+  touched: readonly Touched[] | ((current: Settings) => readonly Touched[]) = [],
 ): Promise<Settings> {
   return withLock(file, async () => {
-    const next = mergeSettings(mutate(await readSettings(file)));
-    await writeBoth(next, await unknownKeys(file), file);
-    return next;
+    const raw = await readRaw(file);
+    const cur = mergeSettings(raw);
+    const json = writtenOnto(raw, cur, mergeSettings(mutate(cur)), typeof touched === "function" ? touched(cur) : touched);
+    await writeRaw(json, file);
+    return mergeSettings(json);
   });
 }
 
 /**
  * Patch the file's NON-schema top-level keys — the app's own legacy blobs
- * (`browserCdp`, `notifications`) that have always lived in settings.json and
+ * (`browserCdp`) that have always lived in settings.json and
  * are the same file as the theme in a packaged app. They used to be written
  * with a plain read-then-write, which erases whatever the theme wrote in
  * between; this applies them to the file as it is, under the same lock, and
- * carries the schema settings through untouched. A key set to `undefined` is
- * removed. Returns the extras as written.
+ * carries the schema settings through untouched. A value is merged as the writer merges
+ * (`assign`): an object value by value, keeping the keys the file has inside it; anything else
+ * replaces; `undefined` removes the key. Returns the extras as written.
  */
 export async function patchSettingsExtras(
   patch: Record<string, unknown>,
@@ -261,18 +260,16 @@ export async function patchSettingsExtras(
 ): Promise<Record<string, unknown>> {
   const known = new Set(Object.keys(DEFAULT_SETTINGS));
   for (const key of Object.keys(patch)) {
-    if (known.has(key) || ["__proto__", "constructor", "prototype"].includes(key)) {
+    if (known.has(key) || key === "__proto__") {
       throw new Error(`not an extra settings key: ${key}`);
     }
   }
   return withLock(file, async () => {
-    const extras = { ...(await unknownKeys(file)) };
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === undefined) delete extras[k];
-      else extras[k] = v;
-    }
-    await writeBoth(await readSettings(file), extras, file);
-    return extras;
+    const raw = await readRaw(file);
+    const json = writtenOnto(raw, mergeSettings(raw), mergeSettings(raw));
+    for (const [k, v] of Object.entries(patch)) assign(json, k, v);
+    await writeRaw(json, file);
+    return Object.fromEntries(Object.entries(json).filter(([k]) => !known.has(k)));
   });
 }
 
@@ -308,5 +305,5 @@ export async function patchSettingsFile(
   patches: readonly { path: string; value: unknown }[],
   file: string = settingsPath(),
 ): Promise<Settings> {
-  return updateSettings((cur) => patches.reduce((acc, p) => setPath(acc, p.path, p.value) as Settings, cur), file);
+  return updateSettings((cur) => patches.reduce((acc, p) => setPath(acc, p.path, p.value) as Settings, cur), file, patches.map((p) => p.path));
 }

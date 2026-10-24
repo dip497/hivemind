@@ -20,6 +20,7 @@ Every answer needs a source: a doc URL, a `--help` line, or the file you grepped
 | 8 | Shell access + spawn-env inheritance (`hive` on PATH) | | | worker viability |
 | 9 | `--model` flag / permission modes | | | the `options` block |
 | 10 | TUI text while working / while awaiting approval | | | the `detect` rules, `caps.blockedDetection` |
+| 10b | Rows of its own chrome above its input (spinner, timer, status bar) | | | `detect.chrome` |
 | 11 | Keys that allow / deny its own permission prompt (from the binary, not memory) | | | the `answer.permission` block |
 | 12 | Key that interrupts its turn (from the binary's own hint, not memory) | | | `interrupt` |
 

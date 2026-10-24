@@ -46,29 +46,49 @@ export function resolvePackageFile(dir: string, rel: string): FileResolution {
   return { status: 200, abs: real };
 }
 
-/** The CSP every plugin document gets. No network (connect-src 'none'), no
- *  frames, forms, objects, nothing from any other scheme. Scripts come from
- *  the package or carry THIS response's nonce — which only the bootstrap page
- *  we generate ever has, so an inline script in a plugin's own page does not
- *  run; ship it as a `.js` file instead. The package is the view's own origin
- *  ('self': where a phone's web view serves it, `https:` there) and anything
- *  on `hm-view:` (the app's iframe, whose sandboxed origin is opaque). */
-export function pluginCsp(nonce: string): string {
-  const own = `'self' ${VIEW_SCHEME}:`;
+/** Where a view is served (`hm-view://<host>`, `ownFiles`; a path of its own in a browser tab) and
+ *  whether it may `fetch` there: only a view whose manifest says `"files": true`. */
+export interface ViewAddress { at: string; fetch: boolean }
+
+/** The CSP every plugin document gets. No network: `fetch` and XHR reach the view's own files at
+ *  `own.at` when `own.fetch`, and nothing else. No frames, objects, nothing from any other scheme.
+ *  A form fires its submit event (the frame allows forms) and form-action 'none' sends it nowhere.
+ *  Scripts come from the package; the only inline one that runs is the SDK's import map, which
+ *  carries THIS response's nonce, so an inline script in a plugin's own page does not run; ship it
+ *  as a `.js` file instead.
+ *
+ *  Scripts, styles, pictures, fonts and media come from the view's own address, `own.at`, and no
+ *  other view's. Only where no address is known (a phone's web view, which serves one view per
+ *  origin) is it 'self' and anything on `hm-view:`. */
+export function pluginCsp(nonce: string, own?: ViewAddress): string {
+  const from = own ? own.at : `'self' ${VIEW_SCHEME}:`;
   return [
     "default-src 'none'",
-    `script-src ${own} 'nonce-${nonce}' 'wasm-unsafe-eval'`,
-    `style-src ${own} 'unsafe-inline'`,
-    `img-src ${own} data: blob:`,
-    `font-src ${own} data:`,
-    `media-src ${own} data: blob:`,
+    `script-src ${from} 'nonce-${nonce}' 'wasm-unsafe-eval'`,
+    `style-src ${from} 'unsafe-inline'`,
+    `img-src ${from} data: blob:`,
+    `font-src ${from} data:`,
+    `media-src ${from} data: blob:`,
     "worker-src blob:",
-    "connect-src 'none'",
+    `connect-src ${own?.fetch ? own.at : "'none'"}`,
     "frame-src 'none'",
     "object-src 'none'",
     "form-action 'none'",
     "base-uri 'none'",
   ].join("; ");
+}
+
+/** A view's own address, `hm-view://<host>`: its origin in the app, and no other view's. `'self'`
+ *  is not enough: in a browser tab every view is a path on one server. */
+export function ownFiles(id: string): string {
+  return `${VIEW_SCHEME}://${viewHost(id)}`;
+}
+
+/** `csp` with the view's own address (`hm-view://<host>`, in every source list that names it) at
+ *  `at` instead: a browser tab serves a view under a path of its own (`/hm-view/<key>/<host>/`),
+ *  which only the server answering the tab knows. */
+export function withOwnFiles(csp: string, at: string): string {
+  return csp.replace(new RegExp(`${VIEW_SCHEME}://[^\\s;]+`, "g"), at);
 }
 
 export function newNonce(): string {
@@ -100,13 +120,15 @@ export function withImportMap(html: string, nonce: string, page: string): string
   return head ? html.replace(head[0], head[0] + tag) : tag + html;
 }
 
-/** The bootstrap page for a `.js` entry: one module script, tagged with the
- *  response's nonce, laid out at the width of the screen it is on (a phone's web view lays a page
- *  that says nothing of it out 980 pixels wide). Null when `js` is not a plain relative `.js` path. */
-export function entryPage(js: string, nonce: string): string | null {
+/** The bootstrap page for a `.js` entry: one module script, laid out at the width of the screen it
+ *  is on (a phone's web view lays a page that says nothing of it out 980 pixels wide). Null when
+ *  `js` is not a plain relative `.js` path. The script carries no nonce: a module's imports inherit
+ *  its nonce, which would let the view import any address at all; without one, every import is
+ *  held to the view's own address. */
+export function entryPage(js: string): string | null {
   if (!/^[\w.-]+(?:\/[\w.-]+)*\.js$/.test(js) || js.split("/").includes("..")) return null;
   // No overflow:hidden: an Android web view can give the body no height, which would clip the page.
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;height:100%;background:transparent}</style></head><body><script type="module" nonce="${nonce}" src="./${js}"></script></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;height:100%;background:transparent}</style></head><body><script type="module" src="./${js}"></script></body></html>`;
 }
 
 /** What a request for a view's file is served, under `csp`, the policy the response carries: text
@@ -121,12 +143,13 @@ export type ServedViewFile =
 /** Serve `rel` of the view package at `dir` as every screen is served it: `__sdk.js` is the SDK
  *  (`sdk()`, the build this device serves), `__entry.html` the page that runs the `.js` entry `js`,
  *  a page of the view's gets the SDK's import map first, and anything else is the file as it is.
- *  Each with a nonce of its own, which its policy names. */
-export async function serveViewFile(dir: string, rel: string, o: { js: string | null; sdk(): Promise<string> }): Promise<ServedViewFile> {
+ *  Each with a nonce of its own, which its policy names, and `own`, the view's address and whether
+ *  it may fetch there (`pluginCsp`). */
+export async function serveViewFile(dir: string, rel: string, o: { js: string | null; sdk(): Promise<string>; own?: ViewAddress }): Promise<ServedViewFile> {
   const nonce = newNonce();
-  const csp = pluginCsp(nonce);
+  const csp = pluginCsp(nonce, o.own);
   if (rel === ENTRY_PAGE) {
-    const html = entryPage(o.js ?? "", nonce);
+    const html = entryPage(o.js ?? "");
     return html === null ? { status: 400 } : { status: 200, type: mimeFor(ENTRY_PAGE), csp, text: withImportMap(html, nonce, ENTRY_PAGE) };
   }
   if (rel === SDK_PATH) return { status: 200, type: mimeFor(SDK_PATH), csp, text: await o.sdk() };

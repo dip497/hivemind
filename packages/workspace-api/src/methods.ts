@@ -8,7 +8,7 @@ import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
 import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
-import type { ActivityLevels, ExitInfo, TerminalOpts, Typist } from "./terminals.js";
+import type { ActivityLevels, ExitInfo, LastLines, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { GuestAnswer } from "@hivemind/workspace-host/connect";
 import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
@@ -21,8 +21,9 @@ import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access"
 import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
-import type { Appearance } from "@hivemind/core/settings-schema";
+import type { SharedAppearance } from "@hivemind/core/settings-schema";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
+import type { RecentSound, SoundMoment, SoundResult } from "./notifications.js";
 
 /** A press on a widget: one of its buttons (its `action`), or its card. */
 export type WidgetPress = { action: unknown } | { click: true };
@@ -81,6 +82,14 @@ export interface WorkspaceMethods {
   "review.save": (repo: string, comments: ReviewComment[]) => void;
   /** Every agent session's status there is. Each change after it is a `status.changed` event. */
   "status.all": () => Array<{ tileId: string; status: StatusChange["status"] }>;
+  /** (0.34) Watch the last lines of `tiles` (at most 1024), in place of those the caller watched (none:
+   *  it watches none). What each one's screen last showed with text, for those that showed one;
+   *  each change after it is a `tile.lines` to the caller alone. */
+  "tile.watchLines": (tiles: string[]) => { lines: LastLines };
+  /** (0.35) The last lines of `tiles` (at most 1024) now, once, for those that showed one: for an
+   *  agent that keeps a conversation, what it last said, read first when it is being read or never
+   *  was. Watches nothing. */
+  "tile.readLines": (tiles: string[]) => { lines: LastLines };
   /** (0.18) The agents in the workspace at `repo`, as a phone is told of them: name, program,
    *  state, what each waits on and where it runs; and the feed's position. Each change after it
    *  is an `agent.changed` and an `agent.event` numbered on from `seq`. */
@@ -206,6 +215,11 @@ export interface WorkspaceMethods {
   "tools.rescan": () => null;
   /** `settings.json` changed on disk: read it again. */
   "settings.reload": () => null;
+  /** (0.35) Play `moment`'s sound now in the window the person is at, and answer what became of it.
+   *  The person's alone: refused to an agent's tile. The app answers it; `hive host` does not. */
+  "notifications.play": (moment: SoundMoment) => SoundResult;
+  /** (0.35) The last 10 bursts of agents' changes and what each sounded and showed, newest first. */
+  "notifications.recentSounds": () => RecentSound[];
   /** The workspaces this machine holds, with each one's id once it has one. */
   "host.status": () => { workspaces: Array<{ repo: string; workspace: string | null }> };
   /** Join a workspace someone shared, by its link. */
@@ -272,8 +286,9 @@ export interface WorkspaceMethods {
   /** Take back the client's last board edit, or make it again: whether there was one. */
   "store.undo": (repo: string) => boolean;
   "store.redo": (repo: string) => boolean;
-  /** (0.17) The host's look, as a guest shows its workspaces: nothing on the host's disk. */
-  "appearance.get": () => Appearance;
+  /** (0.17) The host's look, as a guest shows its workspaces: nothing on the host's disk. (0.35)
+   *  With its custom accent's colours (`accentCustom`), which win over `accent` while set. */
+  "appearance.get": () => SharedAppearance;
 }
 
 /** What a client tells a host and asks no answer to: a host never answers a notice. */
@@ -342,6 +357,9 @@ export interface WorkspaceEvents {
   "terminal.exit": (tile: string, info: ExitInfo) => void;
   /** Changes in watched terminals' activity. */
   "terminal.activity": (levels: ActivityLevels) => void;
+  /** (0.34) The tiles the client watches (`tile.watchLines`) whose last line changed, each with its line
+   *  now: to that client alone, at most every 250 ms. */
+  "tile.lines": (change: { lines: LastLines }) => void;
   /** Who holds a terminal's keyboard now: null while the host does. */
   "terminal.keyboard": (tile: string, holder: Typist | null) => void;
   /** Someone asks for the keyboard the client holds (or the host's windows, while the host does). */
@@ -370,7 +388,7 @@ export interface WorkspaceEvents {
   /** (0.19) To the window that runs `repo`'s widgets: someone pressed the widget `id`. */
   "widget.pressed": (repo: string, id: string, press: WidgetPress) => void;
   /** (0.17) The host's look changed (`appearance.get`). */
-  "appearance.changed": (appearance: Appearance) => void;
+  "appearance.changed": (appearance: SharedAppearance) => void;
   /** Someone asks to join `repo`: to its owner's clients, the first answer counting (M3). */
   "people.asked": (repo: string, question: JoinQuestion) => void;
   /** The question `req` about `repo` was answered, or nobody answered it in time. */

@@ -1,6 +1,7 @@
 /**
  * useCanvasShortcuts — runs the keymap's canvas and app actions (shared/keymap.ts) and the
- * CommandPalette/menu events (spawn-agent, canvas-toggle, add-frame, frame-open, focus-tile).
+ * events the toolbar, menus and notifications send (spawn-agent, canvas-toggle, add-frame,
+ * frame-open, focus-tile).
  * The canvas's keys act only while nothing is typed into: in a terminal or a field they are theirs.
  */
 import { panelOrder } from "./workspace/panel-order";

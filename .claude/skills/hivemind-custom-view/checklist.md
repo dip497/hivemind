@@ -64,7 +64,7 @@ thing that has been wrong in a view someone shipped.
 
 ## The sandbox
 
-- [ ] No `fetch`, no WebSocket, no `localStorage`, no `node:*`
+- [ ] No `fetch` but of its own files (named relatively, with `"files": true` in the manifest and `hm.supports("ownFiles")` checked), no WebSocket, no `localStorage`, no `node:*`
 - [ ] Fonts and images are bundled or `data:` / `blob:`
 - [ ] Opened the view's console: no CSP violations
 

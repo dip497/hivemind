@@ -12,7 +12,10 @@
  */
 
 import { isToolbarActionId, type ToolbarActionId, type ToolbarPreferences } from "./toolbar.js";
-import { isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
+import { isPluginKey, isPluginOn, parsePluginStates, type PackageOf, type PluginState } from "./plugin-settings.js";
+import { accentColorsOf, appearanceExtraOf, importedExtraParts, type AccentColors, type AppearanceExtra, type FontFaces } from "./appearance-extra.js";
+import { FIELD_ID } from "@hivemind/view-sdk/settings";
+import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type NotificationSettings } from "./notification-settings.js";
 
 // ── appearance ────────────────────────────────────────────────────────────────
 
@@ -123,7 +126,13 @@ export interface Appearance {
    *  "opaque" uses the terminal background. */
   pluginSurfaces: "theme" | "opaque";
   overlayMedia: MediaLayer[];
+  /** The glass, wallpaper and corners a whole-look preset (Clean) replaced, put back when the
+   *  person leaves it for a colour preset. This computer's memory, not the look: never exported,
+   *  imported or shown to a guest. */
+  lookBefore?: LookBefore;
 }
+
+export interface LookBefore { glass: boolean; wallpaper: WallpaperId; radius: number }
 
 export interface ThemePreset {
   id: string;
@@ -132,6 +141,9 @@ export interface ThemePreset {
   palette: Palette;
   accent: AccentId;
   terminal: TerminalPalette;
+  /** More than colours: a preset that is a whole look also sets these. Leaving one out keeps the
+   *  person's own. */
+  look?: { glass?: boolean; wallpaper?: WallpaperId; radius?: number };
 }
 
 /** The look hivemind shipped with: the Plane/Linear neutral ladder and the
@@ -177,8 +189,45 @@ export const SIGNAL: ThemePreset = {
   },
 };
 
+/** Clean: Signal made flat. The same graphite, the same one warm colour for what waits on you, with
+ *  no glass and no wallpaper; corners and fonts stay the person's (apps/desktop/DESIGN.md). */
+export const CLEAN: ThemePreset = {
+  id: "clean",
+  label: "Clean",
+  mode: "dark",
+  palette: { ...SIGNAL.palette },
+  accent: "graphite",
+  terminal: { ...SIGNAL.terminal, ansi: [...SIGNAL.terminal.ansi] },
+  look: { glass: false, wallpaper: "none" },
+};
+
+/** Clean Light: Clean's light twin on the same graphite (hue 250), composed for light rather than
+ *  inverted: a cooler ground under near-white sheets, ink and pencil that read on both, the status
+ *  colours dark enough to read as text, and Signal's muted terminal hues darkened for a light ground. */
+export const CLEAN_LIGHT: ThemePreset = {
+  id: "clean-light",
+  label: "Clean Light",
+  mode: "light",
+  palette: {
+    bg: "oklch(0.955 0.004 250)", bg2: "oklch(0.99 0.002 250)", bg3: "oklch(0.965 0.003 250)", bg4: "oklch(0.93 0.004 250)",
+    line: "oklch(0.9 0.004 250)", line2: "oklch(0.84 0.006 250)",
+    fg: "oklch(0.24 0.006 250)", fg2: "oklch(0.42 0.006 250)", fg3: "oklch(0.52 0.006 250)",
+    select: "oklch(0.42 0.006 250)",
+    ok: "oklch(0.5 0.08 155)", warn: "oklch(0.5 0.13 62)", err: "oklch(0.52 0.13 30)",
+  },
+  accent: "graphite",
+  terminal: {
+    background: "#F6F7F8", foreground: "#2A2D32", cursor: "#2A2D32", selection: "rgba(42,45,50,0.16)",
+    ansi: ["#2A2D32", "#A6564B", "#4E7A5C", "#8A6A24", "#4D6B94", "#735F97", "#3F7A80", "#7A7E85",
+           "#5A5F66", "#B8665A", "#5E8C6C", "#9C7B33", "#5E7DA6", "#856FA9", "#4F8C92", "#A3A7AD"],
+  },
+  look: { glass: false, wallpaper: "none" },
+};
+
 export const PRESETS: Record<string, ThemePreset> = {
   signal: SIGNAL,
+  clean: CLEAN,
+  "clean-light": CLEAN_LIGHT,
   ubuntu: UBUNTU,
   dracula: {
     id: "dracula", label: "Dracula", mode: "dark", accent: "violet",
@@ -206,14 +255,25 @@ export const PRESETS: Record<string, ThemePreset> = {
   },
 };
 
+/** The faces the app ships with (apps/desktop/DESIGN.md): the operating system's own UI font for the
+ *  interface, JetBrains Mono for terminals and code. A font setting is a CSS font list, so the
+ *  system's faces follow when one is missing. Geist, bundled, stays a choice. */
+export const UI_FONT = "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Ubuntu, Cantarell, sans-serif";
+export const MONO_FONT = "\"JetBrains Mono\", monospace";
+export const GEIST_FONT = "\"Geist Sans\", \"Geist\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif";
+/** The system's own monospace, for a person who prefers it. */
+export const SYSTEM_MONO_FONT = "ui-monospace, \"SF Mono\", Menlo, Consolas, \"DejaVu Sans Mono\", monospace";
+/** What `uiFont` held before it was drawn, and what most settings.json files hold: the system font. */
+export const OLD_UI_FONT_DEFAULT = "system-ui, sans-serif";
+
 export const DEFAULT_APPEARANCE: Appearance = {
   preset: "signal",
   mode: "dark",
   palette: { ...SIGNAL.palette },
   accent: "graphite",
   radius: 12,
-  uiFont: "system-ui, sans-serif",
-  monoFont: "\"JetBrains Mono\", monospace",
+  uiFont: UI_FONT,
+  monoFont: MONO_FONT,
   glass: { enabled: true, contentGlass: false, opacity: 0.72, blur: 18, contentOpacity: 0.25, animate: true },
   wallpaper: { kind: "mono", brightness: 0.85 },
   terminal: { ...SIGNAL.terminal, ansi: [...SIGNAL.terminal.ansi] },
@@ -221,9 +281,29 @@ export const DEFAULT_APPEARANCE: Appearance = {
   overlayMedia: [],
 };
 
-/** Apply a preset on top of an appearance: palette, terminal, accent, mode, id. */
+/** The glass, wallpaper and corners once `next` is chosen over the preset `from`, and what to
+ *  remember. A whole-look preset sets its own and remembers what it replaced (moving to another
+ *  keeps the first memory); leaving it for a colour preset puts each back, unless the person
+ *  changed it since. */
+function lookAfter(cur: LookBefore, before: LookBefore | undefined, from: string, next: ThemePreset): LookBefore & { before?: LookBefore } {
+  const was = PRESETS[from]?.look;
+  const look = next.look;
+  if (look) return { glass: look.glass ?? cur.glass, wallpaper: look.wallpaper ?? cur.wallpaper, radius: look.radius ?? cur.radius, before: was ? before : cur };
+  if (!was || !before) return cur;
+  const back = <K extends keyof LookBefore>(k: K) => (was[k] !== undefined && cur[k] === was[k] ? before[k] : cur[k]);
+  return { glass: back("glass"), wallpaper: back("wallpaper"), radius: back("radius") };
+}
+
+/** Apply a preset on top of an appearance: palette, terminal, accent, mode, id, and its look. */
 export function applyPreset(a: Appearance, preset: ThemePreset): Appearance {
-  return { ...a, preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent, terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] } };
+  const { lookBefore, ...rest } = a;
+  const l = lookAfter({ glass: a.glass.enabled, wallpaper: a.wallpaper.kind, radius: a.radius }, lookBefore, a.preset, preset);
+  return {
+    ...rest, preset: preset.id, mode: preset.mode, palette: { ...preset.palette }, accent: preset.accent,
+    terminal: { ...preset.terminal, ansi: [...preset.terminal.ansi] },
+    glass: { ...a.glass, enabled: l.glass }, wallpaper: { ...a.wallpaper, kind: l.wallpaper }, radius: l.radius,
+    ...(l.before ? { lookBefore: l.before } : {}),
+  };
 }
 
 /** xterm `ITheme` for an appearance. Key order matches the pre-2.0 literal
@@ -261,6 +341,9 @@ export const LAYERS_GROUP_BY = ["machine", "group", "date", "status", "agent", "
 export const LAYERS_SORT_BY = ["canvas", "activity", "name"] as const;
 /** How Recents groups past sessions: by the agent, by the project (folder) they ran in, by day, or not. */
 export const LAYERS_RECENTS_BY = ["agent", "project", "date", "none"] as const;
+/** Which rows show a second line under the name: every terminal's last line and what each agent
+ *  waits on, only what agents wait on, or none. */
+export const LAYERS_LINES = ["all", "needs-you", "off"] as const;
 export interface LayersPrefs {
   /** Only the tiles in this state. */
   status: (typeof LAYERS_STATUS)[number];
@@ -271,8 +354,9 @@ export interface LayersPrefs {
   /** Only the tiles on these computers ("local", or a machine's id); empty: every one. */
   machines: string[];
   recentsBy: (typeof LAYERS_RECENTS_BY)[number];
+  lines: (typeof LAYERS_LINES)[number];
 }
-export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" };
+export const DEFAULT_LAYERS_PREFS: LayersPrefs = { status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent", lines: "all" };
 
 export interface ViewsSettings {
   /** The view to open with (a registered id; unknown → canvas). */
@@ -350,9 +434,26 @@ export interface QuitSettings {
    *  session saved to come back when it next starts. `ask`: the app asks each time. */
   whenRunning: QuitChoice;
 }
+/** The format of settings.json this build reads and writes (`v`). A file from a newer build says
+ *  more: it is read for what this build knows, and a write here never lowers it. */
+export const SETTINGS_VERSION = 1;
+
+/** The format version a file says it is: a whole number from 1, or 1 for anything else. Every
+ *  build so far wrote `v: 1`, so a file without one (written by hand) or with one below 1 (no build
+ *  wrote it) has the first shape. */
+export function settingsVersionOf(raw: unknown): number {
+  const v = isObj(raw) ? raw.v : undefined;
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 ? v : 1;
+}
+
 export interface Settings {
-  v: 1;
+  /** The file's format version as read (`settingsVersionOf`); above `SETTINGS_VERSION`, a newer
+   *  build wrote it. Not a setting: a write keeps the file's. */
+  v: number;
   appearance: Appearance;
+  /** The look's values an older build's write would erase: the custom accent, font faces and
+   *  the theme applied (`./appearance-extra.ts`). Read on top of `appearance`. */
+  appearanceExtra: AppearanceExtra;
   views: ViewsSettings;
   plugins: PluginsSettings;
   agents: AgentsSettings;
@@ -360,11 +461,15 @@ export interface Settings {
   network: NetworkSettings;
   browserApp: BrowserAppSettings;
   quit: QuitSettings;
+  /** Toasts, OS pop-ups and sounds (`notification-settings.ts`). Before 2026-10 the app kept them
+   *  in a settings.json of its data folder; migration 0006 moved them here. */
+  notifications: NotificationSettings;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   v: 1,
   appearance: DEFAULT_APPEARANCE,
+  appearanceExtra: {},
   views: { defaultView: "canvas", chrome: {}, toolbars: {}, layers: DEFAULT_LAYERS_PREFS },
   // Fresh install: every plugin as it is by default (a tool plugin that is not built in: off).
   plugins: { state: {} },
@@ -375,6 +480,7 @@ export const DEFAULT_SETTINGS: Settings = {
   network: { updateCheck: true },
   browserApp: { enabled: false, port: 4483, names: [] },
   quit: { whenRunning: "ask" },
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
 
 // ── validation / merge ───────────────────────────────────────────────────────
@@ -405,6 +511,14 @@ function mediaLayer(p: unknown, i: number): MediaLayer | null {
   };
 }
 
+/** The keys of a look, as a theme file holds them. */
+const THEME_KEYS = new Set(Object.keys(DEFAULT_APPEARANCE));
+
+function lookBeforeOf(v: unknown): LookBefore | undefined {
+  if (!isObj(v) || typeof v.glass !== "boolean" || !WALLPAPERS.some((x) => x.id === v.wallpaper)) return undefined;
+  return { glass: v.glass, wallpaper: v.wallpaper as WallpaperId, radius: clamp(v.radius, 0, 24, DEFAULT_APPEARANCE.radius) };
+}
+
 export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARANCE): Appearance {
   const p = isObj(raw) ? raw : {};
   const preset = str(p.preset, base.preset, 64);
@@ -416,9 +530,11 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
   const ansiIn = Array.isArray(t.ansi) ? t.ansi : [];
   const ansi = base.terminal.ansi.map((d, i) => color(ansiIn[i], d));
   const srcOk = (v: unknown) => (typeof v === "string" && !v.startsWith("blob:") ? v : undefined);
+  // Only as `raw` has it: a write that drops it (leaving Clean) forgets it.
+  const lookBefore = lookBeforeOf(p.lookBefore);
   return {
     preset,
-    mode: p.mode === "light" ? "light" : "dark",
+    mode: p.mode === "light" || p.mode === "dark" ? p.mode : base.mode,
     palette,
     accent: typeof p.accent === "string" && p.accent in ACCENTS ? (p.accent as AccentId) : base.accent,
     radius: clamp(p.radius, 0, 24, base.radius),
@@ -445,24 +561,116 @@ export function mergeAppearance(raw: unknown, base: Appearance = DEFAULT_APPEARA
       selection: color(t.selection, base.terminal.selection),
       ansi,
     },
-    pluginSurfaces: p.pluginSurfaces === "opaque" ? "opaque" : "theme",
+    pluginSurfaces: p.pluginSurfaces === "opaque" || p.pluginSurfaces === "theme" ? p.pluginSurfaces : base.pluginSurfaces,
     overlayMedia: (Array.isArray(p.overlayMedia) ? p.overlayMedia : []).map(mediaLayer).filter((m): m is MediaLayer => !!m),
+    ...(lookBefore ? { lookBefore } : {}),
   };
 }
 
 /** A host's look as a guest shows it, from anything (a peer's message is untrusted): checked as
  *  settings are, with nothing that names a file on the host's disk. A picture or video wallpaper
  *  becomes the default one, and overlays go: their media is the host's alone. Fonts are not the
- *  look: a guest reads in their own, so the host's are not sent. */
-export function sharedAppearance(raw: unknown): Appearance {
+ *  look: a guest reads in their own, so the host's are not sent. Each field is named: a field
+ *  added later, or one a newer build wrote, reaches guests only when it is added here. */
+export function sharedAppearance(raw: unknown): SharedAppearance {
   const a = mergeAppearance(raw);
   const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  // The custom accent (a theme's colours), as `lookForGuests` adds it: a colour, never a file.
+  const accentCustom = accentColorsOf((raw as { accentCustom?: unknown } | null)?.accentCustom);
   return {
-    ...a,
+    ...(accentCustom ? { accentCustom } : {}),
+    preset: a.preset,
+    mode: a.mode,
+    palette: a.palette,
+    accent: a.accent,
+    radius: a.radius,
     uiFont: DEFAULT_APPEARANCE.uiFont,
     monoFont: DEFAULT_APPEARANCE.monoFont,
+    glass: a.glass,
     wallpaper: { kind: media ? DEFAULT_APPEARANCE.wallpaper.kind : a.wallpaper.kind, brightness: a.wallpaper.brightness },
+    terminal: a.terminal,
+    pluginSurfaces: a.pluginSurfaces,
     overlayMedia: [],
+  };
+}
+
+/** A host's look as guests get it: its appearance, and its custom accent when one is set. */
+export type SharedAppearance = Appearance & { accentCustom?: AccentColors };
+
+/** What a host sends its guests, before `sharedAppearance` takes out what is its own: the
+ *  appearance with the custom accent of its `appearanceExtra`. */
+export function lookForGuests(s: Pick<Settings, "appearance" | "appearanceExtra">): SharedAppearance {
+  return { ...s.appearance, ...(s.appearanceExtra.accent ? { accentCustom: s.appearanceExtra.accent } : {}) };
+}
+
+/** A theme file (`hive theme export`, Copy JSON): the appearance without the media it names. */
+export type ThemeFile = Omit<Appearance, "wallpaper" | "overlayMedia"> & { wallpaper: Omit<Appearance["wallpaper"], "imageSrc" | "videoSrc">; accentCustom?: AccentColors };
+
+const MEDIA_WORDS: Record<string, string> = { "wallpaper.imageSrc": "the wallpaper picture", "wallpaper.videoSrc": "the wallpaper video", overlayMedia: "the overlays" };
+
+/** The appearance as a theme file, each field named. A picture, video or overlay is a file on this
+ *  computer the recipient does not have (an old wallpaper's address even names the home folder),
+ *  so each is left out: `leftOut` names those that were set, and `note` says so in words. A key a
+ *  newer build wrote stays out too: it is that build's to export. */
+export function exportAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "accent"> | null): { theme: ThemeFile; leftOut: string[]; note: string | null } {
+  const leftOut = [
+    ...(a.wallpaper.imageSrc ? ["wallpaper.imageSrc"] : []),
+    ...(a.wallpaper.videoSrc ? ["wallpaper.videoSrc"] : []),
+    ...(a.overlayMedia.length > 0 ? ["overlayMedia"] : []),
+  ];
+  const words = leftOut.map((k) => MEDIA_WORDS[k]!);
+  const list = words.length > 1 ? `${words.slice(0, -1).join(", ")} and ${words.at(-1)}` : words[0];
+  return {
+    theme: {
+      preset: a.preset, mode: a.mode, palette: a.palette, accent: a.accent, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont,
+      glass: a.glass, wallpaper: { kind: a.wallpaper.kind, brightness: a.wallpaper.brightness }, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
+      // The custom accent, which wins over `accent` while set; an older build reads the id.
+      ...(extra?.accent ? { accentCustom: extra.accent } : {}),
+    },
+    leftOut,
+    note: list ? `Left out ${list}: a theme file holds no media files.` : null,
+  };
+}
+
+/** The look in a theme file: a bare appearance, or a whole settings.json's `appearance`. */
+export function themeFileOf(raw: unknown): Record<string, unknown> {
+  const file = isObj(raw) && isObj(raw.appearance) ? raw.appearance : raw;
+  return isObj(file) ? file : {};
+}
+
+/** The keys of the appearance a theme file names, the only ones `importAppearance` reads. */
+export function themeKeysIn(raw: unknown): string[] {
+  return Object.keys(themeFileOf(raw)).filter((k) => THEME_KEYS.has(k));
+}
+
+/** What importing the theme file `raw` writes, by dotted path, for every writer of an import
+ *  (`hive theme import`, the app's Import): each key it names, the memory of the look before,
+ *  which an import forgets, and the parts of `appearanceExtra` it speaks to (`importedExtraParts`:
+ *  the custom accent, the record of the theme it replaces). Every other key of the appearance
+ *  stays as the file has it, a newer build's wallpaper, corners or layers included. */
+export function themeImportPaths(raw: unknown): string[] {
+  return [
+    ...[...themeKeysIn(raw), "lookBefore"].map((k) => `appearance.${k}`),
+    ...Object.keys(importedExtraParts(raw)).map((k) => `appearanceExtra.${k}`),
+  ];
+}
+
+/** A theme file applied over the person's own appearance `cur`: a bare appearance, or a whole
+ *  settings.json (its `appearance`). Only the keys this build knows are read from it, checked as
+ *  settings are. What it leaves out is kept as `cur` has it, the
+ *  media too, so a file of `exportAppearance` never removes yours. A file that sets none of them
+ *  (a package.json picked by mistake) is not a theme: it throws, and nothing changes. */
+export function importAppearance(raw: unknown, cur: Appearance): Appearance {
+  const file = themeFileOf(raw);
+  // Anything else in the file (a settings.json's `v` and `views`, a package.json's `name`) is not the look.
+  const p = Object.fromEntries(themeKeysIn(raw).map((k) => [k, file[k]]));
+  if (Object.keys(p).length === 0) throw new Error(`not a hivemind theme: it sets none of ${[...THEME_KEYS].join(", ")}`);
+  const a = mergeAppearance(p, cur);
+  const w = isObj(p.wallpaper) ? p.wallpaper : {};
+  return {
+    ...a,
+    wallpaper: { ...a.wallpaper, imageSrc: "imageSrc" in w ? a.wallpaper.imageSrc : cur.wallpaper.imageSrc, videoSrc: "videoSrc" in w ? a.wallpaper.videoSrc : cur.wallpaper.videoSrc },
+    overlayMedia: "overlayMedia" in p ? a.overlayMedia : cur.overlayMedia,
   };
 }
 
@@ -488,6 +696,62 @@ export function toolPreferences(s: Pick<Settings, "plugins">, installed: readonl
     for (const [tool, v] of Object.entries(st.options ?? {})) if (v === false) disabledTools.push(`${id}/${tool}`);
   }
   return { enabledPlugins, disabledTools };
+}
+
+const VIEW_ID = { test: (id: string) => VIEW_ID_RE.test(id), what: "a view's id (lowercase letters, digits and dashes; @owner/name for one from HiveHub)" };
+/** Below a plugin's `options`, any field id is a setting, its value checked by the plugin's form. */
+const ANY_FIELD = Symbol("any field id");
+/** The maps whose keys are ids (a view's, a plugin's): any key in one that such an id can be is a
+ *  setting, and below it what one entry holds. Merging drops any other, so it would be set to
+ *  nothing. */
+// Each entry names every key of its type (`satisfies`), so a key added to the type is settable here.
+const ID_MAPS = new Map<string, { test(id: string): boolean; what: string; entry: Record<string, unknown> }>([
+  ["views.chrome", { ...VIEW_ID, entry: { island: "top" } satisfies Record<keyof Required<ViewsSettings["chrome"][string]>, unknown> }],
+  ["views.toolbars", { ...VIEW_ID, entry: { actions: [], labels: true } satisfies Record<keyof Required<ToolbarPreferences>, unknown> }],
+  ["plugins.state", { test: isPluginKey, what: "a plugin's key (kind:id, such as agent:claude)", entry: { enabled: true, options: ANY_FIELD, workspaces: [] } satisfies Record<keyof Required<PluginState>, unknown> }],
+]);
+
+/** Sections whose parts are absent until set (`appearanceExtra.accent`). */
+const OPTIONAL_PARTS = new Map<string, readonly string[]>([["appearanceExtra", ["accent", "fontFaces", "theme"]]]);
+
+/** Why `hive config set` cannot set the dotted `path`, or null when it is a setting. The file
+ *  keeps a key this build does not know (a newer build may have written it), so setting one would
+ *  store a value nothing here reads. Inside a map of ids (`views.chrome.<view>`,
+ *  `views.toolbars.<view>`, `plugins.state.<plugin>`) any key such an id can be is one, and below
+ *  it the keys one entry holds, their values checked as usual. `v` is the file's format, not a
+ *  setting. */
+export function settingPathProblem(path: string): string | null {
+  const keys = path.split(".").filter(Boolean);
+  if (keys.length === 0) return "name a setting, such as appearance.glass.blur";
+  if (keys[0] === "v") return "v is the format of settings.json, which the app keeps; it is not a setting";
+  const all = mergeSettings(undefined);
+  let at: unknown = all;
+  for (let i = 0; i < keys.length; i++) {
+    const where = keys.slice(0, i).join(".");
+    const ids = ID_MAPS.get(where);
+    if (ids) {
+      if (!ids.test(keys[i]!)) return `"${keys[i]}" is not ${ids.what}, and ${where} holds only those`;
+      at = ids.entry;
+      continue;
+    }
+    if (at === ANY_FIELD) return FIELD_ID.test(keys[i]!) ? (i === keys.length - 1 ? null : `${keys.slice(0, i + 1).join(".")} is one value: set it whole`) : `"${keys[i]}" is not a setting's id (letters, digits, dashes and underscores)`;
+    // A part that is absent until set: set it whole.
+    const parts = OPTIONAL_PARTS.get(where);
+    if (parts?.includes(keys[i]!)) return i === keys.length - 1 ? null : `${keys.slice(0, i + 1).join(".")} is set whole`;
+    if (!isObj(at)) return `${where} is ${Array.isArray(at) ? "a list" : "one value"}: set it whole`;
+    if (!Object.hasOwn(at, keys[i]!)) {
+      const near = settingPaths(all).filter((p) => p.endsWith(`.${keys[i]}`));
+      return `this version has no setting ${keys.slice(0, i + 1).join(".")}; ${where || "the file"} holds ${Object.keys(at).join(", ")}${near.length ? `. Did you mean ${near.join(" or ")}?` : ""}`;
+    }
+    at = at[keys[i]!];
+  }
+  return null;
+}
+
+/** Every dotted path in `o` down to its values. */
+function settingPaths(o: unknown, at = ""): string[] {
+  if (!isObj(o) || ID_MAPS.has(at)) return [at];
+  return Object.entries(o).flatMap(([k, v]) => settingPaths(v, at ? `${at}.${k}` : k));
 }
 
 /** Validate + fill a parsed settings.json (any junk) into a Settings.
@@ -536,9 +800,13 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   const agents = isObj(p.agents) ? p.agents : {};
   // Plugin state as stored; else (a partial merge) as `base` has it.
   const state = isObj(plugins.state) ? parsePluginStates(plugins.state) : base.plugins.state;
+  const appearance = mergeAppearance(p.appearance, base.appearance);
+  // Only what this build reads. What else the file holds (a newer build's keys and values) is
+  // the writer's to keep (settings-write.ts), never carried here.
   return {
-    v: 1,
-    appearance: mergeAppearance(p.appearance, base.appearance),
+    v: p.v === undefined ? base.v : settingsVersionOf(p),
+    appearance,
+    appearanceExtra: appearanceExtraOf(isObj(p.appearanceExtra) ? p.appearanceExtra : base.appearanceExtra, appearance),
     views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
     plugins: { state },
     agents: {
@@ -555,6 +823,7 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
     network: { updateCheck: bool((isObj(p.network) ? p.network : {}).updateCheck, base.network.updateCheck) },
     browserApp: browserAppOf(p.browserApp, base.browserApp),
     quit: { whenRunning: quitChoiceOf((isObj(p.quit) ? p.quit : {}).whenRunning, base.quit.whenRunning) },
+    notifications: normalizeNotificationSettings(p.notifications, base.notifications),
   };
 }
 
@@ -611,22 +880,30 @@ export interface FlatTheme {
   videoSrc?: string; imageSrc?: string; videoBrightness?: number; animate: boolean;
   contentGlass: boolean; contentOpacity: number; overlayMedia: MediaLayer[];
   preset: string; mode: "dark" | "light"; palette: Palette; radius: number; uiFont: string; monoFont: string;
-  terminal: TerminalPalette; pluginSurfaces: "theme" | "opaque";
+  terminal: TerminalPalette; pluginSurfaces: "theme" | "opaque"; lookBefore?: LookBefore;
+  /** From `appearanceExtra`: the custom accent, which wins over `accent`, and a theme's font
+   *  files. Written back there, never into `appearance`. */
+  accentCustom?: AccentColors; fontFaces?: FontFaces;
+  /** The theme applied (`appearanceExtra.theme`), by id: its wallpaper draws without glass. */
+  themeId?: string;
 }
 
-export function flattenAppearance(a: Appearance): FlatTheme {
+export function flattenAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "accent" | "fontFaces" | "theme"> | null): FlatTheme {
   return {
+    accentCustom: extra?.accent, fontFaces: extra?.fontFaces, themeId: extra?.theme?.id,
     glass: a.glass.enabled, blur: a.glass.blur, opacity: a.glass.opacity, contentGlass: a.glass.contentGlass, contentOpacity: a.glass.contentOpacity, animate: a.glass.animate,
     wallpaper: a.wallpaper.kind, videoSrc: a.wallpaper.videoSrc, imageSrc: a.wallpaper.imageSrc, videoBrightness: a.wallpaper.brightness,
     accent: a.accent, overlayMedia: a.overlayMedia,
     preset: a.preset, mode: a.mode, palette: a.palette, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
+    lookBefore: a.lookBefore,
   };
 }
 
 /** What a guest paints while a host's workspace is shown: the host's look (`sharedAppearance`),
  *  read in the guest's own fonts. */
-export function guestTheme(own: FlatTheme, host: Appearance): FlatTheme {
-  return { ...flattenAppearance(host), uiFont: own.uiFont, monoFont: own.monoFont };
+export function guestTheme(own: FlatTheme, host: SharedAppearance): FlatTheme {
+  // The host's custom accent is a colour; its font files are its own, as its fonts are.
+  return { ...flattenAppearance(host, { accent: host.accentCustom }), uiFont: own.uiFont, monoFont: own.monoFont, fontFaces: own.fontFaces };
 }
 
 export function nestAppearance(f: FlatTheme): Appearance {
@@ -635,6 +912,8 @@ export function nestAppearance(f: FlatTheme): Appearance {
     glass: { enabled: f.glass, contentGlass: f.contentGlass, opacity: f.opacity, blur: f.blur, contentOpacity: f.contentOpacity, animate: f.animate },
     wallpaper: { kind: f.wallpaper, videoSrc: f.videoSrc, imageSrc: f.imageSrc, brightness: f.videoBrightness ?? DEFAULT_APPEARANCE.wallpaper.brightness },
     terminal: f.terminal, pluginSurfaces: f.pluginSurfaces, overlayMedia: f.overlayMedia,
+    // Always named, undefined too: the store writes the sections that changed, a forgotten one included.
+    lookBefore: f.lookBefore,
   };
 }
 
@@ -642,19 +921,20 @@ export function nestAppearance(f: FlatTheme): Appearance {
 
 export function getPath(obj: unknown, path: string): unknown {
   let o: unknown = obj;
-  for (const k of path.split(".").filter(Boolean)) { if (!isObj(o) && !Array.isArray(o)) return undefined; o = (o as Record<string, unknown>)[k]; }
+  // Own keys only: an inherited `constructor` is not a setting.
+  for (const k of path.split(".").filter(Boolean)) { if ((!isObj(o) && !Array.isArray(o)) || !Object.hasOwn(o, k)) return undefined; o = (o as Record<string, unknown>)[k]; }
   return o;
 }
 
-/** Immutable set at a dotted path; refuses prototype keys. */
+/** Immutable set at a dotted path; refuses `__proto__`, the one key that is not data. */
 export function setPath<T>(obj: T, path: string, value: unknown): T {
   const keys = path.split(".").filter(Boolean);
   if (keys.length === 0) return obj;
-  if (keys.some((k) => k === "__proto__" || k === "constructor" || k === "prototype")) throw new Error(`refusing to set "${path}"`);
+  if (keys.includes("__proto__")) throw new Error(`refusing to set "${path}"`);
   const rec = (o: unknown, i: number): unknown => {
     const k = keys[i]!;
     const base = isObj(o) ? { ...o } : {};
-    base[k] = i === keys.length - 1 ? value : rec(isObj(o) ? o[k] : undefined, i + 1);
+    base[k] = i === keys.length - 1 ? value : rec(isObj(o) && Object.hasOwn(o, k) ? o[k] : undefined, i + 1);
     return base;
   };
   return rec(obj, 0) as T;
@@ -673,5 +953,6 @@ function mergeLayersPrefs(raw: unknown, base: LayersPrefs): LayersPrefs {
       ? [...new Set(v.machines.filter((m): m is string => typeof m === "string" && m.length > 0 && m.length <= 128))].slice(0, 64)
       : base.machines,
     recentsBy: pick(v.recentsBy, LAYERS_RECENTS_BY, base.recentsBy),
+    lines: pick(v.lines, LAYERS_LINES, base.lines),
   };
 }

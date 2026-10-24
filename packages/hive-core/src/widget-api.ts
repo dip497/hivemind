@@ -74,7 +74,7 @@ export const WIDGET_TYPES = `// The API a Hivemind widget's code is given. Writt
 
 /** Something to draw. The app draws it in the theme; a widget never draws pixels itself. */
 type Node =
-  /** \`tint\` on the outermost stack colours the card as a note (\`yellow\`, \`pink\`, \`blue\`…). */
+  /** \`tint\` on the outermost stack colours the card as a note: \`yellow\`, \`peach\`, \`pink\`, \`violet\`, \`blue\` or \`green\`. Any other word colours nothing. */
   | { type: "stack"; children: Node[]; fill?: boolean; tint?: string }
   | { type: "row"; children: Node[] }
   /** One line, cut short with … when too long, unless \`wrap\`: then whole, on as many lines as it needs. */
@@ -100,7 +100,7 @@ interface Hm {
   readonly hello: any;
   readonly capabilities: readonly string[];
   readonly features: readonly string[];
-  readonly settings: Record<string, string | number | boolean>;
+  readonly settings: Record<string, string | number | boolean | string[]>;
   /** The workspace's frames and tiles (\`structure\`), their names, what is selected. */
   on(event: "structure" | "names" | "selection" | "settings" | "theme", cb: (payload: any) => void): () => void;
   /** An agent tile's status, now and on each change, with what it is doing (\`info.agent\`). */
@@ -167,7 +167,7 @@ interface Hive {
   readonly state: any;
   setState(state: unknown): void;
   /** What the person set it to, as its widget.json's \`options\` declare. */
-  readonly options: Record<string, string | number | boolean>;
+  readonly options: Record<string, string | number | boolean | string[]>;
   /** A desktop notification on the machine that runs it. */
   notify(text: string): void;
   /** The workspace, as a view sees it, held to the permissions in widget.json. */
@@ -177,7 +177,7 @@ interface Hive {
   on(event: "action", f: (action: any) => void): void;
   /** The card was clicked, not on a button. */
   on(event: "click", f: () => void): void;
-  on(event: "options", f: (options: Record<string, string | number | boolean>) => void): void;
+  on(event: "options", f: (options: Record<string, string | number | boolean | string[]>) => void): void;
   /** Reduced motion was turned on or off: \`hive.reducedMotion\` is now \`reduced\`. */
   on(event: "motion", f: (reduced: boolean) => void): void;
   /** \`hive.hm\`'s values arrived from the window, or changed (its settings). */

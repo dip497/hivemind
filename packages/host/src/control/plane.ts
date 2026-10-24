@@ -31,6 +31,7 @@ import { SpawnRecords } from "./spawn-records.js";
 import type { HcpCall } from "./protocol.js";
 import { TurnTracker } from "./turn-tracker.js";
 import { Waits } from "../waits.js";
+import type { TileLines } from "../tile-lines.js";
 import { socketIn } from "../socket-in.js";
 import { withPhotos } from "../start-places.js";
 
@@ -75,8 +76,10 @@ export interface ControlPlaneOptions {
   diag?(line: string): void;
   /** A wait began, ended, or its time to answer changed. */
   waitsChanged?(): void;
-  /** A tile's screen showed another last line (`lines`). */
-  lineChanged?(): void;
+  /** Each tile's last line (`tile-lines.ts`): told each line its screen shows, as its daemon reads
+   *  it, by the tile's bare id, each report of its agent (what it said since is read), and each
+   *  tile closed. */
+  lines?: Pick<TileLines, "set" | "reported" | "forget">;
   /** What the agent of a tile waits on, as the person's devices are told it. */
   waitingOf?(bareTile: string): AgentItem["waiting"];
 }
@@ -112,8 +115,6 @@ export class ControlPlane {
   readonly mailbox: Mailbox;
   /** What other agents have for an agent, until it reads them (by bare id). */
   readonly inbox: Inbox;
-  /** What each tile's screen last showed with text, by bare tile id, as its daemon read it. */
-  readonly lines = new Map<string, string>();
   private readonly pipes = new PipeManager();
   /** Spawn links now (child → parent): what a client that opens late starts from. */
   private readonly spawnWires = new Map<string, string>();
@@ -362,7 +363,7 @@ export class ControlPlane {
     const bare = toBareId(tileId);
     this.status.forget(bare);
     this.agentOf.delete(bare);
-    this.lines.delete(bare);
+    this.o.lines?.forget(bare);
     this.forgetRecorded(bare);
     this.spawnRecords.forget(bare);
     if (this.made) this.made.forgetTile(tileId);
@@ -390,10 +391,9 @@ export class ControlPlane {
       return;
     }
     if (method === "tile.line") {
+      // A daemon read the last line of a tile's screen: its owner keeps it for whoever watches.
       const r = (params ?? {}) as { tileId?: unknown; line?: unknown };
-      if (typeof r.tileId !== "string" || typeof r.line !== "string") return;
-      this.lines.set(toBareId(r.tileId), r.line);
-      this.o.lineChanged?.();
+      if (typeof r.tileId === "string" && typeof r.line === "string") this.o.lines?.set(toBareId(r.tileId), r.line);
       return;
     }
     if (method === "agent.screen") {
@@ -407,7 +407,10 @@ export class ControlPlane {
     if (method === "agent.reply") {
       // A remote machine's daemon passes its hooks' replies on as this notification.
       const r = (params ?? {}) as { tileId?: string; text?: string };
-      if (r.tileId && typeof r.text === "string" && r.text) this.turns.recordReply(toPtyId(r.tileId), r.text);
+      if (r.tileId && typeof r.text === "string" && r.text) {
+        this.turns.recordReply(toPtyId(r.tileId), r.text);
+        this.o.lines?.reported(toBareId(r.tileId));
+      }
       return;
     }
     if (method !== AGENT_EVENT_METHOD) return;
@@ -423,6 +426,7 @@ export class ControlPlane {
     }
     const pid = toPtyId(evt.tileId);
     this.status.event(bare, evt);
+    this.o.lines?.reported(bare, evt.sessionId);
     // Hold agent-to-agent messages while this tile is mid-turn (its TUI would swallow them),
     // release one at its prompt.
     if (evt.event === "turn.started") { this.mailbox.setBusy(pid); return; }

@@ -142,7 +142,7 @@ Each of these is a widget on HiveHub, as `@dip497/<name>`.
 | `hive.state`, `hive.setState(value)` | what it keeps, saved in the workspace |
 | `hive.options` | its options, as set, or else their defaults |
 | `hive.on("options", fn)` | the person changed its options |
-| `hive.notify(text)` | shows a desktop notification |
+| `hive.notify(text)` | shows a desktop notification, as the person's [notification settings](/know-who-is-waiting#choose-what-notifies-you) allow (**Do Not Disturb** mutes it): at most one every 10 seconds, its text cut to 200 characters |
 | `hive.moveTo({ x, y }, { over })` | moves its card: `x` and `y` from 0 to 1 across the screen (`y: "bottom"`), over `over` ms |
 | `hive.spot` | where it last moved to |
 | `hive.reducedMotion`, `hive.on("motion", fn)` | the person asked for less motion: hold still and do not move the card. A sprite already stops on its first frame |
@@ -158,7 +158,7 @@ It runs in a worker: no network, no files. What it draws and its state are each 
 
 | Node | Fields |
 |---|---|
-| `stack`, `row` | `children` |
+| `stack`, `row` | `children`; on the outermost `stack`, `tint` colours the card as a note: `yellow`, `peach`, `pink`, `violet`, `blue` or `green` |
 | `text` | `text`, `size: "large"`, `muted: true` |
 | `number` | `value`, `label` |
 | `meter` | `value`, `max`, `label` |
@@ -171,8 +171,8 @@ Images (`.png`, `.gif`, `.webp`, `.jpg`, `.svg`, up to 1 MB) go in the widget's 
 
 ### Options
 
-`options` uses the settings fields every plugin uses: `boolean`, `number`, `text` and `choice`,
-each with a `default`. What someone sets is shared with everyone in the workspace.
+`options` uses the settings fields every plugin uses: see [Plugin settings](/plugin-settings). What
+someone sets is shared with everyone in the workspace.
 
 ### A widget without code
 

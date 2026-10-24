@@ -5,6 +5,7 @@
  */
 import { PROTOCOL_VERSION, VIEW_PERMISSIONS, type ViewPermission } from "./protocol.js";
 import { checkSettingFields, type SettingField } from "./settings.js";
+import { TOKEN_FIELD_PREFIX, checkTokenDecls, tokenFields, type TokenDecl } from "./tokens.js";
 import { parseCategory, type PluginCategory } from "./category.js";
 import { parsePluginCommands, type PluginCommand } from "./commands.js";
 
@@ -65,6 +66,18 @@ export interface ViewManifest {
   /** What the person can set it to, drawn by the app in its Settings; the view reads the values
    *  as `hm.settings` and hears each change (protocol 1.7). */
   settings?: SettingField[];
+  /** 1.16: colours of its own, each with a default in dark and light that may be one of the app's
+   *  (`=accent`); the person can set each one, and the view reads `var(--hm-token-<id>)`. */
+  tokens?: TokenDecl[];
+  /** 1.17 (feature `ownFiles`): it `fetch`es its own files (`fetch("./levels.json")`). Without it the
+   *  app lets it fetch nothing; its pages still load their scripts, styles, pictures and fonts. */
+  files?: boolean;
+}
+
+/** Every setting a view has: the ones it declares, then a colour for each of its tokens. The one
+ *  list the Settings page, the CLI and the view's own `hm.settings` are drawn from. */
+export function viewSettingFields(m: Pick<ViewManifest, "settings" | "tokens">): SettingField[] {
+  return [...(m.settings ?? []), ...tokenFields(m.tokens ?? [])];
 }
 
 export type ViewToolbar = "top" | "bottom" | "hidden" | "off";
@@ -197,16 +210,31 @@ export function validateViewManifest(raw: unknown): ManifestResult {
       // A field the app cannot draw is the author's mistake: say which, rather than drop it.
       const checked = checkSettingFields(m.settings);
       settings = checked.fields;
-      for (const i of checked.refused) errors.push(`settings[${i}] is not a field: an id, a type of boolean, number, text or choice, and a default that fits it`);
+      for (const i of checked.refused) errors.push(`settings[${i}] is not a field: an id, a type (boolean, number, text, choice, color, multi or list), a default that fits it, and a showIf that names a field before it`);
+      for (const f of settings) if (f.id.startsWith(TOKEN_FIELD_PREFIX)) errors.push(`settings id "${f.id}": ids starting "${TOKEN_FIELD_PREFIX}" are the colours of its tokens`);
     }
+  }
+  let tokens: TokenDecl[] | undefined;
+  if (m.tokens !== undefined) {
+    if (!Array.isArray(m.tokens)) errors.push(`"tokens" must be an array`);
+    else {
+      const checked = checkTokenDecls(m.tokens);
+      tokens = checked.tokens;
+      for (const i of checked.refused) errors.push(`tokens[${i}] is not a token: an id of lowercase letters, digits and dashes, and a dark and a light colour, each #rrggbb or =<app colour>`);
+    }
+  }
+  let files: boolean | undefined;
+  if (m.files !== undefined) {
+    if (typeof m.files !== "boolean") errors.push(`"files" must be true or false`);
+    else files = m.files;
   }
   let assets: string | undefined;
   if (m.assets !== undefined) {
     if (typeof m.assets !== "string" || !isSafeRelativePath(m.assets)) errors.push(`"assets" must be a relative path inside the package`);
     else assets = m.assets;
   }
-  for (const k of Object.keys(m)) if (!["id", "name", "description", "icon", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "widgets", "phone", "layers", "layout", "author", "homepage", "license", "settings", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
+  for (const k of Object.keys(m)) if (!["id", "name", "description", "icon", "version", "entry", "protocol", "permissions", "assets", "wallpaper", "toolbar", "widgets", "phone", "layers", "layout", "author", "homepage", "license", "settings", "tokens", "files", "category", "commands"].includes(k)) errors.push(`unknown field "${k}"`);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, manifest: { id: id!, name: name!, version: version!, entry: entry!, protocol, permissions, category: "category" in cat ? cat.category : "other", commands: "commands" in cmds ? cmds.commands : [], ...(description ? { description } : {}), ...(icon ? { icon } : {}), ...(assets ? { assets } : {}), ...(wallpaper === undefined ? {} : { wallpaper }), ...(toolbar ? { toolbar } : {}), ...(widgets ? { widgets } : {}),
-    ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}) } };
+    ...(phone === undefined ? {} : { phone }), ...(layers === undefined ? {} : { layers }), ...(layout === undefined ? {} : { layout }), ...(author ? { author } : {}), ...(homepage ? { homepage } : {}), ...(license ? { license } : {}), ...(settings?.length ? { settings } : {}), ...(tokens?.length ? { tokens } : {}), ...(files === undefined ? {} : { files }) } };
 }

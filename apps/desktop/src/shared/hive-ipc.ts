@@ -72,14 +72,18 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     sshListDir: (uri, dir) => port.invoke("sshListDir", uri, dir),
 
     notifyAgent: local("notify:agent", send("notify:agent")),
+    onSound: local("notify:sound-result", (cb) => port.on("notify:sound", cb)),
+    soundResult: local("notify:sound-result", send("notify:sound-result")),
+    themeSoundBytes: local("notify:theme-sound", invoke("notify:theme-sound")),
+    notifyWidget: local("notify:widget", send("notify:widget")),
     layersShown: (repo, shown) => port.send("layers:shown", repo, shown),
     recentFolders: (folders) => port.send("recent:folders", folders),
 
-    getNotificationSettings: () => port.invoke("getNotificationSettings"),
-    setNotificationSettings: (s) => port.invoke("setNotificationSettings", s),
-
     browserRegister: local("browser:register", send("browser:register")),
     browserCdp: local("browserCdp", invoke("browserCdp")),
+    answerBrowserPermission: local("browser:permission-answer", send("browser:permission-answer")),
+    browserSiteRights: local("browser:site-rights", invoke("browser:site-rights")),
+    setBrowserSiteRight: local("browser:set-site-right", invoke("browser:set-site-right")),
     getBrowserSettings: local("getBrowserSettings", invoke("getBrowserSettings")),
     setBrowserCdpEnabled: local("setBrowserCdpEnabled", invoke("setBrowserCdpEnabled")),
     relaunchApp: local("relaunchApp", invoke("relaunchApp")),
@@ -139,7 +143,6 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     settingsGet: () => port.invoke("settings:get"),
     settingsSet: (p, v) => port.invoke("settings:set", p, v),
     settingsPatch: (patches) => port.invoke("settings:patch", patches),
-    settingsReplace: (next) => port.invoke("settings:replace", next),
     settingsPath: () => port.invoke("settings:path"),
     onSettingsChanged: (cb) => port.on("settings:changed", cb),
     listViews: (repoRoot) => port.invoke("views:list", repoRoot),
@@ -177,11 +180,13 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     rollbackPackage: (id) => port.invoke("plugins:rollback", id),
     reviewPackageFolder: local("plugins:review-folder", invoke("plugins:review-folder")),
     installPackageFolder: local("plugins:install-folder", invoke("plugins:install-folder")),
+    startViewOffers: local("plugins:start-view-offers", invoke("plugins:start-view-offers")),
     onViewRunaway: (cb) => port.on("views:runaway", cb),
     checkForUpdate: local("checkForUpdate", invoke("checkForUpdate")),
     runUpgrade: local("runUpgrade", invoke("runUpgrade")),
     onUpdateProgress: (cb) => port.on("update:progress", cb),
     onBrowserPopup: (cb) => port.on("browser:popup", cb),
+    onBrowserPermission: (cb) => port.on("browser:permission", cb),
 
     // Main takes the app's keys before the page (a terminal would otherwise have them) and sends
     // each as the keymap action it is.
@@ -198,7 +203,11 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     daemonWaitingOn: local("daemon:waiting", invoke("daemon:waiting")),
     onDaemonWaiting: (cb) => port.on("daemon:waiting", cb),
     restartAgentsNow: local("daemon:restart-now", invoke("daemon:restart-now")),
-    importWallpaper: local("wallpaper:import", invoke("wallpaper:import")),
     pickMedia: local("media:pick", invoke("media:pick")),
+    themes: port.serves("themes:list") ? {
+      list: () => port.invoke("themes:list"),
+      apply: (id: string) => port.invoke("themes:apply", id),
+      revert: () => port.invoke("themes:revert"),
+    } : undefined,
   };
 }

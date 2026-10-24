@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { Requests } from "./multiplayer/requests";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { App } from "./App";
+import { useThemeField } from "./theme-store";
 // Self-host Geist (UI) and JetBrains Mono (terminal/code/IDs) so glyphs are available
 // immediately and offline — no CDN round-trip, no flash-of-fallback that would
 // leave xterm's glyph atlas built on the wrong metrics. Weights match --font-mono.
@@ -52,30 +53,38 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <TooltipProvider delayDuration={200} skipDelayDuration={500}>
         <App />
         <Requests />
-        <Toaster
-          theme="dark"
-          position="bottom-right"
-          // One column with the agent cards (workspace/agent-toasts.tsx): these
-          // stack above them, never over them.
-          offset={{ bottom: "calc(12px + var(--agent-toasts-height, 0px))", right: "12px" }}
-          // Same glass family as the agent .hm-toast cards (frosted surface +
-          // token colors + inner-top highlight) so action confirmations and
-          // agent events read as one notification plane.
-          toastOptions={{
-            className: "hm-sonner",
-            style: {
-              background: "color-mix(in srgb, var(--color-bg3) 95%, transparent)",
-              color: "var(--color-fg)",
-              border: "1px solid var(--color-line2)",
-              borderRadius: "12px",
-              boxShadow: "var(--hm-highlight-glass), var(--hm-shadow-glass)",
-              backdropFilter: "blur(10px) saturate(135%)",
-              fontFamily: "var(--font-sans)",
-              fontSize: "var(--text-label)",
-            },
-          }}
-        />
+        <ThemedToaster />
       </TooltipProvider>
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+/** Sonner's own chrome (close button, icons) in the theme's mode; the card colours are tokens. */
+function ThemedToaster() {
+  const mode = useThemeField("mode");
+  return (
+    <Toaster
+      theme={mode}
+      position="bottom-right"
+      // One column with the agent cards (workspace/agent-toasts.tsx): these
+      // stack above them, never over them.
+      offset={{ bottom: "calc(12px + var(--agent-toasts-height, 0px))", right: "12px" }}
+      // Same glass family as the agent .hm-toast cards (frosted surface +
+      // token colors + inner-top highlight) so action confirmations and
+      // agent events read as one notification plane.
+      toastOptions={{
+        className: "hm-sonner",
+        style: {
+          background: "color-mix(in srgb, var(--color-bg3) 95%, transparent)",
+          color: "var(--color-fg)",
+          border: "1px solid var(--color-line2)",
+          borderRadius: "var(--radius-xl)",
+          boxShadow: "var(--hm-highlight-glass), var(--hm-shadow-glass)",
+          backdropFilter: "blur(10px) saturate(135%)",
+          fontFamily: "var(--font-sans)",
+          fontSize: "var(--text-label)",
+        },
+      }}
+    />
+  );
+}

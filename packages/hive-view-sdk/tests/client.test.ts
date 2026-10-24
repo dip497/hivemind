@@ -65,6 +65,27 @@ describe("view-sdk client", () => {
     expect(inbox.filter((m) => m.type === "surfaceRects")).toEqual([{ type: "surfaceRects", rects: [{ tileId: "t1", x: 1, y: 3, w: 10, h: 10 }] }]);
   });
 
+  test("1.17: line slots go only to a host that draws them, once each, for tiles a structure named", async () => {
+    const tiles = { type: "structure", frames: [], tiles: [{ id: "t1", frameId: null, kind: "shell", name: "sh" }] };
+    const older = await scriptedHost([], ["surfaces"]);
+    older.send(tiles);
+    await tick();
+    older.client.setLineRects([{ tileId: "t1", x: 0, y: 0, w: 200, h: 20 }]);
+    await tick();
+    expect(older.inbox.filter((m) => m.type === "lineRects")).toEqual([]);
+
+    const { client, inbox, send } = await scriptedHost([], ["lineSlots"]);
+    client.setLineRects([{ tileId: "t1", x: 0.4, y: 30, w: 200, h: 20 }, { tileId: "t9", x: 0, y: 60, w: 200, h: 20 }]);
+    await tick();
+    expect(inbox.filter((m) => m.type === "lineRects")).toEqual([]);
+    // Named, t1's slot goes; t9 is held back, and the same slots again send nothing.
+    send(tiles);
+    await tick();
+    client.setLineRects([{ tileId: "t1", x: 0, y: 30, w: 200, h: 20 }, { tileId: "t9", x: 0, y: 60, w: 200, h: 20 }]);
+    await tick();
+    expect(inbox.filter((m) => m.type === "lineRects")).toEqual([{ type: "lineRects", rects: [{ tileId: "t1", x: 0, y: 30, w: 200, h: 20 }] }]);
+  });
+
   test("layouts saved in a stream are sent once it settles; one saved now is sent at once", async () => {
     const { client, inbox } = await scriptedHost();
     client.setLayout({ n: 1 });
@@ -278,5 +299,26 @@ describe("view-sdk client", () => {
     expect(phone.client.device).toEqual({ touch: true, compact: true });
     const older = await scriptedHost();
     expect(older.client.device).toEqual({ touch: false, compact: false });
+  });
+});
+
+describe("a theme's font faces (1.17)", () => {
+  test("hello's faces are added to the frame's fonts from their bytes, and `fonts` replaces them", async () => {
+    // The frame's font set and FontFace, as a browser has them: what the client is given to load into.
+    const added = new Set<{ family: string; bytes: Uint8Array }>();
+    const g = globalThis as Record<string, unknown>;
+    const saved = { FontFace: g.FontFace, document: g.document };
+    g.FontFace = class { constructor(public family: string, public bytes: Uint8Array) {} load() { return Promise.resolve(this); } };
+    g.document = { fonts: { add: (f: never) => added.add(f), delete: (f: never) => added.delete(f) } };
+    try {
+      const { send } = await scriptedHost([], ["fontFaces"], { fontFaces: [{ family: "Harbour Display", data: btoa("wOF2one") }] });
+      expect([...added].map((f) => [f.family, new TextDecoder().decode(f.bytes)])).toEqual([["Harbour Display", "wOF2one"]]);
+      send({ type: "fonts", fontFaces: [{ family: "Sea Mono", data: btoa("wOF2two") }] });
+      await tick();
+      expect([...added].map((f) => f.family)).toEqual(["Sea Mono"]);
+      send({ type: "fonts", fontFaces: [] });
+      await tick();
+      expect(added.size).toBe(0);
+    } finally { g.FontFace = saved.FontFace; g.document = saved.document; }
   });
 });

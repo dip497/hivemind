@@ -246,6 +246,14 @@ describe("manifest validation refuses what it cannot back", () => {
     bad({ emptyPrompt: { when: { re: "^>$" } } }, /emptyPrompt.when.re: rules do not take regexes/);
   });
 
+  test("an agent's chrome is said in the screen rules' own words, tested a row at a time, and a regex is refused at load", () => {
+    const def = defFromManifest({ ...base, detect: { default: "idle", rules: [], chrome: { seq: [{ lit: "? for shortcuts" }], at: "start" } } });
+    expect(def.chrome!("? for shortcuts")).toBe(true);
+    expect(def.chrome!("  ? for shortcuts")).toBe(false);
+    expect(defFromManifest({ ...base, detect: { default: "idle", rules: [] } }).chrome).toBeUndefined();
+    bad({ detect: { default: "idle", rules: [], chrome: { re: "^\\?" } } }, /detect.chrome.re: rules do not take regexes/);
+  });
+
   test("an agent that attaches an image whose path is pasted alone says so, and anything but a flag is refused at load", () => {
     expect(defFromManifest({ ...base, pastedImages: true }).pastedImages).toBe(true);
     expect(defFromManifest(base).pastedImages).toBeUndefined();

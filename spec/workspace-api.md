@@ -1,4 +1,4 @@
-# Workspace API (0.33)
+# Workspace API (0.35)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -64,7 +64,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.33", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.35", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -239,6 +239,8 @@ host's. A change is signed `ui` in the issue's activity, whoever calls: who aske
 log.
 
 | `status.all` | | `[{tileId, status}]`, every agent session's status (`spec/status.md`) | read |
+| `tile.watchLines` | `tiles` | `{lines: {[tile]: line}}` (0.34): the last line of each of `tiles` (bare ids, at most 1024) that showed one, one line of plain text of at most 160 characters: for a tile whose agent keeps a conversation, what it last said there ("" until it says something, 0.35), else what its screen last showed with text ("": it shows none now); the caller watches these tiles from now on, in place of those it watched (`[]`: none), and is sent `tile.lines` as they change. A peer names only tiles of its workspace (`FORBIDDEN`) | read |
+| `tile.readLines` | `tiles` | `{lines: {[tile]: line}}` (0.35): the same lines, once: what an agent said is read first when a read of it is under way or it was never read. Watches nothing. A peer names only tiles of its workspace (`FORBIDDEN`) | read |
 | `link.list` | | `{pipes: [{src, dst}], spawns: [{parent, child}]}` | read |
 | `link.connect` | `src`, `dst` | `null`: each reply of the agent in `src` is handed to the one in `dst` as its next prompt, as `hive ctl connect` (0.23) | target `src->dst` |
 | `link.disconnect` | `src`, `dst`? | `null`: that pipe gone, or every pipe out of `src` (0.23) | target `src` |
@@ -248,7 +250,7 @@ log.
 | `widget.run` | `repo` | whether the caller runs the workspace's widgets: a window of the person's, on the host's machine or on another of their devices with it open, the first to ask, until it lets go (`widget.release`) or goes; someone else's device never does (0.19) | — |
 | `widget.packages` | `repo` | the widgets installed on the host, `[{id, name, version?, options, chrome, permissions, placement, size, assets, code, draw?, icon?}]`: what a window showing it offers, draws and runs; `code` is empty for anyone but the person (0.19) | read |
 | `widget.asset` | `repo`, `widget`, `name` | an image of an installed widget, as a data URL, or null (0.18) | read |
-| `appearance.get` | | the host's look as its guests show its workspaces (0.17): its settings' `appearance`, checked, with nothing that names a file on its disk (a picture or video wallpaper is the default one, no overlays) and the default fonts (a guest reads in its own). A `view` peer may ask | read |
+| `appearance.get` | | the host's look as its guests show its workspaces (0.17): its settings' `appearance`, checked, with nothing that names a file on its disk (a picture or video wallpaper is the default one, no overlays) and the default fonts (a guest reads in its own). Its custom accent's colours ride as `accentCustom` (`{ brand, accent, working? }`) when one is set (`appearanceExtra.accent`, additive: a guest that does not read it shows the built-in `accent`). A `view` peer may ask | read |
 | `terminal.open` | `{tileId, tile?, cwd, cmd, args?, cols, rows, env?, initialPrompt?, attachOnly?, liveOnly?, acks?, history?}` (`tile`: the tile it is the session of, when `tileId` is not `hm:<tile>`; `cwd` and `cmd` need not be said with `attachOnly`, 0.23; `acks`: the client acknowledges what it takes, `terminal.ack`, 0.24; `history`: at most this many lines of its scrollback in each screen the client is sent, all the host keeps when not said) | `{pid, joined, asleep?}`: the first client to open a session starts it; one that opens it after joins it (`joined`), sent the host's screen of it first; one put to sleep is started by no client (`asleep`, `pid` -1), nor is a start that would resume a conversation another tile sleeps in (0.29) | target the tile, detail the program, when it starts a session the host did not ask for itself and the client did not only attach to |
 | `terminal.saved` | `tile`, `lines`? | what the agent in `tile`, put to sleep, last showed, with its newest 1000 lines when `lines` asks for no more (none: all it saved); null when it does not sleep. Read from where it slept, as its workspace says (0.29) | — |
 | `agent.answer` | `tile`, `since`, `{text}` or `{decision, feedback?, always?}` | `{answered, by?}`: what the agent waits on the person for is answered, a plan decided, a permission allowed or denied with the agent's own keys, a supervised tool use allowed or denied (0.20), and with `always` every later use of that tool by that agent too, until it closes (0.23), or a line typed into its terminal, only while it still waits on that wait (`since`) and once (`needs.md`, "Answering"); a plan or supervised tool use answered already says who answered first (`by`: `{person, name}`, 0.21) | target the agent's tile |
@@ -329,6 +331,8 @@ says it is asked at the machine itself.
 | `view.emit` | `name`, `data`?, `view`? | `{id, delivered, view, reason?, buffered?}`: the event sent to the view open in the window, or kept for it until it listens (`view`: only while that one is open) | — |
 | `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |
 | `settings.reload` | | `null`: `settings.json` read again | — |
+| `notifications.play` | `moment` (`needs`, `done` or `error`) | `{id, played, why?, pack?}` (0.35): the moment's sound played now in the window the person is at, the applied theme's (`pack`) or the built-in one, or blocked and why (`suspended`, `no audio device`, `no window open`). The person's alone: an agent's tile is refused it. The app answers it; `hive host` has no sounds | target the moment |
+| `notifications.recentSounds` | | `[{id, moment, agents, at, popups, sound, why?, pack?, count?}]` (0.35): the last 10 bursts of agents' changes of one kind, newest first: how many agents (0 for a sound played by name), the sound (`off`, `waiting`, `skipped`, `played`, `blocked`), how many agents its sounds stood for (`count`; a long burst can play twice) and how many OS pop-ups it showed | read |
 
 A terminal is named by its session id, `hm:<tile>`; the audit log names it by its tile. `pid` is -1
 when `attachOnly` finds no session.
@@ -383,6 +387,7 @@ A diff's `scope` is one of `{"kind": "working", "staged"?}`, `{"kind": "branch",
 | `terminal.data` | `tile`, `data` | to each client that shows the terminal, its output in batches; a screen the host sends in place of what the client shows starts with `ESC c` |
 | `terminal.exit` | `tile`, `{code, signal?, slept?}` | to each client that showed it, as its session ends; `slept`: it was put to sleep, and is not gone (0.29) |
 | `terminal.activity` | `{[tile]: 0..3}` | to every client, as watched terminals' output gets busier or quieter |
+| `tile.lines` | `{lines: {[tile]: line}}` | to a client that watches lines (`tile.watchLines`) alone, the watched tiles whose last line changed, each with its line now: at once after a quiet spell, then at most every 250 ms (0.34); a peer hears only its workspace's tiles |
 | `terminal.keyboard` | `tile`, `{id, person, name}` or null | to every client, as a terminal's keyboard changes hands (null: back with the host); to a client that opens the terminal while someone else holds it. A terminal on a participant's machine (M4) is held by that machine's person (`id` `peer:<their device id>`), and asking for it, giving it and taking it do nothing, until they let the others type there: then as any terminal of the host's, until they take that back, when whoever holds it gives it up |
 | `terminal.keyboard.asked` | `tile`, `{id, person, name}` | to the keyboard's holder, as someone asks for it: `id` is who to give it to |
 | `terminal.size` | `tile`, `cols`, `rows` | to every client, as a terminal's session takes a size (on a participant's machine, as that machine says it), and to one that opens it: a client whose own differs draws it at this size |
@@ -413,7 +418,8 @@ caller's connection closes, or the host disables the view (`view.ended`, with wh
   module; `__sdk.js` is the view SDK this device serves its views, so a view never bundles its
   own; and a page of the view's is served with the SDK's import map first (`@hivemind/view-sdk`
   → `/__sdk.js`). Every file comes with `csp`, the Content-Security-Policy the screen serves it
-  under, the window's: no network (`connect-src 'none'`), no frames, forms or objects, scripts
+  under: no network (`connect-src 'none'`: a screen elsewhere does not let a view fetch its own
+  files, which a window does from its own origin), no frames, forms or objects, scripts
   only from the view's own origin (`'self'`, where the screen serves it, or `hm-view:`) or with
   the nonce that only the page made here carries, so the view's own inline scripts do not run.
   `__entry.html` of a view whose entry is a page is `BAD_REQUEST`.

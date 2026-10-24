@@ -94,7 +94,7 @@ test("a program with a scoped grant opens a worktree frame, starts Claude there,
   for (const d of [config, home, bin]) fs.mkdirSync(d, { recursive: true });
   seedAgents(config);
   fs.writeFileSync(path.join(root, "trust-screen"), TRUST_SCREEN);
-  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env bash\nFAKE_GATE="$(cat ${JSON.stringify(path.join(root, "trust-screen"))})" FAKE_TOOL_LOG=${JSON.stringify(toolLog)} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} claude "$@"\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, "claude"), `#!/usr/bin/env bash\nFAKE_PROMPT="❯ " FAKE_GATE="$(cat ${JSON.stringify(path.join(root, "trust-screen"))})" FAKE_TOOL_LOG=${JSON.stringify(toolLog)} exec ${JSON.stringify(process.execPath)} ${JSON.stringify(FIXTURE)} claude "$@"\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, "hive"), `#!/usr/bin/env bash\nexec ${JSON.stringify(onPath("bun"))} ${JSON.stringify(CLI)} "$@"\n`, { mode: 0o755 });
   const env = { ...process.env, XDG_CONFIG_HOME: config, HOME: home, PATH: `${bin}:${process.env.PATH}`, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>;
   delete env.ELECTRON_RUN_AS_NODE;

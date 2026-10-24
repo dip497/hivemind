@@ -15,7 +15,7 @@ The index is `{ "version": 1, "plugins": [...] }`. Each entry names one plugin:
 | `name`, `description`, `author`, `version` | what the list shows |
 | `path`, `source` | the folder of its files, and the https address they are under |
 | `files` | every file, each with its SHA-256 |
-| `minAppVersion` | the oldest Hivemind it runs on |
+| `minAppVersion` | the oldest Hivemind it runs on: an agent's or tool's own, or for a view, widget or package the release that first reads a field it uses ([since.ts](https://github.com/dip497/hivemind/blob/main/packages/hive-hub/src/since.ts)) |
 | `bin`, `icon` | an agent's program and its mark |
 | `category` | where it is listed |
 | `members` | a package's plugins: each one's kind, id, name and permissions |

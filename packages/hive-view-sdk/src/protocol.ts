@@ -115,11 +115,25 @@ export interface SurfaceRect extends ViewRect {
   /** 1.13: the pointer passes through it to the view, while the view drags something across it. */
   inert?: true;
 }
+/** 1.17 (feature `lineSlots`): where the host draws a tile's last line, in px relative to the
+ *  view's viewport: what its screen last showed or its agent last said, or, while its agent waits
+ *  on the person, what for, with the host's own Allow and Deny when it can be answered. The view
+ *  reserves the room and never gets the text. At least `LINE_SLOT_MIN_H` high; never inert. */
+export interface LineRect extends ViewRect {
+  tileId: string;
+}
 /** A command and the keys that run it (its manifest's `keys`). */
 export interface CommandKeys { keys: string; command: string }
 /** The roundest a surface's corners may be. */
 export const MAX_SURFACE_RADIUS = 24;
-/** The host theme, resolved. `colors` are the `--color-*` tokens as `#rrggbb`;
+/** The colours every host sends a view in `ViewTheme.colors`, each `#rrggbb`, which
+ *  `applyThemeVars` sets as `--hm-color-<id>`. Frozen: a host may add one (and a view gives it a
+ *  fallback), but removing or renaming one is a **Breaking:** change to the protocol. */
+export const VIEW_THEME_COLORS = ["bg", "bg2", "bg3", "bg4", "fg", "fg2", "fg3", "line", "line2", "brand", "err", "ok", "warn", "info", "accent"] as const;
+export type ViewThemeColor = (typeof VIEW_THEME_COLORS)[number];
+
+/** The host theme, resolved. `colors` are the `--color-*` tokens as `#rrggbb`, every one of
+ *  `VIEW_THEME_COLORS` at least;
  *  the rest (protocol 1.1, additive — a 1.0 host sends only `colors`) is the
  *  user's appearance: mode, accent, radius, fonts, the surface + terminal
  *  backgrounds, and whether glass is on. `applyThemeVars` maps all of it to
@@ -137,13 +151,17 @@ export interface ViewTheme {
   /** Protocol 1.1, additive: one `#rrggbb` per status tone, resolved from the host's status
    *  tokens. A host that predates it sends none, and `applyThemeVars` derives them from `colors`. */
   status?: Partial<Record<StatusTone, string>>;
+  /** 1.16 (feature `tokens`): the view's own tokens (its manifest's `tokens`), each resolved to
+   *  `#rrggbb` for this theme and what the person set; `applyThemeVars` sets each as
+   *  `--hm-token-<id>`. A host without the feature sends none: give each `var()` a fallback. */
+  tokens?: Record<string, string>;
 }
 
 // ── protocol 1.3 (additive) ─────────────────────────────────────────────────
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces", "lineSlots", "ownFiles"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -317,6 +335,12 @@ export interface ViewWidget {
   placement: "board" | "screen";
 }
 
+// ── protocol 1.17 (additive) ────────────────────────────────────────────────
+// `lineSlots` in `hello.features`: this host draws each tile's last line in the rects a view
+// reserves for them (`lineRects`), and for a wait what the agent waits on with the host's own Allow
+// and Deny. No text an agent or a terminal wrote crosses to the view: it gets the room, not the
+// line. A desktop window draws them; a phone's or a remote screen's host does not say it.
+
 // ── protocol 1.7 (additive) ─────────────────────────────────────────────────
 // `settings` in `hello.features`: `hello.settings` holds the value of every field the manifest
 // declares (the person's, else the field's default), and a `settings` message carries them all
@@ -354,8 +378,21 @@ export interface ViewParticipant {
 
 // ── host → plugin ───────────────────────────────────────────────────────────
 
+/** 1.17 (feature `fontFaces`): one file of a font a theme brought, as its bytes (woff2, base64).
+ *  A view's frame cannot fetch the app's files, but a face made from bytes loads in it
+ *  (`new FontFace(family, bytes)`); the client SDK adds each to the view's `document.fonts`, so the
+ *  family `theme.fonts` names draws in it. Sent in `hello` and in `fonts` when they change, never
+ *  in `theme`, which is sent on every slider move. */
+export interface ViewFontFace { family: string; data: string; weight?: string; style?: string }
+/** The most faces, and the most base64 characters of one, a host sends (4 files of 400 KB for each
+ *  of the two faces a theme may set). */
+export const MAX_VIEW_FONT_FACES = 8;
+export const MAX_VIEW_FONT_DATA = 560_000;
+
 export type HostMessage =
-  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice; /** 1.7 */ settings?: Record<string, SettingValue>; /** 1.13: the declared commands' keys, run in the plugin's frame */ keys?: CommandKeys[] }
+  | { type: "hello"; v: number; pluginId: string; capabilities: ViewPermission[]; theme: ViewTheme; layout: unknown; viewport: { w: number; h: number }; visible: boolean; /** 1.3 */ features?: ViewFeature[]; /** 1.5 */ device?: ViewDevice; /** 1.7 */ settings?: Record<string, SettingValue>; /** 1.13: the declared commands' keys, run in the plugin's frame */ keys?: CommandKeys[]; /** 1.17 */ fontFaces?: ViewFontFace[] }
+  /** 1.17: the theme's font faces changed (none: the theme has no font files). */
+  | { type: "fonts"; fontFaces: ViewFontFace[] }
   /** Frames / tiles / membership (+ the current names). Structural only. */
   | { type: "structure"; frames: ViewFrame[]; tiles: ViewTile[]; /** 1.2 */ links?: ViewLinks }
   /** Display names changed (renames, agent titles) — nothing structural did. */
@@ -454,6 +491,10 @@ export type PluginMessage =
   /** The hole-punch: where live tile surfaces belong, in px relative to the
    *  plugin's viewport. The host positions a real slot per rect above the iframe. */
   | { type: "surfaceRects"; rects: SurfaceRect[] }
+  /** 1.17 (feature `lineSlots`): where the host draws each tile's last line (`LineRect`), in place
+   *  of those asked for before; `[]` draws none. A host without the feature counts it against the
+   *  view, so send it only when `supports("lineSlots")`. */
+  | { type: "lineRects"; rects: LineRect[] }
   | { type: "revealed"; requestId: number; rect: ViewRect | null }
   /** Frames the plugin has drawn so far (monotonic). The host reads it for its
    *  render-on-demand checks; send it when it changes, at most ~1/s. */
@@ -496,6 +537,9 @@ export type PluginMessage =
   | { type: "request"; requestId: number; name: "issue"; args: [{ call: IssueCall; args: unknown[] }] };
 
 export const MAX_SURFACE_RECTS = 16;
+/** 1.17: the most line slots a view asks for at once, and the least height of one. */
+export const MAX_LINE_RECTS = 64;
+export const LINE_SLOT_MIN_H = 20;
 /** 1.2 argument caps: a tile name, and an agent's first prompt. */
 export const NAME_MAX = 120;
 export const PROMPT_MAX = 32 * 1024;
@@ -646,6 +690,19 @@ export function parsePluginMessage(raw: unknown): ParseResult<PluginMessage> {
       }
       return { ok: true, msg: { type: "surfaceRects", rects: (raw.rects as SurfaceRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h, ...(r.chrome ? { chrome: r.chrome } : {}), ...(r.radius ? { radius: r.radius } : {}), ...(r.inert ? { inert: true as const } : {}) })) } };
     }
+    case "lineRects": {
+      if (!Array.isArray(raw.rects)) return bad("rects must be an array");
+      if (raw.rects.length > MAX_LINE_RECTS) return bad(`more than ${MAX_LINE_RECTS} rects`);
+      const seen = new Set<string>();
+      for (const r of raw.rects) {
+        if (!isRect(r) || !isId((r as LineRect).tileId)) return bad("each rect needs tileId,x,y,w,h numbers");
+        if (seen.has((r as LineRect).tileId)) return bad("duplicate tileId");
+        seen.add((r as LineRect).tileId);
+        if ((r as LineRect).h < LINE_SLOT_MIN_H) return bad(`each rect is at least ${LINE_SLOT_MIN_H}px high`);
+      }
+      // Only what a slot is: anything else a view adds (`inert`) is dropped.
+      return { ok: true, msg: { type: "lineRects", rects: (raw.rects as LineRect[]).map((r) => ({ tileId: r.tileId, x: r.x, y: r.y, w: r.w, h: r.h })) } };
+    }
     case "revealed":
       if (!isNum(raw.requestId)) return bad("requestId must be a number");
       if (raw.rect !== null && !isRect(raw.rect)) return bad("rect must be a rect or null");
@@ -767,7 +824,7 @@ export function refusal(m: PluginMessage, host: HostScope): { why: string; partl
   const feature = SUBSCRIPTION_FEATURE[m.type];
   if (feature && !host.features.includes(feature)) return { why: `${m.type}: not supported`, partly: false };
   const why = refused(m, host);
-  return why ? { why, partly: m.type === "surfaceRects" || m.type === "watchActivity" } : null;
+  return why ? { why, partly: m.type === "surfaceRects" || m.type === "lineRects" || m.type === "watchActivity" } : null;
 }
 
 function refused(m: PluginMessage, host: HostScope): string | null {
@@ -801,6 +858,7 @@ function refused(m: PluginMessage, host: HostScope): string | null {
     }
     case "subscribeStatus": return host.hasTile(m.tileId) ? null : `subscribeStatus: unknown tile ${m.tileId}`;
     case "surfaceRects": return m.rects.every((r) => host.hasTile(r.tileId) || host.announced(r.tileId)) ? null : "surfaceRects: unknown tile";
+    case "lineRects": return m.rects.every((r) => host.hasTile(r.tileId) || host.announced(r.tileId)) ? null : "lineRects: unknown tile";
     case "watchActivity": return m.tileIds.every((id) => host.hasTile(id)) ? null : "watchActivity: unknown tile";
     default: return null;
   }
@@ -849,6 +907,8 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
       return typeof raw.visible === "boolean" ? { ok: true, msg: raw as unknown as HostMessage } : bad("visible must be a boolean");
     case "theme":
       return isObj(raw.theme) ? { ok: true, msg: raw as unknown as HostMessage } : bad("theme must be an object");
+    case "fonts":
+      return areFontFaces(raw.fontFaces) ? { ok: true, msg: raw as unknown as HostMessage } : bad("fontFaces must be a list of { family, data } faces");
     case "widgets":
       return Array.isArray(raw.widgets) && raw.widgets.every((w) => isObj(w) && isId(w.id) && typeof w.widget === "string")
         ? { ok: true, msg: raw as unknown as HostMessage } : bad("widgets must be an array of widgets");
@@ -864,6 +924,14 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
     default:
       return { ok: false, reason: `unknown message type ${JSON.stringify(raw.type)}` };
   }
+}
+
+/** Whether `v` is a list of font faces a client may load (1.17): a plain family and base64 bytes. */
+export function areFontFaces(v: unknown): v is ViewFontFace[] {
+  return Array.isArray(v) && v.length <= MAX_VIEW_FONT_FACES && v.every((f) => isObj(f)
+    && typeof f.family === "string" && /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/.test(f.family)
+    && typeof f.data === "string" && f.data.length <= MAX_VIEW_FONT_DATA && /^[A-Za-z0-9+/]*={0,2}$/.test(f.data)
+    && (f.weight === undefined || typeof f.weight === "string") && (f.style === undefined || typeof f.style === "string"));
 }
 
 /** The message the host posts to the iframe window to hand over the port. */

@@ -75,6 +75,23 @@ test("Home is worked out at most every `every` ms, the first change at once, and
   feed.close();
 });
 
+test("a line that changes works out Home's lines alone, never its layout's rows", () => {
+  const rows = new Map([["w:w1", { of: "workspace" as const, workspace: "w1", name: "api" }]]);
+  let lines = new Map<string, string>();
+  let worked = 0;
+  const feed = new HomeFeed({ rows: () => (worked++, rows), lines: () => lines, every: 0 });
+  const heard: HomeMessage[] = [];
+  feed.follow((m) => heard.push(m));
+  worked = 0;
+  lines = new Map([["t:w1/t1", "214 tests passed"]]);
+  feed.linesChanged();
+  assert.equal(worked, 0, "no row of the layout worked out");
+  assert.deepEqual(heard, [{ t: "changes", lines: { seq: 1, changes: [{ seq: 1, key: "t:w1/t1", row: "214 tests passed" }] } }]);
+  feed.changed();
+  assert.equal(worked, 1, "anything else still works out the layout");
+  feed.close();
+});
+
 test("with no one following, Home is not worked out on a change; the next to ask is answered it, caught up", () => {
   let rows = new Map([["w:w1", { of: "workspace" as const, workspace: "w1", name: "api" }]]);
   let worked = 0;

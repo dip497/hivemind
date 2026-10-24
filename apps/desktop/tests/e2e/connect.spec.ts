@@ -48,7 +48,7 @@ test("a laptop pastes the desktop's offer; both show the same words, and it's me
   expect(offer.link).toMatch(/^hivemind:\/\/connect\/[0-9a-f]{64}#/);
   await enter(laptop, offer.link);
 
-  const request = desktop.locator(".hm-connect-request");
+  const request = desktop.locator("[data-connect-request]");
   await expect(request).toContainText("wants to connect", { timeout: 20_000 });
   const shown = laptop.locator("[data-connect-words-text]");
   await expect(shown).toBeVisible();
@@ -94,7 +94,7 @@ test("a phone uses the computer's offer: it shows the same words, is never someo
   const desktop = await person(root, "desktop", api, apps);
   await desktop.evaluate(() => window.hive.settingsSet("profile.name", "Priya"));
   const me = await desktop.evaluate(() => window.hive.identity());
-  const request = desktop.locator(".hm-connect-request");
+  const request = desktop.locator("[data-connect-request]");
 
   // Told it is Priya's, the person at the phone says the words do not match: nothing is kept.
   const first = await desktop.evaluate((r) => window.hive.connectOffer(r), api);
@@ -128,7 +128,7 @@ test("denied, a computer is let in by nothing; asking again with the offer's wor
   const host = await person(root, "host", api, apps);
   const guest = await person(root, "guest", repo("elsewhere"), apps);
   const offer = await host.evaluate((r) => window.hive.connectOffer(r), api);
-  const request = host.locator(".hm-connect-request");
+  const request = host.locator("[data-connect-request]");
 
   await enter(guest, offer.link);
   await request.getByRole("button", { name: "Deny" }).click({ timeout: 20_000 });

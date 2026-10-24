@@ -14,9 +14,10 @@
  */
 import type { SettingValue } from "./settings.js";
 import { chordMatches } from "./commands.js";
+import { isTokenId, tokenVar } from "./tokens.js";
 import {
-  CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
-  type ActivityLevel, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type CommandKeys,
+  CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, areFontFaces, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
+  type ActivityLevel, type ViewFontFace, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type LineRect, type CommandKeys,
   type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
   ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
 } from "./protocol.js";
@@ -110,6 +111,11 @@ export interface ViewClient {
   /** The hole-punch — deduplicated: identical rects are not re-sent. A rect goes to the host once
    *  a `structure` has named its tile, and leaves when one no longer does. */
   setSurfaceRects(rects: SurfaceRect[]): void;
+  /** 1.17 (feature `lineSlots`): where the host draws each tile's last line, or what its agent
+   *  waits on with Allow and Deny (`LineRect`, at least 20px high), in place of those set before.
+   *  The view reserves the room; the text never reaches it. Deduplicated, held back for a tile no
+   *  `structure` named yet, as surfaces are; nothing is sent to a host without the feature. */
+  setLineRects(rects: LineRect[]): void;
   /** The host asked to reveal a tile; answer with where it is (or null). */
   onReveal(handler: (tileId: string) => ViewRect | null | Promise<ViewRect | null>): () => void;
   /** Count a drawn frame (reported to the host, throttled). */
@@ -218,6 +224,8 @@ class Client implements ViewClient {
   private revealHandler: ((tileId: string) => ViewRect | null | Promise<ViewRect | null>) | null = null;
   /** The rects the view asked for, and the tiles the host has named (the last `structure`). */
   private wantedRects: SurfaceRect[] = [];
+  private wantedLines: LineRect[] = [];
+  private lastLines = "[]";
   private tiles = new Set<string>();
   /** What the host was last told: nothing, at first. */
   private lastRects = "[]";
@@ -235,7 +243,7 @@ class Client implements ViewClient {
       port.onmessage = (e) => {
         const r = parseHostMessage(e.data);
         if (!r.ok) return;
-        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; this.settings = r.msg.settings ?? {}; this.bindKeys(r.msg.keys); res(); return; }
+        if (r.msg.type === "hello") { this.hello = r.msg; this.capabilities = r.msg.capabilities; this.viewport = { ...r.msg.viewport }; this.visible = r.msg.visible; this.settings = r.msg.settings ?? {}; this.bindKeys(r.msg.keys); this.loadFonts(r.msg.fontFaces); res(); return; }
         this.dispatch(r.msg);
       };
     });
@@ -253,6 +261,7 @@ class Client implements ViewClient {
       case "structure":
         this.tiles = new Set(m.tiles.map((t) => t.id));
         this.sendRects();
+        this.sendLines();
         this.emit(m.type, m);
         break;
       case "names": case "selection": this.emit(m.type, m); break;
@@ -302,6 +311,7 @@ class Client implements ViewClient {
       case "resize": this.viewport = { w: m.w, h: m.h }; this.emit("resize", this.viewport); break;
       case "visibility": this.visible = m.visible; this.emit("visibility", { visible: m.visible }); break;
       case "theme": this.emit("theme", m.theme); break;
+      case "fonts": this.loadFonts(m.fontFaces); break;
       case "settings": this.settings = m.settings; this.emit("settings", m.settings); break;
       case "undock": {
         // The host has let go of it already: forget it without telling the host again.
@@ -313,6 +323,24 @@ class Client implements ViewClient {
       case "reveal": this.answerReveal(m.requestId, m.tileId); break;
       default: break;
     }
+  }
+
+  /** The theme's font faces (1.17) in this frame's `document.fonts`, replacing the ones before:
+   *  made from bytes, which load where the frame's CSP lets it fetch no font. The family
+   *  `theme.fonts` names then draws here; a view does nothing for it. */
+  private fontFaces: FontFace[] = [];
+  private loadFonts(faces: ViewFontFace[] | undefined): void {
+    if (typeof FontFace === "undefined" || typeof document === "undefined" || !areFontFaces(faces ?? [])) return;
+    for (const f of this.fontFaces) document.fonts.delete(f);
+    this.fontFaces = (faces ?? []).flatMap((f) => {
+      try {
+        const bytes = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0));
+        const face = new FontFace(f.family, bytes, { ...(f.weight ? { weight: f.weight } : {}), ...(f.style ? { style: f.style } : {}) });
+        document.fonts.add(face);
+        void face.load().catch(() => {});
+        return [face];
+      } catch { return []; }
+    });
   }
 
   /** The last of each event that says how things are now, which a listener added later is told first. */
@@ -571,6 +599,20 @@ class Client implements ViewClient {
     this.sendRects();
   }
 
+  setLineRects(rects: LineRect[]) {
+    this.wantedLines = rects.map((r) => ({ tileId: r.tileId, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) }));
+    this.sendLines();
+  }
+
+  private sendLines() {
+    if (!this.supports("lineSlots")) return;
+    const rects = this.wantedLines.filter((r) => this.tiles.has(r.tileId));
+    const key = JSON.stringify(rects);
+    if (key === this.lastLines) return;
+    this.lastLines = key;
+    this.send({ type: "lineRects", rects });
+  }
+
   // A tile the host has not named (one from a saved layout that is gone, or not heard of yet) is
   // held back: the host refuses a rect for a tile it does not have, and enough refusals disable
   // the view.
@@ -650,11 +692,13 @@ export function createInvalidator(client: ViewClient, draw: () => void): { inval
  *   --hm-accent          --hm-radius (px)   --hm-font-ui   --hm-font-mono
  *   --hm-surface         --hm-terminal-bg   --hm-glass (0 | 1)   --hm-mode
  *   --hm-color-scheme    (dark | light — put it on panels that scroll, never on the root)
+ *   --hm-token-<id>      (1.16: each of the view's own tokens, its manifest's `tokens`)
  *
  * So a plugin's CSS can say `background: var(--hm-color-bg2)` and follow the
  * user's appearance without reading messages itself. Returns the unsubscribe.
  */
 export function applyThemeVars(client: ViewClient, root: HTMLElement = document.documentElement): () => void {
+  const set = new Set<string>();
   const apply = (t: ViewTheme) => {
     for (const [k, v] of Object.entries(t.colors)) root.style.setProperty(`--hm-color-${k}`, v);
     // Status tones: the host's, or — from a host that predates them — the same meanings derived
@@ -675,6 +719,11 @@ export function applyThemeVars(client: ViewClient, root: HTMLElement = document.
     if (t.surface) root.style.setProperty("--hm-surface", t.surface);
     if (t.terminalBackground) root.style.setProperty("--hm-terminal-bg", t.terminalBackground);
     if (t.glass !== undefined) root.style.setProperty("--hm-glass", t.glass ? "1" : "0");
+    // The view's own tokens; one the theme no longer sends goes, so its `var()` fallback shows.
+    const tokens = Object.entries(t.tokens ?? {}).filter(([k, v]) => isTokenId(k) && /^#[0-9a-f]{6}$/i.test(v));
+    for (const k of set) if (!tokens.some(([id]) => id === k)) root.style.removeProperty(tokenVar(k));
+    set.clear();
+    for (const [k, v] of tokens) { root.style.setProperty(tokenVar(k), v); set.add(k); }
     if (t.mode) {
       root.style.setProperty("--hm-mode", t.mode);
       root.dataset.hmMode = t.mode;

@@ -203,7 +203,7 @@ function hivehubInstallPhone() {
   return d;
 }
 
-const PACKAGES_DESC = 'A package is one folder whose hivemind-package.json names its tools, widgets, views and agent presets; hive plugins install puts the whole box on this machine, with one switch, one version and a rollback, and hivehub publish lists the whole box on HiveHub.';
+const PACKAGES_DESC = 'A package is one folder whose hivemind-package.json names its tools, widgets, views, agent presets and themes; hive plugins install puts the whole box on this machine, with one switch, one version and a rollback, and hivehub publish lists the whole box on HiveHub.';
 
 function packagesOneBox() {
   const d = new Diagram({
@@ -214,11 +214,13 @@ function packagesOneBox() {
   d.wire([[170, 196], [170, 256]], { accent: true }); d.label(182, 230, 'hive plugins install', { anchor: 'start' });
   d.wire([[470, 196], [470, 256]]); d.label(482, 230, 'hivehub publish', { anchor: 'start' });
   d.zone(20, 24, 600, 172, 'One folder: @you/kit');
-  d.node(35, 56, 130, 64, 'Tools', { sub: 'run in the app' });
-  d.node(180, 56, 130, 64, 'Widgets', { sub: 'sandboxed' });
-  d.node(325, 56, 130, 64, 'Views', { sub: 'sandboxed' });
-  d.node(470, 56, 135, 64, 'Agent presets', { sub: 'a prompt' });
-  d.note(320, 160, 'hivemind-package.json names each member, every one @you/<name>', { size: 12.5 });
+  d.node(32, 56, 100, 64, 'Tools', { sub: 'run in the app' });
+  d.node(140, 56, 100, 64, 'Widgets', { sub: 'sandboxed' });
+  d.node(248, 56, 100, 64, 'Views', { sub: 'sandboxed' });
+  d.node(356, 56, 124, 64, 'Agent presets', { sub: 'a prompt' });
+  d.node(488, 56, 100, 64, 'Themes', { sub: 'data, no code' });
+  d.note(320, 152, 'hivemind-package.json names each member, every one @you/<name>;', { size: 12.5 });
+  d.note(320, 172, 'a theme @you/kit/<name>, after its folder in the package', { size: 12.5 });
   d.node(60, 256, 220, 64, 'This machine', { sub: 'one switch, one version, rollback', focal: true });
   d.node(360, 256, 220, 64, 'HiveHub', { sub: 'one listing, every member', dashed: true, plain: true });
   return d;
@@ -226,18 +228,20 @@ function packagesOneBox() {
 
 // The same box stacked for a phone screen, so nothing scrolls sideways.
 function packagesOneBoxPhone() {
-  const d = new Diagram({ slug: 'packages-one-box-phone', w: 320, h: 442, title: 'A package is one box', desc: PACKAGES_DESC });
-  d.wire([[86, 262], [86, 336]], { accent: true }); d.label(96, 292, 'hive plugins', { anchor: 'start' }); d.label(96, 308, 'install', { anchor: 'start' });
-  d.wire([[234, 262], [234, 336]]); d.label(244, 292, 'hivehub', { anchor: 'start' }); d.label(244, 308, 'publish', { anchor: 'start' });
-  d.zone(8, 30, 304, 232, 'One folder: @you/kit');
+  const d = new Diagram({ slug: 'packages-one-box-phone', w: 320, h: 534, title: 'A package is one box', desc: PACKAGES_DESC });
+  d.wire([[86, 354], [86, 428]], { accent: true }); d.label(96, 384, 'hive plugins', { anchor: 'start' }); d.label(96, 400, 'install', { anchor: 'start' });
+  d.wire([[234, 354], [234, 428]]); d.label(244, 384, 'hivehub', { anchor: 'start' }); d.label(244, 400, 'publish', { anchor: 'start' });
+  d.zone(8, 30, 304, 324, 'One folder: @you/kit');
   d.node(24, 60, 124, 60, 'Tools', { sub: 'run in the app' });
   d.node(172, 60, 124, 60, 'Widgets', { sub: 'sandboxed' });
   d.node(24, 132, 124, 60, 'Views', { sub: 'sandboxed' });
   d.node(172, 132, 124, 60, 'Agent presets', { sub: 'a prompt' });
-  d.note(24, 220, 'hivemind-package.json names each', { anchor: 'start' });
-  d.note(24, 240, 'member, every one @you/<name>', { anchor: 'start' });
-  d.node(24, 336, 124, 86, 'This machine', { sub: ['one switch,', 'one version,', 'a rollback'], focal: true });
-  d.node(172, 336, 124, 86, 'HiveHub', { sub: ['one listing,', 'every member'], dashed: true, plain: true });
+  d.node(24, 204, 124, 60, 'Themes', { sub: 'data, no code' });
+  d.note(24, 292, 'hivemind-package.json names each', { anchor: 'start' });
+  d.note(24, 312, 'member, every one @you/<name>;', { anchor: 'start' });
+  d.note(24, 332, 'a theme @you/kit/<name>', { anchor: 'start' });
+  d.node(24, 428, 124, 86, 'This machine', { sub: ['one switch,', 'one version,', 'a rollback'], focal: true });
+  d.node(172, 428, 124, 86, 'HiveHub', { sub: ['one listing,', 'every member'], dashed: true, plain: true });
   return d;
 }
 

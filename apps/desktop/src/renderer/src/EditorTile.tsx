@@ -41,7 +41,9 @@ import { tags as t } from "@lezer/highlight";
 // buffer there).
 import { unifiedMergeView } from "@codemirror/merge";
 import { resolveActive } from "./editor-active";
+import { getTheme, useThemeField } from "./theme-store";
 import { htmlFileUrl, isHtmlPath } from "./browser-open";
+import { actionKey, keyLabel } from "./shortcut";
 // Lazy: marked + DOMPurify (and, on demand, mermaid) load only when the user
 // actually opens Preview — opening an editor tile pulls in zero markdown code.
 const MarkdownPreview = lazy(() =>
@@ -73,8 +75,7 @@ interface Props {
 
 // ── theme ─────────────────────────────────────────────────────────────────
 // CodeMirror theme bound to the app's --color-* tokens (see styles.css).
-const cmTheme = EditorView.theme(
-  {
+const cmThemeSpec: Parameters<typeof EditorView.theme>[0] = {
     "&": {
       height: "100%",
       backgroundColor: "var(--color-bg2)",
@@ -140,12 +141,15 @@ const cmTheme = EditorView.theme(
     },
     ".cm-button:hover": { backgroundColor: "var(--color-bg2)" },
     ".cm-search .cm-button:active": { backgroundColor: "var(--color-brand)" },
-  },
-  { dark: true },
-);
+};
+/** The colours are tokens either way; `dark` picks CodeMirror's own defaults (panels, tooltips). */
+const cmThemes = { dark: EditorView.theme(cmThemeSpec, { dark: true }), light: EditorView.theme(cmThemeSpec, { dark: false }) };
+/** One compartment for the editor theme, so a mode change swaps it in an open editor. */
+const themeCompartment = new Compartment();
+const themeFor = (mode: "dark" | "light") => themeCompartment.of(cmThemes[mode]);
 
 const highlightStyle = HighlightStyle.define([
-  { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--color-fg3)", fontStyle: "italic" },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--color-syntax-comment)", fontStyle: "italic" },
   { tag: [t.keyword, t.modifier, t.controlKeyword, t.operatorKeyword], color: "var(--color-syntax-keyword)" },
   { tag: [t.string, t.special(t.string), t.regexp], color: "var(--color-syntax-string)" },
   { tag: [t.number, t.bool, t.null, t.atom], color: "var(--color-syntax-number)" },
@@ -177,7 +181,6 @@ const baseExtensions: Extension = [
   highlightSelectionMatches(),
   // Find/replace panel (Mod-f). `top: true` docks it above the editor body.
   search({ top: true }),
-  cmTheme,
   EditorView.lineWrapping,
   // searchKeymap LAST so Mod-f / Mod-g / etc. win over any default binding.
   keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
@@ -194,6 +197,12 @@ async function languageFor(path: string): Promise<LanguageSupport | null> {
   } catch {
     return null;
   }
+}
+
+/** A file with edits not yet saved: a 6px dot in the second text colour, never amber, since an
+ *  unsaved file does not wait on the person (DESIGN.md, Modified marker). */
+function UnsavedMark({ className = "" }: { className?: string }) {
+  return <span role="img" aria-label="unsaved changes" title="unsaved changes" data-unsaved className={`size-1.5 shrink-0 rounded-full bg-[var(--color-fg2)] ${className}`} />;
 }
 
 interface TabState {
@@ -432,6 +441,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         doc: "",
         extensions: [
           baseExtensions,
+          themeFor(getTheme().mode),
           langCompartment.current.of([]),
           diffCompartment.current.of([]),
           keymap.of([
@@ -455,6 +465,12 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
     };
   }, []);
 
+  // The theme's mode, applied to the open editor as it changes.
+  const mode = useThemeField("mode");
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: themeCompartment.reconfigure(cmThemes[mode]) });
+  }, [mode]);
+
   // Load + display the active tab's buffer.
   useEffect(() => {
     const view = viewRef.current;
@@ -475,6 +491,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         doc,
         extensions: [
           baseExtensions,
+          themeFor(getTheme().mode),
           langCompartment.current.of(lang ? lang : []),
           diffCompartment.current.of([]),
           keymap.of([
@@ -574,9 +591,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         <header className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
           <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
           <span className="font-semibold text-[var(--color-fg)]">Editor</span>
-          {activeMeta?.dirty && (
-            <span className="text-chip text-[var(--color-warn)]" title="unsaved changes">●</span>
-          )}
+          {activeMeta?.dirty && <UnsavedMark />}
           {saving && <span className="text-chip text-[var(--color-fg3)]">saving…</span>}
           <span className="ml-auto flex items-center gap-2">
             {active && (
@@ -605,7 +620,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
               </Button>
               </>
             )}
-            <span className="text-chip text-[var(--color-fg3)]">⌘S to save</span>
+            <span className="text-chip text-[var(--color-fg3)]">{keyLabel("mod+s")} to save</span>
             <FontStepper {...font} />
           </span>
           <Button
@@ -682,13 +697,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
                   >⇄</Button>
                 )}
                 <span className="grid place-items-center w-3.5 h-3.5">
-                  {dirty ? (
-                    <span
-                      aria-hidden
-                      className="size-1.5 rounded-full bg-[var(--color-warn)] group-hover:hidden"
-                      title="unsaved"
-                    />
-                  ) : null}
+                  {dirty ? <UnsavedMark className="group-hover:hidden" /> : null}
                   <Button
                     variant="ghost"
                     size="icon-micro"
@@ -708,12 +717,13 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         )}
         {/* Fullscreen — in the tab bar so it shows even when the editor is
             embedded in the Workbench (which strips the standalone header).
-            Sticky so it stays put when the tabs overflow-scroll. */}
+            Sticky so it stays put when the tabs overflow-scroll. Its tooltip names the
+            fit-to-screen key, which leaves from anywhere: Esc is the editor's while you type. */}
         <button
           onClick={() => setOverlay((v) => !v)}
           className="nodrag ml-auto sticky right-0 shrink-0 px-2 grid place-items-center bg-[var(--color-bg2)] border-l border-[var(--color-line)] text-[var(--color-fg3)] hover:text-[var(--color-fg)] hover:bg-[var(--color-bg3)] transition-colors text-label leading-none"
           aria-label="fullscreen editor"
-          title="Fullscreen · Esc to exit"
+          title={`Fullscreen (${actionKey("fit-to-screen")} to leave)`}
         >
           ⤢
         </button>

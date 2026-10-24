@@ -369,6 +369,9 @@ export interface AgentProviderDef {
    *  unknown program): it exists for `hive agent detect` / `--assignee` only,
    *  until real screen text is captured. */
   detect?: (screen: string) => ScreenReading;
+  /** Whether a row of its screen, alone and as the screen shows it, is its own chrome (its spinner
+   *  and timer, a status bar), which a tile's last line passes over (manifest `detect.chrome`). */
+  chrome?: (row: string) => boolean;
   /** The agent's mark as inline SVG: the viewBox, the inner markup (paths /
    *  shapes using `currentColor`) and any root attributes (fill / stroke /
    *  fillRule). Rendered by the UI generically — no per-provider React code. */

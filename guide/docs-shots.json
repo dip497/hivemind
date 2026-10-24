@@ -136,7 +136,7 @@
         }
       ],
       "crop": ".settings-dialog",
-      "alt": "Settings → Notifications: the switch, and which events notify you: Needs you, Finished, Failed."
+      "alt": "Settings → Notifications: the Notifications switch; under Notify me about, Needs you, Finished and Failed, each with its switch and what it covers; then Delivery, starting with In-app toasts."
     },
     {
       "page": "keyboard-shortcuts",

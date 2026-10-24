@@ -6,6 +6,7 @@
     "cli",
     "keyboard-shortcuts",
     "settings",
+    "plugin-settings",
     "environment-variables",
     "agent-yaml",
     "hive-net",

@@ -20,3 +20,10 @@ test("a tint the widget's code draws colours its card", () => {
 test("a sticky note's tint is the colour it was set to", () => {
   assert.equal(widgetLook(placed("note", { color: "green" }), note, undefined).tint, "var(--color-note-green)");
 });
+
+test("only the six note colours tint a card: any other word, ink included, leaves it untinted", () => {
+  for (const tint of ["ink", "red", "transparent"]) {
+    const drawing = { tree: { type: "stack", tint, children: [] }, chrome: "card" as const };
+    assert.equal(widgetLook(placed(coded.id), coded, drawing).tint, null, tint);
+  }
+});

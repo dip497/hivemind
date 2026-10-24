@@ -239,9 +239,6 @@ catalogs:
     clsx:
       specifier: ^2.1.1
       version: 2.1.1
-    cmdk:
-      specifier: ^1.1.1
-      version: 1.1.1
     electron:
       specifier: ^44.5.1
       version: 44.5.1
@@ -305,6 +302,8 @@ overrides:
 
 patchedDependencies:
   '@xterm/addon-webgl@0.20.0-beta.309': 7a7340b6a1ac1a318ce07a2314fa42ac14f1272a9742d832f3dfa58270e2c50f
+  '@xterm/headless@6.1.0-beta.313': 29daca9ddf230d8379977193ce0966fcd5faf181aae44fed783fe96acbe736f7
+  '@xterm/xterm@6.1.0-beta.315': 47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6
 
 importers:
 
@@ -514,22 +513,22 @@ importers:
         version: 5.104.1(react@19.3.0)
       '@xterm/addon-fit':
         specifier: 'catalog:'
-        version: 0.12.0-beta.311(@xterm/xterm@6.1.0-beta.315)
+        version: 0.12.0-beta.311(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
       '@xterm/addon-serialize':
         specifier: 'catalog:'
-        version: 0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315)
+        version: 0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
       '@xterm/addon-web-links':
         specifier: 'catalog:'
-        version: 0.13.0-beta.310(@xterm/xterm@6.1.0-beta.315)
+        version: 0.13.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
       '@xterm/addon-webgl':
         specifier: 'catalog:'
-        version: 0.20.0-beta.309(patch_hash=7a7340b6a1ac1a318ce07a2314fa42ac14f1272a9742d832f3dfa58270e2c50f)(@xterm/xterm@6.1.0-beta.315)
+        version: 0.20.0-beta.309(patch_hash=7a7340b6a1ac1a318ce07a2314fa42ac14f1272a9742d832f3dfa58270e2c50f)(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
       '@xterm/headless':
         specifier: 'catalog:'
-        version: 6.1.0-beta.313
+        version: 6.1.0-beta.313(patch_hash=29daca9ddf230d8379977193ce0966fcd5faf181aae44fed783fe96acbe736f7)
       '@xterm/xterm':
         specifier: 'catalog:'
-        version: 6.1.0-beta.315
+        version: 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
       '@xyflow/react':
         specifier: 'catalog:'
         version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -542,9 +541,6 @@ importers:
       clsx:
         specifier: 'catalog:'
         version: 2.1.1
-      cmdk:
-        specifier: 'catalog:'
-        version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       codemirror:
         specifier: ^6.0.2
         version: 6.0.2
@@ -639,6 +635,9 @@ importers:
       electron-vite:
         specifier: 'catalog:'
         version: 5.0.0(supports-color@7.2.0)(vite@6.4.3(@types/node@24.19.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)(yaml@2.9.1))
+      linkedom:
+        specifier: ^0.18.13
+        version: 0.18.13
       oxlint:
         specifier: ^1.86.0
         version: 1.86.0
@@ -674,10 +673,10 @@ importers:
         version: 1.2.0-beta.15
       '@xterm/addon-serialize':
         specifier: 'catalog:'
-        version: 0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315)
+        version: 0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
       '@xterm/headless':
         specifier: 'catalog:'
-        version: 6.1.0-beta.313
+        version: 6.1.0-beta.313(patch_hash=29daca9ddf230d8379977193ce0966fcd5faf181aae44fed783fe96acbe736f7)
     devDependencies:
       '@hivemind/tsconfig':
         specifier: workspace:*
@@ -3324,12 +3323,6 @@ packages:
   clsx@2.1.1:
     resolution: {integrity: sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==}
     engines: {node: '>=6'}
-
-  cmdk@1.1.1:
-    resolution: {integrity: sha512-Vsv7kFaXm+ptHDMZ7izaRsP70GgrW9NBNGswt9OZaVBLlE0SNpDq8eu/VGXyF9r7M0azK3Wy7OlYXsuyYLFzHg==}
-    peerDependencies:
-      react: ^18 || ^19 || ^19.0.0-rc
-      react-dom: ^18 || ^19 || ^19.0.0-rc
 
   cn@0.3.2:
     resolution: {integrity: sha512-RKzY5Edavc8B2Ka6tjJecKFC4nm0p7lADY72xzICmiJSf4TkaxWXt0fHsib2P2G4FkFyXfSDi9oDtIBuCZvY2g==}
@@ -7203,25 +7196,25 @@ snapshots:
 
   '@xmldom/xmldom@0.8.15': {}
 
-  '@xterm/addon-fit@0.12.0-beta.311(@xterm/xterm@6.1.0-beta.315)':
+  '@xterm/addon-fit@0.12.0-beta.311(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))':
     dependencies:
-      '@xterm/xterm': 6.1.0-beta.315
+      '@xterm/xterm': 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
 
-  '@xterm/addon-serialize@0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315)':
+  '@xterm/addon-serialize@0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))':
     dependencies:
-      '@xterm/xterm': 6.1.0-beta.315
+      '@xterm/xterm': 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
 
-  '@xterm/addon-web-links@0.13.0-beta.310(@xterm/xterm@6.1.0-beta.315)':
+  '@xterm/addon-web-links@0.13.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))':
     dependencies:
-      '@xterm/xterm': 6.1.0-beta.315
+      '@xterm/xterm': 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
 
-  '@xterm/addon-webgl@0.20.0-beta.309(patch_hash=7a7340b6a1ac1a318ce07a2314fa42ac14f1272a9742d832f3dfa58270e2c50f)(@xterm/xterm@6.1.0-beta.315)':
+  '@xterm/addon-webgl@0.20.0-beta.309(patch_hash=7a7340b6a1ac1a318ce07a2314fa42ac14f1272a9742d832f3dfa58270e2c50f)(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))':
     dependencies:
-      '@xterm/xterm': 6.1.0-beta.315
+      '@xterm/xterm': 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
 
-  '@xterm/headless@6.1.0-beta.313': {}
+  '@xterm/headless@6.1.0-beta.313(patch_hash=29daca9ddf230d8379977193ce0966fcd5faf181aae44fed783fe96acbe736f7)': {}
 
-  '@xterm/xterm@6.1.0-beta.315': {}
+  '@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)': {}
 
   '@xyflow/react@12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)':
     dependencies:
@@ -7505,18 +7498,6 @@ snapshots:
       mimic-response: 1.0.1
 
   clsx@2.1.1: {}
-
-  cmdk@1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
-    dependencies:
-      '@radix-ui/react-compose-refs': 1.1.5(@types/react@19.3.0)(react@19.3.0)
-      '@radix-ui/react-dialog': 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@radix-ui/react-id': 1.1.4(@types/react@19.3.0)(react@19.3.0)
-      '@radix-ui/react-primitive': 2.1.10(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      react: 19.3.0
-      react-dom: 19.3.0(react@19.3.0)
-    transitivePeerDependencies:
-      - '@types/react'
-      - '@types/react-dom'
 
   cn@0.3.2: {}
 

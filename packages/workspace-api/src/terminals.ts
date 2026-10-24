@@ -34,6 +34,9 @@ export interface ExitInfo { code: number; signal?: number; slept?: true }
 /** How busy each watched terminal's output is, 0 (quiet) to 3. Only changes are sent. */
 export type ActivityLevels = Record<string, 0 | 1 | 2 | 3>;
 
+/** What each tile's screen last showed with text, by its bare id: "" once it shows none. */
+export type LastLines = Record<string, string>;
+
 /** Someone at a client, as the others see them: who holds a terminal's keyboard, asks for it, or
  *  types into it. */
 export interface Typist {

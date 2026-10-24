@@ -26,7 +26,8 @@ import { ctlCmd } from "./commands/ctl.js";
 import { packagesCmd } from "./commands/packages.js";
 import { agentsCmd } from "./commands/agents.js";
 import { reviewCmd } from "./commands/review.js";
-import { configCmd, themeCmd } from "./commands/config.js";
+import { configCmd } from "./commands/config.js";
+import { themeCmd } from "./commands/theme.js";
 import { pluginsCmd } from "./commands/plugins.js";
 import { networkCmd } from "./commands/network.js";
 import { daemonCmd } from "./commands/daemon.js";
@@ -37,6 +38,7 @@ import { runCmd } from "./commands/run.js";
 import { machineCmd } from "./commands/machine.js";
 import { killCmd } from "./commands/kill.js";
 import { pushCmd } from "./commands/push.js";
+import { notificationsCmd } from "./commands/notifications.js";
 import { joinCmd, peopleCmd, shareCmd } from "./commands/share.js";
 import { grantCmd } from "./commands/grant.js";
 import { migrateOnStart } from "./migrate-on-start.js";
@@ -100,6 +102,7 @@ const main = defineCommand({
     network: networkCmd,
     kill: killCmd,
     push: pushCmd,
+    notifications: notificationsCmd,
     migrations: migrationsCmd,
     guide: guideCmd,
   },

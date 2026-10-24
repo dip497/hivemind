@@ -113,7 +113,7 @@ test("the phone page lists the computer's phone views and shows one on its own o
     console.log(`hostile view, time ${time}:`, JSON.stringify(tried));
     expect(tried).toMatchObject({
       leftovers: "none", window: "blocked", storage: "blocked", deviceKey: "blocked", serviceWorker: "blocked",
-      server: "blocked", socket: "blocked", unruled: "blocked", otherView: "blocked",
+      server: "blocked", socket: "blocked", unruled: "blocked", otherView: "blocked", form: "submits",
     });
     // It tried to take the page to another address, then its own frame to another host.
     expect(new URL(page.url()).hash).toMatch(/^#view=phone-hostile&in=/);
@@ -132,6 +132,9 @@ test("the phone page lists the computer's phone views and shows one on its own o
   await expect(page.locator("[data-paired]")).toHaveAttribute("data-paired", me.deviceId);
   expect(await page.evaluate(() => new Promise((done) => {
     const open = indexedDB.open("hive-web");
-    open.onsuccess = () => { const get = open.result.transaction("kept").objectStore("kept").get("paired"); get.onsuccess = () => done(get.result?.with?.device); };
-  }))).toBe(me.deviceId);
+    open.onsuccess = () => {
+      const get = open.result.transaction("kept").objectStore("kept").get("accounts");
+      get.onsuccess = () => done((get.result?.accounts ?? []).flatMap((a: { computers: Array<{ with: { device: string } }> }) => a.computers.map((c) => c.with.device)));
+    };
+  }))).toEqual([me.deviceId]);
 });

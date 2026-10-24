@@ -27,10 +27,11 @@
  *                user sees their last visible state + a working fresh shell.
  */
 import { pasteText } from "./paste.js";
-import { NothingAsleep, type SessionInfo, type Cursor } from "./pty-protocol.js";
+import { NothingAsleep, type SessionInfo } from "./pty-protocol.js";
 import { randomUUID } from "node:crypto";
 import { splitAtBoundary } from "./vt-boundary.js";
 import { ScreenThread } from "./screen-thread.js";
+import type { ScreenCursor } from "./screen-messages.js";
 
 /** Whether process `pid` is still running (signal 0 only checks). */
 function alive(pid: number): boolean {
@@ -54,6 +55,9 @@ export interface ManagedPty {
    *  `resume` drains again. Driven by the renderer's write-queue watermarks. */
   pause?(): void;
   resume?(): void;
+  /** Whether the program it started holds its terminal, and not a command that program ran
+   *  (foreground.ts). Optional: undefined, or left out (test fakes), where that cannot be told. */
+  holdsTerminal?(): boolean | undefined;
 }
 
 export interface SpawnSpec {
@@ -903,17 +907,21 @@ export class SessionManager {
     return this.sessions.get(id)?.spec.cmd;
   }
 
-  /** The visible rows of each live session's screen as text, its cursor, and the command it runs. */
-  /** Null when the screen worker gave no answer: unknown, not gone. */
-  async viewports(ids: string[]): Promise<Map<string, { cmd: string; screen: string; cursor?: Cursor }> | null> {
+  /** The visible rows of each live session's screen as text, its cursor, and the command it runs;
+   *  while the cursor shows, whether that command holds its terminal (`own`: undefined where that
+   *  cannot be told). Null when the screen worker gave no answer: unknown, not gone. */
+  async viewports(ids: string[]): Promise<Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }> | null> {
     const live = ids.filter((id) => this.hasLive(id));
-    const out = new Map<string, { cmd: string; screen: string; cursor?: Cursor }>();
+    const out = new Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }>();
     if (!live.length) return out;
     const rows = await this.screens.rows(live);
     if (!rows) return null;
     for (const [id, { text, cursor }] of rows) {
       const s = this.sessions.get(id);
-      if (s && !s.exited) out.set(id, { cmd: s.spec.cmd, screen: text, cursor });
+      if (!s || s.exited) continue;
+      // One read of /proc for each session that printed, and only where the line needs it.
+      const own = cursor.hidden ? undefined : s.pty.holdsTerminal?.();
+      out.set(id, { cmd: s.spec.cmd, screen: text, cursor, ...(own === undefined ? {} : { own }) });
     }
     return out;
   }

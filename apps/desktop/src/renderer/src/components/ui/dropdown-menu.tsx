@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+import { cva, type VariantProps } from "class-variance-authority"
 import { Check, ChevronRight } from "../icons"
 
 import { cn } from "../../lib/cn"
@@ -77,19 +78,32 @@ const DropdownMenuContent = React.forwardRef<
 ))
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
 
+const dropdownMenuItemVariants = cva(
+  "relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-label outline-none transition-colors focus:bg-secondary focus:text-secondary-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+  {
+    variants: {
+      variant: {
+        default: "",
+        /* Deletes or closes something: says so before you choose it. */
+        destructive: "text-destructive focus:bg-destructive/10 focus:text-destructive",
+        /* A colour to pick: a round chip filled by the item's own `style.background`. */
+        swatch: "size-6 p-0 rounded-full shadow-[inset_0_0_0_1px_var(--color-line2)] transition-transform duration-150 hover:scale-110 focus:scale-110",
+      },
+    },
+    defaultVariants: { variant: "default" },
+  }
+)
+
 const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
-    inset?: boolean
-  }
->(({ className, inset, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> &
+    VariantProps<typeof dropdownMenuItemVariants> & {
+      inset?: boolean
+    }
+>(({ className, inset, variant, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
-    className={cn(
-      "relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-label outline-none transition-colors focus:bg-secondary focus:text-secondary-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
-      inset && "pl-8",
-      className
-    )}
+    className={cn(dropdownMenuItemVariants({ variant }), inset && "pl-8", className)}
     {...props}
   />
 ))
