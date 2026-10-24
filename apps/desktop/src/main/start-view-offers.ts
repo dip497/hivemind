@@ -7,13 +7,16 @@
  * The one owner of the question "which start views has the person not been offered yet". A window
  * asks after it loads its views, saying which it has (a view that does not load is not offered) and
  * which it shows (one the person is already on is not offered, only recorded). What was offered is
- * kept per package, with its version and view, in a file of its own beside the app's data, so a
- * relaunch does not offer it again. An update is offered again only when it opens with another
- * view: the same view, newer, was already the person's to take or leave.
+ * kept per package, every view it was offered for, in a file of its own beside the app's data, so
+ * a relaunch does not offer it again. An update, or a rollback, is offered only when it opens with
+ * a view not offered before: one already offered was the person's to take or leave.
+ *
+ * Keeping the record is best effort: a disk that refuses it (full, read-only) costs at most an
+ * offer made again after a relaunch, never an install or an offer this session.
  *
  * Nothing switches the view here. The window shows the offer, and only the person's Open does.
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PACKAGE_MANIFEST } from "@hivemind/hub";
 import { parsePackageManifest } from "@hivemind/core/packages";
@@ -25,8 +28,12 @@ export interface StartViewOffer { package: string; name: string; view: string }
 /** What a window has: the views it loaded, and the one it shows. */
 export interface WindowViews { registered: readonly string[]; showing: string | null }
 
-/** Offered, per package id: the version it was offered at and its view. */
-type Offered = Record<string, { version: string; view: string }>;
+/** Offered, per package id: every view it was offered for, and the version last offered. */
+type Offered = Record<string, { version: string; views: string[] }>;
+
+const offer = (offered: Offered, id: string, version: string, view: string): void => {
+  offered[id] = { version, views: [...(offered[id]?.views ?? []).filter((v) => v !== view), view] };
+};
 
 export class StartViewOffers {
   /** A version's start view (or none), by its digest: an installed version's files never change. */
@@ -48,8 +55,8 @@ export class StartViewOffers {
         // Off, its views do not load: it is offered once it is on.
         if (!r.on) continue;
         const view = await this.startViewOf(r);
-        if (!view || offered[r.id]?.view === view || !window.registered.includes(view)) continue;
-        offered[r.id] = { version: r.version, view };
+        if (!view || offered[r.id]?.views.includes(view) || !window.registered.includes(view)) continue;
+        offer(offered, r.id, r.version, view);
         changed = true;
         // Already there: nothing to offer, and nothing to ask later.
         if (window.showing !== view) out.push({ package: r.id, name: r.name, view });
@@ -63,8 +70,8 @@ export class StartViewOffers {
   offeredInSettings(id: string, version: string, view: string): Promise<void> {
     return this.serial(async () => {
       const offered = await this.load();
-      if (offered[id]?.view === view && offered[id]?.version === version) return;
-      offered[id] = { version, view };
+      if (offered[id]?.views.includes(view) && offered[id]?.version === version) return;
+      offer(offered, id, version, view);
       await this.save(offered);
     });
   }
@@ -93,15 +100,25 @@ export class StartViewOffers {
     let read: Offered = {};
     try {
       const v = raw === null ? null : JSON.parse(raw) as { offered?: unknown };
-      if (v && typeof v.offered === "object" && v.offered) read = v.offered as Offered;
+      if (v && typeof v.offered === "object" && v.offered) {
+        for (const [id, o] of Object.entries(v.offered as Record<string, { version?: unknown; views?: unknown }>)) {
+          if (typeof o?.version === "string" && Array.isArray(o.views)) read[id] = { version: o.version, views: o.views.filter((x): x is string => typeof x === "string") };
+        }
+      }
     } catch { /* unreadable: start again; at worst a view is offered once more */ }
     return (this.offered = read);
   }
 
+  /** What is kept in memory is what was offered this session, saved or not. */
   private async save(offered: Offered): Promise<void> {
-    await mkdir(path.dirname(this.file), { recursive: true });
     const tmp = `${this.file}.${process.pid}.tmp`;
-    await writeFile(tmp, `${JSON.stringify({ v: 1, offered }, null, 2)}\n`);
-    await rename(tmp, this.file);
+    try {
+      await mkdir(path.dirname(this.file), { recursive: true });
+      await writeFile(tmp, `${JSON.stringify({ v: 1, offered }, null, 2)}\n`);
+      await rename(tmp, this.file);
+    } catch (e) {
+      console.warn(`[start-view] could not keep what was offered in ${this.file}; a relaunch may offer it again:`, e);
+      await rm(tmp, { force: true }).catch(() => {});
+    }
   }
 }

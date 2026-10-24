@@ -44,9 +44,13 @@ const startViewOffers = (): StartViewOffers =>
   (offers ??= new StartViewOffers(path.join(app.getPath("userData"), "start-view-offers.json")));
 
 /** Settings just installed `r` and offers its start view itself, as it does when the package is on:
- *  recorded, so no window asks again. */
+ *  recorded, so no window asks again. Called before the refresh that tells the windows, since a
+ *  window asks once it reloads its views. Never fails the install that worked: the record is best
+ *  effort (start-view-offers.ts). */
 export async function offeredInSettings(r: InstalledPackage): Promise<void> {
-  if (r.record.on && r.startView) await startViewOffers().offeredInSettings(r.record.id, r.record.version, r.startView);
+  if (!r.record.on || !r.startView) return;
+  await startViewOffers().offeredInSettings(r.record.id, r.record.version, r.startView)
+    .catch((e: unknown) => console.warn("[start-view] could not record Settings' offer:", e));
 }
 
 async function changed(): Promise<void> {

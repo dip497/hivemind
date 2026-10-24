@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { installPackage, switchPackage } from "@hivemind/core/package-install";
+import { installPackage, rollbackPackage, switchPackage } from "@hivemind/core/package-install";
 import { StartViewOffers } from "../../src/main/start-view-offers.ts";
 
 let tmp: string;
@@ -89,12 +89,41 @@ test("an update is offered again only when it opens with another view", async ()
   assert.deepEqual(await offers.next(LOADED), [{ ...ISLE, view: "@acme/dock" }]);
 });
 
-test("a view the window did not load is not offered until it does; one it shows is only recorded", async () => {
+test("a view the window did not load is not offered until it does", async () => {
   await installPackage(harbour("1.0.0", "@acme/isle"));
   const offers = new StartViewOffers(file);
+  // The first ask can come before the window's views load.
   assert.deepEqual(await offers.next({ registered: ["canvas"], showing: "canvas" }), []);
+  assert.deepEqual(await offers.next(LOADED), [ISLE]);
+});
+
+test("a view the window already shows is only recorded, not offered later", async () => {
+  await installPackage(harbour("1.0.0", "@acme/isle"));
+  const offers = new StartViewOffers(file);
   assert.deepEqual(await offers.next({ registered: LOADED.registered, showing: "@acme/isle" }), []);
-  assert.deepEqual(await offers.next(LOADED), [], "already on it: recorded, so not offered later");
+  assert.deepEqual(await offers.next(LOADED), []);
+});
+
+test("a rollback to a version whose view was offered is not offered again", async () => {
+  await installPackage(harbour("1.0.0", "@acme/isle"));
+  const offers = new StartViewOffers(file);
+  assert.deepEqual(await offers.next(LOADED), [ISLE]);
+  await installPackage(harbour("2.0.0", "@acme/dock"));
+  assert.deepEqual(await offers.next(LOADED), [{ ...ISLE, view: "@acme/dock" }]);
+  await rollbackPackage("@acme/harbour");
+  assert.deepEqual(await offers.next(LOADED), [], "back to Isle, offered before");
+  await rollbackPackage("@acme/harbour");
+  assert.deepEqual(await new StartViewOffers(file).next(LOADED), [], "forward to Dock, offered before, after a relaunch too");
+});
+
+test("a record the disk refuses still offers, once this session, and Settings' record does not fail", async () => {
+  await installPackage(harbour("1.0.0", "@acme/isle"));
+  // Its folder is a file: nothing can be written under it.
+  writeFileSync(path.join(tmp, "user-data"), "");
+  const offers = new StartViewOffers(file);
+  await offers.offeredInSettings("@acme/other", "1.0.0", "@acme/other-view");
+  assert.deepEqual(await offers.next(LOADED), [ISLE]);
+  assert.deepEqual(await offers.next(LOADED), []);
 });
 
 test("two windows asking at once: only one is offered it", async () => {
