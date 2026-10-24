@@ -33,8 +33,9 @@ export function OpenStartView({ installed, view, onOpen }: { installed: string; 
 
 /** Each time this window has loaded its views, ask main which start views to offer, and offer
  *  each as a toast that stays until the person opens or closes it. Views load at start and on a
- *  rescan (an install, a switch), a few times a session: one small ask each. */
-export function useStartViewOffers(): void {
+ *  rescan (an install, a switch), a few times a session: one small ask each. A component of its
+ *  own, drawing nothing, so a views load re-renders only it. */
+export function StartViewOffers(): null {
   const report = useCommunityReport();
   useEffect(() => {
     const ask = window.hive.startViewOffers;
@@ -50,4 +51,5 @@ export function useStartViewOffers(): void {
       }
     }, (e: unknown) => console.warn("[hivemind] start view offers:", e));
   }, [report]);
+  return null;
 }
