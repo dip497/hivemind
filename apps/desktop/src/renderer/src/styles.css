@@ -551,6 +551,11 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
+/* An island that is one control (the widgets toggle) clips that control's ring: the island draws it. */
+.hm-island:has(> :only-child:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
 /* An item in a list or menu shows focus by its highlight; a board object is itself the field. */
 :is([role="option"], [role^="menuitem"]):focus-visible,
 :is([data-board-object] textarea, [data-board-object] input, [data-arrow-label] input):focus-visible {
