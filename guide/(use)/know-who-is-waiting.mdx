@@ -49,7 +49,8 @@ last showed, such as `214 tests passed`. When an agent needs you, the line says 
 | **Permission**, **Question**, **Approval** or **Blocked** | that, in a word: its agent tells no more |
 
 For an agent that keeps its own conversation, such as Claude, the line is the first line of what
-it last said, or the tool it last used and what about, as your phone's Home shows it.
+it last said, or the tool it last used and what about, as your phone's Home shows it. For an agent
+that runs on another computer, the line is what its screen last showed.
 
 A terminal's line leaves out its prompt and what you type there, so it shows what the last command
 printed. A few rows are the exception:
@@ -69,11 +70,17 @@ To choose which rows show a line, open the Layers panel's **View** menu, then **
 
 ## Allow or deny from the row
 
-When an agent asks your permission to run a command of one line, its row and its toast show
+When an agent asks your permission to run a short command of one line, its row and its toast show
 **Deny** and **Allow** under the line. Press one to answer, as you would in its tile.
 
-- When the command is longer than the row, or more than one line, the row shows **Review**
-  instead. Press it to read the whole command, then **Deny** or **Allow**.
+- When you might not see all of the command there, the row shows **Review** instead: the command
+  is longer than the row or than 160 characters, has more than one line, or holds a tab, a control
+  or invisible character, or a run of spaces. Press **Review** to read the whole command, its
+  lines as the agent wrote them, then **Deny** or **Allow**. A review shows up to 4,000
+  characters, and says when the command may be longer: read the rest in its tile.
+- When a new request takes the place of the one you were reading, its buttons take no press for
+  half a second, and an open review closes and says the request changed.
+- A custom view that shows agents' lines offers only **Review**, which names the tile.
 - Hover over a row to read its whole line, or the whole command it waits on.
 - If someone answered first, or the agent stopped waiting, your answer does nothing and a notice
   says it was answered already.

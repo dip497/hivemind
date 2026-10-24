@@ -127,8 +127,11 @@ if (hm.supports("lineSlots")) hm.setLineRects([{ tileId, x: 16, y: 40, w: 480, h
 - At most 64 rects, each at least 20px high. Identical rects are not re-sent.
 - Check `supports` first: an older host counts the message against your view. A phone and a
   remote screen do not draw lines, and do not say the feature.
-- The host draws the line in 11px mono, and for a permission it can answer, its own Deny and
-  Allow inside your rect. The pointer passes through the line to you; the buttons take it.
+- The host draws the line in 11px mono, and for a permission it can answer, its own **Review**
+  button inside your rect: a popover of the host's that names the tile and shows all of what the
+  agent would run, with Deny where the keyboard lands. Never Allow in your rect, however short the
+  command: you place the rect, so you could place the button under the person's pointer. The
+  pointer passes through the line to you; the button takes it.
 - Never ask for the text by another road. The rule is the one for `invokeResult` and your saved
   layout: what you hold, you can pass on.
 

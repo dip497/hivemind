@@ -36,8 +36,8 @@ one wins.
 adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone); 1.16 adds
 `tokens` (`theme.tokens`: the view's own colours from its manifest's `tokens`, resolved, set as
 `--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback); 1.17 adds `lineSlots`
-(the host draws each tile's last line in the rects `lineRects` reserves; the computer's windows,
-not the phone). A
+(the host draws each tile's last line in the rects `lineRects` reserves, and for a permission its
+own Review, never Allow; the computer's windows, not the phone). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
