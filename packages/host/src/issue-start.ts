@@ -136,10 +136,10 @@ export function issueStart(o: IssueStartOptions): Domain<Extract<Method, "issue.
         if (wantAssign) left = left.filter((f) => !ASSIGNMENT.includes(f.check));
         if (left.length) return { started: false, id: p.id, findings: p.findings, left };
 
+        if (spawn && !path.isAbsolute(at)) throw new ApiError("UNSUPPORTED", "work on an issue is started in a workspace on this machine");
         if (wantAssign) await assignMe(from, root, p.issue);
         const who = signer(from, o.nameOf);
         let frame: { frame: string; path: string } | undefined;
-        if (spawn && !path.isAbsolute(at)) throw new ApiError("UNSUPPORTED", "work on an issue is started in a workspace on this machine");
         if (spawn && p.git) frame = await o.openWorktree(from, at, p.branch, typeof o2.base === "string" && o2.base ? o2.base : undefined);
         const moved = p.issue.state !== "in_progress";
         const patch = { ...(moved ? { status: p.status } : {}), ...(frame && p.issue.branch !== p.branch ? { branch: p.branch } : {}) };
