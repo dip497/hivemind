@@ -21,7 +21,8 @@ import { ChevronDown } from "./components/icons";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import { getSettings, patchSettings } from "./settings-store";
+import { getSettings, patchSettingsMany } from "./settings-store";
+import { IMPORT_EXTRA_PARTS, importedExtra } from "@hivemind/core/appearance-extra";
 import { exportAppearance, importAppearance } from "@hivemind/core/settings-schema";
 import { setTheme, useTheme } from "./theme-store";
 import {
@@ -45,7 +46,7 @@ function AppearancePrefs() {
   const [advanced, setAdvanced] = useState(false);
 
   const exportTheme = async () => {
-    const { theme, note } = exportAppearance(getSettings().appearance);
+    const { theme, note } = exportAppearance(getSettings().appearance, getSettings().appearanceExtra);
     try { await navigator.clipboard.writeText(JSON.stringify(theme, null, 2)); toast.success("Theme copied as JSON.", note ? { description: note } : undefined); }
     catch { toast.error("Could not reach the clipboard. Use `hive theme export <file>`."); }
   };
@@ -56,8 +57,14 @@ function AppearancePrefs() {
     try {
       const raw: unknown = JSON.parse(await f.text());
       // A theme file or a whole settings.json, checked; the wallpaper media and overlays a theme
-      // file leaves out stay yours.
-      patchSettings("appearance", importAppearance(raw, getSettings().appearance));
+      // file leaves out stay yours. Its custom accent comes with it, and a look imported is not
+      // the applied theme's, so Revert does not undo it (`importedExtra`).
+      const s = getSettings();
+      const extra = importedExtra(raw, s.appearanceExtra);
+      patchSettingsMany([
+        { path: "appearance", value: importAppearance(raw, s.appearance) },
+        ...IMPORT_EXTRA_PARTS.map((k) => ({ path: `appearanceExtra.${k}`, value: extra[k] })),
+      ]);
       toast.success(`Imported ${f.name}`);
     } catch { toast.error("That file is not a hivemind theme."); }
   };

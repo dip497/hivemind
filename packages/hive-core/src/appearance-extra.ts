@@ -206,5 +206,5 @@ export function importedExtra(raw: unknown, cur: AppearanceExtra): AppearanceExt
   if ("palette" in file || "preset" in file) delete out.theme;
   return out;
 }
-/** What an import writes of `appearanceExtra` (`importedExtra`). */
-export const IMPORT_EXTRA_PATHS = ["appearanceExtra.accent", "appearanceExtra.theme"] as const;
+/** The parts of `appearanceExtra` an import writes (`importedExtra`). */
+export const IMPORT_EXTRA_PARTS = ["accent", "theme"] as const satisfies readonly (keyof AppearanceExtra)[];

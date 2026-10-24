@@ -10,7 +10,7 @@
  * a theme naming one is refused here, so an author learns it does nothing yet.
  */
 import { contrastRatio, cssColorToOklab, parseCssColor } from "./css-color.js";
-import { FAMILY_RE, MAX_FACE_FILES, STYLE_RE, WEIGHT_RE, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
+import { FAMILY_RE, MAX_FACE_FILES, STYLE_RE, WEIGHT_RE, accentOf, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
 import { ACCENTS, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
 
 /** The file that makes a folder a theme. */
@@ -261,7 +261,7 @@ export function themeFiles(t: Theme): string[] {
 
 /** Five colours that show a theme at a glance, as presets are shown. */
 export function themeSwatches(t: Pick<Theme, "palette" | "terminal" | "accent">): string[] {
-  const brand = typeof t.accent === "string" ? ACCENTS[t.accent].brand : t.accent.brand;
+  const { brand } = typeof t.accent === "string" ? accentOf({ accent: t.accent }) : accentOf({ accent: "graphite" }, { accent: t.accent });
   return [t.palette.bg, t.palette.bg3, t.terminal?.background ?? t.palette.bg2, brand, t.palette.fg];
 }
 

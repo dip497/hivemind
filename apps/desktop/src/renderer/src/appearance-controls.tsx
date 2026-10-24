@@ -25,9 +25,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { GEIST_FONT, MONO_FONT, OLD_UI_FONT_DEFAULT, PRESETS, SYSTEM_MONO_FONT, UI_FONT, type TerminalPalette } from "@hivemind/core/settings-schema";
 import { contrastRatio, cssColorToHex } from "@hivemind/core/css-color";
+import { accentOf } from "@hivemind/core/appearance-extra";
 import { useSettings } from "./settings-store";
 import {
-  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay,
+  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
 } from "./theme-store";
 
@@ -134,7 +135,7 @@ export function AccentPicker({ t }: { t: ThemeState }) {
               aria-checked={sel}
               aria-label={a.label}
               title={a.label}
-              onClick={() => setTheme({ accent: id, accentCustom: undefined })}
+              onClick={() => chooseAccent(id)}
               className="settings-accent"
               data-selected={sel ? "" : undefined}
               style={{ background: a.swatch, ...(sel ? { boxShadow: `0 0 0 2px var(--color-bg2), 0 0 0 4px ${a.swatch}` } : {}) }}
@@ -161,7 +162,7 @@ export function AccentPicker({ t }: { t: ThemeState }) {
           tabIndex={-1}
           aria-hidden
           data-accent-custom
-          value={cssColorToHex(custom?.brand ?? ACCENTS[t.accent].brand, ACCENTS.graphite.brand)}
+          value={cssColorToHex(accentOf({ accent: t.accent }, { accent: custom }).brand, ACCENTS.graphite.brand)}
           onChange={(e) => chooseAccentColours({ brand: e.target.value, accent: e.target.value })}
         />
       </div>
@@ -290,7 +291,7 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
         <div><label>Animation</label><p>Drifting scenes and slow photo pans. Pauses when the window loses focus.</p></div>
         <Switch on={t.animate} onChange={(v) => setTheme({ animate: v })} label="Animate the background" />
       </div>
-      {t.wallpaper !== "none" && !t.glass && (
+      {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
     </>

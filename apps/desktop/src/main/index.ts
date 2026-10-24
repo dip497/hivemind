@@ -78,7 +78,7 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
-import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
+import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
@@ -1577,7 +1577,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // via a custom scheme. A blob: URL can't survive a reload (in-memory), and a
   // raw file:// is blocked by webSecurity + CSP — so the theme stores a stable
   // `hm-media://v/<encoded-abs-path>` URL and main streams the file here. Must be
-  // registered as privileged BEFORE app `ready`.
+  // registered as privileged BEFORE app `ready`, every scheme in this ONE call: Electron keeps only
+  // one call's list, so a second call drops the privileges of the first (hivemedia: lost the Fetch
+  // API that way, and no view got a theme's font bytes).
   protocol.registerSchemesAsPrivileged([
     { scheme: "hm-media", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
     // Custom-media layers (user-supplied background + transparent overlay). Same
@@ -1588,9 +1590,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
     // Tool plugins' modules, imported into the app's windows; corsEnabled so module scripts load.
     { scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+    // Community view packages: hm-view://<id>/… served to sandboxed iframes.
+    VIEW_SCHEME_PRIVILEGES,
   ]);
-  // Community view packages: hm-view://<id>/… served to sandboxed iframes.
-  registerViewScheme();
   app.whenReady().then(async () => {
     // Before any window or Browser tile page loads, so none is ever granted without them.
     installPermissions(appPageUrl());

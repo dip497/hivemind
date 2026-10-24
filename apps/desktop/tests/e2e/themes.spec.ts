@@ -40,6 +40,8 @@ fs.writeFileSync(path.join(PKG, "themes", "harbour", "still.jpg"), JPEG);
 fs.writeFileSync(path.join(PKG, "themes", "harbour", "theme.json"), JSON.stringify(theme));
 fs.writeFileSync(path.join(PKG, "hivemind-package.json"), JSON.stringify({ apiVersion: 2, id: "@e2e/looks", name: "Looks", version: "1.0.0", themes: [{ path: "themes/harbour" }] }));
 installPlugin(XDG, PKG);
+// A view that says what fonts it was given (fixtures/views/looks).
+installPlugin(XDG, path.join(APP_DIR, "tests", "e2e", "fixtures", "views", "looks"));
 
 const ENV = { ...process.env, XDG_CONFIG_HOME: XDG, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>;
 delete ENV.ELECTRON_RUN_AS_NODE;
@@ -66,6 +68,9 @@ const painted = () => page.evaluate(() => {
     primary: root.getPropertyValue("--primary").trim(),
     wallpaper: img && img.complete && img.naturalWidth > 0 ? decodeURIComponent(img.src) : null,
     glass: document.documentElement.classList.contains("glass-on"),
+    // A wallpaper without glass: the canvas clears to show it (styles.css, html.wallpaper-on).
+    wallpaperOn: document.documentElement.classList.contains("wallpaper-on"),
+    canvas: getComputedStyle(document.querySelector(".react-flow")!).backgroundColor,
   };
 });
 const appearance = async () => {
@@ -110,7 +115,9 @@ test("applied from Appearance: its colours, its accent on the main button, its f
   await expect.poll(() => page.evaluate((f) => document.fonts.load(`16px "${f}"`).then((faces) => faces.length), FAMILY)).toBe(1);
   expect(cssColorToHex(p.primary, "")).toBe(BRAND);
   await expect.poll(async () => (await painted()).wallpaper).toMatch(/^hivemedia:\/\/media\/theme-[0-9a-f]{8}-still\.jpg$/);
-  expect((await painted()).glass).toBe(false);
+  // Shown, not only loaded: glass off, the canvas is clear over it.
+  expect(await painted()).toMatchObject({ glass: false, wallpaperOn: true, canvas: "rgba(0, 0, 0, 0)" });
+  expect(before).toMatchObject({ wallpaperOn: false });
   expect(onDisk().appearance.glass.enabled).toBe(false);
   // An older build reads the built-in id; the colours are in appearanceExtra.
   expect(onDisk().appearanceExtra).toMatchObject({ accent: theme.accent, theme: { id: "@e2e/looks/harbour", version: "1.0.0" } });
@@ -156,4 +163,46 @@ test("`hive theme use` and `hive theme revert` do the same to the running app", 
   expect((await painted()).font).toContain(FAMILY);
   expect(hive("theme", "revert")).toMatchObject({ reverted: "@e2e/looks/harbour", rescanned: true });
   await expect.poll(() => painted()).toEqual(before);
+});
+
+test("a copied theme file is served with CORS to the app's page only, never to a view's frame or another site", async () => {
+  hive("theme", "use", "@e2e/looks/harbour");
+  const font = fs.readdirSync(MEDIA).find((f) => f.endsWith("display.woff2"))!;
+  const allowed = (origin: string) => app.evaluate(async ({ net }, [url, origin]) => {
+    const r = await net.fetch(url, { headers: { Origin: origin } });
+    return [r.status, r.headers.get("access-control-allow-origin")];
+  }, [`hivemedia://media/${font}`, origin] as const);
+  expect(await allowed("file://")).toEqual([200, "file://"]);
+  expect(await allowed("null")).toEqual([200, null]);
+  expect(await allowed("https://evil.example")).toEqual([200, null]);
+  hive("theme", "revert");
+});
+
+test("a view is given the theme's font faces, and loses them when the theme goes", async () => {
+  hive("theme", "use", "@e2e/looks/harbour");
+  await expect.poll(async () => cssColorToHex((await painted()).bg, "")).toBe(BG);
+  const open = async (view: string) => {
+    await page.locator("[data-view-switch]").click();
+    await page.locator(`[data-view-choice="${view}"]`).click();
+  };
+  await open("looks");
+  const frame = async () => {
+    await expect.poll(() => page.frames().some((f) => f.url().includes("looks"))).toBe(true);
+    return page.frames().find((f) => f.url().includes("looks"))!;
+  };
+  /** What the view has: whether its link speaks font faces, and the theme's face, loaded. */
+  const fonts = async () => (await frame()).evaluate((family) => ({
+    supports: (window as unknown as { __looks?: { fontFaces?: boolean } }).__looks?.fontFaces ?? null,
+    loaded: [...document.fonts].some((f) => f.family.replace(/"/g, "") === family && f.status === "loaded") && document.fonts.check(`16px "${family}"`),
+  }), FAMILY);
+  // The first view to open is sent the bytes once they are read (`fonts`); one opened after is
+  // sent them in its hello.
+  await expect.poll(fonts).toEqual({ supports: true, loaded: true });
+  await shot("themes-view-font");
+  await open("canvas");
+  await expect.poll(() => page.frames().some((f) => f.url().includes("looks"))).toBe(false);
+  await open("looks");
+  await expect.poll(fonts).toEqual({ supports: true, loaded: true });
+  hive("theme", "revert");
+  await expect.poll(fonts).toEqual({ supports: true, loaded: false });
 });
