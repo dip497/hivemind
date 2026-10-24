@@ -173,10 +173,13 @@ class Watched {
 export interface IssueWatchOptions {
   /** Tell every client `issue.changed` for the workspace at `repo`. */
   publish(repo: string, change: IssueChange): void;
+  /** Also told, once per change, and of each `.hivemind` folder while it is watched (`until`
+   *  aborts when it stops): what follows issues beside the clients (the PR watcher). */
+  watching?: { follow(root: string, until: AbortSignal): void; changed(change: IssueChange): void };
 }
 
 export class IssueWatch {
-  private readonly watched = new Map<string, { watch: Watched; repos: Map<string, number> }>();
+  private readonly watched = new Map<string, { watch: Watched; repos: Map<string, number>; stop: AbortController }>();
 
   constructor(private readonly o: IssueWatchOptions) {}
 
@@ -187,8 +190,13 @@ export class IssueWatch {
     let entry = this.watched.get(root);
     if (!entry) {
       const repos = new Map<string, number>();
-      const watch = new Watched(root, (change) => { for (const r of repos.keys()) this.o.publish(r, change); });
-      this.watched.set(root, (entry = { watch, repos }));
+      const watch = new Watched(root, (change) => {
+        this.o.watching?.changed(change);
+        for (const r of repos.keys()) this.o.publish(r, change);
+      });
+      const stop = new AbortController();
+      this.watched.set(root, (entry = { watch, repos, stop }));
+      this.o.watching?.follow(root, stop.signal);
     }
     entry.repos.set(repo, (entry.repos.get(repo) ?? 0) + 1);
     const e = entry;
@@ -198,13 +206,17 @@ export class IssueWatch {
       else e.repos.delete(repo);
       if (e.repos.size === 0 && this.watched.get(root) === e) {
         e.watch.close();
+        e.stop.abort();
         this.watched.delete(root);
       }
     }, { once: true });
   }
 
   close(): void {
-    for (const { watch } of this.watched.values()) watch.close();
+    for (const { watch, stop } of this.watched.values()) {
+      watch.close();
+      stop.abort();
+    }
     this.watched.clear();
   }
 }
