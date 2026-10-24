@@ -5,7 +5,10 @@
 
 const clamp01 = (n: number): number => Math.min(1, Math.max(0, n));
 
-const NUM = String.raw`[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?`;
+// Each pattern here reads a string in one pass: a colour comes from a theme or a package (main and
+// the hub read them), so no part may match two ways (`\d+\.?\d*` took quadratic time on a long run
+// of digits, and `\s*([^()]*?)\s*` cubic time on a long run of spaces).
+const NUM = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?`;
 const NUMBER = new RegExp(`^${NUM}$`);
 const PERCENT = new RegExp(`^${NUM}%$`);
 const ANGLE = new RegExp(`^(${NUM})(deg|rad|grad|turn)?$`);
@@ -30,9 +33,9 @@ export function parseCssColor(value: string): { rgb: [number, number, number]; a
     if (hex.length === 6 || hex.length === 8) return { rgb: [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number], alpha: hex.length === 8 };
     return null;
   }
-  const fn = /^(rgba?|oklch)\(\s*([^()]*?)\s*\)$/.exec(v);
+  const fn = /^(rgba?|oklch)\(([^()]*)\)$/.exec(v);
   if (!fn) return null;
-  const body = fn[2]!;
+  const body = fn[2]!.trim();
   let parts: string[], alpha: string | undefined;
   if (fn[1] !== "oklch" && body.includes(",")) {
     // The legacy form: three parts, all numbers or all percentages, and an optional fourth, alpha.
