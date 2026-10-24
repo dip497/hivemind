@@ -10,7 +10,7 @@ import type { LayersPrefs } from "@hivemind/core/settings-schema";
 import { subscribeWait, waitOf, type TileWait } from "./agent-waits";
 import { lineFor } from "../../shared/line-for";
 import { tileLines } from "./line-store";
-import { decidable, DecideButtons, useCut } from "./wait-decide";
+import { decidable, DecideButtons, REVIEW_MAX, reviewText, useCut } from "./wait-decide";
 import { LOOKS } from "./workspace/status-look";
 
 /** `tile`'s line as main tells it; the tile is watched while this asks for it (not null). */
@@ -54,18 +54,23 @@ export const RowLine = memo(function RowLine({ tileId, show }: { tileId: string;
 });
 
 /** The whole of a terminal's line, for its row's hover card: what its agent waits on, the tool and
- *  all of what it would run (a few lines of it), else its last line, wrapped and never cut. */
+ *  what it would run as the agent wrote it (its lines kept, none cut, controls out; its first twelve
+ *  lines, ending in an ellipsis when there are more, and saying when it may be longer than a review
+ *  shows), else its last line, wrapped and never cut. Review is where all of it is read. */
 export function CardLine({ tileId }: { tileId: string }) {
   const agent = useWait(tileId);
   const line = useLine(tileId);
   const waiting = agent?.waiting;
-  const about = waiting?.tool?.about?.split("\n").map(oneLine).join("\n").trim();
-  const text = about ? `${oneLine(waiting!.tool!.name)}: ${about}` : lineFor(waiting, line);
+  const about = waiting?.tool?.about ? reviewText(waiting.tool.about) : null;
+  const text = about?.text ? `${oneLine(waiting!.tool!.name)}: ${about.text}` : lineFor(waiting, line);
   if (!text) return null;
   return (
-    <p data-layers-card-line={waiting ? "waiting" : "line"} className={`mt-3 line-clamp-6 whitespace-pre-wrap break-words font-mono text-count leading-4 ${waiting ? "" : "text-[var(--color-fg2)]"}`}
-      style={waiting ? { color: LOOKS.needs.color } : undefined}>
-      {text}
-    </p>
+    <>
+      <p data-layers-card-line={waiting ? "waiting" : "line"} className={`mt-3 line-clamp-12 whitespace-pre-wrap break-all font-mono text-count leading-4 ${waiting ? "" : "text-[var(--color-fg2)]"}`}
+        style={waiting ? { color: LOOKS.needs.color } : undefined}>
+        {text}
+      </p>
+      {about?.more && <p className="mt-1 text-count text-[var(--color-fg3)]">Only its first {REVIEW_MAX.toLocaleString()} characters are shown.</p>}
+    </>
   );
 }

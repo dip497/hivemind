@@ -147,7 +147,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           data-community-clip={clip ?? undefined}
         />
         <SurfaceSlots rects={rects} width={hostBox.w} names={nameOf} commands={commands} onUndock={undock} />
-        <LineSlots rects={lines} box={hostBox} />
+        <LineSlots rects={lines} box={hostBox} names={nameOf} />
         {dialogs}
         {!ready && <Loading className="pointer-events-none absolute inset-0" label={`Loading ${manifest.name}`} />}
       </div>

@@ -4,7 +4,8 @@
 // more is sent for a client that went, and one that stopped watching a tile is told nothing more of
 // it. Whoever sent a line, it is kept and told as one line of plain text of at most 160 characters.
 // A tile whose agent keeps a conversation shows what it last said there, read from its session
-// file only while someone follows the tile, as its agent reports, and once for a one-shot read.
+// file as someone starts to follow the tile, while someone follows it as its agent reports, and for
+// a one-shot read; an agent that runs on another machine keeps none here, and its screen's line stands.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -21,12 +22,14 @@ import { LINES_EVERY_MS, TileLines } from "../src/tile-lines.ts";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-tile-lines-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-function host(transcripts: Record<string, Transcript> = {}) {
-  /** Each message TileLines sent, to anyone. */
+function host(transcripts: Record<string, Transcript> = {}, elsewhere: string[] = []) {
+  /** Each message TileLines sent, to anyone; how many times a tile's session file was looked for. */
   let sent = 0;
+  let looked = 0;
   const lines = new TileLines({
     server: () => ({ publishTo: (to, event, ...params) => { sent++; server.publishTo(to, event, ...params); } }),
-    transcriptOf: (bare) => transcripts[bare] ?? null,
+    transcriptOf: (bare) => { looked++; return transcripts[bare] ?? null; },
+    runsHere: (bare) => !elsewhere.includes(bare),
   });
   const server = new WorkspaceServer([lines.domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {
@@ -48,7 +51,7 @@ function host(transcripts: Record<string, Transcript> = {}) {
     if ("error" in answer) throw new Error(answer.error.message);
     return (answer.result as { lines: Record<string, string> }).lines;
   };
-  return { lines, client, watch, read, heard, sent: () => sent };
+  return { lines, client, watch, read, heard, sent: () => sent, looked: () => looked };
 }
 
 /** A session file whose records are each a thing the agent said. */
@@ -96,8 +99,14 @@ test("once a client goes, nothing more is sent for what it watched", async (t) =
 });
 
 test("a line is kept and told as one line of plain text of at most 160 characters, whoever sent it", async (t) => {
+  // What an agent wrote in its conversation: an override, a tab, a bell, and a line far past what any
+  // screen shows.
+  const said = sessionAt("plain");
+  fs.writeFileSync(said.file!, words(`\u202erm -rf\u202c\tbuild\u0007 ${"y".repeat(10_000)}\nand more`));
+  const h = host({ t2: said });
+  assert.deepEqual(await h.read(h.client(), ["t2"]), { t2: `rm -rf build ${"y".repeat(147)}` }, "what an agent said");
+
   t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
-  const h = host();
   const a = h.client();
   await h.watch(a, ["t1"]);
   // What a tile's own process may send over the control-plane socket: an override, a line break, and
@@ -185,12 +194,62 @@ test("what an agent said is read only while someone follows its tile; a one-shot
   h.lines.reported("t1");
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(h.lines.get("t1"), "Planning the change", "a one-shot read follows nothing");
+  assert.deepEqual(await h.read(a, ["t1"]), { t1: "Writing the tests" }, "the next one-shot read reads what it wrote since");
+  fs.appendFileSync(s3.file!, words("Reading the diff"));
+  assert.deepEqual(await h.read(a, ["t1"]), { t1: "Reading the diff" }, "and what it wrote with no report");
 
+  fs.appendFileSync(s3.file!, words("Running the tests"));
   h.lines.followAll(true);
   h.lines.reported("t1");
-  await until(() => h.lines.get("t1") === "Writing the tests");
-  assert.equal(h.lines.get("t1"), "Writing the tests", "Home follows every tile");
+  await until(() => h.lines.get("t1") === "Running the tests");
+  assert.equal(h.lines.get("t1"), "Running the tests", "Home follows every tile");
   assert.equal(h.lines.get("t2"), "", "a tile Home asks for whose agent's words were never read");
   await until(() => h.lines.get("t2") !== "");
   assert.equal(h.lines.get("t2"), "Asleep since noon", "is read, with no report of its agent's");
+});
+
+test("a tile someone starts to watch is read with no report of its agent's, in the session it is in now: what it said while no one watched", async () => {
+  const s5 = sessionAt("s5");
+  fs.writeFileSync(s5.file!, words("Idle since lunch"));
+  const transcripts: Record<string, Transcript> = { t1: s5 };
+  const h = host(transcripts);
+  const a = h.client();
+  await h.watch(a, ["t1"]);
+  await until(() => h.heard(a).length > 0);
+  assert.deepEqual(h.heard(a), [{ t1: "Idle since lunch" }], "an idle agent's row shows its words");
+
+  // Unwatched, it begins another session and says nothing of it (no hook, no report).
+  await h.watch(a, []);
+  const s6 = sessionAt("s6");
+  fs.writeFileSync(s6.file!, words("Fresh start"));
+  transcripts.t1 = s6;
+  await h.watch(a, ["t1"]);
+  await until(() => h.heard(a).length > 1);
+  assert.deepEqual(h.heard(a).at(-1), { t1: "Fresh start" }, "watched again, the session it is in now is looked for");
+});
+
+test("an agent that runs on another machine keeps no conversation here: its screen's line stands; one whose file is not written yet is looked for again as it reports another session, else at most every 3 s", async () => {
+  const away = sessionAt("away");
+  fs.writeFileSync(away.file!, words("Not on this machine"));
+  const s7: Transcript = { session: "", file: null, format: FORMAT };
+  const transcripts: Record<string, Transcript> = { t1: away, t2: s7 };
+  const h = host(transcripts, ["t1"]);
+  h.lines.set("t1", "Compiling 3/9");
+  const a = h.client();
+  assert.deepEqual(await h.watch(a, ["t1", "t2"]), { t1: "Compiling 3/9", t2: "" });
+
+  const before = h.looked();
+  for (let i = 0; i < 100; i++) {
+    h.lines.reported("t1", "s-away");
+    h.lines.reported("t2", "s7");
+  }
+  assert.ok(h.looked() - before <= 2, `each report looks for no file: looked ${h.looked() - before} times for 200 reports`);
+  assert.equal(h.lines.get("t1"), "Compiling 3/9");
+
+  const s8 = sessionAt("s8");
+  fs.writeFileSync(s8.file!, words("Started over"));
+  transcripts.t2 = s8;
+  h.lines.reported("t2", "s8");
+  await until(() => h.lines.get("t2") !== "");
+  assert.equal(h.lines.get("t2"), "Started over", "another session reported: looked for at once");
 });

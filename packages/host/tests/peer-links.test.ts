@@ -139,7 +139,9 @@ function linkPair(device: string, computer: string) {
 }
 
 /** The person's computer, holding the workspace `api`, with their phone and laptop paired. */
-function computer() {
+/** The person's computer, holding the workspace `api` with two agents' tiles. `lines`: each tile's
+ *  last line, in place of a map the test sets. */
+function computer(o: { lines?: Pick<TileLines, "get" | "followAll"> } = {}) {
   const dir = path.join(tmp, String(made++));
   const repo = path.join(dir, "api");
   const person = newSeed();
@@ -249,7 +251,7 @@ function computer() {
     devices: () => [host],
     profile: async () => ({ name: "Priya", color: "#3b82f6" }),
     shown: (at) => shown.get(at),
-    lines: { get: (tile) => lines.get(tile), followAll: () => {} },
+    lines: o.lines ?? { get: (tile) => lines.get(tile), followAll: () => {} },
   });
   /** `device` connects: what it hears on each stream, and its end of the link; and a stream of its
    *  own, opened beside them (`open`): what is sent on it, what it hears, and its end. */
@@ -758,6 +760,49 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
   stranger.send("home", { t: "follow" });
   assert.equal(await Promise.race([stranger.closed, wait(2_000).then(() => "still open")]), "removed");
   assert.deepEqual(stranger.heard.get("home"), []);
+});
+
+test("while a phone follows Home, every agent's words are read, unwatched and with no report; after it hangs up a report reads nothing, and Home followed again reads what it said meanwhile", async () => {
+  const file = path.join(tmp, `said-${made}.jsonl`);
+  let n = 0;
+  const words = (text: string) => fs.appendFileSync(file, `${JSON.stringify({ type: "assistant", uuid: `a${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content: text } })}\n`);
+  const format = { id: "uuid", at: "timestamp", said: [{ require: { type: "assistant" }, text: "message.content", who: "agent" as const }] };
+  // eslint-disable-next-line prefer-const
+  let c: ReturnType<typeof computer>;
+  const lines = new TileLines({
+    server: () => ({ publishTo: () => {} }), changed: () => c.links.homeLinesChanged(),
+    transcriptOf: (bare) => (bare === "t1" ? { session: "s1", file, format } : null),
+  });
+  c = computer({ lines });
+  const t1 = `t:${c.workspace}/t1`;
+  /** What Home last told `phone` t1's line is. */
+  const homeLine = (phone: { heard: Map<string, string[]> }) => {
+    let line: string | undefined;
+    for (const m of phone.heard.get("home")!.map((h) => JSON.parse(h) as HomeMessage)) {
+      if (m.t === "home") line = m.lines.rows.find(([k]) => k === t1)?.[1];
+      else for (const ch of m.lines?.changes ?? []) if (ch.key === t1) line = "row" in ch ? ch.row : undefined;
+    }
+    return line;
+  };
+  words("Waiting on CI");
+  const phone = c.connect(c.phone);
+  phone.send("home", { t: "follow" });
+  await until(() => homeLine(phone) === "Waiting on CI");
+  assert.equal(homeLine(phone), "Waiting on CI");
+
+  phone.hangUp();
+  await phone.closed;
+  // Its streams close as the link does.
+  await wait(50);
+  words("Merged");
+  lines.reported("t1", "s1");
+  await wait(100);
+  assert.equal(lines.get("t1"), "Waiting on CI", "followed by no one: not read");
+
+  const again = c.connect(c.phone);
+  again.send("home", { t: "follow" });
+  await until(() => homeLine(again) === "Merged");
+  assert.equal(homeLine(again), "Merged");
 });
 
 /** The person's computer hosting the workspace `api`, whose terminals are the host's own

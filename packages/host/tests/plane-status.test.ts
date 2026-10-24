@@ -1,6 +1,7 @@
 // What the control plane hears of an agent is its status: a daemon's reading of its screen
 // (`agent.screen`) until its hooks speak, a wait and what screen it says it is; and the session its
-// hooks say it is in (`agent.event`); and what a tile's screen last showed (`tile.line`).
+// hooks say it is in (`agent.event`); and what a tile's screen last showed (`tile.line`), or its
+// agent last said, read again as it reports.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -54,6 +55,34 @@ test("what a tile's screen last showed is its line, by its bare id, and told; an
   assert.equal(told, 1);
   p.forget("hm:t1");
   assert.equal(lines.get("t1"), undefined);
+});
+
+test("an agent's report (a hook's event, a reply passed on from another machine) moves its tile's line to what it said since, while someone follows the tile", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-plane-lines-"));
+  try {
+    const file = path.join(dir, "s1.jsonl");
+    let n = 0;
+    const words = (text: string) => fs.appendFileSync(file, `${JSON.stringify({ type: "assistant", uuid: `a${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content: text } })}\n`);
+    const lines = new TileLines({
+      server: () => ({ publishTo: () => {} }),
+      transcriptOf: (bare) => (bare === "t1" ? { session: "s1", file, format: { id: "uuid", at: "timestamp", said: [{ require: { type: "assistant" }, text: "message.content", who: "agent" }] } } : null),
+    });
+    lines.followAll(true);
+    const p = plane({ lines });
+    const until = async (line: string) => { for (let i = 0; i < 100 && lines.get("t1") !== line; i++) await new Promise((r) => setTimeout(r, 10)); };
+    words("Starting");
+    assert.deepEqual(await lines.read(["t1"]), { t1: "Starting" });
+    words("Reading the code");
+    p.event("agent.event", { tileId: "hm:t1", event: "input.resolved" });
+    await until("Reading the code");
+    assert.equal(lines.get("t1"), "Reading the code");
+    words("214 tests pass");
+    p.event("agent.reply", { tileId: "hm:t1", text: "214 tests pass" });
+    await until("214 tests pass");
+    assert.equal(lines.get("t1"), "214 tests pass");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("a startup screen answered (a folder's trust) does not hold the messages sent after it", async () => {

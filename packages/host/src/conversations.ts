@@ -32,6 +32,9 @@ export function keepsConversation(def: AgentProviderDef | undefined): boolean {
 /** How often a followed agent is looked at for a session it began since: an agent with no hooks
  *  says nothing of one. */
 const SESSION_CHECK_MS = 1000;
+/** The least time between two looks for the file of an agent that keeps none yet, however often it
+ *  reports from the same session: each look may scan the agent's store. */
+export const RESOLVE_EVERY_MS = 3000;
 
 /** The session the agent of `tile` keeps its conversation in now, among the boards `held`, and its
  *  file, as its manifest says it is kept (`session.transcript`, `session.resume.exists`); null
@@ -93,6 +96,11 @@ interface SaidOf {
   again: boolean;
   /** Which file it keeps is looked for again before its next read. */
   resolve: boolean;
+  /** When which file it keeps was last looked for, and the session its agent last reported from. */
+  resolvedAt: number;
+  reported?: string;
+  /** Its agent reported while no one followed its tile: read before its line is next told. */
+  stale: boolean;
   /** Called once no read of it is due. */
   settled: Array<() => void>;
 }
@@ -112,7 +120,9 @@ export interface LastSaidOptions {
  * only what was written since. Reads are asynchronous and one at a time for every tile here, so
  * fifty agents are never parsed at once, and a tile asked for again while it is read is read once
  * more after. Which file a tile's agent keeps is looked for once, then again when it reports
- * another session or keeps none yet: never on a timer.
+ * another session, or, while it keeps none yet, as it reports at most every 3 s: never on a timer.
+ * An agent that reports while no one follows its tile is only marked (`stale`), and read once its
+ * line is next asked for.
  */
 export class LastSaid {
   private readonly tiles = new Map<string, SaidOf>();
@@ -133,23 +143,41 @@ export class LastSaid {
     return s.t ? s.line : undefined;
   }
 
-  /** Whether `bare`'s agent keeps a session file whose words were never read. */
+  /** Whether `bare`'s agent keeps a conversation whose words were never read, or reported since
+   *  they were (`stale`), and no read of it is due. */
   unread(bare: string): boolean {
     const s = this.of(bare);
-    return !!s.t?.file && s.cursor === undefined && !s.queued;
+    return !!s.t && !s.queued && (s.stale || (!!s.t.file && s.cursor === undefined));
+  }
+
+  /** The agent of `bare` reported from `session` while no one follows its tile: nothing is read or
+   *  looked for now, and its words are read before its line is next asked for (`unread`). */
+  stale(bare: string, session?: string): void {
+    const s = this.tiles.get(bare);
+    // Never asked for: its first read is from the end anyway.
+    if (!s) return;
+    s.stale = true;
+    this.reportedFrom(s, session);
   }
 
   /** Read what the agent of `bare` said since it was last read, soon; `session`: the session it
    *  reports from, looked for again when another; `resolve`: look for which file it keeps first. */
   refresh(bare: string, o: { session?: string; resolve?: boolean } = {}): void {
     const s = this.of(bare);
-    if (o.resolve || !s.t?.file || (o.session && o.session !== s.t.session)) s.resolve = true;
+    s.stale = false;
+    this.reportedFrom(s, o.session);
+    if (o.resolve || (!s.t?.file && Date.now() - s.resolvedAt >= RESOLVE_EVERY_MS)) s.resolve = true;
     if (s.resolve) this.resolve(bare, s);
     if (!s.t) return;
     if (s.queued) { if (s.reading) s.again = true; return; }
     s.queued = true;
     this.queue.push(bare);
     void this.run();
+  }
+
+  /** Read each tile whose agent reported while no one followed it (`stale`), soon. */
+  refreshStale(): void {
+    for (const [bare, s] of this.tiles) if (s.stale) this.refresh(bare);
   }
 
   /** Resolves once no read of `bare` is due: at once when none is. */
@@ -169,16 +197,25 @@ export class LastSaid {
   private of(bare: string): SaidOf {
     let s = this.tiles.get(bare);
     if (!s) {
-      s = { t: null, queued: false, reading: false, again: false, resolve: false, settled: [] };
+      s = { t: null, queued: false, reading: false, again: false, resolve: false, resolvedAt: 0, stale: false, settled: [] };
       this.tiles.set(bare, s);
       this.resolve(bare, s);
     }
     return s;
   }
 
+  /** `s`'s agent reported from `session`: which file it keeps is looked for again before its next
+   *  read when that is another than it last reported, and than the one it keeps. */
+  private reportedFrom(s: SaidOf, session: string | undefined): void {
+    if (!session || session === s.reported) return;
+    s.reported = session;
+    if (session !== s.t?.session) s.resolve = true;
+  }
+
   /** Look for which file `bare`'s agent keeps now: another one is read from its end. */
   private resolve(bare: string, s: SaidOf): void {
     s.resolve = false;
+    s.resolvedAt = Date.now();
     const t = this.o.transcriptOf(bare);
     if (t?.file === s.t?.file && t?.format === s.t?.format) { s.t = t; return; }
     s.t = t;

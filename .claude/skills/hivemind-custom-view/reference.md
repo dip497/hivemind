@@ -39,8 +39,8 @@ adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone)
 `--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback); 1.17 adds `fontFaces`
 (a theme's fonts: the SDK loads them into `document.fonts`, so the family `theme.fonts` names
 draws in the view; nothing to do in the view) and `lineSlots`
-(the host draws each tile's last line in the rects `lineRects` reserves; the computer's windows,
-not the phone). A
+(the host draws each tile's last line in the rects `lineRects` reserves, and for a permission its
+own Review, never Allow; the computer's windows, not the phone). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |

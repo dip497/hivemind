@@ -391,6 +391,21 @@ test("what an agent last said, in a line: the first line of its last words, or t
   assert.deepEqual(await lastSaidSince(path.join(tmp, "none.jsonl"), TOOLS), { line: undefined, cursor: undefined });
 });
 
+test("from a cursor more than 1 MiB behind, what an agent last said is read from the end of its file, never the whole gap: its last words, and none from megabytes back", async () => {
+  const AGENT: AgentTranscript = { id: "uuid", at: "timestamp", said: [{ require: { type: "assistant" }, text: "message.content", who: "agent" }] };
+  let n = 0;
+  const words = (text: string) => `${JSON.stringify({ type: "assistant", uuid: `g${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content: text } })}\n`;
+  const noise = () => `${JSON.stringify({ type: "cost-state", uuid: `g${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), cost: "0".repeat(1000) })}\n`;
+  const at = sessionFile(words("Started"));
+  const { cursor } = await lastSaidSince(at, AGENT);
+  // Words just past the cursor, then 5 MiB the agent wrote for itself: past the cap and the widest read.
+  fs.appendFileSync(at, words("Megabytes back") + noise().repeat(5 * 1024));
+  const size = fs.statSync(at).size;
+  assert.deepEqual(await lastSaidSince(at, AGENT, cursor), { line: undefined, cursor: size }, "nothing in its last 4 MiB says anything: what was said before stands");
+  fs.appendFileSync(at, noise().repeat(1200) + words("Latest words"));
+  assert.deepEqual(await lastSaidSince(at, AGENT, cursor), { line: "Latest words", cursor: fs.statSync(at).size });
+});
+
 test("a tool use is looked for only in what the caller was shown of the conversation, from a whole line, never the whole session file", async () => {
   const line = (rid: string, kind: string, payload: unknown) => JSON.stringify({ rid, ts: "2026-10-02T08:00:00.000Z", kind, payload });
   const use = (id: string) => [line(`${id}a`, "call", { call_id: id, name: "shell", args: { cmd: id } }), line(`${id}b`, "output", { call_id: id, output: "ok" })];
