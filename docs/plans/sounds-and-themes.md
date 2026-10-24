@@ -112,6 +112,22 @@ then Round 1, then this plan.
   digit only while Num Lock makes it type one, and `actionsFor` lets a row named by a sign win over a
   digit's place, so French Ctrl+6 (`-`) sizes text and tile 6 has no key on AZERTY; the editor's font
   keys follow the terminal's rule only.
+- ~~**Colour gaps from Round 0's reviews.**~~ Closed 2026-10-24 (branch `fix/colour-gaps`): (1) the
+  editor's unsaved dot is a neutral fg2 `UnsavedMark` named "unsaved changes", not amber (DESIGN.md
+  Markers); (2) a machine's link is a shape and a word per state from the app's status owner
+  (`MACHINE_LOOKS` in `workspace/status-look.tsx`), named where no word stands beside it (the chip
+  online or idle, a remote workspace's icon in Layers), and only sign in is amber and pulses; (3) the
+  failed, finished and needs-you colours are fitted per palette (`statusInk` in core's
+  `theme-format.ts`, painted by the theme store, memoised on the palette) so a chip's word reads
+  4.5:1 and its mark 3:1 on bg2, bg3 and bg4: selected failed chip 3.67→4.55:1 Signal and Clean,
+  3.85→4.59 Clean Light, 3.05→4.51 Ubuntu, 2.55→4.51 Dracula, 1.91→4.53 Nord, 2.30→4.53 Solarized
+  Dark, 2.60→4.52 One Dark (finished 1.92→4.56 in Clean Light, needs-you 2.85→4.56 in Solarized
+  Dark); (4) no words in `--color-brand`, `--color-accent` or `--color-info` (Layers' "filtered",
+  the toast verb, the agent badge, a Markdown link, a renamed file). Unit `status-ink`,
+  `machine-status`, core `statusInk`; e2e `layers-panel` (selected failed row in three presets),
+  `machines`, `editor`, `accent-text`, each shown failing with its fix reverted. Left alone: the
+  file tree's git "modified" letter is still amber, and the accent's marks (pin, check, a frame's
+  server icon, the toast's icon) are held to 3:1 on bg and bg2 only, though some sit on bg3.
 - **Agents and Browser tile permissions.** With Agent browser control on, an agent can grant a site a
   right over the DevTools protocol (said on the security page).
 - **A diff's page.** The Diff tile, the Code Workbench's diff, a conflicted file and a tool's diff
