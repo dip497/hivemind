@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: dragging the divider between two panes in the Windows view ends where you let go; before, it could stop partway and stay held until the next click.
 - Fixed: Shift+Esc undocks a terminal from a scene view again while the terminal has the keyboard; a terminal that is not docked still gets the key.
 - Fixed: an agent started by another agent or `hive ctl spawn` is laid out in its frame even when the app hears of it after the tile appears; before, it could be left without a place on the canvas.
 - Fixed: a message sent from the phone, or with `hive ctl send`, to an agent at its prompt says it was sent, not "Queued · sends when it finishes" with a **Send now** that would stop a turn that is not running. `agent.send` answers `held` only while the agent's turn runs.
