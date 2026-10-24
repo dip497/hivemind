@@ -260,7 +260,8 @@ Depth is tonal first: four graphite steps from ground to hover. Soft shadows lif
 ### Overlays and tints
 - **Scrim** (`--color-scrim`, black at 55%): behind a modal dialog or Settings, and the minimap's off-screen area.
 - **Selection** (`--color-selection`, the text colour at 20%), **current line** (2.5%), **match** (`--color-match`, the info colour at 22%), **bracket match** (the accent at 25%): mixed from the theme's own colours, so a light or custom preset gets them too.
-- **Syntax** (`--color-syntax-*`): the editor's keyword, string, number, function, type, property and tag colours.
+- **Syntax** (`--color-syntax-*`): the keyword, string, number, function, type, property, tag and comment colours of the editor and every diff (the Diff tile, its fullscreen, a conflicted file, a tool's `PatchView`), drawn on bg2.
+- **Diff** (`--color-diff-*`): a diff's text, its added and removed words (the +N/−N, changed line numbers, a bar), the quieter line numbers and a conflict's incoming side, each side's row tint and changed-word highlight. Worked out from the palette by `@hivemind/core/diff-colours`, with the syntax, and painted by theme-store: each starts at its own lightness and moves away from the page only as far as 4.5:1 on bg2, bg3 (the Diff tile's header) and every changed row needs (3:1 between a removed bar's stripes). A theme no diff can be read on is refused. `packages/hive-core/src/diff-colours.test.ts` holds every preset.
 
 A colour is defined once, as a custom property in `styles.css` (a token) or in a palette a person picks from (frame colours, people's colours, wallpaper scenes, note paper). Anything else uses those names; the unit test above fails on a colour literal outside a definition.
 

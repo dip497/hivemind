@@ -149,7 +149,7 @@ const themeCompartment = new Compartment();
 const themeFor = (mode: "dark" | "light") => themeCompartment.of(cmThemes[mode]);
 
 const highlightStyle = HighlightStyle.define([
-  { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--color-fg3)", fontStyle: "italic" },
+  { tag: [t.comment, t.lineComment, t.blockComment], color: "var(--color-syntax-comment)", fontStyle: "italic" },
   { tag: [t.keyword, t.modifier, t.controlKeyword, t.operatorKeyword], color: "var(--color-syntax-keyword)" },
   { tag: [t.string, t.special(t.string), t.regexp], color: "var(--color-syntax-string)" },
   { tag: [t.number, t.bool, t.null, t.atom], color: "var(--color-syntax-number)" },

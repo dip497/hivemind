@@ -105,8 +105,8 @@ for (const info of ALLOWED_LANGS) {
 }
 export const bundledLanguagesBase = slimBundledLanguages;
 
-// Pierre registers pierre-dark / pierre-light as CUSTOM themes via
-// `registerCustomTheme`. The shiki bundled themes are dead weight.
+// Pierre registers its themes as CUSTOM themes via `registerCustomTheme`, and
+// the app draws with its own (pierre-codeview.ts). The shiki bundled themes are dead weight.
 export const bundledThemes: Record<string, never> = {};
 export const bundledThemesInfo: never[] = [];
 

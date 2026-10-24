@@ -225,14 +225,9 @@
   --color-bracket-match: color-mix(in oklab, var(--color-brand) 25%, transparent);
   --color-grid-dot: oklch(0.70 0.012 260 / 0.10);
 
-  /* The editor's syntax colours. */
-  --color-syntax-keyword: #c084fc;
-  --color-syntax-string: #22c55e;
-  --color-syntax-number: #f59e0b;
-  --color-syntax-function: #60a5fa;
-  --color-syntax-type: #5eead4;
-  --color-syntax-property: #93c5fd;
-  --color-syntax-tag: #f472b6;
+  /* The syntax colours (--color-syntax-*) and a diff's (--color-diff-*) are worked out from the
+     palette by @hivemind/core/diff-colours and painted by theme-store, so each reads on the look's
+     own bg2 and on a diff's changed rows, a theme's too. */
 }
 
 @layer base {
@@ -530,13 +525,6 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --hm-highlight-glass: inset 0 0 0 0 transparent;
   --color-grid-dot: oklch(0.35 0.012 260 / 0.16);
   --color-scrim: oklch(0.2 0.01 260 / 0.35);
-  --color-syntax-keyword: #8b3fd9;
-  --color-syntax-string: #16794a;
-  --color-syntax-number: #a35f00;
-  --color-syntax-function: #1f5fd1;
-  --color-syntax-type: #0e7490;
-  --color-syntax-property: #2563c9;
-  --color-syntax-tag: #c02679;
   /* Issue states, labels and people's initials, drawn dark on the light page: 4.5:1 on Clean
      Light's bg, bg2 and bg3, and a label's text on its chip in every hue. */
   --color-state-backlog:   oklch(0.52 0.013 231.77);
@@ -550,9 +538,6 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
   --color-label-edge: oklch(0.80 0.04 0 / 0.5);
   --color-label-dot:  oklch(0.60 0.15 0);
   --color-person:     oklch(0.48 0.13 0);
-  /* A diff's ok and err as they are: its page is white. */
-  --color-diff-added:   var(--color-ok);
-  --color-diff-removed: var(--color-err);
 }
 :focus-visible {
   outline: 2px solid var(--color-focus);
@@ -962,13 +947,6 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --color-label-edge: oklch(0.34 0.03 0 / 0.4);
   --color-label-dot:  oklch(0.72 0.15 0);
   --color-person:     oklch(0.78 0.13 0);
-  /* A diff's added and removed lines (pierre-codeview.ts): the palette's ok and err, which it also
-     sets its +N and −N counts in, as text on its own near-black page (#0a0a0a). A preset's err is
-     drawn for a status mark, not for text (Ubuntu's reads 4.1:1 there, Solarized Dark's 4.3:1), so
-     the dark page lifts each to L 0.62 at least: 4.75:1 for any red or green. The light page takes
-     them as they are (:root[data-theme-mode="light"]). Read from inline styles, like the notes. */
-  --color-diff-added:   oklch(from var(--color-ok) max(l, 0.62) c h);
-  --color-diff-removed: oklch(from var(--color-err) max(l, 0.62) c h);
 }
 
 /* The master switch. Recolor the panel TOKENS to translucent variants of the
@@ -986,8 +964,9 @@ html.glass-on {
    tile draws and wash text out over a busy wallpaper. How see-through a tile's content
    is belongs to "Frost tool content" alone — html.content-glass sets those backgrounds
    explicitly, from the surface source at --content-opacity. Scoped to the tile surface,
-   so a pinned or docked tile gets it too. */
-html.glass-on .hm-tile-surface {
+   so a pinned or docked tile gets it too, and to the fullscreen panel that stands for a tile. */
+html.glass-on .hm-tile-surface,
+html.glass-on .hm-term-fs-panel {
   --color-bg2: var(--surface-2);
   --color-bg3: var(--surface-3);
   --color-bg4: var(--surface-4);
@@ -1109,13 +1088,48 @@ html.content-glass .cm-editor .cm-scroller,
 html.content-glass .cm-gutters {
   background-color: transparent !important;
 }
-/* Diff (Pierre): Pierre paints its OWN opaque row/buffer/gutter backgrounds via
-   --diffs-bg-* vars, which hid the tile tint. Clear them through Pierre's
-   intended -override hooks so the wallpaper shows, then tint the whole pane at
-   content-opacity. The add/del/modified line colors keep their own overrides. */
-html.content-glass [data-pierre-tile] {
-  background-color: transparent !important;
-  --diffs-bg-override: transparent;
+/* Every diff (Pierre's `diffs-container`, wherever it mounts: a tile, fullscreen, a tool) takes the
+   app's type and the diff's colours (theme-store paints them from @hivemind/core/diff-colours).
+   Pierre mixes each row's tint into the page itself (20% dark, 12% light), and a changed word's
+   highlight over it; a removed line's hatched bar keeps Pierre's own dark stripe (PIERRE_OPTIONS
+   in pierre-codeview.ts). The Diff tile sets its own size (--hm-diff-font-size). */
+diffs-container {
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: var(--hm-diff-font-size, var(--text-body));
+  --diffs-line-height: 1.6;
+  --diffs-tab-size: 2;
+  --diffs-min-number-column-width: 3ch;
+  --diffs-header-font-family: var(--font-sans);
+  --diffs-gap-inline: 8px;
+  --diffs-gap-block: 8px;
+  /* Solid: Pierre sets the +N/−N, the bars and the changed line numbers in them. */
+  --diffs-addition-color-override: var(--color-diff-added);
+  --diffs-deletion-color-override: var(--color-diff-removed);
+  --diffs-modified-color-override: var(--color-diff-changed);
+  --diffs-fg-number-override: var(--color-diff-number);
+  --diffs-bg-addition-override: var(--color-diff-added-tint);
+  --diffs-bg-addition-number-override: var(--color-diff-added-tint);
+  --diffs-bg-deletion-override: var(--color-diff-removed-tint);
+  --diffs-bg-deletion-number-override: var(--color-diff-removed-tint);
+  --diffs-bg-addition-emphasis-override: var(--color-diff-added-word);
+  --diffs-bg-deletion-emphasis-override: var(--color-diff-removed-word);
+  --conflict-bg-current-override: var(--color-diff-added-tint);
+  --conflict-bg-current-number-override: var(--color-diff-added-tint);
+  --conflict-bg-current-header-override: var(--color-diff-added-tint);
+  --conflict-bg-incoming-override: var(--color-diff-changed-tint);
+  --conflict-bg-incoming-number-override: var(--color-diff-changed-tint);
+  --conflict-bg-incoming-header-override: var(--color-diff-changed-tint);
+  /* A selected line: the accent, which is the person's, not a signal. */
+  --diffs-bg-selection-override: color-mix(in srgb, var(--color-brand) 22%, transparent);
+  --diffs-bg-selection-number-override: color-mix(in srgb, var(--color-brand) 34%, transparent);
+}
+/* A diff's page (every Pierre surface, `diffs-container`) is the preset's bg2, through the theme in
+   pierre-codeview.ts, which reads it as `--diffs-background`. Glass on the content clears it, so the
+   tile's own tint (.hm-glass-surface) is the one layer over the wallpaper, as a terminal's is, and
+   with it the fills Pierre lays over the page (a folded run's bar, the hatching, an expanded run),
+   which would stack where they nest once the page is see-through. Changed rows stay tinted. */
+html.content-glass diffs-container {
+  --diffs-background: transparent;
   --diffs-bg-buffer-override: transparent;
   --diffs-bg-context-override: transparent;
   --diffs-bg-context-gutter-override: transparent;

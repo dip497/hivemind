@@ -21,6 +21,7 @@ import {
 import { accentOf, presetPaths, withPreset, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
 import { contrastRatio } from "@hivemind/core/css-color";
 import { UNREAD_BLUE, accentMarkInk, statusInk, statusTextInk } from "@hivemind/core/theme-format";
+import { diffColours } from "@hivemind/core/diff-colours";
 import { getSettings, patchSettingsMany, subscribeSettings } from "./settings-store";
 
 export { ACCENTS, ANCHORS, WALLPAPERS };
@@ -240,7 +241,13 @@ function paintTheme(t: ThemeState): void {
   root.style.setProperty("--color-status-working", a.working ? (light ? t.palette.fg2 : a.working) : a.brand);
   root.style.setProperty("--color-accent", light ? a.brand : a.accent);
   root.style.setProperty("--color-info", light ? a.brand : a.accent);
+  // The editor's and every diff's colours, worked out to read on this palette's bg2 and a diff's
+  // changed rows: 1 to 2 ms, so once per palette (`show` keeps an unchanged palette's object), not
+  // per wallpaper or scene switch, and never per line.
+  if (diffFor.palette !== t.palette || diffFor.mode !== t.mode) diffFor = { palette: t.palette, mode: t.mode, colours: diffColours(t.palette, t.mode) };
+  for (const [k, v] of Object.entries(diffFor.colours)) root.style.setProperty(k, v);
 }
+let diffFor: { palette?: ThemeState["palette"]; mode?: ThemeState["mode"]; colours: Record<string, string> } = { colours: {} };
 
 export function getTheme(): ThemeState { return state; }
 

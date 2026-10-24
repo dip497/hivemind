@@ -71,8 +71,9 @@ export function DiffHeader(props: {
       )}
 
       <span className="text-[var(--color-fg)] truncate" title={props.file}>{props.file}</span>
-      <span style={{ color: "var(--color-ok)" }}>+{props.adds}</span>
-      <span style={{ color: "var(--color-err)" }}>−{props.dels}</span>
+      {/* The diff's own added and removed, which read on this bg3 (@hivemind/core/diff-colours). */}
+      <span style={{ color: "var(--color-diff-added)" }}>+{props.adds}</span>
+      <span style={{ color: "var(--color-diff-removed)" }}>−{props.dels}</span>
 
       <span className="ml-auto inline-flex items-center gap-2">
         <Button
