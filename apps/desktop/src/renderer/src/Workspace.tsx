@@ -844,23 +844,28 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     setSelectedFrameId, setTiles, setSpawnPick, focusTile, openFileInTile, renameTile,
   });
   // Tiles the control plane opens, which its host starts: announced before they reach the layout
-  // (whether to bring each forward), then laid out as they arrive.
+  // (whether to bring each forward), then laid out as they arrive. The notice and the layout come
+  // by different ways, so a notice can come after its tile: that one is laid out at once.
   const arrivals = useRef(new Map<string, Pick<TileOpened, "background" | "near" | "by">>());
+  const placeArrivedRef = useRef(placeArrived);
+  placeArrivedRef.current = placeArrived;
+  const placeArrivals = useCallback((held: TileInstance[]) => {
+    for (const [id, at] of arrivals.current) {
+      if (!held.some((t) => t.id === id)) continue;
+      arrivals.current.delete(id);
+      placeArrivedRef.current(id, at);
+    }
+  }, []);
   useEffect(() => {
     const off = window.hive.onHcpSpawned(({ tileId, repo, background, near, by }) => {
       if (repo !== persistKey) return;
       if (background) markBackgroundTile(tileId);
       arrivals.current.set(tileId, { background, near, by });
+      placeArrivals(tilesRef.current);
     });
     return () => { off(); arrivals.current.clear(); };
-  }, [persistKey]);
-  useEffect(() => {
-    for (const [id, at] of arrivals.current) {
-      if (!tiles.some((t) => t.id === id)) continue;
-      arrivals.current.delete(id);
-      placeArrived(id, at);
-    }
-  }, [tiles, placeArrived]);
+  }, [persistKey, placeArrivals]);
+  useEffect(() => placeArrivals(tiles), [tiles, placeArrivals]);
   // A session already running on a machine (the frame's machine chip) opens as a terminal in that frame.
   useEffect(() => {
     const onOpen = (e: Event) => {

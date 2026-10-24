@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: an agent started by another agent or `hive ctl spawn` is laid out in its frame even when the app hears of it after the tile appears; before, it could be left without a place on the canvas.
 - Fixed: a message sent from the phone, or with `hive ctl send`, to an agent at its prompt says it was sent, not "Queued · sends when it finishes" with a **Send now** that would stop a turn that is not running. `agent.send` answers `held` only while the agent's turn runs.
 - Fixed: Settings' pages load on their own again, while the app is idle, instead of with the app at start; opening Settings shows its page at once.
 - Fixed: a colour setting's **Theme** button in a plugin's Settings reaches the theme's own colour even when the setting's default is a colour; before, it put the default back. As with `hive plugins set`, an empty colour now means "the theme's".
