@@ -13,7 +13,7 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
 import { agentToStart, notReady, useAgentEntries, useAgentPresence, setAgentDisabled, refreshAgentPresence, syncAgentPlugins } from "./agent-plugins";
-import { useSettingsNavigate } from "./settings-panels";
+import { useSettingsNavigate } from "./settings-navigate";
 import { SvgMark } from "./agents";
 import { actionKey } from "./shortcut";
 

@@ -14,7 +14,7 @@ import type { IslandPlacement } from "@hivemind/core/settings-schema";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar, type ToolbarActionId, type ToolbarPreferences } from "@hivemind/core/toolbar";
 import { useCommunityReport } from "./workspace/views/community/registry";
 import { MaskIcon } from "./plugins/mask-icon";
-import { useSettingsNavigate } from "./settings-panels";
+import { useSettingsNavigate } from "./settings-navigate";
 import { heldOffByPackage, partOfPackage } from "./plugins/package-rows";
 
 export const rescan = () => { window.dispatchEvent(new CustomEvent("hivemind:reload-views")); };
