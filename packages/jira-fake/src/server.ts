@@ -236,7 +236,8 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
     return json(200, { ...u, self: isCloud ? `${c.base}/rest/api/${c.v}/user?accountId=${me.accountId}` : `${c.base}/rest/api/2/user?username=${me.name}`, locale: "en_US", groups: { size: 0, items: [] }, applicationRoles: { size: 1, items: [] }, expand: "groups,applicationRoles", ...(isCloud ? {} : { deleted: false }) });
   });
   route("GET", "/rest/api/{v}/serverInfo", ({ c }) => json(200, {
-    baseUrl: c.base, version: site.serverInfo.version, versionNumbers: site.serverInfo.versionNumbers,
+    // The site's own URL, also when asked through the gateway.
+    baseUrl: isCloud ? site.baseUrl.replace(/\/$/, "") : c.base, version: site.serverInfo.version, versionNumbers: site.serverInfo.versionNumbers,
     ...(isCloud ? { deploymentType: "Cloud" } : {}),
     buildNumber: site.serverInfo.buildNumber, buildDate: "2026-10-01T00:00:00.000+0000", serverTime: formatJiraTime(now()),
     scmInfo: "0000000000000000000000000000000000000000", serverTitle: "Jira", serverTimeZone: site.serverInfo.serverTimeZone,
@@ -410,6 +411,13 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
       isLast,
     });
   };
+  // CHANGE-2046's count for /search/jql: approximate in Jira, exact here; bounded JQL only.
+  route("POST", "/rest/api/{v}/search/approximate-count", ({ body }) => {
+    const parsed = parseOr400(((body ?? {}) as { jql?: string }).jql ?? "");
+    if (parsed instanceof Reply) return parsed;
+    if (!parsed.where) return errors(400, ["Unbounded JQL queries are not allowed here. Please add a search restriction to your query."]);
+    return json(200, { count: searchIssues(parsed, new Set()).hits.length });
+  }, { cloudOnly: true });
   route("GET", "/rest/api/{v}/search/jql", (x) => searchJql(x, false), { cloudOnly: true });
   route("POST", "/rest/api/{v}/search/jql", (x) => searchJql(x, true), { cloudOnly: true });
   const offsetSearch = ({ c, q, body }: Ctx, post: boolean): Reply => {
@@ -878,8 +886,9 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
     const basic = (token: string) => h === `Basic ${Buffer.from(`${creds.email}:${token}`).toString("base64")}`;
     if (via === "site") return basic(creds.classicToken) ? undefined : unauthorized;
     if (!basic(creds.scopedToken)) return unauthorized;
-    const agile = path.startsWith("/rest/agile/") || path.startsWith("/rest/software/");
-    if (agile && creds.scopes && !creds.scopes.some((s) => s.endsWith(":jira-software"))) return json(401, { code: 401, message: "Unauthorized; scope does not match" });
+    const need = creds.scopes ? agileScopes(path) : undefined;
+    // Jira's 401 doesn't say which scope is missing; a client names them from the endpoint.
+    if (need && !need.every((s) => creds.scopes!.includes(s))) return json(401, { code: 401, message: "Unauthorized; scope does not match" });
     return undefined;
   };
 
@@ -988,6 +997,19 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+/**
+ * The granular scopes an Agile call needs (P-R, from the Software spec's `x-atlassian-oauth2-scopes`):
+ * a scoped token with classic scopes alone gets none of them. Undefined for a platform call.
+ */
+export function agileScopes(path: string): string[] | undefined {
+  if (path.startsWith("/rest/software/")) return ["read:board-scope:jira-software", "read:issue-details:jira", "read:jql:jira"];
+  if (!path.startsWith("/rest/agile/")) return undefined;
+  if (/^\/rest\/agile\/1\.0\/board\/[^/]+\/(configuration|features)$/.test(path)) return ["read:board-scope.admin:jira-software", "read:project:jira"];
+  if (/^\/rest\/agile\/1\.0\/(board\/[^/]+\/sprint|sprint\/[^/]+)$/.test(path)) return ["read:sprint:jira-software"];
+  if (/^\/rest\/agile\/1\.0\/board(\/[^/]+)?$/.test(path)) return ["read:board-scope:jira-software", "read:project:jira"];
+  return ["read:board-scope:jira-software", "read:issue-details:jira", "read:jql:jira"];
 }
 
 /** A fault path matches exactly, or with `*` standing for one path segment. */

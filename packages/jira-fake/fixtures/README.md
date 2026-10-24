@@ -68,8 +68,10 @@ await jira.close();
   `gateway`). `authorization("classic" | "scoped" | "pat")` gives the header value.
 - **Auth.** On Cloud, a classic token (Basic `email:token`) works on the site URL only. A scoped
   token works only under `/ex/jira/{cloudId}`, and the site URL answers 401. With
-  `credentials.scopes` set, Agile calls need a granular `…:jira-software` scope (401 "scope does
-  not match" otherwise). On Data Center, only `Bearer <PAT>` works. `GET /_edge/tenant_info`
+  `credentials.scopes` set, each Agile call needs its own granular scopes (`agileScopes()`: the
+  board list `read:board-scope:jira-software` + `read:project:jira`, its configuration and
+  features `read:board-scope.admin:jira-software`, its sprints `read:sprint:jira-software`), and
+  answers 401 "scope does not match" otherwise, without naming the scope. On Data Center, only `Bearer <PAT>` works. `GET /_edge/tenant_info`
   returns `{cloudId}` without credentials. The defaults are in `fake.credentials`; override them
   with `opts.credentials`.
 - **Options.**
@@ -99,6 +101,8 @@ await jira.close();
   and `POST /jql/parse?validation=strict` reports it. On Data Center it's a 400 unless
   `validateQuery=false`. `WAS` and `CHANGED` parse but match nothing. Without `ORDER BY` the order
   is newest id first; Jira's default isn't documented.
+- **Counts.** `POST /search/approximate-count` (Cloud) answers `{count}` for a bounded JQL; exact
+  here, approximate in Jira.
 - **Edits.** `PUT /issue/{key}` sets `summary`, `labels`, `description` and `assignee` (each
   change in the changelog; any other field is a 400 and nothing is applied), and
   `PUT /issue/{key}/comment/{id}` edits a comment its author wrote (403 otherwise).
