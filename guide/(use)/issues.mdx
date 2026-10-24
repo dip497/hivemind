@@ -81,10 +81,26 @@ An agent started with `hive init`'s skills follows these steps:
     It runs the tests and build, and commits with the issue id.
   </Step>
   <Step title="Hand back">
-    It ends every session with `hive ctl set-state`: `in_review`, `done`, `in_progress --note`,
-    or `cancelled --note`.
+    Finished, it runs `hive ctl complete MYP-42`: the work is checked, the branch pushed and the PR
+    opened, and the issue moves to review. Otherwise it ends with `hive ctl set-state`:
+    `in_progress --note` or `cancelled --note`.
   </Step>
 </Steps>
+
+### Pull requests
+
+`hive ctl complete` opens the PR with the GitHub CLI, so `gh auth login` once on the machine the
+agent runs on. While an issue's PR is open, the app reads it from GitHub every 3 minutes:
+
+- **Merged:** the issue moves to Done, and its note says how to remove the worktree
+  (`hive pr cleanup MYP-42`).
+- **Closed without merging:** the issue goes back to In progress, and you get a notification.
+- **Changes requested or checks failing:** a badge on the card. In the issue, **Address review**
+  or **Fix CI** starts an agent with the review comments or the failing checks.
+
+To only move finished work to review, with no PR, set `on_complete: review` in
+`.hivemind/config.yaml`. Every setting and `hive pr` command is in the
+[CLI reference](/cli#issues).
 
 `.hivemind/.agent.md` sums up the open issues, so a new agent session reads one file.
 `hive agent context` writes it again.

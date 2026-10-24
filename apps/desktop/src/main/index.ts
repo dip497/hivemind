@@ -69,7 +69,8 @@ import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
 import { IssueWatch } from "@hivemind/host/issue-watch";
-import { registerAgentNotifications } from "./agent-notify.js";
+import { PrWatch } from "@hivemind/host/pr-watch";
+import { notifyPlain, registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
@@ -1447,7 +1448,9 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
 // Every write to the issues of a workspace a window shows, or a service or guest is connected to.
-const issueWatch = new IssueWatch({ publish: (repo, change) => workspaceServer.publish("issue.changed", repo, change) });
+// The PRs of those issues, read from GitHub every 3 minutes while any is open (design jira-sync §11.4).
+const prWatch = new PrWatch({ notify: notifyPlain, log: (m) => console.warn(m) });
+const issueWatch = new IssueWatch({ publish: (repo, change) => workspaceServer.publish("issue.changed", repo, change), watching: prWatch });
 const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
 // A folder on another of the person's devices is answered there (M4); one of a workspace joined
 // from elsewhere, by its host.

@@ -2,6 +2,7 @@ import type { DragEvent, KeyboardEvent } from "react";
 import { Play } from "@hivemind/app-ui";
 import { statusById, statusOfIssue, useOpenIssue, useWorkflow, type IssueSummary } from "./data";
 import { StatusIcon, LabelChip, Avatar } from "./StateMeta";
+import { PrBadge } from "./PrBits";
 
 /** The status icon of an issue, in its status's colour. */
 export function IssueStatusIcon({ issue, size }: { issue: Pick<IssueSummary, "state" | "status">; size: number }) {
@@ -70,8 +71,9 @@ export function IssueCard({
         </Button>
       </div>
       <div className="mt-1.5 text-label text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
-      {(issue.labels.length > 0 || issue.assignee) && (
+      {(issue.labels.length > 0 || issue.assignee || issue.pr) && (
         <div className="mt-2 flex items-center gap-1 flex-wrap">
+          {issue.pr && <PrBadge pr={issue.pr} />}
           {issue.labels.slice(0, 3).map((l) => (
             <LabelChip key={l} label={l} />
           ))}
@@ -105,6 +107,7 @@ export function IssueRow({ issue, onWork }: { issue: IssueSummary; onWork: () =>
       <IssueStatusIcon issue={issue} size={12} />
       <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums w-20 shrink-0">{issue.id}</span>
       <span className="text-label text-[var(--color-fg)] truncate flex-1 min-w-0">{issue.title}</span>
+      {issue.pr && <PrBadge pr={issue.pr} />}
       {issue.labels.slice(0, 2).map((l) => (
         <LabelChip key={l} label={l} />
       ))}

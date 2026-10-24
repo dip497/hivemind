@@ -132,7 +132,8 @@ When the user asks you to work on an issue (e.g. \`PAY-42\`):
 3. Plan briefly (one comment via \`hive ctl add-comment\`).
 4. Execute. Tick each criterion as you go (\`hive ctl mark-acceptance PAY-42 <n>\`).
 5. Comment progress at meaningful checkpoints (file:line refs).
-6. **Every session MUST end with \`hive ctl set-state\`** — \`in_review\` (done, awaiting review),
+6. **Every session MUST end with \`hive ctl complete PAY-42\`** (work finished: it checks the work, then
+   opens the PR or moves the issue to review, as the workspace's \`on_complete\` says) **or \`hive ctl set-state\`** —
    \`done\` (only with explicit authority), \`in_progress\` (will resume), or \`cancelled\` with \`--note\`.
 
 Do not exit a session silently.
@@ -178,19 +179,21 @@ When you start work on issue \`$KEY\`:
 
 5. **Execute** — do the work with Edit / Write / Bash. After completing each criterion: \`hive ctl mark-acceptance $KEY <index>\`.
 
-6. **Verify & commit (REQUIRED before review)** — run the repo's tests / typecheck / build and make them pass. Commit with the issue id: \`git commit -am "$KEY: <what changed>"\`. **Do NOT push** unless the user explicitly asked.
+6. **Verify & commit (REQUIRED before review)** — run the repo's tests / typecheck / build and make them pass. Commit with the issue id: \`git commit -am "$KEY: <what changed>"\`.
 
 7. **Report progress** — \`hive ctl add-comment $KEY "<summary + file:line refs>"\` when meaningful work lands.
 
 8. **Final disposition (REQUIRED)** — end EVERY session with one of:
    \`\`\`bash
-   hive ctl set-state $KEY in_review                       # work complete, awaiting human review
+   hive ctl complete $KEY --summary "<what you did>"       # work complete: checks it, then hands it on (by default pushes and opens the PR)
    hive ctl set-state $KEY done                            # only with explicit authority
    hive ctl set-state $KEY in_progress --note "<where I stopped>"   # still going; will resume
    hive ctl set-state $KEY cancelled --note "<why>"        # cannot / should not proceed
    \`\`\`
 
-**Do not exit silently.** A session without a final \`set-state\` leaves the issue stale.
+**Do not exit silently.** A session without a final \`complete\` or \`set-state\` leaves the issue stale.
+
+\`hive ctl complete\` refuses, with a \`fix\`, until the tree is clean, the branch has commits ahead of its base, every acceptance criterion is ticked (or \`--ac-note "<why not>"\` says why) and the workspace's check passes. What it does then is the workspace's choice (\`on_complete\` in \`.hivemind/config.yaml\`): open the PR, open a draft, or only move the issue to review. Exit 6 means the person has to sign \`gh\` in; tell them.
 
 ## Handling review feedback
 
@@ -198,7 +201,7 @@ A review comment on your diff arrives as a prompt like \`Address this review com
 
 1. Record it: \`hive ctl add-comment $KEY "review: src/x.ts:42 — <comment>"\`.
 2. Address it, re-verify, commit (\`git commit -am "$KEY: address review on <file>"\`).
-3. If you had set \`in_review\`, go back to \`in_progress\` while working, then \`in_review\` again.
+3. Finish with \`hive ctl complete $KEY\` again: it pushes to the open PR rather than opening another.
 
 ## Sub-tasks
 
@@ -223,6 +226,8 @@ Too big? \`hive new "<title>" --parent $KEY --ac "criterion one || criterion two
 | \`hive update <id> --status "<name or id>"\` · \`hive statuses show\` | A workspace with its own workflow: move to one of its statuses (the state follows); list them. |
 | \`hive ctl add-comment <id> "<md>"\` | Append to the activity log. |
 | \`hive ctl mark-acceptance <id> <index> [--undone]\` | Tick / untick a 0-based criterion. |
+| \`hive ctl complete <id> [--summary …] [--ac-note …] [--draft]\` | Finish: check the work, then open the PR (or a draft, or move to review). |
+| \`hive pr status <id>\` · \`hive pr sync\` | The issue's PR as GitHub has it now; move issues whose PRs merged or closed. |
 | \`hive relate\` · \`hive move\` · \`hive ctl list-workspaces\` | Cross-repo links, transfers, discovery. |
 | \`hive ctl delete-issue <id>\` | Destructive — only on an explicit user ask. |
 

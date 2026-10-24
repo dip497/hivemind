@@ -110,7 +110,32 @@ hive ctl add-comment MYP-1 "root cause found in …"
 hive ctl mark-acceptance MYP-1 0 [--undone]   # 0-based index from hive show --json
 hive ctl delete-issue MYP-1                   # irreversible
 hive ctl list-workspaces                      # prefix, title and folder of each
+hive ctl complete MYP-1 [--summary "…"] [--ac-note "…"] [--draft] [--base main]
+                                              # check the work, then hand it on by on_complete
 ```
+
+`hive ctl complete` runs from the issue's worktree (found from its `branch:`) or anywhere its
+workspace is found from. It refuses (exit 1, with a `fix`) until the tree is clean, the branch has
+commits ahead of the base, every acceptance criterion is ticked or `--ac-note` says why not, and
+`check` in `.hivemind/config.yaml` exits 0. Then, by `on_complete`: `pr` (default) pushes the
+branch, opens the PR and moves the issue by `local.onPrOpened` in `workflow.yaml` (else to
+`in_review`); `draft_pr` opens a draft; `review` only moves it to `in_review`. When `gh` is not
+installed or not signed in it exits 6, and the issue moves to `in_review` with a note.
+
+```text
+hive pr create MYP-1 [--draft] [--base main] [--summary "…"]   # push -u, gh pr create; writes pr + github
+hive pr status MYP-1                     # state, review decision, checks, as GitHub has them (reads only)
+hive pr sync [MYP-1]                     # the PR watcher's pass: merged → local.onPrMerged (done),
+                                         # closed → local.onPrClosed (in_progress)
+hive pr cleanup MYP-1                    # after the merge: remove the worktree and the local branch
+```
+
+| `.hivemind/config.yaml` | Values |
+|---|---|
+| `on_complete` | `pr` (default) · `draft_pr` · `review` |
+| `pr_base` | the branch PRs target (default: the remote's default branch) |
+| `check` | a command `complete` runs in the worktree first, e.g. `pnpm test` |
+| `cleanup` | after a merge: `ask` (default: a note and a notification) · `auto` · `never` |
 
 ## `hive ctl`: agents and tiles
 

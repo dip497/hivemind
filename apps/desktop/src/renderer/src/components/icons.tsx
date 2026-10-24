@@ -10,7 +10,7 @@ import {
   ChevronDownIcon, ChevronRightIcon, CloudServerIcon, ContainerIcon, ChevronUpIcon, CircleCheckIcon, Copy01Icon, Download01Icon, EarthIcon,
   EllipsisIcon, EllipsisVerticalIcon, ExternalLinkIcon, EyeIcon, EyeOffIcon, FileCodeCornerIcon,
   FileQuestionMarkIcon, Files01Icon, Film01Icon, Folder01Icon, FolderGitIcon, FolderMinusIcon, FolderOpenIcon,
-  FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareIcon, GlobeIcon, GripVerticalIcon,
+  FolderPlusIcon, GitBranchIcon, GitCommitHorizontalIcon, GitCompareIcon, GitMergeIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon, GitPullRequestIcon, GlobeIcon, GripVerticalIcon,
   HistoryIcon, Home01Icon, Image01Icon, InboxIcon, InfoIcon, Key01Icon, KeyboardIcon, LaptopIcon,
   LayoutGridIcon, LayoutListIcon, ListTodoIcon, LoaderCircleIcon, LogInIcon, LogOutIcon, Mail01Icon,
   MailOpenIcon, Maximize01Icon, MessageSquareIcon, MessagesSquareIcon, MonitorIcon, MonitorSmartphoneIcon, Moon02Icon,
@@ -78,6 +78,10 @@ export const FolderPlus = icon("folder-plus", FolderPlusIcon);
 export const GitBranch = icon("git-branch", GitBranchIcon);
 export const GitCommit = icon("git-commit", GitCommitHorizontalIcon);
 export const GitCompare = icon("git-compare", GitCompareIcon);
+export const GitMerge = icon("git-merge", GitMergeIcon);
+export const GitPullRequest = icon("git-pull-request", GitPullRequestIcon);
+export const GitPullRequestClosed = icon("git-pull-request-closed", GitPullRequestClosedIcon);
+export const GitPullRequestDraft = icon("git-pull-request-draft", GitPullRequestDraftIcon);
 export const Globe = icon("globe", GlobeIcon);
 export const GripVertical = icon("grip-vertical", GripVerticalIcon);
 export const History = icon("history", HistoryIcon);

@@ -64,6 +64,7 @@ import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
 import { IssueWatch } from "./issue-watch.js";
+import { PrWatch } from "./pr-watch.js";
 import { PluginServices, optionsOf } from "./plugin-services.js";
 import { Secrets, secretsPath } from "./secrets.js";
 import { pluginKey } from "@hivemind/core/plugin-settings";
@@ -459,7 +460,9 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   });
 
   // Every write to a followed workspace's issues, told to its clients: a service's, a guest's.
-  const issueWatch = new IssueWatch({ publish: (repo, change) => api.publish("issue.changed", repo, change) });
+  // And their PRs, read from GitHub every 3 minutes while any is open (design jira-sync §11.4).
+  const prWatch = new PrWatch({ log: o.onWarn });
+  const issueWatch = new IssueWatch({ publish: (repo, change) => api.publish("issue.changed", repo, change), watching: prWatch });
   const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
 
   // Programs drive the workspaces here through the workspace API, held to what they were granted.
@@ -737,6 +740,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       hcp.close();
       drive.close();
       issueWatch.close();
+      prWatch.close();
       endpoint.close();
       elsewhere.close();
       store.flush();
