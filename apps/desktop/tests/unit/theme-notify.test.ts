@@ -20,12 +20,33 @@ test("a program that sets mode 2031 hears each change of background, as 997;1 fo
   assert.equal(notify.theme(false), null, "not asked for yet");
   assert.equal(notify.theme(true), null);
   await write("\x1b[?2031h");
+  // Set, it hears where the background is now: it may have changed while no window heard it ask.
+  assert.deepEqual(sent, ["\x1b[?997;1n"]);
   assert.equal(notify.theme(false), "\x1b[?997;2n");
   assert.equal(notify.theme(false), null, "the same background again is no change");
   assert.equal(notify.theme(true), "\x1b[?997;1n");
   await write("\x1b[?2031l");
   assert.equal(notify.theme(false), null);
-  assert.deepEqual(sent, []);
+  assert.deepEqual(sent, ["\x1b[?997;1n"], "set again while on, or cleared, says nothing");
+});
+
+test("a window that gains the keys tells a program that asked where the background is; one that never asked hears nothing", async () => {
+  const { notify, write } = terminal(true);
+  assert.equal(notify.now(), null);
+  await write("\x1b[?2031h");
+  notify.theme(false);
+  assert.equal(notify.now(), "\x1b[?997;2n");
+});
+
+test("after the program exits and Enter restarts it, the same terminal follows the new program's 2031", async () => {
+  // One ThemeNotify for the mount, the one its parser answers through: an exit resets it in place.
+  const { notify, sent, write } = terminal(true);
+  await write("\x1b[?2031h");
+  notify.reset();
+  assert.equal(notify.theme(false), null, "the old program is gone, and the new one has not asked");
+  await write("\x1b[?2031h");
+  assert.equal(notify.theme(true), "\x1b[?997;1n");
+  assert.deepEqual(sent, ["\x1b[?997;1n", "\x1b[?997;2n"]);
 });
 
 test("2031 set among other modes counts, and those modes still reach xterm", async () => {

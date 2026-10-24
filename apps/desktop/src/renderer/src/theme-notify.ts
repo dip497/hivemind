@@ -38,14 +38,21 @@ export function isDarkBackground(hex: string): boolean {
 }
 
 /** One terminal's mode 2031: whether its program asked, and what it was last told. Each method
- *  returns what to send the program, or null. */
+ *  returns what to send the program, or null. A window keeps one for as long as it shows the
+ *  session; a window that attaches later learns the mode from the daemon's replay
+ *  (`themeNotifySeq` in the screen worker). */
 export class ThemeNotify {
   private on = false;
   constructor(private dark: boolean) {}
 
-  /** `CSI ? … h` (`set`) or `l`: the program switches modes, maybe 2031 among them. */
-  mode(params: readonly (number | number[])[], set: boolean): void {
-    if (params.includes(THEME_NOTIFY_MODE)) this.on = set;
+  /** `CSI ? … h` (`set`) or `l`: the program switches modes, maybe 2031 among them. Turned on, it
+   *  hears where the background is now: it may have changed while no window that heard the
+   *  program ask had the keys (an app restart, a reload, another window holding them). */
+  mode(params: readonly (number | number[])[], set: boolean): string | null {
+    if (!params.includes(THEME_NOTIFY_MODE)) return null;
+    const was = this.on;
+    this.on = set;
+    return set && !was ? themeReport(this.dark) : null;
   }
 
   /** `CSI ? … n`: the answer to a query for this mode, whether or not it is on. */
@@ -59,6 +66,16 @@ export class ThemeNotify {
     this.dark = dark;
     return this.on ? themeReport(dark) : null;
   }
+
+  /** What to tell the program as this window gains the keys: where the background is, if it asked. */
+  now(): string | null {
+    return this.on ? themeReport(this.dark) : null;
+  }
+
+  /** The program ended: the next one in the session asks for itself. */
+  reset(): void {
+    this.on = false;
+  }
 }
 
 /** The part of xterm's parser this needs: the one `Terminal.parser` of the app's xterm and of a
@@ -68,9 +85,13 @@ interface CsiParser {
 }
 
 /** Hear a terminal's program set and clear mode 2031 and ask for it (`CSI ? 996 n`), answering
- *  through `send`. A mode set is left to xterm too (false), so the other modes in it still apply. */
+ *  through `send` (a set is answered with where the background is now). A mode set is left to xterm too (false), so the other modes in it still apply. */
 export function answerThemeNotify(parser: CsiParser, notify: ThemeNotify, send: (reply: string) => void): void {
-  parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => { notify.mode(params, true); return false; });
+  parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+    const reply = notify.mode(params, true);
+    if (reply) send(reply);
+    return false;
+  });
   parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => { notify.mode(params, false); return false; });
   parser.registerCsiHandler({ prefix: "?", final: "n" }, (params) => {
     const reply = notify.query(params);

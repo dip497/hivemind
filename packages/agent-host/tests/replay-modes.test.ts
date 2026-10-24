@@ -43,3 +43,22 @@ test.each([
 ])("a replayed session reads keys by the kitty protocol as its program asked: %s", async (_name, said, expected) => {
   expect(await kittyFlags(await replayAfter(said))).toBe(expected);
 });
+
+/** Whether a terminal fed `replay` hears mode 2031 set, as a window's parser does (theme-notify.ts). */
+async function asksThemeNotify(replay: string): Promise<boolean> {
+  const t = new Terminal({ allowProposedApi: true });
+  let on = false;
+  t.parser.registerCsiHandler({ prefix: "?", final: "h" }, (p) => { if (p.includes(2031)) on = true; return false; });
+  t.parser.registerCsiHandler({ prefix: "?", final: "l" }, (p) => { if (p.includes(2031)) on = false; return false; });
+  await new Promise<void>((r) => t.write(replay, r));
+  return on;
+}
+
+test.each([
+  ["asked for by an agent at launch", "\x1b[?2031hprompt", true],
+  ["asked for with other modes", "\x1b[?1049;2031h\x1b[?25l", true],
+  ["asked for, then stopped", "\x1b[?2031hwork\x1b[?2031l", false],
+  ["a program that never asked", "hello", false],
+])("a replayed session tells a window's terminal whether its program hears the background change (mode 2031): %s", async (_name, said, expected) => {
+  expect(await asksThemeNotify(await replayAfter(said))).toBe(expected);
+});

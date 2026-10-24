@@ -45,6 +45,15 @@ function kittyFlagsSeq(term: InstanceType<HeadlessCtor>): string {
   return flags ? `\x1b[=${flags};1u` : "";
 }
 
+/**
+ * What it loses about the background: whether the program asked to hear when it goes light or dark
+ * (mode 2031, `CSI ? 2031 h`; xterm keeps no state for it). Every window that attaches learns it from
+ * the replay, so the one holding the keys tells the program after a restart, a reload or another
+ * window taking the keyboard.
+ */
+const THEME_NOTIFY_MODE = 2031;
+const themeNotifySeq = (s: Screen): string => (s.themeNotify ? `\x1b[?${THEME_NOTIFY_MODE}h` : "");
+
 interface Screen {
   id: string;
   /** The session instance it belongs to: what it tells main is dropped when another holds the id. */
@@ -54,6 +63,8 @@ interface Screen {
   /** Output position the terminal has taken in, within its session. */
   parsed: number;
   paste: boolean;
+  /** The program has mode 2031 on (`themeNotifySeq`). */
+  themeNotify: boolean;
   /** The last screen serialized, given again while no output or resize changed it. */
   last?: { at: number; lines: number; text: string };
   /** Where the shell's prompt starts, while the shell waits at it, for a shell that marks its prompt
@@ -100,9 +111,13 @@ function open(m: Extract<ToScreens, { t: "open" }>): void {
   const term = new Terminal({ cols: m.cols, rows: m.rows, scrollback: m.scrollback, allowProposedApi: true, vtExtensions: { kittyKeyboard: true } });
   const serializer = new SerializeAddon();
   term.loadAddon(serializer);
-  const s: Screen = { id: m.id, epoch: m.epoch, term, serializer, parsed: m.parsed, paste: false };
+  const s: Screen = { id: m.id, epoch: m.epoch, term, serializer, parsed: m.parsed, paste: false, themeNotify: false };
   screens.set(m.id, s);
   term.onTitleChange((title) => post({ t: "title", id: s.id, epoch: s.epoch, title }));
+  // Heard, and left to xterm (false) for the other modes the same sequence sets.
+  const themeMode = (on: boolean) => (params: (number | number[])[]) => { if (params.includes(THEME_NOTIFY_MODE)) s.themeNotify = on; return false; };
+  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, themeMode(true));
+  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, themeMode(false));
   term.parser.registerOscHandler(133, (data) => {
     const mark = data.split(";", 1)[0];
     if (mark === "A" || mark === "C") { s.prompt?.dispose(); s.prompt = undefined; }
@@ -173,7 +188,7 @@ port.on("message", (m: ToScreens) => {
     case "screen": {
       const s = current(m.id, m.epoch);
       if (!s) { post({ t: "screen", req: m.req, text: null, at: 0, modes: "" }); break; }
-      inTurn(s, () => post({ t: "screen", req: m.req, text: screenOf(s, m.lines), at: s.parsed, modes: mouseEncodingSeq(s.term) + kittyFlagsSeq(s.term) }));
+      inTurn(s, () => post({ t: "screen", req: m.req, text: screenOf(s, m.lines), at: s.parsed, modes: mouseEncodingSeq(s.term) + kittyFlagsSeq(s.term) + themeNotifySeq(s) }));
       break;
     }
     case "rows": {
