@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: Settings' pages load on their own again, while the app is idle, instead of with the app at start; opening Settings shows its page at once.
 - Fixed: a colour setting's **Theme** button in a plugin's Settings reaches the theme's own colour even when the setting's default is a colour; before, it put the default back. As with `hive plugins set`, an empty colour now means "the theme's".
 - Fixed: a view whose token names something that only looks like an app colour (`=constructor`) is refused at install instead of never receiving its first message.
 - **Breaking:** the view SDK's `APP_TOKENS` and `TOKENS_VERSION` are gone (nothing read them, and `APP_TOKENS` did not match what `applyThemeVars` sets); `APP_COLORS` describes the 15 colours of `VIEW_THEME_COLORS`, and `isTokenId` is exported.
