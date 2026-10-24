@@ -577,9 +577,10 @@ function installReport(installed: InstalledPackage, app: AppAnswer) {
 /** The view a package opens with, and how to get there. The CLI never switches the person's view
  *  itself (an agent may be the one installing): the app offers it, and the command switches now. */
 function startViewLine(view: { name: string; open: string }, on: boolean): string {
+  // The app offers each view once (start-view-offers.ts), so this says so rather than promise one.
   return on
-    ? `It opens with the view ${view.name}: the app offers to switch to it, and \`${view.open}\` switches the running app now.`
-    : `It opens with the view ${view.name}: once it is on, the app offers to switch to it, and \`${view.open}\` switches the running app.`;
+    ? `It opens with the view ${view.name}. The app offers to switch to it, unless it has offered that view before; \`${view.open}\` switches the running app now.`
+    : `It opens with the view ${view.name} once it is on. The app offers to switch to it then, unless it has offered that view before; \`${view.open}\` switches the running app.`;
 }
 
 /** One member's change, in a sentence. */

@@ -105,7 +105,7 @@ describe("hive plugins, packages", () => {
       fs.writeFileSync(path.join(harbour, f), text);
     }
     const said = run("install", harbour);
-    expect(said.stdout).toContain("It opens with the view Isle: the app offers to switch to it, and `hive ctl plugin open view:@acme/isle` switches the running app now.");
+    expect(said.stdout).toContain("It opens with the view Isle. The app offers to switch to it, unless it has offered that view before; `hive ctl plugin open view:@acme/isle` switches the running app now.");
     const r = run("install", harbour, "--json");
     expect(r.json).toMatchObject({ on: true, startView: { id: "@acme/isle", name: "Isle", open: "hive ctl plugin open view:@acme/isle" } });
     expect((r.json as { next: string[] }).next).toEqual(["hive ctl plugin open view:@acme/isle", "hive ctl plugin open view:@acme/dock"]);

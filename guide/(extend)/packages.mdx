@@ -92,10 +92,11 @@ Which packages arrive switched off, and which updates need your trust again, are
     In the app, it is one row in **Settings → Plugins**, with one switch.
 
     To open a view as soon as the package is in, name it in `hivemind-package.json`:
-    `"startup": { "view": "@you/board" }`. Once the package is on, the app asks **Open Board?**
-    once, and **Open** shows it. It asks under the install in **Settings → Plugins**. After
-    `hive plugins install`, it asks in the corner of the window, at once if the app is open, or
-    the next time it starts. It asks again only when an update opens with another view.
+    `"startup": { "view": "@you/board" }`. Once the package is on, the app asks **Open Board?**,
+    and **Open** shows it. **Settings → Plugins** asks under each install it makes. After
+    `hive plugins install`, the app asks in the corner of the window, at once if it is open, or
+    the next time it starts. It asks there once per view: an update or a rollback to a view it
+    offered before does not ask again.
 
     The app never switches the view without you, since an agent may be the one installing. To
     switch at once from a terminal, run the command the install prints:
