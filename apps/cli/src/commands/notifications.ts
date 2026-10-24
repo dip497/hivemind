@@ -105,7 +105,7 @@ const recentCmd = defineCommand({
     return ok(ctx, { recent: rows }, () => rows.length === 0 ? "nothing yet" : rows.map((r) => {
       const when = new Date(r.at).toLocaleTimeString();
       const sound = `${r.sound}${r.pack ? ` (${r.pack})` : ""}${r.why ? `: ${r.why}` : ""}`;
-      return `${when}  ${STATUS_MARKS[NOTICE_TONES[r.moment]].word.padEnd(9)}  ${String(r.agents).padStart(3)} agent${r.agents === 1 ? " " : "s"}  ${String(r.popups).padStart(2)} pop-up${r.popups === 1 ? " " : "s"}  ${sound}`;
+      return `${when}  ${STATUS_MARKS[NOTICE_TONES[r.moment]].word.padEnd(9)}  ${(r.agents ? `${r.agents} agent${r.agents === 1 ? "" : "s"}` : "asked for").padStart(10)}  ${String(r.popups).padStart(2)} pop-up${r.popups === 1 ? " " : "s"}  ${sound}`;
     }).join("\n"));
   },
 });

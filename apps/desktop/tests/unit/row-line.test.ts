@@ -3,7 +3,7 @@
 // the agent or a process in the tile wrote, so neither may carry a control that reorders it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lineFor } from "../../src/renderer/src/row-line.tsx";
+import { lineFor } from "../../src/shared/line-for.ts";
 import type { AgentWait } from "../../src/renderer/src/agent-waits.ts";
 
 const wait = (w: Omit<AgentWait, "since">): AgentWait => ({ since: 1, ...w });

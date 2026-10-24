@@ -13,8 +13,6 @@ import { tileLines } from "./line-store";
 import { decidable, DecideButtons, useCut } from "./wait-decide";
 import { LOOKS } from "./workspace/status-look";
 
-export { lineFor };
-
 /** `tile`'s line as main tells it; the tile is watched while this asks for it (not null). */
 export function useLine(tile: string | null): string | undefined {
   const subscribe = useCallback((l: () => void) => (tile ? tileLines.subscribe(tile, l) : () => {}), [tile]);

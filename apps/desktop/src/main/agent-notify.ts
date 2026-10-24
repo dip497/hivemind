@@ -12,8 +12,6 @@ import type { AgentNotice } from "../shared/ipc.js";
 import { composeGroup, composeNotice, withText } from "./agent-notify-core.js";
 import { widgetNoticeToShow } from "./widget-notices.js";
 
-export { composeNotice } from "./agent-notify-core.js";
-
 /** Show one pop-up: one agent (`more` false) with its `text` when given, or a gathered group.
  *  `silent` when the app plays its own sound for it. Its click brings `win()` forward on the first
  *  agent's tile. */
@@ -21,7 +19,7 @@ export function showAgentPopup(p: { kind: AgentNotice["kind"]; notices: AgentNot
   if (!Notification.isSupported()) return;
   const first = p.notices[0];
   if (!first) return;
-  const composed = p.more ? composeGroup(p.kind, p.notices) : composeNotice(first, false);
+  const composed = p.more ? composeGroup(p.kind, p.notices) : composeNotice(first);
   if (!composed) return;
   const n = new Notification({ ...withText(composed, p.more ? undefined : text), silent: p.silent });
   n.on("click", () => {

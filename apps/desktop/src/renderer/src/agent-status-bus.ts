@@ -30,6 +30,9 @@ export interface StatusEvent {
   signal?: number;
   /** One-line detail: why an exit or a turn ended the way it did. */
   detail?: string;
+  /** When the host saw this state start (its status store's `since`): the same in every window,
+   *  so main's notice desk knows two windows' copies of one change, however far apart they come. */
+  since?: number;
 }
 
 type Listener = (e: StatusEvent) => void;
@@ -48,7 +51,7 @@ function effective(tileId: string): StatusEvent | undefined {
   const label = labels.get(tileId) ?? l?.label ?? tileId;
   // The tile saw its process exit and knows how; that detail outranks the host's bare "exited".
   if (l?.status === "exited") return { ...l, label };
-  if (h) return { tileId, label, ...tileStatusOf(h) };
+  if (h) return { tileId, label, ...tileStatusOf(h), since: h.since };
   return l ? { ...l, label } : undefined;
 }
 

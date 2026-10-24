@@ -9,7 +9,8 @@
  */
 import { memo, useRef } from "react";
 import type { LineRect } from "@hivemind/view-sdk/protocol";
-import { lineFor, useLine, useWait } from "../../../row-line";
+import { useLine, useWait } from "../../../row-line";
+import { lineFor } from "../../../../../shared/line-for";
 import { decidable, DecideButtons, useCut } from "../../../wait-decide";
 import { LOOKS } from "../../status-look";
 

@@ -4,8 +4,11 @@
  * needs you, finished, failed); with two windows open each change arrives twice, and a workflow's
  * ten agents finish together. The desk:
  *
- *  1. dedupes: the first notice for (tile, kind) in DEDUPE_MS is an event, and later copies only
- *     merge into it (`selected ||= copy.selected`);
+ *  1. dedupes: a notice with the host's `since` is a copy of the last event of its (tile, kind)
+ *     when that one had the same `since` (or a later one), however late it comes: a busy window
+ *     can see a change seconds after another; without `since` (a status only the window knows),
+ *     the first notice for (tile, kind) in DEDUPE_MS is the event. A copy only merges into its
+ *     event (`selected ||= copy.selected`);
  *  2. gates the OS pop-up on that event, and groups a burst: the first pop-up of a kind shows at
  *     once, the rest within GROUP_MS gather into one ("9 more agents finished"), and needs you is
  *     never folded into finished (each kind groups on its own);
@@ -16,16 +19,20 @@
  *     moment wins (needs > failed > finished) with how many agents it stands for, at most one
  *     sound every SOUND_GAP_MS, and the rest are dropped, not queued;
  *  5. keeps the last RECENT_MAX bursts for Settings and the CLI: the moment, how many agents, when,
- *     the sound (played, blocked and why, skipped, or off) and how many pop-ups it showed.
+ *     the sound (played, blocked and why, skipped, or off), how many agents its sounds stood for,
+ *     and how many pop-ups it showed.
  *
- * Per notice: one Map get and set, an array push, and at most one timer per pacer or group. The
- * dedupe map is pruned from its oldest end on each admit and capped at DEDUPE_MAX, so nothing
+ * Per notice: two Map gets and sets, an array push, and at most one timer per pacer or group.
+ * The dedupe maps are pruned from their oldest end and capped at DEDUPE_MAX each, so nothing
  * rescans. `now` and `schedule` are given, as `CommunityLink` takes them.
  */
 import type { AgentNotice } from "../shared/ipc.js";
-import { shouldNotify, type NoticeKind, type NotificationSettings } from "../shared/notification-settings.js";
+import { NOTICE_TONES, shouldNotify, type NoticeKind, type NotificationSettings } from "../shared/notification-settings.js";
 import { lineFor, type AgentWait } from "../shared/line-for.js";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
+import type { RecentSound } from "@hivemind/workspace-api/notifications";
+import type { AppearanceExtra } from "@hivemind/core/appearance-extra";
+import { STATUS_MARKS } from "@hivemind/view-sdk/status";
 
 export const DEDUPE_MS = 2000;
 export const DEDUPE_MAX = 1024;
@@ -51,26 +58,8 @@ export interface Admitted {
   burst?: Burst;
 }
 
-/** What Recent shows of one burst of one kind. */
-export interface Burst {
-  id: number;
-  moment: NoticeKind;
-  /** How many agents. */
-  agents: number;
-  /** When it started (ms since the epoch). */
-  at: number;
-  /** How many OS pop-ups it showed. */
-  popups: number;
-  /** off: no sound for this moment; waiting: offered; skipped: another sound or the person's look
-   *  took its place; played or blocked: what the window that played it said. */
-  sound: "off" | "waiting" | "skipped" | "played" | "blocked";
-  /** Why it was skipped or blocked. */
-  why?: string;
-  /** The theme's sound pack that played, by name; none: the built-in sound. */
-  pack?: string;
-  /** How many agents the sound played stood for. */
-  count?: number;
-}
+/** What Recent shows of one burst of one kind (the drive socket's shape). */
+export type Burst = RecentSound;
 
 /** A sound for a window to play. */
 export interface Sound { id: number; moment: NoticeKind; count: number }
@@ -79,11 +68,14 @@ export interface Sound { id: number; moment: NoticeKind; count: number }
 export interface Popup { kind: NoticeKind; notices: AgentNotice[]; more: boolean; silent: boolean }
 
 /** Dedupes the copies each window sends of one change. */
-export class NoticeDesk {
+class NoticeDesk {
+  /** The events of the last DEDUPE_MS, oldest first: a copy merges into its event here. */
   private readonly seen = new Map<string, Admitted>();
+  /** Each (tile, kind)'s last event's `since`, least recently changed first. */
+  private readonly since = new Map<string, number>();
   constructor(private readonly clock: Pick<Clock, "now">) {}
 
-  /** The event for `n`, or null when it is a copy of one in the last DEDUPE_MS (merged into it). */
+  /** The event for `n`, or null when it is a copy of one (merged into it, while it is recent). */
   admit(n: AgentNotice, selected: boolean): Admitted | null {
     const now = this.clock.now();
     // Insertion order is age order (a re-admit deletes first), so the expired are at the front.
@@ -93,21 +85,23 @@ export class NoticeDesk {
     }
     const key = `${n.tileId}\u0000${n.kind}`;
     const was = this.seen.get(key);
-    if (was) {
-      this.merge(was, selected);
+    const last = this.since.get(key);
+    const copy = n.since !== undefined && last !== undefined ? n.since <= last : !!was;
+    if (copy) {
+      if (was) was.selected ||= selected;
       return null;
     }
     const a: Admitted = { notice: n, at: now, selected };
+    this.seen.delete(key);
     this.seen.set(key, a);
     if (this.seen.size > DEDUPE_MAX) this.seen.delete(this.seen.keys().next().value!);
+    if (n.since !== undefined) {
+      this.since.delete(key);
+      this.since.set(key, n.since);
+      if (this.since.size > DEDUPE_MAX) this.since.delete(this.since.keys().next().value!);
+    }
     return a;
   }
-
-  merge(a: Admitted, selected: boolean): void {
-    a.selected ||= selected;
-  }
-
-  get size(): number { return this.seen.size; }
 }
 
 /** Gathers sound offers and lets one through at a time. */
@@ -257,14 +251,27 @@ export class NoticeDeskCore {
       const b = a.burst!;
       if (b.sound !== "waiting" || carried.some((c) => c.burst === b)) continue;
       b.sound = "skipped";
-      b.why = looking(a) ? "you were looking at it" : `the ${moment === "needs" ? "needs you" : moment === "error" ? "failed" : "finished"} sound played instead`;
+      b.why = looking(a) ? "you were looking at it" : `the ${STATUS_MARKS[NOTICE_TONES[moment]].word} sound played instead`;
     }
     if (!carried.length) return;
     const b = carried[0]!.burst!;
-    b.count = carried.length;
+    // A burst longer than a sound's gather plays again after the gap: count every agent it told.
+    b.count = (b.count ?? 0) + carried.length;
     this.playing.set(b.id, b);
     this.deps.sound({ id: b.id, moment, count: carried.length });
   }
+}
+
+/**
+ * The applied theme's sound for `moment`, and the theme's name: from the settings owner's typed
+ * `appearanceExtra.theme` (T3–T4), whose sounds are `hivemedia://media/<file>` URLs only (anything
+ * else is dropped on read). None: the built-in sound plays.
+ */
+export function themeSoundOf(s: { appearanceExtra: Pick<AppearanceExtra, "theme"> }, moment: NoticeKind): { url: string; pack: string } | undefined {
+  const theme = s.appearanceExtra.theme;
+  const url = theme?.sounds?.[moment];
+  if (!theme || !url) return undefined;
+  return { url, pack: theme.name.trim().slice(0, 60) || "a theme" };
 }
 
 /** How long a pop-up with text waits for the feed to bring what an agent waits on: its status
