@@ -6,6 +6,8 @@
 // A tile whose agent keeps a conversation shows what it last said there, read from its session
 // file as someone starts to follow the tile, while someone follows it as its agent reports, and for
 // a one-shot read; an agent that runs on another machine keeps none here, and its screen's line stands.
+// A tile asked for before its board holds it is looked for again; an agent that reports nothing is
+// read as its screen changes.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -22,7 +24,8 @@ import { LINES_EVERY_MS, TileLines } from "../src/tile-lines.ts";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-tile-lines-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-function host(transcripts: Record<string, Transcript> = {}, elsewhere: string[] = []) {
+/** `silent`: tiles whose agents report nothing (no hooks). */
+function host(transcripts: Record<string, Transcript> = {}, elsewhere: string[] = [], silent: string[] = []) {
   /** Each message TileLines sent, to anyone; how many times a tile's session file was looked for. */
   let sent = 0;
   let looked = 0;
@@ -30,6 +33,7 @@ function host(transcripts: Record<string, Transcript> = {}, elsewhere: string[] 
     server: () => ({ publishTo: (to, event, ...params) => { sent++; server.publishTo(to, event, ...params); } }),
     transcriptOf: (bare) => { looked++; return transcripts[bare] ?? null; },
     runsHere: (bare) => !elsewhere.includes(bare),
+    reports: (bare) => !silent.includes(bare),
   });
   const server = new WorkspaceServer([lines.domain], new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })));
   const client = () => {
@@ -252,4 +256,50 @@ test("an agent that runs on another machine keeps no conversation here: its scre
   h.lines.reported("t2", "s8");
   await until(() => h.lines.get("t2") !== "");
   assert.equal(h.lines.get("t2"), "Started over", "another session reported: looked for at once");
+});
+
+test("a tile asked for before its board holds it is looked for again as it is asked for, and then shows what its agent said; an agent that reports nothing is read as its screen changes", async () => {
+  const s9 = sessionAt("s9");
+  const transcripts: Record<string, Transcript> = {};
+  const h = host(transcripts, [], ["t1"]);
+  const a = h.client();
+  h.lines.set("t1", "starting");
+  assert.deepEqual(await h.watch(a, ["t1"]), { t1: "starting" }, "on no board yet: its screen's line");
+
+  // Its record reaches the board; it says something and prints, and reports nothing.
+  transcripts.t1 = s9;
+  fs.writeFileSync(s9.file!, words("You said fix the login redirect"));
+  h.lines.set("t1", "heard: fix the login redirect");
+  await until(() => h.heard(a).at(-1)?.t1 === "You said fix the login redirect");
+  assert.deepEqual(h.heard(a).at(-1), { t1: "You said fix the login redirect" }, "looked for again, and read as its screen changed");
+
+  fs.appendFileSync(s9.file!, words("You said add tests"));
+  h.lines.set("t1", "heard: add tests");
+  await until(() => h.heard(a).at(-1)?.t1 === "You said add tests");
+  assert.deepEqual(h.heard(a).at(-1), { t1: "You said add tests" }, "what it said since, read as its screen changed again");
+
+  // An agent that reports, found on the board once its screen shows its chrome: the chrome goes.
+  h.lines.set("t2", "? for shortcuts");
+  await h.watch(a, ["t1", "t2"]);
+  transcripts.t2 = sessionAt("s10");
+  h.lines.set("t2", "? for shortcuts · esc to interrupt");
+  await until(() => h.heard(a).at(-1)?.t2 !== undefined);
+  assert.deepEqual(h.heard(a).at(-1), { t2: "" }, "it keeps a conversation, and has said nothing yet");
+});
+
+test("an agent whose session file is not written yet, read again within 3 s of the last look for it, is looked for once they are up: its first words, though it reports nothing more", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const transcripts: Record<string, Transcript> = { t1: { session: "s11", file: null, format: FORMAT } };
+  const h = host(transcripts, [], ["t1"]);
+  const a = h.client();
+  assert.deepEqual(await h.watch(a, ["t1"]), { t1: "" });
+
+  const s11 = sessionAt("s11");
+  fs.writeFileSync(s11.file!, words("You said ship it"));
+  transcripts.t1 = s11;
+  h.lines.set("t1", "heard: ship it");
+  t.mock.timers.tick(3_000);
+  // The read is the file system's: wait on the event loop, not on the mocked clock.
+  for (let i = 0; i < 10_000 && h.lines.get("t1") !== "You said ship it"; i++) await new Promise((r) => setImmediate(r));
+  assert.equal(h.lines.get("t1"), "You said ship it");
 });
