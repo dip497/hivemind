@@ -168,7 +168,9 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel, wo
                     onChange={(s) => { void write("Changing the state", moveTo(hm, workflow, issue.id, s, "set from the issue panel")); }}
                   />
                 </PropRow>
-                <PropRow label="Assignee">
+                {/* For an issue mirrored from a tracker, hive's assignee is the agent that works it here;
+                    who owns it in the tracker is the tracker row below. */}
+                <PropRow label={issue.external ? "Agent" : "Assignee"}>
                   <AssigneePicker
                     value={issue.assignee}
                     allAssignees={allAssignees}
@@ -205,7 +207,7 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel, wo
                   <span className="text-label text-[var(--color-fg2)]">{relTime(issue.updated)}</span>
                 </PropRow>
                 {issue.external && (
-                  <PropRow label={issue.external.provider === "jira" ? "Jira" : issue.external.provider}>
+                  <PropRow label={`${issue.external.provider === "jira" ? "Jira" : issue.external.provider} assignee`}>
                     <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg2)]" data-tracker-row>
                       <span className="font-mono">{issue.external.key}</span>
                       <TrackerAssignee issue={issue} />
