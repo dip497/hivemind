@@ -21,7 +21,7 @@ import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access"
 import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
-import type { Appearance } from "@hivemind/core/settings-schema";
+import type { SharedAppearance } from "@hivemind/core/settings-schema";
 import type { WidgetPackage } from "@hivemind/core/widget-format";
 import type { RecentSound, SoundMoment, SoundResult } from "./notifications.js";
 
@@ -286,8 +286,9 @@ export interface WorkspaceMethods {
   /** Take back the client's last board edit, or make it again: whether there was one. */
   "store.undo": (repo: string) => boolean;
   "store.redo": (repo: string) => boolean;
-  /** (0.17) The host's look, as a guest shows its workspaces: nothing on the host's disk. */
-  "appearance.get": () => Appearance;
+  /** (0.17) The host's look, as a guest shows its workspaces: nothing on the host's disk. (0.35)
+   *  With its custom accent's colours (`accentCustom`), which win over `accent` while set. */
+  "appearance.get": () => SharedAppearance;
 }
 
 /** What a client tells a host and asks no answer to: a host never answers a notice. */
@@ -387,7 +388,7 @@ export interface WorkspaceEvents {
   /** (0.19) To the window that runs `repo`'s widgets: someone pressed the widget `id`. */
   "widget.pressed": (repo: string, id: string, press: WidgetPress) => void;
   /** (0.17) The host's look changed (`appearance.get`). */
-  "appearance.changed": (appearance: Appearance) => void;
+  "appearance.changed": (appearance: SharedAppearance) => void;
   /** Someone asks to join `repo`: to its owner's clients, the first answer counting (M3). */
   "people.asked": (repo: string, question: JoinQuestion) => void;
   /** The question `req` about `repo` was answered, or nobody answered it in time. */

@@ -4,14 +4,14 @@
  * told when what a guest would see changes, so a host recolouring itself recolours its guests.
  * Electron-free.
  */
-import { sharedAppearance, type Appearance } from "@hivemind/core/settings-schema";
+import { sharedAppearance, type SharedAppearance } from "@hivemind/core/settings-schema";
 import type { Domain, WorkspaceServer } from "@hivemind/workspace-api/server";
 
 export interface AppearanceOptions {
-  /** The host's own appearance now. */
-  current(): Appearance;
-  /** Call `listener` with the host's appearance whenever its settings change. */
-  onChange(listener: (appearance: Appearance) => void): void;
+  /** The host's own look now, with its custom accent (`lookForGuests`). */
+  current(): SharedAppearance;
+  /** Call `listener` with the host's look whenever its settings change. */
+  onChange(listener: (appearance: SharedAppearance) => void): void;
   server(): WorkspaceServer;
 }
 

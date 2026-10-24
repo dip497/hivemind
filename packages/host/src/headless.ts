@@ -37,7 +37,7 @@ import { readSettings, settingsPath } from "@hivemind/core/settings";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { recordsFile } from "@hivemind/core/installed-packages";
 import { appearance } from "./appearance.js";
-import { DEFAULT_APPEARANCE, type Appearance, type Settings } from "@hivemind/core/settings-schema";
+import { DEFAULT_APPEARANCE, lookForGuests, type Appearance, type SharedAppearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { formatPairLink, pairAnnouncement, PairingOffer, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
@@ -281,7 +281,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     recent: () => [], photos: () => path.join(o.dir, "photos"),
   });
   // How this host looks to its guests: its settings' theme, once they are read.
-  let appearanceNow = (): Appearance => DEFAULT_APPEARANCE;
+  let appearanceNow = (): SharedAppearance => DEFAULT_APPEARANCE;
   // Its widgets run on the person's own devices that have a workspace open: it has no window.
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const grants = new Grants(path.join(o.dir, "grants.json"));
@@ -387,7 +387,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // The settings the app and `hive config` keep, wherever this host's own data is.
   const settingsFile = settingsPath();
   const catalog = agentCatalog(settingsFile);
-  appearanceNow = () => { try { return catalog.settings().appearance; } catch { return DEFAULT_APPEARANCE; } };
+  appearanceNow = () => { try { return lookForGuests(catalog.settings()); } catch { return DEFAULT_APPEARANCE; } };
   await catalog.current();
   // A tile's last line changed: the person's phone's Home is told, once it is served.
   let homeLinesChanged = (): void => {};
