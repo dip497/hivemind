@@ -99,7 +99,8 @@ test.beforeAll(async () => {
   fs.mkdirSync(fakeBin, { recursive: true });
   fs.writeFileSync(path.join(fakeBin, "claude"), `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE)} claude "$@"\n`, { mode: 0o755 });
   expect(hive(["init", "--prefix", "HM"]).status).toBe(0);
-  const ingested = hive(["ingest", "--source", SOURCE], JSON.stringify(pay318(null, "2026-10-22T09:14:00.000+0000")));
+  const pay399 = { ...pay318(null, "2026-10-22T09:14:00.000+0000"), external: { ...pay318(null, "2026-10-22T09:14:00.000+0000").external, id: "10499", key: "PAY-399", url: "https://acme.atlassian.net/browse/PAY-399" }, title: "Dashboards for retries" };
+  const ingested = hive(["ingest", "--source", SOURCE], [pay318(null, "2026-10-22T09:14:00.000+0000"), pay399].map((r) => JSON.stringify(r)).join("\n"));
   expect(ingested.status, ingested.out).toBe(0);
   expect(hive(["plugins", "install", plugin]).status).toBe(0);
   expect(hive(["plugins", "enable", "tool:@acme/jira"]).status).toBe(0);
@@ -128,9 +129,40 @@ test.afterAll(async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+const tool = () => page.locator('[data-tool-plugin="@hivemind/issues"]');
+// By its label, not its role: the start dialog opens mid-drag and hides the board from role queries.
+const cardOf = (id: string) => tool().locator(`[role="button"][aria-label="Open issue ${id}"]`);
+/** An HTML5 drag of a card onto a column, as the browser sends it (issues-workflow.spec.ts). */
+async function drag(id: string, to: string) {
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await cardOf(id).dispatchEvent("dragstart", { dataTransfer });
+  await tool().locator(`[data-column="${to}"]`).dispatchEvent("dragover", { dataTransfer });
+  await tool().locator(`[data-column="${to}"]`).dispatchEvent("drop", { dataTransfer });
+  await cardOf(id).dispatchEvent("dragend", { dataTransfer });
+}
+
+test("a drag into progress asks first: cancelled, the issue stays; Move anyway moves it, with no agent and no worktree", async () => {
+  await expect(cardOf("PAY-399")).toBeVisible({ timeout: 15_000 });
+  // Cards drag only while the tile is focused.
+  await tool().locator('[data-column="Backlog"]').click({ position: { x: 100, y: 10 } });
+  await expect(cardOf("PAY-399")).toHaveAttribute("draggable", "true");
+  await drag("PAY-399", "In progress");
+  const dialog = page.locator('[data-start-dialog="PAY-399"]');
+  await expect(dialog).toBeVisible({ timeout: 10_000 });
+  await expect(dialog.locator("[data-assign-me]")).toHaveText("Assign to me and move");
+  await dialog.locator("[data-start-cancel]").click();
+  await expect(dialog).toBeHidden();
+  expect(hive(["show", "PAY-399"]).json.state).toBe("todo");
+
+  await drag("PAY-399", "In progress");
+  await page.locator('[data-start-dialog="PAY-399"] [data-start-anyway]').click();
+  await expect.poll(() => hive(["show", "PAY-399"]).json?.state, { timeout: 10_000 }).toBe("in_progress");
+  expect(hive(["show", "PAY-399"]).json.branch).toBeUndefined();
+  expect(log()).not.toContain("assign PAY-399");
+});
+
 test("an unassigned mirrored issue: the dialog says so; Assign to me and start assigns it, and the agent works it in its own worktree", async () => {
-  const tool = page.locator('[data-tool-plugin="@hivemind/issues"]');
-  const card = tool.locator('[role="button"][aria-label="Open issue PAY-318"]');
+  const card = cardOf("PAY-318");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card.locator("[data-tracker]")).toHaveText("jira");
   await expect(card.locator("[data-unassigned]")).toBeVisible();
