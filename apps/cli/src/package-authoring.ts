@@ -14,10 +14,12 @@ import { packageBrief } from "./plugin-brief.js";
 const title = (name: string) => name.split("-").map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ");
 
 /** What `hive plugins new package` writes: a manifest that holds no member yet, a README and the
- *  brief for an agent. */
+ *  brief for an agent. No member list is written empty: a list a released app does not know
+ *  (`themes`) makes it refuse the whole manifest, so each is written when its first member is
+ *  added (`addEntry`). */
 export function packageStarter(owner: string, name: string): Record<string, string> {
   const id = `@${owner}/${name}`;
-  const manifest = { apiVersion: 2, id, name: title(name), version: "0.1.0", ...Object.fromEntries(MEMBER_FORMATS.map((f) => [f.list, []])) };
+  const manifest = { apiVersion: 2, id, name: title(name), version: "0.1.0" };
   return {
     [PACKAGE_MANIFEST]: JSON.stringify(manifest, null, 2) + "\n",
     "README.md": `# ${title(name)}\n\nWhat it holds, in one line. Shown on its HiveHub page and in the app before anyone installs it: say what each member does and what it asks for.\n\nGuide: https://hivemind.griiken.com/guide/packages/\n`,

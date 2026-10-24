@@ -18,6 +18,18 @@
 import { cssColorToRgb } from "./css-color.js";
 import { ACCENTS, applyPreset, mergeAppearance, type Appearance, type ThemePreset } from "./settings-schema.js";
 
+/** What a theme may have set: each path a part of the look a theme names, so Revert puts back
+ *  those and nothing else. The accent is one part kept in two places (a built-in id an older
+ *  build reads, the custom colours here); a font is the stack and the face it names. */
+export const THEME_SET_PATHS = [
+  "appearance.preset", "appearance.mode", "appearance.palette",
+  "appearance.accent", "appearanceExtra.accent",
+  "appearance.terminal", "appearance.radius", "appearance.wallpaper",
+  "appearance.uiFont", "appearanceExtra.fontFaces.ui",
+  "appearance.monoFont", "appearanceExtra.fontFaces.mono",
+] as const;
+export type ThemeSetPath = (typeof THEME_SET_PATHS)[number];
+
 /** An accent as colours: what a built-in id names, or any colour a person or a theme picks. */
 export interface AccentColors { brand: string; accent: string; working?: string }
 
@@ -38,6 +50,8 @@ export interface ThemeRecord {
   appliedAt: number;
   /** The look before it was applied. Never holds a `theme` of its own, so it never nests. */
   before: { appearance: Appearance; extra: LookExtra };
+  /** The parts of the look it set (`THEME_SET_PATHS`): what Revert puts back from `before`. */
+  set: ThemeSetPath[];
   /** `hivemedia:` URLs of the sounds it brought, per moment. */
   sounds?: { needs?: string; done?: string; error?: string };
   /** Its package was removed; the look stays. */
@@ -67,8 +81,9 @@ export function accentColorsOf(v: unknown): AccentColors | undefined {
 export const MEDIA_URL_RE = /^hivemedia:\/\/media\/[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/;
 /** A family name that is safe inside a CSS string: no quotes, backslashes, braces or semicolons. */
 export const FAMILY_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,59}$/;
-const WEIGHT_RE = /^(?:normal|bold|[1-9]00(?: [1-9]00)?)$/;
-const STYLE_RE = /^(?:normal|italic|oblique)$/;
+/** A font file's weight and style, as `@font-face` takes them. */
+export const WEIGHT_RE = /^(?:normal|bold|[1-9]00(?: [1-9]00)?)$/;
+export const STYLE_RE = /^(?:normal|italic|oblique)$/;
 /** The most files one face may have. */
 export const MAX_FACE_FILES = 4;
 
@@ -81,9 +96,18 @@ function faceSetOf(v: unknown): FaceSet | undefined {
   return files.length ? { family: v.family, files } : undefined;
 }
 
-function fontFacesOf(v: unknown): FontFaces | undefined {
+/** Whether a font stack (`"Harbour Display", system-ui, sans-serif`) names `family`. */
+export function namesFamily(stack: string, family: string): boolean {
+  const want = family.toLowerCase();
+  return stack.split(",").some((x) => x.trim().replace(/^(["'])(.*)\1$/, "$2").toLowerCase() === want);
+}
+
+/** A face is kept only while its font names its family: once the person picks another font, no
+ *  view is sent its bytes and the file can go. Without the fonts (a patch), every face is kept. */
+function fontFacesOf(v: unknown, fonts?: Pick<Appearance, "uiFont" | "monoFont">): FontFaces | undefined {
   if (!isObj(v)) return undefined;
-  const ui = faceSetOf(v.ui), mono = faceSetOf(v.mono);
+  const inUse = (f: FaceSet | undefined, stack: string | undefined) => (f && (stack === undefined || namesFamily(stack, f.family)) ? f : undefined);
+  const ui = inUse(faceSetOf(v.ui), fonts?.uiFont), mono = inUse(faceSetOf(v.mono), fonts?.monoFont);
   return ui || mono ? { ...(ui ? { ui } : {}), ...(mono ? { mono } : {}) } : undefined;
 }
 
@@ -99,11 +123,12 @@ function soundsOf(v: unknown): ThemeRecord["sounds"] {
   return Object.keys(out).length ? out : undefined;
 }
 
-/** The custom accent and font faces of `v`, checked: what a look keeps beside `appearance`. */
-export function lookExtraOf(v: unknown): LookExtra {
+/** The custom accent and font faces of `v`, checked: what a look keeps beside `appearance`, whose
+ *  fonts (when given) decide which faces are still in use. */
+export function lookExtraOf(v: unknown, fonts?: Pick<Appearance, "uiFont" | "monoFont">): LookExtra {
   const p = isObj(v) ? v : {};
   const accent = accentColorsOf(p.accent);
-  const fontFaces = fontFacesOf(p.fontFaces);
+  const fontFaces = fontFacesOf(p.fontFaces, fonts);
   return { ...(accent ? { accent } : {}), ...(fontFaces ? { fontFaces } : {}) };
 }
 
@@ -112,23 +137,28 @@ function themeRecordOf(v: unknown): ThemeRecord | undefined {
   const name = typeof v.name === "string" && v.name.trim() && v.name.length <= 60 ? v.name : v.id.slice(v.id.lastIndexOf("/") + 1);
   const version = typeof v.version === "string" && VERSION_RE.test(v.version) ? v.version : "0.0.0";
   // `before` is the look a revert puts back: read as settings are, and never with a theme of its own.
-  const before = { appearance: mergeAppearance(v.before.appearance), extra: lookExtraOf(v.before.extra) };
+  const appearance = mergeAppearance(v.before.appearance);
+  const before = { appearance, extra: lookExtraOf(v.before.extra, appearance) };
   const sounds = soundsOf(v.sounds);
+  // A record that does not say what it set (or names nothing this build knows) puts back every part.
+  const named = Array.isArray(v.set) ? THEME_SET_PATHS.filter((p) => (v.set as unknown[]).includes(p)) : [];
   return {
     id: v.id, name, version,
     appliedAt: typeof v.appliedAt === "number" && Number.isFinite(v.appliedAt) ? v.appliedAt : 0,
     before,
+    set: named.length ? named : [...THEME_SET_PATHS],
     ...(sounds ? { sounds } : {}),
     ...(v.removed === true ? { removed: true } : {}),
   };
 }
 
 /** `appearanceExtra` from anything (a file, a patch): each part checked, a part that fails
- *  dropped. A key a newer build added is the writer's to keep (`./settings-write.ts`). */
-export function appearanceExtraOf(raw: unknown): AppearanceExtra {
+ *  dropped, a font face its font no longer names left out. A key a newer build added is the
+ *  writer's to keep (`./settings-write.ts`). */
+export function appearanceExtraOf(raw: unknown, fonts?: Pick<Appearance, "uiFont" | "monoFont">): AppearanceExtra {
   const p = isObj(raw) ? raw : {};
   const theme = themeRecordOf(p.theme);
-  return { ...lookExtraOf(p), ...(theme ? { theme } : {}) };
+  return { ...lookExtraOf(p, fonts), ...(theme ? { theme } : {}) };
 }
 
 /** The accent a look paints with: its custom colours when set, else its built-in id's. */
@@ -138,10 +168,43 @@ export function accentOf(appearance: Pick<Appearance, "accent">, extra?: Pick<Ap
   return { brand: a.brand, accent: a.accent, ...(a.working ? { working: a.working } : {}), custom: false };
 }
 
-/** The settings once a built-in preset is chosen: its colours and accent id, so the custom accent
- *  that would win over that id goes, and so does the record of a theme the person has left. A
- *  theme's font faces stay while its family is still the font in use. */
+/** What choosing a built-in preset removes from `appearanceExtra`: the custom accent that would
+ *  win over the preset's accent id, and the record of a theme the person has left. A theme's font
+ *  faces stay while its family is still the font in use. */
+export const PRESET_CLEARS = ["accent", "theme"] as const satisfies readonly (keyof AppearanceExtra)[];
+/** The settings paths choosing a preset writes, written even where they read the same here: an id
+ *  this build does not know (a newer build's accent) reads as the default, and a preset replaces it. */
+export const PRESET_PATHS: readonly string[] = [
+  ...(["preset", "mode", "palette", "accent", "terminal"] as const).map((k) => `appearance.${k}`),
+  ...PRESET_CLEARS.map((k) => `appearanceExtra.${k}`),
+];
+
+/** The settings once a built-in preset is chosen (`PRESET_CLEARS`). */
 export function withPreset<S extends { appearance: Appearance; appearanceExtra: AppearanceExtra }>(s: S, preset: ThemePreset): S {
-  const { accent: _a, theme: _t, ...rest } = s.appearanceExtra;
+  const rest: AppearanceExtra = { ...s.appearanceExtra };
+  for (const k of PRESET_CLEARS) delete rest[k];
   return { ...s, appearance: applyPreset(s.appearance, preset), appearanceExtra: rest };
 }
+
+/** The patches that choose a built-in accent id: the id, and no custom accent, which would win
+ *  over it (`hive config set appearance.accent`). */
+export function accentIdPatches(id: unknown): { path: string; value: unknown }[] {
+  return [{ path: "appearance.accent", value: id }, { path: "appearanceExtra.accent", value: undefined }];
+}
+
+/** `appearanceExtra` once a look file (`exportAppearance`'s, or a whole settings.json) is imported
+ *  over `cur`. Its custom accent (`accentCustom`, or a settings.json's `appearanceExtra.accent`)
+ *  is set; a file that names only an accent id paints that id, so no custom accent stays; and a
+ *  file that names the colours (a palette or a preset) is a look of its own, so the record of the
+ *  theme it replaces goes and Revert cannot undo the import. */
+export function importedExtra(raw: unknown, cur: AppearanceExtra): AppearanceExtra {
+  const file = isObj(raw) && isObj(raw.appearance) ? raw.appearance : isObj(raw) ? raw : {};
+  const custom = accentColorsOf(file.accentCustom) ?? (isObj(raw) && isObj(raw.appearanceExtra) ? accentColorsOf(raw.appearanceExtra.accent) : undefined);
+  const out: AppearanceExtra = { ...cur };
+  if (custom) out.accent = custom;
+  else if ("accent" in file) delete out.accent;
+  if ("palette" in file || "preset" in file) delete out.theme;
+  return out;
+}
+/** What an import writes of `appearanceExtra` (`importedExtra`). */
+export const IMPORT_EXTRA_PATHS = ["appearanceExtra.accent", "appearanceExtra.theme"] as const;

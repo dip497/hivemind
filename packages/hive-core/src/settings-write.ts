@@ -23,6 +23,10 @@
  */
 import { SETTINGS_VERSION, getPath, settingsVersionOf, type Settings } from "./settings-schema.js";
 
+/** A path the writer names: its value set (an object onto the file's, keeping keys beside it),
+ *  or `{ replace }`: the file's value removed first, so no key a newer build put inside stays. */
+export type Touched = string | { replace: string };
+
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => !!v && typeof v === "object" && !Array.isArray(v);
 const BANNED = new Set(["__proto__", "constructor", "prototype"]);
@@ -31,17 +35,19 @@ type Op = { path: string[]; value: unknown } | { path: string[]; remove: true };
 
 /** The file's JSON once `next` is written over it; `raw` is what the file held (anything; not
  *  changed), `cur` how this build read it. */
-export function writtenOnto(raw: unknown, cur: Settings, next: Settings, touched: readonly string[] = []): Json {
+export function writtenOnto(raw: unknown, cur: Settings, next: Settings, touched: readonly Touched[] = []): Json {
   // A missing or broken file starts from the settings as read, whole, as every build wrote it.
   const out: Json = clone(isObj(raw) ? raw : (cur as unknown as Json));
   const ops: Op[] = [];
   const { v: _cv, ...curRest } = cur;
   const { v: _nv, ...nextRest } = next;
   diff(curRest, nextRest, [], ops);
-  for (const p of touched) {
+  for (const t of touched) {
+    const p = typeof t === "string" ? t : t.replace;
     const path = p.split(".").filter(Boolean);
     if (path.length === 0 || path[0] === "v") continue;
     const value = getPath(next, p);
+    if (typeof t !== "string") ops.push({ path, remove: true });
     ops.push(value === undefined ? { path, remove: true } : { path, value });
   }
   for (const op of ops) apply(out, op);

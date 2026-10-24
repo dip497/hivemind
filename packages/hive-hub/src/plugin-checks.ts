@@ -4,7 +4,7 @@
 import YAML from "yaml";
 import { agentDisclosures, defFromManifest, RESERVED_AGENTS, type AgentProviderDef } from "@hivemind/agents";
 import { parseToolManifest, type ToolPackage } from "@hivemind/core/tool-format";
-import { checkTheme, THEME_MANIFEST, themeFiles } from "@hivemind/core/theme-format";
+import { readTheme, THEME_MANIFEST, themeFiles } from "@hivemind/core/theme-format";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import { idProblem, pathsProblem, safeRelative, smallJson, UNSAFE_TEXT_RE, type CatalogFile, type CatalogType } from "./index-format.js";
@@ -99,22 +99,28 @@ export async function checkPluginFolder(folder: readonly PluginFile[]): Promise<
   }
 }
 
+/** What a hub refuses a folder for by its size alone: a file over 2 MB, or more than 8 MB in all.
+ *  `hive plugins check` runs it too, so a plugin it passes is one HiveHub takes. */
+export function sizeProblem(files: readonly { path: string; bytes: number }[]): string | null {
+  const big = files.find((f) => f.bytes > MAX_PLUGIN_FILE_BYTES);
+  if (big) return `${big.path} is larger than 2 MB`;
+  return files.reduce((n, f) => n + f.bytes, 0) > MAX_PLUGIN_BYTES ? "a plugin folder may be at most 8 MB" : null;
+}
+
 async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
   if (!folder.length) refuse("the folder is empty");
   if (folder.length > MAX_PLUGIN_FILES) refuse(`a plugin may have at most ${MAX_PLUGIN_FILES} files`);
-  let total = 0;
   const files: CatalogFile[] = [];
   const text = new Map<string, string>();
   const sizes = new Map<string, number>();
+  for (const f of folder) if (!safeRelative(f.path)) refuse(`${shown(f.path)} is not a plain relative path`);
+  const big = sizeProblem(folder.map((f) => ({ path: f.path, bytes: f.bytes.byteLength })));
+  if (big) refuse(big);
   for (const f of folder) {
     sizes.set(f.path, f.bytes.byteLength);
-    if (!safeRelative(f.path)) refuse(`${shown(f.path)} is not a plain relative path`);
-    if (f.bytes.byteLength > MAX_PLUGIN_FILE_BYTES) refuse(`${f.path} is larger than 2 MB`);
-    total += f.bytes.byteLength;
     files.push({ path: f.path, sha256: await sha256(f.bytes) });
     if (f.bytes.byteLength < MAX_TEXT) text.set(f.path, new TextDecoder().decode(f.bytes));
   }
-  if (total > MAX_PLUGIN_BYTES) refuse("a plugin folder may be at most 8 MB");
   const clash = pathsProblem(folder.map((f) => f.path));
   if (clash) refuse(clash);
   files.sort((a, b) => a.path.localeCompare(b.path));
@@ -279,16 +285,12 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
       const inside = files.filter((f) => f.path.startsWith(prefix)).map((f) => ({ ...f, path: f.path.slice(prefix.length) }));
       const sub = new Map([...text].filter(([f]) => f.startsWith(prefix)).map(([f, t]) => [f.slice(prefix.length), t]));
       if (format.kind === "theme") {
-        // A theme is data: its theme.json checked against the files beside it, as the app checks it.
-        const folder = at.slice(at.lastIndexOf("/") + 1);
-        if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(folder)) refuse(`${shown(at)}: a theme's folder is named like its id: lowercase letters, digits and dashes`);
+        // A theme is data: read from its folder as the app reads it (`readTheme`).
         const source = sub.get(THEME_MANIFEST) ?? refuse(`${shown(at)}: ${format.list} names a folder holding no ${THEME_MANIFEST}`);
-        let raw: unknown;
-        try { raw = JSON.parse(source); } catch { return refuse(`${shown(at)}: ${THEME_MANIFEST} is not valid JSON`); }
-        const t = checkTheme(raw, inside.map((f) => ({ path: f.path, bytes: sizes.get(prefix + f.path) ?? 0 })));
-        if ("problem" in t) return refuse(`${shown(at)}: ${THEME_MANIFEST}: ${escaped(t.problem)}`);
+        const t = readTheme(at.slice(at.lastIndexOf("/") + 1), m.id, source, inside.map((f) => ({ path: f.path, bytes: sizes.get(prefix + f.path) ?? 0 })));
+        if ("problem" in t) return refuse(`${shown(at)}: ${escaped(t.problem)}`);
         const holds = themeFiles(t.theme).length;
-        members.push({ kind: "theme", id: `${m.id}/${folder}`, name: t.theme.name, runs: format.runs, permissions: [],
+        members.push({ kind: "theme", id: t.id, name: t.theme.name, runs: format.runs, permissions: [],
           does: [`${THEME_DOES}${holds ? ` (${holds} file${holds === 1 ? "" : "s"}: fonts, a wallpaper or sounds)` : ""}`] });
         continue;
       }

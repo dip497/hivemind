@@ -5,27 +5,60 @@
 
 const clamp01 = (n: number): number => Math.min(1, Math.max(0, n));
 
-/** sRGB bytes of a CSS colour in one of the forms a palette uses; null for anything else. */
-export function cssColorToRgb(value: string): [number, number, number] | null {
+const NUM = String.raw`[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?`;
+const NUMBER = new RegExp(`^${NUM}$`);
+const PERCENT = new RegExp(`^${NUM}%$`);
+const ANGLE = new RegExp(`^(${NUM})(deg|rad|grad|turn)?$`);
+/** Degrees in one turn of each unit CSS allows for a hue; a bare number is degrees. */
+const TURN: Record<string, number> = { deg: 360, rad: 2 * Math.PI, grad: 400, turn: 1 };
+
+/** A number or a percentage of `whole`; null for anything else. */
+function amount(s: string, whole: number, number = true): number | null {
+  if (PERCENT.test(s)) return (parseFloat(s) / 100) * whole;
+  return number && NUMBER.test(s) ? parseFloat(s) : null;
+}
+
+/** A CSS colour in one of the forms a palette uses, read as CSS reads it: sRGB bytes, and whether
+ *  it carries an alpha (`#rgba`, `#rrggbbaa`, a fourth argument or `/ alpha`). Null for anything
+ *  CSS would paint differently or not at all: a missing or extra part, a unit a part does not take,
+ *  text after the colour. */
+export function parseCssColor(value: string): { rgb: [number, number, number]; alpha: boolean } | null {
   const v = value.trim().toLowerCase();
-  const hex = /^#([0-9a-f]{3,8})$/.exec(v)?.[1];
+  const hex = /^#([0-9a-f]+)$/.exec(v)?.[1];
   if (hex) {
-    if (hex.length === 3 || hex.length === 4) return [0, 1, 2].map((i) => parseInt(hex[i]! + hex[i]!, 16)) as [number, number, number];
-    if (hex.length === 6 || hex.length === 8) return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+    if (hex.length === 3 || hex.length === 4) return { rgb: [0, 1, 2].map((i) => parseInt(hex[i]! + hex[i]!, 16)) as [number, number, number], alpha: hex.length === 4 };
+    if (hex.length === 6 || hex.length === 8) return { rgb: [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number], alpha: hex.length === 8 };
     return null;
   }
-  const fn = /^(rgba?|oklch)\(([^)]*)\)$/.exec(v);
+  const fn = /^(rgba?|oklch)\(\s*([^()]*?)\s*\)$/.exec(v);
   if (!fn) return null;
-  // Spaces or commas between parts; anything after a slash is alpha, which a background ignores.
-  const parts = fn[2]!.split("/")[0]!.trim().split(/[\s,]+/).filter(Boolean);
-  if (parts.length < 3) return null;
-  const num = (s: string, percentOf = 1): number => (s.endsWith("%") ? (parseFloat(s) / 100) * percentOf : parseFloat(s));
-  if (fn[1] !== "oklch") {
-    const rgb = parts.slice(0, 3).map((p) => Math.round(Math.min(255, Math.max(0, num(p, 255)))));
-    return rgb.some(Number.isNaN) ? null : (rgb as [number, number, number]);
+  const body = fn[2]!;
+  let parts: string[], alpha: string | undefined;
+  if (fn[1] !== "oklch" && body.includes(",")) {
+    // The legacy form: three parts, all numbers or all percentages, and an optional fourth, alpha.
+    parts = body.split(",").map((x) => x.trim());
+    if (parts.length === 4) alpha = parts.pop();
+    if (parts.length !== 3 || parts.some((x) => !x || /\s/.test(x))) return null;
+    if (!parts.every((x) => NUMBER.test(x)) && !parts.every((x) => PERCENT.test(x))) return null;
+  } else {
+    // The modern form: three parts between spaces, and `/ alpha`.
+    const [main, a, ...more] = body.split("/").map((x) => x.trim());
+    if (more.length || a === "") return null;
+    alpha = a;
+    parts = main!.split(/\s+/).filter(Boolean);
+    if (parts.length !== 3) return null;
   }
-  const l = num(parts[0]!, 1), c = num(parts[1]!, 0.4), h = (parseFloat(parts[2]!) * Math.PI) / 180;
-  if ([l, c, h].some(Number.isNaN)) return null;
+  if (alpha !== undefined && amount(alpha, 1) === null) return null;
+  const hasAlpha = alpha !== undefined;
+  if (fn[1] !== "oklch") {
+    const rgb = parts.map((p) => amount(p, 255));
+    if (rgb.some((x) => x === null)) return null;
+    return { rgb: rgb.map((x) => Math.round(Math.min(255, Math.max(0, x!)))) as [number, number, number], alpha: hasAlpha };
+  }
+  const l = amount(parts[0]!, 1), c = amount(parts[1]!, 0.4);
+  const angle = ANGLE.exec(parts[2]!);
+  if (l === null || c === null || !angle) return null;
+  const h = (parseFloat(angle[1]!) / TURN[angle[2] ?? "deg"]!) * 2 * Math.PI;
   // OKLCH → OKLab → linear sRGB (Björn Ottosson's matrices), then the sRGB transfer curve.
   const a = c * Math.cos(h), b = c * Math.sin(h);
   const l_ = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
@@ -36,10 +69,19 @@ export function cssColorToRgb(value: string): [number, number, number] | null {
     -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_,
     -0.0041960863 * l_ - 0.7034186147 * m_ + 1.707614701 * s_,
   ];
-  return lin.map((x) => {
-    const e = clamp01(x);
-    return Math.round(255 * (e <= 0.0031308 ? 12.92 * e : 1.055 * e ** (1 / 2.4) - 0.055));
-  }) as [number, number, number];
+  return {
+    rgb: lin.map((x) => {
+      const e = clamp01(x);
+      return Math.round(255 * (e <= 0.0031308 ? 12.92 * e : 1.055 * e ** (1 / 2.4) - 0.055));
+    }) as [number, number, number],
+    alpha: hasAlpha,
+  };
+}
+
+/** sRGB bytes of a CSS colour in one of the forms a palette uses (`parseCssColor`), alpha set
+ *  aside; null for anything else. */
+export function cssColorToRgb(value: string): [number, number, number] | null {
+  return parseCssColor(value)?.rgb ?? null;
 }
 
 /** `#rrggbb` for a CSS colour, or `fallback` when it cannot be read. */

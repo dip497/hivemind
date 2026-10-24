@@ -33,7 +33,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "./settings-schema.js";
-import { writtenOnto } from "./settings-write.js";
+import { writtenOnto, type Touched } from "./settings-write.js";
 
 export function settingsPath(): string {
   if (process.env.HIVE_SETTINGS?.trim()) return path.resolve(process.env.HIVE_SETTINGS.trim());
@@ -242,7 +242,7 @@ export async function breakSettingsLock(file: string = settingsPath()): Promise<
 export async function updateSettings(
   mutate: (current: Settings) => Settings,
   file: string = settingsPath(),
-  touched: readonly string[] = [],
+  touched: readonly Touched[] = [],
 ): Promise<Settings> {
   return withLock(file, async () => {
     const raw = await readRaw(file);

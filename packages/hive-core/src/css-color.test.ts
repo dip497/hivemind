@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cssColorToHex, cssColorToRgb } from "./css-color";
+import { cssColorToHex, cssColorToRgb, parseCssColor } from "./css-color";
 import { PRESETS } from "./settings-schema";
 
 describe("cssColorToRgb", () => {
@@ -27,6 +27,26 @@ describe("cssColorToRgb", () => {
 
   test("gives null for what it cannot read", () => {
     for (const v of ["", "red", "#12", "hsl(0 0% 0%)", "oklch(a b c)", "rgb(1 2)"]) expect(cssColorToRgb(v)).toBeNull();
+  });
+
+  test("gives null for what CSS paints differently or not at all", () => {
+    for (const v of [
+      "rgb(1 2 3 4)", "rgb(1, 2, 3, 4, 5)", "oklch(0.5 0.1 30 40)", // a part too many
+      "rgb(1 2 3) red", "oklch(0.5 0.1 30)x", "#fffz", "rgb(1 2 3 / 0.5 / 1)", // something after it
+      "rgb(1, 2 3)", "rgb(10, 20%, 30)", "rgb(1px 2 3)", "oklch(0.5 0.1 30px)", "oklch(50deg 0.1 30)", // a unit it does not take
+      "rgb(1 2 3 /)", "rgb(1 2 3 / x)", "oklch(0.5, 0.1, 30)", // an alpha or a separator it does not take
+    ]) expect([v, cssColorToRgb(v)]).toEqual([v, null]);
+  });
+
+  test("reads a hue in each unit CSS allows; a bare number is degrees", () => {
+    const deg = cssColorToRgb("oklch(0.6 0.15 180)");
+    for (const h of ["180deg", "3.14159265rad", "200grad", "0.5turn"]) expect(cssColorToRgb(`oklch(0.6 0.15 ${h})`)).toEqual(deg);
+    expect(cssColorToRgb("oklch(0.6 0.15 3rad)")).not.toEqual(cssColorToRgb("oklch(0.6 0.15 3)"));
+  });
+
+  test("says when a colour carries an alpha, in every way CSS writes one", () => {
+    for (const v of ["#fff8", "#ffffff80", "rgba(1, 2, 3, 1)", "rgb(1, 2, 3, 0.5)", "rgb(1 2 3 / 50%)", "oklch(0.5 0.1 30 / 1)"]) expect([v, parseCssColor(v)?.alpha]).toEqual([v, true]);
+    for (const v of ["#fff", "rgb(1, 2, 3)", "rgba(1 2 3)", "oklch(0.5 0.1 30)"]) expect([v, parseCssColor(v)?.alpha]).toEqual([v, false]);
   });
 });
 

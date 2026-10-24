@@ -614,7 +614,7 @@ export function lookForGuests(s: Pick<Settings, "appearance" | "appearanceExtra"
 }
 
 /** A theme file (`hive theme export`, Copy JSON): the appearance without the media it names. */
-export type ThemeFile = Omit<Appearance, "wallpaper" | "overlayMedia"> & { wallpaper: Omit<Appearance["wallpaper"], "imageSrc" | "videoSrc"> };
+export type ThemeFile = Omit<Appearance, "wallpaper" | "overlayMedia"> & { wallpaper: Omit<Appearance["wallpaper"], "imageSrc" | "videoSrc">; accentCustom?: AccentColors };
 
 const MEDIA_WORDS: Record<string, string> = { "wallpaper.imageSrc": "the wallpaper picture", "wallpaper.videoSrc": "the wallpaper video", overlayMedia: "the overlays" };
 
@@ -622,7 +622,7 @@ const MEDIA_WORDS: Record<string, string> = { "wallpaper.imageSrc": "the wallpap
  *  computer the recipient does not have (an old wallpaper's address even names the home folder),
  *  so each is left out: `leftOut` names those that were set, and `note` says so in words. A key a
  *  newer build wrote stays out too: it is that build's to export. */
-export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: string[]; note: string | null } {
+export function exportAppearance(a: Appearance, extra?: Pick<AppearanceExtra, "accent"> | null): { theme: ThemeFile; leftOut: string[]; note: string | null } {
   const leftOut = [
     ...(a.wallpaper.imageSrc ? ["wallpaper.imageSrc"] : []),
     ...(a.wallpaper.videoSrc ? ["wallpaper.videoSrc"] : []),
@@ -634,6 +634,8 @@ export function exportAppearance(a: Appearance): { theme: ThemeFile; leftOut: st
     theme: {
       preset: a.preset, mode: a.mode, palette: a.palette, accent: a.accent, radius: a.radius, uiFont: a.uiFont, monoFont: a.monoFont,
       glass: a.glass, wallpaper: { kind: a.wallpaper.kind, brightness: a.wallpaper.brightness }, terminal: a.terminal, pluginSurfaces: a.pluginSurfaces,
+      // The custom accent, which wins over `accent` while set; an older build reads the id.
+      ...(extra?.accent ? { accentCustom: extra.accent } : {}),
     },
     leftOut,
     note: list ? `Left out ${list}: a theme file holds no media files.` : null,
@@ -784,12 +786,13 @@ export function mergeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): 
   const agents = isObj(p.agents) ? p.agents : {};
   // Plugin state as stored; else (a partial merge) as `base` has it.
   const state = isObj(plugins.state) ? parsePluginStates(plugins.state) : base.plugins.state;
+  const appearance = mergeAppearance(p.appearance, base.appearance);
   // Only what this build reads. What else the file holds (a newer build's keys and values) is
   // the writer's to keep (settings-write.ts), never carried here.
   return {
     v: p.v === undefined ? base.v : settingsVersionOf(p),
-    appearance: mergeAppearance(p.appearance, base.appearance),
-    appearanceExtra: appearanceExtraOf(isObj(p.appearanceExtra) ? p.appearanceExtra : base.appearanceExtra),
+    appearance,
+    appearanceExtra: appearanceExtraOf(isObj(p.appearanceExtra) ? p.appearanceExtra : base.appearanceExtra, appearance),
     views: { defaultView: str(views.defaultView, base.views.defaultView, 64), chrome, toolbars, layers: mergeLayersPrefs(views.layers, base.views.layers) },
     plugins: { state },
     agents: {

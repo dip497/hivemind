@@ -8,6 +8,7 @@ import { z } from "zod";
 import { isSafeRelativePath, MANIFEST_FILE as VIEW_MANIFEST } from "@hivemind/view-sdk/manifest";
 import { TOOL_MANIFEST } from "@hivemind/core/tool-format";
 import { THEME_MANIFEST } from "@hivemind/core/theme-format";
+import { THEME_ID_RE } from "@hivemind/core/appearance-extra";
 import { UNSAFE_TEXT_RE } from "./index-format.js";
 
 /** The file holding a package's own manifest. */
@@ -19,6 +20,9 @@ const relative = z.string().refine((s) => isSafeRelativePath(s) && !UNSAFE_TEXT_
 const agentId = z.string().regex(/^(?!.*--)(?:@[a-z0-9][a-z0-9-]{0,38}\/)?[a-z0-9][a-z0-9-]{1,63}$/);
 /** A member's id: `@owner/name`, the owner being the package's. */
 export const MEMBER_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
+/** A member's id as its kind writes it, one rule for the package check and the hub's index: a
+ *  theme's is `@owner/package/theme` (its folder in its package), every other kind's `@owner/name`. */
+export const memberIdRe = (kind: string): RegExp => (kind === "theme" ? THEME_ID_RE : MEMBER_ID);
 
 const folderEntry = z.strictObject({ path: relative });
 const presetEntry = z.strictObject({

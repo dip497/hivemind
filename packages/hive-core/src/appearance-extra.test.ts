@@ -41,6 +41,15 @@ describe("appearanceExtra in settings.json", () => {
     }
   });
 
+  test("a face is kept only while its font names its family", () => {
+    const faces = { ...face("hivemedia://media/theme-ab12cd34-display.woff2"), mono: face("hivemedia://media/theme-ab12cd34-mono.woff2", "Deck Mono").ui };
+    const read = (uiFont: string, monoFont: string) => mergeSettings({ appearance: { uiFont, monoFont }, appearanceExtra: { fontFaces: faces } }).appearanceExtra.fontFaces;
+    expect(read('"Harbour Display", system-ui', "'Deck Mono', monospace")).toEqual(faces);
+    // The person picked another interface font: its face is not sent to views, and its file can go.
+    expect(read("Inter, sans-serif", '"Deck Mono", monospace')).toEqual({ mono: faces.mono });
+    expect(read("Inter", "Menlo")).toBeUndefined();
+  });
+
   test("a theme's `before` never holds a theme of its own", () => {
     const inner = { id: "@a/p/old", name: "Old", version: "1.0.0", appliedAt: 1, before: { appearance: DEFAULT_APPEARANCE, extra: {} } };
     const x = appearanceExtraOf({ theme: { id: "@a/p/new", name: "New", version: "1.1.0", appliedAt: 2, before: { appearance: DEFAULT_APPEARANCE, extra: { accent: BRAND, theme: inner } } } });

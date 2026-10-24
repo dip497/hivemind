@@ -14,7 +14,7 @@ import { promises as fs } from "node:fs";
 import {
   DEFAULT_APPEARANCE, HiveError, PRESETS, exportAppearance, importAppearance, readSettings, updateSettings,
 } from "@hivemind/core";
-import { withPreset } from "@hivemind/core/appearance-extra";
+import { IMPORT_EXTRA_PATHS, PRESET_PATHS, importedExtra, withPreset } from "@hivemind/core/appearance-extra";
 import { applyTheme, listInstalledThemes, revertTheme, themeStatus } from "@hivemind/core/theme-apply";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
@@ -22,9 +22,6 @@ import { driveCall } from "../drive.js";
 async function reloadApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
 }
-/** What choosing a preset sets, written even where it reads the same here: an id this version does
- *  not know (a newer build's accent) reads as the default, and choosing a preset replaces it. */
-const PRESET_PATHS = ["preset", "mode", "palette", "accent", "terminal"].map((k) => `appearance.${k}`);
 const note = (r: boolean) => (r ? "app reloaded" : "app not running — applies on next start");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e));
 
@@ -95,7 +92,8 @@ const exportCmd = defineCommand({
   meta: { name: "export", description: "Write the current appearance as JSON (stdout or a file), without its media files" },
   args: { file: { type: "positional", required: false }, json: { type: "boolean" } },
   async run({ args }) {
-    const { theme, leftOut, note } = exportAppearance((await readSettings()).appearance);
+    const s = await readSettings();
+    const { theme, leftOut, note } = exportAppearance(s.appearance, s.appearanceExtra);
     const text = JSON.stringify(theme, null, 2) + "\n";
     if (args.file) {
       await fs.writeFile(String(args.file), text, "utf8");
@@ -117,7 +115,7 @@ const importCmd = defineCommand({
     // A file that sets nothing of the look (a package.json picked by mistake) is refused before the
     // settings are touched; importAppearance says why.
     try { importAppearance(raw, DEFAULT_APPEARANCE); } catch (e) { return err(ctx, "invalid_theme", `cannot import ${args.file}: ${(e as Error).message}`); }
-    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }), undefined, ["appearance"]);
+    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance), appearanceExtra: importedExtra(raw, cur.appearanceExtra) }), undefined, ["appearance", ...IMPORT_EXTRA_PATHS]);
     const appearance = written.appearance;
     const rescanned = await reloadApp();
     return ok(ctx, { preset: appearance.preset, rescanned }, () => `imported ${args.file} (preset ${appearance.preset}); ${note(rescanned)}`);
