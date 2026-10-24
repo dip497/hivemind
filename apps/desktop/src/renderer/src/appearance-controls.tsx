@@ -122,7 +122,7 @@ export function AccentPicker({ t }: { t: ThemeState }) {
     <div className="settings-row">
       <div>
         <label id="accent-label">Accent</label>
-        <p>The selected tile, sliders, links and the text cursor. A colour of your own, or a theme's, also fills the main button, a switch that is on and the focus ring.</p>
+        <p>The selected tile, sliders and the text cursor. A colour of your own, or a theme's, also fills the main button, a switch that is on and the focus ring.</p>
         {mark && mark.ratio < ACCENT_CONTRAST && <p className="settings-note" data-accent-faint>Hard to see on {mark.on === "bg" ? "this background" : "the panels"} ({mark.ratio.toFixed(1)}:1).</p>}
       </div>
       <div className="settings-accents" role="radiogroup" aria-labelledby="accent-label">

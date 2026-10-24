@@ -188,7 +188,8 @@ A theme is data, not code: \`theme.json\` (\`format: 1\`) holds the 13 palette c
 fonts (\`.woff2\`, 400 KB each), a wallpaper (a picture or video, 2 MB) and sounds (\`.ogg\` or
 \`.mp3\`, 400 KB) from its folder; the whole package is at most 8 MB, as HiveHub takes it. A theme
 folder written elsewhere joins with \`hive plugins add <folder> --to .\`. The check
-refuses text below 4.5:1 on its background, and an accent in the colour of "needs you". Only
+refuses text below 4.5:1 on its background, panels on which no diff colours can be read (it names
+the pair), and an accent in the colour of "needs you". Only
 preview a theme with \`hive theme use\` when the person asked you to change their look.
 
 ## Done means

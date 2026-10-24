@@ -88,7 +88,9 @@ export const mixLab = (a: RGB, keep: number, b: RGB): RGB => { const A = toLab(a
 /** `ink` at `alpha` laid over `under`. */
 const over = (under: RGB, ink: RGB, alpha: number) => under.map((v, i) => v * (1 - alpha) + ink[i]! * alpha) as RGB;
 
-type DiffPalette = Pick<Palette, "bg2" | "bg3" | "fg" | "fg2" | "ok" | "err">;
+/** The palette fields a diff's colours are worked out from: what a cache of them keys on. */
+export const DIFF_PALETTE_FIELDS = ["bg2", "bg3", "fg", "fg2", "ok", "err"] as const satisfies readonly (keyof Palette)[];
+type DiffPalette = Pick<Palette, (typeof DIFF_PALETTE_FIELDS)[number]>;
 type Side = "added" | "removed" | "changed";
 
 /** Text 4.5:1; a mark (a bar's stripes, one against the other) 3:1 (apps/desktop/DESIGN.md). */

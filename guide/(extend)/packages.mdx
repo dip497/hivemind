@@ -182,10 +182,15 @@ sizes the package as HiveHub does. Each refusal names the field or the pair of c
 - The accent's `brand` below 3:1 on `bg` or on `bg2`, the panels and menus: a switch that is on, a
   slider's thumb or the selected tile's handle in it would be hard to see.
 - An accent that is the colour of an agent waiting on you: `palette.warn`, the colour needs-you is drawn in for that palette (see below), or `amber`.
+- Panels on which a diff cannot be read. The app works out a diff's text, syntax colours, +N/−N,
+  line numbers, a folded run's words and a removed line's bar from `bg2`, `bg3`, `fg`, `fg2`, `ok`
+  and `err`, moving each away from its panel as far as it must; when none reaches 4.5:1 (3:1 for
+  the bar's stripes), the refusal names the pair. A mid-grey `bg2` such as `#666666` is refused,
+  even with white text on it.
 - A file it names that is not in the folder, has the wrong type or is too big.
 - A colour CSS would draw differently: a part too many, a unit a part does not take, or text after it.
 
-What a theme's `err` and `warn` need is fitted, not refused. When a failed or needs-you chip would
+For its status chips, what a theme's `err` and `warn` need is fitted, not refused. When a failed or needs-you chip would
 read under 4.5:1 for its word on its own fill or on `bg2`, or under 3:1 for its mark on `bg2`, `bg3`
 or `bg4` (a row at rest, under the pointer and selected), the app draws it lighter in the same hue
 on a dark theme, or darker on a light one, keeping as much of its colour as it can. A status word

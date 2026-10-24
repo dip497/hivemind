@@ -21,7 +21,7 @@ import {
 import { accentOf, presetPaths, withPreset, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
 import { contrastRatio } from "@hivemind/core/css-color";
 import { UNREAD_BLUE, accentMarkInk, statusInk, statusTextInk } from "@hivemind/core/theme-format";
-import { diffColours } from "@hivemind/core/diff-colours";
+import { DIFF_PALETTE_FIELDS, diffColours } from "@hivemind/core/diff-colours";
 import { getSettings, patchSettingsMany, subscribeSettings } from "./settings-store";
 
 export { ACCENTS, ANCHORS, WALLPAPERS };
@@ -103,22 +103,27 @@ function onBrand(brand: string, t: ThemeState): string {
 
 /** The status colours for this palette (core's `statusInk` and `statusTextInk`): chips and marks,
  *  and words drawn straight on a header or a selected row; and the accent as a small mark
- *  (`accentMarkInk`). Up to about 1 ms each to work out, so they are kept until the palette or the
- *  accent changes: a slider repaints the theme on every move. */
-let inkKey = "";
-let inks: Record<"failed" | "attention" | "unread" | "failedText" | "attentionText" | "unreadText" | "brandMark", string> | null = null;
-function themeInks(t: ThemeState, brand: string): NonNullable<typeof inks> {
+ *  (`accentMarkInk`). Up to about 1 ms each to work out, so each is kept until the values it reads
+ *  change, keyed on those values (a palette's object is rebuilt on every settings write): a slider
+ *  repaints the theme on every move, and the accent picker on every pointer move, which works out
+ *  only the accent's mark again. */
+let statusKey = "";
+let statusInks: Record<"failed" | "attention" | "unread" | "failedText" | "attentionText" | "unreadText", string> | null = null;
+let markKey = "";
+let brandMark = "";
+function themeInks(t: ThemeState, brand: string): NonNullable<typeof statusInks> & { brandMark: string } {
   const p = t.palette;
-  const key = [p.err, p.warn, p.fg, p.bg, p.bg2, p.bg3, p.bg4, brand].join(",");
-  if (key !== inkKey || !inks) {
-    inkKey = key;
-    inks = {
+  const sKey = [p.err, p.warn, p.fg, p.bg2, p.bg3, p.bg4].join(",");
+  if (sKey !== statusKey || !statusInks) {
+    statusKey = sKey;
+    statusInks = {
       failed: statusInk(p.err, p), attention: statusInk(p.warn, p), unread: statusInk(UNREAD_BLUE, p),
       failedText: statusTextInk(p.err, p), attentionText: statusTextInk(p.warn, p), unreadText: statusTextInk(UNREAD_BLUE, p),
-      brandMark: accentMarkInk(brand, p),
     };
   }
-  return inks;
+  const mKey = [brand, p.fg, p.bg, p.bg2, p.bg3, p.bg4].join(",");
+  if (mKey !== markKey) { markKey = mKey; brandMark = accentMarkInk(brand, p); }
+  return { ...statusInks, brandMark };
 }
 
 /** The `@font-face` rules a theme's font files make, kept in one <style> and rewritten only when
@@ -242,12 +247,14 @@ function paintTheme(t: ThemeState): void {
   root.style.setProperty("--color-accent", light ? a.brand : a.accent);
   root.style.setProperty("--color-info", light ? a.brand : a.accent);
   // The editor's and every diff's colours, worked out to read on this palette's bg2 and a diff's
-  // changed rows: 1 to 2 ms, so once per palette (`show` keeps an unchanged palette's object), not
-  // per wallpaper or scene switch, and never per line.
-  if (diffFor.palette !== t.palette || diffFor.mode !== t.mode) diffFor = { palette: t.palette, mode: t.mode, colours: diffColours(t.palette, t.mode) };
+  // changed rows: 1 to 2 ms, so only when a value they read changes (keyed on those values, since a
+  // palette's object is rebuilt on every settings write), not per slider move, wallpaper or scene
+  // switch, and never per line.
+  const key = [t.mode, ...DIFF_PALETTE_FIELDS.map((f) => t.palette[f])].join(",");
+  if (diffFor.key !== key) diffFor = { key, colours: diffColours(t.palette, t.mode) };
   for (const [k, v] of Object.entries(diffFor.colours)) root.style.setProperty(k, v);
 }
-let diffFor: { palette?: ThemeState["palette"]; mode?: ThemeState["mode"]; colours: Record<string, string> } = { colours: {} };
+let diffFor: { key: string; colours: Record<string, string> } = { key: "", colours: {} };
 
 export function getTheme(): ThemeState { return state; }
 
