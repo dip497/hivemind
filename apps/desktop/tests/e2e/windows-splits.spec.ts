@@ -9,6 +9,13 @@ import path from "node:path";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-windows-splits-"));
 const repo = path.join(root, "repo");
+/** A program for a terminal to run, written to a file: it is told where to write by its argument,
+ *  so no path is ever part of code. */
+const program = (name: string, code: string): string => {
+  const file = path.join(root, `${name}.cjs`);
+  fs.writeFileSync(file, code);
+  return file;
+};
 let app: ElectronApplication;
 let page: Page;
 const view = () => page.frameLocator('[data-community-view="windows"] iframe');
@@ -49,7 +56,8 @@ test("switching between a pane's tabs resizes neither terminal: the one switched
     await tabs.nth(i).click();
     await page.locator(`[data-community-slot="${await tabs.nth(i).getAttribute("data-tile-id")}"] .xterm-screen`).click();
     // It makes its log once it listens.
-    await page.keyboard.type(`node -e 'const fs=require("fs");process.stdout.on("resize",()=>fs.appendFileSync(${JSON.stringify(log)},"x"));fs.writeFileSync(${JSON.stringify(log)},"");setInterval(()=>{},1e6)'\n`);
+    const counts = program("count-resizes", 'const fs=require("fs"),f=process.argv[2];process.stdout.on("resize",()=>fs.appendFileSync(f,"x"));fs.writeFileSync(f,"");setInterval(()=>{},1e6);');
+    await page.keyboard.type(`node ${counts} ${log}\n`);
   }
   const told = () => logs.map((l) => (fs.existsSync(l) ? fs.readFileSync(l, "utf8").length : 0));
   await expect.poll(() => logs.every((l) => fs.existsSync(l)), { timeout: 15_000 }).toBe(true);
@@ -80,7 +88,8 @@ test("a terminal shown in a tab, then back on the canvas and not selected there,
   // A program in the third terminal writes down the size it is told.
   await tabs.nth(2).click();
   await page.locator(`[data-community-slot="${third}"] .xterm-screen`).click();
-  await page.keyboard.type(`node -e 'const w=()=>require("fs").writeFileSync(${JSON.stringify(log)},process.stdout.columns+"x"+process.stdout.rows);w();process.stdout.on("resize",w);setInterval(()=>{},1e6)'\n`);
+  const sizes = program("write-size", 'const f=process.argv[2],w=()=>require("fs").writeFileSync(f,process.stdout.columns+"x"+process.stdout.rows);w();process.stdout.on("resize",w);setInterval(()=>{},1e6);');
+  await page.keyboard.type(`node ${sizes} ${log}\n`);
   await expect.poll(size).not.toBe("");
   const inPane = size();
   // Selected on the canvas, it takes its tile's size there.

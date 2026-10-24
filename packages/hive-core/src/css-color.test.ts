@@ -38,6 +38,16 @@ describe("cssColorToRgb", () => {
     ]) expect([v, cssColorToRgb(v)]).toEqual([v, null]);
   });
 
+  test("reads a long hostile value in one pass: a theme's colour cannot stall main or the hub", () => {
+    // Spaces with no closing bracket took cubic time and a run of digits that is not a number
+    // quadratic: these two took 1.3 s together (5,000 spaces took 28 s); now under a millisecond.
+    const hostile = ["rgb(" + " ".repeat(2000), `oklch(${"1".repeat(20_000)}x 0 0)`];
+    const started = performance.now();
+    for (const v of hostile) expect([v.slice(0, 12), cssColorToRgb(v)]).toEqual([v.slice(0, 12), null]);
+    expect(performance.now() - started).toBeLessThan(250);
+    expect(cssColorToRgb("rgb(   1 2 3   )")).toEqual([1, 2, 3]);
+  });
+
   test("reads a hue in each unit CSS allows; a bare number is degrees", () => {
     const deg = cssColorToRgb("oklch(0.6 0.15 180)");
     for (const h of ["180deg", "3.14159265rad", "200grad", "0.5turn"]) expect(cssColorToRgb(`oklch(0.6 0.15 ${h})`)).toEqual(deg);
