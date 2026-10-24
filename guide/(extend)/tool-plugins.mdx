@@ -191,7 +191,7 @@ Next: [Publish a plugin](/publish-to-hivehub) on HiveHub, or ship it with your w
 |---|---|
 | `tile` | `{ id, kind, name, frameId }` |
 | `hm` | the client a view has (`@hivemind/view-sdk`): frames, tiles, agents' status and events, commands, its settings, and its saved state, kept per tile (`hm.hello.layout`, `hm.setLayout`). Each is held to the permissions the manifest declares. |
-| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (see [Running programs](#running-programs)), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser |
+| `host` | what only a tile has: `repoPath`, `cwd`, `run(bin, args, { maxAgeMs, stdin })` (see [Running programs](#running-programs)), `openFile(path)` in the frame's Code tile, `openUrl(url)` in the frame's browser, `call(command, args)` to its own [service](#a-service-that-keeps-running) |
 | `selected` | it has the person's focus |
 
 A tile imports the app's own React and parts from `hm-plugin://host/`: `react.js`,
@@ -329,6 +329,11 @@ What a service asks of its own tool, on its connection:
 | `secret.get(name)` | one of the tool's `secret` settings, or null. Never another plugin's. |
 | `plugin.serve` (notice) | `[{name, description}]`: the commands it answers. Each call comes as the event `plugin.called {call, command, args}`; it answers with the notice `plugin.answer(call, {result} \| {error: {code, message}})`, within 30 s. |
 | `issue.create`, `issue.update`, `issue.setState`, `issue.comment` | at the `edit` role: written into the issue's activity as `@owner/name (service)`. |
+
+The tool's own tiles reach its service with `host.call(command, args)`: the answer, or an error
+saying why there is none (the service is off, or not switched on for this workspace). A tile reaches
+only its own tool's service. A service that drives several workspaces answers on the connection it
+served last, so a tile names its own in the arguments (`{ ...args, workspace: host.repoPath }`).
 
 Every write to the workspace's issues, from the app, `hive` or an agent, comes as the event
 `issue.changed {id, root, change, fields, by}`.
