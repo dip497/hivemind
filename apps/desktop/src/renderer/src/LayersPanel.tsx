@@ -1055,7 +1055,7 @@ function PanelMenu({ title, workspaces, here, onHide, onRemoved, agents, sleepAc
                   onKeyDown={(e) => { if (!isHere && (e.key === "Delete" || e.key === "Backspace")) { own(e); ask(w); } }}>
                   {isHere ? <FolderOpen /> : <Folder />}
                   <span className="flex-1 truncate">{w.title}</span>
-                  {w.needsYou > 0 && <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full" style={{ color: "var(--color-warn)", background: "color-mix(in srgb, var(--color-warn) 16%, transparent)" }}>{w.needsYou} need you</span>}
+                  {w.needsYou > 0 && <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full" style={pillStyle("needs")}>{w.needsYou} need you</span>}
                   <span className={`shrink-0 ${COUNT} ${isHere ? "" : "group-data-[highlighted]/ws:hidden"}`}>{isHere ? "here" : w.tiles}</span>
                   {!isHere && (
                     <button type="button" aria-label={`Remove ${w.title} from this computer`} title="Remove from this computer" data-layers-workspace-remove
@@ -1365,15 +1365,15 @@ function MachineHeader({ group, needsYou, used }: { group: MachineGroup; needsYo
         ? <span className="shrink-0 normal-case tracking-normal font-normal text-count tabular-nums font-mono" data-machine-state>{statusWords(s, on)}</span>
         : on && s.state === "attention"
         ? <button type="button" onClick={retry} data-machine-state
-            className="shrink-0 rounded px-1 normal-case tracking-normal font-normal text-count text-[var(--color-warn)] hover:bg-[var(--surface-3)]">Sign in</button>
+            className="shrink-0 rounded px-1 normal-case tracking-normal font-normal text-count text-[var(--color-status-attention)] hover:bg-[var(--surface-3)]">Sign in</button>
         // Online or away, the dot says it; words only for what is under way or paused.
         : <span className={`shrink-0 normal-case tracking-normal font-normal text-count text-[var(--color-fg3)] ${on && QUIET.has(s.state) ? "sr-only" : m ? "group-hover/mach:invisible group-focus-within/mach:invisible" : ""}`} data-machine-state>
             {statusWords(s, on)}
           </span>
       )}
       {needsYou > 0 && (
-        <span className="shrink-0 flex items-center gap-0.5 font-mono tracking-normal text-[var(--color-warn)]" title={`${needsYou} need you on ${group.label}`} data-machine-needs-you>
-          <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-warn)" }} />
+        <span className="shrink-0 flex items-center gap-0.5 font-mono tracking-normal text-[var(--color-status-attention)]" title={`${needsYou} need you on ${group.label}`} data-machine-needs-you>
+          <span aria-hidden className="size-1.5 rounded-full animate-pulse" style={{ background: "var(--color-status-attention)" }} />
           {needsYou}
         </span>
       )}

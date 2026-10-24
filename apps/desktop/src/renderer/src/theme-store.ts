@@ -20,6 +20,7 @@ import {
 } from "@hivemind/core/settings-schema";
 import { accentOf, presetPaths, withPreset, type AccentColors, type FontFaces } from "@hivemind/core/appearance-extra";
 import { contrastRatio } from "@hivemind/core/css-color";
+import { UNREAD_BLUE, statusInk } from "@hivemind/core/theme-format";
 import { getSettings, patchSettingsMany, subscribeSettings } from "./settings-store";
 
 export { ACCENTS, ANCHORS, WALLPAPERS };
@@ -97,6 +98,21 @@ export function slotWallpaper(t: ThemeState = state): boolean {
  *  better on it. */
 function onBrand(brand: string, t: ThemeState): string {
   return (contrastRatio(t.palette.fg, brand) ?? 0) >= (contrastRatio(t.palette.bg, brand) ?? 0) ? t.palette.fg : t.palette.bg;
+}
+
+/** A status's word on its chip and its mark on a row, selected or under the pointer, in colours that
+ *  read on this palette (core's `statusInk`). Up to about 1 ms each to work out, so they are kept
+ *  until the palette changes: a slider repaints the theme on every move. */
+let inkKey = "";
+let inks = { failed: "", attention: "", unread: "" };
+function statusInks(t: ThemeState): typeof inks {
+  const p = t.palette;
+  const key = [p.err, p.warn, p.fg, p.bg2, p.bg3, p.bg4].join(",");
+  if (key !== inkKey) {
+    inkKey = key;
+    inks = { failed: statusInk(p.err, p), attention: statusInk(p.warn, p), unread: statusInk(UNREAD_BLUE, p) };
+  }
+  return inks;
 }
 
 /** The `@font-face` rules a theme's font files make, kept in one <style> and rewritten only when
@@ -188,6 +204,11 @@ function paintTheme(t: ThemeState): void {
   root.style.setProperty("--surface-2", t.palette.bg2);
   root.style.setProperty("--surface-3", t.palette.bg3);
   root.style.setProperty("--surface-4", t.palette.bg4);
+  // The status colours a list draws its chips and marks in: fitted to this palette (`statusInks`).
+  const ink = statusInks(t);
+  root.style.setProperty("--color-status-failed", ink.failed);
+  root.style.setProperty("--color-status-attention", ink.attention);
+  root.style.setProperty("--color-unread", ink.unread);
   // The band around a terminal is the terminal: it takes the preset's background, not a fixed one.
   root.style.setProperty("--color-terminal-bg", t.terminal.background);
   // Corners and fonts: styles.css builds its radius scale and font stacks on these.

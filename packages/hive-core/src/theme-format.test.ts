@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { contrastRatio, cssColorToOklab } from "./css-color";
-import { checkTheme, themeFiles, themeFromLook, themeSwatches, type ThemeFolderFile } from "./theme-format";
+import { contrastRatio, cssColorToOklab, cssColorToRgb } from "./css-color";
+import { checkTheme, statusInk, themeFiles, themeFromLook, themeSwatches, type ThemeFolderFile } from "./theme-format";
 import { ACCENTS, CLEAN_LIGHT, DEFAULT_APPEARANCE, PRESETS, SIGNAL, applyPreset, type AccentId } from "./settings-schema";
 import type { AccentColors } from "./appearance-extra";
 
@@ -171,5 +171,34 @@ describe("themeFromLook", () => {
     expect(t.wallpaper).toEqual({ kind: "mono", brightness: 0.7 });
     expect(t.accent).toEqual(accent);
     expect(JSON.stringify(t)).not.toContain("hivemedia");
+  });
+});
+
+describe("statusInk", () => {
+  /** A package's palettes the presets do not cover: a dark one whose hover surface is pale, and a
+   *  light one whose amber is drawn for white. */
+  const PALETTES = {
+    "pale dark": { ...PRESETS.dracula!.palette, bg2: "#363642", bg3: "#424250", bg4: "#50505e", err: "#ff2020", warn: "#ffcc00" },
+    "bright light": { ...CLEAN_LIGHT.palette, bg2: "#ffffff", bg3: "#f0f0f0", bg4: "#dedede", err: "#ff6b6b", warn: "#ffd23f" },
+  };
+  const hue = (c: string) => { const [, a, b] = cssColorToOklab(c)!; return { h: (Math.atan2(b, a) * 180) / Math.PI, c: Math.hypot(a, b) }; };
+  const chip = (c: string, row: string) => { const a = cssColorToRgb(c)!, b = cssColorToRgb(row)!; return `rgb(${a.map((x, i) => Math.round(x * 0.16 + b[i]! * 0.84)).join(" ")})`; };
+
+  test("a package theme's status reads on its chip and as a mark on every row, in its own hue", () => {
+    for (const [name, p] of Object.entries(PALETTES)) {
+      for (const base of [p.err, p.warn]) {
+        const ink = statusInk(base, p);
+        for (const row of [p.bg2, p.bg3, p.bg4]) {
+          expect({ name, base, row, word: contrastRatio(ink, chip(ink, row))! >= 4.5, mark: contrastRatio(ink, row)! >= 3 }).toEqual({ name, base, row, word: true, mark: true });
+        }
+        const before = hue(base), after = hue(ink);
+        expect(after.c).toBeGreaterThan(0.02);
+        expect(Math.abs(((after.h - before.h + 540) % 360) - 180)).toBeLessThan(8);
+      }
+    }
+  });
+
+  test("a colour that already reads is the palette's own", () => {
+    expect(statusInk(SIGNAL.palette.warn, SIGNAL.palette)).toBe(SIGNAL.palette.warn);
   });
 });

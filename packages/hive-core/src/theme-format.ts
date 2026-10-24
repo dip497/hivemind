@@ -9,7 +9,7 @@
  * other parts of a look are reserved by name for a later format (customization-gaps review §5):
  * a theme naming one is refused here, so an author learns it does nothing yet.
  */
-import { contrastRatio, cssColorToOklab, parseCssColor } from "./css-color.js";
+import { contrastRatio, cssColorToHex, cssColorToOklab, cssColorToRgb, parseCssColor } from "./css-color.js";
 import { FAMILY_RE, MAX_FACE_FILES, STYLE_RE, WEIGHT_RE, accentOf, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
 import { ACCENTS, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
 
@@ -167,6 +167,65 @@ export function accentMark(brand: string, palette: Pick<Palette, (typeof ACCENT_
     if (!low || ratio < low.ratio) low = { on, ratio };
   }
   return low;
+}
+
+/** What a status is drawn on in a list (Layers, Home, the slot bar): a row at rest, under the
+ *  pointer and selected (graphite-sheet, -card and -hover in apps/desktop/DESIGN.md). A hovered and
+ *  a selected row paint the solid surface, glass on or off. */
+export const STATUS_SURFACES = ["bg2", "bg3", "bg4"] as const satisfies readonly (keyof Palette)[];
+/** Unread and finished-since-you-looked: a clear blue whatever the accent (apps/desktop styles.css
+ *  `--color-unread`, DESIGN.md Unread Blue), before `statusInk` fits it to a palette. */
+export const UNREAD_BLUE = "oklch(0.70 0.14 250)";
+/** A status chip's fill: its colour at this share over the row (`color-mix(in srgb, <status> 16%,
+ *  transparent)`). */
+export const CHIP_TINT = 0.16;
+/** A chip's word on its own fill, and a status mark on the row. */
+export const STATUS_CONTRAST = { word: 4.5, mark: 3 } as const;
+
+/** `color` over `surface` at `share`, as `color-mix(in srgb, …)` paints it; null when unreadable. */
+function tint(color: string, share: number, surface: string): string | null {
+  const c = cssColorToRgb(color), s = cssColorToRgb(surface);
+  return c && s ? cssColorToHex(`rgb(${c.map((x, i) => x * share + s[i]! * (1 - share)).join(" ")})`, "") : null;
+}
+
+/** Whether a status in `color` reads on every surface it is drawn on: its word on its chip, its
+ *  mark on the row. */
+function statusReads(color: string, palette: Pick<Palette, (typeof STATUS_SURFACES)[number]>): boolean {
+  return STATUS_SURFACES.every((on) => {
+    const chip = tint(color, CHIP_TINT, palette[on]);
+    return chip !== null && (contrastRatio(color, chip) ?? 0) >= STATUS_CONTRAST.word && (contrastRatio(color, palette[on]) ?? 0) >= STATUS_CONTRAST.mark;
+  });
+}
+
+/** A status colour as the app paints it for `palette`: `color` itself when it reads on every
+ *  surface in `STATUS_SURFACES` (`STATUS_CONTRAST`), else the nearest colour of its hue and chroma
+ *  that does, lighter on a dark palette and darker on a light one, as `#rrggbb` (what was measured
+ *  is what is painted, never a browser's gamut mapping of it). A preset's `err` drawn for its page
+ *  then still reads on a selected row, and so does a package theme's. */
+export function statusInk(color: string, palette: Pick<Palette, "fg" | (typeof STATUS_SURFACES)[number]>): string {
+  if (statusReads(color, palette)) return color;
+  const lab = cssColorToOklab(color), fg = cssColorToOklab(palette.fg), under = cssColorToOklab(palette.bg4);
+  if (!lab || !fg || !under) return color;
+  const [l, a, b] = lab;
+  const chroma = Math.hypot(a, b), hue = (Math.atan2(b, a) * 180) / Math.PI;
+  const step = fg[0] > under[0] ? 0.005 : -0.005;
+  for (let next = l + step; next > 0 && next < 1; next += step) {
+    const ink = inGamut(next, chroma, hue);
+    if (statusReads(ink, palette)) return ink;
+  }
+  return palette.fg;
+}
+
+/** The colour at lightness `l` and hue `h` with as much of chroma `c` as sRGB can show, as
+ *  `#rrggbb`. Clipping each channel instead keeps a bright red's red at full and its lightness
+ *  short of what was asked, so a Dracula red never got light enough to read on its selected row. */
+function inGamut(l: number, c: number, h: number): string {
+  for (let i = 16; ; i--) {
+    const chroma = (c * i) / 16;
+    const hex = cssColorToHex(`oklch(${l.toFixed(4)} ${chroma.toFixed(4)} ${h.toFixed(2)})`, "#000000");
+    const back = cssColorToOklab(hex)!;
+    if (i === 0 || Math.hypot(back[0] - l, back[1] - chroma * Math.cos((h * Math.PI) / 180), back[2] - chroma * Math.sin((h * Math.PI) / 180)) < 0.01) return hex;
+  }
 }
 
 function terminalOf(v: unknown): TerminalPalette {
