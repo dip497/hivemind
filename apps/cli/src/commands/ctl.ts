@@ -23,7 +23,7 @@ import path from "node:path";
 import { defineCommand, type ArgsDef, type ParsedArgs } from "citty";
 import fs from "node:fs";
 import {
-  HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, requireRoot, rootForId, updateIssue,
+  CATEGORIES, HiveError, commentOnIssue, deleteIssue, issueToJson, listWorkspaces, readIssue, requireRoot, rootForId, updateIssue,
   type IssueState,
 } from "@hivemind/core";
 import { HcpCliError, hcpCall, ownTile, sockPath } from "../hcp.js";
@@ -50,7 +50,6 @@ import { agentRows, tileRows, type AgentRow, type ToolOf } from "../tile-rows.js
 import { LOOK_MS, PLUGIN_CALL_CLIENT_MS, type PluginInstance, type PluginList, type TileLook } from "@hivemind/workspace-api/plugins";
 import os from "node:os";
 
-const ISSUE_STATES = ["backlog", "todo", "in_progress", "in_review", "done", "cancelled"] as const;
 
 /** Who signs Activity rows: an agent's id when run inside a spawned tile,
  *  else the human at the keyboard. */
@@ -632,11 +631,11 @@ const stream = defineCommand({
 
 const setState = sub("set-state", "Set an issue's state (optionally with a note); prints the issue", {
   id: { type: "positional", required: true },
-  state: { type: "positional", required: true, description: ISSUE_STATES.join(" | ") },
+  state: { type: "positional", required: true, description: `${CATEGORIES.join(" | ")} (with a workflow: that state's first status; hive update --status picks one)` },
   note: { type: "string", description: "activity comment explaining the change" },
 }, async (a) => {
   const state = String(a.state) as IssueState;
-  if (!ISSUE_STATES.includes(state)) throw new UsageError(`state must be one of ${ISSUE_STATES.join(", ")}`);
+  if (!CATEGORIES.includes(state)) throw new UsageError(`state must be one of ${CATEGORIES.join(", ")}`);
   const r = await rootForId(await requireRoot(), String(a.id));
   await updateIssue(r, String(a.id), { state }, actor());
   if (a.note) await commentOnIssue(r, String(a.id), String(a.note), actor());

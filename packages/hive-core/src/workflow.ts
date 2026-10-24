@@ -33,12 +33,25 @@ export function loadWorkflow(root: string): Workflow {
   }
   const hit = cache.get(file);
   if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.wf;
-  const parsed = WorkflowZ.safeParse(YAML.parse(readFileSync(file, "utf8")));
-  if (!parsed.success) throw new Error(`${file}: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
+  const { workflow, problems } = parseWorkflow(readFileSync(file, "utf8"));
+  if (!workflow) throw new Error(`${file}: ${problems.join("; ")}`);
+  cache.set(file, { mtimeMs: st.mtimeMs, size: st.size, wf: workflow });
+  return workflow;
+}
+
+/** A workflow file's text read as a workflow, or every way it is not one (its YAML, its shape, then
+ *  `workflowProblems`). What `loadWorkflow` refuses, said without throwing, for `hive statuses validate`. */
+export function parseWorkflow(text: string): { workflow?: Workflow; problems: string[] } {
+  let data: unknown;
+  try {
+    data = YAML.parse(text);
+  } catch (e) {
+    return { problems: [`not YAML: ${(e as Error).message.split("\n")[0]}`] };
+  }
+  const parsed = WorkflowZ.safeParse(data);
+  if (!parsed.success) return { problems: parsed.error.issues.map((i) => `${i.path.join(".") || "(top)"}: ${i.message}`) };
   const problems = workflowProblems(parsed.data);
-  if (problems.length) throw new Error(`${file}: ${problems.join("; ")}`);
-  cache.set(file, { mtimeMs: st.mtimeMs, size: st.size, wf: parsed.data });
-  return parsed.data;
+  return problems.length ? { problems } : { workflow: parsed.data, problems: [] };
 }
 
 /** The one source of truth for the statuses of the workspace at `root`: their order, names and

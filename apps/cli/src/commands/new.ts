@@ -24,6 +24,7 @@ export const newCmd = defineCommand({
     "assignee-type": { type: "string", description: "agent | member (auto-detected)" },
     "assignee-model": { type: "string", description: "Model name for agent assignee" },
     state: { type: "string", description: "Initial state (default: backlog)" },
+    status: { type: "string", description: "Initial workflow status, by id or name; its state follows" },
     github: { type: "string", description: "Linked GitHub issue/PR number" },
     description: { type: "string", description: "Initial description body" },
     ac: { type: "string", description: "Acceptance criteria, '||'-separated (each becomes a checklist item)" },
@@ -66,6 +67,7 @@ export const newCmd = defineCommand({
       const issue = await createIssue(root, {
         title: String(args.title),
         state,
+        ...(args.status ? { status: String(args.status) } : {}),
         parent: parent ?? undefined,
         labels: collectMulti(args.label),
         assignee,

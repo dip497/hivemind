@@ -42,6 +42,7 @@ import { grantCmd } from "./commands/grant.js";
 import { migrateOnStart } from "./migrate-on-start.js";
 import { migrationsCmd } from "./commands/migrations.js";
 import { guideCmd } from "./commands/guide.js";
+import { statusesCmd } from "./commands/statuses.js";
 import { runCli } from "./cli-runner.js";
 
 /**
@@ -102,6 +103,7 @@ const main = defineCommand({
     push: pushCmd,
     migrations: migrationsCmd,
     guide: guideCmd,
+    statuses: statusesCmd,
   },
 });
 

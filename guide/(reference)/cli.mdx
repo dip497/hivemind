@@ -64,15 +64,20 @@ hive init                               # refresh the agentic stack
 hive add skill                          # refresh the skills only
 hive guide agents                       # print the agent guide this hive ships (also work, browser, workflow)
 
-hive new "Title" [--label l …] [--parent ID] [--state backlog] [--github N]
+hive new "Title" [--label l …] [--parent ID] [--state backlog | --status "To Do"] [--github N]
           [--assignee claude --assignee-type agent] [--assignee-model m]
           [--description d] [--ac "criterion one || criterion two"]
-hive list [--state todo] [--assignee id] [--label l] [--parent none|ID]
+hive list [--state todo] [--category in_review] [--status "Code Review"]
+          [--assignee id] [--label l] [--parent none|ID]
 hive show MYP-1
-hive update MYP-1 [--state s] [--title t] [--assignee id|none]
+hive update MYP-1 [--state s | --status "Code Review"] [--title t] [--assignee id|none]
                  [--add-label l] [--rm-label l] [--github N|none] [--note "…"]
 hive close MYP-1 [--reason "…"] [--note "…"]   # --reason → cancelled, else done
 hive reopen MYP-1 [--state todo] [--note "…"]
+
+hive statuses show                      # the workspace's statuses in board order, each with its state
+hive statuses validate [--file f]       # exit 1 naming each problem in .hivemind/workflow.yaml
+hive statuses edit [--from f]           # $EDITOR on workflow.yaml (or install f); saved only once valid
 
 hive task MYP-3 add "Subtask" [--assignee id] [--state todo]   # sub-issues: MYP-3.1, …
 hive task MYP-3 done 2                          # tail number or full id
