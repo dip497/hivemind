@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { installPackage, removePackage } from "./package-install.js";
 import { readSettings, updateSettings } from "./settings.js";
-import { DEFAULT_APPEARANCE, UI_FONT } from "./settings-schema.js";
+import { DEFAULT_APPEARANCE, MONO_FONT, UI_FONT } from "./settings-schema.js";
 import { applyTheme, listInstalledThemes, mediaDirOf, revertTheme, themeStatus } from "./theme-apply.js";
 import { withPreset } from "./appearance-extra.js";
 import { fontNameOf } from "./font-names.js";
@@ -237,4 +237,18 @@ test("a font is named as Settings shows it: a face this build names, a theme's f
   await updateSettings((cur) => ({ ...cur, appearance: { ...cur.appearance, uiFont: '"Harbour Display", serif', monoFont: "'Iosevka Term', monospace" } }));
   expect(await named()).toEqual(["Harbour Display", "Iosevka Term"]);
   expect(fontNameOf("ui", (await readSettings()).appearance.uiFont, (await readSettings()).appearanceExtra).kind).toBe("custom");
+});
+
+test("the code font is named the same way: a theme's mono face with the theme, alone once a theme without a code font follows", async () => {
+  await installPackage(looks("1.0.0", {
+    deck: { ...PARTIAL("Deck", "#0e1a24"), fonts: { mono: { family: "Deck Mono", files: [{ path: "fonts/display.woff2" }] } } },
+    sail: { ...PARTIAL("Sail", "#101820"), fonts: { ui: { family: "Sail Sans", files: [{ path: "fonts/display.woff2" }] } } },
+  }));
+  const named = async () => { const s = await readSettings(); return [fontNameOf("ui", s.appearance.uiFont, s.appearanceExtra).label, fontNameOf("mono", s.appearance.monoFont, s.appearanceExtra).label]; };
+  const deck = await applyTheme(await installed("@acme/looks/deck"));
+  // The code face first, the app's own code font after it: never the proportional UI font.
+  expect(deck.appearance.monoFont).toBe(`"Deck Mono", ${MONO_FONT}`);
+  expect(await named()).toEqual(["System", "Deck Mono · Deck"]);
+  await applyTheme(await installed("@acme/looks/sail"));
+  expect(await named()).toEqual(["Sail Sans · Sail", "Deck Mono"]);
 });

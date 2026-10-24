@@ -182,9 +182,11 @@ function FontRow({ id, slot, label, hint, value, onChange }: {
 }) {
   const name = fontNameOf(slot, value, useSettings().appearanceExtra);
   const fonts = NAMED_FONTS[slot];
-  // Custom… chosen over a face opens the field on that face's list; a value set anywhere since (a
-  // theme, Revert, `hive config set`) is named afresh.
+  // Custom… chosen over a face opens the field on that face's list. The row stays mounted through
+  // Apply and Revert, so the choice is dropped the moment the value moves (a theme, Revert, `hive
+  // config set`): the same list coming back later is named afresh, not Custom again.
   const [customFor, setCustomFor] = useState<string | null>(null);
+  if (customFor !== null && customFor !== value) setCustomFor(null);
   const custom = name.kind === "custom" || customFor === value;
   return (
     <div className="settings-row">
