@@ -24,8 +24,9 @@ import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { GEIST_FONT, MONO_FONT, OLD_UI_FONT_DEFAULT, PRESETS, SYSTEM_MONO_FONT, UI_FONT, type TerminalPalette } from "@hivemind/core/settings-schema";
-import { contrastRatio, cssColorToHex } from "@hivemind/core/css-color";
+import { cssColorToHex } from "@hivemind/core/css-color";
 import { accentOf } from "@hivemind/core/appearance-extra";
+import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
 import { useSettings } from "./settings-store";
 import {
   ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
@@ -70,8 +71,8 @@ export function Section({ title, hint, action, children }: {
 // ── theme: presets + accent ─────────────────────────────────────────────────
 
 /** Theme row: a native select plus a small static swatch strip showing what the
- *  chosen preset looks like. The strip is five flat colours — no preview
- *  rendering, no motion.
+ *  chosen preset looks like, with the accent in use. The strip is five flat colours, chosen as a
+ *  theme's are (`themeSwatches`) — no preview rendering, no motion.
  *
  *  SELECTOR NOTE: `data-preset-option` lives on each item of the list; the control
  *  itself carries `data-preset-select`. */
@@ -80,8 +81,7 @@ export function PresetRow({ t }: { t: ThemeState }) {
   // in use, or as "Custom".
   const preset = PRESETS[t.preset];
   const themeName = useSettings().appearanceExtra.theme?.name;
-  const { palette, terminal } = preset ?? t;
-  const swatches = [palette.bg, palette.bg3, terminal.background, terminal.ansi[1]!, terminal.ansi[2]!];
+  const swatches = themeSwatches({ palette: (preset ?? t).palette, accent: t.accentCustom ?? t.accent });
   return (
     <div className="settings-row">
       <label htmlFor="theme-preset">Preset</label>
@@ -114,14 +114,15 @@ export function PresetRow({ t }: { t: ThemeState }) {
 export function AccentPicker({ t }: { t: ThemeState }) {
   const custom = t.accentCustom;
   const wellRef = useRef<HTMLInputElement>(null);
-  // A colour of the person's own is a mark too: say when it is hard to see on this page.
-  const mark = custom ? contrastRatio(custom.brand, t.palette.bg) : null;
+  // A colour of the person's own is a mark too: say when it is hard to see where it is drawn, by the
+  // rule a theme's accent is checked by.
+  const mark = custom ? accentMark(custom.brand, t.palette) : null;
   return (
     <div className="settings-row">
       <div>
         <label id="accent-label">Accent</label>
         <p>The selected tile, sliders, links and the text cursor. A colour of your own, or a theme's, also fills the main button, a switch that is on and the focus ring.</p>
-        {mark !== null && mark < 3 && <p className="settings-note" data-accent-faint>Hard to see on this background ({mark.toFixed(1)}:1).</p>}
+        {mark && mark.ratio < ACCENT_CONTRAST && <p className="settings-note" data-accent-faint>Hard to see on {mark.on === "bg" ? "this background" : "the panels"} ({mark.ratio.toFixed(1)}:1).</p>}
       </div>
       <div className="settings-accents" role="radiogroup" aria-labelledby="accent-label">
         {(Object.keys(ACCENTS) as AccentId[]).map((id) => {

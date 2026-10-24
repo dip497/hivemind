@@ -59,7 +59,7 @@ export function ZoomIsland({ tileCount, onReset, minimapOn, onToggleMinimap, onF
         </IslandBtn>
       </div>
       {fpsOn && <FpsMeter />}
-      <span className="ml-1 text-chip text-[var(--color-fg3)] font-mono tabular-nums select-none">
+      <span className="hm-canvas-word ml-1 text-chip text-[var(--color-fg3)] font-mono tabular-nums select-none" data-tile-count>
         {tileCount} {tileCount === 1 ? "tile" : "tiles"}
       </span>
     </div>
@@ -114,7 +114,7 @@ function FpsMeter() {
   const color = fps >= 55 ? "var(--color-ok)" : fps >= 30 ? "var(--color-warn)" : "var(--color-err)";
   return (
     <span
-      className="ml-1 text-chip font-mono tabular-nums select-none"
+      className="hm-canvas-word ml-1 text-chip font-mono tabular-nums select-none"
       style={{ color }}
       title="frames/sec — drag a tile and watch this; a big dip = jank to fix"
     >

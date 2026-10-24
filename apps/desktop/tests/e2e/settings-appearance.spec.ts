@@ -183,3 +183,19 @@ test("increased contrast strengthens faint text and lines with glass off, over t
     await page.emulateMedia({ contrast: null });
   }
 });
+
+test("an accent of your own that is hard to see on the panels says so, by the rule a theme's accent is refused by", async () => {
+  // Signal: its page #0d0e10, its panels and menus #141517.
+  expect(hive("theme", "use", "signal").rescanned).toBe(true);
+  await expect.poll(preset, { timeout: 5_000 }).toBe("signal");
+  const own = (brand: string) => page.evaluate((b) => window.hive.settingsSet("appearanceExtra.accent", { brand: b, accent: b }), brand);
+  await openSettings("appearance");
+  const note = page.locator("[data-accent-faint]");
+  // 3.07:1 on the page, 2.90:1 on the panels, where a switch that is on and a slider's thumb are drawn.
+  await own("#606060");
+  await expect(note).toHaveText("Hard to see on the panels (2.9:1).");
+  await own("#808080");
+  await expect(note).toHaveCount(0);
+  await closeSettings();
+  expect(hive("theme", "use", "signal").rescanned).toBe(true);
+});

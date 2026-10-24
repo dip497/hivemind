@@ -774,6 +774,23 @@ body.canvas-resizing .react-flow__node .hm-term-root {
   pointer-events: none;
   z-index: 5;
 }
+/* Over a picture (theme-store `wallpaper-drawn`, with glass or without), what the canvas draws
+   straight on it takes the panel colour behind it instead of whatever the picture holds there:
+   foam behind the tile count, an island behind the handle. The panel colour is `--surface-2`, the
+   palette's bg2 itself (solid under glass too), which a theme's text (4.5:1) and accent (3:1, a
+   mark) are checked against (theme-format.ts). CSS only: nothing runs per frame. */
+html.wallpaper-drawn .react-flow__node .hm-node-selected::after {
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 8px -1px color-mix(in srgb, var(--color-brand) 70%, transparent);
+}
+html.wallpaper-drawn .hm-canvas-word {
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+html.wallpaper-drawn [data-frame-label] {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--surface-2);
+}
 
 /* Pinned tile — the screen-fixed floating panel a pinned tile portals into (see
    canvas-nodes.tsx FloatingPinnedPanel). A soft brand-tinted ring + drop shadow
