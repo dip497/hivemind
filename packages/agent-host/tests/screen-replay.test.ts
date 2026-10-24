@@ -57,6 +57,18 @@ test("a screen asked for after the session is resized puts the cursor where the 
   expect(screen.cursor).toEqual([fresh.buffer.active.cursorY, fresh.buffer.active.cursorX]);
 });
 
+test("a screen asked for as the session is resized comes, and the output after it reaches the screen", async () => {
+  const s = await session(80, 24);
+  // Enough output that the screen is still taking it in when the resize arrives.
+  for (let i = 0; i < 50; i++) s.say(`line ${i} ${"x".repeat(20_000)}\r\n`);
+  const asked = s.m.snapshot("t1");
+  s.m.resize("t1", 100, 24);
+  s.say("after the resize\r\n$ ");
+  expect((await asked)!.replay).toContain("line 49");
+  const screen = await drawn((await s.m.snapshot("t1"))!.replay, 100, 24);
+  expect(screen.lines.slice(-2)).toEqual(["after the resize", "$ "]);
+});
+
 test("a screen asked for while more output arrives than the daemon keeps of it still shows the session's screen", async () => {
   const s = await session(80, 24);
   s.say("\x1b[31m");
