@@ -2,7 +2,7 @@
  *  with a local bare remote, a worktree for the issue's branch, and the `gh` shim
  *  (scripts/gh-shim) on PATH: every check refuses with its fix, each on_complete mode does what it
  *  says, and `hive pr sync` moves the issue when GitHub says the PR merged or closed. */
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -10,6 +10,8 @@ import path from "node:path";
 import { createIssue, readIssue, updateIssue, writeConfig } from "@hivemind/core";
 import { hive } from "./helpers.js";
 
+// Each test runs several `hive` and `git` processes: seconds each on a loaded machine.
+setDefaultTimeout(30_000);
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hive-pr-")));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const SHIM = path.resolve(import.meta.dir, "../../../scripts/gh-shim");
