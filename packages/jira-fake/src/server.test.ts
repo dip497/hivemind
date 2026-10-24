@@ -256,6 +256,15 @@ describe("search", () => {
     expect(keys(r)).toEqual(expected);
   });
 
+  test("approximate-count counts what search finds, refuses unbounded JQL, and is Cloud only", async () => {
+    const f = await fake("cloud-scrum-company");
+    const all = await search(f, "project = PAY", { maxResults: 5000 });
+    expect(await post(f, "/rest/api/3/search/approximate-count", { jql: "project = PAY" })).toMatchObject({ status: 200, body: { count: all.body.issues.length } });
+    expect((await post(f, "/rest/api/3/search/approximate-count", { jql: "project = PAY AND assignee = currentUser()" })).body.count).toBe(keys(await search(f, "project = PAY AND assignee = currentUser()", { maxResults: 100 })).length);
+    expect((await post(f, "/rest/api/3/search/approximate-count", { jql: "ORDER BY key" })).status).toBe(400);
+    expect((await post(await fake("dc-v2-wiki"), "/rest/api/2/search/approximate-count", { jql: "project = PAY" }, { auth: undefined })).status).toBe(404);
+  });
+
   test("GET takes the same query as POST", async () => {
     const f = await fake("cloud-scrum-company");
     const r = await get(f, `/rest/api/3/search/jql?jql=${encodeURIComponent("parent = PAY-300 ORDER BY key")}&fields=key`);

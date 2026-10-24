@@ -411,6 +411,13 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
       isLast,
     });
   };
+  // CHANGE-2046's count for /search/jql: approximate in Jira, exact here; bounded JQL only.
+  route("POST", "/rest/api/{v}/search/approximate-count", ({ body }) => {
+    const parsed = parseOr400(((body ?? {}) as { jql?: string }).jql ?? "");
+    if (parsed instanceof Reply) return parsed;
+    if (!parsed.where) return errors(400, ["Unbounded JQL queries are not allowed here. Please add a search restriction to your query."]);
+    return json(200, { count: searchIssues(parsed, new Set()).hits.length });
+  }, { cloudOnly: true });
   route("GET", "/rest/api/{v}/search/jql", (x) => searchJql(x, false), { cloudOnly: true });
   route("POST", "/rest/api/{v}/search/jql", (x) => searchJql(x, true), { cloudOnly: true });
   const offsetSearch = ({ c, q, body }: Ctx, post: boolean): Reply => {

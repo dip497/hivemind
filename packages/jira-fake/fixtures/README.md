@@ -101,6 +101,8 @@ await jira.close();
   and `POST /jql/parse?validation=strict` reports it. On Data Center it's a 400 unless
   `validateQuery=false`. `WAS` and `CHANGED` parse but match nothing. Without `ORDER BY` the order
   is newest id first; Jira's default isn't documented.
+- **Counts.** `POST /search/approximate-count` (Cloud) answers `{count}` for a bounded JQL; exact
+  here, approximate in Jira.
 - **Edits.** `PUT /issue/{key}` sets `summary`, `labels`, `description` and `assignee` (each
   change in the changelog; any other field is a 400 and nothing is applied), and
   `PUT /issue/{key}/comment/{id}` edits a comment its author wrote (403 otherwise).
