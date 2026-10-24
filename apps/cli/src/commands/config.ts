@@ -14,6 +14,7 @@ import { HiveError, SETTINGS_VERSION, getPath, patchSettingsFile, readSettings, 
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { personOnly } from "../person-only.js";
+import { accentIdPatches } from "@hivemind/core/appearance-extra";
 
 async function reloadApp(): Promise<boolean> {
   try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
@@ -59,7 +60,8 @@ const setCmd = defineCommand({
     try {
       // One dotted path, applied to the file inside the shared lock — never to
       // a snapshot read a moment ago (the app writes the same file).
-      const after = await patchSettingsFile([{ path: String(args.path), value }]);
+      // A built-in accent id paints only without the custom accent, which would win over it.
+      const after = await patchSettingsFile(String(args.path) === "appearance.accent" ? accentIdPatches(value) : [{ path: String(args.path), value }]);
       const stored = getPath(after, String(args.path));
       const rescanned = await reloadApp();
       return ok(ctx, { path: args.path, value: stored, rescanned }, () => `${args.path} = ${JSON.stringify(stored)}; ${note(rescanned)}${JSON.stringify(stored) !== JSON.stringify(value) ? " (value was normalised by validation)" : ""}`);

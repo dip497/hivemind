@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { getSettings, patchSettingsMany } from "./settings-store";
+import { importedExtra } from "@hivemind/core/appearance-extra";
 import { exportAppearance, getPath, importAppearance, themeImportPaths } from "@hivemind/core/settings-schema";
 import { setTheme, useTheme } from "./theme-store";
 import {
@@ -45,7 +46,7 @@ function AppearancePrefs() {
   const [advanced, setAdvanced] = useState(false);
 
   const exportTheme = async () => {
-    const { theme, note } = exportAppearance(getSettings().appearance);
+    const { theme, note } = exportAppearance(getSettings().appearance, getSettings().appearanceExtra);
     try { await navigator.clipboard.writeText(JSON.stringify(theme, null, 2)); toast.success("Theme copied as JSON.", note ? { description: note } : undefined); }
     catch { toast.error("Could not reach the clipboard. Use `hive theme export <file>`."); }
   };
@@ -56,10 +57,12 @@ function AppearancePrefs() {
     try {
       const raw: unknown = JSON.parse(await f.text());
       // A theme file or a whole settings.json, checked; the wallpaper media and overlays a theme
-      // file leaves out stay yours.
-      // Only the keys it names are written (`themeImportPaths`), as `hive theme import` does.
-      const appearance = importAppearance(raw, getSettings().appearance);
-      patchSettingsMany(themeImportPaths(raw).map((path) => ({ path, value: getPath({ appearance }, path) })));
+      // file leaves out stay yours. Its custom accent comes with it, and a look imported is not
+      // the applied theme's, so Revert does not undo it (`importedExtra`). Only the paths it names
+      // are written (`themeImportPaths`), as `hive theme import` does.
+      const s = getSettings();
+      const next = { appearance: importAppearance(raw, s.appearance), appearanceExtra: importedExtra(raw, s.appearanceExtra) };
+      patchSettingsMany(themeImportPaths(raw).map((path) => ({ path, value: getPath(next, path) })));
       toast.success(`Imported ${f.name}`);
     } catch { toast.error("That file is not a hivemind theme."); }
   };

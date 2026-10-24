@@ -13,7 +13,7 @@ import path from "node:path";
  * an arbitrary path from a URL), and (d) lets us stamp a strict CSP on every
  * response so plugin code cannot reach the network or embed anything.
  */
-import { app, net, protocol, type BrowserWindow, type WebFrameMain } from "electron";
+import { app, net, type BrowserWindow, type WebFrameMain } from "electron";
 import { serveScheme } from "./schemes.js";
 import { handle, handleEffect } from "./app-ipc.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -77,15 +77,12 @@ export async function listViewPackages(repoRoot: string | null): Promise<ViewPac
 }
 
 
-/** Call BEFORE app ready. */
-export function registerViewScheme(): void {
-  protocol.registerSchemesAsPrivileged([
-    // corsEnabled: a view's page is sandboxed to an opaque origin, and loading a module
-    // script is always a CORS request — so without it Chromium refuses the view's own code
-    // and it never starts. The boundary is the sandbox + CSP (connect-src: its own origin only), not this.
-    { scheme: VIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
-  ]);
-}
+/** The view scheme's privileges, registered with the app's other schemes in main's one call
+ *  (Electron keeps only one `registerSchemesAsPrivileged` list).
+ *  corsEnabled: a view's page is sandboxed to an opaque origin, and loading a module script is
+ *  always a CORS request — so without it Chromium refuses the view's own code and it never
+ *  starts. The boundary is the sandbox + CSP (connect-src: its own origin only), not this. */
+export const VIEW_SCHEME_PRIVILEGES: Electron.CustomScheme = { scheme: VIEW_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } };
 
 let sdk: string | undefined;
 

@@ -75,7 +75,7 @@ test("a view's token and every new kind of setting, from its Settings page to th
     return page.frames().find((f) => f.url().includes("looks"))!;
   };
   const looks = async () => (await view()).evaluate(() => (window as unknown as { __looks?: unknown }).__looks ?? null);
-  await expect.poll(looks).toEqual({ sea: "#00ff88", foam: "#ffffff", tokens: true, settings: { sky: "custom", hour: 12, days: ["mon", "wed"], harbours: ["North, east", "South"], "token-sea": "#00ff88", foam: "#ffffff" } });
+  await expect.poll(looks).toEqual({ sea: "#00ff88", foam: "#ffffff", tokens: true, fontFaces: true, settings: { sky: "custom", hour: 12, days: ["mon", "wed"], harbours: ["North, east", "South"], "token-sea": "#00ff88", foam: "#ffffff" } });
   await shot("3-view.png");
 
   // Back to the theme's own: the view paints with its default for this mode again. The foam,

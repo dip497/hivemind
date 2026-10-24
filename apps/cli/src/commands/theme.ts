@@ -14,7 +14,7 @@ import { promises as fs } from "node:fs";
 import {
   DEFAULT_APPEARANCE, HiveError, PRESETS, exportAppearance, importAppearance, readSettings, themeImportPaths, updateSettings,
 } from "@hivemind/core";
-import { presetPaths, withPreset } from "@hivemind/core/appearance-extra";
+import { importedExtra, presetPaths, withPreset } from "@hivemind/core/appearance-extra";
 import { applyTheme, listInstalledThemes, revertTheme, themeStatus } from "@hivemind/core/theme-apply";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
@@ -92,7 +92,8 @@ const exportCmd = defineCommand({
   meta: { name: "export", description: "Write the current appearance as JSON (stdout or a file), without its media files" },
   args: { file: { type: "positional", required: false }, json: { type: "boolean" } },
   async run({ args }) {
-    const { theme, leftOut, note } = exportAppearance((await readSettings()).appearance);
+    const s = await readSettings();
+    const { theme, leftOut, note } = exportAppearance(s.appearance, s.appearanceExtra);
     const text = JSON.stringify(theme, null, 2) + "\n";
     if (args.file) {
       await fs.writeFile(String(args.file), text, "utf8");
@@ -114,9 +115,10 @@ const importCmd = defineCommand({
     // A file that sets nothing of the look (a package.json picked by mistake) is refused before the
     // settings are touched; importAppearance says why.
     try { importAppearance(raw, DEFAULT_APPEARANCE); } catch (e) { return err(ctx, "invalid_theme", `cannot import ${args.file}: ${(e as Error).message}`); }
-    // Only the keys the file names (and the memory of the look before, which an import forgets):
-    // every other key of the appearance stays as settings.json has it.
-    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance) }), undefined, themeImportPaths(raw));
+    // Only the keys the file names (and the memory of the look before, which an import forgets),
+    // with its custom accent and without the record of the theme it replaces: every other key of
+    // the appearance stays as settings.json has it.
+    const written = await updateSettings((cur) => ({ ...cur, appearance: importAppearance(raw, cur.appearance), appearanceExtra: importedExtra(raw, cur.appearanceExtra) }), undefined, themeImportPaths(raw));
     const appearance = written.appearance;
     const rescanned = await reloadApp();
     return ok(ctx, { preset: appearance.preset, rescanned }, () => `imported ${args.file} (preset ${appearance.preset}); ${note(rescanned)}`);

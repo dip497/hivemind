@@ -9,8 +9,8 @@
  * other parts of a look are reserved by name for a later format (customization-gaps review §5):
  * a theme naming one is refused here, so an author learns it does nothing yet.
  */
-import { contrastRatio, cssColorToOklab } from "./css-color.js";
-import { FAMILY_RE, MAX_FACE_FILES, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
+import { contrastRatio, cssColorToOklab, parseCssColor } from "./css-color.js";
+import { FAMILY_RE, MAX_FACE_FILES, STYLE_RE, WEIGHT_RE, accentOf, isThemeColor, type AccentColors, type AppearanceExtra } from "./appearance-extra.js";
 import { ACCENTS, PALETTE_KEYS, WALLPAPERS, type AccentId, type Appearance, type Palette, type TerminalPalette, type WallpaperId } from "./settings-schema.js";
 
 /** The file that makes a folder a theme. */
@@ -21,13 +21,18 @@ export const THEME_FORMAT = 1;
  *  something else. */
 export const RESERVED_THEME_PARTS = ["icons", "cursors", "scene", "mascot", "screens", "words"] as const;
 
-/** The most a theme's files may weigh, each. */
-export const THEME_FILE_LIMITS = { font: 400 * 1024, sound: 400 * 1024, image: 4 * 1024 * 1024, video: 16 * 1024 * 1024 } as const;
+/** The most a theme's files may weigh, each. A picture or a video is held to HiveHub's cap on any
+ *  one file of a plugin (`MAX_PLUGIN_FILE_BYTES`, 2 MB; a whole package at most 8 MB), so a theme
+ *  that passes here is one HiveHub lists. */
+export const THEME_FILE_LIMITS = { font: 400 * 1024, sound: 400 * 1024, image: 2 * 1024 * 1024, video: 2 * 1024 * 1024 } as const;
+/** A theme's folder name, which is the last part of its id. */
+export const THEME_FOLDER_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** How many folders deep a theme's files may sit (`fonts/x.woff2` is one): the app reads its
+ *  folder no deeper, so a path deeper is refused rather than missed. */
+export const THEME_DEPTH = 4;
 const SOUND_EXT = /\.(ogg|mp3)$/i;
 const IMAGE_EXT = /\.(png|jpe?g|webp|avif|gif)$/i;
 const VIDEO_EXT = /\.(webm|mp4)$/i;
-const WEIGHT_RE = /^(?:normal|bold|[1-9]00(?: [1-9]00)?)$/;
-const STYLE_RE = /^(?:normal|italic|oblique)$/;
 /** Text a person reads: no control characters, nothing that reorders what is read. */
 const UNSAFE_TEXT = /[\u0000-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]/;
 
@@ -79,9 +84,8 @@ const refuse = (why: string): never => { throw new Refused(why); };
 /** A colour a theme may use, without transparency: its contrast is what is drawn. */
 function opaque(v: unknown, field: string): string {
   if (!isThemeColor(v)) return refuse(`${field} is not a colour this app reads: write it as #rrggbb, rgb() or oklch()`);
-  const s = v.trim();
-  if (/^#(?:[0-9a-f]{4}|[0-9a-f]{8})$/i.test(s) || s.includes("/") || /^rgba\(/i.test(s)) refuse(`${field} has transparency; a theme's ${field.split(".")[0]} colours are solid`);
-  return s;
+  if (parseCssColor(v)!.alpha) refuse(`${field} has transparency; a theme's ${field.split(".")[0]} colours are solid`);
+  return v.trim();
 }
 
 const fixed = (n: number) => (Math.floor(n * 100) / 100).toFixed(2);
@@ -100,6 +104,7 @@ function fileIn(files: readonly ThemeFolderFile[], at: unknown, field: string, e
   if (typeof at !== "string" || !at || at.startsWith("/") || at.split("/").some((x) => x === ".." || x === "." || x === "") || /[\\\u0000-\u001f]/.test(at)) {
     return refuse(`${field} is not a path inside the theme's folder`);
   }
+  if (at.split("/").length > THEME_DEPTH + 1) refuse(`${field}: ${at} is more than ${THEME_DEPTH} folders deep in the theme's folder`);
   if (!ext.test(at)) refuse(`${field}: ${at} is not ${kind}`);
   const f = files.find((x) => x.path === at) ?? refuse(`${field}: there is no ${at} in the theme's folder`);
   if (f.bytes > limit) refuse(`${field}: ${at} is ${Math.ceil(f.bytes / 1024)} KB; ${kind.replace(/^an? /, "")} may be at most ${Math.round(limit / 1024)} KB`);
@@ -231,6 +236,19 @@ export function checkTheme(raw: unknown, files: readonly ThemeFolderFile[]): { t
   }
 }
 
+/** A theme's folder read from what it holds, the same in the app, `hive plugins check` and
+ *  HiveHub: its folder's name, the package it is in, its `theme.json`'s text (null when there is
+ *  none) and its files. Its id, `@owner/package/<folder>`, and the theme; or why it is refused. */
+export function readTheme(folderName: string, packageId: string | undefined, json: string | null, files: readonly ThemeFolderFile[]): { id: string; theme: Theme } | { problem: string } {
+  if (!packageId) return { problem: `a theme comes in a package: name its folder in a hivemind-package.json's "themes"` };
+  if (!THEME_FOLDER_RE.test(folderName)) return { problem: `a theme's folder is named like its id: lowercase letters, digits and dashes, not ${JSON.stringify(folderName).slice(0, 80)}` };
+  if (json === null) return { problem: `there is no ${THEME_MANIFEST} in the theme's folder` };
+  let raw: unknown;
+  try { raw = JSON.parse(json); } catch { return { problem: `${THEME_MANIFEST} is not valid JSON` }; }
+  const r = checkTheme(raw, files);
+  return "problem" in r ? { problem: `${THEME_MANIFEST}: ${r.problem}` } : { id: `${packageId}/${folderName}`, theme: r.theme };
+}
+
 /** Every file a theme names, as paths in its folder. */
 export function themeFiles(t: Theme): string[] {
   const w = t.wallpaper;
@@ -243,7 +261,7 @@ export function themeFiles(t: Theme): string[] {
 
 /** Five colours that show a theme at a glance, as presets are shown. */
 export function themeSwatches(t: Pick<Theme, "palette" | "terminal" | "accent">): string[] {
-  const brand = typeof t.accent === "string" ? ACCENTS[t.accent].brand : t.accent.brand;
+  const { brand } = typeof t.accent === "string" ? accentOf({ accent: t.accent }) : accentOf({ accent: "graphite" }, { accent: t.accent });
   return [t.palette.bg, t.palette.bg3, t.terminal?.background ?? t.palette.bg2, brand, t.palette.fg];
 }
 

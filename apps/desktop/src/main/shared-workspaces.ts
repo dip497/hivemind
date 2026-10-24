@@ -43,7 +43,7 @@ import type { HandedOff } from "@hivemind/workspace-api/git";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import type { Duplex } from "node:stream";
 import { toBareId } from "@hivemind/workspace-api/tile-id";
-import { sharedAppearance, type SharedAppearance as Appearance } from "@hivemind/core/settings-schema";
+import { sharedAppearance, type SharedAppearance } from "@hivemind/core/settings-schema";
 import { joinLines, SPLIT_METHODS, splitTiles, WATCHES } from "./watch-split.js";
 
 /** Where the connection to a workspace's host is. */
@@ -63,7 +63,7 @@ export interface Reach {
   /** Its connection changed, or the host gave another role. */
   told(workspace: string, status: SharedStatus): void;
   /** How its host looks, checked: the windows show its workspace that way. */
-  looks?(workspace: string, appearance: Appearance): void;
+  looks?(workspace: string, appearance: SharedAppearance): void;
   /** It is hosted elsewhere now: keep where, so the next dial goes there. Whether it is followed
    *  (a notice that does not hold up is not). */
   moved?(notice: Moved): Promise<boolean>;
@@ -78,7 +78,7 @@ export interface Reach {
 interface Open {
   status: SharedStatus;
   /** How its host last said it looks, checked; null until it says. */
-  looks: Appearance | null;
+  looks: SharedAppearance | null;
   /** The workspace's own stream to its host: what is no one window's. */
   api: ClientTransport | null;
   /** Each window's own stream to its host for terminals, opened as it first asks about one. */
@@ -278,7 +278,7 @@ export function forgetShared(workspace: string): void {
 }
 
 /** How `workspace`'s host looks, as it last said, while the workspace is open here; null before. */
-export function sharedLooks(workspace: string): Appearance | null {
+export function sharedLooks(workspace: string): SharedAppearance | null {
   return open.get(workspace)?.looks ?? null;
 }
 

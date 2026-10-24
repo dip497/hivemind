@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { checkPluginFolder, ownerProblem } from "./plugin-checks.js";
-import { parseHubIndex } from "./index-format.js";
+import { checkPluginFolder, MAX_PLUGIN_FILE_BYTES, ownerProblem } from "./plugin-checks.js";
+import { THEME_FILE_LIMITS } from "@hivemind/core/theme-format";
+import { parseHubIndex, writeHubIndex } from "./index-format.js";
 import { laterOf, SINCE, sinceOf } from "./since.js";
 
 const folder = (files: Record<string, string | Uint8Array>) =>
@@ -146,6 +147,19 @@ describe("checking a package", () => {
     expect(kit.members).toContainEqual({ kind: "theme", id: "@ada/kit/harbour", name: "Harbour", runs: "nothing: it is data", permissions: [],
       does: ["Changes how the app looks and sounds, once you apply it (1 file: fonts, a wallpaper or sounds)"] });
     expect(kit.does).toContain("Changes how the app looks and sounds, once you apply it (1 file: fonts, a wallpaper or sounds)");
+    // What a hub lists from the check is an entry the app reads: a theme's three-part id too.
+    const { id, type, name, description, version, category, members } = kit;
+    const { index, skipped } = writeHubIndex([{ id, type, name, description, version, category, members, files: kit.files, author: "ada", path: "packages/kit" }]);
+    expect(skipped).toEqual([]);
+    expect(parseHubIndex(JSON.parse(JSON.stringify(index))).plugins[0]?.members).toContainEqual(expect.objectContaining({ kind: "theme", id: "@ada/kit/harbour" }));
+  });
+
+  test("a theme's files as large as the app takes are files the hub takes", async () => {
+    const pkg = manifest({ themes: [{ path: "themes/harbour" }] });
+    const at = (bytes: number) => problem({ "hivemind-package.json": pkg, ...pet(), ...harbour(), "themes/harbour/still.webp": new Uint8Array(bytes) });
+    expect(await at(THEME_FILE_LIMITS.image)).toBeNull();
+    expect(await at(THEME_FILE_LIMITS.image + 1)).toMatch(/still\.webp is larger than 2 MB/);
+    expect(THEME_FILE_LIMITS.video).toBeLessThanOrEqual(MAX_PLUGIN_FILE_BYTES);
   });
 
   test("a theme the app would refuse is refused by the hub for the same reason", async () => {

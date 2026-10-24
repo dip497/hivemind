@@ -21,12 +21,17 @@
  *      for a value this build could not read; undefined removes the key from the file, whole. A
  *      touched object is written as (1) does below it, and each of its plain values set: a list in
  *      it is written only when it changed, so a record or map patched whole does not rewrite the
- *      lists in groups the writer left alone.
+ *      lists in groups the writer left alone. A `{ replace }` path is removed and then written
+ *      whole, so nothing a newer build put inside it stays (a theme's record, replaced by the next).
  *
  * Setting an object sets each of its values and keeps the file's other keys beside them, so a
  * group written whole keeps what a newer build put in it.
  */
 import { SETTINGS_VERSION, getPath, settingsVersionOf, type Settings } from "./settings-schema.js";
+
+/** A path the writer names: its value set (an object onto the file's, keeping keys beside it),
+ *  or `{ replace }`: the file's value removed first, so no key a newer build put inside stays. */
+export type Touched = string | { replace: string };
 
 type Json = Record<string, unknown>;
 const isObj = (v: unknown): v is Json => !!v && typeof v === "object" && !Array.isArray(v);
@@ -43,18 +48,21 @@ type Op =
 
 /** The file's JSON once `next` is written over it; `raw` is what the file held (anything; not
  *  changed), `cur` how this build read it. */
-export function writtenOnto(raw: unknown, cur: Settings, next: Settings, touched: readonly string[] = []): Json {
+export function writtenOnto(raw: unknown, cur: Settings, next: Settings, touched: readonly Touched[] = []): Json {
   // A missing or broken file starts from the settings as read, whole, as every build wrote it.
   const out: Json = clone(isObj(raw) ? raw : (cur as unknown as Json));
   const ops: Op[] = [];
   const { v: _cv, ...curRest } = cur;
   const { v: _nv, ...nextRest } = next;
   diff(curRest, nextRest, [], ops);
-  for (const p of touched) {
+  for (const t of touched) {
+    const p = typeof t === "string" ? t : t.replace;
     const path = p.split(".").filter(Boolean);
     if (path.length === 0 || path[0] === "v") continue;
     const value = getPath(next, p);
     if (value === undefined) ops.push({ path, remove: true });
+    // Replaced: nothing of the file's value stays, so it is written whole, lists and all.
+    else if (typeof t !== "string") ops.push({ path, remove: true }, { path, value });
     else if (isObj(value)) { diff(getPath(cur, p), value, path, ops); setPlain(value, path, ops); }
     else ops.push({ path, value });
   }

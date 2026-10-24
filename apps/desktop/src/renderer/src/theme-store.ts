@@ -231,15 +231,21 @@ export function setTheme(patch: Partial<ThemeState>): void {
   patchSettingsMany(changed);
 }
 
-/** Choose a preset for the person's own theme (what is shown may be a host's). */
+/** Choose a preset for the person's own theme (what is shown may be a host's): its colours, and
+ *  without what core says a preset clears (`PRESET_CLEARS`: the custom accent that would win over
+ *  its id, the record of a theme left behind). */
 export function choosePreset(p: ThemePreset): void {
   // What `hive theme use` writes, path for path (`presetPaths`), each whether or not it reads as
   // changed here: an accent or mode a newer build wrote reads as the default, and the preset
-  // replaces it. A preset's accent is its id, so the custom accent goes; a theme left behind is
-  // forgotten. The settings' change repaints the person's own theme.
+  // replaces it. The settings' change repaints the person's own theme.
   const cur = getSettings();
   const next = withPreset(cur, p);
   patchSettingsMany(presetPaths(p, cur.appearance).map((path) => ({ path, value: getPath(next, path) })));
+}
+
+/** Paint with a built-in accent: its id, without the custom accent that would win over it. */
+export function chooseAccent(id: AccentId): void {
+  setTheme({ accent: id, accentCustom: undefined });
 }
 
 /** Paint with any colour as the accent, kept in `appearanceExtra.accent`; null goes back to the

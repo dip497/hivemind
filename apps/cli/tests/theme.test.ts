@@ -62,6 +62,36 @@ test("a preset chosen over a custom accent paints in the preset's accent", () =>
   expect([file().appearance.accent, file().appearanceExtra]).toEqual(["violet", {}]);
 }, 30_000);
 
+test("a built-in accent set by hand paints: the custom accent that would win over it goes", () => {
+  expect(run("config", "set", "appearanceExtra.accent", JSON.stringify({ brand: "#c08552", accent: "#d9a273" })).code).toBe(0);
+  expect(run("config", "set", "appearance.accent", '"ember"').code).toBe(0);
+  expect([file().appearance.accent, file().appearanceExtra]).toEqual(["ember", {}]);
+}, 30_000);
+
+test("a look exported with a custom accent imports with it, and an import leaves no theme for Revert to undo", () => {
+  const custom = { brand: "#c08552", accent: "#d9a273" };
+  expect(run("config", "set", "appearanceExtra.accent", JSON.stringify(custom)).code).toBe(0);
+  const out = path.join(tmp, "look.json");
+  expect(run("theme", "export", out).code).toBe(0);
+  expect(JSON.parse(fs.readFileSync(out, "utf8")).accentCustom).toEqual(custom);
+
+  expect(run("theme", "use", "dracula").code).toBe(0);
+  expect(file().appearanceExtra).toEqual({});
+  expect(run("theme", "import", out).code).toBe(0);
+  expect(file().appearanceExtra.accent).toEqual(custom);
+
+  // Over an applied theme, with a file naming only an accent id: that id paints, the record goes.
+  expect(run("plugins", "new", "package", "looks", "--owner", "acme").code).toBe(0);
+  expect(run("plugins", "new", "theme", "harbour", "--in", "looks").code).toBe(0);
+  expect(run("plugins", "install", "./looks").code).toBe(0);
+  expect(run("theme", "use", "@acme/looks/harbour").code).toBe(0);
+  const { accentCustom: _c, ...plain } = JSON.parse(fs.readFileSync(out, "utf8"));
+  fs.writeFileSync(out, JSON.stringify({ ...plain, accent: "ember" }));
+  expect(run("theme", "import", out).code).toBe(0);
+  expect([file().appearance.accent, file().appearanceExtra]).toEqual(["ember", {}]);
+  expect(run("theme", "revert", "--json").code).toBe(5);
+}, 60_000);
+
 test("a theme outside a package is refused, saying where it goes", () => {
   const r = run("plugins", "new", "theme", "harbour", "--json");
   expect(r.code).toBe(2);

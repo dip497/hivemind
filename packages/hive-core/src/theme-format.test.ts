@@ -58,6 +58,11 @@ describe("checkTheme", () => {
     ["a named colour", { palette: { ...FULL.palette, line: "gray" } }, /palette.line is not a colour/],
     ["a see-through colour", { palette: { ...FULL.palette, bg3: "#ffffff80" } }, /palette.bg3 has transparency/],
     ["a see-through oklch", { palette: { ...FULL.palette, line: "oklch(0.3 0.01 250 / 0.5)" } }, /palette.line has transparency/],
+    ["an alpha as a fourth argument", { palette: { ...FULL.palette, line: "rgb(30, 40, 50, 0.2)" } }, /palette.line has transparency/],
+    ["an alpha of 1", { accent: { brand: "rgb(192 133 82 / 1)", accent: "#d9a273" } }, /accent.brand has transparency/],
+    ["a colour with a part too many", { palette: { ...FULL.palette, fg: "rgb(255 255 255 0)" } }, /palette.fg is not a colour/],
+    ["a colour with something after it", { palette: { ...FULL.palette, bg: "#0e1a24 url(x)" } }, /palette.bg is not a colour/],
+    ["a hue in a unit it does not take", { palette: { ...FULL.palette, fg: "oklch(0.95 0.01 230px)" } }, /palette.fg is not a colour/],
     ["an accent id it does not know", { accent: "teal" }, /accent is one of/],
     ["amber as the accent", { accent: "amber" }, /amber is the colour of an agent waiting on you/],
     ["the accent in the colour of needs you", { accent: { brand: SIGNAL.palette.warn, accent: "#d9a273" } }, /accent.brand is the colour of an agent waiting on you/],
@@ -70,6 +75,7 @@ describe("checkTheme", () => {
     ["a font not in the folder", { fonts: { mono: { family: "X", files: [{ path: "fonts/gone.woff2" }] } } }, /there is no fonts\/gone.woff2/],
     ["a font kind it does not take", { fonts: { display: {} } }, /fonts is \{ ui\?, mono\? \}/],
     ["a file outside the folder", { wallpaper: { image: "../secret.png" } }, /not a path inside the theme's folder/],
+    ["a file deeper than the app reads the folder", { wallpaper: { image: "a/b/c/d/e/still.webp" } }, /a\/b\/c\/d\/e\/still.webp is more than 4 folders deep/],
     ["a wallpaper of the wrong type", { wallpaper: { image: "clip.webm" } }, /is not an image/],
     ["a built-in wallpaper it does not have", { wallpaper: { kind: "image" } }, /wallpaper.kind is one of/],
     ["brightness out of range", { wallpaper: { kind: "mono", brightness: 2 } }, /brightness is from 0.4 to 1.1/],
@@ -90,10 +96,27 @@ describe("contrast", () => {
     expect(problem(theme({ palette: { ...pal, ...patch } }))).toMatch(why);
   });
 
-  test("a pair exactly at its floor passes", () => {
-    // #767676 on white is 4.54:1, the lightest grey that reads as body text on white.
-    expect(contrastRatio("#767676", "#ffffff")!).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio("#777777", "#ffffff")!).toBeLessThan(4.5);
+  // A white page and panels, so each pair can be put a step either side of its floor.
+  const white = { ...CLEAN_LIGHT.palette, bg: "#ffffff", bg2: "#ffffff", fg: "#000000", fg2: "#555555" };
+  const onWhite = (palette: Record<string, string>, accent: unknown = "graphite") =>
+    problem(theme({ mode: "light", palette: { ...white, ...palette }, accent, wallpaper: { kind: "none" } }));
+  test.each([
+    // #767676 on white is 4.54:1, the lightest grey that reads as body text; #777777 is 4.48:1
+    // (said as 4.47, rounded down so a pair is never said to pass when it does not).
+    ["fg on bg at 4.5:1", { fg: "#767676" }, { fg: "#777777" }, /fg on bg is 4.47:1/],
+    // The page black, where both greys read: only the white panels hold them to the floor.
+    ["fg on bg2 at 4.5:1", { bg: "#000000", fg2: "#949494", fg: "#767676" }, { bg: "#000000", fg2: "#949494", fg: "#777777" }, /fg on bg2 is 4.47:1/],
+    // #949494 is 3.03:1, #959595 2.99:1.
+    ["fg2 on bg at 3:1", { fg2: "#949494" }, { fg2: "#959595" }, /fg2 on bg is 2.99:1/],
+  ])("%s: a step above the floor passes, a step below is refused", (_pair, above, below, why) => {
+    expect(onWhite(above)).toBeNull();
+    expect(onWhite(below)).toMatch(why);
+  });
+
+  test("an accent at 3:1 on its page passes; a step below is refused", () => {
+    expect(contrastRatio("#949494", "#ffffff")!).toBeGreaterThanOrEqual(3);
+    expect(onWhite({}, { brand: "#949494", accent: "#949494" })).toBeNull();
+    expect(onWhite({}, { brand: "#959595", accent: "#959595" })).toMatch(/accent.brand on bg is 2.99:1/);
   });
 
   test("a light theme passes the same pairs, and fails them the same way", () => {

@@ -42,6 +42,8 @@ import { installPackage, removePackage, removePlugin, rollbackPackage, switchPac
 import { readInstalledPackages, type PackageRecord } from "@hivemind/core/installed-packages";
 import { memberKind } from "@hivemind/core/package-kinds";
 import { BUILTIN_WIDGETS } from "@hivemind/core/widget-format";
+import { THEME_MANIFEST } from "@hivemind/core/theme-format";
+import { readThemeFolder } from "@hivemind/core/theme-folder";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
 import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import { listWidgets } from "@hivemind/core/widgets";
@@ -454,6 +456,26 @@ async function newTheme(ctx: { json: boolean }, a: { name: string; in?: string; 
   ].join("\n"));
 }
 
+/** `hive plugins add <theme folder> --to <package>`: a theme is read as the package will hold it
+ *  (its id is its folder in the package), copied to `themes/<folder>` when it is outside, and
+ *  named in the manifest. */
+async function addTheme(ctx: { json: boolean }, pkg: PackageFolder, from: string) {
+  const inside = from.startsWith(pkg.dir + path.sep);
+  const dir = inside ? from : path.join(pkg.dir, memberFormat(THEME.kind)!.list, path.basename(from));
+  const { id } = await readThemeFolder(from, pkg.id);
+  if (!inside && fs.existsSync(dir)) return err(ctx, "exists", `${dir} is already there: move the theme into the package yourself, or remove that folder`);
+  const entry = path.relative(pkg.dir, dir).split(path.sep).join("/");
+  const list = (pkg.manifest[memberFormat(THEME.kind)!.list] as Array<{ path?: string }> | undefined) ?? [];
+  if (list.some((e) => e.path === entry)) return err(ctx, "already_a_member", `${PACKAGE_MANIFEST} already names ${entry}`);
+  if (!inside) copyMember(from, dir);
+  await addEntry(pkg, THEME, entry);
+  const at = shownFrom(pkg.dir);
+  const next = [`hive plugins check ${at}`, `hive plugins install ${at}`, `hive theme use ${id}    # see it; \`hive theme revert\` goes back`];
+  return ok(ctx, { package: pkg.id, kind: THEME.kind, id, path: entry, copied: !inside, dir, next }, () => [
+    `added theme ${id} to ${pkg.id} as ${entry}${inside ? "" : `, copied from ${from}`}`, "Next:", steps(next),
+  ].join("\n"));
+}
+
 /** Copy a plugin's folder, without what a build or a checkout leaves beside it. */
 const copyMember = (from: string, to: string) =>
   fs.cpSync(from, to, { recursive: true, errorOnExist: true, filter: (f) => !["node_modules", ".git"].includes(path.basename(f)) });
@@ -471,8 +493,9 @@ const addCmd = defineCommand({
       const pkg = await readPackageFolder(String(args.to));
       const from = path.resolve(String(args.folder));
       if (!fs.existsSync(from) || !fs.statSync(from).isDirectory()) return err(ctx, "not_found", `there is no folder ${from}`);
+      if (fs.existsSync(path.join(from, THEME_MANIFEST))) return await addTheme(ctx, pkg, from);
       const k = KINDS.find((x) => fs.existsSync(path.join(from, x.manifest)));
-      if (!k) return err(ctx, "not_a_plugin", `${from} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
+      if (!k) return err(ctx, "not_a_plugin", `${from} holds no ${[...KINDS.map((x) => x.manifest), THEME_MANIFEST].join(", ")}`);
       const id = await memberId(k, from);
       if (!id.startsWith(`@${pkg.owner}/`)) return err(ctx, "not_the_owner", `${k.noun} ${id} is not @${pkg.owner}'s: every member of ${pkg.id} is @${pkg.owner}/<name>. Give it an id of @${pkg.owner}/<name> in its ${k.manifest} first`);
       const inside = from.startsWith(pkg.dir + path.sep);

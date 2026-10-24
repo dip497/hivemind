@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { presetPaths, withPreset } from "./appearance-extra.js";
+import { importedExtra, presetPaths, withPreset } from "./appearance-extra.js";
 import { ACCENTS, PRESETS, SETTINGS_VERSION, importAppearance, mergeSettings, themeImportPaths } from "./settings-schema.js";
 import { patchSettingsExtras, patchSettingsFile, readSettings, updateSettings } from "./settings.js";
 
@@ -48,15 +48,17 @@ const NEWER = {
   quit: { whenRunning: "ask", later: 1 },
 };
 
+const IMPORTED = { preset: "nord", radius: 4 };
 /** Each writer the app, main and `hive` use, changing one thing, and the paths it removes by this
  *  build's own rule (choosing a preset forgets the look before, the custom accent and the theme
- *  record; importing a look forgets the look before). */
+ *  record; importing a look forgets the look before, and the theme record when it names the
+ *  colours). */
 const WRITERS: [string, () => Promise<unknown>, string[]][] = [
   ["a patch (the app, hive config set)", () => patchSettingsFile([{ path: "appearance.glass.blur", value: 20 }], file), []],
   ["a preset chosen (hive theme use, the app's picker)", () => updateSettings((cur) => withPreset(cur, PRESETS.nord!), file, (cur) => presetPaths(PRESETS.nord!, cur.appearance)),
     ["appearance.lookBefore", "appearanceExtra.accent", "appearanceExtra.theme"]],
-  ["a theme imported (hive theme import, the app's Import)", () => updateSettings((cur) => ({ ...cur, appearance: importAppearance({ preset: "nord", radius: 4 }, cur.appearance) }), file, themeImportPaths({ preset: "nord", radius: 4 })),
-    ["appearance.lookBefore"]],
+  ["a theme imported (hive theme import, the app's Import)", () => updateSettings((cur) => ({ ...cur, appearance: importAppearance(IMPORTED, cur.appearance), appearanceExtra: importedExtra(IMPORTED, cur.appearanceExtra) }), file, themeImportPaths(IMPORTED)),
+    ["appearance.lookBefore", "appearanceExtra.theme"]],
   ["a map written whole (the app's toolbar settings)", () => updateSettings((cur) => ({ ...cur, views: { ...cur.views, toolbars: { ...cur.views.toolbars, orbit: { labels: true } } } }), file, ["views.toolbars"]), []],
   ["an extra key (main's browserCdp)", () => patchSettingsExtras({ browserCdp: true }, file), []],
   ["an extra key's group (patchSettingsExtras)", () => patchSettingsExtras({ cdp: { port: 9444 } }, file), []],

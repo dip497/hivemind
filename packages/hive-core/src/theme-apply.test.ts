@@ -143,3 +143,63 @@ test("an update shows as one, applying it keeps the look from before the theme, 
   expect(themeStatus(after.appearanceExtra.theme, (await listInstalledThemes()).themes)).toEqual({ update: null, removed: true });
   expect(fs.existsSync(fileOf(after.appearance.wallpaper.imageSrc))).toBe(true);
 });
+
+test("Revert puts back only what a partial theme set: corners, wallpaper and font changed after it stay", async () => {
+  await installPackage(looks("1.0.0", { plain: PARTIAL("Plain", "#101820") }));
+  const before = await readSettings();
+  const s = await applyTheme(await installed("@acme/looks/plain"));
+  // A theme that names no wallpaper, corners or font writes none: no default lands over them.
+  expect(s.appearanceExtra.theme?.set).toEqual(["appearance.preset", "appearance.mode", "appearance.palette", "appearance.accent", "appearanceExtra.accent"]);
+
+  await updateSettings((cur) => ({ ...cur, appearance: { ...cur.appearance, radius: 11, uiFont: "Inter, sans-serif", wallpaper: { ...cur.appearance.wallpaper, kind: "aurora" } } }));
+  const back = await revertTheme();
+  expect(back.appearance).toMatchObject({ radius: 11, uiFont: "Inter, sans-serif", palette: before.appearance.palette, accent: before.appearance.accent });
+  expect(back.appearance.wallpaper.kind).toBe("aurora");
+});
+
+test("a theme with only a UI font keeps the code font's face of the theme before it", async () => {
+  const mono = { family: "Deck Mono", files: [{ path: "fonts/display.woff2" }] };
+  await installPackage(looks("1.0.0", {
+    deck: { ...PARTIAL("Deck", "#0e1a24"), fonts: { mono } },
+    sail: { ...PARTIAL("Sail", "#101820"), fonts: { ui: { family: "Sail Sans", files: [{ path: "fonts/display.woff2" }] } } },
+  }));
+  await applyTheme(await installed("@acme/looks/deck"));
+  const s = await applyTheme(await installed("@acme/looks/sail"));
+  expect(s.appearance.monoFont).toStartWith('"Deck Mono"');
+  expect(s.appearanceExtra.fontFaces?.mono?.family).toBe("Deck Mono");
+  expect(s.appearanceExtra.fontFaces?.ui?.family).toBe("Sail Sans");
+  expect(fs.existsSync(fileOf(s.appearanceExtra.fontFaces?.mono?.files[0]?.url))).toBe(true);
+});
+
+test("a newer build's key inside the old record goes with it; one beside it stays", async () => {
+  await installPackage(looks("1.0.0", { a: PARTIAL("Ay", "#0e1a24"), b: PARTIAL("Bee", "#101820") }));
+  await applyTheme(await installed("@acme/looks/a"));
+  const file = JSON.parse(fs.readFileSync(settings, "utf8"));
+  file.appearanceExtra.theme.extraKey = "from a newer build";
+  file.appearanceExtra.spinner = { speed: 3 };
+  fs.writeFileSync(settings, JSON.stringify(file));
+  await applyTheme(await installed("@acme/looks/b"));
+  const after = JSON.parse(fs.readFileSync(settings, "utf8")).appearanceExtra;
+  expect(after.spinner).toEqual({ speed: 3 });
+  expect(after.theme.id).toBe("@acme/looks/b");
+  expect(after.theme).not.toHaveProperty("extraKey");
+});
+
+test("two themes applied at once leave the files of the one that ends up applied", async () => {
+  await installPackage(looks("1.0.0", { a: FULL("Ay", "#0e1a24"), b: FULL("Bee", "#101820") }));
+  const [a, b] = [await installed("@acme/looks/a"), await installed("@acme/looks/b")];
+  for (let i = 0; i < 4; i++) await Promise.all([applyTheme(a), applyTheme(b), revertTheme().catch(() => null)]);
+  const s = await readSettings();
+  for (const url of [s.appearance.wallpaper.imageSrc, s.appearanceExtra.fontFaces?.ui?.files[0]?.url]) {
+    if (url?.startsWith("hivemedia:")) expect(fs.existsSync(fileOf(url))).toBe(true);
+  }
+});
+
+test("a file as deep as a theme may name one is read from its folder", async () => {
+  const root = looks("1.0.0", { deep: { ...PARTIAL("Deep", "#0e1a24"), fonts: { ui: { family: "Deep Sans", files: [{ path: "a/b/c/d/deep.woff2" }] } } } });
+  fs.mkdirSync(path.join(root, "themes", "deep", "a", "b", "c", "d"), { recursive: true });
+  fs.writeFileSync(path.join(root, "themes", "deep", "a", "b", "c", "d", "deep.woff2"), "font");
+  await installPackage(root);
+  const s = await applyTheme(await installed("@acme/looks/deep"));
+  expect(fs.readFileSync(fileOf(s.appearanceExtra.fontFaces?.ui?.files[0]?.url), "utf8")).toBe("font");
+});
