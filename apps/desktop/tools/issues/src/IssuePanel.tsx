@@ -13,6 +13,7 @@ import { AssigneePicker, LabelPicker, ParentPicker } from "./pickers";
 import { SubIssueTree } from "./SubIssueTree";
 import { isIssueId } from "@hivemind/core/issue-id";
 import { workPrompt } from "./IssuesTile";
+import { trackerName, trackerOf, trackerOwns, type TrackerRef } from "./tracker";
 
 type LinkType = "relates" | "blocks" | "blocked-by" | "duplicates" | "parent-of" | "child-of";
 
@@ -34,6 +35,7 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel }: 
   const parentCandidates = useMemo(() => allIssues.filter((i) => i.id !== id), [allIssues, id]);
 
   if (!id) return null;
+  const tracker = issue ? trackerOf(issue) : null;
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -71,6 +73,7 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel }: 
               {issue.github != null && (
                 <span className="font-mono text-count text-[var(--color-info)]">#{issue.github}</span>
               )}
+              {tracker && <EditInTracker tracker={tracker} />}
               <div className="ml-auto flex items-center gap-1">
                 <Button
                   onClick={() => {
@@ -103,15 +106,27 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel }: 
             </header>
             <div className="flex-1 min-h-0 grid grid-cols-[1fr_280px]">
               <div className="px-7 py-6 border-r border-[var(--color-line)] min-w-0 overflow-y-auto">
-                <EditableTitle
-                  value={issue.title}
-                  onSave={(v) => patch({ title: v })}
-                />
-                <Section title="Description">
-                  <EditableDescription
-                    value={issue.sections.description}
-                    onSave={(v) => patch({ description: v })}
+                {trackerOwns(issue, "title") ? (
+                  <h1 className="text-heading font-semibold text-[var(--color-fg)] tracking-tight leading-tight" data-tracker-owned="title">{issue.title}</h1>
+                ) : (
+                  <EditableTitle
+                    value={issue.title}
+                    onSave={(v) => patch({ title: v })}
                   />
+                )}
+                <Section title="Description">
+                  {trackerOwns(issue, "description") ? (
+                    <div data-tracker-owned="description">
+                      {issue.sections.description.trim()
+                        ? <MarkdownPreview source={issue.sections.description} className="md-preview" />
+                        : <p className="text-label text-[var(--color-fg2)] italic">No description.</p>}
+                    </div>
+                  ) : (
+                    <EditableDescription
+                      value={issue.sections.description}
+                      onSave={(v) => patch({ description: v })}
+                    />
+                  )}
                 </Section>
                 <Section title="Acceptance criteria">
                   <AcEditor
@@ -159,19 +174,28 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel }: 
                     onChange={(a) => patch({ assignee: a })}
                   />
                 </PropRow>
+                {tracker && <TrackerRows tracker={tracker} />}
                 <PropRow label="Parent">
-                  <ParentPicker
-                    value={issue.parent}
-                    candidates={parentCandidates}
-                    onChange={(p) => patch({ parent: p })}
-                  />
+                  {trackerOwns(issue, "parent") ? (
+                    <span className="font-mono text-count text-[var(--color-fg2)]" data-tracker-owned="parent">{issue.parent ?? "None"}</span>
+                  ) : (
+                    <ParentPicker
+                      value={issue.parent}
+                      candidates={parentCandidates}
+                      onChange={(p) => patch({ parent: p })}
+                    />
+                  )}
                 </PropRow>
                 <PropRow label="Labels">
-                  <LabelPicker
-                    value={issue.labels}
-                    allLabels={allLabels}
-                    onChange={(l) => patch({ labels: l })}
-                  />
+                  {trackerOwns(issue, "labels") ? (
+                    <span className="flex flex-wrap gap-1 text-label text-[var(--color-fg2)]" data-tracker-owned="labels">{issue.labels.length ? issue.labels.join(", ") : "None"}</span>
+                  ) : (
+                    <LabelPicker
+                      value={issue.labels}
+                      allLabels={allLabels}
+                      onChange={(l) => patch({ labels: l })}
+                    />
+                  )}
                 </PropRow>
                 <PropRow label="Created">
                   <span className="text-label text-[var(--color-fg2)]">{relTime(issue.created)}</span>
@@ -190,6 +214,38 @@ export function IssuePanel({ hm, workflow, params, close: onClose, openPanel }: 
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** A mirrored issue's link to its tracker: its title, description, labels and parent are the
+ *  tracker's (design jira-sync §8.1), so they are changed there. Opens in the system browser. */
+function EditInTracker({ tracker }: { tracker: TrackerRef }) {
+  const name = trackerName(tracker.provider);
+  return tracker.url ? (
+    <Button size="xs" variant="outline" data-edit-in-tracker={tracker.url}
+      title={`Its title, description, labels and parent are ${name}'s: change them in ${name}`}
+      onClick={() => window.open(tracker.url, "_blank", "noopener")}>
+      Edit in {name}
+    </Button>
+  ) : (
+    <span className="text-count text-[var(--color-fg3)]">from {name}</span>
+  );
+}
+
+/** What the tracker says that hive does not own: whose it is there, its type, priority, estimate and sprint. */
+function TrackerRows({ tracker }: { tracker: TrackerRef }) {
+  const name = trackerName(tracker.provider);
+  return (
+    <>
+      <PropRow label={`${name} assignee`}>
+        <span className="text-label text-[var(--color-fg2)]" data-tracker-assignee-row>{tracker.assignee ? `${tracker.assignee.name}${tracker.assignee.me ? " (you)" : ""}` : "Unassigned"}</span>
+      </PropRow>
+      {tracker.type && <PropRow label="Type"><span className="text-label text-[var(--color-fg2)]">{tracker.type.name}</span></PropRow>}
+      {tracker.priority && <PropRow label="Priority"><span className="text-label text-[var(--color-fg2)]">{tracker.priority}</span></PropRow>}
+      {tracker.estimate !== undefined && <PropRow label="Estimate"><span className="text-label font-mono text-[var(--color-fg2)]">{tracker.estimate}</span></PropRow>}
+      {tracker.sprint && <PropRow label="Sprint"><span className="text-label text-[var(--color-fg2)]">{tracker.sprint.name}{tracker.sprint.state !== "active" ? ` (${tracker.sprint.state})` : ""}</span></PropRow>}
+      {tracker.archived && <PropRow label="Scope"><span className="text-label text-[var(--color-warn)]">Not in the sync's scope any more; kept for its local work</span></PropRow>}
+    </>
   );
 }
 

@@ -15,6 +15,7 @@ import { ViewSwitcher, type ViewKind } from "./ViewSwitcher";
 import { BoardView } from "./BoardView";
 import { ListView } from "./ListView";
 import { GROUP_BY_LABEL, GROUP_BY_ORDER, type GroupBy } from "./grouping";
+import { DEFAULT_TRACKER_ASSIGNEE, isTrackerAssignee, matchesTrackerAssignee, type TrackerAssignee } from "./tracker";
 
 /** Centered, teaching empty/placeholder state. */
 function TileEmpty({
@@ -91,7 +92,7 @@ function SetUpIssues({ hm, status, onReady }: { hm: ViewClient; status: ViewIssu
   );
 }
 
-interface Saved { view?: ViewKind; groupBy?: GroupBy }
+interface Saved { view?: ViewKind; groupBy?: GroupBy; trackerAssignee?: TrackerAssignee }
 
 /** "Work on it": an agent in this tile's frame, told the issue (the person sends or cancels it). */
 export function workPrompt(issue: Pick<IssueSummary, "id" | "title">): string {
@@ -106,9 +107,12 @@ export function IssuesTile({ tile, hm, selected, workflowError }: TileProps & { 
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [view, setView] = useState<ViewKind>(saved.view ?? "board");
   const [groupBy, setGroupBy] = useState<GroupBy>(saved.groupBy ?? "state");
-  const save = (next: Saved) => hm.setLayout({ view, groupBy, ...next });
+  // Whose mirrored issues show, kept with the tile like its view: the Issues tile is one per workspace.
+  const [trackerAssignee, setTrackerAssignee] = useState<TrackerAssignee>(isTrackerAssignee(saved.trackerAssignee) ? saved.trackerAssignee : DEFAULT_TRACKER_ASSIGNEE);
+  const save = (next: Saved) => hm.setLayout({ view, groupBy, trackerAssignee, ...next });
   const setViewP = (v: ViewKind) => { setView(v); save({ view: v }); };
   const setGroupP = (g: GroupBy) => { setGroupBy(g); save({ groupBy: g }); };
+  const setTrackerP = (t: TrackerAssignee) => { setTrackerAssignee(t); save({ trackerAssignee: t }); };
 
   // Whether this workspace keeps issues; an older app does not say, and always does.
   const [status, setStatus] = useState<ViewIssuesStatus | null>(null);
@@ -118,7 +122,7 @@ export function IssuesTile({ tile, hm, selected, workflowError }: TileProps & { 
     return () => { live = false; };
   }, [hm]);
 
-  const filtered = useMemo(() => applyFilters(issues, filters), [issues, filters]);
+  const filtered = useMemo(() => applyFilters(issues, filters).filter((i) => matchesTrackerAssignee(i, trackerAssignee)), [issues, filters, trackerAssignee]);
   const workOn = (issue: IssueSummary) => {
     void write("Starting an agent", Promise.resolve().then(() => hm.commands.spawnAgent(null, tile.frameId, { prompt: workPrompt(issue), name: issue.id })));
   };
@@ -141,6 +145,7 @@ export function IssuesTile({ tile, hm, selected, workflowError }: TileProps & { 
             issues={issues}
             filters={filters}
             onChange={setFilters}
+            tracker={{ value: trackerAssignee, onChange: setTrackerP }}
             rightSlot={
               <>
                 <span className="text-count text-[var(--color-fg3)] tabular-nums">{issues.length}</span>

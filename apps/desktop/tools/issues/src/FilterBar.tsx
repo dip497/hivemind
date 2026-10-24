@@ -5,6 +5,7 @@ import { Button } from "@hivemind/app-ui";
 import { Input } from "@hivemind/app-ui";
 import { MenuItem } from "@hivemind/app-ui";
 import { Popover } from "@hivemind/app-ui";
+import { hasMirrored, trackerAssigneeLabel, trackerPeople, type TrackerAssignee } from "./tracker";
 
 export interface Filters {
   q: string;
@@ -40,11 +41,14 @@ export function FilterBar({
   filters,
   onChange,
   rightSlot,
+  tracker,
 }: {
   issues: IssueSummary[];
   filters: Filters;
   onChange: (f: Filters) => void;
   rightSlot?: React.ReactNode;
+  /** Whose mirrored issues are shown (design jira-sync §7.1); offered once an issue is mirrored. */
+  tracker?: { value: TrackerAssignee; onChange: (v: TrackerAssignee) => void };
 }) {
   const wf = useWorkflow();
   const statusWord = wf.custom ? "Status" : "State";
@@ -121,6 +125,7 @@ export function FilterBar({
             }))}
           />
         )}
+        {tracker && hasMirrored(issues) && <TrackerAssigneeMenu issues={issues} value={tracker.value} onChange={tracker.onChange} />}
         <Button
           variant={filters.showCancelled ? "secondary" : "ghost"}
           size="xs"
@@ -155,6 +160,45 @@ export function FilterBar({
         </div>
       )}
     </div>
+  );
+}
+
+/** Whose mirrored issues the board shows: Me (the default), Unassigned, Anyone, or one person. */
+function TrackerAssigneeMenu({ issues, value, onChange }: { issues: IssueSummary[]; value: TrackerAssignee; onChange: (v: TrackerAssignee) => void }) {
+  const people = trackerPeople(issues);
+  const options: Array<{ key: TrackerAssignee; label: string }> = [
+    { key: "me", label: "Me" }, { key: "unassigned", label: "Unassigned" }, { key: "anyone", label: "Anyone" },
+    ...people.map((p) => ({ key: p.key, label: p.name })),
+  ];
+  return (
+    <Popover
+      width={200}
+      align="left"
+      trigger={
+        <span data-tracker-assignee={value} title="Whose issues from the tracker the board shows"
+          className="inline-flex items-center gap-1.5 px-2 py-1 text-label rounded-md border cursor-pointer hm-soft bg-[var(--color-bg3)] border-[var(--color-line2)] text-[var(--color-fg)]">
+          <span className="text-[var(--color-fg2)]">Assigned to</span>
+          {trackerAssigneeLabel(value, issues)}
+          <svg width="9" height="9" viewBox="0 0 10 10" className="text-[var(--color-fg3)]">
+            <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+          </svg>
+        </span>
+      }
+    >
+      {(close) => (
+        <div className="flex flex-col gap-0.5 max-h-[280px] overflow-y-auto">
+          {options.map((o, i) => (
+            <div key={o.key}>
+              {i === 3 && <div className="my-1 h-px bg-[var(--color-line)]" />}
+              <MenuItem size="sm" variant={o.key === value ? "default" : "muted"} selected={o.key === value} data-tracker-option={o.key}
+                onClick={() => { onChange(o.key); close(); }}>
+                <span>{o.label}</span>
+              </MenuItem>
+            </div>
+          ))}
+        </div>
+      )}
+    </Popover>
   );
 }
 
