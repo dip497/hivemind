@@ -113,6 +113,8 @@ export class Mailbox {
   /** Tiles whose screen is being read before a release, and whether another release was asked
    *  for meanwhile. */
   private reading = new Map<string, boolean>();
+  /** Tiles whose last message's Enter is still to come, and the messages typed after it. */
+  private submitting = new Map<string, string[][]>();
 
   constructor(
     /** Raw write into a tile's pty. `paste` = a message handed over as one block, not
@@ -263,6 +265,7 @@ export class Mailbox {
     this.asleep.delete(ptyId);
     this.waking.delete(ptyId);
     this.reading.delete(ptyId);
+    this.submitting.delete(ptyId);
     this.cancelRelease(ptyId);
   }
 
@@ -336,8 +339,28 @@ export class Mailbox {
     // words after it are set apart by a space, whether it was attached or stayed a path.
     const pastes = [...pasted, ...(text ? [pasted.length ? ` ${text}` : text] : [])];
     if (!pastes.length) return false;
+    // Typed before the last message's Enter, it would be glued to that message: it waits for it.
+    const waiting = this.submitting.get(ptyId);
+    if (waiting) {
+      waiting.push(pastes);
+      return true;
+    }
+    return this.type(ptyId, pastes);
+  }
+
+  /** Type one message, then, `submitDelayMs` later, the Enter that sends it, then the next
+   *  waiting for that Enter. */
+  private type(ptyId: string, pastes: string[]): boolean {
     for (const p of pastes) if (!this.write(ptyId, p, true)) return false;
-    const t = setTimeout(() => this.write(ptyId, "\r"), this.submitDelayMs);
+    this.submitting.set(ptyId, []);
+    const t = setTimeout(() => {
+      this.write(ptyId, "\r");
+      const waiting = this.submitting.get(ptyId) ?? [];
+      this.submitting.delete(ptyId);
+      let next: string[] | undefined;
+      while ((next = waiting.shift()) && !this.type(ptyId, next)) { /* its pty is gone: so is the rest's */ }
+      if (next) this.submitting.get(ptyId)!.push(...waiting);
+    }, this.submitDelayMs);
     t.unref?.();
     return true;
   }
