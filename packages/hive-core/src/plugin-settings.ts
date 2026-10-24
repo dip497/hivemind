@@ -68,7 +68,7 @@ export function parsePluginStates(raw: unknown): Record<string, PluginState> {
     if (isObj(v.options)) {
       const options: Record<string, SettingValue> = {};
       for (const [k, x] of Object.entries(v.options).slice(0, MAX_OPTIONS)) {
-        if (!FIELD_ID.test(k)) continue;
+        if (!FIELD_ID.test(k) || k === "__proto__") continue;
         if (typeof x === "boolean" || (typeof x === "number" && Number.isFinite(x))) options[k] = x;
         else if (typeof x === "string") options[k] = x.slice(0, MAX_TEXT);
         // Several choices, or a list: texts only, as many as a list may hold.

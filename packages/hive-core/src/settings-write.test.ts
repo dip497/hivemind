@@ -7,8 +7,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ACCENTS, PRESETS, SETTINGS_VERSION, applyPreset, importAppearance, mergeSettings } from "./settings-schema.js";
-import { patchSettingsExtras, patchSettingsFile, readSettings, updateSettings, writeSettings } from "./settings.js";
+import { presetPaths, withPreset } from "./appearance-extra.js";
+import { ACCENTS, PRESETS, SETTINGS_VERSION, importAppearance, mergeSettings, themeImportPaths } from "./settings-schema.js";
+import { patchSettingsExtras, patchSettingsFile, readSettings, updateSettings } from "./settings.js";
 
 let dir = "";
 let file = "";
@@ -23,6 +24,7 @@ const disk = () => JSON.parse(fs.readFileSync(file, "utf8"));
 const NEWER = {
   v: 2,
   appearanceExtra: { accent: { custom: "#ff5500" }, fonts: [{ family: "Harbour Sans" }], theme: { id: "@dip497/harbour", before: { preset: "signal" } } },
+  cdp: { port: 9333, later: 1 },
   notifications: { enabled: true, sound: true, sounds: { needsYou: "chime" } },
   appearance: {
     preset: "harbour", accent: "graphite", radius: 6, later: 1,
@@ -36,7 +38,7 @@ const NEWER = {
     defaultView: "canvas", later: 1,
     layers: { status: "all", density: "compact" },
     chrome: { canvas: { island: "top", dock: "left" }, orbit: { island: "floating" } },
-    toolbars: { canvas: { labels: true, size: "s" } },
+    toolbars: { canvas: { labels: true, size: "s", actions: ["agent", "later-action", "frame"] } },
   },
   plugins: { later: 1, state: { "agent:claude": { enabled: true, pinned: true, options: { model: "opus" } } } },
   agents: { defaultAgent: "claude", later: 1 },
@@ -46,35 +48,41 @@ const NEWER = {
   quit: { whenRunning: "ask", later: 1 },
 };
 
-/** Each writer the app, main and `hive` use, changing one thing, and whether it forgets
- *  `lookBefore` by this build's own rule (choosing a preset or importing a look forgets it). */
-const WRITERS: [string, () => Promise<unknown>, boolean][] = [
-  ["a patch (the app, hive config set)", () => patchSettingsFile([{ path: "appearance.glass.blur", value: 20 }], file), false],
-  ["a mutation (hive theme use)", () => updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) }), file), true],
-  ["a section written whole (a theme import)", () => updateSettings((cur) => ({ ...cur, appearance: importAppearance({ preset: "nord", radius: 4 }, cur.appearance) }), file, ["appearance"]), true],
-  ["the whole settings (writeSettings)", async () => writeSettings(await readSettings(file), file), false],
-  ["an extra key (main's browserCdp)", () => patchSettingsExtras({ browserCdp: true }, file), false],
+/** Each writer the app, main and `hive` use, changing one thing, and the paths it removes by this
+ *  build's own rule (choosing a preset forgets the look before, the custom accent and the theme
+ *  record; importing a look forgets the look before). */
+const WRITERS: [string, () => Promise<unknown>, string[]][] = [
+  ["a patch (the app, hive config set)", () => patchSettingsFile([{ path: "appearance.glass.blur", value: 20 }], file), []],
+  ["a preset chosen (hive theme use, the app's picker)", () => updateSettings((cur) => withPreset(cur, PRESETS.nord!), file, (cur) => presetPaths(PRESETS.nord!, cur.appearance)),
+    ["appearance.lookBefore", "appearanceExtra.accent", "appearanceExtra.theme"]],
+  ["a theme imported (hive theme import, the app's Import)", () => updateSettings((cur) => ({ ...cur, appearance: importAppearance({ preset: "nord", radius: 4 }, cur.appearance) }), file, themeImportPaths({ preset: "nord", radius: 4 })),
+    ["appearance.lookBefore"]],
+  ["a map written whole (the app's toolbar settings)", () => updateSettings((cur) => ({ ...cur, views: { ...cur.views, toolbars: { ...cur.views.toolbars, orbit: { labels: true } } } }), file, ["views.toolbars"]), []],
+  ["an extra key (main's browserCdp)", () => patchSettingsExtras({ browserCdp: true }, file), []],
+  ["an extra key's group (patchSettingsExtras)", () => patchSettingsExtras({ cdp: { port: 9444 } }, file), []],
 ];
 
 /** Every key and value of `NEWER` this build does not read, by its path. */
 const UNREAD: [string, unknown][] = [
-  ["appearanceExtra", NEWER.appearanceExtra], ["notifications", NEWER.notifications],
+  ["appearanceExtra.accent", NEWER.appearanceExtra.accent], ["appearanceExtra.fonts", NEWER.appearanceExtra.fonts], ["appearanceExtra.theme", NEWER.appearanceExtra.theme],
+  ["notifications", NEWER.notifications], ["cdp.later", 1],
   ["appearance.later", 1], ["appearance.palette.tint", "#202020"], ["appearance.glass.frost", 0.4],
   ["appearance.wallpaper.parallax", true], ["appearance.terminal.ligatures", true], ["appearance.lookBefore.shadows", "soft"],
   ["views.later", 1], ["views.layers.density", "compact"], ["views.chrome.canvas.dock", "left"], ["views.chrome.orbit.island", "floating"],
-  ["views.toolbars.canvas.size", "s"], ["plugins.later", 1], ["plugins.state.agent:claude.pinned", true],
+  ["views.toolbars.canvas.size", "s"], ["views.toolbars.canvas.actions", ["agent", "later-action", "frame"]], ["plugins.later", 1], ["plugins.state.agent:claude.pinned", true],
   ["agents.later", 1], ["profile.later", 1], ["network.later", 1], ["browserApp.later", 1], ["quit.later", 1],
 ];
 const at = (o: unknown, p: string) => p.split(".").reduce<unknown>((x, k) => (x as Record<string, unknown> | undefined)?.[k], o);
 
 describe("a write by this build", () => {
-  test.each(WRITERS)("keeps every key and value a newer build wrote, and its v: %s", async (_, write, forgetsLookBefore) => {
+  test.each(WRITERS)("keeps every key and value a newer build wrote, and its v: %s", async (_, write, removes) => {
     put(NEWER);
     await write();
     const after = disk();
-    const kept = UNREAD.filter(([p]) => !(forgetsLookBefore && p.startsWith("appearance.lookBefore.")));
+    const gone = (p: string) => removes.some((r) => p === r || p.startsWith(`${r}.`));
+    const kept = UNREAD.filter(([p]) => !gone(p));
     expect(kept.map(([p]) => [p, at(after, p)])).toEqual(kept);
-    if (forgetsLookBefore) expect(after.appearance.lookBefore).toBeUndefined();
+    expect(removes.map((p) => [p, at(after, p)])).toEqual(removes.map((p) => [p, undefined]));
     expect(after.v).toBe(2);
   });
 
@@ -90,7 +98,7 @@ describe("a write by this build", () => {
     expect([disk().appearance.accent, disk().views.chrome.orbit]).toEqual([read.appearance.accent, { island: "top" }]);
   });
 
-  test("what a writer removes goes, the keys beside it stay", async () => {
+  test("what a writer removes goes, as far as this build read it; the keys beside it stay", async () => {
     put(NEWER);
     // Leaving Clean forgets lookBefore; a view's island set back to its default is removed from the map.
     await updateSettings((cur) => {
@@ -99,10 +107,73 @@ describe("a write by this build", () => {
       return { ...cur, appearance, views: { ...cur.views, chrome } };
     }, file);
     const after = disk();
-    expect([after.appearance.lookBefore, after.views.chrome.canvas, after.views.chrome.orbit, after.appearance.later]).toEqual([undefined, undefined, { island: "floating" }, 1]);
-    // A path set to undefined removes it, one this build does not read too (as migration 0002 does).
-    await patchSettingsFile([{ path: "views.later", value: undefined }], file);
-    expect(["later" in disk().views, disk().views.defaultView]).toEqual([false, "canvas"]);
+    // What this build read there goes; a newer build's key in it stays, and so does its group.
+    expect([after.appearance.lookBefore, after.views.chrome.canvas, after.views.chrome.orbit, after.appearance.later]).toEqual([{ shadows: "soft" }, { dock: "left" }, { island: "floating" }, 1]);
+    // A path set to undefined removes it whole, one this build does not read too (as migration 0002 does).
+    await patchSettingsFile([{ path: "views.later", value: undefined }, { path: "appearance.lookBefore", value: undefined }], file);
+    expect(["later" in disk().views, "lookBefore" in disk().appearance, disk().views.defaultView]).toEqual([false, false, "canvas"]);
+  });
+
+  test("a plugin record emptied here keeps the option values and keys this build cannot read", async () => {
+    put({ ...NEWER, plugins: { state: { "view:isles": { enabled: true, options: { fog: true, sky: { later: 1 } }, pinned: true } } } });
+    // `hive plugins reset`: the record as this build read it goes ({ enabled, options: { fog } }).
+    await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state: {} } }), file);
+    expect(disk().plugins.state).toEqual({ "view:isles": { options: { sky: { later: 1 } }, pinned: true } });
+    // Once nothing of it is left, the record goes too.
+    put({ ...NEWER, plugins: { state: { "view:isles": { enabled: true, options: { fog: true } } } } });
+    await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state: {} } }), file);
+    expect(disk().plugins.state).toEqual({});
+  });
+
+  test("a plugin's fields named constructor or prototype are written and read back like any other", async () => {
+    put({});
+    await patchSettingsFile([
+      { path: "plugins.state.view:isles.options.constructor", value: "teal" },
+      { path: "plugins.state.view:isles.options.prototype", value: 3 },
+    ], file);
+    expect(disk().plugins.state["view:isles"].options).toEqual({ constructor: "teal", prototype: 3 });
+    expect((await readSettings(file)).plugins.state["view:isles"]!.options).toEqual({ constructor: "teal", prototype: 3 });
+    // An inherited one is never followed: a field nobody set is absent, not Object's constructor.
+    put({ plugins: { state: { "view:isles": { options: { fog: true } } } } });
+    await patchSettingsFile([{ path: "plugins.state.view:isles.options.constructor", value: undefined }], file);
+    expect(disk().plugins.state["view:isles"].options).toEqual({ fog: true });
+    expect(() => patchSettingsFile([{ path: "plugins.state.view:isles.options.__proto__", value: 1 }], file)).toThrow();
+  });
+});
+
+describe("a theme imported over a look this build cannot read whole", () => {
+  test("a palette-only theme writes the palette; a newer wallpaper, corners and layers stay as they were", async () => {
+    const layers = [{ id: "l1", url: "hive-media://a.png", kind: "lottie", opacity: 0.5, fit: "cover", size: 1, anchor: "center", blend: "screen" }];
+    put({ v: 2, appearance: { preset: "harbour", wallpaper: { kind: "aurora-2", brightness: 0.7 }, radius: 40, overlayMedia: layers } });
+    const theme = { palette: { bg: "#000000" } };
+    await updateSettings((cur) => ({ ...cur, appearance: importAppearance(theme, cur.appearance) }), file, themeImportPaths(theme));
+    const a = disk().appearance;
+    expect([a.palette.bg, a.wallpaper, a.radius, a.overlayMedia]).toEqual(["#000000", { kind: "aurora-2", brightness: 0.7 }, 40, layers]);
+  });
+});
+
+describe("a preset chosen over a look this build cannot read whole", () => {
+  /** A newer build's look: an accent, a mode and a wallpaper this build does not know, its own
+   *  accent colours and the record of a theme. */
+  const look = (extra: Record<string, unknown> = {}) => ({
+    v: 2,
+    appearance: { preset: "harbour", mode: "dim", accent: "saffron", wallpaper: { kind: "aurora-2", brightness: 0.7 }, glass: { enabled: true }, radius: 10, ...extra },
+    appearanceExtra: { accent: { brand: "#ff5500", accent: "#ff7700" }, theme: { id: "@dip497/harbour" } },
+  });
+  const choose = (id: string) => updateSettings((cur) => withPreset(cur, PRESETS[id]!), file, (cur) => presetPaths(PRESETS[id]!, cur.appearance));
+
+  test("a colour preset replaces the accent and mode, drops the custom accent and theme, and keeps the wallpaper", async () => {
+    put(look());
+    await choose("nord");
+    const a = disk().appearance;
+    expect([a.preset, a.mode, a.accent, a.wallpaper.kind, a.glass.enabled, a.radius, disk().appearanceExtra]).toEqual(["nord", "dark", "ice", "aurora-2", true, 10, {}]);
+  });
+
+  test("a whole-look preset sets its glass and wallpaper, and remembers the look it replaced", async () => {
+    put(look());
+    await choose("clean");
+    const a = disk().appearance;
+    expect([a.preset, a.mode, a.accent, a.wallpaper.kind, a.glass.enabled, a.lookBefore]).toEqual(["clean", "dark", PRESETS.clean!.accent, "none", false, { glass: true, wallpaper: "mono", radius: 10 }]);
   });
 });
 
@@ -113,7 +184,6 @@ describe("the file's format version, v", () => {
     expect([read.v, read.appearance.preset, read.appearance.radius]).toEqual([SETTINGS_VERSION + 3, "nord", 4]);
     // Not even a writer that names v.
     await updateSettings((cur) => ({ ...cur, v: 1 }), file, ["v"]);
-    await writeSettings({ ...read, v: 1 }, file);
     expect(disk().v).toBe(SETTINGS_VERSION + 3);
   });
 

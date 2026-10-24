@@ -6,10 +6,13 @@
  * Linux they are one file, and nothing moves.
  *
  * The data folder's file is backed up; the one settings.json only gains the section, and only
- * when it has none, or the defaults: any write by this build stores the section, so a `hive config
- * set` made while an older app held this migration back stored the defaults, not a choice. A
- * section someone changed wins. Run again after being cut off, it finds the section moved and only
- * takes the old blob out.
+ * when it has none, or one that reads as the defaults (a build that wrote whole sections stored
+ * them, so a write made while an older app held this migration back stored the defaults, not a
+ * choice). A section someone changed wins. The old blob is written whole, as this build reads it:
+ * each of its values set even where it equals the default, so the section in the file says what
+ * the person chose, not what this build happens to default to. (Only an app older than this
+ * migration wrote that blob, so it holds no key this build does not read.) Run again after being
+ * cut off, it finds the section moved and only takes the old blob out.
  *
  * Number 0005 is skipped: a 0005 lived on a branch and was dropped before any release, and a
  * ledger that ran it keeps that id.
@@ -53,7 +56,7 @@ export const m0006: Migration = {
     const there = (await readJson(to))?.notifications;
     const kept = isObj(there) && JSON.stringify(normalizeNotificationSettings(there)) !== JSON.stringify(DEFAULT_NOTIFICATION_SETTINGS);
     if (!kept) {
-      await updateSettings((cur) => ({ ...cur, notifications: normalizeNotificationSettings(old.notifications) }), to);
+      await updateSettings((cur) => ({ ...cur, notifications: normalizeNotificationSettings(old.notifications) }), to, ["notifications"]);
     }
     // The old blob goes, so nothing reads a second copy; the rest of that file (its `browserCdp`)
     // stays as it is.

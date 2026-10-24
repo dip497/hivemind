@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { mergeSettings } from "../settings-schema.js";
 import { files, TestRoot } from "./fixtures/runs.js";
 
 const FIXTURE = path.join(import.meta.dir, "fixtures", "0006", "before");
@@ -16,6 +17,8 @@ let t: TestRoot;
 afterEach(() => t.remove());
 
 const readData = (rel: string) => JSON.parse(fs.readFileSync(path.join(t.data, rel), "utf8"));
+/** The one settings.json as the app and `hive` read it. */
+const readOne = () => mergeSettings(t.read("settings.json"));
 function endState() {
   return { settings: t.read("settings.json"), old: readData("settings.json"), backup: files(path.join(t.data, "migrations", "backups", ID)) };
 }
@@ -25,7 +28,7 @@ describe("notifications move into the one settings.json", () => {
     t = new TestRoot(FIXTURE, true);
     t.runOnce();
     const s = endState();
-    expect(s.settings.notifications).toEqual({
+    expect(readOne().notifications).toEqual({
       enabled: true,
       kinds: { needs: true, done: false, error: true },
       dnd: { enabled: true, start: "23:00", end: "06:30" },
@@ -36,6 +39,8 @@ describe("notifications move into the one settings.json", () => {
       volume: 0.6,
       popupText: false,
     });
+    // Written whole: the file says each value the person had, a default one too.
+    expect(s.settings.notifications).toEqual(readOne().notifications);
     // The rest of the one settings.json is as it was.
     expect([s.settings.appearance.preset, s.settings.views.defaultView, s.settings.profile.name]).toEqual(["nord", "windows", "Ada"]);
     expect(s.old).toEqual({ browserCdp: true });
@@ -47,8 +52,9 @@ describe("notifications move into the one settings.json", () => {
     const file = path.join(t.root, "settings.json");
     fs.writeFileSync(file, JSON.stringify({ ...t.read("settings.json"), notifications: { enabled: false } }));
     t.runOnce();
-    expect(t.read("settings.json").notifications.enabled).toBe(false);
-    expect(t.read("settings.json").notifications.kinds.done).toBe(true);
+    // The file keeps the section as it was; it reads with the defaults beside what was set.
+    expect(t.read("settings.json").notifications).toEqual({ enabled: false });
+    expect([readOne().notifications.enabled, readOne().notifications.kinds.done]).toEqual([false, true]);
     expect(readData("settings.json")).toEqual({ browserCdp: true });
   });
 

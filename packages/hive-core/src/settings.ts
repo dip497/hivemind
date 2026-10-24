@@ -33,7 +33,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DEFAULT_SETTINGS, mergeSettings, setPath, type Settings } from "./settings-schema.js";
-import { writtenOnto } from "./settings-write.js";
+import { assign, writtenOnto } from "./settings-write.js";
 
 export function settingsPath(): string {
   if (process.env.HIVE_SETTINGS?.trim()) return path.resolve(process.env.HIVE_SETTINGS.trim());
@@ -45,16 +45,6 @@ export function settingsPath(): string {
 export async function readSettings(file: string = settingsPath()): Promise<Settings> {
   try { return mergeSettings(JSON.parse(await fs.readFile(file, "utf8"))); }
   catch { return mergeSettings(DEFAULT_SETTINGS); }
-}
-
-/** The sections a whole-object write names. */
-const SECTIONS = Object.keys(DEFAULT_SETTINGS).filter((k) => k !== "v");
-
-/** Write `next` whole: every setting it holds is written, even one equal to what the file reads
- *  as. What this build does not read (top-level keys such as `browserCdp`, a newer build's keys
- *  in any group) stays. */
-export async function writeSettings(next: Settings, file: string = settingsPath()): Promise<void> {
-  await updateSettings(() => next, file, SECTIONS);
 }
 
 /** The file's JSON as it is, or undefined when it is missing or not JSON. */
@@ -237,17 +227,18 @@ export async function breakSettingsLock(file: string = settingsPath()): Promise<
  * overwritten by a stale snapshot. What the mutation changed is written onto the
  * file's own JSON (`writtenOnto`), and each `touched` dotted path is written as
  * `mutate` left it even where it reads the same (undefined removes the key, one
- * this build does not read too). Returns the settings as the file now reads.
+ * this build does not read too); `touched` may be worked out from the settings as read, under
+ * the same lock (`presetPaths`). Returns the settings as the file now reads.
  */
 export async function updateSettings(
   mutate: (current: Settings) => Settings,
   file: string = settingsPath(),
-  touched: readonly string[] = [],
+  touched: readonly string[] | ((current: Settings) => readonly string[]) = [],
 ): Promise<Settings> {
   return withLock(file, async () => {
     const raw = await readRaw(file);
     const cur = mergeSettings(raw);
-    const json = writtenOnto(raw, cur, mergeSettings(mutate(cur)), touched);
+    const json = writtenOnto(raw, cur, mergeSettings(mutate(cur)), typeof touched === "function" ? touched(cur) : touched);
     await writeRaw(json, file);
     return mergeSettings(json);
   });
@@ -259,8 +250,9 @@ export async function updateSettings(
  * are the same file as the theme in a packaged app. They used to be written
  * with a plain read-then-write, which erases whatever the theme wrote in
  * between; this applies them to the file as it is, under the same lock, and
- * carries the schema settings through untouched. A key set to `undefined` is
- * removed. Returns the extras as written.
+ * carries the schema settings through untouched. A value is merged as the writer merges
+ * (`assign`): an object value by value, keeping the keys the file has inside it; anything else
+ * replaces; `undefined` removes the key. Returns the extras as written.
  */
 export async function patchSettingsExtras(
   patch: Record<string, unknown>,
@@ -268,17 +260,14 @@ export async function patchSettingsExtras(
 ): Promise<Record<string, unknown>> {
   const known = new Set(Object.keys(DEFAULT_SETTINGS));
   for (const key of Object.keys(patch)) {
-    if (known.has(key) || ["__proto__", "constructor", "prototype"].includes(key)) {
+    if (known.has(key) || key === "__proto__") {
       throw new Error(`not an extra settings key: ${key}`);
     }
   }
   return withLock(file, async () => {
     const raw = await readRaw(file);
     const json = writtenOnto(raw, mergeSettings(raw), mergeSettings(raw));
-    for (const [k, v] of Object.entries(patch)) {
-      if (v === undefined) delete json[k];
-      else json[k] = v;
-    }
+    for (const [k, v] of Object.entries(patch)) assign(json, k, v);
     await writeRaw(json, file);
     return Object.fromEntries(Object.entries(json).filter(([k]) => !known.has(k)));
   });

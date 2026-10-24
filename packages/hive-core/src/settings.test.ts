@@ -4,11 +4,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, GEIST_FONT, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, presetPatch, exportAppearance, flattenAppearance, getPath, importAppearance, mergeAppearance, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, GEIST_FONT, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, exportAppearance, flattenAppearance, getPath, importAppearance, mergeAppearance, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
 import { cssColorToRgb } from "./css-color.js";
-import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
+import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings } from "./settings.js";
 
 // The pre-2.0 literal from TerminalTile.tsx, verbatim: the ubuntu preset must
 // derive exactly this (byte-identical terminal output).
@@ -52,9 +52,6 @@ describe("settings schema", () => {
     }
     const nord = applyPreset(mine, PRESETS.nord!);
     expect([nord.glass.enabled, nord.wallpaper.kind, nord.radius]).toEqual([true, "aurora", 16]);
-    // The same change, as the flat patch the Appearance page applies.
-    expect(presetPatch(PRESETS["clean-light"]!, flattenAppearance(mine))).toMatchObject({ glass: false, wallpaper: "none", radius: 16, mode: "light" });
-    expect(presetPatch(PRESETS.nord!, flattenAppearance(mine))).toMatchObject({ glass: true, wallpaper: "aurora", radius: 16 });
   });
 
   test("leaving Clean for a colour preset puts back the glass, wallpaper and corners it replaced, but not over the person's own change", () => {
@@ -67,10 +64,9 @@ describe("settings schema", () => {
     // A wallpaper chosen while on Clean is kept; the glass and corners still come back.
     const chose = applyPreset({ ...clean, wallpaper: { ...clean.wallpaper, kind: "mono" } }, PRESETS.nord!);
     expect([chose.glass.enabled, chose.wallpaper.kind, chose.radius]).toEqual([true, "mono", 16]);
-    // Remembered across a save and a load, and the Appearance page's flat patch does the same.
+    // Remembered across a save and a load.
     const saved = mergeSettings(JSON.parse(JSON.stringify({ appearance: clean }))).appearance;
     expect(applyPreset(saved, PRESETS.signal!).wallpaper.kind).toBe("aurora");
-    expect(presetPatch(PRESETS.signal!, flattenAppearance(saved))).toMatchObject({ glass: true, wallpaper: "aurora", radius: 16, lookBefore: undefined });
     // It is this computer's memory, no part of the look: not in a theme file, not shown to a guest.
     expect(exportAppearance(clean).theme).not.toHaveProperty("lookBefore");
     expect(sharedAppearance(clean)).not.toHaveProperty("lookBefore");
@@ -426,7 +422,7 @@ describe("settings file", () => {
     expect(settingsPath()).toBe(path.join(tmp, "custom.json"));
     expect(await readSettings()).toEqual(mergeSettings(DEFAULT_SETTINGS));
     const next = mergeSettings({ appearance: applyPreset(DEFAULT_APPEARANCE, PRESETS.dracula!), views: { defaultView: "world" } });
-    await writeSettings(next);
+    await updateSettings(() => next, settingsPath(), ["appearance", "views"]);
     expect(fs.readdirSync(tmp).filter((f) => f.endsWith(".tmp"))).toEqual([]); // no temp file left behind
     expect(await readSettings()).toEqual(next);
     fs.writeFileSync(settingsPath(), "{ not json");
@@ -436,7 +432,7 @@ describe("settings file", () => {
   test("a write keeps top-level keys the schema does not own (the app's browserCdp flag)", async () => {
     process.env.HIVE_SETTINGS = path.join(tmp, "with-extras.json");
     fs.writeFileSync(settingsPath(), JSON.stringify({ browserCdp: true, browserCdpPort: "9333" }));
-    await writeSettings(mergeSettings({ views: { defaultView: "world" } }));
+    await patchSettingsFile([{ path: "views.defaultView", value: "world" }]);
     const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
     expect(raw.browserCdp).toBe(true);
     expect(raw.browserCdpPort).toBe("9333");
@@ -449,24 +445,6 @@ describe("settings concurrency", () => {
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-settings-race-"));
     process.env.HIVE_SETTINGS = path.join(dir, "settings.json");
-  });
-
-  test("REGRESSION: a snapshot write loses a concurrent update; updateSettings does not", async () => {
-    // The old renderer path: read now, write the whole object 150ms later.
-    const stale = await readSettings();
-    await writeSettings({ ...stale, appearance: applyPreset(stale.appearance, PRESETS.nord!) }); // the CLI
-    await writeSettings({ ...stale, views: { ...stale.views, defaultView: "world" } });          // the debounce
-    expect((await readSettings()).appearance.preset).toBe("signal"); // ← the bug: nord reverted
-
-    // The same two writers through updateSettings: both edits survive.
-    fs.rmSync(settingsPath(), { force: true });
-    const snapshot = await readSettings();
-    void snapshot; // deliberately unused: a mutation never writes back a snapshot
-    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) }));
-    await updateSettings((cur) => ({ ...cur, views: { ...cur.views, defaultView: "world" } }));
-    const merged = await readSettings();
-    expect(merged.appearance.preset).toBe("nord");
-    expect(merged.views.defaultView).toBe("world");
   });
 
   test("concurrent writers to different paths all land (serialized, none lost)", async () => {
@@ -519,10 +497,13 @@ describe("settings concurrency", () => {
     expect(await readSettings()).toEqual(mergeSettings(raw)); // still a valid settings file
   });
 
-  test("extras cannot bypass the schema or assign prototype keys", async () => {
-    for (const key of ["appearance", "agents", "__proto__", "constructor", "prototype"]) {
+  test("extras cannot bypass the schema or set a prototype; constructor and prototype are keys like any other", async () => {
+    for (const key of ["appearance", "agents", "__proto__"]) {
       await expect(patchSettingsExtras(JSON.parse(`{"${key}":{}}`))).rejects.toThrow("not an extra settings key");
     }
+    await patchSettingsExtras({ constructor: { a: 1 }, prototype: 2 });
+    const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
+    expect([Object.hasOwn(raw, "constructor") && raw.constructor, raw.prototype, ({} as Record<string, unknown>).a]).toEqual([{ a: 1 }, 2, undefined]);
   });
 
   test("an extras patch leaves the schema settings untouched, and removes a key set to undefined", async () => {
