@@ -212,6 +212,19 @@ export async function allocateId(root: string): Promise<{ id: string; cfg: Confi
   return run;
 }
 
+/** Read-modify-write config.yaml, serialized with id allocation and migrations (all three rewrite
+ *  it, and a write that interleaves with another loses its change). Returns the config as written. */
+export async function updateConfig(root: string, mutate: (cfg: Config) => Config): Promise<Config> {
+  const prev = allocChains.get(root) ?? Promise.resolve();
+  const run = prev.then(async () => {
+    const next = mutate(await readConfig(root));
+    await writeConfig(root, next);
+    return next;
+  });
+  allocChains.set(root, run.then(() => undefined, () => undefined));
+  return run;
+}
+
 // ── issues: paths ──────────────────────────────────────────────────
 
 /**
@@ -617,18 +630,26 @@ function parseAcceptance(text: string): AcceptanceItem[] {
   return items;
 }
 
-// Activity line: `- <ISO-8601 timestamp> · <who> · <message>[ <!-- id:<id> -->]`.
-// P0d shim until P0a's parser lands: `who` may hold spaces, and the optional row id is read back.
+// Activity line: `- <ISO-8601 timestamp> · <who> · <message>[ <!-- id:<id> -->]`; a multi-line
+// message continues on lines indented by two spaces, and the row id ends its last line.
+// P0d shim until P0a's parser lands: `who` may hold spaces, multi-line rows and row ids survive.
 const ACT_RE = /^-\s+(\S+)\s+·\s+(.+?)\s+·\s+(.+)$/;
 const ACT_ID_RE = /\s*<!-- id:(\S+) -->$/;
 function parseActivity(text: string): ActivityEntry[] {
   const out: ActivityEntry[] = [];
+  const finish = (e: ActivityEntry | undefined) => {
+    const id = e && ACT_ID_RE.exec(e.message);
+    if (e && id) { e.message = e.message.slice(0, id.index); e.id = id[1]!; }
+  };
   for (const line of text.split("\n")) {
+    const last = out[out.length - 1];
+    if (last && line.startsWith("  ")) { last.message += `\n${line.slice(2)}`; continue; }
     const m = ACT_RE.exec(line.trim());
     if (!m) continue;
-    const id = ACT_ID_RE.exec(m[3]!);
-    out.push({ at: m[1]!, who: m[2]!, message: id ? m[3]!.slice(0, id.index) : m[3]!, ...(id ? { id: id[1]! } : {}) });
+    finish(last);
+    out.push({ at: m[1]!, who: m[2]!, message: m[3]! });
   }
+  finish(out[out.length - 1]);
   return out;
 }
 
@@ -640,7 +661,7 @@ export function serializeSections(s: IssueSections): string {
     parts.push(`## Acceptance criteria\n\n${lines.join("\n")}`);
   }
   if (s.activity.length > 0) {
-    const lines = s.activity.map((e) => `- ${e.at} · ${e.who} · ${e.message}${e.id ? ` <!-- id:${e.id} -->` : ""}`);
+    const lines = s.activity.map((e) => `- ${e.at} · ${e.who} · ${e.message.replace(/\n/g, "\n  ")}${e.id ? ` <!-- id:${e.id} -->` : ""}`);
     parts.push(`## Activity\n\n${lines.join("\n")}`);
   }
   if (s.extra.trim()) parts.push(s.extra.trim());

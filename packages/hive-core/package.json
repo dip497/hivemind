@@ -11,6 +11,8 @@
     "./issue-id": "./src/issue-id.ts",
     "./storage": "./src/storage.ts",
     "./mirror": "./src/mirror.ts",
+    "./ingest": "./src/ingest.ts",
+    "./sync-lock": "./src/sync-lock.ts",
     "./query": "./src/query.ts",
     "./agent-context": "./src/agent-context.ts",
     "./registry": "./src/registry.ts",

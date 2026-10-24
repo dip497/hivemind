@@ -4,6 +4,7 @@
  */
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
+import type { IngestReport } from "@hivemind/core/ingest";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
@@ -75,6 +76,9 @@ export interface WorkspaceMethods {
   "issue.unlink": (root: string, id: string, other: string) => { removed: number };
   /** Into the host's workspace with prefix `prefix`. */
   "issue.move": (root: string, id: string, prefix: string, mode: "move" | "copy") => TransferResult;
+  /** Upsert issues mirrored from an external tracker (`source`, e.g. `jira:acme/PAY`) — what
+   *  `hive ingest` does, for a service on the drive socket. */
+  "issue.ingest": (root: string, source: string, records: unknown[], opts?: { dryRun?: boolean }) => IngestReport;
   /** The repo's review comments, resolved ones included. */
   "review.list": (repo: string) => ReviewComment[];
   /** Replace the repo's review comments. */

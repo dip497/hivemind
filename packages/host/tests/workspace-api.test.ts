@@ -11,6 +11,7 @@ import { Intents } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../src/domains.ts";
+import { mayCall } from "@hivemind/workspace-api/roles";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "hm-workspace-api-")));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -67,4 +68,20 @@ test("saving a repo's review comments with what is not a list is a bad request, 
   await result("review.save", repo, [comment]);
   for (const comments of [null, { c1: comment }, "[]"]) assert.equal(await codeOf("review.save", repo, comments), "BAD_REQUEST", JSON.stringify(comments));
   assert.deepEqual((await result<Array<{ id: string }>>("review.list", repo)).map((c) => c.id), ["c1"]);
+});
+
+test("a sync service at edit role mirrors a tracker's issues with issue.ingest; view is refused, and a malformed record writes nothing", async () => {
+  const root = await makeWorkspace();
+  const peer = (access: "view" | "edit") => ({ actor: { kind: "peer", person: "b".repeat(64), device: "d".repeat(64), access } as const, send: () => {}, closed: new AbortController().signal });
+  const record = { external: { id: "10423", key: "PAY-318", remoteUpdated: "2026-10-22T09:14:00.000+0000" }, title: "Retry failed webhooks", status: { id: "jira:10001", name: "To Do", category: "todo" } };
+  // a peer's role is checked by the peer layer, against the role table
+  assert.equal(mayCall({ access: "view" }, "issue.ingest"), false);
+  assert.equal(mayCall({ access: "edit" }, "issue.ingest"), true);
+  const bad = await server.answer("issue.ingest", [root, "jira:acme/PAY", [record, { external: { id: "1", key: "PAY-1" } }]], peer("edit"));
+  assert.equal("error" in bad && bad.error.code, "BAD_REQUEST");
+  assert.equal(fs.existsSync(path.join(root, "mirror")), false);
+  const ok = await server.answer("issue.ingest", [root, "jira:acme/PAY", [record]], peer("edit"));
+  assert.ok("result" in ok, JSON.stringify(ok));
+  assert.deepEqual((ok.result as { created: string[] }).created, ["PAY-318"]);
+  assert.equal((await result<Issue>("issue.read", root, "PAY-318")).title, "Retry failed webhooks");
 });

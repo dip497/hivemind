@@ -24,6 +24,8 @@ const LEAST: Record<string, Role> = {
   "file.read": "view",
   "issue.list": "view",
   "issue.read": "view",
+  // Mirroring a tracker's issues (a sync service at edit role, design jira-sync §5.4).
+  "issue.ingest": "edit",
   "review.list": "view",
   // Handing a branch of one's own to the host: it lands as a branch of its own, and a Diff tile
   // shows it (M4). Nothing of the host's is changed.

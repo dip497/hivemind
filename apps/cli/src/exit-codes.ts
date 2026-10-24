@@ -15,7 +15,7 @@ const EXIT_CODES = [
   { name: "timeout", exit: 4, codes: ["TIMEOUT"], meaning: "the wait ran out" },
   { name: "notFound", exit: 5, codes: ["NOT_FOUND", "NO_AGENT", "NO_ROOT"], meaning: "what it names is not there, or was closed: a tile, agent, frame, issue or workspace; or the tile runs no agent" },
   { name: "unauthorized", exit: 6, codes: ["FORBIDDEN", "PERSON_ONLY"], meaning: "not yours to do: a bad token, or only the person may: ask them" },
-  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; or the plugin changes only with its package" },
+  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE", "SYNC_LOCKED"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; the plugin changes only with its package; or another sync of that source is running" },
   { name: "waiting", exit: 8, codes: ["WAITING"], meaning: "the agent stopped to wait on an answer" },
   { name: "asleep", exit: 9, codes: ["ASLEEP"], meaning: "the agent is asleep: wake it with `hive ctl wake <tile>`" },
 ] as const;

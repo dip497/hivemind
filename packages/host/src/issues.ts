@@ -5,13 +5,14 @@
  * in the issue's activity, as the app's window has always signed it, and the agents' context file
  * is written again after it.
  */
-import { oneOf, shaped, text, written } from "@hivemind/workspace-api/protocol";
+import { ApiError, fields, flag, oneOf, shaped, text, written } from "@hivemind/workspace-api/protocol";
 import { named, type Domain } from "@hivemind/workspace-api/server";
 import type { Method } from "@hivemind/workspace-api/methods";
 import { IssuePatchZ, IssueStateZ, LinkTypeZ, NewIssueZ } from "@hivemind/core/types";
 import { commentOnIssue, createIssue, deleteIssue, listIssues, readIssue, updateIssue } from "@hivemind/core/storage";
 import { linkIssues, transferIssue, unlinkIssues } from "@hivemind/core/cross-repo";
 import { writeAgentContext } from "@hivemind/core/agent-context";
+import { ingestRecords } from "@hivemind/core/ingest";
 
 type IssueMethod = Extract<Method, `issue.${string}`>;
 
@@ -56,6 +57,17 @@ export const issues: Domain<IssueMethod> = {
     "issue.unlink": async (_, root, id, other) => ({ removed: await unlinkIssues(rootOf(root), idOf(id), text(other, "other"), "ui") }),
     "issue.move": (_, root, id, prefix, mode) =>
       transferIssue(rootOf(root), idOf(id), text(prefix, "prefix").toUpperCase(), { mode: oneOf(mode, "mode", ["move", "copy"] as const), actor: "ui" }),
+    "issue.ingest": (_, root, source, records, opts) => {
+      const r = rootOf(root);
+      if (!Array.isArray(records)) throw new ApiError("BAD_REQUEST", "records must be a list");
+      const dryRun = opts == null ? false : flag(fields(opts, "opts").dryRun, "opts.dryRun") === true;
+      // A record that doesn't parse is the caller's to fix, and nothing was written.
+      const run = ingestRecords(r, text(source, "source"), records, { dryRun }).catch((e: unknown) => {
+        const code = (e as { code?: unknown })?.code;
+        throw code === "bad_request" || code === "invalid_arg" ? new ApiError("BAD_REQUEST", (e as Error).message) : e;
+      });
+      return dryRun ? run : changed(r, run);
+    },
   },
   effects: {
     "issue.create": () => ({ target: (issue: { id?: string } | null) => issue?.id }),
@@ -66,5 +78,6 @@ export const issues: Domain<IssueMethod> = {
     "issue.link": (_root, id, other, type) => ({ target: between(id, other), detail: named(type) }),
     "issue.unlink": (_root, id, other) => ({ target: between(id, other) }),
     "issue.move": (_root, id, prefix, mode) => ({ target: named(id), detail: named(prefix) && `${mode === "copy" ? "copy" : "move"} to ${named(prefix)!.toUpperCase()}` }),
+    "issue.ingest": (_root, source) => ({ target: named(source) }),
   },
 };
