@@ -340,14 +340,62 @@ describe("parseSections", () => {
       { done: false, text: "todo item" },
     ]);
   });
-  test("an \"Acceptance criteria\" line that isn't the `##` heading stays in the description, with every line under it", () => {
+  test("plain `Acceptance criteria:` label inside description is split out", () => {
+    // Agents (hive_create_issue) embed the checklist under a plain label line
+    // inside the free-text description — not a `## ` heading. It must still
+    // reach the acceptanceCriteria section, and the real description must NOT
+    // include the checklist lines.
+    const s = parseSections(
+      "## Description\n\nReal desc text.\n\nAcceptance criteria:\n- [ ] first\n- [x] second\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created",
+    );
+    expect(s.description).toBe("Real desc text.");
+    expect(s.acceptanceCriteria).toEqual([
+      { done: false, text: "first" },
+      { done: true, text: "second" },
+    ]);
+    expect(s.activity.length).toBe(1);
+  });
+  test("bold `**Acceptance criteria:**` label is split out, blank lines before its checkboxes allowed", () => {
+    const s = parseSections(
+      "## Description\n\nD.\n\n**Acceptance criteria:**\n\n- [ ] x",
+    );
+    expect(s.description).toBe("D.");
+    expect(s.acceptanceCriteria).toEqual([{ done: false, text: "x" }]);
+  });
+  test("an acceptance-criteria label line is found in linear time", () => {
+    const s = parseSections("Intro.\r\n\r\n  ### Acceptance  criteria : **\r\n- [ ] y\r\n");
+    expect(s.description).toBe("Intro.");
+    expect(s.acceptanceCriteria).toEqual([{ done: false, text: "y" }]);
+    const t = performance.now();
+    const long = parseSections(`acceptance criteria${" ".repeat(50_000)}x\n${"Acceptance criteria\t".repeat(5_000)}`);
+    expect(performance.now() - t).toBeLessThan(100);
+    expect(long.acceptanceCriteria).toEqual([]);
+  });
+  test("a label line stays in the description, with every line under it, when no checkbox follows it or the issue is mirrored", () => {
     // Jira descriptions carry exactly this (jira-fake OPS-7: a bold paragraph over a plain bullet
     // list). Splitting it out kept only checkbox lines and lost the rest on the next write.
-    for (const label of ["Acceptance criteria", "Acceptance criteria:", "**Acceptance criteria**", "**Acceptance criteria:**", "### Acceptance criteria"]) {
-      const desc = `Retry failed webhooks.\n\n${label}\n\n- Retries back off\n- [ ] a checkbox too`;
-      const s = parseSections(`## Description\n\n${desc}\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created`);
-      expect([label, s.description, s.acceptanceCriteria]).toEqual([label, desc, []]);
+    const cases = [
+      { mirrored: false, desc: "Retry failed webhooks.\n\n**Acceptance criteria**\n\n- Retries back off\n- [ ] a checkbox later" },
+      { mirrored: true, desc: "Retry failed webhooks.\n\nAcceptance criteria:\n\n- [ ] from Jira\n- [x] also from Jira" },
+    ];
+    for (const { mirrored, desc } of cases) {
+      const s = parseSections(`## Description\n\n${desc}\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created`, { mirrored });
+      expect([mirrored, s.description, s.acceptanceCriteria, s.activity.length]).toEqual([mirrored, desc, [], 1]);
     }
+  });
+  test("a mirrored issue's description keeps headings named like hive's sections", () => {
+    // The tracker's text may hold `### Activity`, `# Description`, even `## Activity`: only hive's
+    // own `##` headings split a mirrored issue, and Activity is the last one, as hive writes it.
+    const desc = "Intro.\n\n### Activity\n\nWhat the user does.\n\n# Description\n\n## Description\n\nMore.\n\n## Activity\n\n- not a row, Jira's own list";
+    const body = `## Description\n\n${desc}\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · Jane Doe (jira) · created`;
+    const s = parseSections(body, { mirrored: true });
+    expect([s.description, s.activity.map((a) => a.who), s.activityLayout]).toEqual([desc, ["Jane Doe (jira)"], undefined]);
+    expect(serializeSections(s)).toBe(body + "\n");
+    // With no description, a lower-level heading in a section hive doesn't model stays there.
+    const noDesc = "## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created\n\n## Links\n\n### Description\n\nx";
+    expect(parseSections(noDesc, { mirrored: true })).toMatchObject({ description: "", extra: "## Links\n\n### Description\n\nx" });
+    // A local issue keeps today's tolerant matching: any level splits.
+    expect(parseSections(body).description).toBe("Intro.");
   });
   test("finding sections stays linear on long lines", () => {
     const t = performance.now();

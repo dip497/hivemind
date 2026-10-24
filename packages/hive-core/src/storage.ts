@@ -358,7 +358,7 @@ export function parseIssueFile(p: string, raw: string): Issue {
   if (!fmResult.success) {
     throw new HiveError("bad_issue", `${p}: invalid frontmatter: ${z.prettifyError(fmResult.error)}`);
   }
-  const sections = parseSections(parsed.content);
+  const sections = parseSections(parsed.content, { mirrored: fmResult.data.external !== undefined });
   return {
     ...fmResult.data,
     path: p,
@@ -491,22 +491,31 @@ async function walk(dir: string, ext: string): Promise<string[]> {
 
 // ── markdown body parsing ──────────────────────────────────────────
 
-// Accept any heading level (# … ######) so users can write `# Description`
-// without breaking parse. Serializer always emits `##`, so the file
-// normalises after one round-trip.
+// A local issue's headings may be at any level (# … ######), so users can write `# Description`
+// without breaking parse. Serializer always emits `##`, so the file normalises after one
+// round-trip.
 const SEC_DESC = /^#{1,6}\s+Description\s*$/im;
-// Only the real `## Acceptance criteria` heading. A plain or bold "Acceptance criteria" line is
-// description text: Jira descriptions hold exactly that line over a plain bullet list (jira-fake
-// OPS-7), and splitting it out dropped every line under it that wasn't a checkbox.
-const SEC_AC = /^##[ \t]+Acceptance[ \t]+criteria[ \t]*$/im;
 const SEC_ACT = /^#{1,6}\s+Activity\s*$/im;
+// A mirrored issue's description is the tracker's text, which holds headings of its own, so its
+// sections are found only at the level hive writes, and Activity — always written last — is the
+// last `## Activity`.
+const MIRRORED_DESC = /^##[ \t]+Description[ \t]*$/im;
+const MIRRORED_ACT = /^##[ \t]+Activity[ \t]*$/gim;
+const SEC_AC = /^##[ \t]+Acceptance[ \t]+criteria[ \t]*$/im;
+// A local issue also takes a plain or bold label line (`Acceptance criteria:` /
+// `**Acceptance criteria:**`) followed by checkboxes. Agents embed the checklist under one inside
+// the description, and the Acceptance Criteria panel showed empty. Only when a checkbox follows
+// it, and never in a mirrored issue: Jira descriptions hold that line over plain bullets
+// (jira-fake OPS-7), which must stay in the description. Tested one trimmed line at a time with
+// no overlapping quantifiers, so it stays linear.
+const SEC_AC_LABEL = /^(?:#{1,6}\s+|\*\*\s*)?Acceptance\s+criteria\s*(?::\s*)?\**$/i;
 /** A `#` or `##` heading inside Acceptance criteria or Activity starts a section we don't model. */
 const OTHER_SECTION = /^#{1,2}[ \t]+\S/;
 
 /** Split the body into our three known sections + extra. Tolerant: missing sections become empty.
  *  Lossless: what a section holds beyond its entries is kept in its layout or in `extra`, so
  *  `serializeSections` writes back what it read. */
-export function parseSections(body: string): IssueSections {
+export function parseSections(body: string, opts: { mirrored?: boolean } = {}): IssueSections {
   const sections: IssueSections = {
     description: "",
     acceptanceCriteria: [],
@@ -522,9 +531,18 @@ export function parseSections(body: string): IssueSections {
       heads.push({ name, idx: m.index, end: m.index + m[0].length });
     }
   };
-  push("desc", SEC_DESC);
+  push("desc", opts.mirrored ? MIRRORED_DESC : SEC_DESC);
   push("ac", SEC_AC);
-  push("act", SEC_ACT);
+  if (!opts.mirrored && !heads.some((h) => h.name === "ac")) {
+    const label = acceptanceLabel(body);
+    if (label) heads.push({ name: "ac", ...label });
+  }
+  if (opts.mirrored) {
+    const last = [...body.matchAll(MIRRORED_ACT)].pop();
+    if (last) heads.push({ name: "act", idx: last.index, end: last.index + last[0].length });
+  } else {
+    push("act", SEC_ACT);
+  }
   heads.sort((a, b) => a.idx - b.idx);
 
   if (heads.length === 0) {
@@ -559,6 +577,22 @@ export function parseSections(body: string): IssueSections {
     else if (pre) sections.description = `${pre}\n\n${sections.description}`;
   }
   return sections;
+}
+
+/** The first label line that has a checkbox as its next non-blank line. */
+function acceptanceLabel(body: string): { idx: number; end: number } | null {
+  const lines = body.split("\n");
+  let at = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (SEC_AC_LABEL.test(line.trim())) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j]!.trim()) j++;
+      if (j < lines.length && parseTodo(lines[j]!.trim())) return { idx: at, end: at + line.length };
+    }
+    at += line.length + 1;
+  }
+  return null;
 }
 
 /** A section's lines without the blank lines around them (an indented first line keeps its indent). */
