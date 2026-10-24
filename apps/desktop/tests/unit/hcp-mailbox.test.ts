@@ -98,6 +98,17 @@ test("a tile we never heard a turn from (codex/opencode — no hooks) delivers i
   assert.deepEqual(writes, ["report", "\r"], "unknown ⇒ idle: no regression for hookless agents");
 });
 
+test("two messages typed at once into one tile are each sent alone: the second waits for the first's Enter", async () => {
+  // Typed between the first's text and its Enter, the second was glued to it and its own Enter
+  // sent an empty line: a phone's "/clear" then "a fresh start" reached the agent as
+  // "/cleara fresh start".
+  const { mb, writes } = harness();
+  assert.equal(mb.deliver("hm:tile-codex-9", "/clear"), true);
+  assert.equal(mb.deliver("hm:tile-codex-9", "a fresh start"), true);
+  await settle();
+  assert.deepEqual(writes, ["/clear", "\r", "a fresh start", "\r"]);
+});
+
 test("dead tile while idle reports failure (so agent.send can raise NOT_FOUND)", () => {
   const { mb } = harness(false);
   assert.equal(mb.deliver(PID, "x"), false);
