@@ -22,7 +22,7 @@ const FROZEN = ["bg", "bg2", "bg3", "bg4", "fg", "fg2", "fg3", "line", "line2", 
 // The page's tokens: every --color-* the stylesheet has, each set.
 const tokens = new Map([...FROZEN, "select", "terminal-bg", "status-working"].map((k, i) => [`--color-${k}`, `rgb(${i}, 0, 0)`]));
 // theme-store paints the page once on import.
-(globalThis as unknown as { document: unknown }).document = { documentElement: { classList: { toggle() {} }, dataset: {}, style: { setProperty() {} } } };
+(globalThis as unknown as { document: unknown }).document = { documentElement: { classList: { toggle() {} }, dataset: {}, style: { setProperty() {}, removeProperty() {} } } };
 (globalThis as unknown as { getComputedStyle: unknown }).getComputedStyle = () => ({ getPropertyValue: (k: string) => tokens.get(k) ?? "" });
 const { readTheme } = await import("../../src/renderer/src/workspace/plugin-theme");
 
