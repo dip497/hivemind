@@ -19,7 +19,8 @@
  *     names, agents' status, events, commands and requests, each held to the `permissions` its
  *     manifest declares, the `settings` it declares as the person set them, and its saved state
  *     (`hm.hello.layout`, `hm.setLayout`), kept per tile;
- *   - `host`: what only a tile has: its folder, programs run there, and opening things beside it.
+ *   - `host`: what only a tile has: its folder, programs run there, opening things beside it, and
+ *     its own plugin's service (`host.call`).
  *
  * This contract changes only with `TILE_API_VERSION`, which a plugin names as `apiVersion`.
  */
@@ -65,6 +66,13 @@ export interface TileHost {
   openFile(path: string): void;
   /** Open a web page in the frame's browser. */
   openUrl(url: string): void;
+  /**
+   * Run a command of this plugin's own service (its manifest's `service`, which registers its
+   * commands with `plugin.serve`): what the service answered, or an error saying why there is
+   * none, as when the person has not switched the service on for this workspace. One JSON
+   * argument, at most 30 s. A tile reaches only its own plugin's service. An older app has none.
+   */
+  call(command: string, args?: unknown): Promise<unknown>;
 }
 
 export interface TileProps {
