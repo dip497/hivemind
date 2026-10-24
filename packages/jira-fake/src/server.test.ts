@@ -565,6 +565,35 @@ describe("writes", () => {
     expect([w.status, w.body.body, issueOf(dc, "CORE-1").comments.at(-1)!.body]).toEqual([201, "h3. Done\n* (/) shipped", { wiki: "h3. Done\n* (/) shipped" }]);
   });
 
+  test("PUT comment: only the author edits, the body stays ADF on v3, and the edit stamps both updated times", async () => {
+    const f = await fake("cloud-scrum-company");
+    const adf = (text: string) => ({ type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
+    expect(await put(f, "/rest/api/3/issue/PAY-318/comment/10023", { body: adf("x") })).toMatchObject({ status: 403 });
+    clock = NOW - 60_000;
+    const mine = (await post(f, "/rest/api/3/issue/PAY-318/comment", { body: adf("first") })).body;
+    clock = NOW;
+    expect(await put(f, `/rest/api/3/issue/PAY-318/comment/${mine.id}`, { body: "plain" })).toMatchObject({ status: 400 });
+    const r = await put(f, `/rest/api/3/issue/PAY-318/comment/${mine.id}`, { body: adf("second") });
+    expect([r.status, r.body.body, r.body.created, r.body.updated, issueOf(f, "PAY-318").updated]).toEqual([200, adf("second"), "2026-10-24T07:59:00.000+0000", "2026-10-24T08:00:00.000+0000", "2026-10-24T08:00:00.000+0000"]);
+    expect((await put(f, "/rest/api/3/issue/PAY-318/comment/1", { body: adf("x") })).status).toBe(404);
+  });
+
+  test("PUT issue: summary, labels, description and assignee, each change recorded; other fields and bad values are 400 with nothing applied", async () => {
+    const f = await fake("cloud-scrum-company");
+    const before = structuredClone(issueOf(f, "PAY-318"));
+    const refused = await put(f, "/rest/api/3/issue/PAY-318", { fields: { summary: "New", priority: { name: "Low" }, labels: ["has space"] } });
+    expect(refused).toMatchObject({ status: 400, body: { errors: { priority: expect.stringContaining("cannot be set"), labels: "Labels must be strings without spaces." } } });
+    expect(issueOf(f, "PAY-318")).toEqual(before);
+    const desc = { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text: "d" }] }] };
+    expect((await put(f, "/rest/api/3/issue/PAY-318", { fields: { summary: "New", labels: ["x", "x", "y"], description: desc, assignee: { accountId: ME } } })).status).toBe(204);
+    const i = issueOf(f, "PAY-318");
+    expect([i.summary, i.labels, i.description, i.assignee, i.updated]).toEqual(["New", ["x", "y"], { adf: desc }, ME, "2026-10-24T08:00:00.000+0000"]);
+    expect(i.changelog.slice(-2).flatMap((h) => h.items.map((x) => x.field))).toEqual(["assignee", "summary", "labels", "description"]);
+    const noEdit = await fake("cloud-jwm-noboard");
+    noEdit.site.permissions.MKT = noEdit.site.permissions.MKT!.filter((p) => p !== "EDIT_ISSUES");
+    expect((await put(noEdit, "/rest/api/3/issue/MKT-1", { fields: { summary: "x" } })).status).toBe(403);
+  });
+
   test("remote links: upsert by globalId nulls omitted fields, 413 past the cap, delete by globalId", async () => {
     const f = await fake("cloud-scrum-company", { limits: { remoteLinks: 2 } });
     const gid = "github-pr:acme/payments#1201";

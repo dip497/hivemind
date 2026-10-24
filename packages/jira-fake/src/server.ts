@@ -70,8 +70,16 @@ export interface FakeJira {
   credentials: FakeJiraCredentials;
   /** The Authorization header value for a credential kind (default: classic on Cloud, PAT on DC). */
   authorization(kind?: "classic" | "scoped" | "pat"): string;
+  /**
+   * Answers one REST call in-process, as the gateway would for an authorised caller: faults and
+   * write limits apply, `requests` doesn't log it. The fake Rovo MCP server reads and writes
+   * through this, so both transports see one Jira.
+   */
+  invoke(method: string, pathAndQuery: string, body?: unknown): JiraReply;
   close(): Promise<void>;
 }
+
+export interface JiraReply { status: number; body: unknown; headers: Record<string, string> }
 
 const PERMISSION_NAMES: Record<string, string> = {
   BROWSE_PROJECTS: "Browse Projects", TRANSITION_ISSUES: "Transition Issues", ASSIGN_ISSUES: "Assign Issues", ASSIGNABLE_USER: "Assignable User",
@@ -575,7 +583,10 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
     const b = (body ?? {}) as { accountId?: string | null; name?: string | null; key?: string | null };
     const field = isCloud ? "accountId" : "name" in b ? "name" : "key";
     if (!(field in b)) return errors(400, [], { assignee: `The ${isCloud ? "accountId" : "name"} is required.` });
-    const ref = b[field as "accountId"] ?? null;
+    return assign(i, b[field as "accountId"] ?? null) ?? empty(204);
+  }));
+  /** Sets the assignee (null or "-1" = unassigned); a 400 Reply when the user can't be assigned. */
+  const assign = (i: SiteIssue, ref: string | null): Reply | undefined => {
     let next: string | null = null;
     if (ref !== null && ref !== "-1") {
       const u = findUser(site, ref);
@@ -584,12 +595,47 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
       if (!assignable) return errors(400, [], { assignee: `User '${u.displayName}' cannot be assigned issues.` });
       next = userRef(site, u);
     }
-    if (next === i.assignee) return empty(204);
+    if (next === i.assignee) return undefined;
     remember(i);
     const name = (r: string | null) => findUser(site, r)?.displayName ?? null;
     history(i, [{ field: "assignee", fieldId: "assignee", from: i.assignee, fromString: name(i.assignee), to: next, toString: name(next) }]);
     i.assignee = next;
     touch(i);
+    return undefined;
+  };
+  // Edit: summary, description, labels and assignee, the fields the sync's push owns (design §8.1).
+  route("PUT", "/rest/api/{v}/issue/:key", withIssue(({ c, body }, i) => {
+    const limited = writeGate(i);
+    if (limited) return limited;
+    if (!can(i.project, "EDIT_ISSUES")) return errors(403, ["You do not have permission to edit this issue."]);
+    const fields = ((body ?? {}) as { fields?: Json }).fields ?? {};
+    const errs: Record<string, string> = {};
+    for (const k of Object.keys(fields)) if (!["summary", "description", "labels", "assignee"].includes(k)) errs[k] = `Field '${k}' cannot be set. It is not on the appropriate screen, or unknown.`;
+    if ("summary" in fields && (typeof fields.summary !== "string" || fields.summary.trim() === "")) errs.summary = "You must specify a summary of the issue.";
+    if ("labels" in fields && (!Array.isArray(fields.labels) || fields.labels.some((l) => typeof l !== "string" || /\s/.test(l)))) errs.labels = "Labels must be strings without spaces.";
+    const d = fields.description as { type?: string } | string | null | undefined;
+    if ("description" in fields && d !== null && (c.v === 3 ? typeof d !== "object" || d?.type !== "doc" : typeof d !== "string")) errs.description = c.v === 3 ? "Operation value must be an Atlassian Document (see the Atlassian Document Format)" : "Operation value must be a string";
+    if (Object.keys(errs).length) return errors(400, [], errs);
+    if ("assignee" in fields) {
+      const a = fields.assignee as { accountId?: string | null; name?: string | null } | null;
+      const refused = assign(i, a === null ? null : (a.accountId ?? a.name ?? null));
+      if (refused) return refused;
+    }
+    const items: SiteIssue["changelog"][number]["items"] = [];
+    if ("summary" in fields && fields.summary !== i.summary) {
+      items.push({ field: "summary", fieldId: "summary", from: null, fromString: i.summary, to: null, toString: fields.summary as string });
+      i.summary = fields.summary as string;
+    }
+    if ("labels" in fields) {
+      const next = [...new Set(fields.labels as string[])];
+      if (next.join(" ") !== i.labels.join(" ")) items.push({ field: "labels", fieldId: "labels", from: null, fromString: i.labels.join(" "), to: null, toString: next.join(" ") });
+      i.labels = next;
+    }
+    if ("description" in fields) {
+      items.push({ field: "description", fieldId: "description", from: null, fromString: null, to: null, toString: null });
+      i.description = d === null ? null : isCloud ? { adf: c.v === 3 ? d : textToAdf(String(d)) } : { wiki: String(d) };
+    }
+    if (items.length) { remember(i); history(i, items); touch(i); }
     return empty(204);
   }));
   route("POST", "/rest/api/{v}/issue/:key/comment", withIssue(({ c, body }, i) => {
@@ -607,6 +653,21 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
     i.comments.push(cm);
     touch(i);
     return json(201, commentJson(c, i, cm));
+  }));
+  route("PUT", "/rest/api/{v}/issue/:key/comment/:id", withIssue(({ c, body, p }, i) => {
+    const limited = writeGate(i);
+    if (limited) return limited;
+    const cm = i.comments.find((x) => x.id === p.id);
+    if (!cm) return errors(404, ["Can not find a comment for the id: " + p.id + "."]);
+    if (cm.author !== meRef) return errors(403, ["You do not have the permission to edit this comment."]);
+    const b = (body ?? {}) as { body?: unknown };
+    if (c.v === 3 && (b.body as { type?: string } | undefined)?.type !== "doc") return errors(400, [], { comment: "Operation value must be an Atlassian Document (see the Atlassian Document Format)" });
+    if (c.v === 2 && (typeof b.body !== "string" || b.body.trim() === "")) return errors(400, [], { comment: "Comment body can not be empty!" });
+    remember(i);
+    cm.body = isCloud ? { adf: c.v === 3 ? b.body : textToAdf(String(b.body)) } : { wiki: String(b.body) };
+    cm.updated = formatJiraTime(now());
+    touch(i);
+    return json(200, commentJson(c, i, cm));
   }));
   const linkJson = (c: RenderContext, i: SiteIssue, l: SiteIssue["remoteLinks"][number]) => dropNulls({
     id: l.id, self: `${c.base}/rest/api/${c.v}/issue/${i.key}/remotelink/${l.id}`, globalId: l.globalId,
@@ -831,6 +892,16 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
     return errors(404, ["null for uri: " + path]);
   };
 
+  /** A scripted fault for this call, or the route's answer (with the fault's headers when it is a 2xx one). */
+  const answer = (method: string, path: string, x: Omit<Ctx, "p" | "c">, base: string): Reply => {
+    const fault = faultFor(method, path);
+    if (fault && (fault.status < 200 || fault.status > 299)) {
+      return new Reply(fault.status, fault.body ?? { errorMessages: [fault.status === 429 ? "Rate limit exceeded." : fault.name], errors: {} }, fault.headers);
+    }
+    const r = dispatch(method, path, x, base);
+    return fault ? r.with(fault.headers) : r;
+  };
+
   const handle = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://fake");
     let path = url.pathname;
@@ -858,12 +929,7 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
     if (raw) {
       try { parsedBody = JSON.parse(raw); } catch { return send(errors(400, ["Unexpected character in the request body: it must be JSON."])); }
     }
-    const fault = faultFor(method, path);
-    if (fault && (fault.status < 200 || fault.status > 299)) {
-      return send(new Reply(fault.status, fault.body ?? { errorMessages: [fault.status === 429 ? "Rate limit exceeded." : fault.name], errors: {} }, fault.headers));
-    }
-    const r = dispatch(method, path, { q: url.searchParams, body: parsedBody, raw }, base);
-    send(fault ? r.with(fault.headers) : r);
+    send(answer(method, path, { q: url.searchParams, body: parsedBody, raw }, base));
   };
 
   const server = createServer((req, res) => { handle(req, res).catch((e: unknown) => { write(res, errors(500, [String(e instanceof Error ? e.stack : e)])); }); });
@@ -878,6 +944,11 @@ export async function createFakeJira(input: Site, opts: FakeJiraOptions = {}): P
     authorization(kind = isCloud ? "classic" : "pat") {
       if (kind === "pat") return `Bearer ${creds.pat}`;
       return `Basic ${Buffer.from(`${creds.email}:${kind === "scoped" ? creds.scopedToken : creds.classicToken}`).toString("base64")}`;
+    },
+    invoke(method, pathAndQuery, body) {
+      const u = new URL(pathAndQuery, "http://fake");
+      const r = answer(method.toUpperCase(), u.pathname, { q: u.searchParams, body, raw: body === undefined ? "" : JSON.stringify(body) }, isCloud ? `${url}/ex/jira/${site.cloudId}` : url);
+      return { status: r.status, body: r.body, headers: r.headers };
     },
     close: () => new Promise<void>((resolve) => {
       server.close(() => resolve());
