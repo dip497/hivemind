@@ -4,7 +4,10 @@
  * sounds, so it does not.
  */
 
-export type SoundMoment = "needs" | "done" | "error";
+import type { NoticeKind } from "@hivemind/core/notification-settings";
+
+/** The moment a sound is for: the kind of change it tells. */
+export type SoundMoment = NoticeKind;
 
 /** What became of a sound. */
 export interface SoundResult {

@@ -149,7 +149,8 @@ The `views.layers` values are what the Layers panel's **View** menu sets.
 ## notifications
 
 Change them on **Settings → Notifications** ([Know who is waiting](/know-who-is-waiting)), or with
-`hive notifications set`. Only the person changes them: an agent is refused.
+`hive notifications set` or `hive config set`. Both refuse a path not listed here and a value not of
+its kind. Only the person changes them: an agent is refused.
 
 | Path | Default | Means |
 |---|---|---|
@@ -162,7 +163,7 @@ Change them on **Settings → Notifications** ([Know who is waiting](/know-who-i
 | `notifications.sounds.needs` | `true` | a sound when an agent needs you |
 | `notifications.sounds.done`, `.error` | `false` | a sound when an agent finishes, or fails |
 | `notifications.volume` | `0.6` | 0 to 1 |
-| `notifications.dnd.enabled` | `false` | Do Not Disturb: mutes finished and failed, never needs you |
+| `notifications.dnd.enabled` | `false` | Do Not Disturb: mutes finished and failed (toasts, popups, sounds, the spoken line), never needs you |
 | `notifications.dnd.start`, `.end` | `22:00`, `07:00` | its times, as `HH:MM` in your local time |
 
 ## profile, network, browserApp, quit

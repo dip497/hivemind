@@ -9,7 +9,7 @@ import { shouldNotify } from "../../shared/notification-settings.js";
 import type { FrameState } from "./canvas-persistence";
 import { statusLook } from "./workspace/status-look";
 import { subscribeWait, waitOf, type AgentWait } from "./agent-waits";
-import { lineFor } from "./row-line";
+import { lineFor } from "../../shared/line-for";
 import { decidable } from "./wait-decide";
 import { oneLine } from "@hivemind/agent-host/one-line";
 
@@ -238,6 +238,7 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
           label: e.label,
           kind,
           ...(selected ? { selected } : {}),
+          ...(e.since !== undefined ? { since: e.since } : {}),
           ...(fr?.title ? { frame: fr.title } : {}),
           ...(repo ? { repo } : {}),
           ...(crashed

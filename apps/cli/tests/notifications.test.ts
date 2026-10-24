@@ -40,12 +40,26 @@ describe("hive notifications", () => {
       ["volume", "1.5", "volume is from 0 to 1"],
       ["volume", "", "volume is from 0 to 1"],
       ["dnd.end", "7am", "dnd.end is a time of day as HH:MM"],
+      // An object's own names only, never what every object inherits.
+      ["toString", "12:00", 'no notification setting "toString"'],
+      ["kinds.constructor", "off", 'no notification setting "kinds.constructor"'],
     ];
     for (const [key, value, why] of bad) {
       const r = hive(["notifications", "set", key, value, "--json"], { env });
       expect([key, r.code, JSON.parse(r.stderr).error.message]).toEqual([key, 2, expect.stringContaining(why)]);
     }
-    expect(JSON.parse(fs.readFileSync(file(), "utf8")).notifications.volume).toBe(0.8);
+    // `hive config set` on the section is held to the same rules, a group's keys too.
+    const viaConfig: [string, string, string][] = [
+      ["notifications.volume", "2", "volume is from 0 to 1"],
+      ["notifications.dnd", '{"start":"25:00"}', "dnd.start is a time of day as HH:MM"],
+      ["notifications.sounds", '{"started":true}', 'no notification setting "sounds.started"'],
+    ];
+    for (const [key, value, why] of viaConfig) {
+      const r = hive(["config", "set", key, value, "--json"], { env });
+      expect([key, r.code, JSON.parse(r.stderr).error.message]).toEqual([key, 2, expect.stringContaining(why)]);
+    }
+    const stored = JSON.parse(fs.readFileSync(file(), "utf8")).notifications;
+    expect([stored.volume, stored.dnd.start, stored.sounds.started, Object.hasOwn(stored, "toString")]).toEqual([0.8, "23:30", undefined, false]);
   });
 
   test("play and recent with no app running are UNAVAILABLE and say to open the app", () => {

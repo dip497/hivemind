@@ -17,11 +17,8 @@ import {
 import { importedExtra, presetPaths, withPreset } from "@hivemind/core/appearance-extra";
 import { applyTheme, listInstalledThemes, revertTheme, themeStatus } from "@hivemind/core/theme-apply";
 import { err, ok } from "../format.js";
-import { driveCall } from "../drive.js";
+import { reloadApp } from "../drive.js";
 
-async function reloadApp(): Promise<boolean> {
-  try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
-}
 const note = (r: boolean) => (r ? "app reloaded" : "app not running — applies on next start");
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never => err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e));
 

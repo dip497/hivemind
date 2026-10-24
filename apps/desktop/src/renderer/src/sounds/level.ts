@@ -1,6 +1,7 @@
 /**
  * How loud and how long a sound may be: every sound the app plays peaks at PEAK (−6 dBFS) and lasts
- * at most MAX_SECONDS, so a theme's pack can never be louder or longer than the built-in sounds.
+ * at most MAX_SECONDS, so a theme's pack is never louder than the built-in sounds, and is cut to 3 s
+ * (the built-ins last at most 0.61 s).
  * Pure: it works on the samples, so the player (and a test) gives it any decoded buffer.
  */
 

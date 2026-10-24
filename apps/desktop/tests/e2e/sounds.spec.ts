@@ -1,9 +1,11 @@
 // Sounds and the notice desk (docs/plans/sounds-and-themes.md S1–S3, T4): with two windows open,
 // ten stand-in agents (fixtures/fake-agent.cjs) that finish together make one burst in main's
-// Recent, one sound for ten agents, played, and their OS pop-ups gathered (the first, then one for
-// the other nine). Play in Settings and `hive notifications play` add played entries; an applied
-// theme's sound plays instead of the built-in one and Recent names its pack, until it is gone.
-// Screenshots of the Sounds section go to $SOUNDS_SHOTS when set.
+// Recent, played in one window only, for all ten (one of them selected in a window that lost the
+// focus), and their OS pop-ups gathered (the first, then one for the other nine). Play in Settings
+// and `hive notifications play` add played entries; an applied theme's sound plays instead of the
+// built-in one and Recent names its pack, a file that does not decode plays the built-in and says
+// why, and a window gets no file but the applied theme's. Screenshots of the Sounds section go to
+// $SOUNDS_SHOTS when set.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -103,23 +105,38 @@ test("ten agents finishing together in two windows make one burst: one sound for
   test.setTimeout(180_000);
   await openNotifications();
   await page.getByRole("switch", { name: "Play a sound" }).click();
+  // A change the window has not heard of yet (a hand edit, a `hive` whose reload is on its way):
+  // the switch below writes its own setting only, so this one stays.
+  const settingsFile = path.join(XDG, "hivemind", "settings.json");
+  await expect.poll(() => JSON.parse(fs.readFileSync(settingsFile, "utf8")).notifications?.sound, { timeout: 5_000 }).toBe(true);
+  const raw = JSON.parse(fs.readFileSync(settingsFile, "utf8"));
+  fs.writeFileSync(settingsFile, JSON.stringify({ ...raw, notifications: { ...raw.notifications, popupText: true } }, null, 2));
   await page.getByRole("switch", { name: /^Sound on Finished/ }).click();
   await expect.poll(() => hive(["notifications", "show", "--json"]).json?.sounds?.done, { timeout: 5_000 }).toBe(true);
+  expect(JSON.parse(fs.readFileSync(settingsFile, "utf8")).notifications.popupText).toBe(true);
+  expect(hive(["notifications", "set", "popupText", "off"]).code).toBe(0);
   if (SHOTS) await page.locator("[data-settings-sounds]").screenshot({ path: path.join(SHOTS, "sounds-dark.png") });
   await page.keyboard.press("Escape");
 
   const [second] = await Promise.all([app.waitForEvent("window"), page.evaluate(() => window.hive.newWindow())]);
   await second.waitForSelector(".react-flow", { timeout: 15_000 });
+  // How many sounds each window is asked to play: main sends each to one window only.
+  for (const w of [page, second]) await w.evaluate(() => { const c = window as unknown as { soundsHeard: number }; c.soundsHeard = 0; window.hive.onSound?.(() => { c.soundsHeard++; }); });
 
-  // Each waits for one file, so all ten finish at once.
+  // Each waits for one file, so all ten finish at once. Reported (no `--no-report`): a workflow's
+  // background worker tells no one when it finishes.
   const go = path.join(repo, ".go");
   const tiles: string[] = [];
   for (let i = 0; i < 10; i++) {
-    const r = hive(["ctl", "spawn", "--agent", "claude", "--name", `sound-${i}`, "--prompt", `while [ ! -f ${go} ]; do sleep 0.05; done; echo done-${i}`, "--no-report", "--json"]);
+    const r = hive(["ctl", "spawn", "--agent", "claude", "--name", `sound-${i}`, "--prompt", `while [ ! -f ${go} ]; do sleep 0.05; done; echo done-${i}`, "--json"]);
     expect(r.code, r.stderr).toBe(0);
     tiles.push(r.json.tile);
   }
   for (const t of tiles) await expect(page.locator(`.hm-layers [data-layer-tile="${t}"] [aria-label="working"]`)).toHaveCount(1, { timeout: 30_000 });
+  // One of them selected in this window: looked at only while the window has the focus, so its
+  // finish still counts in the sound once the person is away.
+  await page.locator(`.hm-layers [data-layer-tile="${tiles[0]}"]`).click();
+  await expect(page.locator(`.hm-layers [data-layer-tile="${tiles[0]}"]`)).toHaveAttribute("data-active", "true");
   // Away from the app: OS pop-ups show only while no window has the focus.
   await app.evaluate(({ BrowserWindow }) => { for (const w of BrowserWindow.getAllWindows()) w.blur(); });
   fs.writeFileSync(go, "");
@@ -129,6 +146,8 @@ test("ten agents finishing together in two windows make one burst: one sound for
   await expect.poll(done, { timeout: 30_000 }).toEqual([expect.objectContaining({ moment: "done", agents: 10, sound: "played", count: 10 })]);
   // The pop-ups: the first at once, the other nine gathered into one 1.5 s later.
   await expect.poll(() => done()[0]?.popups, { timeout: 5_000 }).toBe(2);
+  const heard = await Promise.all([page, second].map((w) => w.evaluate(() => (window as unknown as { soundsHeard: number }).soundsHeard)));
+  expect(heard.filter((n) => n > 0), `sounds per window: ${heard}`).toHaveLength(1);
   // Settings lists the same burst.
   await openNotifications();
   await expect.poll(async () => (await recent()).filter((r) => r.moment === "done"), { timeout: 5_000 })
@@ -154,10 +173,33 @@ test("an applied theme's sound plays instead of the built-in one, and Recent nam
     fs.writeFileSync(settings, JSON.stringify({ ...raw, appearanceExtra: { ...(raw.appearanceExtra ?? {}), theme } }, null, 2));
     expect(hive(["notifications", "set", "volume", "0.6"]).code).toBe(0); // and the app reloads
   };
-  withTheme({ id: "@e2e/pack/harbour", name: "Harbour", version: "1.0.0", appliedAt: Date.now(), sounds: { needs: "hivemedia://media/theme-e2e-needs.wav" } });
+  const harbour = (sounds: Record<string, string>) => ({
+    id: "@e2e/pack/harbour", name: " Harbour ", version: "1.0.0", appliedAt: Date.now(), before: { appearance: {}, extra: {} }, sounds,
+  });
+  // Over the 1 MiB a window is handed: refused before it is read.
+  fs.writeFileSync(path.join(media, "theme-e2e-big.wav"), Buffer.alloc(1024 * 1024 + 1));
+  withTheme(harbour({ needs: "hivemedia://media/theme-e2e-needs.wav", error: "hivemedia://media/theme-e2e-big.wav" }));
   expect(hive(["notifications", "play", "needs", "--json"]).json).toMatchObject({ played: true, pack: "Harbour" });
   await openNotifications();
   await expect.poll(async () => (await recent())[0], { timeout: 10_000 }).toMatchObject({ moment: "needs", sound: "played", pack: "Harbour" });
+
+  // A window gets the applied theme's sounds and no other file: not one on disk, not another
+  // media file, and not one too large.
+  const refused = (url: string) => page.evaluate((u) => window.hive.themeSoundBytes!(u).then(() => "read", (e: Error) => e.message), url);
+  expect(await refused("hivemedia://media/theme-e2e-needs.wav")).toBe("read");
+  expect(await refused("file:///etc/hostname")).toMatch(/not one of the applied theme's sounds/);
+  fs.writeFileSync(path.join(media, "theme-e2e-other.wav"), wav(0.2, 440));
+  expect(await refused("hivemedia://media/theme-e2e-other.wav")).toMatch(/not one of the applied theme's sounds/);
+  expect(await refused("hivemedia://media/theme-e2e-big.wav")).toMatch(/too large/);
+
+  // A file that is not a sound, under a name the window has not decoded before: the built-in
+  // plays, and both the answer and Recent say why.
+  fs.writeFileSync(path.join(media, "theme-e2e-garbage.wav"), Buffer.from("not a sound at all, only text"));
+  withTheme(harbour({ needs: "hivemedia://media/theme-e2e-garbage.wav" }));
+  const fallback = hive(["notifications", "play", "needs", "--json"]).json;
+  expect(fallback).toMatchObject({ played: true, why: expect.stringMatching(/did not play/) });
+  expect(fallback.pack).toBeUndefined();
+  await expect.poll(async () => (await page.locator("[data-recent-sound]").first().textContent()) ?? "", { timeout: 10_000 }).toMatch(/played: Harbour's sound did not play/);
 
   withTheme(undefined);
   const after = hive(["notifications", "play", "needs", "--json"]).json;

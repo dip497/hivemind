@@ -1,17 +1,12 @@
-// The native-OS-notification decision/format core. The electron side effects
-// (Notification, flashFrame, dock) are thin glue; the gate + text live in the
-// pure `composeNotice`, tested here.
+// The native-OS-notification format core. The electron side effects (Notification,
+// flashFrame, dock) are thin glue; the text lives in the pure `composeNotice`,
+// tested here. Whether a pop-up shows is the notice desk's (notice-desk-core.test.ts).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { composeNotice } from "../../src/main/agent-notify-core.ts";
 
-test("suppresses when the window is focused (in-app toast covers it)", () => {
-  const r = composeNotice({ tileId: "t1", label: "claude #1", kind: "needs" }, true);
-  assert.equal(r, null);
-});
-
 test("needs → critical urgency, 'needs you' title", () => {
-  const r = composeNotice({ tileId: "t1", label: "claude #2 · plan", kind: "needs" }, false);
+  const r = composeNotice({ tileId: "t1", label: "claude #2 · plan", kind: "needs" });
   assert.ok(r);
   assert.equal(r.urgency, "critical");
   assert.equal(r.title, "claude #2 · plan"); // TITLE = identity only
@@ -19,7 +14,7 @@ test("needs → critical urgency, 'needs you' title", () => {
 });
 
 test("done → normal urgency, 'finished' title", () => {
-  const r = composeNotice({ tileId: "t1", label: "codex", kind: "done" }, false);
+  const r = composeNotice({ tileId: "t1", label: "codex", kind: "done" });
   assert.ok(r);
   assert.equal(r.urgency, "normal");
   assert.equal(r.title, "codex");
@@ -27,7 +22,7 @@ test("done → normal urgency, 'finished' title", () => {
 });
 
 test("error → critical urgency, 'failed' title + exit code in body", () => {
-  const r = composeNotice({ tileId: "t1", label: "claude #3", kind: "error", exitCode: 137 }, false);
+  const r = composeNotice({ tileId: "t1", label: "claude #3", kind: "error", exitCode: 137 });
   assert.ok(r);
   assert.equal(r.urgency, "critical");
   assert.equal(r.title, "claude #3");
@@ -35,16 +30,14 @@ test("error → critical urgency, 'failed' title + exit code in body", () => {
 });
 
 test("error with no code and no context falls back to a generic line", () => {
-  const r = composeNotice({ tileId: "t1", label: "claude", kind: "error" }, false);
+  const r = composeNotice({ tileId: "t1", label: "claude", kind: "error" });
   assert.ok(r);
   assert.equal(r.body, "Crashed");
 });
 
 test("error with frame shows 'Crashed · …' and the context", () => {
   const r = composeNotice(
-    { tileId: "t1", label: "claude", kind: "error", exitCode: 1, frame: "billing-api" },
-    false,
-  );
+    { tileId: "t1", label: "claude", kind: "error", exitCode: 1, frame: "billing-api" });
   assert.ok(r);
   assert.equal(r.urgency, "critical");
   assert.equal(r.title, "claude");
@@ -53,32 +46,21 @@ test("error with frame shows 'Crashed · …' and the context", () => {
 
 test("error prefers explicit detail (signal) over the bare exit code", () => {
   const r = composeNotice(
-    { tileId: "t1", label: "claude", kind: "error", exitCode: 143, detail: "killed by signal 15", frame: "api" },
-    false,
-  );
+    { tileId: "t1", label: "claude", kind: "error", exitCode: 143, detail: "killed by signal 15", frame: "api" });
   assert.ok(r);
   assert.equal(r.body, "Crashed · killed by signal 15 · api");
 });
 
-test("error is suppressed when the window is focused (toast covers it)", () => {
-  const r = composeNotice({ tileId: "t1", label: "claude", kind: "error", exitCode: 1 }, true);
-  assert.equal(r, null);
-});
-
 test("repo basename is appended as context when provided", () => {
   const r = composeNotice(
-    { tileId: "t1", label: "claude", kind: "needs", repo: "/home/me/dev/motadata-itsm-server" },
-    false,
-  );
+    { tileId: "t1", label: "claude", kind: "needs", repo: "/home/me/dev/motadata-itsm-server" });
   assert.ok(r);
   assert.equal(r.body, "Needs your input · motadata-itsm-server");
 });
 
 test("frame name is preferred over repo as the context", () => {
   const r = composeNotice(
-    { tileId: "t1", label: "Refactor auth", kind: "done", frame: "billing-api", repo: "/x/y/repo" },
-    false,
-  );
+    { tileId: "t1", label: "Refactor auth", kind: "done", frame: "billing-api", repo: "/x/y/repo" });
   assert.ok(r);
   assert.equal(r.title, "Refactor auth");
   assert.equal(r.body, "Finished · billing-api");
@@ -86,19 +68,19 @@ test("frame name is preferred over repo as the context", () => {
 
 test("ignores unknown kinds and missing tileId", () => {
   // @ts-expect-error — exercising the runtime guard
-  assert.equal(composeNotice({ tileId: "t1", label: "x", kind: "bogus" }, false), null);
+  assert.equal(composeNotice({ tileId: "t1", label: "x", kind: "bogus" }), null);
   // @ts-expect-error — exercising the runtime guard
-  assert.equal(composeNotice({ label: "x", kind: "needs" }, false), null);
+  assert.equal(composeNotice({ label: "x", kind: "needs" }), null);
 });
 
 test("falls back to 'agent' when label is empty", () => {
-  const r = composeNotice({ tileId: "t1", label: "", kind: "done" }, false);
+  const r = composeNotice({ tileId: "t1", label: "", kind: "done" });
   assert.ok(r);
   assert.equal(r.title, "agent");
 });
 
 test("a raw tile id never surfaces as the title — falls back to 'agent'", () => {
-  const r = composeNotice({ tileId: "tile-claude-123", label: "tile-claude-123", kind: "needs", frame: "api" }, false);
+  const r = composeNotice({ tileId: "tile-claude-123", label: "tile-claude-123", kind: "needs", frame: "api" });
   assert.ok(r);
   assert.equal(r.title, "agent");
   assert.equal(r.body, "Needs your input · api");
@@ -110,7 +92,7 @@ test("a gathered pop-up counts the agents after the first and names three; with 
   assert.deepEqual(composeGroup("done", nine), { title: "9 more agents finished", body: "codex #0, agent, codex #2, …", urgency: "normal" });
   assert.deepEqual(composeGroup("needs", nine.slice(0, 1)), { title: "1 more agent needs you", body: "codex #0", urgency: "critical" });
   assert.equal(composeGroup("needs", nine.slice(0, 2)).title, "2 more agents need you");
-  const one = composeNotice({ tileId: "t1", label: "claude", kind: "needs", frame: "api" }, false)!;
+  const one = composeNotice({ tileId: "t1", label: "claude", kind: "needs", frame: "api" })!;
   assert.equal(withText(one, "Bash: npm test").body, "Bash: npm test\nNeeds your input · api");
   assert.equal(withText(one, undefined), one);
 });

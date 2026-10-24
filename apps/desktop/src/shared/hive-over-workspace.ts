@@ -130,6 +130,9 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     },
     // The workspaces on this machine, as the drive socket serves them.
     hostWorkspaces: async () => (await workspace.call("host.status")).workspaces.map((w) => w.repo),
+    // The app's sounds: Recent, and one played by name (Settings' Play), as `hive notifications` asks.
+    recentSounds: () => workspace.call("notifications.recentSounds"),
+    playSound: (moment) => workspace.call("notifications.play", moment),
     onAgentChanged: (cb) => workspace.on("agent.changed", cb),
     onAgentEvent: (cb) => workspace.on("agent.event", cb),
     onHcpSpawn: (cb) => workspace.on("link.spawn", cb),

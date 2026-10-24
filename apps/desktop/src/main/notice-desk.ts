@@ -3,21 +3,24 @@
  * once per change whatever the number of windows; the desk shows the OS pop-up (agent-notify.ts),
  * and sends a sound to the one window the person is at (`notify:sound`), which plays it and says
  * what became of it (`notify:sound-result`). Settings and `hive notifications` read Recent and play
- * a sound by name, over IPC and the drive socket (`notifications.play`, `notifications.recentSounds`).
+ * a sound by name over the workspace API (`notifications.play`, `notifications.recentSounds`): a
+ * window on its connection, the CLI on the drive socket. A window cannot fetch `hivemedia:`, so
+ * main hands it the applied theme's sound files (`notify:theme-sound`), and those only.
  *
  * The pop-up says what an agent waits on, or its tile's last line, only when the person turned
  * that on (`notifications.popupText`): a command on screen may hold a secret. Push never carries it.
  */
-import { readFileSync } from "node:fs";
-import { net, type BrowserWindow } from "electron";
+import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
+import type { BrowserWindow } from "electron";
 import { handle, on } from "./app-ipc.js";
 import { appWindowOf, userWindow } from "./windows.js";
 import { showAgentPopup } from "./agent-notify.js";
 import { getNotificationSettings } from "./notification-settings-store.js";
-import { onSettingsChange, settingsFile } from "./settings-store.js";
-import { NoticeDeskCore, popupTextOf } from "./notice-desk-core.js";
+import { getSettings, settingsFile } from "./settings-store.js";
+import { NoticeDeskCore, popupTextOf, themeSoundOf } from "./notice-desk-core.js";
 import { NOTICE_KINDS, type NoticeKind } from "../shared/notification-settings.js";
-import { themeSoundOf } from "../shared/theme-sounds.js";
+import { mediaDirOf } from "@hivemind/core/theme-apply";
 import type { AgentWait } from "../shared/line-for.js";
 import type { AgentNotice, SoundResult } from "../shared/ipc.js";
 import { ApiError } from "@hivemind/workspace-api/protocol";
@@ -35,18 +38,22 @@ const ANSWER_MS = 3000;
 /** The most of a theme sound's file handed to a window: a theme's sound is at most 400 KB. */
 const THEME_SOUND_MAX = 1024 * 1024;
 
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isKind = (v: unknown): v is NoticeKind => NOTICE_KINDS.includes(v as NoticeKind);
 
-/** The settings file as parsed, for what the schema does not read (the applied theme's sounds):
- *  read when a sound wants it, again only after settings change. */
-let rawSettings: unknown;
-function themeSound(moment: NoticeKind) {
-  if (rawSettings === undefined) {
-    try { rawSettings = JSON.parse(readFileSync(settingsFile(), "utf8")); } catch { rawSettings = null; }
-  }
-  return themeSoundOf(rawSettings, moment);
+/** The applied theme's sound for `moment`, from the settings owner's snapshot: no file read. */
+const themeSound = (moment: NoticeKind) => themeSoundOf(getSettings(), moment);
+
+/** The bytes of `url`, when it is one of the applied theme's sounds (`hivemedia://media/<file>`,
+ *  a plain name, as the record is read) and no larger than THEME_SOUND_MAX, stat'ed before it is
+ *  read. */
+async function themeSoundBytes(url: unknown): Promise<Uint8Array> {
+  if (typeof url !== "string" || !NOTICE_KINDS.some((k) => themeSound(k)?.url === url)) throw new Error("not one of the applied theme's sounds");
+  const file = path.join(mediaDirOf(settingsFile()), url.slice("hivemedia://media/".length));
+  const st = await stat(file);
+  if (!st.isFile()) throw new Error("not a file");
+  if (st.size > THEME_SOUND_MAX) throw new Error("too large");
+  return new Uint8Array(await readFile(file));
 }
 
 let desk: NoticeDeskCore | null = null;
@@ -68,8 +75,6 @@ async function playNamed(moment: NoticeKind): Promise<SoundResult> {
 
 /** Start the desk: `notify:agent` and the sound channels. */
 export function registerNoticeDesk(o: NoticeDeskOptions): void {
-  onSettingsChange(() => { rawSettings = undefined; });
-
   desk = new NoticeDeskCore({
     now: Date.now,
     schedule: (fn, ms) => setTimeout(fn, ms),
@@ -102,7 +107,8 @@ export function registerNoticeDesk(o: NoticeDeskOptions): void {
     if (!rec || typeof rec.tileId !== "string" || !isKind(rec.kind)) return;
     // A tile counts as looked at only while the window that has it selected has the focus.
     const selected = rec.selected === true && !!appWindowOf(e.sender)?.isFocused();
-    desk?.receive({ ...rec, label: typeof rec.label === "string" ? rec.label : "" }, selected);
+    const { since, ...rest } = rec;
+    desk?.receive({ ...rest, label: typeof rec.label === "string" ? rec.label : "", ...(Number.isFinite(since) ? { since } : {}) }, selected);
   }, { local: true });
 
   on("notify:sound-result", (_e, raw: unknown) => {
@@ -115,24 +121,13 @@ export function registerNoticeDesk(o: NoticeDeskOptions): void {
     waiting.delete(r.id);
   }, { local: true });
 
-  handle("notify:recent-sounds", () => desk?.recent() ?? [], { local: true });
   // Only the applied theme's sounds: a window asks for no other file this way.
-  handle("notify:theme-sound", async (_e, url: unknown) => {
-    if (typeof url !== "string" || !NOTICE_KINDS.some((k) => themeSound(k)?.url === url)) throw new Error("not one of the applied theme's sounds");
-    const r = await net.fetch(url);
-    if (!r.ok) throw new Error(`${r.status}`);
-    const bytes = new Uint8Array(await r.arrayBuffer());
-    if (bytes.byteLength > THEME_SOUND_MAX) throw new Error("too large");
-    return bytes;
-  }, { local: true });
-  handle("notify:play", (_e, moment: unknown) => {
-    if (!isKind(moment)) throw new Error("moment must be needs, done or error");
-    return playNamed(moment);
-  }, { local: true });
+  handle("notify:theme-sound", (_e, url: unknown) => themeSoundBytes(url), { local: true });
 }
 
-/** The drive socket's half (spec/workspace-api.md 0.35): play a sound by name, and Recent. Both
- *  are this machine's own; an agent's tile may read Recent but never play (roles.ts). */
+/** Play a sound by name, and Recent (spec/workspace-api.md 0.35), for a window and the drive
+ *  socket alike. Both are this machine's own; an agent's tile may read Recent but never play
+ *  (roles.ts). */
 export const noticeDeskDomain: Domain<"notifications.play" | "notifications.recentSounds"> = {
   answers: {
     "notifications.play": async (_from, moment) => {

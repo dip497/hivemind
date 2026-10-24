@@ -5,14 +5,16 @@
  * `hive config get notifications` found nothing and the app never saw a change made there. On
  * Linux they are one file, and nothing moves.
  *
- * The data folder's file is backed up; the one settings.json only gains the section, and only
- * when it has none, or one that reads as the defaults (a build that wrote whole sections stored
- * them, so a write made while an older app held this migration back stored the defaults, not a
- * choice). A section someone changed wins. The old blob is written whole, as this build reads it:
- * each of its values set even where it equals the default, so the section in the file says what
- * the person chose, not what this build happens to default to. (Only an app older than this
- * migration wrote that blob, so it holds no key this build does not read.) Run again after being
- * cut off, it finds the section moved and only takes the old blob out.
+ * The data folder's file is backed up, only when it holds a blob to move: on Linux, or once moved,
+ * there is no backup, so restoring 0006 never puts back a settings.json older than changes made
+ * since. The one settings.json only gains the section, and only when it has none, or one that
+ * reads as the defaults (a build that wrote whole sections stored them, so a write made while an
+ * older app held this migration back stored the defaults, not a choice). A section someone
+ * changed wins. The old blob is written whole, as this build reads it: each of its values set
+ * even where it equals the default, so the section in the file says what the person chose, not
+ * what this build happens to default to. (Only an app older than this migration wrote that blob,
+ * so it holds no key this build does not read.) Run again after being cut off, it finds the
+ * section moved and only takes the old blob out.
  *
  * Number 0005 is skipped: a 0005 lived on a branch and was dropped before any release, and a
  * ledger that ran it keeps that id.
@@ -47,6 +49,10 @@ export const m0006: Migration = {
   backsUp: ["settings.json"],
   // An older app still running reads and writes its notifications in the old file.
   movesFilesAnOlderAppReads: true,
+  async changesHere(ctx) {
+    const from = path.join(ctx.root, "settings.json");
+    return !(await samePath(from, settingsPath())) && "notifications" in ((await readJson(from)) ?? {});
+  },
   async run(ctx) {
     const from = path.join(ctx.root, "settings.json");
     const to = settingsPath();

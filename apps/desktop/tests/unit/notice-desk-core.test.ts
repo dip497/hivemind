@@ -5,7 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
-import { DEDUPE_MAX, NoticeDesk, NoticeDeskCore, type Popup, type Sound } from "../../src/main/notice-desk-core.ts";
+import { GATHER_MS, GROUP_MS, NoticeDeskCore, themeSoundOf, type Popup, type Sound } from "../../src/main/notice-desk-core.ts";
+import { mergeSettings } from "@hivemind/core/settings-schema";
 import { DEFAULT_NOTIFICATION_SETTINGS, type NotificationSettings } from "../../src/shared/notification-settings.ts";
 import type { AgentNotice } from "../../src/shared/ipc.ts";
 
@@ -68,6 +69,15 @@ test("10 agents that finish together make one sound, counted 10", () => {
   assert.deepEqual(sounds.map((x) => [x.moment, x.count]), [["done", 10]]);
 });
 
+test("ten finishes spread over 400 ms play twice, and Recent counts all ten for the one burst", () => {
+  const { d, c, sounds } = desk();
+  for (let i = 0; i < 10; i++) { d.receive(n(`t${i}`, "done"), false); c.tick(40); }
+  c.tick(3000);
+  // The first sound gathers what came in its 150 ms; the rest wait out the 1.2 s gap.
+  assert.deepEqual(sounds.map((x) => x.count), [4, 6]);
+  assert.deepEqual(d.recent().map((b) => [b.moment, b.agents, b.count]), [["done", 10, 10]]);
+});
+
 test("a failure and a finish together play the failure; the finish says why it was skipped", () => {
   const { d, c, sounds } = desk();
   d.receive(n("a", "done"), false);
@@ -101,34 +111,101 @@ test("Do Not Disturb mutes finished and failed, sound and pop-up, never needs yo
   assert.deepEqual(d.recent().map((b) => [b.moment, b.sound]), [["needs", "waiting"], ["error", "off"], ["done", "off"]]);
 });
 
-test("a finish of a tile selected in the focused window makes no sound; another tile's does", () => {
+test("a finish of a tile selected in the focused window makes no sound, whichever window's copy comes first; another tile's does", () => {
   const { d, c, sounds } = desk({}, true);
   d.receive(n("a", "done"), false);
   d.receive(n("a", "done"), true); // the focused window has it selected: its copy says so
   c.tick(2000);
   assert.deepEqual(sounds, []);
   assert.deepEqual([d.recent()[0]!.sound, d.recent()[0]!.why], ["skipped", "you were looking at it"]);
+  // The selected copy first, the other window's after it: a later copy never unsets it.
+  d.receive(n("s", "done"), true);
+  d.receive(n("s", "done"), false);
+  c.tick(2000);
+  assert.deepEqual(sounds, []);
   d.receive(n("b", "done"), false);
   c.tick(2000);
   assert.deepEqual(sounds.map((x) => x.moment), ["done"]);
 });
 
-test("the dedupe map keeps at most 1024 entries, and a burst of 1500 notices takes under 25 ms", (t) => {
-  const c = clock();
-  const dedupe = new NoticeDesk(c);
-  for (let i = 0; i < 3000; i++) dedupe.admit(n(`t${i}`, "done"), false);
-  assert.equal(dedupe.size, DEDUPE_MAX);
-  c.tick(2001);
-  dedupe.admit(n("late", "done"), false);
-  assert.equal(dedupe.size, 1, "the expired go on the next admit");
+test("needs you and failed play while the person looks at that tile", () => {
+  for (const kind of ["needs", "error"] as const) {
+    const { d, c, sounds } = desk({}, true);
+    d.receive(n("a", kind), true);
+    c.tick(2000);
+    d.result(sounds[0]!.id, true);
+    assert.deepEqual([sounds.map((x) => x.moment), d.recent()[0]!.sound], [[kind], "played"], kind);
+  }
+});
 
+test("a copy 1.9 s after a change merges into it; 2.1 s after, it is a new change", () => {
+  const { d, c } = desk();
+  d.receive(n("a", "done"), false);
+  c.tick(1900);
+  d.receive(n("a", "done"), false);
+  assert.deepEqual(d.recent().map((b) => b.agents), [1]);
+  c.tick(200);
+  d.receive(n("a", "done"), false);
+  assert.deepEqual(d.recent().map((b) => b.agents), [1, 1]);
+});
+
+test("copies carrying the host's time of a change are one change however late; a later time is a new one", () => {
+  const { d, c } = desk();
+  const at = (tileId: string, since: number): AgentNotice => ({ ...n(tileId, "done"), since });
+  d.receive(at("a", 1000), false);
+  c.tick(4500); // a busy window sees it seconds after the other
+  d.receive(at("a", 1000), false);
+  assert.deepEqual(d.recent().map((b) => b.agents), [1]);
+  // The same tile finishing again 500 ms later: a change of its own, not a copy.
+  d.receive(at("b", 2000), false);
+  c.tick(500);
+  d.receive(at("b", 2600), false);
+  d.receive(at("b", 2000), false); // the slow window's copy of the first
+  assert.deepEqual(d.recent().map((b) => b.agents), [2, 1]);
+});
+
+test("the dedupe map holds the last 1024 changes: the 1025th puts the first out, so its copy counts again", () => {
   const { d } = desk();
-  const notices = Array.from({ length: 1500 }, (_, i) => n(`b${i}`, i % 3 === 0 ? "error" : "done"));
+  for (let i = 0; i <= 1024; i++) d.receive(n(`t${i}`, "done"), false);
+  d.receive(n("t0", "done"), false); // put out: a new change, which puts t1 out
+  d.receive(n("t2", "done"), false); // still held: a copy
+  assert.deepEqual(d.recent().map((b) => b.agents), [1026]);
+});
+
+test("a burst: a notice 1.4 s after the last gathers into its pop-up; 1.6 s after, it starts a burst with a pop-up of its own", () => {
+  const { d, c, popups } = desk();
+  d.receive(n("a", "done"), false);
+  c.tick(1400);
+  d.receive(n("b", "done"), false);
+  c.tick(1600);
+  d.receive(n("c", "done"), false);
+  c.tick(2000);
+  assert.deepEqual(popups.map((p) => [p.notices.map((x) => x.tileId), p.more]), [[["a"], false], [["b"], true], [["c"], false]]);
+  assert.deepEqual(d.recent().map((b) => b.agents), [1, 2]);
+});
+
+test("a window that takes the focus before a burst's pop-up gathers stops it", () => {
+  const { d, c, popups, focus } = desk();
+  d.receive(n("a", "done"), false);
+  d.receive(n("b", "done"), false);
+  c.tick(1000);
+  focus(true);
+  c.tick(1000);
+  assert.deepEqual(popups.map((p) => p.notices.map((x) => x.tileId)), [["a"]]);
+  assert.equal(d.recent()[0]!.popups, 1);
+});
+
+test("1500 notices with their sounds, pop-ups and Recent, in a bound near what they cost", (t) => {
+  const { d, c } = desk();
+  const notices = Array.from({ length: 1500 }, (_, i) => ({ ...n(`b${i}`, (["needs", "error", "done"] as const)[i % 3]!), since: 1000 + i }));
+  // Twice each (two windows): the copies are half the work the desk sees.
   const started = performance.now();
-  for (const x of notices) d.receive(x, false);
+  for (const x of notices) { d.receive(x, false); d.receive(x, false); }
+  c.tick(GROUP_MS + GATHER_MS);
   const took = performance.now() - started;
-  t.diagnostic(`1500 notices: ${took.toFixed(3)} ms`);
-  assert.ok(took < 25, `${took} ms`);
+  t.diagnostic(`3000 notices (1500 changes, two windows) and their timers: ${took.toFixed(3)} ms`);
+  // 6–7.5 ms measured on a shared 4-CPU container (2026-10-24); the bound gives it twice that.
+  assert.ok(took < 15, `${took} ms`);
 });
 
 test("pop-ups: the first of a kind shows at once, the rest of its burst gather into one, and needs you is never folded into finished", () => {
@@ -186,6 +263,25 @@ test("a pop-up's text: none unless the person turned it on or for a gathered one
   assert.equal(await popupTextOf(one("done"), true, o), "214 tests passed", "controls and bidi stripped");
   assert.equal(await popupTextOf(one("needs"), true, o), "Bash: rm -rf build");
   assert.equal(slept, 500, "it waited for the feed to bring the wait");
-  wait = undefined; slept = -1e9;
-  assert.equal(await popupTextOf(one("needs"), true, { ...o, sleep: async (ms: number) => { slept += ms; } }), undefined, "it gives up after 1 s");
+  wait = undefined; slept = 0;
+  assert.equal(await popupTextOf(one("needs"), true, { ...o, sleep: async (ms: number) => { slept += ms; } }), undefined);
+  assert.equal(slept, 1000, "it gives up after 1 s");
+});
+
+test("a theme's sound: only a hivemedia: file of the applied theme, named by the theme", () => {
+  // As the settings owner reads the file: the record's checks are the gate main hands files through.
+  const sound = (theme: Record<string, unknown>) => themeSoundOf(mergeSettings({ appearanceExtra: { theme: { id: "@me/pack/harbour", version: "1.0.0", before: { appearance: {}, extra: {} }, ...theme } } }), "needs");
+  const media = "hivemedia://media/theme-1-needs.wav";
+  const rows: [string, Record<string, unknown>, ReturnType<typeof themeSoundOf>][] = [
+    ["its file", { name: "Harbour", sounds: { needs: media } }, { url: media, pack: "Harbour" }],
+    ["a name with spaces around it", { name: "  Harbour  ", sounds: { needs: media } }, { url: media, pack: "Harbour" }],
+    ["no name: the theme's id names it", { sounds: { needs: media } }, { url: media, pack: "harbour" }],
+    ["a file: URL", { name: "Harbour", sounds: { needs: "file:///etc/hostname" } }, undefined],
+    ["an http: URL", { name: "Harbour", sounds: { needs: "http://example.com/a.wav" } }, undefined],
+    ["a path out of the media folder", { name: "Harbour", sounds: { needs: "hivemedia://media/../settings.json" } }, undefined],
+    ["a URL over 2048 characters", { name: "Harbour", sounds: { needs: `hivemedia://media/${"a".repeat(2048)}.wav` } }, undefined],
+    ["no sound for the moment", { name: "Harbour", sounds: { done: media } }, undefined],
+  ];
+  for (const [what, theme, says] of rows) assert.deepEqual(sound(theme), says, what);
+  assert.equal(themeSoundOf(mergeSettings({}), "needs"), undefined, "no theme applied");
 });

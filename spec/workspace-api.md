@@ -332,7 +332,7 @@ says it is asked at the machine itself.
 | `views.rescan`, `agents.rescan`, `widgets.rescan`, `tools.rescan` | | `null`: those installed read again from disk | — |
 | `settings.reload` | | `null`: `settings.json` read again | — |
 | `notifications.play` | `moment` (`needs`, `done` or `error`) | `{id, played, why?, pack?}` (0.35): the moment's sound played now in the window the person is at, the applied theme's (`pack`) or the built-in one, or blocked and why (`suspended`, `no audio device`, `no window open`). The person's alone: an agent's tile is refused it. The app answers it; `hive host` has no sounds | target the moment |
-| `notifications.recentSounds` | | `[{id, moment, agents, at, popups, sound, why?, pack?, count?}]` (0.35): the last 10 bursts of agents' changes of one kind, newest first: how many agents, the sound (`off`, `waiting`, `skipped`, `played`, `blocked`) and how many OS pop-ups it showed | read |
+| `notifications.recentSounds` | | `[{id, moment, agents, at, popups, sound, why?, pack?, count?}]` (0.35): the last 10 bursts of agents' changes of one kind, newest first: how many agents (0 for a sound played by name), the sound (`off`, `waiting`, `skipped`, `played`, `blocked`), how many agents its sounds stood for (`count`; a long burst can play twice) and how many OS pop-ups it showed | read |
 
 A terminal is named by its session id, `hm:<tile>`; the audit log names it by its tile. `pid` is -1
 when `attachOnly` finds no session.

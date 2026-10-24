@@ -45,3 +45,8 @@ export async function driveCall(method: string, params: unknown[], timeoutMs = 1
     drive.close();
   }
 }
+
+/** Ask a running app to read settings.json again (`settings.reload`); false when none answered. */
+export async function reloadApp(): Promise<boolean> {
+  try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
+}

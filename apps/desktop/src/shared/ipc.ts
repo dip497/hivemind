@@ -6,7 +6,7 @@ import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
-import type { RecentSound, SoundResult } from "@hivemind/workspace-api/notifications";
+import type { RecentSound, SoundMoment, SoundResult } from "@hivemind/workspace-api/notifications";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
@@ -817,10 +817,12 @@ export interface HiveIpc {
   onSound?(cb: (sound: SoundRequest) => void): () => void;
   /** What became of sound `id`: played (with the theme's pack, if it was one), or blocked and why. */
   soundResult?(result: SoundResult): void;
-  /** The last 10 bursts the desk saw: their moment, agents, sound and pop-ups (newest first). */
+  /** The last 10 bursts the desk saw: their moment, agents, sound and pop-ups (newest first):
+   *  the workspace API's `notifications.recentSounds`. */
   recentSounds?(): Promise<RecentSound[]>;
-  /** Play `moment`'s sound now in the window the person is at, as Settings' Play does. */
-  playSound?(moment: AgentNotice["kind"]): Promise<SoundResult>;
+  /** Play `moment`'s sound now in the window the person is at, as Settings' Play does: the
+   *  workspace API's `notifications.play`. */
+  playSound?(moment: SoundMoment): Promise<SoundResult>;
   /** The bytes of one of the applied theme's sounds (its `hivemedia:` URL), which a window cannot
    *  fetch itself; any other URL is refused. */
   themeSoundBytes?(url: string): Promise<Uint8Array>;
@@ -936,6 +938,9 @@ export interface AgentNotice {
   /** The tile is selected in the window that sent this (main counts it only while that window
    *  has the focus): a finished sound for it is skipped. */
   selected?: boolean;
+  /** When the host saw the state start (`SessionStatus.since`), the same in every window: copies
+   *  with it are one change however late one comes. Absent for a status only the window knows. */
+  since?: number;
 }
 
 /** A sound main asks a window to play (`notify:sound`). */

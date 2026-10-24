@@ -23,12 +23,12 @@ test("a widget's notice follows main's notification settings, from start-up on, 
   try {
     fs.writeFileSync(path.join(userData, "settings.json"), JSON.stringify({ notifications: { ...DEFAULT_NOTIFICATION_SETTINGS, osPopups: false } }));
     const { widgetNoticeToShow } = await import("../../src/main/widget-notices.ts");
-    const { setNotificationSettings } = await import("../../src/main/notification-settings-store.ts");
+    const { patchSettings } = await import("../../src/main/settings-store.ts");
     const noon = new Date(2025, 0, 1, 12, 0).getTime();
     const notice = (widget: string, text: string) => ({ repo: "/work", widget, title: "Tally", text });
 
     assert.equal(widgetNoticeToShow(notice("w1", "hi"), noon), null, "pop-ups were off when the app started");
-    await setNotificationSettings({ ...DEFAULT_NOTIFICATION_SETTINGS, osPopups: true }); // Settings → Notifications, in any window
+    await patchSettings([{ path: "notifications.osPopups", value: true }]); // Settings → Notifications, in any window
     assert.deepEqual(widgetNoticeToShow(notice("w1", "hi"), noon), { title: "Tally", body: "hi" });
     // Within 10 s the same widget stays quiet, before and after another one speaks.
     assert.deepEqual(
