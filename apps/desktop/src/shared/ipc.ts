@@ -368,8 +368,6 @@ export interface HiveIpc {
    *  debounced UI snapshot reverts whatever the CLI (or another window) wrote in
    *  the meantime. Resolves with the settings as written. */
   settingsPatch(patches: readonly { path: string; value: unknown }[]): Promise<Settings>;
-  /** Whole-object write (a theme import). Merged onto the file under the same lock. */
-  settingsReplace(next: Settings): Promise<Settings>;
   settingsPath(): Promise<string>;
   onSettingsChanged(cb: (s: Settings) => void): () => void;
   // ── community views ───────────────────────────────────────

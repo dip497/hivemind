@@ -264,7 +264,8 @@ function OptionRow({ def, option: o, value, found }: {
 }) {
   const id = `agent-${def.id}-${o.id}`;
   const values = optionChoices(o, found?.values ?? []);
-  const set = (v: string) => setPluginOption("agent", def.id, o.id, v);
+  // "" is "left to the agent": no value stored.
+  const set = (v: string) => setPluginOption("agent", def.id, o.id, v || undefined);
   const unset = o.default ? `${o.default} (Hivemind default)` : `${def.label} decides`;
   const source = found === undefined ? `Asking ${def.bin}…`
     : found?.from === "list" ? `Listed by ${def.bin} ${o.list!.args.join(" ")}`

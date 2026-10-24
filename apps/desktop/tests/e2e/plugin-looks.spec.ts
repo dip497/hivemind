@@ -75,16 +75,28 @@ test("a view's token and every new kind of setting, from its Settings page to th
     return page.frames().find((f) => f.url().includes("looks"))!;
   };
   const looks = async () => (await view()).evaluate(() => (window as unknown as { __looks?: unknown }).__looks ?? null);
-  await expect.poll(looks).toEqual({ sea: "#00ff88", tokens: true, settings: { sky: "custom", hour: 12, days: ["mon", "wed"], harbours: ["North, east", "South"], "token-sea": "#00ff88" } });
+  await expect.poll(looks).toEqual({ sea: "#00ff88", foam: "#ffffff", tokens: true, settings: { sky: "custom", hour: 12, days: ["mon", "wed"], harbours: ["North, east", "South"], "token-sea": "#00ff88", foam: "#ffffff" } });
   await shot("3-view.png");
 
-  // Back to the theme's own: the view paints with its default for this mode again.
+  // Back to the theme's own: the view paints with its default for this mode again. The foam,
+  // whose default is a colour, reaches the theme's own colour too: "" is stored, not its default.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugin:view:looks" } })));
   await field("token-sea").getByRole("button", { name: "Theme" }).click();
+  await field("foam").getByRole("button", { name: "Theme" }).click();
+  await expect.poll(stored).toMatchObject({ "token-sea": "", foam: "" });
+  await expect(field("foam").getByRole("button", { name: "Theme" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  const sea = async () => ((await looks()) as { sea: string } | null)?.sea;
-  await expect.poll(sea).not.toBe("#00ff88");
-  // Dark, its own #123a5a; light, the theme's info colour.
-  const light = await page.evaluate(() => document.documentElement.classList.contains("light"));
-  if (!light) expect(await sea()).toBe("#123a5a");
+  const now = async () => (await looks()) as { sea: string; foam: string; settings: Record<string, unknown> } | null;
+  const fg = async () => (await view()).evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--hm-color-fg").trim());
+  await expect.poll(async () => (await now())?.settings.foam).toBe("");
+  await expect.poll(async () => (await now())?.foam).toBe(await fg());
+  // Dark, its own #123a5a.
+  expect(await page.evaluate(() => document.documentElement.dataset.themeMode)).toBe("dark");
+  await expect.poll(async () => (await now())?.sea).toBe("#123a5a");
+  // Light, the theme's info colour.
+  await page.evaluate(() => window.hive.settingsPatch([{ path: "appearance.mode", value: "light" }]));
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.themeMode)).toBe("light");
+  const info = async () => (await view()).evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--hm-color-info").trim());
+  await expect.poll(async () => { const sea = (await now())?.sea; return !!sea && sea !== "#123a5a" && sea === (await info()); }).toBe(true);
+  await shot("4-light.png");
 });

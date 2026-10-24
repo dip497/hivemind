@@ -145,7 +145,6 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     settingsGet: () => port.invoke("settings:get"),
     settingsSet: (p, v) => port.invoke("settings:set", p, v),
     settingsPatch: (patches) => port.invoke("settings:patch", patches),
-    settingsReplace: (next) => port.invoke("settings:replace", next),
     settingsPath: () => port.invoke("settings:path"),
     onSettingsChanged: (cb) => port.on("settings:changed", cb),
     listViews: (repoRoot) => port.invoke("views:list", repoRoot),

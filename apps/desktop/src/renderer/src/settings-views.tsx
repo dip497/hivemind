@@ -7,7 +7,7 @@ import type { PluginCategory } from "@hivemind/view-sdk/category";
 import { useHubDescription } from "./plugins/library";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch } from "./components/ui/switch";
-import { getSettings, patchSettings, useSettings, switchPlugin } from "./settings-store";
+import { patchSettings, patchSettingsMany, useSettings, switchPlugin } from "./settings-store";
 import { getView, resolveChrome, resolveViewId, useViews } from "./workspace/workspace-view";
 import { setViewMode, useViewMode } from "./workspace/view-mode-store";
 import type { IslandPlacement } from "@hivemind/core/settings-schema";
@@ -96,12 +96,7 @@ export function ViewPage({ id }: { id: string }) {
       <h3>Toolbar</h3>
       <div className="settings-row">
         <div><label htmlFor="toolbar-position">Display</label><p>Use the view’s default or choose a position.</p></div>
-        <Select value={override ?? "auto"} onValueChange={(v) => {
-          const chrome = { ...getSettings().views.chrome };
-          if (v === "auto") delete chrome[id];
-          else chrome[id] = { island: v as IslandPlacement };
-          patchSettings("views.chrome", chrome);
-        }}>
+        <Select value={override ?? "auto"} onValueChange={(v) => patchSettings(`views.chrome.${id}.island`, v === "auto" ? undefined : v as IslandPlacement)}>
           <SelectTrigger id="toolbar-position" className="min-w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="auto">Automatic ({resolveChrome(view).island})</SelectItem>
@@ -149,10 +144,9 @@ function ToolbarSettings({ mode }: { mode: string }) {
   const actions = resolveToolbar(preference);
   const selected = actions.map((action) => action.id);
   const rows = [...actions, ...BUILTIN_TOOLBAR_ACTIONS.filter((action) => !selected.includes(action.id))];
-  const update = (patch: Partial<ToolbarPreferences>) => {
-    const current = getSettings().views.toolbars;
-    patchSettings("views.toolbars", { ...current, [mode]: { ...current[mode], ...patch } });
-  };
+  // Each preference at its own path: the other views' toolbars, and a newer build's actions in
+  // them, are not rewritten.
+  const update = (patch: Partial<ToolbarPreferences>) => patchSettingsMany(Object.entries(patch).map(([k, value]) => ({ path: `views.toolbars.${mode}.${k}`, value })));
   const move = (id: ToolbarActionId, direction: -1 | 1) => {
     const next = [...selected];
     const index = next.indexOf(id);
@@ -166,11 +160,7 @@ function ToolbarSettings({ mode }: { mode: string }) {
     <p className="settings-note">Choose the buttons and their order. Switch tools on under Plugins.</p>
     <div className="settings-row">
       <label><input type="checkbox" checked={preference?.labels ?? false} onChange={(event) => update({ labels: event.target.checked })} /> Show labels</label>
-      <Button variant="outline" onClick={() => {
-        const current = { ...getSettings().views.toolbars };
-        delete current[mode];
-        patchSettings("views.toolbars", current);
-      }}>Reset actions</Button>
+      <Button variant="outline" onClick={() => patchSettings(`views.toolbars.${mode}`, undefined)}>Reset actions</Button>
     </div>
     <ol className="settings-toolbar-actions" aria-label="Toolbar actions">
       {rows.map((action) => {

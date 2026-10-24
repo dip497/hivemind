@@ -31,7 +31,7 @@ const RECENT_EVERY_MS = 2000;
 
 export function NotificationPrefs() {
   const s = useNotificationSettings();
-  const update = (patch: Partial<NotificationSettings>): void => saveNotificationSettings({ ...s, ...patch });
+  const update = (patch: Partial<NotificationSettings>): void => saveNotificationSettings(patch);
   const dim = !s.enabled;
 
   return (

@@ -132,12 +132,26 @@ function flush(): void {
 
 if (typeof window !== "undefined") window.addEventListener("beforeunload", flush);
 
-/** Set one dotted path (`appearance.glass.blur`), apply now, persist soon. */
-/** Change one plugin's record (`plugins.state["<kind>:<id>"]`), only that record, so an edit to
- *  another plugin made meanwhile (another window, `hive plugins`) is kept. An empty record is dropped. */
+/** Change one plugin's record (`plugins.state["<kind>:<id>"]`): each value the change made is
+ *  written at its own path (`.enabled`, `.workspaces`, `.options.<field>`), so an edit to another
+ *  value or plugin made meanwhile (another window, `hive plugins`) is kept, and a value a newer
+ *  build keeps in the record stays. */
 export function patchPluginState(kind: PluginKind, id: string, change: (s: PluginState) => PluginState): void {
   const key = pluginKey(kind, id);
-  patchSettings(`plugins.state.${key}`, withPluginState(getSettings().plugins.state, kind, id, change)[key] ?? {});
+  const was = getSettings().plugins.state[key] ?? {};
+  const now = withPluginState(getSettings().plugins.state, kind, id, change)[key] ?? {};
+  patchSettingsMany(changedPaths(was, now, `plugins.state.${key}`));
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+/** Each value that differs between `was` and `now`, at its own dotted path below `at`; a group
+ *  on one side only is gone through value by value too. */
+function changedPaths(was: unknown, now: unknown, at: string): { path: string; value: unknown }[] {
+  if ((isRecord(was) || isRecord(now)) && (isRecord(was) || was === undefined) && (isRecord(now) || now === undefined)) {
+    const a = was ?? {}, b = now ?? {};
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap((k) => changedPaths(a[k], b[k], `${at}.${k}`));
+  }
+  return JSON.stringify(was) === JSON.stringify(now) ? [] : [{ path: at, value: now }];
 }
 
 /** The workspaces a tool plugin's service may drive, by their folder. */
@@ -158,15 +172,17 @@ export function switchPlugin(kind: PluginKind, plugin: { id: string; package?: P
   return Promise.resolve();
 }
 
-/** Set one of a plugin's options (undefined or empty: back to its default). */
+/** Set one of a plugin's options; undefined puts it back to its default. Any other value is
+ *  stored, "" too: for a colour it is "as the theme has it", which a field's own default may not be. */
 export function setPluginOption(kind: PluginKind, id: string, option: string, value: SettingValue | undefined): void {
   patchPluginState(kind, id, (s) => {
     const options = { ...s.options };
-    if (value === undefined || value === "") delete options[option]; else options[option] = value;
+    if (value === undefined) delete options[option]; else options[option] = value;
     return { ...s, options };
   });
 }
 
+/** Set one dotted path (`appearance.glass.blur`), apply now, persist soon. */
 export function patchSettings(dotted: string, value: unknown): void {
   patchSettingsMany([{ path: dotted, value }]);
 }
@@ -181,12 +197,6 @@ export function patchSettingsMany(patches: readonly { path: string; value: unkno
   state = mergeSettings(next, state);
   emit();
   persist();
-}
-
-/** Replace whole sections (a theme import). Each section is one path patch, so
- *  sections nobody touched here are never rewritten. */
-export function replaceSettings(next: Partial<Settings>): void {
-  patchSettingsMany(Object.entries(next).map(([k, value]) => ({ path: k, value })));
 }
 
 /** Test seam: how many times a save failure was reported (one per streak). */

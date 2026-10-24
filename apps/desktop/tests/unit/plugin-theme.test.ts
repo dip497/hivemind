@@ -1,6 +1,8 @@
 /**
- * What the app tells a view of its theme (`readTheme`, sent in `hello.theme` and `theme`): every
- * colour of the frozen contract, resolved to #rrggbb from the app's own tokens. A view paints with
+ * What the app asks its page for when it tells a view its theme (`readTheme`, sent in
+ * `hello.theme` and `theme`): every colour of the frozen contract, each resolved to #rrggbb from
+ * the page's `--color-<name>`. The page here is a stand-in that has every token; that the built
+ * page has each, and a view is told all 15, is e2e `plugin-contract.spec.ts`. A view paints with
  * them and breaks silently when one stops coming (protocol `VIEW_THEME_COLORS`; removing one is a
  * Breaking change).
  *

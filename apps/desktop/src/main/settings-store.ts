@@ -9,8 +9,8 @@
  */
 import { answer, handle, handleEffect } from "./app-ipc.js";
 import { readFileSync } from "node:fs";
-import { DEFAULT_SETTINGS, mergeSettings, type Settings } from "@hivemind/core/settings-schema";
-import { patchSettingsFile, readSettings, settingsPath, updateSettings } from "@hivemind/core/settings";
+import { mergeSettings, type Settings } from "@hivemind/core/settings-schema";
+import { patchSettingsFile, readSettings, settingsPath } from "@hivemind/core/settings";
 import { createSettingsCoordinator } from "./settings-coordinator.js";
 
 let current: Settings | null = null;
@@ -54,14 +54,6 @@ const coordinator = createSettingsCoordinator<Settings>({
 export function onSettingsChange(l: (s: Settings) => void): () => void {
   listeners.add(l);
   return () => { listeners.delete(l); };
-}
-
-/** Replace whole sections (a theme import). Still a locked read/modify/write
- *  so unknown keys and a concurrent writer's file are respected; the caller's
- *  object wins for the sections it carries. */
-export async function replaceSettings(next: unknown): Promise<Settings> {
-  const sections = next && typeof next === "object" ? Object.keys(next).filter((k) => k !== "v" && k in DEFAULT_SETTINGS) : [];
-  return coordinator.mutate(() => updateSettings((cur) => mergeSettings(next, cur), settingsFile(), sections));
 }
 
 /** Apply dotted-path patches (`appearance.glass.blur`) to the file as it is on
@@ -128,7 +120,6 @@ function sanitizePatches(raw: unknown): { path: string; value: unknown }[] {
 export function installSettingsIpc(tellWindows: (channel: string, settings: Settings) => void): void {
   answer("settings:get-sync", () => getSettings());
   handle("settings:get", () => getSettings());
-  handleEffect("settings:replace", () => ({}), (_e, next: unknown) => replaceSettings(next));
   handleEffect("settings:set", (dotted) => ({ target: typeof dotted === "string" ? dotted : undefined }), (_e, dotted: unknown, value: unknown) => patchSettingsPath(String(dotted), value));
   // Batched dotted-path patches — what the renderer sends now (a full-object
   // replace from a debounced UI would revert whatever else was written meanwhile).

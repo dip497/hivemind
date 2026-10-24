@@ -43,9 +43,11 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const [rects, setRects] = useState<SurfaceRect[]>([]);
     const [lines, setLines] = useState<LineRect[]>([]);
+    // One array per manifest: the link's settings memo keys on it.
+    const fields = useMemo(() => viewSettingFields(manifest), [manifest]);
     const { link, ready, send, dialogs } = usePluginLink({
       pluginId: pkg.id, record: { kind: "view", id: pkg.id }, name: manifest.name, capabilities,
-      fields: viewSettingFields(manifest), tokens: manifest.tokens, layoutId: pkg.id, personal: manifest.layout === "personal", props: { model, commands }, root: rootRef,
+      fields, tokens: manifest.tokens, layoutId: pkg.id, personal: manifest.layout === "personal", props: { model, commands }, root: rootRef,
       onSurfaceRects: setRects, onLineRects: setLines, commands: manifest.commands, instance: { id: pkg.id, label: manifest.name },
       onDisable: (reason) => {
         toast.error(`The ${manifest.name} view was disabled: ${reason}. Switched back to Canvas — your tiles are untouched.`);
