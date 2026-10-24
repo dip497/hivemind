@@ -236,6 +236,7 @@ hive plugins show claude                # its settings: each one's value and wha
 hive plugins enable @hivemind/web        # or disable; a package by its id switches all it holds
                                         # one plugin of a package can be switched off alone, on only while its package is on
 hive plugins set @you/board columns all # checked against what the setting takes
+printf %s "$TOKEN" | hive plugins set @acme/jira token  # a secret: on stdin, never as an argument
 hive plugins reset @you/board [columns] # back to its default
 hive plugins workspaces <tool> <folder>…   # the workspaces a tool's service drives (hive host)
 hive plugins workspaces <tool> --none   # it drives none: its service stops

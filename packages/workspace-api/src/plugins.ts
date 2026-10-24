@@ -76,3 +76,18 @@ export interface TileLook {
 
 /** How long `tile.look` waits, in the window, for the tile to be in view and drawn. */
 export const LOOK_MS = 8_000;
+
+/** What a tool plugin's service reads of its own settings (`plugin.options`, design jira-sync
+ *  §12.4): each field's value as the person set it, checked against the field, and the names of
+ *  its secrets that are set, never their values (`secret.get` reads one). */
+export interface PluginOptions {
+  values: Record<string, string | number | boolean>;
+  secrets: string[];
+}
+
+/** A command the host asks a service to run (`plugin.called`): answered with `plugin.answer`
+ *  naming `call`. */
+export interface ServiceCall { call: number; command: string; args: unknown }
+
+/** What a service answers a call with: what its command gave, or why it failed. */
+export type ServiceAnswer = { result: unknown } | { error: { code?: string; message: string } };

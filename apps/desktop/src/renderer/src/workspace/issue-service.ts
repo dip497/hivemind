@@ -1,6 +1,7 @@
 /**
  * The issues of the workspace a plugin shows (protocol 1.9), from the app's own issue calls: the
- * list now and whenever its `.hivemind` changes (an agent's `hive update` included), and each
+ * list now and whenever one of them is written (`issue.changed`, an agent's `hive update` included;
+ * nothing else under `.hivemind`, a sync's bookkeeping among it, reads them again), and each
  * issue method. What reaches a plugin never says where the workspace is on disk, and it writes
  * only to this workspace.
  */
@@ -20,6 +21,7 @@ const summary = (wf: WorkflowView | null) => ({ path: _, ...rest }: IssueSummary
 const full = (wf: WorkflowView | null, { path: _, raw: __, ...rest }: Issue): ViewIssue => ({ ...rest, ...statusIn(wf, rest as Issue) });
 const workflowAt = (r: string): Promise<WorkflowView | null> => window.hive.issueWorkflow(r).catch(() => null);
 const parent = (dir: string) => dir.slice(0, Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\"))) || dir;
+const isWorkflowFile = (root: string, p: string) => p.startsWith(root) && /^[\\/]workflow\.yaml$/.test(p.slice(root.length));
 
 /** The prefix a folder's issue ids would start with: its name, letters and digits, upper case. */
 export function suggestedPrefix(folder: string | null): string {
@@ -63,7 +65,13 @@ export function issueService(root: () => string | null, folder: () => string | n
         if (r !== watched) {
           off();
           watched = r;
-          off = r ? window.hive.onFsChanged(parent(r), ({ paths }) => { if (paths.some((p) => p.startsWith(r))) soon(); }) : () => {};
+          if (r) {
+            // Issues by `issue.changed`; the workflow (columns, names, colours) by its own file,
+            // which no issue event covers.
+            const offIssues = window.hive.onIssueChanged(r, soon);
+            const offWorkflow = window.hive.onFsChanged(parent(r), ({ paths }) => { if (paths.some((p) => isWorkflowFile(r, p))) soon(); });
+            off = () => { offIssues(); offWorkflow(); };
+          } else off = () => {};
         }
         if (!r) { cb([]); return; }
         void Promise.all([window.hive.listIssues(r), workflowAt(r)]).then(([list, wf]) => { if (live) cb(list.map(summary(wf))); }, () => { if (live) cb([]); });

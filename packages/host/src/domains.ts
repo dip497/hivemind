@@ -6,7 +6,8 @@
  */
 import { git } from "./git.js";
 import { files } from "./files.js";
-import { issues } from "./issues.js";
+import { issuesDomain, type NameOf } from "./issues.js";
 import { reviews } from "./reviews.js";
 
-export const workspaceDomains = [git, files, issues, reviews];
+/** `nameOf`: what a peer is called in an issue's activity (a guest by the name they joined with). */
+export const workspaceDomains = (nameOf?: NameOf) => [git, files, issuesDomain(nameOf), reviews];

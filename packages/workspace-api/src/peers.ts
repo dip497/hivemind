@@ -200,6 +200,12 @@ export function servePeer(server: Pick<WorkspaceServer, "connect" | "answer" | "
   };
   const routed = (event: EventMessage): EventMessage | null => {
     if (event.event === "store.changed") return null; // the document reaches peers by its own sync
+    // An issue's change names where its workspace keeps them: one kept outside the workspace (a
+    // folder above it) is the host's, and not told.
+    if (event.event === "issue.changed") {
+      const change = event.params[1] as { root?: unknown } | undefined;
+      return event.params[0] === peer.repo && typeof change?.root === "string" && inWorkspace(peer.repo, change.root) ? { event: event.event, params: [url, change] } : null;
+    }
     if (event.event === "file.changed" || event.event === "widget.runner" || event.event === "widget.pressed" || event.event === "presence.changed" || event.event === "widget.drawn" || event.event === "agent.changed" || event.event === "agent.event" || event.event === "people.asked" || event.event === "people.answered") {
       return event.params[0] === peer.repo ? { event: event.event, params: [url, ...event.params.slice(1)] } : null;
     }
