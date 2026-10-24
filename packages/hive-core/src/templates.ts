@@ -359,6 +359,7 @@ starting waits for it (30 s in all). Exit 5: not running, or no such command; 4:
 \`hive ctl tile look <tile> --json\` shows a tile as the person sees it: a PNG path, its plugin's state and console.
 Writing one: \`hive plugins new tool|widget|view <name>\` starts it, with a PROMPT.md that has the whole guide.
 Several as one: \`hive plugins new package <name>\`, then \`hive plugins new <kind> <name> --in <package>\`; \`hive plugins check <package>\` checks every member, \`hive plugins install <package>\` installs them as one.
+A package that opens with a view (\`"startup": {"view": …}\`): the install's \`--json\` names it as \`startView\`, and the app offers the person to open it, so leave their view as it is unless they asked to see it; \`startView.open\` switches it.
 
 ## Beyond the canvas
 Each has \`--help\` with its exact options; read it before you run one.

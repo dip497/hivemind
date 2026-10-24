@@ -215,6 +215,7 @@ hive plugins check <folder> [--json]    # its types, its manifest and its code d
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id: installed as a package
                                         # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable @owner/name
+                                        # a package that opens with a view prints it and its command (--json: startView {id, name, open})
 hive plugins install <folder>|<id> --dry-run   # what an update would change, member by member; installs nothing
 hive plugins rollback <package>         # back to the version in use before its last update, switched as it was
 hive plugins remove <plugin>|<package>  # one you added on its own, or a whole package
