@@ -199,6 +199,12 @@ async function languageFor(path: string): Promise<LanguageSupport | null> {
   }
 }
 
+/** A file with edits not yet saved: a 6px dot in the second text colour, never amber, since an
+ *  unsaved file does not wait on the person (DESIGN.md, Modified marker). */
+function UnsavedMark({ className = "" }: { className?: string }) {
+  return <span role="img" aria-label="unsaved changes" title="unsaved changes" data-unsaved className={`size-1.5 shrink-0 rounded-full bg-[var(--color-fg2)] ${className}`} />;
+}
+
 interface TabState {
   /** Last-saved content (for dirty comparison + reset). */
   saved: string;
@@ -585,9 +591,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
         <header className="tile-drag-handle h-8 flex items-center gap-2 px-2.5 bg-[var(--color-bg3)] border-b border-[var(--color-line)] text-count font-mono text-[var(--color-fg2)] cursor-grab active:cursor-grabbing">
           <GripVertical size={13} className="text-[var(--color-fg3)] -ml-1 shrink-0" />
           <span className="font-semibold text-[var(--color-fg)]">Editor</span>
-          {activeMeta?.dirty && (
-            <span className="text-chip text-[var(--color-warn)]" title="unsaved changes">●</span>
-          )}
+          {activeMeta?.dirty && <UnsavedMark />}
           {saving && <span className="text-chip text-[var(--color-fg3)]">saving…</span>}
           <span className="ml-auto flex items-center gap-2">
             {active && (
@@ -693,13 +697,7 @@ export function EditorTile({ repoPath, tabs, onCloseTab, onClose, activeReq, onO
                   >⇄</Button>
                 )}
                 <span className="grid place-items-center w-3.5 h-3.5">
-                  {dirty ? (
-                    <span
-                      aria-hidden
-                      className="size-1.5 rounded-full bg-[var(--color-warn)] group-hover:hidden"
-                      title="unsaved"
-                    />
-                  ) : null}
+                  {dirty ? <UnsavedMark className="group-hover:hidden" /> : null}
                   <Button
                     variant="ghost"
                     size="icon-micro"

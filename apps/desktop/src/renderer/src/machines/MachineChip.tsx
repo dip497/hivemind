@@ -26,7 +26,7 @@ export function MachineChip({ uri, frameId, onUnbind }: { uri: string; frameId: 
         aria-label={`machine ${name}`}
         data-machine-state={status.state}
       >
-        <MachineDot status={status} />
+        <MachineDot status={status} named={status.state === "online" || status.state === "idle"} />
         <span className="truncate">{name}<span className="text-[var(--color-fg3)]">:{remoteBasename(uri)}</span></span>
         {status.state === "online" && status.rttMs !== undefined && <span className="shrink-0 text-[var(--color-fg3)] tabular-nums">{status.rttMs}ms</span>}
         {status.state !== "online" && status.state !== "idle" && <span className="shrink-0 text-[var(--color-fg2)]">{statusWords(status)}</span>}

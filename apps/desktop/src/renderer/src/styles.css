@@ -158,6 +158,12 @@
   --color-status-idle:      var(--color-fg3);
   --color-status-exited:    var(--color-fg3);
   --color-status-failed:    var(--color-err);
+  /* A status word straight on a header or a selected row, and the accent as a small mark: the theme
+     store fits each to the palette (core's statusTextInk, accentMarkInk); these are first paint. */
+  --color-status-failed-text:    var(--color-status-failed);
+  --color-status-attention-text: var(--color-status-attention);
+  --color-unread-text:           var(--color-unread);
+  --color-brand-mark:            var(--color-brand);
 
   /* Issue states (tools/issues): Plane's five groups (backlog, unstarted, started, completed,
      cancelled), with In progress and In review apart. No state's hue is near a preset's warn, the
@@ -295,8 +301,9 @@ small, .u-caption { letter-spacing: var(--hm-track-caption); }
 
 /* ── Glass toasts (bottom-right stack) — borderless frosted cards. No hairline
    border: the inset top sheen + the soft drop define the edge. ONE accent (the
-   app brand, --color-brand) tints the icon, the verb line, and the auto-dismiss
-   progress line; the kind is encoded by the icon shape + verb text (+ a pulse on
+   app brand, --color-brand) tints the icon and the auto-dismiss progress line, both
+   marks; the verb is words, in the second text colour, since the accent is held to
+   3:1 as a mark and not to 4.5:1 as text (DESIGN.md, Steel Accent); the kind is encoded by the icon shape + verb text (+ a pulse on
    needs-you), never by a second color. Opaque in the default theme; frosts
    against the live wallpaper under glass mode. NOT under .react-flow__node, so
    the canvas motion-strip rule (which clears backdrop-filter during pan/drag)
@@ -323,9 +330,9 @@ html.glass-on .hm-toast {
   background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(145%);
 }
-/* The single accent — applied to exactly three spots (icon, verb, TTL line). */
-.hm-toast-icon { color: var(--color-brand); }
-.hm-toast-verb { color: var(--color-brand); }
+/* The single accent — applied to exactly two marks (icon, TTL line). */
+.hm-toast-icon { color: var(--color-brand-mark); }
+.hm-toast-verb { color: var(--color-fg2); }
 /* Auto-dismiss progress line — shrinks 100%→0 over --ttl (set inline to match
    the JS dismiss timer exactly, both via toastTtlMs). */
 .hm-toast-bar {
@@ -870,8 +877,9 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
 .md-preview h3 { font-size: 1.2em; }
 .md-preview h4 { font-size: 1.05em; }
 .md-preview p, .md-preview ul, .md-preview ol, .md-preview blockquote, .md-preview table { margin: 0.7em 0; }
-.md-preview a { color: var(--color-accent); text-decoration: none; }
-.md-preview a:hover { text-decoration: underline; }
+/* A link is the text colour, underlined: the accent is held to 3:1 as a mark, not to 4.5:1 as text. */
+.md-preview a { color: var(--color-fg); text-decoration: underline; text-decoration-color: var(--color-fg3); text-underline-offset: 2px; }
+.md-preview a:hover { text-decoration-color: currentColor; }
 .md-preview strong { color: var(--color-fg); font-weight: 650; }
 .md-preview ul, .md-preview ol { padding-left: 1.5em; }
 .md-preview li { margin: 0.25em 0; }

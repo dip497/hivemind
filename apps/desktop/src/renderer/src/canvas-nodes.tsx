@@ -188,7 +188,7 @@ export function HeaderPinButton({ tileId, pinned, onToggle }: {
       aria-pressed={!!pinned}
     >
       {/* Brand on the filled glyph is the pinned STATE (an aria-pressed twin), not decoration. */}
-      <Pin className={pinned ? "fill-current text-[var(--color-brand)]" : ""} />
+      <Pin className={pinned ? "fill-current text-[var(--color-brand-mark)]" : ""} />
     </Button>
   );
 }
@@ -330,7 +330,7 @@ function FloatingPinnedPanel({ id, anchor, size, onUnpin, onChange, onClose, hea
           title="Unpin — return to canvas"
           aria-label="Unpin tile"
         >
-          <Pin className="fill-current text-[var(--color-brand)]" />
+          <Pin className="fill-current text-[var(--color-brand-mark)]" />
         </Button>
         {onClose && (
           <Button

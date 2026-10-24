@@ -116,6 +116,26 @@ then Round 1, then this plan.
 - **`pnpm lint` is not a CI check.** It exits 0 since 2026-10-24 (branch `fix/lint-clean`), but nothing
   keeps it there: `.github/workflows/ci.yml` needs a step in the `desktop` job, after `pnpm install`:
   `- name: Lint (desktop renderer)` / `run: pnpm --filter @hivemind/desktop run lint`.
+- ~~**Colour gaps from Round 0's reviews.**~~ Closed 2026-10-24 (branch `fix/colour-gaps`): (1) the
+  editor's unsaved dot is a neutral fg2 `UnsavedMark` named "unsaved changes", not amber (DESIGN.md
+  Markers), and so are a git-modified file in the tree and its count; (2) a machine's link is a shape
+  and a word per state from the app's status owner (`MACHINE_LOOKS` in `workspace/status-look.tsx`),
+  named where no word stands beside it (the chip online or idle, a remote workspace's icon in
+  Layers), and only sign in is amber and pulses; (3) a status chip sits on an opaque 16% fill over
+  `--surface-2`, and core fits each status colour per palette (`statusInk`, `statusTextInk`,
+  `theme-format.ts`, painted by the theme store, memoised on palette and accent): the chip's word
+  4.5:1 on its fill and the panel, its mark 3:1 on bg2, bg3 and bg4, keeping its hue and at least
+  half its chroma; a word straight on a header or a selected row takes the `-text` ink. Selected
+  failed chip before → after: Signal and Clean 3.67→4.54 (err unchanged), Clean Light 3.85→4.54,
+  Ubuntu 3.05→4.53, Dracula 2.55→4.52 (#ff827b), Nord 1.91→4.55 (#fe9aa1, chroma 0.121→0.120),
+  Solarized Dark 2.30→4.53, One Dark 2.60→4.55. A theme's accent is also refused near the needs-you
+  colour as drawn; (4) no words in `--color-brand`, `--color-accent` or `--color-info` in the
+  renderer or the Issues tool (unit `accent-words` scans both), and the accent's small marks take
+  `--color-brand-mark`, fitted to 3:1 on bg, bg2 and bg3 (`accentMarkInk`) rather than a stricter
+  theme check, since a picked accent is only warned about. Unit `status-ink`, `machine-status`,
+  `accent-words`, core `statusInk`; e2e `layers-panel` (selected failed row in three presets),
+  `machines`, `editor`, `accent-text` (accent and amber words), each shown failing with its fix
+  reverted. A view's `done` tone is still the palette's `ok`, unfitted, as before.
 - **Agents and Browser tile permissions.** With Agent browser control on, an agent can grant a site a
   right over the DevTools protocol (said on the security page).
 - **A diff's page.** The Diff tile, the Code Workbench's diff, a conflicted file and a tool's diff

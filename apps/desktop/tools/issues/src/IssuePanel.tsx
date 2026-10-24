@@ -68,7 +68,7 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
             <header className="flex items-center gap-2 pl-4 pr-12 py-3 border-b border-[var(--color-line)]">
               <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums">{issue.id}</span>
               {issue.github != null && (
-                <span className="font-mono text-count text-[var(--color-info)]">#{issue.github}</span>
+                <span className="font-mono text-count text-[var(--color-fg2)]">#{issue.github}</span>
               )}
               <div className="ml-auto flex items-center gap-1">
                 <Button
@@ -180,7 +180,7 @@ export function IssuePanel({ hm, params, close: onClose, openPanel }: PanelProps
                 </PropRow>
                 {issue.github != null && (
                   <PropRow label="GitHub">
-                    <span className="font-mono text-count text-[var(--color-info)]">#{issue.github}</span>
+                    <span className="font-mono text-count text-[var(--color-fg2)]">#{issue.github}</span>
                   </PropRow>
                 )}
               </aside>
@@ -486,7 +486,7 @@ function RelationsSection({ issue, onClose, openIssue, hm }: { issue: Issue; onC
                 {l.type}
               </span>
               <button
-                className="font-mono text-label text-[var(--color-info)] hover:underline truncate"
+                className="font-mono text-label text-[var(--color-fg)] underline decoration-[var(--color-fg3)] underline-offset-2 hover:decoration-current truncate"
                 title={`open ${l.id}`}
                 onClick={() => openIssue(l.id)}
               >

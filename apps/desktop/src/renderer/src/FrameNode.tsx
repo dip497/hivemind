@@ -202,7 +202,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
             title={isRemoteWs ? `remote ${remoteDisplay(data.workspacePath!, machineName)}` : `workspace ${data.workspacePath}`}
           >
             {isRemoteWs
-              ? <Server size={11} className="shrink-0 text-[var(--color-brand)]" />
+              ? <Server size={11} className="shrink-0 text-[var(--color-brand-mark)]" />
               : <FolderGit size={11} className="shrink-0 text-[var(--color-fg2)]" />}
             {/* The pill's label is dropped when it just repeats the frame title —
                 which is the DEFAULT, since a new frame is titled after its repo.

@@ -183,7 +183,7 @@ The code is migrating to two settled decisions. The UI font moves from bundled G
 The palette is neutral graphite tinted a hair toward blue (hue 250), with colour kept for meaning. All values are oklch so blends and alpha mixes stay even. A preset may recolour every value; the meanings stay.
 
 ### Primary
-- **Steel Accent** (steel-accent; steel-accent-hover on hover): the user's accent, a quiet desaturated steel by default. It marks resize handles under the pointer and checkbox fills; never focus, which is the selection colour. The user may set it to grey, so it never carries meaning.
+- **Steel Accent** (steel-accent; steel-accent-hover on hover): the user's accent, a quiet desaturated steel by default. It marks resize handles under the pointer and checkbox fills; never focus, which is the selection colour. The user may set it to grey, so it never carries meaning. It is held to 3:1 as a mark only, so it never colours words: text is chalk or pencil, and a link is chalk with an underline. A small mark in it on a header or a card (a pin, a check, a toast's icon) takes `--color-brand-mark`, the accent fitted to 3:1 on the page, the panels and the cards.
 
 ### Tertiary
 - **Signal Amber** (signal-amber): needs-you, and nothing else. Blocked, asking and plan-review chips, the needs-you badge on the rail, the needs-you count, and what such a row waits on, on its second line. Nothing decorative borrows it.
@@ -193,7 +193,7 @@ The palette is neutral graphite tinted a hair toward blue (hue 250), with colour
 - **Mist Info** (mist-info): neutral information.
 - **Working White** (working-white): the small dot for an agent at work. Being at work is not a call to action.
 
-Status chips use the status colour as text on a 16% mix of the same colour (`color-mix(in srgb, <status> 16%, transparent)`).
+Status chips use the status colour as text on an opaque 16% mix of it over the panel colour (`color-mix(in srgb, <status> 16%, var(--surface-2))`), so a chip reads the same on any row under it.
 
 ### Neutral
 - **Graphite Ground** (graphite-ground): the canvas and window behind everything.
@@ -306,7 +306,7 @@ The components are calm, exact and small. Nothing raises its voice until it need
 - **Menu item:** 12px, 6px by 8px, 6px corners, graphite-card on hover and focus. A shortcut sits at the far end in 11px pencil-text.
 
 ### Tile Row (signature)
-A 32px row: a 16px icon slot (an agent's own logo, or the tool's mark), the name at 14px, an unread dot, a spacer, then one status mark. Working is a working-white dot. Done or failed is a chip that hides on hover. Needs-you is an amber chip that pulses. Idle shows nothing. While Ctrl or ⌘ is held, an 18px keycap with the jump number replaces the status. The selected row takes graphite-hover with a 12% chalk inner ring.
+A 32px row: a 16px icon slot (an agent's own logo, or the tool's mark), the name at 14px, an unread dot, a spacer, then one status mark. Working is a working-white dot. Done or failed is a chip that hides on hover. Needs-you is an amber chip that pulses. Idle shows nothing. While Ctrl or ⌘ is held, an 18px keycap with the jump number replaces the status. The selected row takes graphite-hover with a 12% chalk inner ring. The failed, finished and needs-you colours are fitted to the preset (`statusInk` in core's `theme-format.ts`): a chip's word reads at 4.5:1 on its own fill and on the panel, and a mark at 3:1 on a row at rest, under the pointer and selected, in the colour's own hue with as much of its chroma as it can keep, so failed stays red. A status word drawn straight on a header or a selected row takes the text colour fitted to those surfaces (`statusTextInk`, `--color-status-*-text`).
 
 A terminal's row may say one more thing, on a second line under the name and lined up with it: what its screen last showed (`214 tests passed`), in 11px mono pencil-text (`text-count font-mono`), cut with an ellipsis. While its agent waits on the person, the line is what it waits on instead (`Bash: npm test`, `Asks: …`, Plan ready for review), in Signal Amber. The row grows to 44px (row-tall) only while it has a line; with none it stays 32px. The line never pulses or moves; for an agent that keeps a conversation it is the first line of what it last said. The View menu's **Lines** shows them for all agents, only for those that need you, or not at all.
 
@@ -317,6 +317,10 @@ The panel's start actions (New agent, New project, Add a tool or widget, New mac
 
 ### Tool Island
 The workspace's tool bar floats at top centre: graphite-sheet, 12px corners, control-line edge, 6px padding and ghost icon buttons 2px apart.
+
+### Markers
+- **Modified marker:** a file with unsaved edits is a 6px pencil-text dot after its name, named "unsaved changes" for a screen reader. It is neutral: an unsaved file does not wait on the person, so it never takes amber. So is a file git calls modified, in the file tree.
+- **Machine link:** a machine's connection takes a status mark with a word, from the app's status owner (`workspace/status-look.tsx`, `MACHINE_LOOKS`): online a sage dot, connecting a half-filled dot, offline a dust square, paused two bars, idle a ring, and sign in the amber needs-you triangle, the one machine state that waits on the person. A mark shown without its word carries the word as its accessible name.
 
 ## Do's and Don'ts
 

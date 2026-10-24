@@ -42,7 +42,7 @@ const LineSlot = memo(function LineSlot({ tileId, name, x, y, w, h }: { tileId: 
   return (
     <div className="absolute flex items-center gap-2 overflow-hidden" style={{ left: x, top: y, width: w, height: h }} data-community-line={tileId}>
       <span ref={el} data-line-slot={waiting ? "waiting" : "line"} className={`min-w-0 flex-1 truncate font-mono text-count leading-4 ${waiting ? "" : "text-[var(--color-fg2)]"}`}
-        style={waiting ? { color: LOOKS.needs.color } : undefined}>
+        style={waiting ? { color: LOOKS.needs.text } : undefined}>
         {text}
       </span>
       {decides && <DecideButtons tile={tileId} name={name} waiting={waiting} cut reviewOnly small={h < ROOMY_H} className="pointer-events-auto shrink-0" />}

@@ -9,6 +9,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
+import { contrastRatio } from "@hivemind/core/css-color";
 
 let app: AppWindow;
 let page: Page;
@@ -80,6 +81,23 @@ test("typing marks the tab dirty", async () => {
   // header; the dirty indicator lives on the tab itself).
   await expect(editor.getByRole("tab")).toHaveAttribute("title", FILE, { timeout: 4_000 });
   await expect(editor.locator(".cm-content")).toContainText("// edited", { timeout: 4_000 });
+  // The dot is named for a screen reader and neutral: an unsaved file does not wait on the person,
+  // so it is not the amber of "needs you" (DESIGN.md), and it reads 3:1 on its tab as a mark.
+  const dot = editor.getByRole("img", { name: "unsaved changes" });
+  await expect(dot).toBeVisible({ timeout: 4_000 });
+  const { fill, warn, tab } = await dot.evaluate((el) => {
+    const px = (css: string) => {
+      const c = document.createElement("canvas").getContext("2d")!;
+      c.fillStyle = css;
+      c.fillRect(0, 0, 1, 1);
+      return `rgb(${[...c.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(" ")})`;
+    };
+    let under: Element | null = el.parentElement;
+    while (under && getComputedStyle(under).backgroundColor === "rgba(0, 0, 0, 0)") under = under.parentElement;
+    return { fill: px(getComputedStyle(el).backgroundColor), warn: px(getComputedStyle(el).getPropertyValue("--color-warn")), tab: px(getComputedStyle(under!).backgroundColor) };
+  });
+  expect(fill).not.toBe(warn);
+  expect(contrastRatio(fill, tab)).toBeGreaterThanOrEqual(3);
 });
 
 test("Ctrl+S saves edits to disk", async () => {

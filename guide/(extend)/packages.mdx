@@ -181,9 +181,16 @@ sizes the package as HiveHub does. Each refusal names the field or the pair of c
 - `fg2` on `bg` below 3:1.
 - The accent's `brand` below 3:1 on `bg` or on `bg2`, the panels and menus: a switch that is on, a
   slider's thumb or the selected tile's handle in it would be hard to see.
-- An accent that is the colour of an agent waiting on you: `palette.warn`, or `amber`.
+- An accent that is the colour of an agent waiting on you: `palette.warn`, the colour needs-you is drawn in for that palette (see below), or `amber`.
 - A file it names that is not in the folder, has the wrong type or is too big.
 - A colour CSS would draw differently: a part too many, a unit a part does not take, or text after it.
+
+What a theme's `err` and `warn` need is fitted, not refused. When a failed or needs-you chip would
+read under 4.5:1 for its word on its own fill or on `bg2`, or under 3:1 for its mark on `bg2`, `bg3`
+or `bg4` (a row at rest, under the pointer and selected), the app draws it lighter in the same hue
+on a dark theme, or darker on a light one, keeping as much of its colour as it can. A status word
+drawn straight on a tile's header or a selected row is fitted to those too. A view is told the
+fitted failed and needs-you colours; its `done` is the palette's `ok`, as before.
 
 Every command on this page is in the [CLI reference](/cli#plugins).
 
