@@ -11,40 +11,21 @@
  *   hive notifications recent [--json]       the last 10 bursts: anyone may read them
  */
 import { defineCommand } from "citty";
-import { HiveError, patchSettingsFile, readSettings } from "@hivemind/core";
-import { NOTICE_KINDS, type NoticeKind } from "@hivemind/core/notification-settings";
+import { HiveError, getPath, patchSettingsFile, readSettings } from "@hivemind/core";
+import { NOTICE_KINDS, NOTICE_TONES, notificationSettingProblem, type NoticeKind } from "@hivemind/core/notification-settings";
+import { STATUS_MARKS } from "@hivemind/view-sdk/status";
 import { err, ok } from "../format.js";
-import { driveCall } from "../drive.js";
+import { driveCall, reloadApp } from "../drive.js";
 import { personOnly } from "../person-only.js";
 import type { RecentSound } from "@hivemind/workspace-api/notifications";
 
-type Kind = "bool" | "volume" | "time";
-/** Every key `set` takes, and what its value is. */
-export const NOTIFICATION_KEYS: Record<string, Kind> = {
-  enabled: "bool", inApp: "bool", osPopups: "bool", popupText: "bool", sound: "bool", volume: "volume",
-  "sounds.needs": "bool", "sounds.done": "bool", "sounds.error": "bool",
-  "kinds.needs": "bool", "kinds.done": "bool", "kinds.error": "bool",
-  "dnd.enabled": "bool", "dnd.start": "time", "dnd.end": "time",
-};
-
-/** `text` as `key`'s value, or why it is not one. */
-export function valueOf(key: string, text: string): { value: unknown } | { why: string } {
-  const kind = NOTIFICATION_KEYS[key];
-  if (!kind) return { why: `no notification setting "${key}"; one of ${Object.keys(NOTIFICATION_KEYS).join(", ")}` };
-  if (kind === "bool") {
-    if (text === "true" || text === "on") return { value: true };
-    if (text === "false" || text === "off") return { value: false };
-    return { why: `${key} is on or off (true or false), not "${text}"` };
-  }
-  if (kind === "volume") {
-    const n = Number(text.endsWith("%") ? Number(text.slice(0, -1)) / 100 : text);
-    return text.trim() !== "" && Number.isFinite(n) && n >= 0 && n <= 1 ? { value: n } : { why: `volume is from 0 to 1 (or 0% to 100%), not "${text}"` };
-  }
-  return /^([01]?\d|2[0-3]):[0-5]\d$/.test(text) ? { value: text } : { why: `${key} is a time of day as HH:MM (24 hours), not "${text}"` };
-}
-
-async function reloadApp(): Promise<boolean> {
-  try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
+/** `text` as a value: on, off, true and false as a switch, a number or a percentage as a number,
+ *  anything else as text. `notificationSettingProblem` then says whether `key` takes it. */
+export function valueOf(text: string): unknown {
+  if (text === "true" || text === "on") return true;
+  if (text === "false" || text === "off") return false;
+  const n = text.endsWith("%") ? Number(text.slice(0, -1)) / 100 : Number(text);
+  return text.trim() !== "" && Number.isFinite(n) ? n : text;
 }
 
 const onOff = (b: boolean) => (b ? "on" : "off");
@@ -72,11 +53,12 @@ const setCmd = defineCommand({
     const ctx = { json: !!args.json };
     const key = String(args.key);
     personOnly(ctx, "change the app's sounds and notifications", `hive notifications set ${key} ${String(args.value)}`, "Notifications");
-    const v = valueOf(key, String(args.value));
-    if ("why" in v) return err(ctx, "usage", v.why, undefined, "run `hive notifications show` to see them, or `hive notifications --help`");
+    const value = valueOf(String(args.value));
+    const why = notificationSettingProblem(key, value);
+    if (why) return err(ctx, "usage", why, undefined, "run `hive notifications show` to see them, or `hive notifications --help`");
     try {
-      const after = await patchSettingsFile([{ path: `notifications.${key}`, value: v.value }]);
-      const stored = key.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)[k], after.notifications);
+      const after = await patchSettingsFile([{ path: `notifications.${key}`, value }]);
+      const stored = getPath(after.notifications, key);
       const reloaded = await reloadApp();
       return ok(ctx, { key, value: stored, reloaded }, () => `${key} = ${JSON.stringify(stored)}; ${reloaded ? "app reloaded" : "app not running — applies on next start"}`);
     } catch (e) {
@@ -107,8 +89,6 @@ const playCmd = defineCommand({
   },
 });
 
-const WORDS: Record<string, string> = { needs: "needs you", done: "finished", error: "failed" };
-
 const recentCmd = defineCommand({
   meta: { name: "recent", description: "The last 10 bursts of agents' changes: how many agents, the sound and the pop-ups" },
   args: { json: { type: "boolean" } },
@@ -125,7 +105,7 @@ const recentCmd = defineCommand({
     return ok(ctx, { recent: rows }, () => rows.length === 0 ? "nothing yet" : rows.map((r) => {
       const when = new Date(r.at).toLocaleTimeString();
       const sound = `${r.sound}${r.pack ? ` (${r.pack})` : ""}${r.why ? `: ${r.why}` : ""}`;
-      return `${when}  ${WORDS[r.moment]!.padEnd(9)}  ${String(r.agents).padStart(3)} agent${r.agents === 1 ? " " : "s"}  ${String(r.popups).padStart(2)} pop-up${r.popups === 1 ? " " : "s"}  ${sound}`;
+      return `${when}  ${STATUS_MARKS[NOTICE_TONES[r.moment]].word.padEnd(9)}  ${String(r.agents).padStart(3)} agent${r.agents === 1 ? " " : "s"}  ${String(r.popups).padStart(2)} pop-up${r.popups === 1 ? " " : "s"}  ${sound}`;
     }).join("\n"));
   },
 });

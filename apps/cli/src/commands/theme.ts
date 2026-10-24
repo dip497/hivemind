@@ -17,11 +17,8 @@ import {
 import { withPreset } from "@hivemind/core/appearance-extra";
 import { applyTheme, listInstalledThemes, revertTheme, themeStatus } from "@hivemind/core/theme-apply";
 import { err, ok } from "../format.js";
-import { driveCall } from "../drive.js";
+import { reloadApp } from "../drive.js";
 
-async function reloadApp(): Promise<boolean> {
-  try { await driveCall("settings.reload", [], 5000); return true; } catch { return false; }
-}
 /** What choosing a preset sets, written even where it reads the same here: an id this version does
  *  not know (a newer build's accent) reads as the default, and choosing a preset replaces it. */
 const PRESET_PATHS = ["preset", "mode", "palette", "accent", "terminal"].map((k) => `appearance.${k}`);

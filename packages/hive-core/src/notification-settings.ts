@@ -11,8 +11,13 @@
  *      you, so DND never mutes it; only the noisier finished and failed.
  */
 
+import type { StatusTone } from "@hivemind/view-sdk/protocol";
+
 export type NoticeKind = "needs" | "done" | "error";
 export const NOTICE_KINDS: readonly NoticeKind[] = ["needs", "done", "error"];
+/** The status each kind is a change to: its word and mark come from `STATUS_MARKS[tone]`
+ *  (`@hivemind/view-sdk/status`), so a pop-up, Recent and the CLI say it as the app does. */
+export const NOTICE_TONES: Readonly<Record<NoticeKind, StatusTone>> = { needs: "attention", done: "done", error: "failed" };
 export type NoticeSurface = "inApp" | "osPopups" | "sound";
 
 export interface NotificationSettings {
@@ -77,6 +82,40 @@ export function normalizeNotificationSettings(raw: unknown, base: NotificationSe
     popupText: bool(r.popupText, base.popupText),
   };
 }
+
+/** Why `value` cannot be stored at `key` (dotted, under `notifications`; "" the section), or null
+ *  when it can: the one check `hive notifications set` and `hive config set notifications.*` share. A key is one of
+ *  DEFAULT_NOTIFICATION_SETTINGS' own (a group too, whose value sets some of its keys); a value
+ *  is of its default's kind: on or off, the volume from 0 to 1, a time of day as HH:MM. */
+export function notificationSettingProblem(key: string, value: unknown): string | null {
+  let def: unknown = DEFAULT_NOTIFICATION_SETTINGS;
+  for (const k of key.split(".").filter(Boolean)) {
+    if (!isObj(def) || !Object.hasOwn(def, k)) return `no notification setting "${key}"; one of ${NOTIFICATION_KEYS.join(", ")}`;
+    def = def[k];
+  }
+  return problemOf(key, def, value);
+}
+
+function problemOf(key: string, def: unknown, value: unknown): string | null {
+  if (isObj(def)) {
+    if (!isObj(value)) return `${key || "notifications"} is a group of settings (${Object.keys(def).join(", ")}), not ${JSON.stringify(value)}`;
+    for (const [k, v] of Object.entries(value)) {
+      const at = key ? `${key}.${k}` : k;
+      if (!Object.hasOwn(def, k)) return `no notification setting "${at}"; one of ${NOTIFICATION_KEYS.join(", ")}`;
+      const why = problemOf(at, def[k], v);
+      if (why) return why;
+    }
+    return null;
+  }
+  if (typeof def === "boolean") return typeof value === "boolean" ? null : `${key} is on or off (true or false), not ${JSON.stringify(value)}`;
+  if (typeof def === "number") return typeof value === "number" && value >= 0 && value <= 1 ? null : `${key} is from 0 to 1 (0% to 100%), not ${JSON.stringify(value)}`;
+  return typeof value === "string" && HM_RE.test(value) ? null : `${key} is a time of day as HH:MM (24 hours), not ${JSON.stringify(value)}`;
+}
+
+/** Every setting's dotted key, as the defaults have them. */
+export const NOTIFICATION_KEYS: readonly string[] = (function leaves(o: Record<string, unknown>, at: string): string[] {
+  return Object.entries(o).flatMap(([k, v]) => (isObj(v) ? leaves(v, `${at}${k}.`) : [`${at}${k}`]));
+})(DEFAULT_NOTIFICATION_SETTINGS as unknown as Record<string, unknown>, "");
 
 type MaybeDate = Date | number;
 

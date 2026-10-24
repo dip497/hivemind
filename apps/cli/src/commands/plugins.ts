@@ -47,7 +47,7 @@ import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
-import { driveCall } from "../drive.js";
+import { driveCall, reloadApp } from "../drive.js";
 import { HcpCliError } from "../hcp.js";
 import { EXIT } from "../exit-codes.js";
 import { personOnly } from "../person-only.js";
@@ -137,7 +137,7 @@ async function findTarget(raw: string): Promise<{ plugin: Plugin } | { package: 
 /** One plugin's record changed inside the settings lock, and a running app told. */
 async function change(p: Plugin, fn: (s: PluginState) => PluginState): Promise<{ state: PluginState; reloaded: boolean }> {
   const after = await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state: withPluginState(cur.plugins.state, p.kind, p.id, fn) } }));
-  const reloaded = await driveCall("settings.reload", [], 5000).then(() => true, () => false);
+  const reloaded = await reloadApp();
   return { state: after.plugins.state[p.key] ?? {}, reloaded };
 }
 const note = (reloaded: boolean) => (reloaded ? "app reloaded" : "app not running — applies on next start");
@@ -222,14 +222,14 @@ const switchCmd = (on: boolean) => defineCommand({
       const target = await findTarget(String(args.plugin));
       if ("package" in target) {
         const r = await switchPackage(target.package.id, on);
-        const reloaded = (await Promise.all([driveCall("settings.reload", [], 5000).then(() => true, () => false), rescanApp(r.members.map((m) => m.kind))]))[0];
+        const reloaded = (await Promise.all([reloadApp(), rescanApp(r.members.map((m) => m.kind))]))[0];
         return ok(ctx, { package: r.id, enabled: on, reloaded }, () => `${r.id} ${on ? "on" : "off"}, with ${r.members.length} plugin${r.members.length === 1 ? "" : "s"}; ${note(reloaded)}`);
       }
       const p = target.plugin;
       // One you added is switched with its package; one that comes with the app by its own setting.
       if (p.package) {
         const pkg = await switchPlugin(p.kind, p.id, on);
-        const reloaded = (await Promise.all([driveCall("settings.reload", [], 5000).then(() => true, () => false), rescanApp([p.kind])]))[0];
+        const reloaded = (await Promise.all([reloadApp(), rescanApp([p.kind])]))[0];
         return ok(ctx, { key: p.key, enabled: on, package: pkg?.id ?? p.package.id, reloaded }, () => `${p.key} ${on ? "on" : "off"}; ${note(reloaded)}`);
       }
       const { reloaded } = await change(p, (s) => ({ ...s, enabled: on }));
