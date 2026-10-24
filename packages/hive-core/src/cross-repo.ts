@@ -224,7 +224,13 @@ export async function transferIssue(
     opts.mode === "move"
       ? { id, type: "moved-from" }
       : { id, type: "relates" };
+  // Every frontmatter key travels except the ones rebuilt below and `branch` (a branch of the source
+  // repo, like `github`). A copy is a new issue, so it leaves behind what names the original: its
+  // tracker link, its PR and its earlier ids.
+  const { path: _p, sections: _s, raw: _r, branch: _b, external, pr, aliases, ...carried } = src;
   const newIssue: Issue = {
+    ...carried,
+    ...(opts.mode === "move" ? { external, pr, aliases } : {}),
     id: newId,
     title: src.title,
     state: src.state,
@@ -239,14 +245,15 @@ export async function transferIssue(
     sections: {
       description: src.sections.description,
       acceptanceCriteria: src.sections.acceptanceCriteria.map((a) => ({ ...a })),
+      ...(src.sections.acceptanceLayout ? { acceptanceLayout: [...src.sections.acceptanceLayout] } : {}),
       activity: [
         {
-          at: now.replace("T", " ").slice(0, 16),
+          at: now,
           who: actor,
           message: `${opts.mode === "move" ? "moved" : "copied"} from ${id} (${prefixOf(id)})`,
         },
       ],
-      extra: "",
+      extra: src.sections.extra,
     },
     raw: "",
   };

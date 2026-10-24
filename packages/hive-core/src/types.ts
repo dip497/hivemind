@@ -108,7 +108,8 @@ export const PrRefZ = z
   .loose();
 export type PrRef = z.infer<typeof PrRefZ>;
 
-/** YAML frontmatter schema for an issue file. */
+/** YAML frontmatter schema for an issue file. Loose: a key this build doesn't name (one a newer
+ *  build or a plugin wrote) is kept and written back after the known ones (`serializeIssue`). */
 export const IssueFrontmatterZ = z.object({
   id: IssueIdZ,
   title: z.string().min(1),
@@ -132,7 +133,7 @@ export const IssueFrontmatterZ = z.object({
   aliases: z.array(z.string()).optional(),
   created: IsoZ,
   updated: IsoZ,
-});
+}).loose();
 export type IssueFrontmatter = z.infer<typeof IssueFrontmatterZ>;
 
 /** Body sections parsed out from the markdown. */
@@ -140,9 +141,20 @@ export interface IssueSections {
   description: string;
   acceptanceCriteria: AcceptanceItem[];
   activity: ActivityEntry[];
-  /** Untouched body text for sections we don't model yet. */
+  /** Sections we don't model, as written: everything from an unknown `#`/`##` heading inside or
+   *  after Activity. Written back after Activity. */
   extra: string;
+  /** The Acceptance criteria section line by line, present only when it holds more than
+   *  checklist items (prose, `* [ ]`, nested bullets, an unknown heading's block, or an indented
+   *  item), so those lines survive a rewrite in place. A `{ indent }` slot is where the next entry
+   *  of `acceptanceCriteria` goes; entries beyond the slots go at the end of the section. */
+  acceptanceLayout?: LayoutLine[];
+  /** The same for Activity: lines that are not rows, kept between the rows they sat between. */
+  activityLayout?: LayoutLine[];
 }
+
+/** A line kept as written, or a slot for the section's next modelled entry. */
+export type LayoutLine = string | { indent: string };
 
 export interface AcceptanceItem {
   done: boolean;
@@ -152,8 +164,11 @@ export interface AcceptanceItem {
 export interface ActivityEntry {
   /** An ISO-8601 timestamp with `Z` (UTC). */
   at: string;
-  who: string; // user id or agent id
+  who: string; // user id, agent id or a tracker person ("Jane Doe (jira)")
   message: string;
+  /** A stable id for a row that mirrors one elsewhere (`jira-c-10023` for a Jira comment), so a
+   *  sync matches it instead of adding it twice. Written as a trailing `<!-- id:… -->`. */
+  id?: string;
 }
 
 export interface Issue extends IssueFrontmatter {
@@ -175,6 +190,12 @@ export interface IssueSummary
     | "labels"
     | "assignee"
     | "github"
+    | "links"
+    | "status"
+    | "external"
+    | "branch"
+    | "pr"
+    | "aliases"
     | "created"
     | "updated"
   > {
@@ -197,6 +218,10 @@ export const IssuePatchZ = z
     labels: z.array(z.string()),
     assignee: AssigneeZ.nullable(),
     github: z.number().int().positive().nullable(),
+    /** `null` removes it, like `github`. */
+    branch: z.string().min(1).nullable(),
+    pr: PrRefZ.nullable(),
+    aliases: z.array(z.string()),
     description: z.string(),
     acceptanceCriteria: z.array(AcceptanceItemZ),
     extra: z.string(),
@@ -214,9 +239,11 @@ export const NewIssueZ = z.object({
   description: z.string().optional(),
   acceptanceCriteria: z.array(AcceptanceItemZ).optional(),
   github: z.number().int().positive().nullable().optional(),
+  branch: z.string().min(1).optional(),
 });
 export type NewIssue = z.infer<typeof NewIssueZ>;
 
+/** `.hivemind/config.yaml`. Loose, like the issue frontmatter: every writer keeps keys it doesn't name. */
 export const ConfigZ = z.object({
   prefix: z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/, "prefix must be UPPERCASE 2-10 chars"),
   next_id: z.number().int().positive(),
@@ -228,10 +255,10 @@ export const ConfigZ = z.object({
       z.object({
         bin: z.string(),
         model: z.string().optional(),
-      })
+      }).loose()
     )
     .default({}),
-});
+}).loose();
 export type Config = z.infer<typeof ConfigZ>;
 
 /** Common JSON envelope used by all CLI commands when `--json` is passed. */

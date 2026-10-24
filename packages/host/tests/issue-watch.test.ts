@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { WORKSPACE_FORMAT, createIssue, deleteIssue, updateIssue, writeConfig } from "@hivemind/core/storage";
+import { WORKSPACE_FORMAT, commentOnIssue, createIssue, deleteIssue, updateIssue, writeConfig } from "@hivemind/core/storage";
 import type { IssueChange } from "@hivemind/workspace-api/methods";
 import { IssueWatch } from "../src/issue-watch.ts";
 
@@ -67,6 +67,12 @@ test("a sub-issue's write is told; a file written again unchanged, a sync's book
 
   const sub = await createIssue(root, { title: "child", parent: parent.id, who: "codex" });
   assert.deepEqual((await told(1)).map(([, c]) => [c.id, c.change, c.by]), [[sub.id, "created", "codex"]]);
+  // A comment in a file whose activity holds a line that is not a row: the activity changed,
+  // nothing else (how the section's lines lie is not a field).
+  fs.writeFileSync(sub.path, fs.readFileSync(sub.path, "utf8").replace("## Activity\n", "## Activity\n\nSynced from Jira.\n"));
+  await told(1);
+  await commentOnIssue(root, sub.id, "looks right", "Priya Nair");
+  assert.deepEqual((await told(1)).map(([, c]) => [[...c.fields].sort(), c.by]), [[["activity", "updated"], "Priya Nair"]]);
 
   const file = sub.path;
   fs.writeFileSync(file, fs.readFileSync(file)); // the same bytes: an mtime moved, no field

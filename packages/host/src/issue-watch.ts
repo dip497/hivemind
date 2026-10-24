@@ -32,7 +32,8 @@ interface Kept {
 export function changedFields(before: Issue | null, after: Issue): string[] {
   const flat = (i: Issue | null): Record<string, unknown> => {
     if (!i) return {};
-    const { path: _p, raw: _r, sections, ...front } = i;
+    // How a section's lines were laid out is the file's, not a field: it moves with every row.
+    const { path: _p, raw: _r, sections: { acceptanceLayout: _a, activityLayout: _l, ...sections }, ...front } = i;
     return { ...front, ...sections };
   };
   const a = flat(before);
