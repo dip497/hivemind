@@ -112,6 +112,9 @@ then Round 1, then this plan.
   digit only while Num Lock makes it type one, and `actionsFor` lets a row named by a sign win over a
   digit's place, so French Ctrl+6 (`-`) sizes text and tile 6 has no key on AZERTY; the editor's font
   keys follow the terminal's rule only.
+- **`pnpm lint` is not a CI check.** It exits 0 since 2026-10-24 (branch `fix/lint-clean`), but nothing
+  keeps it there: `.github/workflows/ci.yml` needs a step in the `desktop` job, after `pnpm install`:
+  `- name: Lint (desktop renderer)` / `run: pnpm --filter @hivemind/desktop run lint`.
 - **Agents and Browser tile permissions.** With Agent browser control on, an agent can grant a site a
   right over the DevTools protocol (said on the security page).
 - **A diff's page.** The Diff tile, the Code Workbench's diff, a conflicted file and a tool's diff
