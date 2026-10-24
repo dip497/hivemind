@@ -368,17 +368,13 @@
    under 200; pressed, as large as the window allows. The code draws its own white. */
 /* Wider than 240 when a long code needs it to keep whole pixels a module. */
 .qr-code { display: grid; place-items: center; flex-shrink: 0; width: clamp(200px, 100%, 240px); min-width: min-content; aspect-ratio: 1; padding: 0; background: none; cursor: zoom-in; }
-.qr-code > svg { display: block; border-radius: 4px; }
-/* A scanner reads the code on white, whatever the theme. */
-.qr-large { --qr-paper: #fff; display: grid; place-items: center; width: min(92vw, 92vh); max-width: none; aspect-ratio: 1; background: var(--qr-paper); border-radius: 8px; overflow: hidden; }
-.qr-large > svg { display: block; }
+.qr-code > svg { border-radius: 4px; }
 
 /* A package of several: one row switched as one, its members under it. */
 .package-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 8px; text-align: left; background: none; border: 0; color: inherit; cursor: pointer; border-radius: 6px; }
 .package-members { margin-left: 22px; border-left: 1px solid var(--color-line2); padding-left: 4px; }
 .package-members .plugin-row:not(:has(> button)) { padding: 8px; }
 .package-members .settings-remove-confirm { margin: 8px; padding: 12px; border-radius: 6px; background: var(--color-bg2); }
-.package-rollback-open { align-self: flex-start; margin: 4px 0 6px 2px; color: var(--color-fg2); }
 
 /* A package's review, before it is installed or updated: one line per member, what it is and
    where it runs, then what it may do or what changed. */

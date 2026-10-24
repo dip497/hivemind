@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "../icons"
 
 import { cn } from "../../lib/cn"
@@ -39,8 +40,10 @@ const DialogContent = React.forwardRef<
     padding?: "default" | "none"
     /** The × in its corner; a dialog that is all list, closed with Escape or a click outside, has none. */
     closeButton?: boolean
+    /** "paper": a code to scan (a QR), on white whatever the theme, as large a square as the window allows. */
+    surface?: "card" | "paper"
   }
->(({ className, children, padding = "default", closeButton = true, onPointerDownOutside, ...props }, ref) => {
+>(({ className, children, padding = "default", closeButton = true, surface = "card", onPointerDownOutside, ...props }, ref) => {
   // A press begun while it was closing is no press outside it: its click may be what opened it again.
   const node = React.useRef<HTMLDivElement | null>(null)
   const pressedClosed = React.useRef(false)
@@ -59,8 +62,12 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={refs}
       onPointerDownOutside={(e) => { if (pressedClosed.current) e.preventDefault(); onPointerDownOutside?.(e) }}
+      // The card is focused only as a fallback (no control in it, or a picker taking the arrows): its controls show focus, not the card.
       className={cn(
-        "fixed left-[50%] top-[50%] z-(--layer-dialogs) grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:pointer-events-none data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] hm-surface-3 text-[var(--color-fg)]",
+        "fixed left-[50%] top-[50%] z-(--layer-dialogs) grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:pointer-events-none data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] text-[var(--color-fg)] outline-none",
+        surface === "paper"
+          ? "w-[min(92vw,92vh)] max-w-none aspect-square place-items-center overflow-hidden rounded-[8px] border border-[var(--color-line2)] bg-qr-paper shadow-[var(--hm-shadow-3),var(--hm-highlight)]"
+          : "hm-surface-3",
         padding === "none" ? "gap-0 p-0" : "gap-4 p-6",
         className
       )}
@@ -104,28 +111,36 @@ const DialogFooter = ({
 )
 DialogFooter.displayName = "DialogFooter"
 
+/* "list": the header of a dialog that is a list to pick from — smaller and quieter, so the list leads. */
+const dialogTitleVariants = cva("text-row font-medium leading-none tracking-tight text-foreground", {
+  variants: { variant: { default: "", list: "text-body font-semibold" } },
+  defaultVariants: { variant: "default" },
+})
+
 const DialogTitle = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Title>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title> & VariantProps<typeof dialogTitleVariants>
+>(({ className, variant, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn(
-      "text-row font-medium leading-none tracking-tight text-foreground",
-      className
-    )}
+    className={cn(dialogTitleVariants({ variant }), className)}
     {...props}
   />
 ))
 DialogTitle.displayName = DialogPrimitive.Title.displayName
 
+const dialogDescriptionVariants = cva("text-label text-muted-foreground", {
+  variants: { variant: { default: "", list: "line-clamp-2 text-[var(--color-fg3)]" } },
+  defaultVariants: { variant: "default" },
+})
+
 const DialogDescription = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Description>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description> & VariantProps<typeof dialogDescriptionVariants>
+>(({ className, variant, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-label text-muted-foreground", className)}
+    className={cn(dialogDescriptionVariants({ variant }), className)}
     {...props}
   />
 ))

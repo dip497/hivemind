@@ -32,7 +32,7 @@ export function ThemeList() {
   const update = record && status?.update ? info!.themes.find((x) => x.id === record.id) : undefined;
 
   return (
-    <div className="settings-row settings-themes" data-themes>
+    <div className="settings-row" data-themes>
       <div>
         <label>Themes</label>
         <p>{info && !info.themes.length && !record ? "None installed. A package from HiveHub can hold themes." : "From the packages you installed."}</p>

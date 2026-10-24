@@ -103,7 +103,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
 
   return (
     <div
-      className="group/frame w-full h-full rounded-xl relative"
+      className="group w-full h-full rounded-xl relative"
       // Frame node is pointer-transparent at the .react-flow__node-frame
       // wrapper level (styles.css). Pan/right-drag/Space+left/rubber-band
       // selection all need pointer events to reach the pane container —
@@ -243,7 +243,7 @@ export function FrameNode({ id, data, selected }: { id: string; data: FrameNodeD
         })()}
         {/* Its menu, the one the Layers panel opens: shown on hover, while selected or open, or on focus. */}
         <Button variant="ghost" size="icon-micro" aria-label={`${data.title} actions`} title="Frame actions" data-frame-actions={data.id}
-          className={`transition-opacity duration-150 focus-visible:opacity-100 group-hover/frame:opacity-100 ${selected || menu ? "opacity-100" : "opacity-0"}`}
+          reveal={selected || menu ? "none" : "hidden"}
           onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMenu((m) => (m ? null : { x: r.right - 230, y: r.bottom })); }}>
           <Ellipsis />
         </Button>

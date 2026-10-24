@@ -63,7 +63,7 @@ function PackageItem({ p, open, toggle, reload }: { p: PackageRow; open: boolean
   };
   const Chevron = open ? ChevronDown : ChevronRight;
   const offAlone = p.on ? p.members.filter((m) => !m.on).length : 0;
-  return <div className="package-item" data-package={p.id} data-open={open ? "" : undefined}>
+  return <div data-package={p.id} data-open={open ? "" : undefined}>
     <div className="plugin-row" data-state={p.on ? "on" : "off"}>
       <button type="button" className="package-toggle" aria-expanded={open} aria-controls={`package-${p.id}`} onClick={toggle} data-package-open={p.id}>
         <Chevron size={15} className="plugin-row-mark" />
@@ -91,14 +91,14 @@ function PackageItem({ p, open, toggle, reload }: { p: PackageRow; open: boolean
           </div>;
       })}
       {p.previous && (asking
-        ? <div className="settings-remove-confirm package-rollback" data-rollback-confirm={p.id}>
+        ? <div className="settings-remove-confirm" data-rollback-confirm={p.id}>
           <p>Go back to {p.previous.version}? It comes back {p.previous.on ? "on" : "off"}, as it was. {p.version} is kept.</p>
           <div className="settings-actions">
             <Button variant="outline" disabled={busy} onClick={() => setAsking(false)}>Keep {p.version}</Button>
             <Button disabled={busy} data-rollback-do={p.id} onClick={() => void act(() => window.hive.rollbackPackage(p.id))}>{busy ? "Rolling back…" : `Roll back to ${p.previous.version}`}</Button>
           </div>
         </div>
-        : <Button variant="ghost" size="sm" className="package-rollback-open" data-rollback={p.id} onClick={() => setAsking(true)}><History />Roll back to {p.previous.version}</Button>)}
+        : <Button variant="ghost" size="sm" className="mt-1 mb-1.5 ml-0.5 self-start" data-rollback={p.id} onClick={() => setAsking(true)}><History />Roll back to {p.previous.version}</Button>)}
     </div>}
   </div>;
 }

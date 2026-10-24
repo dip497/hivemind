@@ -87,7 +87,7 @@ function Control({ field: f, value, compact, set }: { field: SettingField; value
         <span className="flex items-center gap-1.5">
           <input type="color" className="size-7 cursor-pointer rounded-md border border-[var(--color-line)] bg-transparent p-0.5"
             value={start} onChange={(e) => set(e.target.value)} aria-label={f.label} data-color />
-          <Input type="text" size={size} className="w-24 font-mono" key={hex} defaultValue={hex} placeholder="theme"
+          <Input type="text" size={size} font="mono" className="w-24" key={hex} defaultValue={hex} placeholder="theme"
             onBlur={(e) => set(e.target.value.trim())} />
           {hex !== "" && <Button type="button" variant="ghost" size="sm" onClick={() => set("")} title="Use the theme's own colour">Theme</Button>}
         </span>
