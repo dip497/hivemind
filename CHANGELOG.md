@@ -40,6 +40,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ### Fixed
 
+- `hive plugins check` no longer type-checks a tool's service program (the file its `service.command` runs, often a bundle) as tile code, reports a long list of type problems instead of saying TypeScript did not run, and draws a tool whose tile calls its service.
 - An agent whose workers finish one after another is told "Your agents sent you messages" once, at its prompt, even before it has finished a turn since the app started; before, the line could be pasted into its prompt again for each worker.
 - Shift+Enter in a terminal adds a new line in an agent's prompt instead of sending it. A program that reads keys by the kitty keyboard protocol gets Shift+Enter, Ctrl+I and Tab as themselves, also after a window reattaches.
 - Esc in a full-screen terminal reaches the program instead of leaving full screen; ⌘/Ctrl+⇧+F leaves. Settings → Shortcuts lists the terminal's own keys.
