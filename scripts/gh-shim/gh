@@ -7,6 +7,7 @@
 #   pr-url             the URL `gh pr create` prints (default https://github.com/acme/widgets/pull/7)
 #   create-fail        present → `gh pr create` fails
 #   graphql.json       `gh api graphql` prints it
+#   graphql-exit       its exit code then (gh exits 1 when GitHub answered `errors` beside `data`)
 # `gh pr create` saves its body (stdin) as $GH_SHIM/body.md.
 state="${GH_SHIM:?GH_SHIM names the shim state folder}"
 for a in "$@"; do printf '%s\037' "$a" >> "$state/calls"; done
@@ -24,7 +25,7 @@ case "$1 $2" in
     if [ -e "$state/pr-url" ]; then cat "$state/pr-url"; else echo "https://github.com/acme/widgets/pull/7"; fi
     exit 0 ;;
   "api graphql")
-    if [ -e "$state/graphql.json" ]; then cat "$state/graphql.json"; exit 0; fi
+    if [ -e "$state/graphql.json" ]; then cat "$state/graphql.json"; exit "$(cat "$state/graphql-exit" 2>/dev/null || echo 0)"; fi
     echo '{"data":{}}'; exit 0 ;;
 esac
 echo "gh shim: no answer for: $*" >&2

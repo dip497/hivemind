@@ -148,3 +148,22 @@ test("changes requested and failing checks are badges: the issue stays where it 
   assert.deepEqual(await prs.pass(), [], "the same answer again changes nothing");
   assert.equal(fs.readFileSync(after.path, "utf8"), file, "and writes nothing");
 });
+
+test("a PR GitHub no longer finds (gh exits 1, `errors` beside `data`) leaves its issue alone and the others still move", async () => {
+  shim();
+  const answer = gql({ 11: { state: "MERGED", merged: true } }) as { data: { r0: Record<string, unknown> }; errors?: unknown[] };
+  answer.data.r0.p12 = null;
+  answer.errors = [{ type: "NOT_FOUND", path: ["r0", "p12"], message: "Could not resolve to a PullRequest with the number of 12." }];
+  fs.writeFileSync(path.join(process.env.GH_SHIM!, "graphql.json"), JSON.stringify(answer));
+  fs.writeFileSync(path.join(process.env.GH_SHIM!, "graphql-exit"), "1");
+  const { repo, root } = await workspace();
+  const found = await createIssue(root, { title: "Found", state: "in_review" });
+  await updateIssue(root, found.id, { pr: pr(11) });
+  const gone = await createIssue(root, { title: "Gone", state: "in_review" });
+  await updateIssue(root, gone.id, { pr: pr(12) });
+  const { prs, issues } = watching();
+  issues.follow(repo, root, new AbortController().signal);
+  await until(() => prs.running);
+  assert.deepEqual((await prs.pass()).map((c) => [c.id, c.event]), [[found.id, "merged"]]);
+  assert.deepEqual([(await readIssue(root, gone.id)).state, (await readIssue(root, gone.id)).pr?.state], ["in_review", "open"]);
+});
