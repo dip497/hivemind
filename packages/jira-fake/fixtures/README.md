@@ -102,6 +102,8 @@ await jira.close();
 - **Edits.** `PUT /issue/{key}` sets `summary`, `labels`, `description` and `assignee` (each
   change in the changelog; any other field is a 400 and nothing is applied), and
   `PUT /issue/{key}/comment/{id}` edits a comment its author wrote (403 otherwise).
+- **Filters.** `GET filter/{id}` and `GET filter/search` answer the boards' filters; one with
+  `shared: false` is refused by id and left out of the search, as for a filter not shared with you.
 - **What's out of scope.** Issue creation, other field edits, attachments, worklogs, versions and
   rendered fields. An unknown path answers 404.
 
@@ -255,6 +257,7 @@ await rovo.close();
 | `listJiraStatuses` `mode` | `"project"` (per issue type, needs `projectKey`) or `"search"` (filters) | its handler |
 | `getJiraBoardIssueData` `dataset` | `"board"` (the filter, default) or `"backlog"` | its handler |
 | `listJiraBoards`, `listJiraBoardSprints`, `getJiraWorkflows` inputs | Not in any capture; REST-like | `EXTRA`, `MANAGE` |
+| `listJiraFilters` output | REST `filter/search` (`{values: [{id, name, jql}], total, isLast, …}`), each filter's `jql` always included; a board filter with `shared: false` isn't listed | its handler; `filter/search` in `server.ts` |
 | Comment / edit bodies | Markdown only; `contentFormat: "html"` is refused | `bodyIn()` |
 | How HTML / markdown render panels, mentions, lozenges, media | `src/markdown.ts` | `adfToHtml()`, `adfToMarkdown()` |
 | `getAccessibleAtlassianResources` | One Jira entry; `avatarUrl` present | its handler |

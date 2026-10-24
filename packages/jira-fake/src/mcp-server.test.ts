@@ -27,6 +27,7 @@ const SYNC_TOOLS = [
   "listJiraIssueChangelogs", "listJiraBoards", "getJiraBoardConfig", "listJiraBoardSprints", "getJiraBoardIssueData", "getJiraBoardSprintData",
   "getJiraIssueTypeMetaWithFields", "listJiraProjectIssueTypesMetadata", "listJiraIssueAssignableUsers", "lookupJiraAccountId",
   "editJiraIssue", "createJiraIssueRemoteIssueLink", "listJiraIssueRemoteIssueLinks", "getJiraEntityProperty", "editJiraEntityProperty",
+  "listJiraFilters",
 ];
 
 let clock = NOW;
@@ -460,6 +461,17 @@ describe("the sync's tools on the Cloud sites: one Jira with the REST fake", () 
       expect((await call(c, f, "lookupJiraAccountId", { query: someone.displayName })).data.map((u: { accountId: string }) => u.accountId)).toEqual([someone.accountId]);
     });
   }
+
+  test("listJiraFilters lists the filters this person can see with their JQL, as REST has them; one not shared with them isn't listed", async () => {
+    const { f, c } = await signedIn("cloud-scrum-company");
+    const [scrum, bugs] = f.site.boards;
+    const both = await call(c, f, "listJiraFilters", { id: [scrum!.filter.id, bugs!.filter.id] });
+    expect(both.data.values.map((v: { id: string; jql: string }) => [v.id, v.jql])).toEqual(await Promise.all([scrum!, bugs!].map(async (b) => [b.filter.id, (await rest(f, "GET", `/rest/api/3/filter/${b.filter.id}`)).jql])));
+    expect((await call(c, f, "listJiraFilters", { filterName: "bugs" })).data.values.map((v: { id: string }) => v.id)).toEqual([bugs!.filter.id]);
+    bugs!.filter.shared = false;
+    expect((await call(c, f, "listJiraFilters", { id: [bugs!.filter.id] })).data).toMatchObject({ total: 0, values: [] });
+    expect((await rest(f, "GET", `/rest/api/3/filter/${bugs!.filter.id}`)).errorMessages).toHaveLength(1);
+  });
 
   test("rich text comes back as markdown, or as HTML when markdown can't carry it; an ADF request is ignored (#189)", async () => {
     const { f, c } = await signedIn("cloud-kanban-team");
