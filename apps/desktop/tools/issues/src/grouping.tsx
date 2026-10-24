@@ -33,7 +33,7 @@ export interface IssueGroup {
 const rank = (s: WorkflowStatus) => ISSUE_STATES.indexOf(s.category);
 
 /** The status columns: the workflow's board columns when it has them, with every status no column
- *  holds placed by its state; else one per status, in the workflow's order (state order, then the
+ *  holds placed by its state (the board's own order kept); else one per status, in the workflow's order (state order, then the
  *  file's). A retired status gets a column only while an issue sits in it; cancelled ones only when
  *  asked for, and a cancelled issue in a mixed column likewise. */
 export function statusColumns(issues: IssueSummary[], wf: Workflow, showCancelled: boolean): IssueGroup[] {
@@ -45,16 +45,18 @@ export function statusColumns(issues: IssueSummary[], wf: Workflow, showCancelle
   }
   const byId = new Map(live.map((s) => [s.id, s]));
   const onBoard = new Set(wf.board?.columns.flatMap((c) => c.statuses) ?? []);
-  const slots: { name: string; statuses: WorkflowStatus[]; at: number }[] = [
-    ...(wf.board?.columns ?? []).map((c) => {
-      const statuses = c.statuses.map((id) => byId.get(id)).filter((s): s is WorkflowStatus => !!s);
-      return { name: c.name, statuses, at: Math.min(...statuses.map(rank), 99) };
-    }),
-    ...live.filter((s) => !onBoard.has(s.id)).map((s) => ({ name: s.name, statuses: [s], at: rank(s) + 0.5 })),
-  ];
+  // The board's columns in the board's order, whatever their states: a Jira board may put an
+  // in-progress "Ready for release" after "Review".
+  const slots: { name: string; statuses: WorkflowStatus[]; at: number }[] = (wf.board?.columns ?? []).map((c) => {
+    const statuses = c.statuses.map((id) => byId.get(id)).filter((s): s is WorkflowStatus => !!s);
+    return { name: c.name, statuses, at: Math.min(...statuses.map(rank), 99) };
+  });
+  // A status no column holds goes before the first column of a later state, in the workflow's order.
+  for (const s of live.filter((x) => !onBoard.has(x.id))) {
+    const at = slots.findIndex((slot) => slot.at > rank(s));
+    slots.splice(at < 0 ? slots.length : at, 0, { name: s.name, statuses: [s], at: rank(s) });
+  }
   return slots
-    .map((slot, i) => ({ ...slot, i }))
-    .sort((a, b) => a.at - b.at || a.i - b.i)
     .map((slot) => ({ ...slot, statuses: slot.statuses.filter((s) => showCancelled || s.category !== "cancelled") }))
     .filter((slot) => slot.statuses.length > 0)
     .map(({ name, statuses }) => {
