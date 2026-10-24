@@ -103,6 +103,8 @@ test("the toolbar's Theme button opens Appearance beside the workspace, live, fr
   }
   expect(changed, "a preset picked in the panel applies to the app behind it").toBe(true);
   await pick(select, current);
+  // The list gives the keyboard back to its trigger, in the panel, a moment after it closes.
+  await expect(select).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(theme).toBeFocused();

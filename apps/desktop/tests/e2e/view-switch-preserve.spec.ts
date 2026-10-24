@@ -137,8 +137,10 @@ test("a minimized tab keeps its surface alive (parked, not unmounted) and comes 
   await toggleView();
   await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
   const tab = tabs('[role="tab"]').first();
-  await tab.hover();
-  await tab.getByRole("button", { name: /^Minimize/ }).click();
+  const minimize = tab.getByRole("button", { name: /^Minimize/ });
+  // Shown while the tab is hovered: the view just opened may lay its strip out again under the pointer.
+  await expect(async () => { await tab.hover(); await expect(minimize).toBeVisible({ timeout: 500 }); }).toPass({ timeout: 15_000 });
+  await minimize.click();
   await expect(tabs('[role="tab"]')).toHaveCount(0);
   // Still exactly one xterm — now in the hidden park, still the tagged instance.
   await expect(page.locator(".xterm")).toHaveCount(1);
