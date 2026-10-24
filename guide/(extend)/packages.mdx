@@ -22,8 +22,9 @@ At the end, tell me what the package holds and what each member asks for. Do not
 <Diagram name="packages-one-box" caption="A package is one box" />
 
 - A **package** is one folder. Its `hivemind-package.json` names its **tools**, **widgets**,
-  **views** and **agent presets**, each tool, widget and view in a folder of its own with its
-  own manifest. Every member's id has the package's owner: `@you/<name>`.
+  **views**, **agent presets** and **themes**, each tool, widget, view and theme in a folder of
+  its own with its own manifest. Every member's id has the package's owner: `@you/<name>`, and a
+  theme's `@you/kit/<name>`, after its folder in the package.
 - Package → **this machine**: `hive plugins install` puts the whole box in, with one switch, one
   version and a rollback.
 - Package → **HiveHub**: `hivehub publish` lists the whole box, with every member and what it
@@ -155,23 +156,26 @@ folder.
 | `terminal` | no | `background`, `foreground`, `cursor`, `selection` and `ansi`, the 16 terminal colours |
 | `radius` | no | corners, 0 to 24 |
 | `fonts` | no | `{ "ui"?, "mono"? }`, each `{ "family", "files": [{ "path", "weight"?, "style"? }] }`: 1 to 4 `.woff2` files of at most 400 KB each |
-| `wallpaper` | no | `{ "kind" }`, a built-in one (`none`, `aurora`, `ember`, `ice`, `mesh`, `sunset`, `forest`, `nebula`, `mono`), or `{ "image" }` (.png, .jpg, .webp, .avif or .gif, up to 4 MB) or `{ "video" }` (.webm or .mp4, up to 16 MB) naming a file in the folder; `brightness` 0.4 to 1.1 |
+| `wallpaper` | no | `{ "kind" }`, a built-in one (`none`, `aurora`, `ember`, `ice`, `mesh`, `sunset`, `forest`, `nebula`, `mono`), or `{ "image" }` (.png, .jpg, .webp, .avif or .gif) or `{ "video" }` (.webm or .mp4) naming a file in the folder, up to 2 MB; `brightness` 0.4 to 1.1 |
 | `sounds` | no | `{ "needs"?, "done"?, "error"? }`, each an `.ogg` or `.mp3` of at most 400 KB, copied with the theme |
 
 Colours are `#rrggbb`, `rgb()` or `oklch()`, and solid: a theme's colours have no transparency.
-What a theme leaves out stays as the person has it. `icons`, `cursors`, `scene`, `mascot`,
+A file may sit at most four folders deep in the theme's folder. The whole package is at most
+8 MB, the [limits HiveHub takes](/hivehub-api#limits). What a theme leaves out stays as the person
+has it, and **Revert to previous look** puts back only what it set. `icons`, `cursors`, `scene`, `mascot`,
 `screens` and `words` are kept for a later format and are refused.
 
 ### What the check refuses
 
-`hive plugins check`, the install and HiveHub check a theme the same way. Each refusal names the
-field or the pair of colours.
+`hive plugins check`, the install and HiveHub check a theme the same way, and `hive plugins check`
+sizes the package as HiveHub does. Each refusal names the field or the pair of colours.
 
 - `fg` on `bg`, and `fg` on `bg2`, below 4.5:1.
 - `fg2` on `bg` below 3:1.
 - The accent's `brand` on `bg` below 3:1: a switch or focus ring in it would be hard to see.
 - An accent that is the colour of an agent waiting on you: `palette.warn`, or `amber`.
 - A file it names that is not in the folder, has the wrong type or is too big.
+- A colour CSS would draw differently: a part too many, a unit a part does not take, or text after it.
 
 Every command on this page is in the [CLI reference](/cli#plugins).
 

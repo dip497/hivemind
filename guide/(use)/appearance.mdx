@@ -10,11 +10,11 @@ applies at once and is saved for you.
 Change how Hivemind looks, from the terminal, with the \`hive theme\` and \`hive config\` commands.
 
 1. Show me the looks: \`hive theme list\` prints the presets and the themes my installed packages hold (\`@owner/package/theme\`). Ask me which one I want, then run \`hive theme use <id>\`. After a theme, \`hive theme revert\` goes back to the look before it.
-2. Before changing anything else, save the current look, with its photo, video and overlays: \`hive config get appearance > ~/hivemind-theme-backup.json\`.
+2. Before changing anything else, save the current settings, with the look's photo, video, overlays and accent colour: \`hive config get > ~/hivemind-look-backup.json\`.
 3. For anything else I ask (blur, wallpaper, glass), read the value first with \`hive config get <dotted.path>\`, for example \`hive config get appearance.glass.blur\`. Then set it with \`hive config set <dotted.path> '<JSON value>'\`. The value is JSON: a number as is (\`12\`), text in double quotes inside single quotes (\`'"ice"'\`), \`true\` or \`false\`.
 4. If \`hive config set\` refuses a path or a value, show me its message. Do not edit the settings file by hand.
 
-At the end, show the new values with \`hive config get appearance\`, and tell me that \`hive theme import ~/hivemind-theme-backup.json\` undoes it all.
+At the end, show the new values with \`hive config get appearance\`, and tell me that \`hive theme import ~/hivemind-look-backup.json\` puts the look back.
 `}</AgentPrompt>
 
 <Tabs>
@@ -91,7 +91,8 @@ package and version, and **Apply**. Press **Apply** and the theme is written ove
 - Its fonts and wallpaper are copied beside your settings, so the look keeps working without the
   package.
 - A theme's wallpaper shows even with glass off.
-- Your look before it is kept. **Revert to previous look** puts back everything the theme set.
+- Your look before it is kept. **Revert to previous look** puts back what the theme set, and
+  nothing else: corners, fonts or a wallpaper the theme left out and you changed since stay.
 
 ```bash
 hive theme list                   # presets, and themes as @owner/package/theme
@@ -153,9 +154,10 @@ pick your own under **Background**.
 
 **Import…** and `hive theme import` also take a whole settings.json, and read only the look from
 any file. What a file leaves out, such as light or dark, stays as you have it. A file with none of
-the look in it, such as a package.json, is refused and changes nothing. To keep a copy of your look
-with its photo, video and overlays, save
-`hive config get appearance > my-look.json`: importing that file puts them back.
+the look in it, such as a package.json, is refused and changes nothing. The file carries your own
+accent colour; importing one over a theme leaves the theme, so **Revert to previous look** does not undo it. To
+keep a copy of your look with its photo, video and overlays, save `hive config get > my-look.json`:
+importing that file puts them back.
 
 A guest who joins your workspace sees your colours and accent, your own accent colour too, but not your photo, video, overlays or fonts.
 

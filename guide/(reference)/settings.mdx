@@ -102,8 +102,8 @@ Each part is set whole.
 
 | Path | Default | Allowed |
 |---|---|---|
-| `appearanceExtra.accent` | none | `{ "brand", "accent", "working"? }` colours (`#rrggbb`, `rgb()` or `oklch()`): your own **Accent**. Picking a built-in accent or a preset removes it |
-| `appearanceExtra.fontFaces` | none | `{ "ui"?, "mono"? }`, the font files a theme brought. Set by applying a theme |
+| `appearanceExtra.accent` | none | `{ "brand", "accent", "working"? }` colours (`#rrggbb`, `rgb()` or `oklch()`): your own **Accent**. Picking a built-in accent or a preset, or `hive config set appearance.accent`, removes it |
+| `appearanceExtra.fontFaces` | none | `{ "ui"?, "mono"? }`, the font files a theme brought. Set by applying a theme; one is read only while `appearance.uiFont` or `appearance.monoFont` names its family, so picking another font lets its file go |
 | `appearanceExtra.theme` | none | the theme applied, its version, and your look before it. Set by **Apply** and `hive theme use`, cleared by **Revert to previous look**, `hive theme revert` or a preset |
 
 ```bash

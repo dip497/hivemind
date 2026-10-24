@@ -29,13 +29,16 @@ one wins.
 | `hello` (1.5) | `device? {touch, compact}` | What the view is on; `hm.device` reads a desktop's from a host that predates it |
 | `participants` (1.5) | `participants [{id, person, name, color, cursor: {tileId} \| null, selection}]` | After `subscribeParticipants`; everyone else here, on each change of who, the tile their pointer is over or their selection — only of your tiles and frames |
 | `structure` (1.14) | `tiles[].asleep? {since?}` | The agent is asleep: its process ended, its tile kept with its last screen and its conversation until it is woken. `since`: when it was put to sleep (ms since epoch). Absent while awake. Its `status` stays what it was left at: draw `asleep` over it |
+| `fonts` (1.17) | `fontFaces [{family, data, weight?, style?}]` | A theme's font files changed (applied, reverted): the SDK puts them in `document.fonts`, replacing the ones before. `hello.fontFaces` carries them when they are read by then. Nothing to do in the view |
 
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
 `history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
 `participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run); 1.15
 adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone); 1.16 adds
 `tokens` (`theme.tokens`: the view's own colours from its manifest's `tokens`, resolved, set as
-`--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback); 1.17 adds `lineSlots`
+`--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback); 1.17 adds `fontFaces`
+(a theme's fonts: the SDK loads them into `document.fonts`, so the family `theme.fonts` names
+draws in the view; nothing to do in the view) and `lineSlots`
 (the host draws each tile's last line in the rects `lineRects` reserves; the computer's windows,
 not the phone). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
