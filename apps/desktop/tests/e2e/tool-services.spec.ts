@@ -54,7 +54,7 @@ c.on("data", (d) => {
     const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1);
     for (const e of Array.isArray(m) ? m : m.event ? [m] : []) {
       if (e.event === "issue.changed") console.log("changed " + e.params[1].id + " " + e.params[1].fields.join(",") + " by " + e.params[1].by);
-      if (e.event === "plugin.called") c.write(JSON.stringify({ method: "plugin.answer", params: [e.params[0].call, { result: { pong: e.params[0].args } }] }) + "\n");
+      if (e.event === "plugin.called") c.write(JSON.stringify({ method: "plugin.answer", params: [e.params[0].call, { result: { pong: e.params[0].args } }] }) + "\\n");
     }
     if (Array.isArray(m) || m.event) continue;
     if (m.hello) { console.log("as " + JSON.stringify(m.hello.as)); call(1, "agent.list", [m.hello.as.workspace]); }
@@ -64,7 +64,7 @@ c.on("data", (d) => {
     else if (m.id === 4) { console.log("secret " + (m.result === ${JSON.stringify(SECRET)} ? "read" : "wrong")); call(5, "issue.create", [${JSON.stringify(path.join(repo, ".hivemind"))}, { title: "from the service" }]); }
     else if (m.id === 5) {
       console.log("issue " + (m.error ? m.error.code : m.result.id));
-      c.write(JSON.stringify({ method: "plugin.serve", params: [[{ name: "ping", description: "answers pong" }]] }) + "\n");
+      c.write(JSON.stringify({ method: "plugin.serve", params: [[{ name: "ping", description: "answers pong" }]] }) + "\\n");
       console.log("serving");
     }
   }
