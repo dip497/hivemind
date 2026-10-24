@@ -121,6 +121,9 @@ export const KEYMAP: readonly Binding[] = [
   { keys: "mod+c", where: "terminal", action: "copy" },
   { keys: "mod+shift+c", where: "terminal", action: "copy" },
   { keys: "shift+enter", where: "terminal", action: "new-line" },
+  // A docked terminal has the keyboard: undocking it is the one key out. With no slot to leave, the
+  // key is the program's.
+  { keys: "shift+escape", where: "terminal", action: "undock" },
   { keys: "mod+shift+k", where: "terminal", action: "take-keyboard" },
   { keys: "mod+=", where: "terminal", action: "font-bigger" },
   { keys: "mod+shift+=", where: "terminal", action: "font-bigger" },
