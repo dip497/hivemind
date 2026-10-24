@@ -10,12 +10,15 @@
  *   runs the plugin (`call`): the host sends `plugin.called {call, command, args}` on that
  *   connection, and the service answers with `plugin.answer(call, {result} | {error})`.
  *
+ * - `tileCall`: a tool's own tile asks its service (the tile SDK's `host.call`), as an agent's
+ *   `plugin call` does, without going through a window first.
+ *
  * A service is its grant: the grant's plugin is the only one it speaks for, and a connection that
  * holds no service's grant (the person, an agent, another program) is refused. The person sets a
  * secret with `secret.set` (from `hive plugins set`); a service sets only its own plugin's declared
  * secrets (the Jira service keeps its sign-in), signed in the audit log as itself. Electron-free.
  */
-import { parsePluginCommands, type PluginCommand } from "@hivemind/view-sdk/commands";
+import { COMMAND_NAME_RE, parsePluginCommands, type PluginCommand } from "@hivemind/view-sdk/commands";
 import { FIELD_ID, pluginOptions, resolveSettings, type PluginState, type SettingField } from "@hivemind/core/plugin-settings";
 import { ApiError, text, type ErrorCode } from "@hivemind/workspace-api/protocol";
 import { emit, type Connection, type Domain } from "@hivemind/workspace-api/server";
@@ -115,6 +118,17 @@ export class PluginServices {
       this.waiting.set(call, { connection: s.connection, plugin, resolve, reject, timer });
       emit(s.connection, "plugin.called", { call, command, args: args ?? null });
     });
+  }
+
+  /** A tool's tile asking its own plugin's service (`host.call`; the window names the plugin, never
+   *  the tile's code): what it answered, or why there is no answer to wait for. */
+  tileCall(plugin: unknown, command: unknown, args: unknown): Promise<unknown> {
+    if (typeof plugin !== "string" || !plugin || plugin.length > 200) return Promise.reject(new ApiError("BAD_REQUEST", "plugin must be a tool plugin's id"));
+    if (typeof command !== "string" || !COMMAND_NAME_RE.test(command)) return Promise.reject(new ApiError("BAD_REQUEST", "command must be one of the service's command names"));
+    return this.call(plugin, command, args)
+      ?? Promise.reject(new ApiError("UNAVAILABLE", this.serving.has(plugin)
+        ? `${plugin}'s service has no command "${command}"`
+        : `${plugin}'s service is not running: switch it on for this workspace in Settings ▸ Plugins`));
   }
 
   domain(): Domain<"secret.get" | "secret.set" | "plugin.options", "plugin.serve" | "plugin.answer"> {

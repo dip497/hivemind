@@ -1664,6 +1664,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installPackagesIpc();
     installServicesIpc();
     installSecretsIpc(() => void pluginServices.settingsChanged());
+    // A tool's tile asking its own service (`host.call`); the window names the plugin, from the tile's package.
+    handle("tools:call", (_e, call: { plugin?: unknown; command?: unknown; args?: unknown } | null) => pluginServices.tileCall(call?.plugin, call?.command, call?.args));
     installPluginCatalogIpc();
     installQuitIpc({
       agent: (s) => !!agentForCmd(s.cmd) || control.agentOf.has(toBareId(s.id)),

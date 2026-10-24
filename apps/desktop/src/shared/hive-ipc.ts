@@ -157,6 +157,7 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     toolHostExports: (map) => port.invoke("tools:host-exports", map),
     removeToolPackage: (id) => port.invoke("tools:remove", id),
     toolRun: (call) => port.invoke("tools:run", call),
+    toolCall: (call) => port.invoke("tools:call", call),
     onToolsChanged: (cb) => port.on("tools:changed", () => cb()),
     services: () => port.invoke("services:list"),
     serviceLog: (plugin) => port.invoke("services:log", plugin),

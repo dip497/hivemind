@@ -2,6 +2,7 @@ import type { DragEvent, KeyboardEvent } from "react";
 import { Play } from "@hivemind/app-ui";
 import { statusById, statusOfIssue, useOpenIssue, useWorkflow, type IssueSummary } from "./data";
 import { StatusIcon, LabelChip, Avatar } from "./StateMeta";
+import { cardFacts, type CardFacts } from "./tracker";
 import { PrBadge } from "./PrBits";
 
 /** The status icon of an issue, in its status's colour. */
@@ -10,6 +11,22 @@ export function IssueStatusIcon({ issue, size }: { issue: Pick<IssueSummary, "st
   return <StatusIcon status={statusById(wf, statusOfIssue(issue), issue.state)} size={size} />;
 }
 import { Button } from "@hivemind/app-ui";
+
+const chip = "inline-flex items-center px-1.5 py-0.5 rounded-md text-chip border border-[var(--color-line2)] text-[var(--color-fg2)] whitespace-nowrap";
+
+/** A mirrored issue's tracker facts (design jira-sync §13): type, priority, estimate, a sprint that
+ *  is not the active one, and "not in scope". Whose it is shows in the footer (TrackerAssignee). */
+function TrackerFacts({ facts }: { facts: CardFacts }) {
+  return (
+    <div className="mt-2 flex items-center gap-1 flex-wrap" data-tracker-facts>
+      {facts.type && <span className={chip} data-tracker-type>{facts.type}</span>}
+      {facts.priority && <span className="text-chip text-[var(--color-fg3)]" title="Priority" data-tracker-priority>{facts.priority}</span>}
+      {facts.estimate && <span className="text-chip font-mono tabular-nums text-[var(--color-fg3)]" title="Estimate" data-tracker-estimate>{facts.estimate}</span>}
+      {facts.sprint && <span className="text-chip text-[var(--color-fg3)] truncate" title="Sprint">{facts.sprint}</span>}
+      {facts.notInScope && <span className={`${chip} text-[var(--color-warn)]`} title="It left the sync's scope; it stays here because it has local work" data-not-in-scope>not in scope</span>}
+    </div>
+  );
+}
 
 const onActivate = (fn: () => void) => (e: KeyboardEvent) => {
   if (e.key === "Enter" || e.key === " ") {
@@ -48,6 +65,7 @@ export function IssueCard({
 }) {
   const openIssue = useOpenIssue();
   const open = () => openIssue(issue.id);
+  const facts = cardFacts(issue);
   return (
     <div
       role="button"
@@ -85,6 +103,7 @@ export function IssueCard({
         </Button>
       </div>
       <div className="mt-1.5 text-label text-[var(--color-fg)] leading-snug line-clamp-3">{issue.title}</div>
+      {facts && <TrackerFacts facts={facts} />}
       {(issue.labels.length > 0 || issue.assignee || issue.pr || issue.external?.assignee !== undefined) && (
         <div className="mt-2 flex items-center gap-1 flex-wrap">
           {issue.pr && <PrBadge pr={issue.pr} />}
@@ -108,6 +127,7 @@ export function IssueCard({
 export function IssueRow({ issue, onWork }: { issue: IssueSummary; onWork: () => void }) {
   const openIssue = useOpenIssue();
   const open = () => openIssue(issue.id);
+  const rowFacts = cardFacts(issue);
   return (
     <div
       role="button"
@@ -120,6 +140,10 @@ export function IssueRow({ issue, onWork }: { issue: IssueSummary; onWork: () =>
       <IssueStatusIcon issue={issue} size={12} />
       <span className="font-mono text-count text-[var(--color-fg3)] tabular-nums w-20 shrink-0">{issue.id}</span>
       <span className="text-label text-[var(--color-fg)] truncate flex-1 min-w-0">{issue.title}</span>
+      {rowFacts?.type && <span className={chip}>{rowFacts.type}</span>}
+      {rowFacts?.notInScope && <span className={`${chip} text-[var(--color-warn)]`} data-not-in-scope>not in scope</span>}
+      {rowFacts?.owner === "unassigned" && <span className={chip}>Unassigned</span>}
+      {rowFacts?.owner && rowFacts.owner !== "unassigned" && <span title={`Assigned to ${rowFacts.owner.name}`}><Avatar id={rowFacts.owner.name} size={16} /></span>}
       {issue.pr && <PrBadge pr={issue.pr} />}
       {issue.labels.slice(0, 2).map((l) => (
         <LabelChip key={l} label={l} />

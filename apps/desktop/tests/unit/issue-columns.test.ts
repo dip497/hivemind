@@ -63,3 +63,20 @@ test("without board columns, one column per status in the workflow's order", () 
   const { board: _, ...noBoard } = WF;
   assert.deepEqual(columns([], noBoard).map((c) => c[0]), ["Backlog", "To Do", "In Progress", "Code Review", "QA", "PR Created", "Done"]);
 });
+
+test("the board's own order is kept when a later column holds an earlier state; a status no column holds goes before the first column of a later state", () => {
+  // cloud-scrum-company's PAY board: Ready (an in-progress "Ready for Release") comes after Review.
+  const wf: Workflow = {
+    ...WF,
+    statuses: [...WF.statuses, { id: "j:ready", name: "Ready for Release", category: "in_progress", source: "jira" }, { id: "j:blocked", name: "Blocked", category: "in_progress", source: "jira" }],
+    board: { columns: [
+      { name: "To Do", statuses: ["j:todo"] },
+      { name: "In Progress", statuses: ["j:prog"] },
+      { name: "Review", statuses: ["j:review", "j:qa", "hive:pr"] },
+      { name: "Ready", statuses: ["j:ready"] },
+      { name: "Done", statuses: ["j:done", "j:wont"] },
+    ] },
+  };
+  assert.deepEqual(columns([issue("A-1", "in_progress", "j:ready")], wf).map((c) => c[0]), ["Backlog", "To Do", "In Progress", "Blocked", "Review", "Ready", "Done"]);
+  assert.deepEqual(columns([issue("A-1", "in_progress", "j:ready")], wf)[5], ["Ready", ["j:ready"], ["A-1"]]);
+});

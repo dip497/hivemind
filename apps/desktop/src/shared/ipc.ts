@@ -417,6 +417,8 @@ export interface HiveIpc {
   removeToolPackage(id: string): Promise<void>;
   /** A tool plugin's tile running a program in its folder. */
   toolRun(call: ToolRun): Promise<ToolRunResult>;
+  /** A tool plugin's tile asking its own plugin's service (`host.call`): what the service answered. */
+  toolCall(call: { plugin: string; command: string; args: unknown }): Promise<unknown>;
   /** The installed tool plugins changed. */
   onToolsChanged(cb: () => void): () => void;
   /** The folders of the workspaces on this machine: what a program's grant may name. */

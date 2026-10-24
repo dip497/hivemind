@@ -170,6 +170,18 @@ test("`plugin call` with no window reaches the service, as under `hive host`; wh
   assert.deepEqual(listed.plugins.map((p) => [p.plugin, p.kind, p.commands.map((c) => c.name)]), [["@acme/ci", "service", ["echo"]]]);
 });
 
+test("a tool's own tile reaches its service directly (host.call): its answer, its error, and why there is none", async () => {
+  assert.deepEqual(await plugins.tileCall("@acme/ci", "echo", { n: 2 }), { echo: { n: 2 }, runtime: null });
+  assert.deepEqual(await plugins.tileCall("@acme/ci", "echo", undefined), { echo: null, runtime: null });
+  assert.equal(await codeOf(plugins.tileCall("@acme/ci", "echo", { fail: true })), "BAD_REQUEST");
+  const why = (p: Promise<unknown>) => p.then(() => "answered", (e: ApiError) => `${e.code}: ${e.message}`);
+  assert.equal(await why(plugins.tileCall("@acme/ci", "other", null)), `UNAVAILABLE: @acme/ci's service has no command "other"`);
+  assert.match(await why(plugins.tileCall("@acme/none", "echo", null)), /^UNAVAILABLE: @acme\/none's service is not running/);
+  // Only a command's name reaches the service.
+  assert.equal(await codeOf(plugins.tileCall("@acme/ci", "Echo", null)), "BAD_REQUEST");
+  assert.equal(await codeOf(plugins.tileCall("", "echo", null)), "BAD_REQUEST");
+});
+
 test("a program holding no service's grant, and the person, are refused a service's methods; a program sets no secret, the person any", async () => {
   const program = grants.create({ name: "a program", repos: [repo], role: "edit" });
   for (const [method, ...params] of [["plugin.options"], ["secret.get", "token"]] as const) {
