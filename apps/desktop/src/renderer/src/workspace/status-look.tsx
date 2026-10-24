@@ -6,6 +6,7 @@
  */
 import type { Ref } from "react";
 import type { TileStatusKind } from "../agent-status-bus";
+import type { MachineState } from "../../../shared/ipc";
 import { bucketTileStatus } from "@hivemind/view-host/status";
 import { STATUS_MARKS } from "@hivemind/view-sdk/status";
 
@@ -25,6 +26,31 @@ export const LOOKS: Record<StatusLook, { word: string; color: string; shape: str
   idle: look("idle", "var(--color-status-idle)"),
   exited: look("exited", "var(--color-status-exited)"),
 };
+
+/** A machine's link, as a mark and a word wherever a machine shows (its chip, Layers, the Machines
+ *  hub, a terminal's banner): the same marks as a tile's status where the meaning is the same, so
+ *  only signing in, the one state that waits on the person, is amber and pulses. `paused`: the
+ *  person switched the machine off. */
+export type MachineLook = MachineState | "paused";
+const CIRCLE = STATUS_MARKS.working.path;
+export const MACHINE_LOOKS: Record<MachineLook, { word: string; color: string; shape: string; pulse: boolean }> = {
+  online: { word: "online", color: "var(--color-ok)", shape: CIRCLE, pulse: false },
+  // A ring half filled: under way, its left half for a first connection and its right half again.
+  connecting: { word: "connecting…", color: "var(--color-fg2)", shape: `${CIRCLE}M5 2a3 3 0 1 0 0 6a3 3 0 1 0 0-6ZM5 2a3 3 0 0 0 0 6Z`, pulse: false },
+  reconnecting: { word: "reconnecting…", color: "var(--color-fg2)", shape: `${CIRCLE}M5 2a3 3 0 1 0 0 6a3 3 0 1 0 0-6ZM5 2a3 3 0 0 1 0 6Z`, pulse: false },
+  // Away is ordinary (a laptop asleep, a box switched off): the exited square, not an alarm.
+  offline: { word: "offline", color: "var(--color-fg3)", shape: STATUS_MARKS.exited.path, pulse: false },
+  attention: { word: "sign in", color: LOOKS.needs.color, shape: LOOKS.needs.shape, pulse: true },
+  // Connected, without hive to keep its sessions through a drop: a dot with a bar through it.
+  "no-hive": { word: "no hive", color: "var(--color-fg2)", shape: `${CIRCLE}M2 4.2H8V5.8H2Z`, pulse: false },
+  idle: { word: "idle", color: "var(--color-fg3)", shape: STATUS_MARKS.idle.path, pulse: false },
+  paused: { word: "paused", color: "var(--color-fg3)", shape: "M2 1.5H4.2V8.5H2ZM5.8 1.5H8V8.5H5.8Z", pulse: false },
+};
+
+/** A machine's look: paused while the person has it switched off, else its link's state. */
+export function machineLook(state: MachineState, enabled = true): MachineLook {
+  return enabled ? state : "paused";
+}
 
 /** What a tile that needs you waits for, in a word. */
 const WAITS: Partial<Record<TileStatusKind, string>> = {
@@ -68,6 +94,20 @@ export function StatusGlyph({ look, className = "size-2", ref }: { look: StatusL
   const l = LOOKS[look];
   return (
     <svg ref={ref} viewBox="0 0 10 10" aria-hidden data-status-look={look} className={`shrink-0 ${l.pulse ? "animate-pulse" : ""} ${className}`} style={{ color: l.color }}>
+      <path d={l.shape} fill="currentColor" fillRule="evenodd" />
+    </svg>
+  );
+}
+
+/** A machine look's mark, `size` pixels square. `named`: no word is shown beside it, so the mark
+ *  carries its word for a screen reader and under the pointer. */
+export function MachineGlyph({ look, size, named }: { look: MachineLook; size: number; named: boolean }) {
+  const l = MACHINE_LOOKS[look];
+  return (
+    <svg viewBox="0 0 10 10" width={size} height={size} data-machine-look={look}
+      {...(named ? { role: "img", "aria-label": l.word } : { "aria-hidden": true })}
+      className={`shrink-0 ${l.pulse ? "animate-pulse" : ""}`} style={{ color: l.color }}>
+      {named && <title>{l.word}</title>}
       <path d={l.shape} fill="currentColor" fillRule="evenodd" />
     </svg>
   );

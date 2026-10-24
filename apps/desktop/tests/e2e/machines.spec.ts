@@ -161,6 +161,11 @@ test("a frame runs on the machine: chip online with a round trip, terminals run 
   await page.locator('ul[aria-label="machines"] li', { hasText: "build-box" }).locator("button").first().click();
   await page.getByRole("button", { name: "Open here" }).click();
   await expect.poll(chipState, { timeout: 60_000 }).toBe("online");
+  // Online, the chip says no word, so its mark is a shape that says the word itself, not a colour.
+  const mark = page.locator('button[aria-label="machine build-box"] [data-machine-look]');
+  await expect(mark).toHaveAttribute("data-machine-look", "online");
+  await expect(mark).toHaveAttribute("role", "img");
+  await expect(mark).toHaveAccessibleName("online");
   // A terminal opened after the bind runs on the machine; one that was already open keeps its own session.
   await page.evaluate(() => {
     const id = document.querySelector(".react-flow__node-frame")?.getAttribute("data-id");
@@ -242,6 +247,15 @@ test("the server goes away and comes back: chip and banner say so, the job never
   await expect.poll(chipState, { timeout: 30_000 }).toBe("reconnecting");
   const banner = page.getByRole("status").filter({ hasText: "Reconnecting to build-box" });
   await expect(banner.first()).toBeVisible();
+  // Its own shape beside its word, in the chip and the banner, neither amber nor pulsing: a
+  // reconnect does not wait on the person.
+  for (const mark of [page.locator('button[aria-label="machine build-box"] [data-machine-look]'), banner.first().locator("[data-machine-look]")]) {
+    await expect(mark).toHaveAttribute("data-machine-look", "reconnecting");
+    await expect(mark).toHaveAttribute("aria-hidden", "true");
+    await expect(mark).not.toHaveClass(/animate-pulse/);
+  }
+  await expect(page.locator('button[aria-label="machine build-box"]')).toContainText("reconnecting…");
+  await page.screenshot({ path: test.info().outputPath("machine-reconnecting.png") });
   startSshd();
   // The backoff may win the race; the button only skips the wait.
   await banner.first().getByRole("button", { name: "Retry now" }).click({ timeout: 3_000 }).catch(() => {});

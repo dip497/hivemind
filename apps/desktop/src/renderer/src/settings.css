@@ -162,7 +162,7 @@
 .plugin-row-go { color: var(--color-fg3); flex-shrink: 0; }
 .plugin-row[data-state=off] :is(.plugin-row-name, .plugin-row-mark) { color: var(--color-fg3); }
 .plugin-row[data-state=unavailable] .plugin-row-detail { color: var(--color-err); }
-.agent-badge { font-size: var(--text-count); font-weight: 500; padding: 2px 9px; border-radius: 10px; color: var(--color-brand); background: color-mix(in oklab, var(--color-brand) 16%, transparent); }
+.agent-badge { font-size: var(--text-count); font-weight: 500; padding: 2px 9px; border-radius: 10px; color: var(--color-fg); background: color-mix(in oklab, var(--color-brand) 16%, transparent); }
 .agent-facts { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; padding: 0; list-style: none; }
 .agent-facts li { font-size: var(--text-count); padding: 3px 9px; border-radius: 10px; background: color-mix(in oklab, var(--color-ok) 12%, transparent); color: var(--color-fg); }
 .agent-facts li[data-limit] { background: var(--color-bg3); color: var(--color-fg2); }

@@ -177,7 +177,7 @@ function RemoteIcon({ color, uri }: { color: string; uri?: string }) {
   return (
     <span className="relative shrink-0 grid place-items-center" title={machine?.label ?? device?.name ?? hostId ?? GONE_MACHINE}>
       <Server size={ICON} style={{ color: muted(color) }} />
-      {s.state !== "idle" && <span className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-[var(--color-bg2)] leading-[0]"><MachineDot status={s} size={6} /></span>}
+      {s.state !== "idle" && <span className="absolute -right-0.5 -bottom-0.5 rounded-full ring-2 ring-[var(--color-bg2)] leading-[0]"><MachineDot status={s} size={6} named /></span>}
     </span>
   );
 }
@@ -1167,7 +1167,7 @@ function ViewMenu({ prefs, setPref, machines, hideAsleep, setHideAsleep }: {
       <span className="relative inline-flex">
         <Button variant="ghost" size="2xs" aria-label="View options" title="What is listed, grouped and ordered how" data-layers-view-menu aria-expanded={open} className="relative text-count font-medium" onClick={() => setOpen(true)}>
           {prefs.groupBy === "none" ? "Not grouped" : `By ${choiceLabel("groupBy", prefs.groupBy).toLowerCase()}`}
-          {filtered && <span className="text-[var(--color-brand)]">· filtered</span>}
+          {filtered && <span className="text-[var(--color-fg2)]">· filtered</span>}
           <ChevronDown size={11} />
         </Button>
         <DropdownMenuTrigger asChild><span aria-hidden className="absolute bottom-0 right-0 size-0" /></DropdownMenuTrigger>
