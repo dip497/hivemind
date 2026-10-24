@@ -95,6 +95,14 @@ async function addFromFolder(dir: string): Promise<void> {
   await body().locator("[data-add-plugin]").click();
   await page.locator("[data-folder-install]").click();
 }
+/** Settings offered `view` under its own install and recorded that: the window's corner does not
+ *  offer it too. Asked as the window asks, once the view has loaded, with Canvas showing. */
+async function noCornerOffer(view: string): Promise<void> {
+  const registered = () => page.evaluate(() => (window as Window & { __hivemindViews?: { registered: string[] } }).__hivemindViews?.registered ?? []);
+  await expect.poll(registered).toContain(view);
+  expect(await page.evaluate(async (views) => await window.hive.startViewOffers!(["canvas", ...views], "canvas"), await registered())).toEqual([]);
+  await expect(page.locator("[data-start-view-offer]")).toHaveCount(0);
+}
 const review = () => body().locator("[data-package-review='@e2e/kit']");
 const row = () => body().locator("[data-package='@e2e/kit']");
 const packageSwitch = () => row().locator("[data-package-switch]");
@@ -217,6 +225,8 @@ test("a package that opens with a view offers it once installed, and Open switch
   await addFromFolder(dir);
   await body().locator("[data-folder-install-do]").click();
   const offer = body().getByRole("status").filter({ hasText: "Open Isle?" });
+  await expect(offer).toBeVisible();
+  await noCornerOffer("@e2e/isle");
   await shot("10-open-start-view-offer");
   await offer.getByRole("button", { name: "Open" }).click();
   // Settings closes on the view it opened.
@@ -232,6 +242,8 @@ test("a package from the HiveHub list that opens with a view offers it once inst
   await body().locator("[data-install-start='package:@e2e/cove']").click();
   await body().locator("[data-install-review='package:@e2e/cove'] [data-install-confirm]").click();
   const offer = body().getByRole("status").filter({ hasText: "Open Bay?" });
+  await expect(offer).toBeVisible();
+  await noCornerOffer("@e2e/bay");
   await offer.getByRole("button", { name: "Open" }).click();
   await expect(page.locator('[data-community-view="@e2e/bay"]')).toBeVisible();
   await expect(body()).toHaveCount(0);
@@ -253,4 +265,8 @@ test("a package that arrives switched off does not offer its view, which would n
   await body().locator("[data-folder-install-do]").click();
   await expect.poll(() => page.evaluate(async () => (await window.hive.installedPackages()).find((p) => p.id === "@e2e/shut")?.on)).toBe(false);
   await expect(body().locator("[data-open-start-view]")).toHaveCount(0);
+  // Settings did not offer it, so switched on later, the window's corner does.
+  await page.evaluate(async () => { await window.hive.switchPackage("@e2e/shut", true); window.dispatchEvent(new CustomEvent("hivemind:reload-views")); });
+  const corner = page.locator('[data-start-view-offer="@e2e/shut"]');
+  await expect(corner).toContainText("Shut is installed. Open Island?");
 });

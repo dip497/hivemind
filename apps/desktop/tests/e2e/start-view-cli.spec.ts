@@ -76,11 +76,15 @@ test("a relaunch does not offer it again; one installed while the app was closed
   // Back on Canvas, where Isle would be offered again if nothing remembered it was.
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
   await expect(page.locator('[data-community-view="@e2e/isle"]')).toHaveCount(0);
+  // Saved before closing (it is debounced): a relaunch on Isle would record Harbour without asking.
+  const settings = path.join(xdg, "hivemind", "settings.json");
+  await expect.poll(() => JSON.parse(fs.readFileSync(settings, "utf8")).views?.defaultView).toBe("canvas");
   await app.close();
   expect(hive("plugins", "install", opensWith("cove", "Cove", "bay", "Bay"))).toMatchObject({ status: 0, data: { rescanned: false, startView: { id: "@e2e/bay" } } });
   await launch();
   // Both are asked about in the one ask after the views load: Cove's offer is that ask's answer.
   await expect(offer("@e2e/cove")).toHaveText("Cove is installed. Open Bay?Open");
   await expect(offer("@e2e/harbour")).toHaveCount(0);
+  await expect(page.locator('[data-community-view="@e2e/isle"]')).toHaveCount(0);
   await shot("3-relaunch");
 });
