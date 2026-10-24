@@ -59,27 +59,55 @@ class Watched {
   private async start(): Promise<void> {
     try {
       // The folder itself, for an `issues/` or `mirror/` made after: a sync's first mirror.
-      this.top = fs.watch(this.root, (_e, name) => { if (name && (WATCHED as readonly string[]).includes(String(name))) this.watchSub(String(name), true); });
+      this.top = fs.watch(this.root, (_e, name) => { if (name && (WATCHED as readonly string[]).includes(String(name))) this.watchTree(path.join(this.root, String(name)), true); });
       this.top.on("error", () => {});
     } catch {
       return; // no .hivemind: nothing to watch until it is set up and followed again
     }
-    for (const sub of WATCHED) this.watchSub(sub, false);
+    for (const sub of WATCHED) this.watchTree(path.join(this.root, sub), false);
     for (const sub of WATCHED) await this.readAll(path.join(this.root, sub));
   }
 
-  /** `made`: it was made after the start, so what it holds already is new. */
-  private watchSub(sub: string, made: boolean): void {
-    if (this.closed || this.watchers.has(sub)) return;
-    const dir = path.join(this.root, sub);
+  /**
+   * Watch `dir` and every folder under it, each with a watcher of its own. Not `recursive`: on
+   * Linux, Node's recursive watch also watches each file by its inode, so a file replaced by an
+   * atomic write (ingest's temp file + rename) keeps the old inode's watch, and every later write to
+   * it went untold. A folder's own watch tells of any change to the files in it, whatever their
+   * inode. A folder made later is watched when its parent tells of it; one removed lets go.
+   * `made`: it was made after the start, so what it holds already is new.
+   */
+  private watchTree(dir: string, made: boolean): void {
+    if (this.closed || this.watchers.has(dir)) return;
     try {
-      const w = fs.watch(dir, { recursive: true }, (_e, name) => { if (name) this.changed(path.join(dir, String(name))); });
-      w.on("error", () => { w.close(); this.watchers.delete(sub); });
-      this.watchers.set(sub, w);
+      const w = fs.watch(dir, (_e, name) => {
+        if (!name) return;
+        const at = path.join(dir, String(name));
+        if (!String(name).endsWith(".md")) {
+          void fs.promises.stat(at).then((st) => { if (st.isDirectory()) this.watchTree(at, true); }, () => this.unwatch(at));
+        }
+        this.changed(at);
+      });
+      w.on("error", () => this.unwatch(dir));
+      this.watchers.set(dir, w);
     } catch {
-      return; // not there yet
+      return; // not there yet, or gone again
     }
+    let subs: string[] = [];
+    try {
+      subs = fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.join(dir, d.name));
+    } catch { /* gone again */ }
+    for (const sub of subs) this.watchTree(sub, made);
     if (made) void this.ready.then(() => this.readAll(dir, true));
+  }
+
+  /** Let go of the watchers of `dir` and every folder under it: it is gone. */
+  private unwatch(dir: string): void {
+    for (const [d, w] of this.watchers) {
+      if (d === dir || d.startsWith(dir + path.sep)) {
+        w.close();
+        this.watchers.delete(d);
+      }
+    }
   }
 
   /** Keep a copy of every issue under `dir`; `tell`: each one not kept yet is told as made. */

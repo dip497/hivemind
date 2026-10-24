@@ -219,6 +219,7 @@ test("Address review starts its agent in the issue's worktree frame", async () =
   const before = inFrame();
   await updateIssue(path.join(repo, ".hivemind"), "PAY-318", { pr: { repo: "acme/payments", number: 1187, url: "https://github.com/acme/payments/pull/1187", state: "open", review: "changes_requested" } as never });
   fs.writeFileSync(path.join(ghState, "pr-view.json"), "reviewer: retry 429s too\n");
+  expect((hive(["show", "PAY-318"]).json as { pr?: { review?: string } }).pr?.review).toBe("changes_requested");
   const card = cardOf("PAY-318");
   await expect(card.locator('[data-pr-review="changes_requested"]')).toBeVisible({ timeout: 15_000 });
   await card.click();
