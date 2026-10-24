@@ -122,3 +122,28 @@ test("each workspace following a folder is told once; once the last stops follow
   assert.deepEqual(await told(1), []);
   assert.equal(watches(), before, "its folder is no longer watched");
 });
+
+// Ingest writes a mirrored issue atomically (a temp file renamed over it), so the file is a new
+// inode each time. A later write to it — the person's `hive update`, the PR watcher, an agent — is
+// told all the same (it once went untold: the watch had stayed on the replaced inode).
+test("a mirrored issue that ingest replaced is still told when it is written again", async () => {
+  const { ingestRecords } = await import("@hivemind/core/ingest");
+  const { repo, root } = await workspace();
+  const record = (updated: string, assignee: { name: string; me?: boolean } | null) => ({
+    external: { id: "10423", key: "PAY-318", remoteUpdated: updated, assignee },
+    title: "Retry failed webhooks",
+    status: { id: "jira:10001", name: "To Do", category: "todo" as const },
+  });
+  await ingestRecords(root, "jira:acme/PAY", [record("2026-10-22T09:14:00.000+0000", null)]);
+  const { watch, told } = watching();
+  watch.follow(repo, root, new AbortController().signal);
+  await settle();
+
+  await ingestRecords(root, "jira:acme/PAY", [record("2026-10-23T09:14:00.000+0000", { name: "Me", me: true })]);
+  const [[, synced]] = (await told(1)) as [[string, IssueChange]];
+  assert.deepEqual([synced.id, synced.change], ["PAY-318", "updated"]);
+
+  await updateIssue(root, "PAY-318", { branch: "PAY-318-retry" }, "claude");
+  const [[, edited]] = (await told(1)) as [[string, IssueChange]];
+  assert.deepEqual([edited.id, edited.fields.includes("branch"), edited.by], ["PAY-318", true, "claude"]);
+});

@@ -5,6 +5,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ViewClient } from "@hivemind/view-sdk";
+import type { TileHost } from "@hivemind/tile-sdk";
 import { ISSUE_STATES, transitionTargets, type ViewIssue, type ViewIssueSummary, type ViewWorkflow, type ViewWorkflowStatus } from "@hivemind/view-sdk/protocol";
 import { toast } from "@hivemind/app-ui";
 
@@ -18,8 +19,21 @@ export type AcceptanceItem = ViewIssue["sections"]["acceptanceCriteria"][number]
  *  dialogs over the tile. */
 export interface Issues {
   hm: ViewClient;
+  /** The tile's folder: what `gh` runs in, and the frame's browser a PR opens in. */
+  host: TileHost;
+  /** The frame the tile is in: where an agent it starts goes. */
+  frameId: string | null;
   workflow: ViewWorkflow;
   openPanel(id: "issue" | "new", params?: unknown): void;
+  /** "Work on this": the start-work guard first (StartWork.tsx). */
+  workOn(issue: ViewIssueSummary): void;
+  /** The guard's say on moving an issue into progress: the person's answer, null when they
+   *  cancelled, "legacy" from a host with no guard. */
+  answerFor(issue: ViewIssueSummary, verb: "move"): Promise<{ ack: string[]; assignMe: boolean } | null | "legacy">;
+  /** Save part of how the tile is set (its view, grouping, what not to warn of), the rest kept. */
+  saveLayout(patch: Record<string, unknown>): void;
+  /** How the tile was set when it opened. */
+  layout: Record<string, unknown>;
 }
 /** What a dialog is handed. */
 export interface PanelProps extends Issues {

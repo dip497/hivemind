@@ -116,7 +116,7 @@ export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeatu
   if (s.confirmPrompt && s.sendPrompt) f.push("prompt");
   if (s.participants) f.push("participants");
   if (s.widgets) f.push("widgets");
-  if (s.issues) f.push("issues", "workflow");
+  if (s.issues) f.push("issues", "workflow", "startWork");
   f.push("invoke");
   if (placesSurfaces) f.push("surfaces");
   return f;

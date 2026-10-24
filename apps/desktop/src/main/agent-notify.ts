@@ -65,3 +65,12 @@ export function registerAgentNotifications(getWin: () => BrowserWindow | null): 
 
   on("notify:agent", onNotice, { local: true });
 }
+
+/** A notice that is not an agent's (a PR merged or closed, from the PR watcher): an OS popup under
+ *  the same preferences as a finished agent. */
+export function notifyPlain(title: string, body: string): void {
+  if (!shouldNotify(getNotificationSettings(), "done", "osPopups") || !Notification.isSupported()) return;
+  const n = new Notification({ title, body });
+  n.on("failed", (_e, error) => console.warn("[notify] the OS did not show it:", error));
+  n.show();
+}

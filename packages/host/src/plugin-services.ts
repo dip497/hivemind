@@ -63,7 +63,7 @@ export class PluginServices {
   constructor(private readonly o: PluginServicesOptions) {}
 
   /** The plugin whose service is at the other end of `from`, or refused. */
-  private pluginOf(from: Connection): string {
+  pluginOf(from: Connection): string {
     const { actor } = from;
     const grant = actor.kind === "peer" && actor.client && actor.person.startsWith("client:") ? actor.person.slice("client:".length) : null;
     const plugin = grant ? this.o.pluginOfGrant(grant) : undefined;

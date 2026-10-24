@@ -69,7 +69,8 @@ import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
 import { IssueWatch } from "@hivemind/host/issue-watch";
-import { registerAgentNotifications } from "./agent-notify.js";
+import { PrWatch } from "@hivemind/host/pr-watch";
+import { notifyPlain, registerAgentNotifications } from "./agent-notify.js";
 import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
 import { normalizeNotificationSettings } from "../shared/notification-settings.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
@@ -115,6 +116,7 @@ import { answers } from "@hivemind/host/answers";
 import { answerKeys, heldBoards, manifestOf, runsIn, sessionFolder } from "@hivemind/host/needs";
 import { workspaceSummaries } from "@hivemind/host/home";
 import { agentControl } from "@hivemind/host/agent-control";
+import { issueStart, issueStartOver, issueTiles } from "@hivemind/host/issue-start";
 import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
@@ -1363,6 +1365,25 @@ const pluginServices = new PluginServices({
   secretFields: async (plugin) => ((await listTools()).find((p) => p.id === plugin)?.settings ?? []).filter((f) => f.type === "secret").map((f) => f.id),
 });
 onSettingsChange(() => void pluginServices.settingsChanged());
+const agentsHere = agentControl({
+  programs: async () => {
+    await shellEnvReady;
+    return spawnableAgents().filter((d) => !!findBin(d.bin));
+  },
+  core: (repo) => workspaceStore().getCore(repo),
+  repos: () => workspaceStore().repos(),
+  machines: knownMachines,
+  places: placesHere,
+  openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
+  start: (repo, start) => control.start(repo, start),
+  status: (bare) => control.status.get(bare),
+  interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
+  // As the person types: an interrupt key ends the turn in the agent's status too.
+  type: (bare, data) => control.typed(`hm:${bare}`, data),
+  close: (bare) => control.close(bare),
+  folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
+});
+const framesHere = framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn });
 const workspaceServer: WorkspaceServer = new WorkspaceServer([
   pluginServices.domain(),
   ...workspaceDomains((c) => whoIs(c).name),
@@ -1381,24 +1402,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   // Agents started, interrupted and closed from another of the person's devices, and what they
   // changed (M5, spec/agents.md).
   placesHere.domain(),
-  agentControl({
-    programs: async () => {
-      await shellEnvReady;
-      return spawnableAgents().filter((d) => !!findBin(d.bin));
-    },
-    core: (repo) => workspaceStore().getCore(repo),
-    repos: () => workspaceStore().repos(),
-    machines: knownMachines,
-    places: placesHere,
-    openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
-    start: (repo, start) => control.start(repo, start),
-    status: (bare) => control.status.get(bare),
-    interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
-    // As the person types: an interrupt key ends the turn in the agent's status too.
-    type: (bare, data) => control.typed(`hm:${bare}`, data),
-    close: (bare) => control.close(bare),
-    folderOf: (bare) => runsIn(heldBoards(workspaceStore()), bare),
-  }),
+  agentsHere,
   // Naming, keys, replies, sessions, tools and pipes, and the person's machine methods (0.23).
   controlApi({
     control: () => control.api(),
@@ -1443,12 +1447,16 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     grants,
     elsewhere: (method, params) => askDrive(driveSockPath(app.getPath("userData")), readOrCreateToken(app.getPath("userData")), method, params),
   }),
-  framesDomain({ store: workspaceStore, worktreeList, worktreeCreate, worktreeRemove, closeTile: (bare) => control.close(bare), machines: machinesToRunOn }),
+  framesHere,
+  // Starting work on an issue: the guard, its worktree frame, an agent on it (design jira-sync §11.1).
+  issueStart({ activeTiles: () => issueTiles(heldBoards(workspaceStore())), ...issueStartOver(framesHere, agentsHere), services: pluginServices, nameOf: (c) => whoIs(c).name }),
   // A participant's branch, handed off from their machine (M4).
   handOff({ who: whoIs, place: (repo, tile, name) => { workspaceStore().addTile(repo, tile, { name }, HANDED_OFF); } }),
 ], hostIntents(), (m) => console.warn(`[workspace] ${m}`));
 // Every write to the issues of a workspace a window shows, or a service or guest is connected to.
-const issueWatch = new IssueWatch({ publish: (repo, change) => workspaceServer.publish("issue.changed", repo, change) });
+// The PRs of those issues, read from GitHub every 3 minutes while any is open (design jira-sync §11.4).
+const prWatch = new PrWatch({ notify: notifyPlain, log: (m) => console.warn(m) });
+const issueWatch = new IssueWatch({ publish: (repo, change) => workspaceServer.publish("issue.changed", repo, change), watching: prWatch });
 const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
 // A folder on another of the person's devices is answered there (M4); one of a workspace joined
 // from elsewhere, by its host.

@@ -105,6 +105,10 @@ export const PrRefZ = z
     number: z.number().int().positive(),
     url: z.string().url(),
     state: z.enum(["open", "draft", "merged", "closed"]),
+    /** GitHub's review decision, as the PR watcher last saw it (a badge; it never moves the issue). */
+    review: z.enum(["approved", "changes_requested", "review_required"]).optional(),
+    /** The head commit's checks, as the PR watcher last saw them. */
+    checks: z.enum(["passing", "failing", "pending"]).optional(),
   })
   .loose();
 export type PrRef = z.infer<typeof PrRefZ>;
@@ -258,6 +262,11 @@ export const ConfigZ = z.object({
    *  move the issue to review. */
   on_complete: z.enum(["pr", "draft_pr", "review"]).optional(),
   pr_base: z.string().min(1).optional(),
+  /** The git remote an issue's branch is pushed to; default: the one you can push to (a fork). */
+  pr_push_remote: z.string().min(1).optional(),
+  /** The repository PRs open against, `owner/repo` (or `host/owner/repo`); default: the fork's
+   *  parent when the push remote is a fork, else the push remote's repository. */
+  pr_repo: z.string().regex(/^(?:[\w.-]+\/)?[\w.-]+\/[\w.-]+$/).optional(),
   /** After a merge: remove the worktree and local branch (`auto`), ask, or keep them. */
   cleanup: z.enum(["ask", "auto", "never"]).optional(),
   /** The branch an issue's work goes on; `{key}` and `{slug}` are filled in. */

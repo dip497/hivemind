@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MenuItem } from "@hivemind/app-ui";
-import { issueTypeOf, moveTo, statusOfIssue, transitionTargets, useIssuesPlugin, write, type IssueSummary, type WorkflowStatus } from "./data";
+import { issueTypeOf, moveTo, statusOfIssue, transitionTargets, useIssuesPlugin, write, type Issues, type IssueSummary, type WorkflowStatus } from "./data";
 import { groupIssues, type GroupBy, type IssueGroup } from "./grouping";
 import { IssueCard } from "./IssueCard";
 import { HiveOnlyMark, StatusIcon } from "./StateMeta";
@@ -58,21 +58,31 @@ export function BoardView({
   showCancelled,
   selected,
   onWork,
+  answerFor,
 }: {
   issues: IssueSummary[];
   groupBy: GroupBy;
   showCancelled: boolean;
   selected: boolean;
   onWork: (i: IssueSummary) => void;
+  /** The start-work guard's say on moving an issue into progress (protocol 1.17). */
+  answerFor?: Issues["answerFor"];
 }) {
   const { hm, workflow } = useIssuesPlugin();
   const groups = groupIssues(issues, groupBy, showCancelled, workflow);
   const dragId = useRef<string | null>(null);
   const [overKey, setOverKey] = useState<string | null>(null);
   const [picking, setPicking] = useState<{ key: string; issue: IssueSummary } | null>(null);
-  const move = (issue: IssueSummary, to: WorkflowStatus) => {
+  const move = async (issue: IssueSummary, to: WorkflowStatus) => {
     setPicking(null);
-    if (statusOfIssue(issue) !== to.id) void write("Moving the issue", moveTo(hm, workflow, issue.id, to, `moved to ${to.category} via board`));
+    if (statusOfIssue(issue) === to.id) return;
+    // Into progress from elsewhere starts work: the guard asks first, and Assign to me goes first.
+    if (to.category === "in_progress" && issue.state !== "in_progress" && answerFor) {
+      const answer = await answerFor(issue, "move");
+      if (answer === null) return;
+      if (answer !== "legacy" && answer.assignMe && !(await write("Assigning the issue", hm.issues.start(issue.id, { ack: answer.ack as never, assignMe: true, agent: false })))) return;
+    }
+    void write("Moving the issue", moveTo(hm, workflow, issue.id, to, `moved to ${to.category} via board`));
   };
 
   const dropOn = (g: IssueGroup) => {
@@ -83,7 +93,7 @@ export function BoardView({
     const issue = issues.find((i) => i.id === id);
     if (!issue) return;
     if (g.dropStatuses !== undefined) {
-      if (g.dropStatuses.length === 1) move(issue, g.dropStatuses[0]!);
+      if (g.dropStatuses.length === 1) void move(issue, g.dropStatuses[0]!);
       else setPicking({ key: g.key, issue });
     } else if (g.dropAssignee !== undefined) {
       if ((issue.assignee?.id ?? null) !== (g.dropAssignee ?? null))
@@ -117,7 +127,7 @@ export function BoardView({
               </span>
             </div>
             {picking?.key === g.key && g.dropStatuses && (
-              <StatusPicker issue={picking.issue} statuses={g.dropStatuses} onPick={(s) => move(picking.issue, s)} onCancel={() => setPicking(null)} />
+              <StatusPicker issue={picking.issue} statuses={g.dropStatuses} onPick={(s) => void move(picking.issue, s)} onCancel={() => setPicking(null)} />
             )}
             <div className="flex flex-col gap-2 px-1.5 pb-2 overflow-y-auto">
               {g.items.map((issue) => (

@@ -12,6 +12,9 @@ const touched: string[] = [];
 const at = (what: string) => (root: string, id: string) => { touched.push(`${what} ${root} ${id}`); return Promise.resolve({ id, path: "p", raw: "r" }); };
 
 (globalThis as unknown as { window: unknown }).window = {
+  // What every window has, for the modules issue-service imports (the settings store listens for unload).
+  addEventListener: () => {},
+  removeEventListener: () => {},
   hive: {
     resolveIssueRoot: (id: string) => Promise.resolve({ root: id.startsWith("OTH-") ? OTHER : HERE }),
     readIssue: at("read"),

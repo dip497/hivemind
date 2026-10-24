@@ -46,6 +46,8 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     updateIssue: (root, id, patch) => workspace.call("issue.update", root, id, patch),
     commentOnIssue: (root, id, message) => workspace.call("issue.comment", root, id, message),
     deleteIssue: (root, id) => workspace.call("issue.delete", root, id),
+    checkStartWork: (root, id) => workspace.call("issue.checkStart", root, id),
+    startIssue: (repo, id, opts) => workspace.call("issue.start", repo, id, opts),
     moveIssue: (root, id, destPrefix, mode) => workspace.call("issue.move", root, id, destPrefix, mode),
     linkIssue: (root, id, otherId, type) => workspace.call("issue.link", root, id, otherId, type),
     unlinkIssue: (root, id, otherId) => workspace.call("issue.unlink", root, id, otherId),
