@@ -140,7 +140,8 @@ function write(s: Screen, data: string, end: number): void {
 /** Run `then` once the terminal has taken in everything sent before it: a screen, the rows or its
  *  end keep their place among the session's output. Not `write("")`: a resize first takes in what is
  *  queued, and stops at an empty string (it is falsy), dropping it, its `then` and every write after
- *  it, so a window waits for a screen that never comes (xterm's WriteBuffer.flushSync). */
+ *  it, so a window waits for a screen that never comes (xterm's WriteBuffer.flushSync). Our patch of
+ *  @xterm/headless fixes that loop too; an empty array keeps this right without the patch. */
 function inTurn(s: Screen, then: () => void): void {
   s.term.write(NOTHING, then);
 }

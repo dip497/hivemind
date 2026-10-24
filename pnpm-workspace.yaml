@@ -79,3 +79,5 @@ overrides:
 
 patchedDependencies:
   '@xterm/addon-webgl@0.20.0-beta.309': patches/@xterm__addon-webgl@0.20.0-beta.309.patch
+  '@xterm/headless@6.1.0-beta.313': patches/@xterm__headless@6.1.0-beta.313.patch
+  '@xterm/xterm@6.1.0-beta.315': patches/@xterm__xterm@6.1.0-beta.315.patch
