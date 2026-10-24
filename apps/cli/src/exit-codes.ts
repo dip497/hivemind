@@ -15,7 +15,7 @@ const EXIT_CODES = [
   { name: "timeout", exit: 4, codes: ["TIMEOUT"], meaning: "the wait ran out" },
   { name: "notFound", exit: 5, codes: ["NOT_FOUND", "NO_AGENT", "NO_ROOT"], meaning: "what it names is not there, or was closed: a tile, agent, frame, issue or workspace; or the tile runs no agent" },
   { name: "unauthorized", exit: 6, codes: ["FORBIDDEN", "PERSON_ONLY"], meaning: "not yours to do: a bad token, or only the person may: ask them" },
-  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE", "SYNC_LOCKED"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; the plugin changes only with its package; or another sync of that source is running" },
+  { name: "refused", exit: 7, codes: ["RATE_LIMITED", "DEPTH_EXCEEDED", "UNSUPPORTED", "OCCLUDED", "PART_OF_A_PACKAGE", "SYNC_LOCKED", "NEEDS_CONFIRM"], meaning: "refused for now, or the agent cannot do it: idle with nothing to read; something covers the tile `tile look` would picture; the plugin changes only with its package; another sync of that source is running; or starting this work needs the person to confirm (see `warnings`)" },
   { name: "waiting", exit: 8, codes: ["WAITING"], meaning: "the agent stopped to wait on an answer" },
   { name: "asleep", exit: 9, codes: ["ASLEEP"], meaning: "the agent is asleep: wake it with `hive ctl wake <tile>`" },
 ] as const;
@@ -46,13 +46,15 @@ export interface Failure {
   message: string;
   /** What to run or do next. */
   fix?: string;
+  /** NEEDS_CONFIRM: each finding of the start-work guard, and what can be done about it. */
+  warnings?: { check: string; severity: string; message: string; actions: string[] }[];
 }
 
 /** Print `failure` on stderr, as JSON or as text, and exit with its code (from the table unless
  *  given). */
 export function printFailure(json: boolean, failure: Failure, exit = exitCodeFor(failure.code)): never {
-  const { code, message, fix } = failure;
-  if (json) process.stderr.write(`${JSON.stringify({ error: { code, message, ...(fix ? { fix } : {}) } })}\n`);
+  const { code, message, fix, warnings } = failure;
+  if (json) process.stderr.write(`${JSON.stringify({ error: { code, message, ...(fix ? { fix } : {}), ...(warnings ? { warnings } : {}) } })}\n`);
   else process.stderr.write(`error [${code}] ${message}\n${fix ? `fix: ${fix}\n` : ""}`);
   process.exit(exit === EXIT.ok ? EXIT.error : exit);
 }

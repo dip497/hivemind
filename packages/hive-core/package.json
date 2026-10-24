@@ -47,7 +47,9 @@
     "./tool-registry": "./src/tool-registry.ts",
     "./tile-id": "./src/tile-id.ts",
     "./workflow": "./src/workflow.ts",
-    "./workflow-model": "./src/workflow-model.ts"
+    "./workflow-model": "./src/workflow-model.ts",
+    "./start-guard": "./src/start-guard.ts",
+    "./pr": "./src/pr.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

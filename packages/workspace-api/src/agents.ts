@@ -127,6 +127,8 @@ export interface StartAgent {
   resume?: string;
   supervise?: true | "all" | string[];
   report?: boolean;
+  /** (0.35) The issue it works (design jira-sync §11.1): recorded on its tile as `issue`. */
+  issue?: string;
 }
 
 /** A supervised tool use waiting on an answer (0.20): which tool, what it would do, and when it

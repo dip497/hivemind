@@ -254,6 +254,16 @@ export const ConfigZ = z.object({
   next_id: z.number().int().positive(),
   /** The on-disk format the workspace is at (storage.ts WORKSPACE_FORMAT). */
   format: z.number().int().positive().optional(),
+  /** What `hive ctl complete` does (design jira-sync §11.2): open the PR (default), a draft, or only
+   *  move the issue to review. */
+  on_complete: z.enum(["pr", "draft_pr", "review"]).optional(),
+  pr_base: z.string().min(1).optional(),
+  /** After a merge: remove the worktree and local branch (`auto`), ask, or keep them. */
+  cleanup: z.enum(["ask", "auto", "never"]).optional(),
+  /** The branch an issue's work goes on; `{key}` and `{slug}` are filled in. */
+  branch_template: z.string().min(1).optional(),
+  /** A command `hive ctl complete` runs in the worktree before it hands work on (tests, lint). */
+  check: z.string().min(1).optional(),
   /** Tracker project keys mirrored here (`PAY` for `PAY-318`), written by `hive ingest`. */
   external_prefixes: z.array(z.string().regex(EXTERNAL_PREFIX_RE)).optional(),
   /** `commit: true` keeps `.hivemind/mirror/` in git instead of ignoring it (mirror.ts). */

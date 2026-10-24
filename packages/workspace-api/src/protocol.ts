@@ -31,12 +31,15 @@ export type ErrorCode =
   /** Something else is drawn over what it would show: the message names it. */
   | "OCCLUDED"
   /** It ran and failed: git refused, a file could not be written. */
-  | "FAILED";
+  | "FAILED"
+  /** It would start work the person should confirm first (design jira-sync §10): the error's
+   *  `warnings` say why and what can be done (`--assign-me`, `--ack <check>`, `--force`). */
+  | "NEEDS_CONFIRM";
 
 /** Every code, so that one added to the type must be added here. */
 const ERROR_CODES: Record<ErrorCode, true> = {
   BAD_REQUEST: true, UNKNOWN_METHOD: true, FORBIDDEN: true, NOT_FOUND: true, NO_AGENT: true, ASLEEP: true, UNSUPPORTED: true,
-  RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, OCCLUDED: true, FAILED: true,
+  RATE_LIMITED: true, DEPTH_EXCEEDED: true, TIMEOUT: true, UNAVAILABLE: true, OCCLUDED: true, FAILED: true, NEEDS_CONFIRM: true,
 };
 /** Whether `code` is one of the codes a call fails with: what crossed a boundary untyped. */
 export const isErrorCode = (code: unknown): code is ErrorCode => typeof code === "string" && Object.hasOwn(ERROR_CODES, code);
