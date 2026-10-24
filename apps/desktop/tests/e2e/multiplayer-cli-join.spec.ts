@@ -35,6 +35,6 @@ test("hive join through the app opens the workspace in its window", async () => 
   };
   const joined = new Promise<string>((resolve) => execFile("bun", [CLI, "join", link, "--json"], { env }, (_e, out) => resolve(out)));
   await host.locator(".hm-join-request").getByRole("button", { name: "Allow" }).click();
-  expect(JSON.parse(await joined)).toMatchObject({ ok: true, data: { ok: true, role: "edit" } });
+  expect(JSON.parse(await joined)).toMatchObject({ ok: true, role: "edit" });
   await expect(guest.locator("[data-shared-banner]")).toBeVisible();
 });
