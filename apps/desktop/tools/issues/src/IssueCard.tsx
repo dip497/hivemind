@@ -83,7 +83,7 @@ export function IssueCard({
     >
       <div className="flex items-center gap-1.5">
         <IssueStatusIcon issue={issue} size={11} />
-        <span className="font-mono text-count text-[var(--color-fg2)] tabular-nums">{issue.id}</span>
+        <span className="font-mono text-count text-[var(--color-fg2)] tabular-nums whitespace-nowrap shrink-0">{issue.id}</span>
         {issue.statusName && issue.status !== issue.state && (
           <span className="text-chip text-[var(--color-fg3)] truncate" data-card-status>{issue.statusName}</span>
         )}
