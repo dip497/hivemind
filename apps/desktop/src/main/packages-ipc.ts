@@ -3,10 +3,7 @@
  * and adding one from a folder after the same review `hive plugins install --dry-run` prints. Every
  * change goes through `@hivemind/core/package-install`, as the CLI's do, and every window is told.
  */
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { app, dialog, type WebContents } from "electron";
-import { checkPackageManifest, PACKAGE_MANIFEST } from "@hivemind/hub";
 import { installPackage, reviewedOf, rollbackPackage, switchPackage, type InstalledPackage, type Reviewed } from "@hivemind/core/package-install";
 import { readInstalledPackages } from "@hivemind/core/installed-packages";
 import { memberKind } from "@hivemind/core/package-kinds";
@@ -21,21 +18,18 @@ import type { PackageReview } from "../shared/ipc.js";
 
 const runsOf = (kind: string) => memberKind(kind)?.runs ?? "in the app";
 
-/** The view a package opens with (its manifest's `startup.view`), named as its member is. */
-async function opensWith(dir: string, r: InstalledPackage): Promise<PackageReview["opens"]> {
-  const read = await readFile(path.join(dir, PACKAGE_MANIFEST), "utf8").then((t) => checkPackageManifest(JSON.parse(t)), () => null);
-  const id = read && "manifest" in read ? read.manifest.startup?.view : undefined;
-  const view = r.members.find((m) => m.kind === "view" && m.id === id);
+/** The view a package opens with, named as its member is. */
+function opensWith(r: InstalledPackage): PackageReview["opens"] {
+  const view = r.members.find((m) => m.kind === "view" && m.id === r.startView);
   return view ? { id: view.id, name: view.name } : null;
 }
 
-/** A dry run's result as the app reviews it, with whether the version it replaces is on now. `dir`
- *  is the folder reviewed, whose manifest names the view it opens with. */
-export async function packageReview(r: InstalledPackage, token: string, dir: string): Promise<PackageReview> {
+/** A dry run's result as the app reviews it, with whether the version it replaces is on now. */
+export async function packageReview(r: InstalledPackage, token: string): Promise<PackageReview> {
   const named = new Map(r.members.map((m) => [`${m.kind}:${m.id}`, m.name]));
   const now = (await readInstalledPackages()).find((x) => x.id === r.record.id);
   return {
-    token, id: r.record.id, name: r.record.name, version: r.record.version, on: r.record.on, opens: await opensWith(dir, r),
+    token, id: r.record.id, name: r.record.name, version: r.record.version, on: r.record.on, opens: opensWith(r),
     replaces: r.replaced ? { version: r.replaced.version, on: now?.on ?? false } : null,
     members: r.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, permissions: m.permissions, runs: runsOf(m.kind) })),
     changes: r.changes.map((c) => ({ ...c, name: named.get(`${c.kind}:${c.id}`) ?? c.id, runs: runsOf(c.kind) })),
@@ -78,7 +72,7 @@ export function installPackagesIpc(): void {
     rememberPick("package", dir);
     const r = await installPackage(dir, { dryRun: true });
     pending = { token: newNonce(), dir, id: r.record.id, reviewed: reviewedOf(r), sender: e.sender };
-    return await packageReview(r, pending.token, dir);
+    return await packageReview(r, pending.token);
   }, { local: true });
   handleEffect("plugins:install-folder", (token) => ({ target: pending && pending.token === token ? pending.id : undefined }), async (e, token: unknown) => {
     if (!pending || pending.token !== token || pending.sender !== e.sender) throw new Error("Choose the folder again to review it.");

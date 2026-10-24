@@ -299,3 +299,9 @@ test("a package with one version installed has nothing to roll back to", async (
   await installPackage(widget());
   await expect(rollbackPackage("counter")).rejects.toThrow("counter 0.0.0 is the only version installed: there is none before it to go back to");
 });
+
+test("an install says which view the package opens with, as its manifest's startup names it, and none when it names none", async () => {
+  expect((await installPackage(bundle("kit", "acme", { startup: { view: "@acme/island", agents: [] } }), { dryRun: true })).startView).toBe("@acme/island");
+  expect((await installPackage(bundle("plain"), { dryRun: true })).startView).toBeNull();
+  expect((await installPackage(widget(), { dryRun: true })).startView).toBeNull();
+});
