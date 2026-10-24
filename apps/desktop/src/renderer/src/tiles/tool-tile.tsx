@@ -104,7 +104,10 @@ function LinkedTile({ data, selected, drawn, props }: { data: ToolTileData; sele
     openFile: (path) => dataRef.current.openFile(path),
     openUrl: (url) => { if (/^https?:\/\//i.test(url)) dataRef.current.openUrl(url); },
     // Its own plugin's service, never another's: the plugin is the tile's package, not what its code says.
-    call: (command, args) => window.hive.toolCall({ plugin: dataRef.current.pkg.id, command, args: args ?? null }),
+    call: (command, args) => window.hive.toolCall({ plugin: dataRef.current.pkg.id, command, args: args ?? null }).catch((e: unknown) => {
+      // The service's own words, not the IPC's wrapping of them.
+      throw new Error((e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, ""));
+    }),
   }).current;
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[inherit] bg-[var(--color-bg2)]" data-tool-plugin={data.pkg.id}>
