@@ -204,8 +204,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     sessions.write(ptyId, data, paste);
     return true;
   };
+  // How busy each watched terminal's output is, for the devices that watch it: measured from each
+  // session's live output, as main does.
+  const activity = new TileActivity(() => api);
   // Every session as the control plane needs it: which agent runs in it, a supervised worker's
-  // policy in its environment, its output for whoever streams it, its end, and a person's keys.
+  // policy in its environment, its output for whoever streams it (and the activity meter), its end,
+  // and a person's keys.
   const backend: SessionBackend = {
     ...sessions,
     start: (opts, out) => {
@@ -215,7 +219,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       else control.agentOf.delete(bare);
       const supervise = control.supervise.get(bare);
       return sessions.start(supervise ? { ...opts, env: { ...opts.env, HIVE_SUPERVISE: supervise } } : opts, {
-        data: (data, replay) => out.data(data, replay),
+        data: (data, replay) => {
+          out.data(data, replay);
+          if (!replay) activity.note(bare, data.length);
+        },
         // Asleep, it is not gone: what waits on it waits on.
         exit: (code, signal, slept) => {
           out.exit(code, signal, slept);
@@ -289,6 +296,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const tileLines = new TileLines({
     server: () => api, changed: () => homeLinesChanged(),
     transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
+    runsHere: (bare) => !isRemote(runsIn(heldBoards(store), bare)),
   });
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
@@ -299,8 +307,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     }),
     terminals.domain,
     tileLines.domain,
-    // A device's watch of terminals' activity is taken, and told nothing: no output is measured here.
-    new TileActivity(() => api).domain,
+    activity.domain,
     presence(() => api, () => keys.personId),
     widgetDomain,
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.

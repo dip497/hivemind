@@ -13,8 +13,10 @@
  *
  * What an agent said is read only for a tile someone follows (a client's watch, or Home while a
  * phone follows it, `followAll`), when its own agent reports (`reported`: each tool use, each
- * reply), and only what it wrote since (`LastSaid`). Electron-free: main and `hive host` each make
- * one.
+ * reply), and only what it wrote since (`LastSaid`). A report of a tile no one follows marks it,
+ * and it is read before its line is next told: to a one-shot read, to Home, to a new watch. An agent
+ * that runs on another machine keeps no conversation here: its line is its screen's, as that
+ * machine's daemon read it. Electron-free: main and `hive host` each make one.
  *
  * A line is kept as one line of plain text at most 160 characters long (one-line.ts) whoever sent
  * it: the daemon that read it, a tile's own process (the control-plane socket lets a tile set its
@@ -40,6 +42,9 @@ export interface TileLinesOptions {
   /** The session the agent of a tile keeps its conversation in, and its file; null when it keeps
    *  none. None given: no tile's line is what its agent said. */
   transcriptOf?(bare: string): Transcript | null;
+  /** Whether the agent of a tile runs on this machine, so its session file is here: one that runs
+   *  elsewhere keeps no conversation here. None given: every one does. */
+  runsHere?(bare: string): boolean;
 }
 
 export class TileLines {
@@ -60,8 +65,11 @@ export class TileLines {
   readonly domain: Domain<"tile.watchLines" | "tile.readLines">;
 
   constructor(private readonly o: TileLinesOptions) {
-    const transcriptOf = o.transcriptOf;
-    this.said = new LastSaid({ transcriptOf: (bare) => transcriptOf?.(bare) ?? null, said: (bare) => this.lineChanged(bare) });
+    const { transcriptOf, runsHere } = o;
+    this.said = new LastSaid({
+      transcriptOf: (bare) => (transcriptOf && runsHere?.(bare) !== false ? transcriptOf(bare) : null),
+      said: (bare) => this.lineChanged(bare),
+    });
     this.domain = {
       answers: {
         "tile.watchLines": (from, tiles) => ({ lines: this.linesOf(this.watch(from, texts(tiles, "tiles").slice(0, WATCHED_MAX))) }),
@@ -75,18 +83,18 @@ export class TileLines {
   /** The line `bare` shows now: what its agent last said, when it keeps a conversation ("" until
    *  it says something there, and before it was read); else what its screen shows, none before
    *  its screen showed one. While Home follows every tile, a tile asked for whose agent's words
-   *  were never read is read, and told once it is. */
+   *  were never read, or reported since, is read, and told once it is. */
   get(bare: string): string | undefined {
     if (!this.said.keeps(bare)) return this.screens.get(bare);
     if (this.all && this.said.unread(bare)) this.said.refresh(bare);
     return this.said.line(bare) ?? "";
   }
 
-  /** The lines of `tiles` now, each read first when its agent's words are being read or were
-   *  never read: what a one-shot reader (a toast, the CLI) is answered. */
+  /** The lines of `tiles` now, each read first when no one follows it, or its agent's words are
+   *  being read or were never read: what a one-shot reader (a toast, the CLI) is answered. */
   async read(tiles: string[]): Promise<LastLines> {
     const reading = tiles.filter((t) => this.said.keeps(t));
-    for (const t of reading) if (this.said.unread(t)) this.said.refresh(t);
+    for (const t of reading) if (!this.followed(t) || this.said.unread(t)) this.said.refresh(t);
     await Promise.all(reading.map((t) => this.said.settled(t)));
     return this.linesOf(tiles);
   }
@@ -101,15 +109,23 @@ export class TileLines {
   }
 
   /** The agent of `bare` reported (a tool used, a turn ended, a reply), from `session`: what it
-   *  said since is read, while someone follows the tile. */
+   *  said since is read while someone follows the tile, else before its line is next told. */
   reported(bare: string, session?: string): void {
-    if (!this.all && !this.watchers.has(bare)) return;
+    if (!this.followed(bare)) return this.said.stale(bare, session);
     this.said.refresh(bare, session ? { session } : {});
   }
 
-  /** Home follows every tile (`on`), while a phone follows it, or no longer. */
+  /** Home follows every tile (`on`), while a phone follows it, or no longer. As it starts to, each
+   *  tile whose agent reported while no one followed it is read, and told once it is. */
   followAll(on: boolean): void {
+    const was = this.all;
     this.all = on;
+    if (on && !was) this.said.refreshStale();
+  }
+
+  /** Whether someone follows `bare`: a client's watch, or Home. */
+  private followed(bare: string): boolean {
+    return this.all || this.watchers.has(bare);
   }
 
   /** `bare` is closed: its line goes with it. */

@@ -1024,6 +1024,7 @@ function hostStarted() {
 const tileLines = new TileLines({
   server: () => workspaceServer, changed: () => homeLinesChanged(),
   transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
+  runsHere: (bare) => !isRemote(runsIn(heldBoards(workspaceStore()), bare)),
 });
 
 /** A session's screen and its cursor, wherever it runs. */

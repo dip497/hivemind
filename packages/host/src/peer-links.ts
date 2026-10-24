@@ -513,6 +513,9 @@ export class PeerLinks {
     try { asked = JSON.parse(text) as typeof asked; } catch { return; }
     if (asked?.t !== "follow" || this.homeFollowed.has(on)) return;
     const at = (v: unknown) => (typeof v === "number" ? v : undefined);
+    // Home follows every tile before it is first worked out: a tile whose agent's words were never
+    // read, or reported since, is read as Home asks for its line, and told once it is.
+    this.o.lines?.followAll(true);
     const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines() }));
     // Where the follower is in each of Home's two feeds, as it was last sent them, and whether it
     // missed a change for want of room: then it is sent nothing until room returns, and then what
@@ -533,7 +536,6 @@ export class PeerLinks {
       if (m.t === "home" || m.layout?.changes.length || m.lines?.changes.length) send(m);
     };
     this.homeFollowed.add(on);
-    this.o.lines?.followAll(true);
     send(home.answer({ layout: follower.layout, lines: follower.lines }));
     const stop = home.follow((m) => {
       if (follower.behind) return;
