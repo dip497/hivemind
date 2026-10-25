@@ -14,12 +14,14 @@ import {
   listIssues,
   parseSections,
   readConfig,
+  serializeSections,
   readIssue,
   serializeIssue,
   writeConfig,
   writeIssue,
   WORKSPACE_FORMAT,
 } from "./storage.js";
+import YAML from "yaml";
 import type { Issue } from "./types.js";
 
 async function mkRoot(): Promise<string> {
@@ -154,6 +156,17 @@ describe("readConfig self-heal", () => {
     expect(cfg.prefix).toMatch(/^[A-Z][A-Z0-9]{1,9}$/);
     expect(cfg.prefix).not.toBe("123");
   });
+  test("keys it doesn't name survive the repair", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(path.join(root, "config.yaml"), "next_id: 4\nagents:\n  claude: { bin: /bin/claude, flags: [--x] }\njira:\n  sources: [jira:acme/PAY]\n", "utf8");
+    const cfg = await readConfig(root);
+    const after = YAML.parse(await fs.readFile(path.join(root, "config.yaml"), "utf8"));
+    expect([cfg.jira, after.jira, after.agents]).toEqual([
+      { sources: ["jira:acme/PAY"] },
+      { sources: ["jira:acme/PAY"] },
+      { claude: { bin: "/bin/claude", flags: ["--x"] } },
+    ]);
+  });
 });
 
 describe("allocateId", () => {
@@ -176,6 +189,15 @@ describe("allocateId", () => {
     expect((await readConfig(root)).next_id).toBe(N + 1);
     const nums = ids.map((id) => Number(id.split("-")[1])).sort((a, b) => a - b);
     expect(nums).toEqual(Array.from({ length: N }, (_, i) => i + 1)); // exactly 1..N
+  });
+
+  test("keeps config keys it doesn't name", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(path.join(root, "config.yaml"), `prefix: PAY\nnext_id: 3\nformat: ${WORKSPACE_FORMAT}\nagents: {}\nmirror:\n  commit: true\n`, "utf8");
+    await allocateId(root);
+    expect(YAML.parse(await fs.readFile(path.join(root, "config.yaml"), "utf8"))).toEqual({
+      prefix: "PAY", next_id: 4, format: WORKSPACE_FORMAT, agents: {}, mirror: { commit: true },
+    });
   });
 });
 
@@ -333,9 +355,9 @@ describe("parseSections", () => {
     ]);
     expect(s.activity.length).toBe(1);
   });
-  test("bold `**Acceptance criteria:**` label is split out", () => {
+  test("bold `**Acceptance criteria:**` label is split out, blank lines before its checkboxes allowed", () => {
     const s = parseSections(
-      "## Description\n\nD.\n\n**Acceptance criteria:**\n- [ ] x",
+      "## Description\n\nD.\n\n**Acceptance criteria:**\n\n- [ ] x",
     );
     expect(s.description).toBe("D.");
     expect(s.acceptanceCriteria).toEqual([{ done: false, text: "x" }]);
@@ -348,6 +370,81 @@ describe("parseSections", () => {
     const long = parseSections(`acceptance criteria${" ".repeat(50_000)}x\n${"Acceptance criteria\t".repeat(5_000)}`);
     expect(performance.now() - t).toBeLessThan(100);
     expect(long.acceptanceCriteria).toEqual([]);
+  });
+  test("a label line stays in the description, with every line under it, when no checkbox follows it or the issue is mirrored", () => {
+    // Jira descriptions carry exactly this (jira-fake OPS-7: a bold paragraph over a plain bullet
+    // list). Splitting it out kept only checkbox lines and lost the rest on the next write.
+    const cases = [
+      { mirrored: false, desc: "Retry failed webhooks.\n\n**Acceptance criteria**\n\n- Retries back off\n- [ ] a checkbox later" },
+      { mirrored: true, desc: "Retry failed webhooks.\n\nAcceptance criteria:\n\n- [ ] from Jira\n- [x] also from Jira" },
+    ];
+    for (const { mirrored, desc } of cases) {
+      const s = parseSections(`## Description\n\n${desc}\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created`, { mirrored });
+      expect([mirrored, s.description, s.acceptanceCriteria, s.activity.length]).toEqual([mirrored, desc, [], 1]);
+    }
+  });
+  test("a mirrored issue's description keeps headings named like hive's sections", () => {
+    // The tracker's text may hold `### Activity`, `# Description`, even `## Activity`: only hive's
+    // own `##` headings split a mirrored issue, and Activity is the last one, as hive writes it.
+    const desc = "Intro.\n\n### Activity\n\nWhat the user does.\n\n# Description\n\n## Description\n\nMore.\n\n## Activity\n\n- not a row, Jira's own list";
+    const body = `## Description\n\n${desc}\n\n## Activity\n\n- 2026-05-17T10:00:00.000Z · Jane Doe (jira) · created`;
+    const s = parseSections(body, { mirrored: true });
+    expect([s.description, s.activity.map((a) => a.who), s.activityLayout]).toEqual([desc, ["Jane Doe (jira)"], undefined]);
+    expect(serializeSections(s)).toBe(body + "\n");
+    // With no description, a lower-level heading in a section hive doesn't model stays there.
+    const noDesc = "## Activity\n\n- 2026-05-17T10:00:00.000Z · ui · created\n\n## Links\n\n### Description\n\nx";
+    expect(parseSections(noDesc, { mirrored: true })).toMatchObject({ description: "", extra: "## Links\n\n### Description\n\nx" });
+    // A local issue keeps today's tolerant matching: any level splits.
+    expect(parseSections(body).description).toBe("Intro.");
+  });
+  test("finding sections stays linear on long lines", () => {
+    const t = performance.now();
+    const long = parseSections(
+      `## Acceptance criteria${" ".repeat(50_000)}x\n${"## Acceptance\tcriteria \t".repeat(5_000)}\n## Activity\n\n- a${" ·x".repeat(20_000)}`,
+    );
+    expect(performance.now() - t).toBeLessThan(100);
+    expect([long.acceptanceCriteria, long.activity]).toEqual([[], []]);
+  });
+  test("a body round-trips: lines that aren't entries, unknown sections and row details are written back as read", () => {
+    const bodies = {
+      "AC prose, `* [ ]`, nested bullets, an indented item": [
+        "## Description", "", "D.", "",
+        "## Acceptance criteria", "",
+        "Must hold for every source:", "", "- [x] retries back off", "  - at most 5 times", "  - [ ] jittered", "* [ ] star bullet", "", "Done when QA signs off.",
+      ],
+      "an unknown section between Acceptance criteria and Activity stays there": [
+        "## Acceptance criteria", "", "- [ ] one", "", "## Notes", "", "- [ ] not a criterion", "", "## Activity", "", "- 2026-05-17T10:00:00.000Z · ui · created",
+      ],
+      "an unknown section after Activity": [
+        "## Activity", "", "- 2026-05-17T10:00:00.000Z · ui · created", "", "## Links", "", "- https://example.com", "", "# Appendix", "", "text",
+      ],
+      "activity: who with spaces, a row id, a multi-line message, a line that isn't a row": [
+        "## Activity", "",
+        "- 2026-05-17T10:00:00.000Z · Jane Doe (jira) · Looks good<br>ship it <!-- id:jira-c-10023 -->",
+        "  a continuation an older build wrote",
+        "- 2026-05-17T11:00:00.000Z · claude · state: todo → in_progress · labels: [] → [x]",
+      ],
+    };
+    for (const [name, lines] of Object.entries(bodies)) {
+      const body = lines.join("\n") + "\n";
+      expect([name, serializeSections(parseSections(body))]).toEqual([name, body]);
+    }
+    const s = parseSections(bodies["activity: who with spaces, a row id, a multi-line message, a line that isn't a row"].join("\n"));
+    expect(s.activity).toEqual([
+      { at: "2026-05-17T10:00:00.000Z", who: "Jane Doe (jira)", message: "Looks good\nship it", id: "jira-c-10023" },
+      { at: "2026-05-17T11:00:00.000Z", who: "claude", message: "state: todo → in_progress · labels: [] → [x]" },
+    ]);
+    const ac = parseSections(bodies["AC prose, `* [ ]`, nested bullets, an indented item"].join("\n"));
+    expect(ac.acceptanceCriteria).toEqual([{ done: true, text: "retries back off" }, { done: false, text: "jittered" }]);
+    expect(parseSections(bodies["an unknown section between Acceptance criteria and Activity stays there"].join("\n")).acceptanceCriteria).toEqual([{ done: false, text: "one" }]);
+    expect(parseSections(bodies["an unknown section after Activity"].join("\n")).extra).toBe("## Links\n\n- https://example.com\n\n# Appendix\n\ntext");
+  });
+  test("entries added to a section with kept lines land after its entries, not inside an unknown section", () => {
+    const s = parseSections("## Acceptance criteria\n\nIntro.\n\n- [ ] one\n\n## Notes\n\nfree text\n");
+    s.acceptanceCriteria.push({ done: false, text: "two" });
+    const back = parseSections(serializeSections(s));
+    expect(back.acceptanceCriteria).toEqual([{ done: false, text: "one" }, { done: false, text: "two" }]);
+    expect(serializeSections(back)).toContain("- [ ] two\n\n## Notes\n\nfree text");
   });
   test("activity entries parsed", () => {
     const s = parseSections(
@@ -412,7 +509,7 @@ describe("appendActivity", () => {
   test("a format-1 workspace is brought to format 2 once: activity rows rewritten to ISO, nothing else", async () => {
     const root = await mkRoot();
     const cfgFile = path.join(root, "config.yaml");
-    await fs.writeFile(cfgFile, "prefix: PAY\nnext_id: 2\nagents: {}\n");
+    await fs.writeFile(cfgFile, "prefix: PAY\nnext_id: 2\nagents: {}\nmirror: { commit: true }\n");
     const md = `---
 id: PAY-1
 title: T
@@ -441,6 +538,7 @@ updated: "2026-05-17T10:00:00Z"
     expect(after).toContain("- 2026-05-17T10:00:00.000Z · ui · created");
     expect(after).toContain("- 2026-05-17 10:00 · a note that only looks like a row");
     expect((await readConfig(root)).format).toBe(WORKSPACE_FORMAT);
+    expect((await readConfig(root)).mirror).toEqual({ commit: true });
   });
   test("a workspace written by a newer build is refused, not misread", async () => {
     const root = await mkRoot();
@@ -516,6 +614,123 @@ describe("serializeIssue round-trip is stable", () => {
     expect(back.github).toBe(487);
     expect(back.sections.description).toBe("D body.");
   });
+
+  // A mirrored issue as a sync or a hand edit leaves it: the new typed fields, keys this build
+  // doesn't name, a comment, and timestamps and dates without quotes.
+  const MIRRORED = `---
+id: PAY-7
+title: Mirrored
+state: in_review
+parent: null
+labels: []
+assignee: null
+github: null
+links:
+  - id: PAY-1
+    type: relates
+created: 2026-10-01T00:00:00Z
+updated: 2026-10-01T00:00:00Z
+status: hive:pr-created
+# written by the Jira sync
+external:
+  provider: jira
+  source: jira:acme/PAY
+  id: "10423"
+  key: PAY-318
+  remoteUpdated: 2026-10-22T09:14:00.000Z
+  customfield_10016: 3
+branch: PAY-318-retry
+pr: { repo: acme/payments, number: 1187, url: "https://github.com/acme/payments/pull/1187", state: open }
+aliases: [PAY-300]
+jira:
+  rank: "0|hzzzzz"
+due: 2026-11-01
+x_note: keep me
+---
+
+## Description
+
+D.
+
+### Activity
+
+Steps from Jira.
+`;
+
+  test("an update writes back every entry it didn't change byte for byte, unquoted dates and timestamps too", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED, "utf8");
+    const [summary] = await listIssues(root);
+    expect(summary).toMatchObject({
+      id: "PAY-7",
+      created: "2026-10-01T00:00:00Z",
+      links: [{ id: "PAY-1", type: "relates" }],
+      status: "hive:pr-created",
+      external: { key: "PAY-318", remoteUpdated: "2026-10-22T09:14:00.000Z" },
+      branch: "PAY-318-retry",
+      pr: { number: 1187, state: "open" },
+      aliases: ["PAY-300"],
+    });
+    const back = await updateIssue(root, "PAY-7", { title: "Mirrored renamed" }, "cli:bob");
+    const frontmatter = (text: string) => text.split("\n---\n")[0];
+    // Only what changed is written fresh, and a timestamp hive writes is quoted, so an older
+    // build (whose YAML reads an unquoted one as a date) still reads the file.
+    expect(frontmatter(await fs.readFile(issuePath(root, "PAY-7"), "utf8"))).toBe(
+      frontmatter(MIRRORED).replace("title: Mirrored\n", "title: Mirrored renamed\n").replace("updated: 2026-10-01T00:00:00Z", `updated: '${back.updated}'`),
+    );
+    const reread = await readIssue(root, "PAY-7");
+    expect(reread.sections.description).toBe("D.\n\n### Activity\n\nSteps from Jira.");
+    expect([reread.title, reread.due, reread.jira, reread.x_note, reread.external?.customfield_10016, reread.external?.remoteUpdated]).toEqual([
+      "Mirrored renamed", "2026-11-01", { rank: "0|hzzzzz" }, "keep me", 3, "2026-10-22T09:14:00.000Z",
+    ]);
+  });
+
+  test("a key the file didn't have goes after its own keys, and a removed one leaves the rest as they were", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED.replace("github: null\n", ""), "utf8");
+    await updateIssue(root, "PAY-7", { branch: null }, "cli:bob");
+    await updateIssue(root, "PAY-7", { github: 9, labels: ["sync", "2026-11-01"] }, "cli:bob");
+    const text = await fs.readFile(issuePath(root, "PAY-7"), "utf8");
+    const keys = [...text.split("\n---\n")[0]!.matchAll(/^(\w+):/gm)].map((m) => m[1]);
+    expect(keys).toEqual([
+      "id", "title", "state", "parent", "labels", "assignee", "links", "created", "updated",
+      "status", "external", "pr", "aliases", "jira", "due", "x_note", "github",
+    ]);
+    // Written fresh, a date-like string is quoted: an older build's YAML would read it as a date.
+    expect(text).toContain("labels:\n  - sync\n  - '2026-11-01'\nassignee: null\nlinks:\n");
+    expect(text).toContain("x_note: keep me\ngithub: 9\n---\n");
+    expect(text).toContain("# written by the Jira sync\nexternal:\n  provider: jira\n");
+  });
+
+  test("an object read from a file and changed in place is written, and the entries around it stay as they were", async () => {
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED, "utf8");
+    const issue = await readIssue(root, "PAY-7");
+    (issue.jira as { rank: string }).rank = "0|i00000";
+    issue.external!.customfield_10016 = 5;
+    await writeIssue(issue);
+    const back = await readIssue(root, "PAY-7");
+    expect([back.jira, back.external?.customfield_10016]).toEqual([{ rank: "0|i00000" }, 5]);
+    expect(await fs.readFile(issuePath(root, "PAY-7"), "utf8")).toContain("\ncreated: 2026-10-01T00:00:00Z\n");
+  });
+
+  test("frontmatter that doesn't split into one entry per line-start is written fresh, losing nothing", async () => {
+    // A quoted title running over two lines: its second line starts at column 0.
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED.replace("title: Mirrored\n", 'title: "Mirrored\nacross lines"\n'), "utf8");
+    await updateIssue(root, "PAY-7", { labels: ["x"] }, "cli:bob");
+    const back = await readIssue(root, "PAY-7");
+    expect([back.title, back.labels, back.due, back.x_note]).toEqual(["Mirrored across lines", ["x"], "2026-11-01", "keep me"]);
+  });
+
+  test("two reads of one file share no objects, so changing one doesn't change the next", async () => {
+    // gray-matter caches by content and returns the same `data` object every time.
+    const root = await mkRoot();
+    await fs.writeFile(issuePath(root, "PAY-7"), MIRRORED, "utf8");
+    const first = await readIssue(root, "PAY-7");
+    (first.jira as { rank: string }).rank = "changed in memory";
+    expect((await readIssue(root, "PAY-7")).jira).toEqual({ rank: "0|hzzzzz" });
+  });
 });
 
 describe("createIssue / updateIssue (CLI + UI write path)", () => {
@@ -555,5 +770,34 @@ describe("createIssue / updateIssue (CLI + UI write path)", () => {
     const updated = await updateIssue(root, created.id, { github: null }, "ui");
     expect(updated.github).toBe(null);
     expect(updated.sections.activity.map((a) => a.message)).toContain("github: 7 → —");
+  });
+
+  test("branch, pr and aliases are written, diffed in activity, and null removes branch", async () => {
+    const root = await mkRoot();
+    const created = await createIssue(root, { title: "t", branch: "PAY-1-t" });
+    const pr = { repo: "acme/payments", number: 1187, url: "https://github.com/acme/payments/pull/1187", state: "open" as const };
+    await updateIssue(root, created.id, { pr, aliases: ["OLD-1"] }, "cli:bob");
+    await updateIssue(root, created.id, { branch: null, pr: { ...pr, state: "merged" } }, "cli:bob");
+    await updateIssue(root, created.id, { pr: { ...pr, state: "merged" }, aliases: ["OLD-1"] }, "cli:bob");
+    const back = await readIssue(root, created.id);
+    expect([back.branch, back.pr?.state, back.aliases]).toEqual([undefined, "merged", ["OLD-1"]]);
+    expect(back.sections.activity.map((a) => a.message)).toEqual([
+      "created",
+      "pr: — → acme/payments#1187 (open) · aliases: [] → [OLD-1]",
+      "branch: PAY-1-t → — · pr: acme/payments#1187 (open) → acme/payments#1187 (merged)",
+    ]);
+    expect((await fs.readFile(back.path, "utf8")).split("---")[1]).not.toContain("branch:");
+  });
+
+  test("activity rows keep their ids and multi-line messages through a write", async () => {
+    const root = await mkRoot();
+    const created = await createIssue(root, { title: "t" });
+    const issue = await readIssue(root, created.id);
+    appendActivity(issue, "Jane Doe (jira)", "Looks good.\nShip it.", new Date("2026-05-17T10:00:00Z"), "jira-c-10023");
+    await writeIssue(issue);
+    await updateIssue(root, created.id, { title: "t2" }, "cli:bob");
+    const rows = (await readIssue(root, created.id)).sections.activity;
+    expect(rows[1]).toEqual({ at: "2026-05-17T10:00:00.000Z", who: "Jane Doe (jira)", message: "Looks good.\nShip it.", id: "jira-c-10023" });
+    expect(rows.length).toBe(3);
   });
 });

@@ -1,0 +1,96 @@
+{
+  "name": "dc-v2-wiki",
+  "description": "Jira Software Data Center 9.12: REST v2 + /rest/agile/1.0 only, PAT Bearer auth, users by username (name/key, no accountId), wiki-markup descriptions and comments, offset search (/rest/api/2/search with startAt/total), no bulkfetch / jql/match / changelog bulkfetch (use JQL `id in (…)` and expand=changelog). Scrum board with a screen transition that requires a resolution.",
+  "deployment": "DataCenter",
+  "restVersion": 2,
+  "baseUrl": "https://jira.example.com",
+  "serverInfo": { "version": "9.12.15", "versionNumbers": [9, 12, 15], "buildNumber": 9120015, "serverTimeZone": "Europe/London" },
+  "myself": "usolanki",
+  "users": [
+    { "name": "usolanki", "key": "JIRAUSER10100", "displayName": "Ujjwal Solanki", "emailAddress": "ujjwal@example.com", "timeZone": "Europe/London" },
+    { "name": "jdoe", "key": "JIRAUSER10101", "displayName": "Jane Doe", "emailAddress": "jane@example.com", "timeZone": "Europe/London" }
+  ],
+  "permissions": {
+    "CORE": ["BROWSE_PROJECTS", "TRANSITION_ISSUES", "ASSIGN_ISSUES", "ASSIGNABLE_USER", "ADD_COMMENTS", "EDIT_ISSUES", "LINK_ISSUES"]
+  },
+  "statuses": [
+    { "id": "1", "name": "Open", "statusCategory": { "id": 2, "key": "new", "colorName": "blue-gray", "name": "To Do" } },
+    { "id": "3", "name": "In Progress", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "10000", "name": "In Review", "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" } },
+    { "id": "6", "name": "Closed", "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" } }
+  ],
+  "workflows": {
+    "CORE workflow": {
+      "name": "CORE workflow",
+      "statuses": ["1", "3", "10000", "6"],
+      "initial": "1",
+      "transitions": [
+        { "id": "4", "name": "Start Progress", "from": ["1"], "to": "3" },
+        { "id": "301", "name": "Stop Progress", "from": ["3"], "to": "1" },
+        { "id": "711", "name": "Review", "from": ["3"], "to": "10000" },
+        {
+          "id": "2", "name": "Close Issue", "from": "*", "to": "6", "hasScreen": true,
+          "fields": {
+            "resolution": { "required": true, "name": "Resolution", "schema": { "type": "resolution", "system": "resolution" }, "allowedValues": [ { "id": "1", "name": "Fixed" }, { "id": "2", "name": "Won't Fix" }, { "id": "3", "name": "Duplicate" } ], "operations": ["set"] }
+          }
+        },
+        { "id": "3", "name": "Reopen Issue", "from": ["6"], "to": "1" }
+      ]
+    }
+  },
+  "projects": [
+    {
+      "id": "10000", "key": "CORE", "name": "Core", "style": "classic", "simplified": false, "projectTypeKey": "software",
+      "issueTypes": [
+        { "id": "1", "name": "Bug", "subtask": false, "hierarchyLevel": 0, "workflow": "CORE workflow" },
+        { "id": "10001", "name": "Story", "subtask": false, "hierarchyLevel": 0, "workflow": "CORE workflow" },
+        { "id": "5", "name": "Sub-task", "subtask": true, "hierarchyLevel": -1, "workflow": "CORE workflow" }
+      ]
+    }
+  ],
+  "resolutions": [ { "id": "1", "name": "Fixed", "isDefault": true }, { "id": "2", "name": "Won't Fix" }, { "id": "3", "name": "Duplicate" } ],
+  "priorities": [ { "id": "1", "name": "Blocker" }, { "id": "3", "name": "Major" }, { "id": "4", "name": "Minor" } ],
+  "fields": [
+    { "id": "summary", "name": "Summary", "custom": false, "schema": { "type": "string", "system": "summary" }, "clauseNames": ["summary"] },
+    { "id": "description", "name": "Description", "custom": false, "schema": { "type": "string", "system": "description" }, "clauseNames": ["description"] },
+    { "id": "status", "name": "Status", "custom": false, "schema": { "type": "status", "system": "status" }, "clauseNames": ["status"] },
+    { "id": "assignee", "name": "Assignee", "custom": false, "schema": { "type": "user", "system": "assignee" }, "clauseNames": ["assignee"] },
+    { "id": "updated", "name": "Updated", "custom": false, "schema": { "type": "datetime", "system": "updated" }, "clauseNames": ["updated"] },
+    { "id": "customfield_10100", "name": "Sprint", "custom": true, "schema": { "type": "array", "items": "string", "custom": "com.pyxis.greenhopper.jira:gh-sprint", "customId": 10100 }, "clauseNames": ["cf[10100]", "Sprint"] },
+    { "id": "customfield_10106", "name": "Story Points", "custom": true, "schema": { "type": "number", "custom": "com.atlassian.jira.plugin.system.customfieldtypes:float", "customId": 10106 }, "clauseNames": ["cf[10106]", "Story Points"] },
+    { "id": "customfield_10101", "name": "Epic Link", "custom": true, "schema": { "type": "any", "custom": "com.pyxis.greenhopper.jira:gh-epic-link", "customId": 10101 }, "clauseNames": ["cf[10101]", "Epic Link"] }
+  ],
+  "boards": [
+    {
+      "id": 1, "name": "CORE board", "type": "scrum", "projectKey": "CORE",
+      "filter": { "id": "10000", "jql": "project = CORE ORDER BY Rank ASC" },
+      "columns": [
+        { "name": "To Do", "statuses": ["1"] },
+        { "name": "In Progress", "statuses": ["3", "10000"] },
+        { "name": "Done", "statuses": ["6"] }
+      ],
+      "estimationFieldId": "customfield_10106",
+      "features": { "BACKLOG": "ENABLED", "SPRINTS": "ENABLED" }
+    }
+  ],
+  "sprints": [ { "id": 5, "boardId": 1, "name": "CORE Sprint 5", "state": "active", "startDate": "2026-10-14T09:00:00.000Z", "endDate": "2026-10-28T09:00:00.000Z" } ],
+  "issues": [
+    {
+      "id": "20000", "key": "CORE-1", "project": "CORE", "issueType": "1", "status": "1",
+      "summary": "Login fails behind the proxy",
+      "description": { "wiki": "h3. Steps\n# Configure the proxy\n# Log in\n\n{code:java}\nproxy.setHost(\"10.0.0.1\");\n{code}\n\n{panel:title=Note}Only on 9.12{panel}\n\nh3. Acceptance Criteria\n* (/) Works behind the proxy\n* (x) Error message names the proxy\n\n[~jdoe] reported it. See [the forum|https://forum.example.com/t/1]." },
+      "assignee": "usolanki", "reporter": "jdoe", "priority": "Major",
+      "sprints": [5],
+      "created": "2026-10-15T09:00:00.000+0100", "updated": "2026-10-22T14:00:00.000+0100",
+      "comments": [ { "id": "30000", "author": "jdoe", "created": "2026-10-22T14:00:00.000+0100", "updated": "2026-10-22T14:00:00.000+0100", "body": { "wiki": "*Repro* on staging, see {{proxy.log}}." } } ]
+    },
+    {
+      "id": "20001", "key": "CORE-2", "project": "CORE", "issueType": "10001", "status": "3",
+      "summary": "Unassigned story in the sprint", "description": { "wiki": "Plain text description." },
+      "assignee": null, "reporter": "jdoe", "priority": "Minor",
+      "sprints": [5],
+      "created": "2026-10-15T10:00:00.000+0100", "updated": "2026-10-21T10:00:00.000+0100"
+    }
+  ],
+  "faults": []
+}

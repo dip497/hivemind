@@ -5,6 +5,7 @@ import {
   createIssue,
   readIssue,
   requireRoot,
+  rootForIdHere,
   writeAgentContext,
 } from "@hivemind/core";
 import { err, ok, renderIssue } from "../format.js";
@@ -24,6 +25,7 @@ export const newCmd = defineCommand({
     "assignee-type": { type: "string", description: "agent | member (auto-detected)" },
     "assignee-model": { type: "string", description: "Model name for agent assignee" },
     state: { type: "string", description: "Initial state (default: backlog)" },
+    status: { type: "string", description: "Initial workflow status, by id or name; its state follows" },
     github: { type: "string", description: "Linked GitHub issue/PR number" },
     description: { type: "string", description: "Initial description body" },
     ac: { type: "string", description: "Acceptance criteria, '||'-separated (each becomes a checklist item)" },
@@ -32,7 +34,8 @@ export const newCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
+      // A sub-issue is created where its parent lives (design jira-sync §5.2).
+      const root = args.parent ? await rootForIdHere(stripAt(String(args.parent))) : await requireRoot();
 
       // Validate parent if given.
       let parent: string | null = null;
@@ -66,6 +69,7 @@ export const newCmd = defineCommand({
       const issue = await createIssue(root, {
         title: String(args.title),
         state,
+        ...(args.status ? { status: String(args.status) } : {}),
         parent: parent ?? undefined,
         labels: collectMulti(args.label),
         assignee,

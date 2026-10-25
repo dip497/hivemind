@@ -32,6 +32,8 @@ export function startServices(o: { driveSock: string; grants: Grants; serving: P
       grants: o.grants,
       logDir: path.join(app.getPath("userData"), "services"),
       onChange: () => broadcast("services:changed"),
+      // A service's `node` comes with the app: the person may have installed nothing else.
+      node: { file: process.execPath, env: { ELECTRON_RUN_AS_NODE: "1" } },
     });
     onSettingsChange(sync);
     onToolsChanged(sync);

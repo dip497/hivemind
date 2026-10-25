@@ -25,6 +25,7 @@
  * bigger package is not installed, removed or switched on apart from it (exit 7).
  *   hive plugins enable <plugin>  |  disable <plugin>
  *   hive plugins set <plugin> <setting> <value>    checked against the setting (a choice, a number…)
+ *   hive plugins set <tool> <secret> < value       a secret (an API token) on stdin, never as an argument
  *   hive plugins reset <plugin> [setting]          back to its default (every setting, without one)
  *   hive plugins workspaces <tool> [folder…] [--none]   the workspaces a tool's service may drive
  */
@@ -35,7 +36,7 @@ import path from "node:path";
 import { defineCommand } from "citty";
 import { HiveError, findRoot, listInstalledViews, readSettings, updateSettings } from "@hivemind/core";
 import {
-  PLUGIN_KINDS, agentSettingFields, isPluginOn, isPluginId, parseSettingValue, pluginKey, pluginOptions, resolveSettings,
+  PLUGIN_KINDS, agentSettingFields, isPluginOn, isPluginId, parseSettingValue, pluginKey, pluginOptions, resolveSettings, secretsSet,
   serviceWorkspaces, toolSettingFields, withPluginState, type PackageOf, type PluginKind, type PluginState, type SettingField,
 } from "@hivemind/core/plugin-settings";
 import { installPackage, removePackage, removePlugin, rollbackPackage, switchPackage, switchPlugin, type InstalledPackage, type MemberChange } from "@hivemind/core/package-install";
@@ -48,6 +49,7 @@ import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
 import { driveCall } from "../drive.js";
 import { HcpCliError } from "../hcp.js";
+import { Secrets, secretsPath, type KeptBy } from "@hivemind/host/secrets";
 import { EXIT } from "../exit-codes.js";
 import { personOnly } from "../person-only.js";
 import { KINDS, kindNamed, type AuthoredKind } from "../plugin-kinds.js";
@@ -203,9 +205,11 @@ const showCmd = defineCommand({
       const p = await find(String(args.plugin));
       const states = (await readSettings()).plugins.state;
       const values = resolveSettings(p.fields, pluginOptions(states, p.kind, p.id));
-      const data = { key: p.key, name: p.name, enabled: isPluginOn(states, p.kind, p, p.enabledByDefault), fields: p.fields, values, ...(p.package ? { package: p.package } : {}) };
+      // Of a secret, only whether one is set: its value is never shown.
+      const secrets = secretsSet(p.fields, pluginOptions(states, p.kind, p.id));
+      const data = { key: p.key, name: p.name, enabled: isPluginOn(states, p.kind, p, p.enabledByDefault), fields: p.fields, values, ...(Object.keys(secrets).length ? { secrets } : {}), ...(p.package ? { package: p.package } : {}) };
       return ok(ctx, data, () => [`${p.name} (${p.key}) — ${data.enabled ? "on" : "off"}`,
-        ...(p.fields.length ? p.fields.map((f) => `  ${f.id.padEnd(16)} ${show(values[f.id]).padEnd(14)} ${f.type === "choice" ? f.values.join(" | ") : f.type}${f.label !== f.id ? `  ${f.label}` : ""}`)
+        ...(p.fields.length ? p.fields.map((f) => `  ${f.id.padEnd(16)} ${(f.type === "secret" ? (secrets[f.id] ? "set" : "not set") : show(values[f.id])).padEnd(14)} ${f.type === "choice" ? f.values.join(" | ") : f.type}${f.label !== f.id ? `  ${f.label}` : ""}`)
           : ["  nothing to set"])].join("\n"));
     } catch (e) { return fail(ctx, e, "show_failed"); }
   },
@@ -237,21 +241,47 @@ const switchCmd = (on: boolean) => defineCommand({
   },
 });
 
+/** Keep (null: take away) a tool plugin's secret: in the running app's keychain, or `hive host`'s
+ *  file; in that 0600 file here when neither runs. How it is kept, and what to tell the person. */
+async function keepSecret(key: string, name: string, value: string | null): Promise<{ kept: KeptBy | null; note?: string }> {
+  try {
+    return await driveCall("secret.set", [key, name, value]) as { kept: KeptBy | null };
+  } catch (e) {
+    if (!(e instanceof HcpCliError && e.code === "UNAVAILABLE")) throw e;
+    const kept = new Secrets().set(key, name, value);
+    return { kept, ...(kept ? { note: `kept in ${secretsPath()}, readable by you alone (0600): no app is running to keep it in the system keychain` } : {}) };
+  }
+}
+
 const setCmd = defineCommand({
-  meta: { name: "set", description: "Set one of a plugin's settings, checked against what it takes" },
+  meta: { name: "set", description: "Set one of a plugin's settings, checked against what it takes; a secret is read from stdin" },
   args: {
     plugin: { type: "positional", required: true, description: "its id, or <kind>:<id>" },
     setting: { type: "positional", required: true },
-    value: { type: "positional", required: true },
+    value: { type: "positional", required: false, description: "the value; a secret is never given here, but piped in" },
     json: { type: "boolean" },
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
-    personOnly(ctx, "change a plugin's settings", `hive plugins set ${String(args.plugin)} ${String(args.setting)} ${String(args.value)}`);
+    // A secret's value is never said back, even in a refusal.
+    const secret = await find(String(args.plugin)).then((p) => p.fields.find((f) => f.id === args.setting)?.type === "secret", () => false);
+    personOnly(ctx, "change a plugin's settings", `hive plugins set ${String(args.plugin)} ${String(args.setting)}${args.value === undefined ? "" : ` ${secret ? "<on stdin>" : String(args.value)}`}`);
     try {
       const p = await find(String(args.plugin));
       const field = p.fields.find((f) => f.id === args.setting);
       if (!field) throw new Error(`${p.key} has no setting "${args.setting}"${p.fields.length ? `; it has: ${p.fields.map((f) => f.id).join(", ")}` : ""}`);
+      if (field.type === "secret") {
+        const fix = `printf %s "$TOKEN" | hive plugins set ${p.id} ${field.id}`;
+        if (args.value !== undefined) return err(ctx, "usage", `${field.id} is a secret: never give it as an argument, which shell history and the process list keep`, EXIT.usage, fix);
+        if (process.stdin.isTTY) return err(ctx, "usage", `${field.id} is a secret: pipe it in on stdin`, EXIT.usage, fix);
+        const value = (await readStdin()).replace(/\r?\n$/, "");
+        if (!value) return err(ctx, "usage", `nothing came on stdin for ${field.id}`, EXIT.usage, fix);
+        const { kept, note: where } = await keepSecret(p.key, field.id, value);
+        const { reloaded } = await change(p, (s) => ({ ...s, options: { ...s.options, [field.id]: true } }));
+        if (where && !ctx.json) process.stderr.write(`${where}\n`);
+        return ok(ctx, { key: p.key, setting: field.id, set: true, kept, reloaded }, () => `${p.key} ${field.id} set (${kept === "keychain" ? "in the system keychain" : "in a file only you can read"}); ${note(reloaded)}`);
+      }
+      if (args.value === undefined) return err(ctx, "usage", `give ${field.id} a value: hive plugins set ${p.id} ${field.id} <value>`, EXIT.usage);
       const value = parseSettingValue(field, String(args.value));
       const { reloaded } = await change(p, (s) => ({ ...s, options: { ...s.options, [field.id]: value } }));
       return ok(ctx, { key: p.key, setting: field.id, value, reloaded }, () => `${p.key} ${field.id} = ${show(value)}; ${note(reloaded)}`);
@@ -268,6 +298,8 @@ const resetCmd = defineCommand({
     try {
       const p = await find(String(args.plugin));
       const one = args.setting ? String(args.setting) : null;
+      // A secret put back to its default is taken away.
+      for (const f of p.fields) if (f.type === "secret" && (!one || one === f.id)) await keepSecret(p.key, f.id, null);
       const { state, reloaded } = await change(p, (s) => {
         if (!one) return {};
         const { [one]: _, ...options } = s.options ?? {};
@@ -618,3 +650,9 @@ export const pluginsCmd = defineCommand({
   meta: { name: "plugins", description: "Tools, widgets, views and agents: start, install, remove; on or off, and their settings" },
   subCommands: { new: newCmd, add: addCmd, check: checkCmd, install: installCmd, search: searchCmd, rollback: rollbackCmd, reload: reloadCmd, remove: removeCmd, api: apiCmd, list: listCmd, show: showCmd, enable: switchCmd(true), disable: switchCmd(false), set: setCmd, reset: resetCmd, workspaces: workspacesCmd },
 });
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const c of process.stdin) chunks.push(c as Buffer);
+  return Buffer.concat(chunks).toString("utf8");
+}

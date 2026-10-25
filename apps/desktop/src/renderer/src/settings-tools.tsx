@@ -3,7 +3,7 @@ import { FileCode, Earth, ListTodo, Puzzle, Trash } from "./components/icons";
 import { toast } from "sonner";
 import { BUNDLED_TOOL_PLUGINS, BROWSER_PLUGIN_ID, bundledToolRegistry, CODE_PLUGIN_ID, ISSUES_PLUGIN_ID } from "@hivemind/core/tool-plugins";
 import { toolPreferences } from "@hivemind/core/settings-schema";
-import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
+import { isPluginOn, pluginOptions, resolveSettings, secretsSet } from "@hivemind/core/plugin-settings";
 import { patchPluginState, setPluginOption, switchPlugin, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";
@@ -118,7 +118,10 @@ export function ToolPage({ id }: { id: string }) {
     {added && <p className="settings-note">It runs inside the app, with the access it has. Switch it on only if you trust who wrote it.</p>}
     {added && added.settings.length > 0 && <section className="plugin-section" aria-label="Its settings" data-plugin-settings={`tool:${id}`}>
       <h3>Its settings</h3>
-      <SettingsForm fields={added.settings} values={resolveSettings(added.settings, pluginOptions(stored, "tool", id))} onChange={(f, v) => setPluginOption("tool", id, f, v)} />
+      <SettingsForm fields={added.settings} values={resolveSettings(added.settings, pluginOptions(stored, "tool", id))} onChange={(f, v) => setPluginOption("tool", id, f, v)}
+        secrets={secretsSet(added.settings, pluginOptions(stored, "tool", id))}
+        // The value goes to main's keychain; settings.json keeps only that one is set.
+        onSecret={(f, v) => void window.hive.setPluginSecret(id, f, v).then(() => setPluginOption("tool", id, f, v === null ? undefined : true))} />
     </section>}
     {added?.service && <ServiceSection id={id} service={added.service} on={enabled} />}
     {id === BROWSER_PLUGIN_ID && <BrowserControl toolOn={enabled} />}

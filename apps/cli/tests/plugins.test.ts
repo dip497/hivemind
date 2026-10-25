@@ -54,6 +54,44 @@ describe("hive plugins", () => {
     }
   }, 60_000);
 
+  test("a tool's secret is read from stdin, never an argument: kept apart in a file only the person reads, settings.json saying only that it is set, and taken away by reset", () => {
+    const xdg = fixtureXDG([]);
+    const tool = path.join(xdg, "jira-source");
+    fs.mkdirSync(tool, { recursive: true });
+    fs.writeFileSync(path.join(tool, "hivemind-tool.json"), JSON.stringify({
+      id: "@acme/jira", name: "Jira", version: "1.0.0", apiVersion: 1, entry: "index.js",
+      tools: [{ key: "sync", label: "Sync", tileKind: "acme-sync" }],
+      settings: [{ id: "token", label: "API token", type: "secret" }, { id: "site", label: "Site", type: "text" }],
+    }));
+    fs.writeFileSync(path.join(tool, "index.js"), "export default { tiles: {} };\n");
+    // No app and no host: the CLI keeps it itself.
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock") };
+    const run = (args: string[], input?: string) => hive(["plugins", ...args, "--json"], { cwd: xdg, env, ...(input === undefined ? {} : { input }) });
+    const file = (name: string) => path.join(xdg, "hivemind", name);
+    try {
+      expect(run(["install", tool]).code).toBe(0);
+      const given = run(["set", "@acme/jira", "token", "hunter2"]);
+      expect([given.code, given.json]).toMatchObject([2, { error: { message: expect.stringContaining("never give it as an argument") } }]);
+      expect(fs.existsSync(file("secrets.json"))).toBe(false);
+
+      expect(run(["set", "@acme/jira", "token"], "hunter2\n").json).toMatchObject({ key: "tool:@acme/jira", setting: "token", set: true, kept: "file" });
+      expect((fs.statSync(file("secrets.json")).mode & 0o777).toString(8)).toBe("600");
+      expect(fs.readFileSync(file("secrets.json"), "utf8")).toContain("hunter2");
+      const settings = fs.readFileSync(file("settings.json"), "utf8");
+      expect(settings).not.toContain("hunter2");
+      expect(JSON.parse(settings).plugins.state["tool:@acme/jira"].options).toEqual({ token: true });
+      const shown = run(["show", "@acme/jira"]);
+      expect(shown.json).toMatchObject({ values: { site: "" }, secrets: { token: true } });
+      expect(shown.stdout).not.toContain("hunter2");
+
+      expect(run(["reset", "@acme/jira", "token"]).code).toBe(0);
+      expect(fs.readFileSync(file("secrets.json"), "utf8")).not.toContain("hunter2");
+      expect(run(["show", "@acme/jira"]).json).toMatchObject({ secrets: { token: false } });
+    } finally {
+      fs.rmSync(xdg, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   test("search finds HiveHub's plugins by every word, best match first, and refuses a limit it cannot use", () => {
     const xdg = fixtureXDG([]);
     const entry = (type: string, id: string, name: string, description: string, category: string) =>

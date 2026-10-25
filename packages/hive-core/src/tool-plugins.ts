@@ -46,9 +46,9 @@ export const BUNDLED_TOOL_PLUGINS: readonly ToolPluginContribution[] = Object.fr
     ]),
     commands: Object.freeze([
       Object.freeze({ key: "new", summary: "Open an issue", cli: "hive new \"title\" [--label X] [--parent ID] [--assignee NAME]" }),
-      Object.freeze({ key: "list", summary: "List issues", readOnly: true, cli: "hive list [--state in_progress] [--json]" }),
+      Object.freeze({ key: "list", summary: "List issues", readOnly: true, cli: "hive list [--state in_progress] [--status NAME] [--json]" }),
       Object.freeze({ key: "show", summary: "Show one issue", readOnly: true, cli: "hive show <ID>" }),
-      Object.freeze({ key: "update", summary: "Change an issue's state", cli: "hive update <ID> --state in_review --note \"...\"" }),
+      Object.freeze({ key: "update", summary: "Change an issue's state or status", cli: "hive update <ID> --state in_review | --status \"Code Review\" --note \"...\"" }),
       Object.freeze({ key: "task-add", summary: "Add a subtask", cli: "hive task add <ID> \"title\"" }),
       Object.freeze({ key: "task-done", summary: "Complete a subtask", cli: "hive task done <ID> <SUBID>" }),
       Object.freeze({ key: "link", summary: "Relate two issues", cli: "hive link <ID> --parent <ID>" }),

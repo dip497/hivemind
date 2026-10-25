@@ -4,6 +4,8 @@
  */
 import type { Issue, IssuePatch, IssueState, IssueSummary, LinkType, NewIssue } from "@hivemind/core/types";
 import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
+import type { IngestReport } from "@hivemind/core/ingest";
+import type { WorkflowView } from "@hivemind/core/workflow-model";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
@@ -15,7 +17,8 @@ import type { DeviceCertificate } from "@hivemind/workspace-host/identity";
 import type { ClientGrant, NewGrant } from "./grants.js";
 import type { FrameClose, FrameClosed, FrameOpened, FrameSpec } from "./frames.js";
 import type { ViewFile, ViewListing, ViewScreen } from "./views.js";
-import type { PluginList, TileLook } from "./plugins.js";
+import type { PluginList, PluginOptions, ServiceAnswer, ServiceCall, TileLook } from "./plugins.js";
+import type { PluginCommand } from "@hivemind/view-sdk/commands";
 import type { HostMessage, PluginMessage, SurfaceRect } from "@hivemind/view-sdk/protocol";
 import type { Answering, LinkRole, Role } from "@hivemind/workspace-host/access";
 import type { BoardEdit, BoardObject, CoreLayout, ViewLayout } from "@hivemind/workspace-doc/shapes";
@@ -26,6 +29,18 @@ import type { WidgetPackage } from "@hivemind/core/widget-format";
 
 /** A press on a widget: one of its buttons (its `action`), or its card. */
 export type WidgetPress = { action: unknown } | { click: true };
+
+/** One write to an issue (design jira-sync §12.1), whoever made it: the app, a peer, a service or
+ *  `hive` on this machine. `root` is the workspace's `.hivemind`; `fields` the issue's fields and
+ *  body sections that differ from what it held before (every one it has, when it is new); `by`
+ *  who signed its newest activity row (null: it was deleted, or has none). */
+export interface IssueChange {
+  id: string;
+  root: string;
+  change: "created" | "updated" | "deleted";
+  fields: string[];
+  by: string | null;
+}
 
 /** A workspace's layouts as a client that holds them opens it. */
 export interface StoreSnapshot {
@@ -64,6 +79,8 @@ export interface WorkspaceMethods {
   /** `root` is the workspace's `.hivemind` directory. */
   "issue.list": (root: string) => IssueSummary[];
   "issue.read": (root: string, id: string) => Issue;
+  /** The workspace's statuses in board order, its board columns and per-type transitions. */
+  "issue.workflow": (root: string) => WorkflowView;
   "issue.create": (root: string, issue: NewIssue) => Issue;
   "issue.update": (root: string, id: string, patch: IssuePatch) => Issue;
   /** A state change, with a note in the same activity entry. */
@@ -75,6 +92,9 @@ export interface WorkspaceMethods {
   "issue.unlink": (root: string, id: string, other: string) => { removed: number };
   /** Into the host's workspace with prefix `prefix`. */
   "issue.move": (root: string, id: string, prefix: string, mode: "move" | "copy") => TransferResult;
+  /** Upsert issues mirrored from an external tracker (`source`, e.g. `jira:acme/PAY`) — what
+   *  `hive ingest` does, for a service on the drive socket. */
+  "issue.ingest": (root: string, source: string, records: unknown[], opts?: { dryRun?: boolean }) => IngestReport;
   /** The repo's review comments, resolved ones included. */
   "review.list": (repo: string) => ReviewComment[];
   /** Replace the repo's review comments. */
@@ -194,6 +214,14 @@ export interface WorkspaceMethods {
   /** (0.27) Stop the running plugin `instance` (as `plugin.list` names it): a tool's tile closed, a
    *  widget taken off the board, a view left for the canvas. */
   "plugin.close": (instance: string, plugin?: string) => { closed: string; plugin: string; kind: string };
+  /** (0.34) A tool plugin's service, of its own plugin: what it is set to, and once asked, each
+   *  change after it as `options.changed`. */
+  "plugin.options": () => PluginOptions;
+  /** (0.34) A tool plugin's service: one of its own plugin's `secret` settings (null: not set). */
+  "secret.get": (name: string) => string | null;
+  /** (0.34) The person: set a plugin's secret (null: take it away), by its settings key
+   *  (`tool:@owner/name`): how it is kept, in the system keychain or in a file only they can read. */
+  "secret.set": (key: string, name: string, value: string | null) => { kept: "keychain" | "file" | null };
   /** Bring a tile into view and give it the keyboard. */
   "tile.focus": (tile: string) => null;
   /** (0.32) Bring a tile into view, wait for its plugin to draw, and answer a picture of it with its
@@ -322,6 +350,11 @@ export interface WorkspaceNotices {
   "widget.press": (repo: string, id: string, press: WidgetPress) => void;
   /** What the view of the caller's session `session` posts to its host (P8). */
   "view.post": (session: string, message: PluginMessage, workspace?: string) => void;
+  /** (0.34) A tool plugin's service answers these commands of its own plugin: `hive ctl plugin
+   *  call` runs one there when no window runs the plugin (`plugin.called`). */
+  "plugin.serve": (commands: PluginCommand[]) => void;
+  /** (0.34) A service's answer to the call `call` it was sent. */
+  "plugin.answer": (call: number, answer: ServiceAnswer) => void;
   /** The screen the view of the caller's session `session` is shown on now: its host tells the view
    *  (`resize`, `theme`) what changed (0.14). */
   "view.screen": (session: string, screen: ViewScreen, workspace?: string) => void;
@@ -351,6 +384,10 @@ export interface WorkspaceEvents {
   /** Someone types into `tile`: to each client that opened it but theirs, at most once a second
    *  for the same person typing (R4). */
   "terminal.typing": (tile: string, by: Typist) => void;
+  /** An issue of the workspace at `repo` was written, by anyone, as its file shows: to every
+   *  client of the workspace while something here follows it (a window showing it, a service or
+   *  guest connected to it). */
+  "issue.changed": (repo: string, change: IssueChange) => void;
   /** Files changed in a repo the client watches (at most one event every 300 ms). */
   "file.changed": (repo: string, change: { paths: string[] }) => void;
   /** Another writer changed a workspace's layouts: `part` is `core`, `board` or `view:<id>`; for the
@@ -369,6 +406,10 @@ export interface WorkspaceEvents {
   "widget.runner": (repo: string) => void;
   /** (0.19) To the window that runs `repo`'s widgets: someone pressed the widget `id`. */
   "widget.pressed": (repo: string, id: string, press: WidgetPress) => void;
+  /** (0.34) To a tool plugin's service: run one of the commands it serves, and answer. */
+  "plugin.called": (call: ServiceCall) => void;
+  /** (0.34) To a tool plugin's service that read its options: the person changed them. */
+  "options.changed": (options: PluginOptions) => void;
   /** (0.17) The host's look changed (`appearance.get`). */
   "appearance.changed": (appearance: Appearance) => void;
   /** Someone asks to join `repo`: to its owner's clients, the first answer counting (M3). */

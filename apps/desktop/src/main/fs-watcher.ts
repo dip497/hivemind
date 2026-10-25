@@ -68,6 +68,8 @@ export function watchRepo(repoPath: string, client: Connection): void {
     ].filter((p) => existsSync(p)),
     {
       ignored: (p: string) => {
+        // A sync's own bookkeeping (its lock's heartbeat, its ledger) is nobody's change to show.
+        if (/\/\.hivemind\/sync(\/|$)/.test(p)) return true;
         // .hivemind/ may be gitignored, but issue changes arrive through it.
         if (ignoredByGit && !p.includes("/.hivemind") && !p.includes("/.git/") && underIgnored(repoPath, p, ignoredByGit)) return true;
         // Inside .git/ keep only the four HEAD-ish files above; everything

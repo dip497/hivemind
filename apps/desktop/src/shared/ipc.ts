@@ -5,8 +5,10 @@ import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
+import type { IssueChange } from "@hivemind/workspace-api/methods";
 import type { NotificationSettings } from "./notification-settings.js";
 import type { ReviewComment } from "@hivemind/core/review";
+import type { WorkflowView } from "@hivemind/core/workflow-model";
 import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
 import type { Participant, PresenceState } from "@hivemind/workspace-host/presence";
@@ -424,6 +426,9 @@ export interface HiveIpc {
   serviceLog(plugin: string): Promise<string>;
   /** A service started, stopped or is starting again. */
   onServicesChanged(cb: () => void): () => void;
+  /** Set (null: take away) a tool plugin's `secret` setting: kept in the system keychain, or in a
+   *  file only the person reads where there is none. The value never comes back to a window. */
+  setPluginSecret(plugin: string, field: string, value: string | null): Promise<{ kept: "keychain" | "file" | null }>;
   /** Ids of installed agents whose manifest differs from the one the catalog lists. */
   outdatedAgents(): Promise<string[]>;
   /** Download and verify a catalog plugin, then return it for review. A view installs with
@@ -611,6 +616,8 @@ export interface HiveIpc {
   // ── hive-core (issues) ───────────────────────────
   listIssues(root: string): Promise<IssueSummary[]>;
   readIssue(root: string, id: string): Promise<Issue>;
+  /** The workspace's statuses, board columns and transitions (its `workflow.yaml`, else the six states). */
+  issueWorkflow(root: string): Promise<WorkflowView>;
   updateIssueState(
     root: string,
     id: string,
@@ -622,6 +629,7 @@ export interface HiveIpc {
     opts: {
       title: string;
       state?: IssueSummary["state"];
+      status?: string;
       parent?: string;
       labels?: string[];
       assignee?: Issue["assignee"];
@@ -936,6 +944,9 @@ export type HiveApi = HiveIpc & {
     repoPath: string,
     cb: (info: { paths: string[] }) => void
   ) => () => void;
+  /** Each write to an issue kept in `root` (a `.hivemind`), whoever made it, while a window here
+   *  shows its workspace. */
+  onIssueChanged: (root: string, cb: (change: IssueChange) => void) => () => void;
   /** The sessions (agents mid-turn) a terminal daemon of another protocol waits on before it is
    *  replaced; null when none waits. */
   daemonWaitingOn?: () => Promise<string[] | null>;

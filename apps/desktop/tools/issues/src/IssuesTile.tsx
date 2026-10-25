@@ -98,7 +98,7 @@ export function workPrompt(issue: Pick<IssueSummary, "id" | "title">): string {
   return `Work on ${issue.id}: load it with \`hive show ${issue.id} --json\`, complete the acceptance criteria, and end with \`hive ctl set-state\`. Title: "${issue.title}".`;
 }
 
-export function IssuesTile({ tile, hm, selected }: TileProps) {
+export function IssuesTile({ tile, hm, selected, workflowError }: TileProps & { workflowError?: string | null }) {
   const { openPanel } = useIssuesPlugin();
   const list = useIssueList();
   const issues = list ?? [];
@@ -132,6 +132,11 @@ export function IssuesTile({ tile, hm, selected }: TileProps) {
         <SetUpIssues hm={hm} status={status} onReady={setStatus} />
       ) : (
         <>
+          {workflowError && (
+            <div role="alert" className="px-4 py-1.5 text-count text-[var(--color-warn)] border-b border-[var(--color-line)] bg-[var(--color-bg2)]" data-workflow-error>
+              The workflow could not be read, so the board shows the six states: {workflowError}. Run <code className="font-mono">hive statuses validate</code>.
+            </div>
+          )}
           <FilterBar
             issues={issues}
             filters={filters}

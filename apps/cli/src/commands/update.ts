@@ -3,7 +3,7 @@ import { ensureAgentCatalog } from "../agent-catalog.js";
 import {
   HiveError,
   readIssue,
-  requireRoot,
+  rootForIdHere,
   updateIssue,
   writeAgentContext,
   type IssuePatch,
@@ -16,7 +16,8 @@ export const updateCmd = defineCommand({
   meta: { name: "update", description: "Update fields of an existing issue" },
   args: {
     id: { type: "positional", required: true, description: "Issue ID" },
-    state: { type: "string", description: "New state" },
+    state: { type: "string", description: "New state (with a workflow: that state's first status)" },
+    status: { type: "string", description: "New workflow status, by id or name (hive statuses show); its state follows" },
     title: { type: "string", description: "New title" },
     assignee: { type: "string", description: "Assignee id (or 'none' to unset)" },
     "assignee-type": { type: "string" },
@@ -30,8 +31,8 @@ export const updateCmd = defineCommand({
   async run({ args }) {
     const ctx = { json: !!args.json };
     try {
-      const root = await requireRoot();
       const id = stripAt(String(args.id));
+      const root = await rootForIdHere(id);
       // The CLI validates/parses flags into a patch; core owns the diff,
       // canonical activity format, and write. We read once only to resolve the
       // add/remove-label SET semantics into a final labels array.
@@ -42,6 +43,10 @@ export const updateCmd = defineCommand({
         const ns = parseState(String(args.state));
         if (!ns) return err(ctx, "bad_state", `invalid state: ${args.state}`);
         patch.state = ns;
+      }
+      if (args.status !== undefined) {
+        if (args.state !== undefined) return err(ctx, "usage", "give --status or --state, not both: a status decides the state");
+        patch.status = String(args.status); // core resolves it, refusing one the workflow lacks
       }
       if (args.title !== undefined) patch.title = String(args.title);
       if (args.assignee !== undefined) {

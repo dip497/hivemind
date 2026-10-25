@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createIssue, registerWorkspace, writeConfig } from "@hivemind/core";
+import { createIssue, readIssue, registerWorkspace, writeConfig } from "@hivemind/core";
 import { hive } from "./helpers.js";
 
 let ws: string;
@@ -43,6 +43,19 @@ describe("hive ctl issue verbs", () => {
     const act = j.activity as Array<{ message: string; who?: string }>;
     expect(JSON.stringify(act)).toContain("claiming");
     expect(JSON.stringify(act)).toContain("tester");
+  });
+
+  test("hive update keeps frontmatter it doesn't name, and both --json shapes carry the tracker fields", async () => {
+    const root = path.join(ws, ".hivemind");
+    const mirrored = await createIssue(root, { title: "Mirrored", branch: "TT-2-mirrored" });
+    const raw = await fs.readFile(mirrored.path, "utf8");
+    await fs.writeFile(mirrored.path, raw.replace("\nupdated:", "\nexternal: { provider: jira, source: 'jira:acme/PAY', id: '10423', key: PAY-318 }\njira: { rank: '0|hz' }\nupdated:"));
+    const up = hive(["update", mirrored.id, "--title", "Mirrored, renamed", "--json"], { cwd: ws, env: env() });
+    expect([up.code, up.json]).toMatchObject([0, { title: "Mirrored, renamed", branch: "TT-2-mirrored", external: { key: "PAY-318" }, jira: { rank: "0|hz" } }]);
+    const back = await readIssue(root, mirrored.id);
+    expect([back.title, back.jira, back.external?.id]).toEqual(["Mirrored, renamed", { rank: "0|hz" }, "10423"]);
+    const set = hive(["ctl", "set-state", mirrored.id, "in_review", "--json"], { cwd: ws, env: env() });
+    expect([set.code, set.json]).toMatchObject([0, { state: "in_review", branch: "TT-2-mirrored", external: { key: "PAY-318", source: "jira:acme/PAY" } }]);
   });
 
   test("set-state rejects an unknown state with exit 2 and a structured error", () => {

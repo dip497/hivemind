@@ -63,6 +63,10 @@ import { daemonSessions } from "./daemon-sessions.js";
 import { deviceSessions, onDevices, participantAt } from "./device-sessions.js";
 import { Hosting } from "./hosting.js";
 import { workspaceDomains } from "./domains.js";
+import { IssueWatch } from "./issue-watch.js";
+import { PluginServices, optionsOf } from "./plugin-services.js";
+import { Secrets, secretsPath } from "./secrets.js";
+import { pluginKey } from "@hivemind/core/plugin-settings";
 import { HANDED_OFF, handOff } from "./hand-off.js";
 import { answers } from "./answers.js";
 import { PeerLinks, tellGuestOf } from "./peer-links.js";
@@ -283,8 +287,23 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // Its widgets run on the person's own devices that have a workspace open: it has no window.
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const grants = new Grants(path.join(o.dir, "grants.json"));
+  // Its plugins' secrets: no system keychain here, so in a file only the person reads.
+  const secrets = new Secrets();
+  // What a tool plugin's service asks of its own plugin, and the commands it answers: with no
+  // window here, every plugin call a service serves is answered there.
+  const pluginServices = new PluginServices({
+    pluginOfGrant: (id) => grants.list().find((g) => g.id === id)?.plugin,
+    options: async (plugin) => optionsOf(plugin, (await listToolPackages()).find((p) => p.id === plugin)?.settings ?? [], (await readSettings(settingsPath())).plugins.state, secrets.names(pluginKey("tool", plugin))),
+    secret: (plugin, name) => secrets.get(pluginKey("tool", plugin), name),
+    setSecret: (key, name, value) => {
+      const kept = secrets.set(key, name, value);
+      if (kept === "file") o.onWarn(`${name} of ${key} is kept in ${secretsPath()}, readable by you alone (0600): hive host has no system keychain`);
+      return kept;
+    },
+  });
   const api: WorkspaceServer = new WorkspaceServer([
-    ...workspaceDomains,
+    pluginServices.domain(),
+    ...workspaceDomains((c) => who(c).name),
     layouts.domain,
     agents({
       statuses: () => control.status.all(), links: () => control.links(),
@@ -415,6 +434,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     methods: () => ({
       reported: (tile, message) => agentFeed?.report(toBareId(tile), message),
       callRenderer: () => Promise.reject(new ApiError("UNAVAILABLE", "there is no window here: hive host runs none")),
+      services: pluginServices,
       reloadSettings: () => catalog.current().then(() => { syncServices(); return { ok: true }; }),
       defaultAgentId: () => preferredAgent(catalog.settings().agents.defaultAgent, (d) => !!findBin(d.bin))?.id,
       agentInstalled: (def, { folder }) => places.installedAt(def, folder),
@@ -438,6 +458,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     onError: (e) => o.onWarn(`the control plane is off: ${e.message}. \`hive ctl\` cannot reach this host`),
   });
 
+  // Every write to a followed workspace's issues, told to its clients: a service's, a guest's.
+  const issueWatch = new IssueWatch({ publish: (repo, change) => api.publish("issue.changed", repo, change) });
+  const followIssues = (repo: string, until: AbortSignal) => issueWatch.follow(repo, path.join(repo, ".hivemind"), until);
+
   // Programs drive the workspaces here through the workspace API, held to what they were granted.
   const driveSock = driveSockPath(o.dir);
   const drive = serveDrive(driveSock, {
@@ -449,6 +473,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     nameOf: (tile) => control.labelOf(tile),
     places: (repo) => frameWorktrees(store.getCore(repo)),
     workspaceId: (repo) => store.ownership(repo)?.workspaceId ?? null,
+    follow: followIssues,
     onWarn: o.onWarn,
   });
 
@@ -465,8 +490,20 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const servicesWatched = [settingsFile, recordsFile()];
   void drive.serving.then((mine) => {
     if (!mine) return;
-    services = new Services({ driveSock, grants, logDir: path.join(o.dir, "services") });
-    for (const f of servicesWatched) fs.watchFile(f, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) syncServices(); });
+    // No window shows why a service is not running here: it is said, once each time it changes.
+    const said = new Map<string, string>();
+    services = new Services({
+      driveSock, grants, logDir: path.join(o.dir, "services"),
+      onChange: () => {
+        for (const st of services?.states() ?? []) {
+          const line = st.state === "running" ? "" : st.why ?? "";
+          if (said.get(st.plugin) === line) continue;
+          said.set(st.plugin, line);
+          if (line) o.onWarn(`${st.plugin}'s service is ${st.state}: ${line}`);
+        }
+      },
+    });
+    for (const f of servicesWatched) fs.watchFile(f, { interval: 2_000 }, (now, before) => { if (now.mtimeMs !== before.mtimeMs) { syncServices(); void pluginServices.settingsChanged(); } });
     syncServices();
   });
 
@@ -496,6 +533,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     changes: heard.changes,
     lists,
     server: api,
+    follow: followIssues,
     // The person's devices run terminals here, in frames on this machine (M3).
     daemon: o.daemon,
     hosting,
@@ -698,6 +736,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       await services?.stop();
       hcp.close();
       drive.close();
+      issueWatch.close();
       endpoint.close();
       elsewhere.close();
       store.flush();
