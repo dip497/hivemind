@@ -9,6 +9,7 @@
 import type { JsonValue, NeedsInputReason, TurnOutcome, ViewEvent, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
 import { bucketTileStatus } from "@hivemind/view-host/status";
+import { exitFailed } from "./status-look";
 
 export interface HubTile {
   id: string;
@@ -89,7 +90,7 @@ export class ViewEventHub {
     const t = this.now();
     const prevRaw = this.raw.get(e.tileId);
     this.raw.set(e.tileId, e.status);
-    if (e.status === "exited" && e.exitCode) this.failed.add(e.tileId);
+    if (exitFailed(e)) this.failed.add(e.tileId);
     const reason = REASON[e.status];
     if (reason && prevRaw !== e.status) this.emit({ kind: "needsInput", tileId: e.tileId, reason }, t);
 

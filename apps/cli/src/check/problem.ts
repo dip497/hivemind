@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export type CheckStep = "types" | "manifest" | "draw";
+export type CheckStep = "types" | "manifest" | "draw" | "hub";
 
 export interface Problem {
   step: CheckStep;

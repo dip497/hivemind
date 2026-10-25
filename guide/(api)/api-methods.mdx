@@ -61,9 +61,11 @@ At the end, tell me how to stop the script and how to revoke the token: \`hive g
 | <a id="widget-all" />`widget.all`, `widget.packages`, `widget.asset` | what widgets draw, which are installed, their images | `["/home/you/work/api"]` |
 | <a id="terminal-open-attach" />`terminal.open` with `attachOnly` | watch a running terminal; output comes as `terminal.data` | `[{"tileId": "t-3f2a", "attachOnly": true, "cols": 120, "rows": 40}]` |
 | <a id="terminal-follow" />`terminal.show`, `terminal.history`, `terminal.flow`, `terminal.ack`, `terminal.detach`, `terminal.watchActivity` | follow terminals; these get no answer | `["t-3f2a", true]` |
+| <a id="tile-watch-lines" />`tile.watchLines` | the last line each named terminal shows, such as `214 tests passed`, or for an agent that keeps a conversation what it last said (from 0.35); it replaces the terminals you watched, `[]` stops, and changes come as `tile.lines`. From 0.34 | `[["t-3f2a", "t-9b1c"]]` |
+| <a id="tile-read-lines" />`tile.readLines` | the same lines once, without watching. From 0.35 | `[["t-3f2a"]]` |
 | <a id="terminal-saved" />`terminal.saved` | what a sleeping agent last showed | `["t-3f2a"]` |
 | <a id="presence-set" />`presence.set` | where your pointer is, for others in the workspace | `["/home/you/work/api", null]` |
-| <a id="appearance-get" />`appearance.get` | the app's theme | `[]` |
+| <a id="appearance-get" />`appearance.get` | the app's theme; a colour of the person's own for the accent comes as `accentCustom` (`{ brand, accent, working? }`, from 0.35), which wins over `accent` while set | `[]` |
 | <a id="view" />`view.list`, `view.file`, `view.open`, `view.post`, `view.screen`, `view.close` | open an installed view that is ready for phones | `[]` |
 
 ## edit

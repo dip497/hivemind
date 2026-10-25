@@ -37,7 +37,7 @@ import { readSettings, settingsPath } from "@hivemind/core/settings";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { recordsFile } from "@hivemind/core/installed-packages";
 import { appearance } from "./appearance.js";
-import { DEFAULT_APPEARANCE, type Appearance, type Settings } from "@hivemind/core/settings-schema";
+import { DEFAULT_APPEARANCE, lookForGuests, type Appearance, type SharedAppearance, type Settings } from "@hivemind/core/settings-schema";
 import { AccessLists } from "@hivemind/workspace-host/access";
 import { Devices, type PairedDevice } from "@hivemind/workspace-host/devices";
 import { formatPairLink, pairAnnouncement, PairingOffer, type Pairing, type PairingDevice } from "@hivemind/workspace-host/pairing";
@@ -69,7 +69,7 @@ import { PeerLinks, tellGuestOf } from "./peer-links.js";
 import { answerKeys, heldBoards, manifestOf, participantNamed, runsIn, sessionFolder } from "./needs.js";
 import { agentControl } from "./agent-control.js";
 import { StartPlaces } from "./start-places.js";
-import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "./conversations.js";
+import { askingOf, conversationOf, conversations, transcriptOf } from "./conversations.js";
 import { views } from "./views.js";
 import { listInstalledViews } from "@hivemind/core/views";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
@@ -87,6 +87,8 @@ import { makeSpawnPacer } from "./spawn-pacer.js";
 import { startSpawned, wakeSpawned } from "./spawned.js";
 import { Layouts } from "./store.js";
 import { Terminals, type SessionBackend } from "./terminals.js";
+import { TileLines } from "./tile-lines.js";
+import { TileActivity } from "./tile-activity.js";
 
 export interface HeadlessHostOptions {
   /** The data folder, laid out as the app's on this machine. */
@@ -202,8 +204,12 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     sessions.write(ptyId, data, paste);
     return true;
   };
+  // How busy each watched terminal's output is, for the devices that watch it: measured from each
+  // session's live output, as main does.
+  const activity = new TileActivity(() => api);
   // Every session as the control plane needs it: which agent runs in it, a supervised worker's
-  // policy in its environment, its output for whoever streams it, its end, and a person's keys.
+  // policy in its environment, its output for whoever streams it (and the activity meter), its end,
+  // and a person's keys.
   const backend: SessionBackend = {
     ...sessions,
     start: (opts, out) => {
@@ -213,7 +219,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       else control.agentOf.delete(bare);
       const supervise = control.supervise.get(bare);
       return sessions.start(supervise ? { ...opts, env: { ...opts.env, HIVE_SUPERVISE: supervise } } : opts, {
-        data: (data, replay) => out.data(data, replay),
+        data: (data, replay) => {
+          out.data(data, replay);
+          if (!replay) activity.note(bare, data.length);
+        },
         // Asleep, it is not gone: what waits on it waits on.
         exit: (code, signal, slept) => {
           out.exit(code, signal, slept);
@@ -279,10 +288,17 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     recent: () => [], photos: () => path.join(o.dir, "photos"),
   });
   // How this host looks to its guests: its settings' theme, once they are read.
-  let appearanceNow = (): Appearance => DEFAULT_APPEARANCE;
+  let appearanceNow = (): SharedAppearance => DEFAULT_APPEARANCE;
   // Its widgets run on the person's own devices that have a workspace open: it has no window.
   const widgetDomain = widgets(() => api, widgetAsset, listWidgets, (repo) => store.getObjects(repo));
   const grants = new Grants(path.join(o.dir, "grants.json"));
+  // Each tile's last line, for the devices that watch it, and for Home.
+  const tileLines = new TileLines({
+    server: () => api, changed: () => homeLinesChanged(),
+    transcriptOf: (bare) => transcriptOf(heldBoards(store), bare, path.join(o.dir, TILE_SESSIONS_DIR)),
+    runsHere: (bare) => !isRemote(runsIn(heldBoards(store), bare)),
+    reports: (bare) => !!manifestOf(heldBoards(store), bare)?.caps.turnSignal,
+  });
   const api: WorkspaceServer = new WorkspaceServer([
     ...workspaceDomains,
     layouts.domain,
@@ -291,6 +307,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       feed: () => agentFeed, workspaceOf: (repo) => store.ownership(repo)?.workspaceId ?? null,
     }),
     terminals.domain,
+    tileLines.domain,
+    activity.domain,
     presence(() => api, () => keys.personId),
     widgetDomain,
     // Nothing changes a headless host's theme while it runs: it answers, and has nothing to tell.
@@ -377,11 +395,10 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   // The settings the app and `hive config` keep, wherever this host's own data is.
   const settingsFile = settingsPath();
   const catalog = agentCatalog(settingsFile);
-  appearanceNow = () => { try { return catalog.settings().appearance; } catch { return DEFAULT_APPEARANCE; } };
+  appearanceNow = () => { try { return lookForGuests(catalog.settings()); } catch { return DEFAULT_APPEARANCE; } };
   await catalog.current();
   // A tile's last line changed: the person's phone's Home is told, once it is served.
-  let homeChanged = (): void => {};
-  const said = new LastSaid({ tileSessionsDir: path.join(o.dir, TILE_SESSIONS_DIR) });
+  let homeLinesChanged = (): void => {};
   // A session's screen and its cursor.
   const viewport = (ptyId: string) => (endpoint.has(ptyId) ? endpoint.viewport(ptyId) : Promise.resolve(null));
   // How the host watches a session it starts or wakes.
@@ -393,7 +410,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
   const control: ControlPlane = new ControlPlane({
     dir: () => o.dir,
     waitsChanged: () => agentFeed?.changed(),
-    lineChanged: () => homeChanged(),
+    lines: tileLines,
     waitingOf: (bare) => agentFeed?.waitingOf(bare),
     publish: (event, ...params) => api.publish(event, ...params),
     write: writeTile,
@@ -510,7 +527,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     machines,
     // Home's rows: the links between agents, and what each tile last said or showed.
     links: () => control.links(),
-    line: (held, tile) => said.line(held, tile) ?? control.lines.get(tile),
+    lines: tileLines,
     // Where each of the person's phones is told what happens here.
     subscribe: (device, sub) => pushSubscriptions.set(device, sub),
     // The phones one of the person's computers paired with are the person's here too
@@ -523,7 +540,7 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
     },
     onWarn: o.onWarn,
   });
-  homeChanged = () => peers.homeChanged();
+  homeLinesChanged = () => peers.homeLinesChanged();
   // The person's phones are told what happens here, encrypted to each (M5), and that this host is
   // back as its network starts.
   const pushSubscriptions = new PushSubscriptions(path.join(identity, "push.json"));

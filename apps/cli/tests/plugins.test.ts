@@ -8,6 +8,30 @@ import { hive } from "./helpers.js";
 import { fixtureXDG } from "./agents-fixtures.js";
 
 describe("hive plugins", () => {
+  test("a view's own colours are among its settings, and a list it takes is kept as a list", () => {
+    const xdg = fixtureXDG(["claude"]);
+    const view = path.join(xdg, "isles-source");
+    fs.mkdirSync(view, { recursive: true });
+    fs.writeFileSync(path.join(view, "index.html"), "<p>isles</p>");
+    fs.writeFileSync(path.join(view, "hivemind-view.json"), JSON.stringify({
+      id: "isles", name: "Isles", version: "1.0.0", entry: "index.html",
+      settings: [{ id: "names", label: "Harbours", type: "list" }],
+      tokens: [{ id: "sea", label: "Sea", dark: "#123a5a", light: "=info" }],
+    }));
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock") };
+    const run = (...args: string[]) => hive(["plugins", ...args, "--json"], { cwd: xdg, env });
+    try {
+      expect(run("install", view).json).toMatchObject({ id: "isles" });
+      expect(run("set", "view:isles", "token-sea", "#00FF88").json).toMatchObject({ value: "#00ff88" });
+      expect(run("set", "view:isles", "names", '["north, east", "south"]').json).toMatchObject({ value: ["north, east", "south"] });
+      // Read back from settings.json: the list came through as a list.
+      expect(run("show", "view:isles").json).toMatchObject({ values: { "token-sea": "#00ff88", names: ["north, east", "south"] } });
+      expect(run("set", "view:isles", "token-sea", "sea-green").json).toMatchObject({ error: { message: "token-sea is a colour like #1d4ed8, or theme for the theme's own" } });
+    } finally {
+      fs.rmSync(xdg, { recursive: true, force: true });
+    }
+  });
+
   test("lists every kind, switches one on and off, and sets what its settings take", () => {
     const xdg = fixtureXDG(["claude"]);
     const view = path.join(xdg, "board-source");
@@ -75,6 +99,24 @@ describe("hive plugins", () => {
       const bad = run("pr", "--limit", "-1");
       expect(bad.code).not.toBe(0);
       expect(bad.json).toMatchObject({ error: { message: "--limit is a whole number from 1 to 100" } });
+    } finally { fs.rmSync(xdg, { recursive: true, force: true }); }
+  });
+
+  test("a plugin that needs a newer Hivemind is refused by name and version before anything is downloaded", () => {
+    const xdg = fixtureXDG([]);
+    const ours = (JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "package.json"), "utf8")) as { version: string }).version;
+    const [y, m, n] = ours.split(".").map(Number);
+    const next = `${y}.${m}.${n! + 1}`;
+    // Its file is nowhere: a download would fail with another reason.
+    fs.writeFileSync(path.join(xdg, "index.json"), JSON.stringify({ version: 1, plugins: [
+      { id: "@ada/graph", type: "view", name: "Graph", description: "A graph.", author: "ada", version: "1.0.0", category: "git", path: "graph",
+        source: "https://127.0.0.1:9/nowhere/", minAppVersion: next, files: [{ path: "hivemind-view.json", sha256: "0".repeat(64) }] },
+    ] }));
+    const env = { XDG_CONFIG_HOME: xdg, HIVE_SETTINGS: undefined, HIVE_HCP_SOCK: path.join(xdg, "no-app.sock"), HIVE_DRIVE_SOCK: path.join(xdg, "no-drive.sock"), HIVEMIND_PLUGIN_INDEX: `file://${path.join(xdg, "index.json")}` };
+    try {
+      const r = hive(["plugins", "install", "@ada/graph", "--json"], { cwd: xdg, env });
+      expect(r.code).not.toBe(0);
+      expect(r.json).toMatchObject({ error: { message: `Graph needs Hivemind ${next} or newer; this is ${ours}.` } });
     } finally { fs.rmSync(xdg, { recursive: true, force: true }); }
   });
 

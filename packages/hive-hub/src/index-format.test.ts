@@ -92,7 +92,12 @@ describe("reading an index", () => {
     const pkg = { ...view, id: "@ada/kit", type: "package", path: "kit", members };
     expect(one(pkg)).toMatchObject({ type: "package", id: "@ada/kit", members });
     expect(one({ ...pkg, members: [] })).toBe("its members must list 1-64 members of a package");
-    expect(one({ ...pkg, members: [{ kind: "view", id: "island", name: "Island", permissions: [] }] })).toBe("members[0] needs a kind, an @owner/name id, a name and its permissions");
+    const why = "members[0] needs a kind, an id as its kind writes it (@owner/name; a theme's @owner/package/theme), a name and its permissions";
+    expect(one({ ...pkg, members: [{ kind: "view", id: "island", name: "Island", permissions: [] }] })).toBe(why);
+    // A theme's id is its folder in its package; a view's is not.
+    expect(one({ ...pkg, members: [{ kind: "theme", id: "@ada/kit/harbour", name: "Harbour", permissions: [] }] })).toMatchObject({ members: [{ id: "@ada/kit/harbour" }] });
+    expect(one({ ...pkg, members: [{ kind: "theme", id: "@ada/harbour", name: "Harbour", permissions: [] }] })).toBe(why);
+    expect(one({ ...pkg, members: [{ kind: "view", id: "@ada/kit/island", name: "Island", permissions: [] }] })).toBe(why);
     expect(one({ ...view, members })).toBe("its members must list 1-64 members of a package");
   });
 

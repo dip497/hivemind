@@ -211,7 +211,7 @@ function Dropdown({ label, count, options }: { label: string; count: number; opt
         >
           {label}
           {count > 0 && (
-            <span className="font-mono tabular-nums text-chip text-[var(--color-accent)]">{count}</span>
+            <span className="font-mono tabular-nums text-chip text-[var(--color-fg2)]">{count}</span>
           )}
           <svg width="9" height="9" viewBox="0 0 10 10" className="text-[var(--color-fg3)]">
             <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" fill="none" strokeLinecap="round" />

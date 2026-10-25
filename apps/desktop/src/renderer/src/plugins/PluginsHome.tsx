@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { OpenStartView, startViewOf } from "./open-start-view";
 import { ChevronDown, FolderPlus, Plus, Sparkles } from "../components/icons";
 import { isPluginOn } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
@@ -22,6 +23,7 @@ import { BrowsePlugins } from "../settings-plugins";
 import { cleanError } from "./catalog-install";
 import { textMatches } from "@hivemind/core/plugin-search";
 import { useHubDescription } from "./library";
+import { actionKey } from "../shortcut";
 import { rowsInKindTab, type PluginTab } from "./kinds";
 import { CategoryGroups, KindTabs, PluginRow, type ListedRow } from "./PluginList";
 import { WidgetIcon } from "./WidgetIcon";
@@ -89,7 +91,7 @@ function InstalledPlugins({ matches, tab, onTab }: { matches: (text: string) => 
     <KindTabs counts={counts} tab={tab} onChange={onTab} />
     {tab === "tool" && tools.warning && <p role="status" className="settings-message">{tools.warning}</p>}
     <CategoryGroups groups={groups} feet={tab === "agent" && agents.foot ? { agents: agents.foot } : {}} />
-    {tab === "view" && views.length > 0 && <p className="settings-note">⌘E switches between the views that are on.</p>}
+    {tab === "view" && views.length > 0 && <p className="settings-note">{actionKey("toggle-view-mode")} switches between the views that are on.</p>}
   </>;
 }
 
@@ -112,6 +114,7 @@ function useWidgetRows(matches: (text: string) => boolean): ListedRow[] {
  *  is `hive agents install <folder>`. */
 function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean } {
   const [review, setReview] = useState<Review | null>(null);
+  const [opens, setOpens] = useState<{ name: string; view: NonNullable<Review["opens"]> } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLElement | null>(null);
@@ -122,18 +125,21 @@ function useAddFromFolder(): { item: ReactNode; panel: ReactNode; busy: boolean 
   // From a folder this computer's picker chooses: not from a browser tab.
   const { reviewPackageFolder, installPackageFolder } = window.hive;
   const item = reviewPackageFolder && <DropdownMenuItem data-folder-install onSelect={() => void act(async () => {
-    setReview(null);
+    setReview(null); setOpens(null);
     const r = await reviewPackageFolder();
     setReview(r);
     if (r) requestAnimationFrame(() => ref.current?.focus());
   })}><FolderPlus />Add from a folder</DropdownMenuItem>;
   const panel = <>
     {error && <div role="alert" className="settings-message error">{error}</div>}
+    {opens && <div role="status" className="settings-message catalog-done"><OpenStartView installed={opens.name} view={opens.view} /></div>}
     {review && installPackageFolder && <section ref={ref} tabIndex={-1} className="settings-install-review" aria-label={`Review ${review.name}`}>
       <PackageReview review={review} heading />
       <div className="settings-actions"><Button variant="outline" disabled={busy} onClick={() => setReview(null)}>Cancel</Button><Button disabled={busy} data-folder-install-do onClick={() => void act(async () => {
         await installPackageFolder(review.token);
-        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`, { id: `package:${review.id}` }); setReview(null); rescan();
+        toast.success(`${review.name} ${review.version} is installed${review.on ? "" : ", switched off"}.`, { id: `package:${review.id}` });
+        const view = startViewOf(review);
+        setOpens(view && { name: review.name, view }); setReview(null); rescan();
       })}>{busy ? "Installing…" : review.replaces ? "Update" : "Install"}</Button></div>
     </section>}
   </>;

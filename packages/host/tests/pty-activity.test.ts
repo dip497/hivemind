@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ActivityMeter, SAMPLE_MS, levelFor } from "../../src/main/pty-activity";
+import { ActivityMeter, SAMPLE_MS, levelFor } from "../src/pty-activity.ts";
 
 function meter() {
   const changes: Array<Record<string, number>> = [];

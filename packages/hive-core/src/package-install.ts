@@ -13,6 +13,7 @@ import { mkdir, mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { checkHoldsPlugin, copyPackage, folderDigest, readPackage, type PackageRead } from "./packages.js";
 import { memberKind, type CheckedMember } from "./package-kinds.js";
+import { runsWithoutTrust } from "@hivemind/hub";
 import {
   changeInstalledPackages, packageFolderName, packageHolding, packagesDir, readInstalledPackages, versionFolder,
   type PackageMember, type PackageRecord, type PackageVersion,
@@ -33,6 +34,9 @@ export interface InstalledPackage {
   tookOver: string[];
   /** How each member differs from the version before it; empty for the same files again. */
   changes: MemberChange[];
+  /** The id of the view member it opens with (its manifest's `startup.view`, checked by
+   *  `readPackage`), or null. */
+  startView: string | null;
 }
 
 /** Refused because a package holds it: one of its plugins cannot be installed, removed or switched
@@ -87,12 +91,12 @@ function plan(records: readonly PackageRecord[], read: PackageRead, version: Pac
     const o = before.find((x) => x.kind === m.kind && x.id === m.id);
     const newPermissions = m.permissions.filter((p) => !(o?.permissions ?? []).includes(p));
     if (o && o.digest === m.digest && !newPermissions.length) continue;
-    const sandboxed = memberKind(m.kind)?.runs === "sandboxed";
-    changes.push({ kind: m.kind, id: m.id, change: o ? "changed" : "new", newPermissions, switchesOff: sandboxed ? newPermissions.length > 0 : true });
+    const free = runsWithoutTrust(memberKind(m.kind)?.runs ?? "in the app");
+    changes.push({ kind: m.kind, id: m.id, change: o ? "changed" : "new", newPermissions, switchesOff: free ? newPermissions.length > 0 : true });
   }
   for (const o of before) if (!version.members.some((m) => m.kind === o.kind && m.id === o.id)) changes.push({ kind: o.kind, id: o.id, change: "gone", newPermissions: [], switchesOff: false });
   const wasOn = old ? old.on : taken.length ? taken.every((t) => t.on) : null;
-  const on = wasOn === null ? version.members.every((m) => memberKind(m.kind)?.runs === "sandboxed") : wasOn && !changes.some((c) => c.switchesOff);
+  const on = wasOn === null ? version.members.every((m) => runsWithoutTrust(memberKind(m.kind)?.runs ?? "in the app")) : wasOn && !changes.some((c) => c.switchesOff);
   const same = old?.digest === version.digest;
   const record: PackageRecord = {
     id: read.id, ...version, on,
@@ -149,6 +153,7 @@ export async function installPackage(src: string, given: { id?: string; dryRun?:
     const result = (p: ReturnType<typeof plan>, dir: string) => ({
       record: p.record, members: read.members.map((m, i) => ({ ...m, digest: version.members[i]!.digest, dir: path.join(dir, m.path) })),
       replaced: p.old ? versionOf(p.old) : null, tookOver: p.taken.map((t) => t.id), changes: p.changes,
+      startView: read.manifest?.startup?.view ?? null,
     });
     if (given.dryRun) return result(plan(await readInstalledPackages(), read, version), files);
     const installed = await changeInstalledPackages(async (records) => {

@@ -31,6 +31,7 @@ import { Loading } from "./components/ui/loading";
 import { MenuItem } from "./components/ui/menu-item";
 import { useTileFont, FontStepper, handleFontKey } from "./tile-font";
 import { FullscreenShell } from "./tile-fullscreen";
+import { actionKey } from "./shortcut";
 import { DiffSurface } from "./code/DiffSurface";
 import {
   CodeView,
@@ -59,7 +60,7 @@ import { FileTree, clampFilesW, type FileRow } from "./code/FileTree";
 import { BranchPicker } from "./code/BranchPicker";
 import { collectChanges, collectMatches, hashNum } from "./code/diff-search";
 import {
-  PIERRE_CSS_VARS,
+  PIERRE_OPTIONS,
   workerHighlighterOptions,
   workerPoolOptions,
 } from "./pierre-codeview";
@@ -67,6 +68,7 @@ import { DiffReviewPanel } from "./DiffReviewPanel";
 import { newCid, formatCommentMessage, formatReviewMessage, type ReviewComment } from "./diff-comments";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { loadComments, saveComments, deliverToAgent } from "./code/review-store";
+import { useThemeField } from "./theme-store";
 
 interface Props {
   repoPath: string;
@@ -512,10 +514,11 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
   useEffect(() => { setChangeIdx(-1); }, [changes.length]);
 
   // ── CodeView options ────────────────────────────────────────────────────
+  const themeMode = useThemeField("mode");
   const options: CodeViewOptions<ReviewComment, undefined> = useMemo(
     () => ({
-      theme: { dark: "pierre-dark", light: "pierre-light" },
-      themeType: "dark",
+      ...PIERRE_OPTIONS,
+      themeType: themeMode,
       diffStyle: layout,
       overflow,
       diffIndicators: "bars",
@@ -573,7 +576,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
         openComposerAt(file, p.lineNumber, p.lineNumber, p.annotationSide ?? "additions", lineEl);
       },
     }),
-    [layout, overflow, expandUnchanged, headerH, openComposerAt],
+    [layout, overflow, expandUnchanged, headerH, openComposerAt, themeMode],
   );
 
   // ── header slot ───────────────────────────────────────────────────────
@@ -714,10 +717,14 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
     },
   ];
 
+  // The diff's size, on the tile and on its fullscreen body (portalled out of the tile): every other
+  // part of a diff's look is one rule on Pierre's host (styles.css, `diffs-container`).
+  const diffFont = { "--hm-diff-font-size": `${font.size}px` } as React.CSSProperties;
+
   return (
     <div
       className="hm-glass-surface flex flex-col h-full bg-[var(--color-bg2)] border border-[var(--color-line)] rounded-xl overflow-hidden"
-      style={{ ...PIERRE_CSS_VARS, "--diffs-font-size": `${font.size}px` } as React.CSSProperties}
+      style={diffFont}
       onKeyDownCapture={(e) => {
         handleFontKey(e, font);
         // n / p (or j / k) step through changes — but not while typing in the
@@ -1012,7 +1019,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             className="nodrag"
             onClick={() => setOverlay((v) => !v)}
             aria-label="fullscreen diff"
-            title="Fullscreen · Esc to exit"
+            title={`Fullscreen (${actionKey("fit-to-screen")} to leave)`}
           >
             <Maximize />
           </Button>
@@ -1247,7 +1254,7 @@ export function DiffTile({ repoPath, initialMode = "working", initialBase = "ori
             hostRef={overlayHostRef}
             onClose={() => setOverlay(false)}
           >
-            <div className="h-full w-full flex flex-col overflow-hidden">{diffBody}</div>
+            <div className="h-full w-full flex flex-col overflow-hidden" style={diffFont}>{diffBody}</div>
           </FullscreenShell>
         ) : diffBody;
        })()}

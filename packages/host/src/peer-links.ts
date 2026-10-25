@@ -71,6 +71,7 @@ import type { PairedWith } from "@hivemind/workspace-host/pairing";
 import type { GuestOf } from "@hivemind/workspace-host/devices";
 import { subscriptionOf, type Subscription } from "./web-push.js";
 import { linkDuplex } from "./device-sessions.js";
+import type { TileLines } from "./tile-lines.js";
 
 /** How long a phone that unpaired itself has to hang up before it is let go. */
 const LET_GO_MS = 2_000;
@@ -142,6 +143,10 @@ function apiStreams(link: Link): (serve: (api: TextChannel & Room, terminals: bo
     for (const held of [...waiting]) start(held);
   };
 }
+
+/** Whether `event` is one window's to hear, on its own stream: its terminals', and the last lines
+ *  of the tiles it watches (`tile.watchLines`, told to the connection that watches alone). */
+const windowsEvent = (event: string): boolean => event.startsWith("terminal.") || event === "tile.lines";
 
 /** Whether a stream whose first frame is `text` is for terminals alone; null when that frame does
  *  not say, but asks. */
@@ -221,8 +226,9 @@ export interface PeerLinksOptions {
   linkState?(workspacePath: string): ViewFrameMachine["state"];
   /** What the window's Layers panel shows of the workspace in `repo` (Home's order and pins). */
   shown?(repo: string): LayersShown | undefined;
-  /** What the tile `tile` of `held` last said, or its screen last showed (Home's last line). */
-  line?(held: HeldBoard[], tile: string): string | undefined;
+  /** Each tile's last line (`TileLines`): what it last said, or its screen last showed; told while
+   *  Home is followed, so every tile's is kept. */
+  lines?: Pick<TileLines, "get" | "followAll">;
 }
 
 interface Served { workspace: string; person: string; link: Link; stop(): void }
@@ -447,7 +453,8 @@ export class PeerLinks {
       // The owner's other devices keep its list in step, to take it over with as it is (M3).
       const list = access === "owner" ? serveList(lists, hello.workspace, streamOf(link, "list")) : () => {};
       const stop = () => { replica(); list(); };
-      // Its app's stream hears what happens in the workspace, once; each window's, its terminals'.
+      // Its app's stream hears what happens in the workspace, once; each window's, its terminals'
+      // and the last lines it watches (both sent to the window that asked alone).
       serveApi((api, terminals) => servePeer(server, api, {
         actor: { kind: "peer", person, device: link.peer, access },
         workspace: hello.workspace,
@@ -456,7 +463,7 @@ export class PeerLinks {
         holds: (tile) => store.workspaceOf(toBareId(tile)) === repo,
         elsewhere: (tile) => store.workspaceOf(toBareId(tile)) !== null,
         places: () => frameWorktrees(store.getCore(repo)),
-        ...(terminals === null ? {} : { hears: (event: string) => event.startsWith("terminal.") === terminals }),
+        ...(terminals === null ? {} : { hears: (event: string) => windowsEvent(event) === terminals }),
       }));
       const entry: Served = { workspace: hello.workspace, person, link, stop };
       this.served.add(entry);
@@ -506,6 +513,9 @@ export class PeerLinks {
     try { asked = JSON.parse(text) as typeof asked; } catch { return; }
     if (asked?.t !== "follow" || this.homeFollowed.has(on)) return;
     const at = (v: unknown) => (typeof v === "number" ? v : undefined);
+    // Home follows every tile before it is first worked out: a tile whose agent's words were never
+    // read, or reported since, is read as Home asks for its line, and told once it is.
+    this.o.lines?.followAll(true);
     const home = (this.home ??= new HomeFeed({ rows: () => this.homeRows(), lines: () => this.homeLines() }));
     // Where the follower is in each of Home's two feeds, as it was last sent them, and whether it
     // missed a change for want of room: then it is sent nothing until room returns, and then what
@@ -525,8 +535,8 @@ export class PeerLinks {
       follower.behind = false;
       if (m.t === "home" || m.layout?.changes.length || m.lines?.changes.length) send(m);
     };
-    send(home.answer({ layout: follower.layout, lines: follower.lines }));
     this.homeFollowed.add(on);
+    send(home.answer({ layout: follower.layout, lines: follower.lines }));
     const stop = home.follow((m) => {
       if (follower.behind) return;
       if (on.hasRoom()) return send(m);
@@ -536,6 +546,7 @@ export class PeerLinks {
     void on.closed.then(() => {
       stop();
       this.homeFollowed.delete(on);
+      if (this.homeFollowed.size === 0) this.o.lines?.followAll(false);
     });
   }
 
@@ -558,14 +569,17 @@ export class PeerLinks {
   }
 
   private homeLines() {
-    const held = heldBoards(this.o.store);
-    return homeLines(held, (tile) => this.o.line?.(held, tile));
+    return homeLines(heldBoards(this.o.store), (tile) => this.o.lines?.get(tile));
   }
 
-  /** Something Home shows changed that the boards and statuses do not say: a tile's last line, or
-   *  what the window shows. */
+  /** Something Home shows changed that the boards and statuses do not say: what the window shows. */
   homeChanged(): void {
     this.home?.changed();
+  }
+
+  /** A tile's last line changed: Home works out its lines alone. */
+  homeLinesChanged(): void {
+    this.home?.linesChanged();
   }
 
   /** The agents here changed: those following them are sent the list again, at once unless it went

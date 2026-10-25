@@ -51,8 +51,10 @@ const shown = () => page.evaluate(() => {
   let host: Element | null = term;
   while (host && !("__hmScreen" in host)) host = host.parentElement;
   const r = screen.getBoundingClientRect();
-  const rows = term.querySelectorAll(".xterm-rows > div").length || 24;
-  return { tile: term.closest<HTMLElement>("[data-surface]")?.dataset.surface, x: r.x, y: r.y, width: r.width, rowHeight: r.height / rows, webgl: !!screen.querySelector("canvas"), text: (host as (Element & { __hmScreen(): string }) | null)?.__hmScreen() ?? "" };
+  // Its screen has a line per row (WebGL draws no row elements to count).
+  const text = (host as (Element & { __hmScreen(): string }) | null)?.__hmScreen() ?? "";
+  const rows = text.split("\n").length;
+  return { tile: term.closest<HTMLElement>("[data-surface]")?.dataset.surface, x: r.x, y: r.y, width: r.width, rowHeight: r.height / rows, webgl: !!screen.querySelector("canvas"), text };
 });
 
 /** Show tile `i` from the Layers rail: the page's own control, so the window's focus does not move. */

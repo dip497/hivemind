@@ -291,6 +291,40 @@ detect:
           - containsCS: "\u2570"
     then: idle
   default: working
+  # Rows of its own above its input, which a tile's last line passes over, read from the claude
+  # 2.1.309 binary: its effort right of the rule ("◐ medium · /effort"), its spinner while it works
+  # ("✻ Combobulating…", "* Newspapering… (2s · ↓ 2 tokens)") and what it says as a turn ends
+  # ("✻ Crunched for 2s · done 6:51 PM"). Its messages open with "●" at the first column and go on
+  # two columns in, so neither is taken for these.
+  chrome:
+    any:
+    - seq:
+      - lit: " · /effort"
+    - seq:
+      - run: "✻✶✳✢✽⋆✺✹✸✷✵✴✲✱*·✚✦✧"
+        min: 1
+        max: 1
+      - run: space
+        min: 1
+        max: 1
+      - run: "!space"
+        min: 1
+        max: 1
+      - upTo: "…"
+      at: start
+    - seq:
+      - run: "✻✶✳✢✽⋆✺✹✸✷✵✴✲✱*·✚✦✧"
+        min: 1
+        max: 1
+      - run: space
+        min: 1
+        max: 1
+      - run: word
+        min: 1
+      - lit: " for "
+      - run: digit
+        min: 1
+      at: start
 session:
   # Each transcript's first lines carry its folder, its title, and the user's first prompt.
   list:

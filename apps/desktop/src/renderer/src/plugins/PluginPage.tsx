@@ -7,12 +7,13 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, LayoutGrid, Trash } from "../components/icons";
 import { CatalogMark } from "../settings-plugins";
+import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import { cleanError, useCatalogInstall } from "./catalog-install";
 import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugin-settings";
 import { Button } from "../components/ui/button";
 import { Loading } from "../components/ui/loading";
 import { Switch } from "../components/ui/switch";
-import { useSettingsNavigate } from "../settings-panels";
+import { useSettingsNavigate } from "../settings-navigate";
 import { setPluginOption, switchPlugin, useSettings } from "../settings-store";
 import { AgentActions, AgentMark, AgentPage } from "../settings-agents";
 import { ViewActions, ViewMark, ViewPage } from "../settings-views";
@@ -160,7 +161,8 @@ function PluginSettings({ p }: { p: PluginRecord }) {
 
 /** What a community view declares in its manifest's `settings`, set here and sent to it live. */
 function ViewDeclaredSettings({ id }: { id: string }) {
-  const fields = useCommunityReport().packages.find((x) => x.id === id)?.manifest?.settings ?? [];
+  const manifest = useCommunityReport().packages.find((x) => x.id === id)?.manifest;
+  const fields = manifest ? viewSettingFields(manifest) : [];
   const stored = useSettings().plugins.state;
   if (!fields.length) return null;
   return <section className="plugin-section" aria-label="Its settings" data-plugin-settings={`view:${id}`}>

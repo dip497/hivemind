@@ -1,16 +1,22 @@
-/** Agent status transitions → in-app toast (not for a selected tile) and OS
- *  notification (main suppresses it while the window is focused). */
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
+/** Agent status transitions → in-app toast (not for a selected tile), and main's notice desk
+ *  (OS pop-up and sound, notice-desk.ts). `noticeOf` decides which
+ *  transitions are told; the screen reader's line (workspace/announcer.ts) asks it too. */
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { subscribeStatus, type StatusEvent, type TileStatusKind } from "./agent-status-bus";
 import { isBackgroundTile } from "./worker-tiles";
 import { getNotificationSettings } from "./notification-settings";
 import { shouldNotify } from "../../shared/notification-settings.js";
 import type { FrameState } from "./canvas-persistence";
+import { statusLook } from "./workspace/status-look";
+import { subscribeWait, waitOf, type AgentWait } from "./agent-waits";
+import { lineFor } from "../../shared/line-for";
+import { decidable } from "./wait-decide";
+import { oneLine } from "@hivemind/agent-host/one-line";
 
 type TileMeta = { label: string; status: TileStatusKind; seen: boolean };
 
 /** The verb-class of a toast / OS popup — drives accent color, icon and copy.
- *  Derived from a status transition: needs-you (blocked/permission/question),
+ *  Derived from a status transition: needs-you (any status that looks "needs"),
  *  finished (working→idle, or clean exit code 0), or error (working→exited,
  *  non-zero). Kept separate from TileStatusKind so a single "error" kind can
  *  overlay an `exited` status with red styling + the exit code in the body. */
@@ -33,30 +39,41 @@ export interface Toast {
   frame?: string;
   /** Creation ts — the rich toast renders a relative "just now" / "12s" stamp. */
   at: number;
-  /** Inline actions rendered as a button row under the context line. FUTURE SEAM
-   *  (nothing sets this yet): the first real use is a supervised-worker approval —
-   *  push a `needs` toast with actions `[{label:"Approve", primary:true, run: () =>
-   *  approve(reqId,"allow")}, {label:"Deny", run: () => approve(reqId,
-   *  "deny")}]` (agent.answer) so the human answers from the toast instead of tabbing to the tile.
-   *  `run` returns the toast id to dismiss (or void to keep it open, e.g. pending). */
-  actions?: ToastAction[];
+  /** A needs-you toast's wait, once the agent feed tells it, when it can be allowed or denied from
+   *  the toast (wait-decide.tsx): its Deny and Allow are drawn under the context line. */
+  decide?: AgentWait;
+  /** When the wait the toast shows began: once it ends, the toast goes. */
+  waited?: number;
 }
 
-/** An inline toast button. Kept intentionally minimal — a label, a handler, and a
- *  primary flag for the accent-filled variant. The handler owns any async work
- *  (e.g. the HCP call); the toast just renders the button and dismisses on click. */
-export interface ToastAction {
-  label: string;
-  run: () => void;
-  /** Accent-filled (the affirmative action, e.g. Approve). Others render quiet. */
-  primary?: boolean;
+/**
+ * What a status change tells the person, or null for nothing. `prev`: the tile's status before
+ * this one (undefined: the first seen of it).
+ *  - needs: it waits for a person (a permission, a question, a plan to review, an approval,
+ *    blocked), from any state: what wears the "needs" look. A background worker that needs you
+ *    still does.
+ *  - done: a working agent finished its turn, or closed cleanly (exit code 0). Not a synthetic
+ *    idle: a stuck "working" corrected, or the person interrupting it.
+ *  - error: a working agent's process died, with a non-zero code or none known.
+ * Only a tile that was working can finish or fail: a plain shell never says it works, so its exit
+ * stays quiet. A background worker (a workflow's, `report:false`) is gathered in bulk: its end is
+ * not told one by one.
+ */
+export function noticeOf(prev: TileStatusKind | undefined, e: StatusEvent): NoticeKind | null {
+  // A supervised worker's approval is its lead's to give (an agent), not the person's: its mark shows
+  // it, and nothing is said.
+  if (statusLook(e.status) === "needs") return e.status === "awaiting_approval" ? null : "needs";
+  if (prev !== "working" || isBackgroundTile(e.tileId)) return null;
+  if (e.status === "idle") return e.synthetic ? null : "done";
+  if (e.status === "exited") return e.exitCode === 0 ? "done" : "error";
+  return null;
 }
 
 /** The notice class for a toast, deriving it from the status when the caller
  *  didn't set `kind` explicitly (the worktree handlers pass only a status). */
 export function toastKindOf(t: { kind?: NoticeKind; status: TileStatusKind }): NoticeKind {
   if (t.kind) return t.kind;
-  if (t.status === "blocked" || t.status === "permission" || t.status === "question") return "needs";
+  if (statusLook(t.status) === "needs") return "needs";
   if (t.status === "exited") return "error";
   return "done";
 }
@@ -95,16 +112,47 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
     setToasts((ts) => ts.filter((t) => t.id !== id));
   }, []);
   const pushToast = useCallback((t: Omit<Toast, "id" | "at"> & { at?: number }) => {
-    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const at = t.at ?? Date.now();
     setToasts((ts) => {
-      // Collapse a prior toast for the same tile — only the latest state matters.
-      const kept = ts.filter((x) => x.tileId !== t.tileId);
-      return [...kept, { ...t, id, at }];
+      // A prior toast for the same tile is replaced, only the latest state matters, and keeps its
+      // id: its card stays mounted and starts its time again.
+      const was = ts.find((x) => x.tileId === t.tileId);
+      const id = was?.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      return [...ts.filter((x) => x.tileId !== t.tileId), { ...t, id, at }];
     });
     // Auto-dismiss is owned by the CARD (a pausable timer that stops on hover and
     // on window-blur), so a toast never vanishes while you're reading it or
     // reaching for its ×. See ToastCard in workspace/agent-toasts.tsx.
+  }, []);
+
+  // A needs-you toast says what its agent waits on, and offers Allow and Deny when it can: the wait
+  // comes with the agent feed, up to 250 ms after the status that raised the toast, so the toast is
+  // filled in place as it comes (agent-waits.ts), and goes once the wait ends (answered here, on its
+  // tile or elsewhere). A done toast says the tile's last line, read once (`tile.readLines`).
+  const needsTiles = useMemo(() => toasts.filter((t) => toastKindOf(t) === "needs").map((t) => t.tileId).sort().join("\n"), [toasts]);
+  useEffect(() => {
+    if (!needsTiles) return undefined;
+    const fill = (tile: string) => {
+      const waiting = waitOf(tile)?.waiting;
+      setToasts((ts) => {
+        const t = ts.find((x) => x.tileId === tile);
+        if (!t || toastKindOf(t) !== "needs") return ts;
+        if (!waiting) return t.waited === undefined ? ts : ts.filter((x) => x !== t);
+        const detail = lineFor(waiting, undefined);
+        const decide = decidable(waiting) ? waiting : undefined;
+        if (t.detail === detail && t.decide === decide && t.waited === waiting.since) return ts;
+        return ts.map((x) => (x === t ? { ...t, detail, decide, waited: waiting.since } : x));
+      });
+    };
+    const offs = needsTiles.split("\n").map((tile) => { fill(tile); return subscribeWait(tile, () => fill(tile)); });
+    return () => { for (const off of offs) off(); };
+  }, [needsTiles]);
+  const sayLine = useCallback((tile: string) => {
+    void window.hive.tileLinesRead?.([tile]).then(({ lines }) => {
+      const detail = oneLine(lines[tile] ?? "");
+      if (!detail) return;
+      setToasts((ts) => ts.map((t) => (t.tileId === tile && toastKindOf(t) === "done" && t.detail !== detail ? { ...t, detail } : t)));
+    }, () => { /* an older host reads no lines */ });
   }, []);
 
   // Expose pushToast to the (earlier-declared) bind/unbind worktree handlers.
@@ -151,44 +199,24 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
       const selected = selectedTileIdsRef.current.has(e.tileId);
       const prev = statusesRef.current;
       const old = prev.get(e.tileId);
-      const rawFinished = e.status === "idle" && old?.status === "working"; // done now
-      const needsHuman =
-        e.status === "blocked" || e.status === "permission" || e.status === "question";
-      // A WORKING agent whose process just DIED. This is the failure mode that
-      // was previously silent (a non-zero exit only painted grey inline text):
-      // a crash, an OOM-kill, a failed build that took the shell down. Only a
-      // tile that was actually working can "crash" — a plain shell's exit has no
-      // prior working status (it never publishes one) so this stays quiet for it.
-      // Background workers are gathered in bulk and excluded like `finished`.
-      const exitedFromWorking = e.status === "exited" && old?.status === "working" && !isBackgroundTile(e.tileId);
-      // exitCode 0 = the agent closed cleanly (e.g. /exit) → reads as "done",
-      // not alarm-red. Unknown/missing code or non-zero → error.
-      const cleanExit = exitedFromWorking && e.exitCode === 0;
-      const crashed = exitedFromWorking && e.exitCode !== 0;
-      // Skip the "finished" path for:
-      //  - SYNTHETIC idles: a stuck "working" decayed because output stopped (a
-      //    state correction, not a completion) — toasting/notifying for each would
-      //    flood the screen (the "filling laggy" report); the status still updates.
-      //  - background workflow workers (report:false), gathered in bulk.
-      // needs-you is kept either way: an unattended blocked worker still needs help.
-      const finished = (rawFinished && !e.synthetic) || cleanExit;
+      const kind = noticeOf(old?.status, e);
+      const crashed = kind === "error";
       // "seen" = user is looking (tile selected) OR nothing noteworthy happened.
-      const seen = selected ? true : finished || needsHuman || crashed ? false : old?.seen ?? true;
+      const seen = selected ? true : kind ? false : old?.seen ?? true;
       const next = new Map(prev);
       next.set(e.tileId, { label: e.label, status: e.status, seen });
       commitStatuses(next);
-      // Resolve the notice class + the project context once, for both surfaces.
-      // `frame` is the frame title (a worktree's branch); `repo` is the repo dir
-      // basename — the fallback context so a bare "claude" is still pinned to a
-      // project when the frame has no title. Both surfaces read the same fields.
-      const kind: NoticeKind = crashed ? "error" : needsHuman ? "needs" : "done";
+      if (!kind) return;
+      // The project context, once, for both surfaces. `frame` is the frame title (a worktree's
+      // branch); `repo` is the repo dir basename — the fallback context so a bare "claude" is
+      // still pinned to a project when the frame has no title. Both surfaces read the same fields.
       const fid = frameOfRef.current[e.tileId];
       const fr = fid ? framesRef.current.find((f) => f.id === fid) : undefined;
       const repo = ((fr?.worktreePath ?? fr?.workspacePath) || "")
         .split("/").filter(Boolean).pop() || undefined;
       // Toast only for background events — suppress when the tile is selected.
       // Gated by user prefs (master / per-kind / DND) for the in-app surface.
-      if (!selected && (needsHuman || finished || crashed) && shouldNotify(getNotificationSettings(), kind, "inApp")) {
+      if (!selected && shouldNotify(getNotificationSettings(), kind, "inApp")) {
         pushToast({
           tileId: e.tileId,
           label: e.label,
@@ -197,29 +225,30 @@ export function useAgentAwareness(ctx: AgentAwarenessCtx) {
           ...(crashed ? { detail: e.detail ?? (e.exitCode !== undefined ? `exit code ${e.exitCode}` : undefined) } : {}),
           ...(fr?.title ? { frame: fr.title } : repo ? { frame: repo } : {}),
         });
+        if (kind === "done") sayLine(e.tileId);
       }
-      // Native OS notification for the SAME transitions, NOT gated on selection
-      // (if the whole window is unfocused you're away). Main suppresses it when
-      // the window IS focused AND applies the same prefs for the osPopups
-      // surface. One state machine, two surfaces. We still forward every event
-      // so the OS-surface pref is honored even when the in-app one is off.
-      if (needsHuman || finished || crashed) {
-        try {
-          window.hive.notifyAgent?.({
-            tileId: e.tileId,
-            label: e.label,
-            kind,
-            ...(fr?.title ? { frame: fr.title } : {}),
-            ...(repo ? { repo } : {}),
-            ...(crashed
-              ? { ...(e.exitCode !== undefined ? { exitCode: e.exitCode } : {}), ...(e.detail ? { detail: e.detail } : {}) }
-              : {}),
-          });
-        } catch { /* preload missing in some test harnesses */ }
-      }
+      // Main's notice desk hears every window's copy of the same change and makes it one event:
+      // the OS pop-up while no window has the focus, and the sound, under the same settings. Every
+      // change goes, so its pop-up and sound settings hold even with toasts off. `selected`: a
+      // finished sound is skipped while the person looks at that tile (main counts it only while
+      // this window has the focus).
+      try {
+        window.hive.notifyAgent?.({
+          tileId: e.tileId,
+          label: e.label,
+          kind,
+          ...(selected ? { selected } : {}),
+          ...(e.since !== undefined ? { since: e.since } : {}),
+          ...(fr?.title ? { frame: fr.title } : {}),
+          ...(repo ? { repo } : {}),
+          ...(crashed
+            ? { ...(e.exitCode !== undefined ? { exitCode: e.exitCode } : {}), ...(e.detail ? { detail: e.detail } : {}) }
+            : {}),
+        });
+      } catch { /* preload missing in some test harnesses */ }
     });
     return off;
-  }, [commitStatuses, pushToast, frameOfRef, framesRef]);
+  }, [commitStatuses, pushToast, sayLine, frameOfRef, framesRef]);
 
   return { toasts, dismissToast, markSeen, selectedTileIdsRef };
 }

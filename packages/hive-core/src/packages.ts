@@ -55,7 +55,7 @@ export async function readPackage(dir: string, given: { id?: string; folder: str
     const members: PackageMemberRead[] = [];
     for (const k of MEMBER_KINDS) {
       for (const entry of entriesOf(m, k)) {
-        const c = await k.check(dir, entry, { folder: path.basename(dir) });
+        const c = await k.check(dir, entry, { folder: path.basename(dir), package: m.id });
         if (!ownedBy(m.id, c.id)) fail(`${k.noun} ${c.id} is not ${owner}'s: every member of ${m.id} is ${owner}/<name>`);
         members.push({ ...c, kind: k.kind });
       }

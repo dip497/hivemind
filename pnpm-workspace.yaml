@@ -29,7 +29,6 @@ catalog:
   '@xterm/addon-web-links': 0.13.0-beta.310
   '@pierre/diffs': 1.5.1
   sonner: ^2.0.8
-  cmdk: ^1.1.1
   '@radix-ui/react-tooltip': ^1.2.16
   '@radix-ui/react-dropdown-menu': ^2.1.24
   '@radix-ui/react-select': 2.3.7
@@ -80,3 +79,5 @@ overrides:
 
 patchedDependencies:
   '@xterm/addon-webgl@0.20.0-beta.309': patches/@xterm__addon-webgl@0.20.0-beta.309.patch
+  '@xterm/headless@6.1.0-beta.313': patches/@xterm__headless@6.1.0-beta.313.patch
+  '@xterm/xterm@6.1.0-beta.315': patches/@xterm__xterm@6.1.0-beta.315.patch

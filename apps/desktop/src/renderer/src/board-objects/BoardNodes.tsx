@@ -14,6 +14,7 @@ import { WidgetContent, useWidgetLook } from "./WidgetBody";
 import { optionsOf, useShownWidgetPackages } from "./widget-runtime";
 import { SettingsForm } from "../plugins/SettingsForm";
 import { useBoardContext } from "./board-context";
+import { actionKey } from "../shortcut";
 
 interface BoxNodeProps<T extends BoxObject> {
   id: string;
@@ -55,8 +56,8 @@ function BoxBar({ id, object }: { id: string; object: BoxObject }) {
       {!!pkg?.options.some((o) => o.id !== "color") && (
         <Button variant="ghost" size="icon-sm" aria-label={`${pkg.name} options`} aria-pressed={setting} data-widget-options onClick={() => setSetting((v) => !v)}><Settings2 /></Button>
       )}
-      <Button variant="ghost" size="icon-sm" aria-label="duplicate" title="Duplicate  (⌘D)" onClick={() => board.duplicate(id)}><Copy /></Button>
-      <Button variant="ghost" size="icon-sm" aria-label="delete" title="Delete  (⌫)" onClick={() => board.remove(id)}><Trash /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label="duplicate" title={`Duplicate  (${actionKey("duplicate")})`} onClick={() => board.duplicate(id)}><Copy /></Button>
+      <Button variant="ghost" size="icon-sm" aria-label="delete" title={`Delete  (${actionKey("remove-selected")})`} onClick={() => board.remove(id)}><Trash /></Button>
       {setting && pkg && (
         <div className="hm-island absolute left-0 top-full mt-1 w-[240px] rounded-xl p-3">
           <SettingsForm compact fields={pkg.options} values={optionsOf(pkg, object)}

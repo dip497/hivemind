@@ -33,9 +33,9 @@ function QrSvg({ text, label }: { text: string; label: string }) {
   const cells: string[] = [];
   data.forEach((row, y) => row.forEach((on, x) => { if (on) cells.push(`M${x} ${y}h1v1h-1z`); }));
   return (
-    <svg ref={svg} viewBox={`0 0 ${size} ${size}`} width={side} height={side} shapeRendering="crispEdges" role="img" aria-label={label} data-qr-modules={size}>
-      <rect width={size} height={size} fill="#fff" />
-      <path d={cells.join("")} fill="#000" />
+    <svg ref={svg} viewBox={`0 0 ${size} ${size}`} width={side} height={side} shapeRendering="crispEdges" className="block" role="img" aria-label={label} data-qr-modules={size}>
+      <rect width={size} height={size} fill="var(--color-qr-paper)" />
+      <path d={cells.join("")} fill="var(--color-qr-ink)" />
     </svg>
   );
 }
@@ -48,7 +48,7 @@ export function QrCode({ text, label, ...rest }: { text: string; label: string }
     </button>
     <Dialog open={large} onOpenChange={setLarge}>
       {/* Above Settings, which a code is shown from. */}
-      <DialogContent padding="none" closeButton={false} className="qr-large" data-qr-large>
+      <DialogContent padding="none" closeButton={false} surface="paper" data-qr-large>
         <DialogTitle className="sr-only">{label}</DialogTitle>
         <DialogDescription className="sr-only">Point the phone's camera at it. Esc closes it.</DialogDescription>
         <QrSvg text={text} label={label} />

@@ -5,10 +5,12 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UnresolvedFile } from "@pierre/diffs/react";
-
-const OPTIONS = { theme: { dark: "pierre-dark", light: "pierre-light" }, diffStyle: "split" } as const;
+import { PIERRE_OPTIONS } from "../pierre-codeview";
+import { useThemeField } from "../theme-store";
 
 export function ConflictView(props: { repoPath: string; file: string }) {
+  const themeType = useThemeField("mode");
+  const options = useMemo(() => ({ ...PIERRE_OPTIONS, themeType, diffStyle: "split" }) as const, [themeType]);
   const conflict = useQuery<{ raw: string; conflicts: number }>({
     queryKey: ["git:conflict", props.repoPath, props.file],
     queryFn: () => window.hive.gitConflictedFile(props.repoPath, props.file),
@@ -28,7 +30,7 @@ export function ConflictView(props: { repoPath: string; file: string }) {
   return (
     <UF
       file={file}
-      options={OPTIONS}
+      options={options}
       onResolved={(resolved: string) => {
         void window.hive.gitWriteResolved(props.repoPath, props.file, resolved);
       }}

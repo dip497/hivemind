@@ -38,6 +38,26 @@ function kit(version: string, dogAsks: string[]): string {
   return dir;
 }
 
+/** A package HiveHub serves whole: a view it opens with (`startup.view`), every file listed with
+ *  its checksum, as the index lists one. */
+function hubPackage(name: string, label: string, view: string): Record<string, unknown> {
+  const dir = path.join(root, "hub", "packages", name);
+  const files: Record<string, string> = {
+    "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: `@e2e/${name}`, name: label, version: "1.0.0", views: [{ path: `views/${view}` }], startup: { view: `@e2e/${view}` } }),
+    [`views/${view}/hivemind-view.json`]: JSON.stringify({ id: `@e2e/${view}`, name: view[0]!.toUpperCase() + view.slice(1), version: "1.0.0", entry: "index.html" }),
+    [`views/${view}/index.html`]: "<!doctype html>",
+  };
+  for (const [f, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true });
+    fs.writeFileSync(path.join(dir, f), text);
+  }
+  return {
+    id: `@e2e/${name}`, type: "package", name: label, description: `${label}, from the catalog.`, author: "e2e", version: "1.0.0", path: `packages/${name}`,
+    files: Object.entries(files).map(([f, text]) => ({ path: f, sha256: createHash("sha256").update(text).digest("hex") })),
+    members: [{ kind: "view", id: `@e2e/${view}`, name: view, permissions: [] }],
+  };
+}
+
 test.beforeAll(async () => {
   execFileSync("git", ["init", "-q", path.join(root, "repo")]);
   fs.mkdirSync(path.join(root, "home"));
@@ -49,7 +69,7 @@ test.beforeAll(async () => {
     id: "@e2e/hubkit", type: "package", name: "Hub kit", description: "A test package from the catalog.", author: "e2e", version: "1.0.0",
     path: "packages/hubkit", files: [{ path: "hivemind-package.json", sha256: createHash("sha256").update(manifest).digest("hex") }],
     members: [{ kind: "widget", id: "@e2e/cat", name: "Cat", permissions: [] }, { kind: "tool", id: "@e2e/runner", name: "Runner", permissions: ["workspace:spawn"] }],
-  }] }));
+  }, hubPackage("cove", "Cove", "bay")] }));
   const env = {
     ...process.env, HOME: path.join(root, "home"), XDG_CONFIG_HOME: xdg, HIVEMIND_SHELL_ENV: "0",
     HIVEMIND_PLUGIN_INDEX: pathToFileURL(path.join(root, "hub", "index.json")).href,
@@ -74,6 +94,14 @@ async function addFromFolder(dir: string): Promise<void> {
   }, dir);
   await body().locator("[data-add-plugin]").click();
   await page.locator("[data-folder-install]").click();
+}
+/** Settings offered `view` under its own install and recorded that: the window's corner does not
+ *  offer it too. Asked as the window asks, once the view has loaded, with Canvas showing. */
+async function noCornerOffer(view: string): Promise<void> {
+  const registered = () => page.evaluate(() => (window as Window & { __hivemindViews?: { registered: string[] } }).__hivemindViews?.registered ?? []);
+  await expect.poll(registered).toContain(view);
+  expect(await page.evaluate(async (views) => await window.hive.startViewOffers!(["canvas", ...views], "canvas"), await registered())).toEqual([]);
+  await expect(page.locator("[data-start-view-offer]")).toHaveCount(0);
 }
 const review = () => body().locator("[data-package-review='@e2e/kit']");
 const row = () => body().locator("[data-package='@e2e/kit']");
@@ -182,4 +210,63 @@ test("in a browser tab the Packages tab lists the package, and its switch reache
     await expect(tab.locator("[data-folder-install]")).toHaveCount(0);
     if (shots) await tab.screenshot({ path: path.join(shots, "13-browser-tab-add.png") });
   } finally { await browser.close(); }
+});
+
+test("a package that opens with a view offers it once installed, and Open switches to it", async () => {
+  const dir = path.join(root, "harbour");
+  fs.mkdirSync(path.join(dir, "views", "isle"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "views", "isle", "hivemind-view.json"), JSON.stringify({ id: "@e2e/isle", name: "Isle", version: "1.0.0", entry: "index.html" }));
+  fs.writeFileSync(path.join(dir, "views", "isle", "index.html"), "<!doctype html>");
+  fs.writeFileSync(path.join(dir, "hivemind-package.json"), JSON.stringify({
+    apiVersion: 2, id: "@e2e/harbour", name: "Harbour", version: "1.0.0", views: [{ path: "views/isle" }], startup: { view: "@e2e/isle" },
+  }));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } })));
+  await expect(page.locator("[data-plugins-home]")).toBeVisible();
+  await addFromFolder(dir);
+  await body().locator("[data-folder-install-do]").click();
+  const offer = body().getByRole("status").filter({ hasText: "Open Isle?" });
+  await expect(offer).toBeVisible();
+  await noCornerOffer("@e2e/isle");
+  await shot("10-open-start-view-offer");
+  await offer.getByRole("button", { name: "Open" }).click();
+  // Settings closes on the view it opened.
+  await expect(page.locator('[data-community-view="@e2e/isle"]')).toBeVisible();
+  await expect(body()).toHaveCount(0);
+  await shot("11-open-start-view-opened");
+});
+
+test("a package from the HiveHub list that opens with a view offers it once installed", async () => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } })));
+  await body().getByRole("tab", { name: "HiveHub", exact: true }).click();
+  await body().locator('[data-plugins-kind="package"]').click();
+  await body().locator("[data-install-start='package:@e2e/cove']").click();
+  await body().locator("[data-install-review='package:@e2e/cove'] [data-install-confirm]").click();
+  const offer = body().getByRole("status").filter({ hasText: "Open Bay?" });
+  await expect(offer).toBeVisible();
+  await noCornerOffer("@e2e/bay");
+  await offer.getByRole("button", { name: "Open" }).click();
+  await expect(page.locator('[data-community-view="@e2e/bay"]')).toBeVisible();
+  await expect(body()).toHaveCount(0);
+});
+
+test("a package that arrives switched off does not offer its view, which would not load", async () => {
+  // Its tool runs in the app, so it arrives off. Kit's members, under ids of their own.
+  const dir = kit("3.0.0", []);
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, "hivemind-package.json"), "utf8"));
+  for (const f of ["tools/prs/hivemind-tool.json", "widgets/dog/widget.json", "views/island/hivemind-view.json"]) {
+    const at = path.join(dir, f);
+    fs.writeFileSync(at, fs.readFileSync(at, "utf8").replace(/@e2e\/(prs|dog|island)/, "@e2e/shut-$1"));
+  }
+  fs.writeFileSync(path.join(dir, "hivemind-package.json"), JSON.stringify({ ...manifest, id: "@e2e/shut", name: "Shut", startup: { view: "@e2e/shut-island" } }));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:open-settings", { detail: { page: "plugins" } })));
+  await expect(page.locator("[data-plugins-home]")).toBeVisible();
+  await addFromFolder(dir);
+  await expect(body().locator("[data-package-review='@e2e/shut']")).toBeVisible();
+  await body().locator("[data-folder-install-do]").click();
+  await expect.poll(() => page.evaluate(async () => (await window.hive.installedPackages()).find((p) => p.id === "@e2e/shut")?.on)).toBe(false);
+  await expect(body().locator("[data-open-start-view]")).toHaveCount(0);
+  // Settings did not offer it, so switched on later, the window's corner does.
+  await page.evaluate(async () => { await window.hive.switchPackage("@e2e/shut", true); window.dispatchEvent(new CustomEvent("hivemind:reload-views")); });
+  const corner = page.locator('[data-start-view-offer="@e2e/shut"]');
+  await expect(corner).toContainText("Shut is installed. Open Island?");
 });

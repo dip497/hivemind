@@ -149,7 +149,8 @@ export class ViewScreen {
     if (!view) return this.end(`${this.app.computer()} does not offer this view on a phone.`);
     this.title.textContent = view.name;
     const token = crypto.randomUUID().replaceAll("-", "");
-    const frame = h("iframe", { sandbox: "allow-scripts allow-same-origin", referrerpolicy: "no-referrer", title: view.name, "data-view-frame": view.id, src: `${at}/?s=${token}` });
+    // Forms fire their submit event; the view's CSP (form-action 'none') sends them nowhere.
+    const frame = h("iframe", { sandbox: "allow-scripts allow-same-origin allow-forms", referrerpolicy: "no-referrer", title: view.name, "data-view-frame": view.id, src: `${at}/?s=${token}` });
     let loads = 0;
     frame.addEventListener("load", () => {
       // The frame went somewhere else: the view led it away.

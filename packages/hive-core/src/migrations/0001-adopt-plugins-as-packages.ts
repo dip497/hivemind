@@ -138,7 +138,8 @@ export const m0001: Migration = {
         return [key, kept];
       }).filter(([, s]) => Object.keys(s as object).length));
       return { ...cur, plugins: { ...cur.plugins, state } };
-    }, settingsPath());
+      // The records under a tool's old `owner/name` go: named, since a write keeps what this build does not read.
+    }, settingsPath(), Object.keys(renamed).map((key) => `plugins.state.tool:${key.slice("tool:@".length)}`));
     return { adopted, skipped };
   },
 };

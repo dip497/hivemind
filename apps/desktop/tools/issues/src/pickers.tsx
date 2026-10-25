@@ -26,7 +26,7 @@ export function AssigneePicker({
       width={200}
       trigger={
         value ? (
-          <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)] hover:text-[var(--color-accent)]">
+          <span className="inline-flex items-center gap-1.5 text-label text-[var(--color-fg)] hover:underline underline-offset-2">
             <Avatar id={value.id} size={18} />
             {value.id}
           </span>
@@ -55,7 +55,7 @@ export function AssigneePicker({
             {q.trim() && !allAssignees.includes(q.trim()) && (
               <button
                 onClick={() => { onChange({ type: "member", id: q.trim() }); close(); }}
-                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
+                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-fg)] cursor-pointer"
               >
                 Assign “{q.trim()}”
               </button>
@@ -128,7 +128,7 @@ export function LabelPicker({
             {q.trim() && !allLabels.includes(q.trim()) && (
               <button
                 onClick={() => { onChange([...value, q.trim()]); setQ(""); }}
-                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-accent)] cursor-pointer"
+                className="w-full text-left px-2 py-1 text-label hover:bg-[var(--color-bg4)] rounded text-[var(--color-fg)] cursor-pointer"
               >
                 Create “{q.trim()}”
               </button>
@@ -158,7 +158,7 @@ export function ParentPicker({
       width={250}
       trigger={
         value ? (
-          <span className="font-mono text-count text-[var(--color-fg)] hover:text-[var(--color-accent)]">{value}</span>
+          <span className="font-mono text-count text-[var(--color-fg)] hover:underline underline-offset-2">{value}</span>
         ) : (
           <span className="text-label text-[var(--color-fg2)] hover:text-[var(--color-fg)]">Set parent…</span>
         )

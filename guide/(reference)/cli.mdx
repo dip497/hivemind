@@ -109,7 +109,8 @@ hive ctl whoami                         # which app (hivemind or hivemind-dev), 
                                         # sockets, and you: person, agent or program; workspace,
                                         # tile and session
 hive ctl agents [--watch] [--session <id>]
-                                        # the workspace's agents, their state and what each waits on;
+                                        # the workspace's agents, their state, what each waits on
+                                        # and its last line;
                                         # --session: the one in that session (exit 5: none)
 hive ctl tiles                          # every tile: agents, terminals, tools, browsers
 hive ctl frames                         # frames an agent may start in: id, name, machine
@@ -145,7 +146,7 @@ hive ctl view emit <name> ['{"json":1}' | -] [--view id]
                                         # a named event to the view shown
 ```
 
-`hive ctl agents --json` prints `{"seq": 3, "agents": [ … ]}`: `seq` is the agent feed's position (`--watch` prints the events after it), and each agent is `{"tile", "name", "agent"?, "workspace": {"id", "name"}, "state", "since", "machine", "waiting"?, "parent"?, "interrupt"?, "conversation"?, "session"?}`: `name` is the tile's name (`spawn --name`), `agent` the program it runs (`spawn --agent`), and `state` is `asleep` for one put to sleep.
+`hive ctl agents --json` prints `{"seq": 3, "agents": [ … ]}`: `seq` is the agent feed's position (`--watch` prints the events after it), and each agent is `{"tile", "name", "agent"?, "workspace": {"id", "name"}, "state", "since", "machine", "waiting"?, "parent"?, "interrupt"?, "conversation"?, "session"?, "line"?}`: `name` is the tile's name (`spawn --name`), `agent` the program it runs (`spawn --agent`), `state` is `asleep` for one put to sleep, and `line` is its last line as its row in the Layers panel says it: what it last said, or for an agent that keeps no conversation what its screen last showed, at most 160 characters. Without `--json` the line ends each agent's row as `line: …`.
 
 `hive ctl tiles --json` prints `{"tiles": [ … ]}`, every tile of the workspace in order, each `{"tile", "kind", "name", "frame", "state"?, "agent"?, "plugin"?, "tool"?}`. `kind` is `agent`, `terminal` or `tool`, or the tile's own kind when it is none of those; an agent has its `state` and `agent`, a tool its `plugin` and `tool` ids. `frame` is null for a tile in no frame. `session` appears once the agent's hooks have said it; `--session <id>` also finds a tile by the session the app tracks to resume it.
 
@@ -196,7 +197,7 @@ hive ctl plugin call windows unsplit
 
 ## Plugins
 
-To write, check, install, list and remove agents, views, widgets, tools and packages, and change their settings. Guide: [Packages](/packages).
+To write, check, install, list and remove agents, views, widgets, tools, themes and packages, and change their settings. Guide: [Packages](/packages).
 
 ```text
 hive plugins new tool|widget|view <name> [--dir folder] [--owner login]
@@ -205,6 +206,8 @@ hive plugins new package <name> [--dir folder] [--owner login]
                                         # a package that holds nothing yet, with PROMPT.md
 hive plugins new tool|widget|view <name> --in <package folder>
                                         # a starter inside the package, named in its hivemind-package.json
+hive plugins new theme <name> --in <package folder> [--dir folder]
+                                        # a theme.json of the look in use, in <package>/themes/<name>
 hive plugins add <folder> --to <package folder>
                                         # one already written, copied in when outside; another owner's id is refused
 hive plugins check <folder> [--json]    # its types, its manifest and its code drawn once; file:line for each problem
@@ -212,6 +215,7 @@ hive plugins check <folder> [--json]    # its types, its manifest and its code d
 hive plugins install <folder>|<id>      # a folder holding a plugin, or one from HiveHub by its id: installed as a package
                                         # owner/name and @owner/name are always HiveHub's: a folder is ./x, ../x, /x or ~/x
                                         # a tool arrives off: hive plugins enable @owner/name
+                                        # a package that opens with a view prints it and its command (--json: startView {id, name, open})
 hive plugins install <folder>|<id> --dry-run   # what an update would change, member by member; installs nothing
 hive plugins rollback <package>         # back to the version in use before its last update, switched as it was
 hive plugins remove <plugin>|<package>  # one you added on its own, or a whole package
@@ -262,8 +266,10 @@ To read and change settings, themes, the installed version and what it changed i
 hive config path
 hive config get [dotted.path]
 hive config set <path> '<json>'
-hive theme list
-hive theme use nord
+hive theme list                         # the presets, and installed themes as @owner/package/theme
+hive theme use nord                     # a preset
+hive theme use @owner/kit/harbour       # a theme: its files are copied beside settings.json
+hive theme revert                       # back to the look before the theme
 hive theme export f.json
 hive theme import f.json
 hive upgrade [--dev]
@@ -361,6 +367,21 @@ hive push set https://ntfy.sh/<your-topic> [--events input.requested,turn.ended]
                                         # a plain-text POST when an agent on this machine needs you
 hive push status | test | off
 ```
+
+### `hive notifications`
+
+The app's toasts, popups and sounds: the `notifications` settings ([Settings](/settings#notifications)). Guide: [Know who is waiting](/know-who-is-waiting#hear-it).
+
+```text
+hive notifications show [--json]
+hive notifications set <key> <value>      # sound on, sounds.done on, volume 0.4 (or 40%), dnd.start 22:30
+hive notifications play needs|done|error [--json]
+                                          # plays it in the app: {played, why?, pack?}
+hive notifications recent [--json]        # the last 10 moments: agents, sound, popups
+```
+
+`set` and `play` are the person's: an agent is refused them (`PERSON_ONLY`, exit 6). `play` and
+`recent` need the app running; without it they exit 3 (`UNAVAILABLE`). `set` reloads the app.
 
 ## Packages (preview)
 

@@ -23,6 +23,7 @@ import type { Link, Stream } from "@hivemind/workspace-host/hive-net";
 import { WorkspaceStore } from "@hivemind/workspace-host/store";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import { workspaceDomains } from "../src/domains.ts";
+import { TileLines } from "../src/tile-lines.ts";
 import { PeerLinks } from "../src/peer-links.ts";
 import { Terminals, type SessionOutput } from "../src/terminals.ts";
 import type { WaitingStatus } from "../src/needs.ts";
@@ -138,7 +139,9 @@ function linkPair(device: string, computer: string) {
 }
 
 /** The person's computer, holding the workspace `api`, with their phone and laptop paired. */
-function computer() {
+/** The person's computer, holding the workspace `api` with two agents' tiles. `lines`: each tile's
+ *  last line, in place of a map the test sets. */
+function computer(o: { lines?: Pick<TileLines, "get" | "followAll"> } = {}) {
   const dir = path.join(tmp, String(made++));
   const repo = path.join(dir, "api");
   const person = newSeed();
@@ -248,7 +251,7 @@ function computer() {
     devices: () => [host],
     profile: async () => ({ name: "Priya", color: "#3b82f6" }),
     shown: (at) => shown.get(at),
-    line: (_held, tile) => lines.get(tile),
+    lines: o.lines ?? { get: (tile) => lines.get(tile), followAll: () => {} },
   });
   /** `device` connects: what it hears on each stream, and its end of the link; and a stream of its
    *  own, opened beside them (`open`): what is sent on it, what it hears, and its end. */
@@ -680,11 +683,11 @@ test("an owner's device whose link has no room is sent nothing of Home, and once
 
   phone.room(false);
   c.lines.set("t2", "Compiling…");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await wait(300);
   c.lines.set("t2", "Compiled");
   c.lines.delete("t1");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await wait(300);
   assert.equal(heard().length, 1);
 
@@ -698,7 +701,7 @@ test("an owner's device whose link has no room is sent nothing of Home, and once
 
   await wait(300);
   c.lines.set("t1", "Done");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await until(() => heard().length === 3);
   assert.deepEqual(heard()[2], { t: "changes", lines: { seq: 5, changes: [{ seq: 5, key: t1, row: "Done" }] } });
 });
@@ -734,7 +737,7 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
 
   // t2 prints: only the lines move. t1 is answered: only its row is sent.
   c.lines.set("t2", "Compiling…");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   await until(() => heard().length === 2);
   assert.deepEqual(heard()[1], { t: "changes", lines: { seq: 2, changes: [{ seq: 2, key: t2, row: "Compiling…" }] } });
   await wait(300);
@@ -746,7 +749,7 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
   phone.hangUp();
   await phone.closed;
   c.lines.delete("t1");
-  c.links.homeChanged();
+  c.links.homeLinesChanged();
   const again = c.connect(c.phone);
   again.send("home", { t: "follow", layout: 4, lines: 2 });
   await until(() => again.heard.get("home")!.length === 1);
@@ -757,6 +760,49 @@ test("the owner's devices follow Home: sent both sequences whole, then each chan
   stranger.send("home", { t: "follow" });
   assert.equal(await Promise.race([stranger.closed, wait(2_000).then(() => "still open")]), "removed");
   assert.deepEqual(stranger.heard.get("home"), []);
+});
+
+test("while a phone follows Home, every agent's words are read, unwatched and with no report; after it hangs up a report reads nothing, and Home followed again reads what it said meanwhile", async () => {
+  const file = path.join(tmp, `said-${made}.jsonl`);
+  let n = 0;
+  const words = (text: string) => fs.appendFileSync(file, `${JSON.stringify({ type: "assistant", uuid: `a${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content: text } })}\n`);
+  const format = { id: "uuid", at: "timestamp", said: [{ require: { type: "assistant" }, text: "message.content", who: "agent" as const }] };
+  // eslint-disable-next-line prefer-const
+  let c: ReturnType<typeof computer>;
+  const lines = new TileLines({
+    server: () => ({ publishTo: () => {} }), changed: () => c.links.homeLinesChanged(),
+    transcriptOf: (bare) => (bare === "t1" ? { session: "s1", file, format } : null),
+  });
+  c = computer({ lines });
+  const t1 = `t:${c.workspace}/t1`;
+  /** What Home last told `phone` t1's line is. */
+  const homeLine = (phone: { heard: Map<string, string[]> }) => {
+    let line: string | undefined;
+    for (const m of phone.heard.get("home")!.map((h) => JSON.parse(h) as HomeMessage)) {
+      if (m.t === "home") line = m.lines.rows.find(([k]) => k === t1)?.[1];
+      else for (const ch of m.lines?.changes ?? []) if (ch.key === t1) line = "row" in ch ? ch.row : undefined;
+    }
+    return line;
+  };
+  words("Waiting on CI");
+  const phone = c.connect(c.phone);
+  phone.send("home", { t: "follow" });
+  await until(() => homeLine(phone) === "Waiting on CI");
+  assert.equal(homeLine(phone), "Waiting on CI");
+
+  phone.hangUp();
+  await phone.closed;
+  // Its streams close as the link does.
+  await wait(50);
+  words("Merged");
+  lines.reported("t1", "s1");
+  await wait(100);
+  assert.equal(lines.get("t1"), "Waiting on CI", "followed by no one: not read");
+
+  const again = c.connect(c.phone);
+  again.send("home", { t: "follow" });
+  await until(() => homeLine(again) === "Merged");
+  assert.equal(homeLine(again), "Merged");
 });
 
 /** The person's computer hosting the workspace `api`, whose terminals are the host's own
@@ -789,7 +835,8 @@ async function guestWindows({ early = false } = {}) {
       screen: (_, lines) => (cb) => { cb(lines === undefined ? "screen" : `screen with ${lines} lines`); return true; },
     },
   });
-  const server = new WorkspaceServer([...workspaceDomains, terminals.domain], intents);
+  const tileLines = new TileLines({ server: () => server });
+  const server = new WorkspaceServer([...workspaceDomains, terminals.domain, tileLines.domain], intents);
   const links = new PeerLinks({ store, changes: () => () => {}, lists, server, machines: { self: () => ({ device: idOf(newSeed()), name: "desk" }), mine: () => undefined, whose: () => undefined, saved: () => undefined } });
   const [computerEnd, herComputer] = linkPair(hers, idOf(newSeed()));
   links.serve(computerEnd);
@@ -809,6 +856,14 @@ async function guestWindows({ early = false } = {}) {
       events,
       open: () => api.send(JSON.stringify({ id: 1, method: "terminal.open", params: [{ tileId: "hm:t1", tile: "t1", cwd: `hive://${workspace}`, cmd: "", cols: 80, rows: 24, attachOnly: true }] })),
       notice: (method: string, ...params: unknown[]) => api.send(JSON.stringify({ method, params })),
+      /** Watch the last lines of `tiles`: what it is answered. */
+      watchLines: async (tiles: string[]) => {
+        api.send(JSON.stringify({ id: 2, method: "tile.watchLines", params: [tiles] }));
+        await until(() => heard.some((m) => m.id === 2));
+        return heard.find((m) => m.id === 2);
+      },
+      /** Each `tile.lines` it was told. */
+      lines: () => heard.filter((m) => m.event === "tile.lines").map((m) => (m.params![0] as { lines: Record<string, string> }).lines),
       answered: () => heard.some((m) => m.id === 1),
       /** What it was sent of t1's screen and output. */
       shown: () => heard.filter((m) => m.event === "terminal.data").map((m) => m.params![1] as string),
@@ -823,7 +878,7 @@ async function guestWindows({ early = false } = {}) {
   await until(() => a.answered());
   b.open();
   await until(() => b.shown().includes("screen"));
-  return { a, b, herApp, letGo, server, print: (data: string) => session!.data(data) };
+  return { a, b, herApp, letGo, server, tileLines, print: (data: string) => session!.data(data) };
 }
 
 test("a guest's app hears what happens in the workspace once, on its own stream, and her windows only their terminals", async () => {
@@ -838,6 +893,17 @@ test("a guest's app hears what happens in the workspace once, on its own stream,
     assert.deepEqual(w.events().filter((e) => !e.startsWith("terminal.")), [], "a window hears no event but a terminal's");
     assert.ok(w.events().includes("terminal.size"));
   }
+});
+
+test("a guest's window that watches last lines is answered and told them on its own stream, alone: neither her other window nor her app hears them", async () => {
+  const { a, b, herApp, tileLines } = await guestWindows();
+  tileLines.set("t1", "npm test");
+  assert.deepEqual(await a.watchLines(["t1"]), { id: 2, result: { lines: { t1: "npm test" } } });
+  tileLines.set("t1", "214 tests passed");
+  await until(() => a.lines().length > 0);
+  await wait(100);
+  assert.deepEqual(a.lines(), [{ t1: "214 tests passed" }]);
+  assert.deepEqual([b.lines(), herApp.events().filter((e) => e === "tile.lines")], [[], []]);
 });
 
 test("a guest's window that asks before her app's hello reaches the host is answered once it does", async () => {

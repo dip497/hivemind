@@ -13,20 +13,30 @@ console.log("started");
 const r = await runMigrations({ by: "cli", app: "2026.10.4", say: (line) => console.error(line) });
 console.log(JSON.stringify(r));`;
 
-export const ALL = ["0001-adopt-plugins-as-packages", "0002-plugin-state-from-old-keys", "0003-remove-old-one-off-backups", "0004-remove-machines-marker"];
+export const ALL = ["0001-adopt-plugins-as-packages", "0002-plugin-state-from-old-keys", "0003-remove-old-one-off-backups", "0004-remove-machines-marker", "0006-notifications-into-settings"];
 
 export interface Applied { id: string; result: Record<string, unknown> & { adopted?: number; skipped?: { path: string; why: string }[] } }
 
-/** A data root (config and app data in one folder, as on Linux) made from `fixture`. */
+/** A data root (config and app data in one folder, as on Linux) made from `fixture`; `split`, two
+ *  folders (as on macOS and Windows), from the fixture's `config` and `data`. */
 export class TestRoot {
   home = "";
-  constructor(readonly fixture: string) { this.fresh(); }
+  constructor(readonly fixture: string, readonly split = false) { this.fresh(); }
   get root(): string { return path.join(this.home, "hivemind"); }
-  env(): NodeJS.ProcessEnv { return { ...process.env, XDG_CONFIG_HOME: this.home, HIVEMIND_APP_DATA: this.root, HIVE_SETTINGS: "" }; }
+  /** The app's data folder: `root` unless split. */
+  get data(): string { return this.split ? path.join(this.home, "app-data") : this.root; }
+  env(): NodeJS.ProcessEnv { return { ...process.env, XDG_CONFIG_HOME: this.home, HIVEMIND_APP_DATA: this.data, HIVE_SETTINGS: "" }; }
   fresh(): void {
     this.remove();
     this.home = fs.mkdtempSync(path.join(os.tmpdir(), "hive-migration-"));
-    fs.cpSync(this.fixture, this.root, { recursive: true });
+    if (!this.split) return void fs.cpSync(this.fixture, this.root, { recursive: true });
+    fs.cpSync(path.join(this.fixture, "config"), this.root, { recursive: true });
+    fs.cpSync(path.join(this.fixture, "data"), this.data, { recursive: true });
+  }
+  /** Whether every migration is in a ledger. */
+  finished(): boolean {
+    const count = (dir: string) => (fs.existsSync(path.join(dir, "migrations", "ledger.json")) ? JSON.parse(fs.readFileSync(path.join(dir, "migrations", "ledger.json"), "utf8")).applied.length : 0);
+    return count(this.root) + (this.split ? count(this.data) : 0) >= ALL.length;
   }
   remove(): void { if (this.home) fs.rmSync(this.home, { recursive: true, force: true }); }
   read(rel: string): any { return JSON.parse(fs.readFileSync(path.join(this.root, rel), "utf8")); }
@@ -81,7 +91,7 @@ export class TestRoot {
       await new Promise((r) => setTimeout(r, (spread * cutOff) / 20));
       run.kill();
       await run.done;
-      if (!this.has("migrations/ledger.json") || this.ledger().length < ALL.length) cutOff++;
+      if (!this.finished()) cutOff++;
       else spread *= 0.8;
       this.runOnce();
       ends.push(endState());

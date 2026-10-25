@@ -6,6 +6,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { patchSettingsExtras, settingsPath, updateSettings } from "../settings.js";
+import type { Settings } from "../settings-schema.js";
 import { parsePluginStates, withPluginState, type PluginState } from "../plugin-settings.js";
 import type { Migration } from "./runner.js";
 
@@ -51,9 +52,13 @@ export async function writePluginStateFromOldKeys(file = settingsPath()): Promis
   try { raw = JSON.parse(await readFile(file, "utf8")); } catch { return false; }
   if (!isObj(raw) || !hasOldKeys(raw) || (isObj(raw.plugins) && isObj(raw.plugins.state))) return false;
   const state = statesFromOldKeys(raw);
-  await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state } }), file);
+  // The old keys are named so the write removes them: a write keeps what this build does not read.
+  await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state } }), file, OLD_KEYS);
   return true;
 }
+
+/** The old keys inside a section, which a write would otherwise keep as a newer build's. */
+const OLD_KEYS = ["agents.disabled", "agents.options", "plugins.disabled"];
 
 export const m0002: Migration = {
   id: "0002-plugin-state-from-old-keys",

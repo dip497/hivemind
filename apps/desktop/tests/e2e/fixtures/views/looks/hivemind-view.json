@@ -1,0 +1,18 @@
+{
+  "id": "looks",
+  "name": "Looks",
+  "version": "0.1.0",
+  "entry": "main.js",
+  "protocol": 1,
+  "permissions": [],
+  "settings": [
+    { "id": "sky", "label": "Sky", "type": "choice", "values": ["clock", "custom"], "section": "Sky" },
+    { "id": "hour", "label": "Hour", "type": "number", "min": 0, "max": 24, "step": 1, "slider": true, "default": 12, "section": "Sky", "showIf": { "field": "sky", "equals": "custom" } },
+    { "id": "days", "label": "Days", "type": "multi", "values": ["mon", "tue", "wed"], "labels": ["Mon", "Tue", "Wed"], "default": ["mon"] },
+    { "id": "harbours", "label": "Harbours", "type": "list" },
+    { "id": "foam", "label": "Foam", "type": "color", "default": "#ffffff", "section": "Colours" }
+  ],
+  "tokens": [
+    { "id": "sea", "label": "Sea", "description": "The water between the islands", "dark": "#123a5a", "light": "=info" }
+  ]
+}

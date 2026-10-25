@@ -14,8 +14,8 @@ degrade — the user loses sight of agents that are still running.
 
 The trap is not the protocol, which is small. It is that a view runs under
 `default-src 'none'` in an opaque origin, and **the web reflexes that fail there fail
-silently**. `fetch()` does not throw a useful error, it is refused by
-`connect-src 'none'`. A Google Font link loads nothing. An `<iframe>` is `frame-src
+silently**. `fetch()` of anything but the view's own files does not throw a useful error, it
+is refused by `connect-src`. A Google Font link loads nothing. An `<iframe>` is `frame-src
 'none'`. A CDN `<script>` is not on `hm-view:`. Authors lose an afternoon to a blank
 canvas because they assumed a normal page.
 
@@ -113,6 +113,27 @@ Three things authors get wrong:
 - **Listen for `undock`.** The user can undock from the host's bar or with Shift+Esc.
   The tile is already released when the message arrives; drop the rect from your model
   or your UI will claim a surface that is gone.
+
+## Line slots: the host draws what a tile last said
+
+A view never gets the text a terminal showed or an agent wrote. To show a tile's last line (what
+its screen last showed, what its agent last said, or, while it waits on the person, what for), leave
+room for it and let the host draw it (protocol 1.17, feature `lineSlots`):
+
+```ts
+if (hm.supports("lineSlots")) hm.setLineRects([{ tileId, x: 16, y: 40, w: 480, h: 24 }]);
+```
+
+- At most 64 rects, each at least 20px high. Identical rects are not re-sent.
+- Check `supports` first: an older host counts the message against your view. A phone and a
+  remote screen do not draw lines, and do not say the feature.
+- The host draws the line in 11px mono, and for a permission it can answer, its own **Review**
+  button inside your rect: a popover of the host's that names the tile and shows all of what the
+  agent would run, with Deny where the keyboard lands. Never Allow in your rect, however short the
+  command: you place the rect, so you could place the button under the person's pointer. The
+  pointer passes through the line to you; the button takes it.
+- Never ask for the text by another road. The rule is the one for `invokeResult` and your saved
+  layout: what you hold, you can pass on.
 
 ## Theme: never hardcode a colour
 
@@ -274,11 +295,15 @@ Concretely:
 
 | You wrote | What happens |
 | --- | --- |
-| `fetch()` / `XMLHttpRequest` / WebSocket | refused — `connect-src 'none'`. There is no network, by design |
+| `fetch("./data.json")`, XHR of your own files | declare `"files": true` in `hivemind-view.json` and check `hm.supports("ownFiles")`. Works from Hivemind 2026.10.6, in the app and a browser tab: `connect-src` names your own origin (`hm-view://<host>`, or your path in a tab) and nothing else. Refused on the phone page and without the declaration; bundle what the phone shows |
+| `<img>`, `<link rel=stylesheet>`, `import()` of another view's files | refused: every source list names your own origin only |
+| `fetch()` of anything else / WebSocket | refused, another view's files too. There is no network, by design |
 | `<link>` to Google Fonts, a CDN script | loads nothing, no error worth reading |
 | `<iframe>` | `frame-src 'none'` |
 | `require`, `process`, `node:*` | there is no node here |
 | `localStorage` | opaque origin — use `setLayout` |
+| `<form>` | its `submit` event fires, in the app and on the phone page, and `form-action 'none'` keeps it from going anywhere: handle the event and call `preventDefault()` |
+| `Notification`, `getUserMedia`, `geolocation` | refused — a view gets no browser permission |
 
 Images, fonts and media may be `data:`, `blob:` or bundled files. Workers may be
 `blob:`. WebAssembly is allowed (`wasm-unsafe-eval`). Bundle what you need.

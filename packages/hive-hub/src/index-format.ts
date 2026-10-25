@@ -7,6 +7,7 @@
 import { MIN_APP_VERSION_RE } from "@hivemind/agents";
 import { TOOL_ID_RE } from "@hivemind/core/tool-registry";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
+import { memberIdRe } from "./package-format.js";
 
 export { CATEGORY_LABELS, PLUGIN_CATEGORIES, type PluginCategory } from "@hivemind/view-sdk/category";
 
@@ -167,9 +168,9 @@ function readEntry(p: Record<string, unknown>): CatalogEntry {
 function readMembers(raw: unknown, type: CatalogType): CatalogMember[] {
   if (type !== "package" || !Array.isArray(raw) || !raw.length || raw.length > 64) refuse("its members must list 1-64 members of a package");
   return (raw as Record<string, unknown>[]).map((m, j) => {
-    if (!m || typeof m !== "object" || !text(m.kind, 40) || typeof m.id !== "string" || !SCOPED.test(m.id) || !text(m.name, 120)
+    if (!m || typeof m !== "object" || !text(m.kind, 40) || typeof m.id !== "string" || !memberIdRe(m.kind as string).test(m.id) || !text(m.name, 120)
       || !Array.isArray(m.permissions) || m.permissions.length > 32 || !m.permissions.every((x) => text(x, 80))) {
-      refuse(`members[${j}] needs a kind, an @owner/name id, a name and its permissions`);
+      refuse(`members[${j}] needs a kind, an id as its kind writes it (@owner/name; a theme's @owner/package/theme), a name and its permissions`);
     }
     return { kind: m.kind as string, id: m.id as string, name: m.name as string, permissions: m.permissions as string[] };
   });

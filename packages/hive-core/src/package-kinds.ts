@@ -11,6 +11,7 @@ import { memberFormat, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, typ
 import { readToolPackage } from "./tool-packages.js";
 import { widgetToInstall } from "./widgets.js";
 import { viewToInstall } from "./views.js";
+import { readThemeFolder } from "./theme-folder.js";
 import { HiveError } from "./storage.js";
 
 /** A member as its kind read it. */
@@ -26,15 +27,18 @@ export interface CheckedMember {
 }
 
 
+export interface MemberGiven { id?: string; folder: string; package?: string }
+
 export interface MemberKind extends MemberFormat {
   /** Read and check one entry of its list, in the package at `root`: the member, and its path
    *  inside the package. `id`, when given, is the id it must have (a HiveHub listing); `folder` is
-   *  the name of the folder a package of one came from. */
-  check(root: string, entry: unknown, given: { id?: string; folder: string }): Promise<CheckedMember & { path: string }>;
+   *  the name of the folder a package of one came from; `package` is the id of the package it is
+   *  in, which a theme's id is made from. */
+  check(root: string, entry: unknown, given: MemberGiven): Promise<CheckedMember & { path: string }>;
 }
 
 /** A kind whose members are folders: its entry is `{ path }`, checked by `read`. */
-function inFolders(kind: MemberFormat["kind"], read: (dir: string, given: { id?: string; folder: string }) => Promise<CheckedMember>): MemberKind {
+function inFolders(kind: MemberFormat["kind"], read: (dir: string, given: MemberGiven) => Promise<CheckedMember>): MemberKind {
   return {
     ...memberFormat(kind)!,
     check: async (root, entry, given) => {
@@ -65,6 +69,10 @@ export const MEMBER_KINDS: readonly MemberKind[] = [
     if (id && v.id !== id) throw new Error(`its ${VIEW_MANIFEST} says it is "${v.id}", not ${id}`);
     if ((v.manifest?.protocol ?? 1) > PROTOCOL_VERSION) throw new Error(`it needs view protocol ${v.manifest!.protocol}; this app has ${PROTOCOL_VERSION}`);
     return { id: v.id, name: v.manifest?.name ?? v.id, ...(v.manifest?.version ? { version: v.manifest.version } : {}), permissions: v.manifest?.permissions ?? [] };
+  }),
+  inFolders("theme", async (dir, given) => {
+    const { id, theme } = await readThemeFolder(dir, given.package);
+    return { id, name: theme.name, permissions: [] };
   }),
   {
     ...memberFormat("agent-preset")!,

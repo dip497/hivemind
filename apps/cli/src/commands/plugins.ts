@@ -6,7 +6,7 @@
  *
  *   hive plugins new <tool|widget|view> <name> [--dir <folder>] [--owner <login>]   a starter that works, with PROMPT.md
  *   hive plugins new package <name> [--dir <folder>]  a package to hold several, with PROMPT.md
- *   hive plugins new <tool|widget|view> <name> --in <package folder>   a starter, as a member of that package
+ *   hive plugins new <tool|widget|view|theme> <name> --in <package folder>   a starter, as a member of that package (a theme: the look in use)
  *   hive plugins add <folder> --to <package folder>  one already written, as a member of that package
  *   hive plugins install <folder|id>               a folder holding a plugin, or one from HiveHub
  *                                                  (@owner/name is HiveHub's: write a folder as ./x);
@@ -42,11 +42,14 @@ import { installPackage, removePackage, removePlugin, rollbackPackage, switchPac
 import { readInstalledPackages, type PackageRecord } from "@hivemind/core/installed-packages";
 import { memberKind } from "@hivemind/core/package-kinds";
 import { BUILTIN_WIDGETS } from "@hivemind/core/widget-format";
+import { THEME_MANIFEST } from "@hivemind/core/theme-format";
+import { readThemeFolder } from "@hivemind/core/theme-folder";
 import { BUNDLED_TOOL_PLUGINS } from "@hivemind/core/tool-plugins";
+import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import { listWidgets } from "@hivemind/core/widgets";
 import { listToolPackages } from "@hivemind/core/tool-packages";
 import { err, ok } from "../format.js";
-import { driveCall } from "../drive.js";
+import { driveCall, reloadApp } from "../drive.js";
 import { HcpCliError } from "../hcp.js";
 import { EXIT } from "../exit-codes.js";
 import { personOnly } from "../person-only.js";
@@ -57,7 +60,7 @@ import { checkPlugin, DRAW_ALONE } from "../check/check.js";
 import { checkPackage } from "../check/package.js";
 import { where } from "../check/problem.js";
 import { PACKAGE_MANIFEST, memberFormat } from "@hivemind/hub";
-import { addEntry, arrivesOff, memberId, memberPath, packageStarter, readPackageFolder, type PackageFolder } from "../package-authoring.js";
+import { addEntry, arrivesOff, memberId, memberPath, packageStarter, readPackageFolder, themeStarter, type PackageFolder } from "../package-authoring.js";
 
 interface Plugin {
   key: string;
@@ -89,7 +92,7 @@ async function inventory(): Promise<Plugin[]> {
   const added = await listToolPackages();
   const out: Plugin[] = [
     ...agents.map((a): Plugin => ({ key: pluginKey("agent", a.id), kind: "agent", id: a.id, name: a.def?.label ?? a.id, enabledByDefault: true, fields: a.def ? agentSettingFields(a.def) : [], problem: a.error })),
-    ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest?.settings ?? [], problem: v.error, dir: v.dir, ...(v.package ? { package: v.package } : {}) })),
+    ...views.map((v): Plugin => ({ key: pluginKey("view", v.id), kind: "view", id: v.id, name: v.manifest?.name ?? v.id, enabledByDefault: true, fields: v.manifest ? viewSettingFields(v.manifest) : [], problem: v.error, dir: v.dir, ...(v.package ? { package: v.package } : {}) })),
     ...widgets.map((w): Plugin => ({ key: pluginKey("widget", w.id), kind: "widget", id: w.id, name: w.name, enabledByDefault: true, fields: [], problem: null, ...(w.dir ? { dir: w.dir } : {}), ...(w.package ? { package: w.package } : {}) })),
     ...BUNDLED_TOOL_PLUGINS.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.tools.map((x) => x.label).join(", "), enabledByDefault: !!t.builtin, fields: toolSettingFields(t), problem: null, opens: opensOf(t) })),
     ...added.map((t): Plugin => ({ key: pluginKey("tool", t.id), kind: "tool", id: t.id, name: t.name, enabledByDefault: false, fields: [...toolSettingFields(t), ...t.settings], problem: t.problem, ...(t.service ? { service: t.service.command } : {}), opens: opensOf(t), dir: t.dir, ...(t.package ? { package: t.package } : {}) })),
@@ -136,7 +139,7 @@ async function findTarget(raw: string): Promise<{ plugin: Plugin } | { package: 
 /** One plugin's record changed inside the settings lock, and a running app told. */
 async function change(p: Plugin, fn: (s: PluginState) => PluginState): Promise<{ state: PluginState; reloaded: boolean }> {
   const after = await updateSettings((cur) => ({ ...cur, plugins: { ...cur.plugins, state: withPluginState(cur.plugins.state, p.kind, p.id, fn) } }));
-  const reloaded = await driveCall("settings.reload", [], 5000).then(() => true, () => false);
+  const reloaded = await reloadApp();
   return { state: after.plugins.state[p.key] ?? {}, reloaded };
 }
 const note = (reloaded: boolean) => (reloaded ? "app reloaded" : "app not running — applies on next start");
@@ -144,7 +147,7 @@ const note = (reloaded: boolean) => (reloaded ? "app reloaded" : "app not runnin
  *  refuses (exit 7); anything else fails (exit 1). */
 const fail = (ctx: { json: boolean }, e: unknown, code: string): never =>
   err(ctx, e instanceof HiveError ? e.code : code, e instanceof Error ? e.message : String(e), e instanceof HiveError && e.code === "part_of_a_package" ? 7 : 1);
-const show = (v: unknown) => (typeof v === "string" ? JSON.stringify(v) : String(v));
+const show = (v: unknown) => (typeof v === "string" || Array.isArray(v) ? JSON.stringify(v) : String(v));
 
 const listCmd = defineCommand({
   meta: { name: "list", description: "Every plugin on this machine, on or off" },
@@ -221,14 +224,14 @@ const switchCmd = (on: boolean) => defineCommand({
       const target = await findTarget(String(args.plugin));
       if ("package" in target) {
         const r = await switchPackage(target.package.id, on);
-        const reloaded = (await Promise.all([driveCall("settings.reload", [], 5000).then(() => true, () => false), rescanApp(r.members.map((m) => m.kind))]))[0];
+        const reloaded = (await Promise.all([reloadApp(), rescanApp(r.members.map((m) => m.kind))]))[0];
         return ok(ctx, { package: r.id, enabled: on, reloaded }, () => `${r.id} ${on ? "on" : "off"}, with ${r.members.length} plugin${r.members.length === 1 ? "" : "s"}; ${note(reloaded)}`);
       }
       const p = target.plugin;
       // One you added is switched with its package; one that comes with the app by its own setting.
       if (p.package) {
         const pkg = await switchPlugin(p.kind, p.id, on);
-        const reloaded = (await Promise.all([driveCall("settings.reload", [], 5000).then(() => true, () => false), rescanApp([p.kind])]))[0];
+        const reloaded = (await Promise.all([reloadApp(), rescanApp([p.kind])]))[0];
         return ok(ctx, { key: p.key, enabled: on, package: pkg?.id ?? p.package.id, reloaded }, () => `${p.key} ${on ? "on" : "off"}; ${note(reloaded)}`);
       }
       const { reloaded } = await change(p, (s) => ({ ...s, enabled: on }));
@@ -340,7 +343,9 @@ const HUB_ID = /^@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** The kind `hive plugins new` starts that holds the others. */
 const PACKAGE = { kind: "package", noun: "package", guide: "https://hivemind.griiken.com/guide/packages/" } as const;
-const NEW_KINDS = `${KIND_NAMES}, ${PACKAGE.kind}`;
+/** A theme: data, not code, written from the look in use into a package (`--in`). */
+const THEME = { kind: "theme", noun: "theme", guide: "https://hivemind.griiken.com/guide/packages/#themes" } as const;
+const NEW_KINDS = `${KIND_NAMES}, ${THEME.kind}, ${PACKAGE.kind}`;
 /** A folder as printed, so `install` never reads it as an id on HiveHub. */
 const shownPath = (given: string) => (given === "." || /^(\.{1,2}\/|\/|~)/.test(given) ? given : `./${given}`);
 /** `to` as written from the current folder. */
@@ -376,10 +381,11 @@ const newCmd = defineCommand({
   },
   async run({ args }) {
     const ctx = { json: !!args.json };
+    if (String(args.kind) === THEME.kind) return newTheme(ctx, { name: String(args.name), in: args.in ? String(args.in) : undefined, dir: args.dir ? String(args.dir) : undefined });
     const isPackage = String(args.kind) === PACKAGE.kind;
     const k = isPackage ? null : kindNamed(String(args.kind));
     if (!isPackage && !k) return err(ctx, "usage", `the kind is one of: ${NEW_KINDS}`, 2);
-    if (isPackage && args.in) return err(ctx, "usage", "a package holds tools, widgets and views, not another package", 2);
+    if (isPackage && args.in) return err(ctx, "usage", "a package holds tools, widgets, views and themes, not another package", 2);
     const name = String(args.name);
     if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(name) || name.includes("--")) return err(ctx, "bad_name", `"${name}" is not a name: lowercase letters, digits and single dashes`);
     let pkg: PackageFolder | null = null;
@@ -398,7 +404,7 @@ const newCmd = defineCommand({
     if (!k) {
       const id = `@${owner}/${name}`;
       try { await writeStarter(dir, packageStarter(owner, name)); } catch (e) { return fail(ctx, e, "new_failed"); }
-      const next = [...KINDS.map((x) => `hive plugins new ${x.kind} <name> --in ${shown}`), `hive plugins add <folder> --to ${shown}`];
+      const next = [...[...KINDS, THEME].map((x) => `hive plugins new ${x.kind} <name> --in ${shown}`), `hive plugins add <folder> --to ${shown}`];
       return ok(ctx, { kind: PACKAGE.kind, id, dir, next, prompt: path.join(dir, "PROMPT.md"), guide: PACKAGE.guide }, () => [
         `started package ${id} in ${dir}; it holds nothing yet`, "Add its members:", steps(next),
         `Want an agent to build it? Write your idea into ${shown}/PROMPT.md and hand it that file.`,
@@ -424,6 +430,52 @@ const newCmd = defineCommand({
   },
 });
 
+/** `hive plugins new theme <name> --in <package>`: the look in use as a theme.json in the package,
+ *  named in its manifest. A theme is data, so there is nothing to build: check it, install the
+ *  package, and preview it with `hive theme use`. */
+async function newTheme(ctx: { json: boolean }, a: { name: string; in?: string; dir?: string }) {
+  if (!a.in) return err(ctx, "usage", "a theme comes in a package: `hive plugins new theme <name> --in <package folder>` (start one with `hive plugins new package <name>`)", 2);
+  if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(a.name) || a.name.includes("--")) return err(ctx, "bad_name", `"${a.name}" is not a name: lowercase letters, digits and single dashes`);
+  let pkg: PackageFolder;
+  try { pkg = await readPackageFolder(a.in); } catch (e) { return fail(ctx, e, "not_a_package"); }
+  const dir = a.dir ? path.resolve(a.dir) : path.join(pkg.dir, memberFormat(THEME.kind)!.list, a.name);
+  if (!dir.startsWith(pkg.dir + path.sep)) return err(ctx, "usage", `--dir must be inside the package, ${pkg.dir}`, 2);
+  if (path.basename(dir) !== a.name) return err(ctx, "usage", `a theme's folder is its name: --dir must end in /${a.name}`, 2);
+  if (await notEmpty(dir)) return err(ctx, "exists", `${dir} is already there and not an empty folder`);
+  try {
+    await writeStarter(dir, themeStarter(a.name, await readSettings()));
+    await addEntry(pkg, THEME, path.relative(pkg.dir, dir).split(path.sep).join("/"));
+  } catch (e) { return fail(ctx, e, "new_failed"); }
+  const id = `${pkg.id}/${a.name}`;
+  const at = shownFrom(pkg.dir);
+  const next = [`edit ${shownFrom(path.join(dir, "theme.json"))}`, `hive plugins check ${at}`, `hive plugins install ${at}`, `hive theme use ${id}    # see it; \`hive theme revert\` goes back`];
+  return ok(ctx, { kind: THEME.kind, id, dir, package: pkg.id, next, guide: THEME.guide }, () => [
+    `started theme ${id} in ${dir}, a member of ${pkg.id}, from the look in use`, "Next:", steps(next),
+    "Add fonts (.woff2), a wallpaper picture and sounds (.ogg or .mp3) beside theme.json and name them in it.",
+    `Guide: ${THEME.guide}`,
+  ].join("\n"));
+}
+
+/** `hive plugins add <theme folder> --to <package>`: a theme is read as the package will hold it
+ *  (its id is its folder in the package), copied to `themes/<folder>` when it is outside, and
+ *  named in the manifest. */
+async function addTheme(ctx: { json: boolean }, pkg: PackageFolder, from: string) {
+  const inside = from.startsWith(pkg.dir + path.sep);
+  const dir = inside ? from : path.join(pkg.dir, memberFormat(THEME.kind)!.list, path.basename(from));
+  const { id } = await readThemeFolder(from, pkg.id);
+  if (!inside && fs.existsSync(dir)) return err(ctx, "exists", `${dir} is already there: move the theme into the package yourself, or remove that folder`);
+  const entry = path.relative(pkg.dir, dir).split(path.sep).join("/");
+  const list = (pkg.manifest[memberFormat(THEME.kind)!.list] as Array<{ path?: string }> | undefined) ?? [];
+  if (list.some((e) => e.path === entry)) return err(ctx, "already_a_member", `${PACKAGE_MANIFEST} already names ${entry}`);
+  if (!inside) copyMember(from, dir);
+  await addEntry(pkg, THEME, entry);
+  const at = shownFrom(pkg.dir);
+  const next = [`hive plugins check ${at}`, `hive plugins install ${at}`, `hive theme use ${id}    # see it; \`hive theme revert\` goes back`];
+  return ok(ctx, { package: pkg.id, kind: THEME.kind, id, path: entry, copied: !inside, dir, next }, () => [
+    `added theme ${id} to ${pkg.id} as ${entry}${inside ? "" : `, copied from ${from}`}`, "Next:", steps(next),
+  ].join("\n"));
+}
+
 /** Copy a plugin's folder, without what a build or a checkout leaves beside it. */
 const copyMember = (from: string, to: string) =>
   fs.cpSync(from, to, { recursive: true, errorOnExist: true, filter: (f) => !["node_modules", ".git"].includes(path.basename(f)) });
@@ -441,8 +493,9 @@ const addCmd = defineCommand({
       const pkg = await readPackageFolder(String(args.to));
       const from = path.resolve(String(args.folder));
       if (!fs.existsSync(from) || !fs.statSync(from).isDirectory()) return err(ctx, "not_found", `there is no folder ${from}`);
+      if (fs.existsSync(path.join(from, THEME_MANIFEST))) return await addTheme(ctx, pkg, from);
       const k = KINDS.find((x) => fs.existsSync(path.join(from, x.manifest)));
-      if (!k) return err(ctx, "not_a_plugin", `${from} holds no ${KINDS.map((x) => x.manifest).join(", ")}`);
+      if (!k) return err(ctx, "not_a_plugin", `${from} holds no ${[...KINDS.map((x) => x.manifest), THEME_MANIFEST].join(", ")}`);
       const id = await memberId(k, from);
       if (!id.startsWith(`@${pkg.owner}/`)) return err(ctx, "not_the_owner", `${k.noun} ${id} is not @${pkg.owner}'s: every member of ${pkg.id} is @${pkg.owner}/<name>. Give it an id of @${pkg.owner}/<name> in its ${k.manifest} first`);
       const inside = from.startsWith(pkg.dir + path.sep);
@@ -498,6 +551,7 @@ const installCmd = defineCommand({
         ...installed.tookOver.map((t) => `It took over ${t}, installed on its own before; what you set it to is kept.`),
         dryRun ? (record.on ? "It would be on." : "It would be off until you switch it on.")
           : record.on ? "It is on." : installed.changes.some((c) => c.switchesOff) && installed.replaced ? `It is off: a change above needs you to trust it again. \`hive plugins rollback ${record.id}\` puts back ${installed.replaced.version}.` : "It is off until you switch it on, if you trust who wrote it.",
+        ...(report.startView && !dryRun ? [startViewLine(report.startView, record.on)] : []),
         ...(dryRun ? [] : ["Next:", steps(report.next)]),
       ].join("\n"));
     } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
@@ -507,12 +561,26 @@ const installCmd = defineCommand({
 /** What `install` says it did, for a person and as --json. */
 function installReport(installed: InstalledPackage, app: AppAnswer) {
   const { record } = installed;
-  const next = [...(record.on ? [] : [`hive plugins enable ${record.members.length === 1 ? `${record.members[0]!.kind}:${record.members[0]!.id}` : record.id}`]), ...installed.members.flatMap((m) => kindNamed(m.kind)?.see(m.id) ?? [])];
+  const opens = installed.members.find((m) => m.kind === "view" && m.id === installed.startView);
+  const startView = opens ? { id: opens.id, name: opens.name, open: `hive ctl plugin open view:${opens.id}` } : null;
+  // The view it opens with comes first: switching to it is what installing it was for.
+  const sees = installed.members.flatMap((m) => (m.kind === THEME.kind ? [`hive theme use ${m.id}`] : kindNamed(m.kind)?.see(m.id) ?? []));
+  const next = [...(record.on ? [] : [`hive plugins enable ${record.members.length === 1 ? `${record.members[0]!.kind}:${record.members[0]!.id}` : record.id}`]),
+    ...(startView ? [startView.open, ...sees.filter((c) => c !== startView.open)] : sees)];
   return {
     id: record.id, name: record.name, version: record.version, digest: record.digest, on: record.on,
     members: installed.members.map((m) => ({ kind: m.kind, id: m.id, name: m.name, dir: m.dir, permissions: m.permissions })),
-    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, changes: installed.changes, ...app, next,
+    replaced: installed.replaced?.version ?? null, tookOver: installed.tookOver, changes: installed.changes, startView, ...app, next,
   };
+}
+
+/** The view a package opens with, and how to get there. The CLI never switches the person's view
+ *  itself (an agent may be the one installing): the app offers it, and the command switches now. */
+function startViewLine(view: { name: string; open: string }, on: boolean): string {
+  // The app offers each view once (start-view-offers.ts), so this says so rather than promise one.
+  return on
+    ? `It opens with the view ${view.name}. The app offers to switch to it, unless it has offered that view before; \`${view.open}\` switches the running app now.`
+    : `It opens with the view ${view.name} once it is on. The app offers to switch to it then, unless it has offered that view before; \`${view.open}\` switches the running app.`;
 }
 
 /** One member's change, in a sentence. */

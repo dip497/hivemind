@@ -153,11 +153,14 @@ test("Appearance contains the former drawer controls and mounts terminal colours
   await expect(pane.getByLabel("Blur", { exact: true })).toBeVisible();
   await pane.locator("summary").filter({ hasText: "Background" }).click();
   await page.screenshot({ path: "/tmp/hivemind-settings-appearance-clean.png" });
-  await expect(pane.locator('input[type="color"]')).toHaveCount(0);
+  // The accent's own colour well is always there; the terminal colours' wells only while open.
+  const terminalWells = pane.locator('input[type="color"]:not([data-accent-custom])');
+  await expect(terminalWells).toHaveCount(0);
   await pane.locator("summary").filter({ hasText: "Terminal colours" }).click();
   await expect(pane.getByLabel("background", { exact: true })).toBeVisible();
+  await expect(terminalWells).not.toHaveCount(0);
   await pane.locator("summary").filter({ hasText: "Terminal colours" }).click();
-  await expect(pane.locator('input[type="color"]')).toHaveCount(0);
+  await expect(terminalWells).toHaveCount(0);
   await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind/settings.json"), "utf8")).appearance.wallpaper.kind).toBe("aurora");
   await pane.getByRole("heading", { name: "Appearance", exact: true }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/tmp/hivemind-settings-appearance.png" });

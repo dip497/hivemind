@@ -9,6 +9,7 @@ import { resolveViewId, useViews } from "./workspace-view";
 import { setViewMode, useViewMode } from "./view-mode-store";
 import { AppControls } from "./app-controls";
 import { openAdd } from "./add-dialog";
+import { actionKey } from "../shortcut";
 
 export interface StandardToolbarProps {
   actions: readonly ToolbarAction[];
@@ -89,7 +90,7 @@ function ViewSwitch({ compact }: { compact: boolean }) {
   if (views.length < 2 || !active) return null;
   return <div ref={root} className="relative ml-1 flex items-center border-l border-[var(--color-border)] pl-1">
     <Button ref={trigger} variant="ghost" onClick={() => setOpen((value) => !value)} aria-label="switch view" aria-expanded={open}
-      data-view-switch title="Switch view  (⌘E)">
+      data-view-switch title={`Switch view  (${actionKey("toggle-view-mode")})`}>
       <active.icon /><span className="text-label">{active.label}</span><ChevronDown />
     </Button>
     {open && <div role="menu" className={`hm-island absolute right-0 z-30 min-w-[180px] rounded-lg p-1 ${compact ? "bottom-full mb-1" : "top-full mt-1"}`}>

@@ -51,7 +51,8 @@
     const registration = await navigator.serviceWorker.register("sw.js", { scope: "./v/" });
     await activated(registration);
     frame = document.createElement("iframe");
-    frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
+    // Forms fire their submit event; the view's CSP (form-action 'none') sends them nowhere.
+    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
     frame.setAttribute("data-view", "");
     frame.addEventListener("load", () => {
       let home = false;

@@ -5,6 +5,7 @@
  * Electron-free.
  */
 import fs from "node:fs";
+import { oneLine } from "@hivemind/agent-host/one-line";
 import { transcriptEntries, type AgentTranscript, type TranscriptEntry } from "@hivemind/agents/node";
 import type { ConversationEntry as Entry, ToolAsked, ToolUse } from "@hivemind/workspace-api/agents";
 
@@ -19,16 +20,21 @@ export interface Said {
 export const TAIL_BYTES = 1024 * 1024;
 export const TAIL_ENTRIES = 200;
 
+/** The complete lines of `got` bytes read from byte `start` of a file, and where the last of them
+ *  ends: what is after its last line break is a line still being written. */
+function completeLines(bytes: Buffer, got: number, start: number): { lines: string[]; through: number } {
+  const last = bytes.subarray(0, got).lastIndexOf(0x0a);
+  if (last < 0) return { lines: [], through: start };
+  return { lines: bytes.subarray(0, last).toString("utf8").split("\n").filter(Boolean), through: start + last + 1 };
+}
+
 /** The complete lines of `file` from `start` to `end` (bytes), and where the last of them ends. */
 function linesBetween(file: string, start: number, end: number): { lines: string[]; through: number } {
   if (end <= start) return { lines: [], through: start };
   const fd = fs.openSync(file, "r");
   try {
     const bytes = Buffer.alloc(end - start);
-    const got = fs.readSync(fd, bytes, 0, bytes.length, start);
-    const last = bytes.subarray(0, got).lastIndexOf(0x0a);
-    if (last < 0) return { lines: [], through: start };
-    return { lines: bytes.subarray(0, last).toString("utf8").split("\n").filter(Boolean), through: start + last + 1 };
+    return completeLines(bytes, fs.readSync(fd, bytes, 0, bytes.length, start), start);
   } finally {
     fs.closeSync(fd);
   }
@@ -57,26 +63,61 @@ export function readConversation(file: string, format: AgentTranscript, cursor?:
  *  it says nothing, up to the most. */
 const LAST_BYTES = 64 * 1024;
 const LAST_BYTES_MAX = 4 * 1024 * 1024;
-/** The longest last thing said told. */
-const LAST_MAX = 160;
+/** The most read after a cursor: past it, what was written since is read as from no cursor, from
+ *  the end, as an agent's last words are at the end and a gap of megabytes parsed whole would hold
+ *  the thread that asked (`lastSaidSince`). */
+export const SINCE_BYTES_MAX = 1024 * 1024;
+/** Where one line said ends and the next begins. */
+const LINE_BREAKS = /[\n\v\f\r\u2028\u2029]/;
 
-/** The last thing said in the session file `file`, read as `format` maps it, in a line: the first
- *  line of what was last said, or the tool last used and what it is about; undefined when the last
- *  4 MiB say neither. An agent may write records for itself after its last words (each resume
- *  does), so the end is read wider until it says something. */
-export function lastSaid(file: string, format: AgentTranscript): string | undefined {
-  let size: number;
-  try { size = fs.statSync(file).size; } catch { return undefined; }
-  for (let bytes = LAST_BYTES; ; bytes *= 4) {
-    const from = Math.max(0, size - bytes);
-    const { lines } = linesBetween(file, from, size);
-    const entries = transcriptEntries(format, from === 0 ? lines : lines.slice(1));
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const e = entries[i]!;
-      const line = "text" in e ? e.text.split("\n").map((l) => l.trim()).find(Boolean) : "tool" in e ? [e.tool.name, e.tool.about].filter(Boolean).join(" · ") : undefined;
-      if (line) return [...line].slice(0, LAST_MAX).join("");
+/** What the last thing said is in a line, of `entries`: the first line of what was last said, or
+ *  the tool last used and what it is about; undefined when they say neither. Made one line of plain
+ *  text (one-line.ts): what an agent wrote reaches a tile's line, Home and `hive ctl agents`. */
+function lastLineOf(entries: TranscriptEntry[]): string | undefined {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!;
+    const line = "text" in e ? e.text.split(LINE_BREAKS).map(oneLine).find(Boolean) : "tool" in e ? oneLine([e.tool.name, e.tool.about].filter(Boolean).join(" · ")) : undefined;
+    if (line) return line;
+  }
+  return undefined;
+}
+
+/** The complete lines of the file open as `fd` from `start` to `end` (bytes), and where the last of
+ *  them ends: as `linesBetween`, off the thread that asks. */
+async function linesBetweenAsync(fd: fs.promises.FileHandle, start: number, end: number): Promise<{ lines: string[]; through: number }> {
+  if (end <= start) return { lines: [], through: start };
+  const bytes = Buffer.alloc(end - start);
+  const { bytesRead } = await fd.read(bytes, 0, bytes.length, start);
+  return completeLines(bytes, bytesRead, start);
+}
+
+/** What the session file `file` last said, read as `format` maps it, in a line (`lastLineOf`),
+ *  and where what was read of it ends (`cursor`, the end of its last whole line; none while it is
+ *  not there). From a cursor an earlier read gave, only what was written after it is read, and
+ *  `line` is undefined when that says nothing (what was said before stands); from none, once the
+ *  file is shorter than the cursor (written again), or once more than 1 MiB was written after it,
+ *  the end is read wider until it says something, to its last 4 MiB, as an agent may write records
+ *  for itself after its last words (each resume does). Asynchronous, so a session file of megabytes
+ *  is never read on the thread that asked. */
+export async function lastSaidSince(file: string, format: AgentTranscript, cursor?: number): Promise<{ line: string | undefined; cursor: number | undefined }> {
+  let fd: fs.promises.FileHandle;
+  // Not there (yet): where it was read to stands, so a file that comes is read from its end.
+  try { fd = await fs.promises.open(file, "r"); } catch { return { line: undefined, cursor }; }
+  try {
+    const { size } = await fd.stat();
+    if (cursor !== undefined && cursor <= size && size - cursor <= SINCE_BYTES_MAX) {
+      const { lines, through } = await linesBetweenAsync(fd, cursor, size);
+      return { line: lastLineOf(transcriptEntries(format, lines)), cursor: through };
     }
-    if (from === 0 || bytes >= LAST_BYTES_MAX) return undefined;
+    for (let bytes = LAST_BYTES; ; bytes *= 4) {
+      const from = Math.max(0, size - bytes);
+      const { lines, through } = await linesBetweenAsync(fd, from, size);
+      // Read from inside the file, the first line is a piece of one: never a record.
+      const line = lastLineOf(transcriptEntries(format, from === 0 ? lines : lines.slice(1)));
+      if (line !== undefined || from === 0 || bytes >= LAST_BYTES_MAX) return { line, cursor: through };
+    }
+  } finally {
+    await fd.close();
   }
 }
 

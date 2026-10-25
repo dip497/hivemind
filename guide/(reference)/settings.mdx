@@ -41,7 +41,24 @@ can do**.
 
 Everything is one file you own. The app and the `hive` command both read and write it, and it is
 checked each time. A value out of range is set to the nearest allowed one; an unknown value falls
-back to its default.
+back to its default. `hive config set` refuses a path that is not a setting, and lists the
+settings there. It also refuses a `<view>` that is not a view's id, a `<kind>:<id>` that is not
+a plugin's, and a key under either that is not one of its settings. A plugin's option ids are
+checked only as ids there; `hive plugins set` checks them against the plugin's own settings.
+
+A change writes only the settings it changes. Everything else in the file stays as it is, so a
+newer version and this one can share the file:
+
+- A key this version does not know stays, wherever it is: at the top of the file, in a section,
+  or in a group such as `appearance.glass`.
+- A value this version does not know, such as a newer accent's, mode's or wallpaper's id, reads
+  as the default here and stays in the file until you set that setting here. A preset's id is
+  kept as written: one this version does not know shows as Custom.
+- Choosing a preset writes its colours, accent and mode, whatever they read as here. Importing a
+  theme writes only the keys its file names.
+- `v` is the file's format. A file from a newer version is read for the settings this version
+  knows, and keeps its `v`; `hive config get` says so. A file without `v` is read as format 1.
+  `v` is not a setting: the app keeps it.
 
 | | Where |
 |---|---|
@@ -60,12 +77,12 @@ hive config set views.layers.groupBy '"status"'
 
 | Path | Default | Allowed |
 |---|---|---|
-| `appearance.preset` | `signal` | `signal`, `ubuntu`, `dracula`, `nord`, `solarized-dark`, `one-dark` (set with `hive theme use`) |
-| `appearance.mode` | from the preset | `dark`, `light` |
-| `appearance.accent` | from the preset | `graphite`, `indigo`, `volt`, `ember`, `ice`, `pulse`, `rose`, `emerald`, `amber`, `violet` |
-| `appearance.radius` | `12` | 0 to 24 (px) |
-| `appearance.uiFont` | `system-ui, sans-serif` | a CSS font list |
-| `appearance.monoFont` | `"JetBrains Mono", monospace` | a CSS font list |
+| `appearance.preset` | `signal` | `signal`, `clean`, `clean-light`, `ubuntu`, `dracula`, `nord`, `solarized-dark`, `one-dark` (set with `hive theme use`), or `theme` while a theme from a package is applied |
+| `appearance.mode` | from the preset | `dark`, `light`. Set it with a preset: a light mode needs a light palette, such as `clean-light`'s |
+| `appearance.accent` | from the preset | `graphite`, `indigo`, `volt`, `ember`, `ice`, `pulse`, `rose`, `emerald`, `amber`, `violet`. A colour of your own goes in `appearanceExtra.accent`, which wins over it |
+| `appearance.radius` | `12` | 0 to 24 (px): **Corners** |
+| `appearance.uiFont` | the system's own interface font | a CSS font list: **Interface font** (System, Geist, a theme's, or your own) |
+| `appearance.monoFont` | `"JetBrains Mono", monospace` | a CSS font list: **Code font** |
 | `appearance.glass.enabled` | `true` | **Glass panels** |
 | `appearance.glass.opacity` | `0.72` | 0.30 to 0.95: **Panel opacity** |
 | `appearance.glass.blur` | `18` | 8 to 24 (px): **Blur** |
@@ -78,7 +95,24 @@ hive config set views.layers.groupBy '"status"'
 | `appearance.palette`, `appearance.terminal` | from the preset | CSS colours; set them with **Terminal colours** or a theme file |
 | `appearance.overlayMedia` | none | set with **Add overlay** |
 
-Fonts and corner radius have no control on a page. Set them here or with `hive config set`.
+A view you installed is told your fonts. It draws a theme's fonts, the fonts it ships and the
+fonts your computer has ([how](/plugin-settings#the-apps-colours)).
+
+## appearanceExtra
+
+The parts of the look an older Hivemind does not know. They sit in their own key, so a write by an
+older app or `hive` keeps them, and `appearance.accent` keeps a built-in id that older builds read.
+Each part is set whole.
+
+| Path | Default | Allowed |
+|---|---|---|
+| `appearanceExtra.accent` | none | `{ "brand", "accent", "working"? }` colours (`#rrggbb`, `rgb()` or `oklch()`): your own **Accent**. Picking a built-in accent or a preset, or `hive config set appearance.accent`, removes it |
+| `appearanceExtra.fontFaces` | none | `{ "ui"?, "mono"? }`, the font files a theme brought. Set by applying a theme; one is read only while `appearance.uiFont` or `appearance.monoFont` names its family, so picking another font lets its file go |
+| `appearanceExtra.theme` | none | the theme applied, its version, and your look before it. Set by **Apply** and `hive theme use`, cleared by **Revert to previous look**, `hive theme revert` or a preset |
+
+```bash
+hive config set appearanceExtra.accent '{"brand":"#c08552","accent":"#d9a273"}'
+```
 
 ## views
 
@@ -91,6 +125,7 @@ Fonts and corner radius have no control on a page. Set them here or with `hive c
 | `views.layers.sortBy` | `canvas` | `canvas`, `activity`, `name` |
 | `views.layers.recentsBy` | `agent` | `agent`, `project`, `date`, `none` |
 | `views.layers.machines` | every one | `local`, or a machine's id |
+| `views.layers.lines` | `all` | `all`, `needs-you`, `off`: which rows show a second line ([Know who is waiting](/know-who-is-waiting#read-what-each-row-says)) |
 | `views.chrome.<view>.island` | the view's own | `top`, `bottom`, `hidden`, `off`: where the toolbar sits in that view |
 | `views.toolbars.<view>` | the defaults | which toolbar buttons, in which order |
 
@@ -110,6 +145,26 @@ The `views.layers` values are what the Layers panel's **View** menu sets.
 | Path | Means |
 |---|---|
 | `plugins.state.<kind>:<id>` | whether that plugin is on, and the values of its settings. Change them on its page, or with `hive plugins enable`, `disable`, `set` and `reset`. |
+
+## notifications
+
+Change them on **Settings → Notifications** ([Know who is waiting](/know-who-is-waiting)), or with
+`hive notifications set` or `hive config set`. Both refuse a path not listed here and a value not of
+its kind. Only the person changes them: an agent is refused.
+
+| Path | Default | Means |
+|---|---|---|
+| `notifications.enabled` | `true` | every toast, popup and sound |
+| `notifications.kinds.needs`, `.done`, `.error` | `true` | which changes notify you: needs you, finished, failed |
+| `notifications.inApp` | `true` | toasts in the window, and what a screen reader says |
+| `notifications.osPopups` | `true` | your system's popups, while no Hivemind window has the focus |
+| `notifications.popupText` | `false` | a popup says what the agent waits on, or its terminal's last line |
+| `notifications.sound` | `false` | play a sound |
+| `notifications.sounds.needs` | `true` | a sound when an agent needs you |
+| `notifications.sounds.done`, `.error` | `false` | a sound when an agent finishes, or fails |
+| `notifications.volume` | `0.6` | 0 to 1 |
+| `notifications.dnd.enabled` | `false` | Do Not Disturb: mutes finished and failed (toasts, popups, sounds, the spoken line), never needs you |
+| `notifications.dnd.start`, `.end` | `22:00`, `07:00` | its times, as `HH:MM` in your local time |
 
 ## profile, network, browserApp, quit
 

@@ -5,6 +5,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { AppWindow, FolderOpen, History, LogIn, LogOut, Power, Server, Users } from "./components/icons";
 import { Dialog, DialogContent, DialogTitle } from "./components/ui/dialog";
 import { MenuItem } from "./components/ui/menu-item";
+import { actionKey } from "./shortcut";
 // Joining loads when its page is opened.
 const JoinForm = lazy(() => import("./multiplayer/join-form").then((m) => ({ default: m.JoinForm })));
 
@@ -101,7 +102,7 @@ export function RecentProjects({ open, joining: joinFirst = false, recents, curr
           <div className="my-1 border-t border-[var(--color-line)]" />
           <MenuItem autoFocus={others.length === 0} onClick={() => { onClose(); onBrowse(); }}>
             <FolderOpen /><span className="flex-1">Open folder…</span>
-            <kbd className="font-mono text-count text-[var(--color-fg2)]">Ctrl O</kbd>
+            <kbd className="font-mono text-count text-[var(--color-fg2)]">{actionKey("open-folder")}</kbd>
           </MenuItem>
           <MenuItem data-new-window onClick={() => { onClose(); onNewWindow(); }}>
             <AppWindow /><span className="flex-1">New window</span>
@@ -114,7 +115,7 @@ export function RecentProjects({ open, joining: joinFirst = false, recents, curr
               <div className="my-1 border-t border-[var(--color-line)]" />
               <MenuItem data-quit onClick={() => { onClose(); void window.hive.quit?.(); }}>
                 <LogOut /><span className="flex-1">Quit</span>
-                <kbd className="font-mono text-count text-[var(--color-fg2)]">{window.hive.platform === "darwin" ? "⌘Q" : "Ctrl Q"}</kbd>
+                <kbd className="font-mono text-count text-[var(--color-fg2)]">{actionKey("quit")}</kbd>
               </MenuItem>
               <MenuItem data-quit-stop-agents onClick={() => { onClose(); void window.hive.quitAndStopEverything?.(); }}>
                 <Power /><span className="flex-1">Quit and stop agents</span>

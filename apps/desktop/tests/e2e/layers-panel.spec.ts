@@ -8,6 +8,8 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { PRESETS } from "@hivemind/core/settings-schema";
+import { contrastRatio } from "@hivemind/core/css-color";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-layers-"));
 const repo = path.join(root, "repo");
@@ -239,4 +241,64 @@ test("joining a shared workspace is in the panel's title menu, and opens on the 
   await expect(page.getByRole("dialog")).toContainText("Join a shared workspace");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("a tile that fails reads failed and not finished: an exit 3 while you look elsewhere, a session that cannot be opened", async () => {
+  const ids = () => page.locator(".react-flow__node-terminal").evaluateAll((ns) => ns.map((n) => n.getAttribute("data-id")!));
+  /** Opens a tile and gives back its id. */
+  const opened = async (open: () => Promise<void>) => {
+    const had = await ids();
+    await open();
+    await expect.poll(async () => (await ids()).length).toBe(had.length + 1);
+    return (await ids()).find((id) => !had.includes(id))!;
+  };
+  const shell = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  const row = (id: string) => panel().locator(`[data-layer-tile="${id}"]`);
+  const header = (id: string) => page.locator(`.react-flow__node-terminal[data-id="${id}"] .hm-term-root`);
+  const failing = await opened(shell);
+  const other = await opened(shell);
+  await row(failing).click();
+  await page.waitForTimeout(300);
+  await page.keyboard.type("sleep 1; exit 3\n");
+  await row(other).click();
+  await expect(row(failing).locator('[data-layer-status="failed"]')).toBeVisible({ timeout: 15_000 });
+  await expect(header(failing).locator('[data-status-look="failed"]')).toHaveCount(1);
+  await expect(row(failing).locator("[data-layer-unread]")).toHaveCount(0);
+  // A session that has ended, opened again: there is no exit code to say it failed.
+  const frameId = await page.locator(".react-flow__node-frame").first().getAttribute("data-id");
+  const gone = await opened(() => page.evaluate((frameId) => window.dispatchEvent(new CustomEvent("hivemind:open-session", {
+    detail: { frameId, session: { id: "no-such-session", state: "live", cmd: "bash", args: [], cwd: "/", viewers: 0, cols: 80, rows: 24, title: "gone" } },
+  })), frameId));
+  await expect(header(gone).locator('[data-status-look="failed"]')).toHaveCount(1, { timeout: 15_000 });
+  await expect(row(gone).locator('[data-layer-status="failed"]')).toBeVisible();
+
+  // Selected, the failed row's chip still reads: its word at 4.5:1 on its own fill over the row
+  // (tests/unit/status-ink.test.ts holds every preset; this is the real page in three).
+  await row(failing).click();
+  await page.mouse.move(900, 600); // off the row, whose chip hides under the pointer
+  const chip = row(failing).locator('[data-layer-status="failed"]');
+  for (const preset of ["signal", "nord", "clean-light"] as const) {
+    const p = PRESETS[preset]!;
+    for (const [k, v] of [["appearance.palette", p.palette], ["appearance.mode", p.mode], ["appearance.preset", preset]] as const) {
+      await page.evaluate(([k, v]) => window.hive.settingsSet(k as string, v), [k, v] as const);
+    }
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.preset)).toBe(preset);
+    await expect(row(failing)).toHaveAttribute("data-active", "true");
+    await expect(chip).toBeVisible();
+    // The row's colour transition has ended: its surface is opaque again.
+    await expect.poll(() => row(failing).evaluate((el) => getComputedStyle(el).backgroundColor)).not.toMatch(/\/ [\d.]+\)|rgba/);
+    const { word, fill, under, tint } = await chip.evaluate((el) => {
+      // What the screen shows: the row's surface, the chip's tint over it, the word's colour.
+      const c = document.createElement("canvas").getContext("2d")!;
+      const at = (...layers: string[]) => {
+        c.clearRect(0, 0, 1, 1);
+        for (const l of layers) { c.fillStyle = l; c.fillRect(0, 0, 1, 1); }
+        return `rgb(${[...c.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(" ")})`;
+      };
+      const under = getComputedStyle(el.closest("[data-layer-tile]")!).backgroundColor;
+      return { word: at(getComputedStyle(el).color), fill: at(under, getComputedStyle(el).backgroundColor), under, tint: getComputedStyle(el).backgroundColor };
+    });
+    expect({ preset, ratio: contrastRatio(word, fill)! >= 4.5 }, `${preset}: ${word} on ${fill} (${tint} over ${under})`).toEqual({ preset, ratio: true });
+    await page.screenshot({ path: test.info().outputPath(`selected-failed-${preset}.png`) });
+  }
 });

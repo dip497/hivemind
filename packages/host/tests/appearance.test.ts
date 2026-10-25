@@ -10,15 +10,15 @@ import { Intents, type Actor } from "@hivemind/workspace-host/intents";
 import { AuditLog } from "@hivemind/workspace-host/audit-log";
 import { WorkspaceServer, type Connection } from "@hivemind/workspace-api/server";
 import type { EventMessage } from "@hivemind/workspace-api/protocol";
-import { DEFAULT_APPEARANCE, type Appearance } from "@hivemind/core/settings-schema";
+import { DEFAULT_APPEARANCE, DEFAULT_SETTINGS, lookForGuests, type Appearance, type SharedAppearance } from "@hivemind/core/settings-schema";
 import { appearance } from "../src/appearance.ts";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-appearance-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-function host(start: Appearance) {
+function host(start: SharedAppearance) {
   let current = start;
-  let changed: (a: Appearance) => void = () => {};
+  let changed: (a: SharedAppearance) => void = () => {};
   const server: WorkspaceServer = new WorkspaceServer(
     [appearance({ current: () => current, onChange: (l) => { changed = l; }, server: () => server })],
     new Intents(new AuditLog({ file: path.join(tmp, "audit.jsonl") })),
@@ -26,7 +26,7 @@ function host(start: Appearance) {
   const told: EventMessage[] = [];
   const guest: Connection = { actor: { kind: "peer", person: "b".repeat(64), device: "d".repeat(64), access: "view" } as Actor, send: (m) => told.push(m), closed: new AbortController().signal };
   server.connect(guest);
-  const set = (a: Appearance) => { current = a; changed(a); };
+  const set = (a: SharedAppearance) => { current = a; changed(a); };
   return { server, guest, told, set };
 }
 
@@ -50,4 +50,15 @@ test("guests are told when the host's look changes, and not when only what they 
   assert.equal(h.told.length, 1);
   assert.equal(h.told[0]!.event, "appearance.changed");
   assert.deepEqual([(h.told[0]!.params[0] as Appearance).accent, (h.told[0]!.params[0] as Appearance).mode], ["rose", "light"]);
+});
+
+test("a colour of the host's own for the accent reaches guests, and changing it is news", async () => {
+  const wood = { brand: "#b07a4f", accent: "#c99a72" };
+  const h = host(lookForGuests(DEFAULT_SETTINGS));
+  h.set(lookForGuests({ appearance: DEFAULT_APPEARANCE, appearanceExtra: { accent: wood } }));
+  assert.equal(h.told.length, 1);
+  assert.deepEqual((h.told[0]!.params[0] as SharedAppearance).accentCustom, wood);
+  const answer = await h.server.answer("appearance.get", [], h.guest);
+  assert.ok("result" in answer);
+  assert.deepEqual((answer.result as SharedAppearance).accentCustom, wood);
 });

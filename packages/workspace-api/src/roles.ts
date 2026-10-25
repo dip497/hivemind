@@ -46,6 +46,9 @@ const LEAST: Record<string, Role> = {
   "terminal.ack": "view",
   "terminal.detach": "view",
   "terminal.watchActivity": "view",
+  // What a terminal's screen last showed, a line of what watching it shows.
+  "tile.watchLines": "view",
+  "tile.readLines": "view",
   // Seeing what a sleeping agent last showed.
   "terminal.saved": "view",
   // Editing the board is the document's own sync (`doc-sync.ts`), where the host takes only what
@@ -109,7 +112,10 @@ const LEAST: Record<string, Role> = {
  *  the person's own devices included. An agent on this machine keeps them, but joining and serving
  *  a folder: those are the person's, since a tile is kept to its own workspace. */
 const MACHINE = new Set(["view.emit", "plugin.list", "plugin.commands", "plugin.open", "plugin.call", "plugin.close", "tile.focus", "tile.look", "views.rescan", "agents.rescan",
-  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add"]);
+  "widgets.rescan", "tools.rescan", "settings.reload", "host.status", "host.join", "host.add", "notifications.play", "notifications.recentSounds"]);
+
+/** The machine's methods that are the person's alone: an agent's tile is refused them too. */
+const PERSON = new Set(["host.join", "host.add", "notifications.play"]);
 
 /** Why a peer with `access`, or an agent here in `tile`, may not call `method`, in words that name
  *  what works instead. */
@@ -120,13 +126,16 @@ export function refusalOf(who: { access: Access; tile?: string }, method: string
   if (method === "host.add") {
     return "serving a folder as a workspace is the person's, at this machine: run `hive host add <folder>` in a terminal of your own, not from an agent's tile or another device";
   }
+  if (method === "notifications.play") {
+    return "the app's sounds are the person's: an agent may not make their computer chime. Ask them to run `hive notifications play` in a terminal of their own";
+  }
   if (MACHINE.has(method) && who.tile === undefined) return `${method} is this machine's own: ask it at the machine, in its app or with \`hive\` there`;
   return `${method} is not open to your role on this workspace`;
 }
 
 /** Whether a peer with `access`, or an agent here in `tile`, may call `method`. */
 export function mayCall(who: { access: Access; tile?: string }, method: string): boolean {
-  if (MACHINE.has(method)) return who.tile !== undefined && method !== "host.join" && method !== "host.add";
+  if (MACHINE.has(method)) return who.tile !== undefined && !PERSON.has(method);
   if (who.access === "owner") return true;
   const { access } = who;
   const least = Object.hasOwn(LEAST, method) ? LEAST[method] : undefined;

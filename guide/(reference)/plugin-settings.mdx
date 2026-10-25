@@ -1,0 +1,104 @@
+---
+title: "Plugin settings and colours reference"
+sidebarTitle: "Plugin settings"
+description: "Every kind of setting a view, widget or tool can ask for, how to group and hide them, and the colours a view can add for people to change."
+---
+
+A plugin never draws its own settings screen. It lists fields in its manifest, and the app draws
+them the same way everywhere: on the plugin's page in **Settings ▸ Plugins**, in a widget's box, and
+for `hive plugins set`. A view lists them under `"settings"`, a widget under `"options"` and a tool
+plugin under `"settings"`. The app checks every stored value against its field. A view reads them
+as `hm.settings`, a widget as `hive.options`.
+
+## Fields
+
+Each field has an `id` (letters, digits, `-` and `_`, up to 40), a `label`, an optional
+`description`, a `type` and a `default`. A plugin can have up to 30.
+
+| `type` | Drawn as | Extra keys | Value |
+|---|---|---|---|
+| `boolean` | a switch | | `true` or `false` |
+| `number` | a number box | `min`, `max`, `step`; `"slider": true` (needs `min` and `max`) draws a slider | a number, kept between `min` and `max` |
+| `text` | a text box | `maxLength` (up to 2000) | a string |
+| `choice` | a menu | `values` (up to 40), `labels` | one of `values` |
+| `color` | a colour picker and a hex box | | `"#rrggbb"`, or `""` for "as the theme has it" |
+| `multi` | a row of buttons to press | `values`, `labels`, `default` as a list | the values pressed, in the order of `values` |
+| `list` | a box with one item on each line | `maxItems` (up to 50), `maxLength` (up to 200) | a list of one-line strings |
+
+A stored value that no longer fits its field reads as the default. A `multi` value keeps the
+choices it still has and drops the ones a newer version took away.
+
+## Sections and conditions
+
+| Key | What it does |
+|---|---|
+| `"section": "Sky"` | Draws the field under a **Sky** heading, with the other fields of that section, in the order they are declared. Fields without a section come first. |
+| `"showIf": { "field": "sky", "equals": "custom" }` | Shows the field only while the field `sky` has the value `custom`. The field it names comes before it in the list. A field shows only while the field it depends on shows too. |
+
+```json
+"settings": [
+  { "id": "sky", "label": "Sky", "type": "choice", "values": ["clock", "custom"], "section": "Sky" },
+  { "id": "hour", "label": "Hour", "type": "number", "min": 0, "max": 24, "step": 1, "slider": true,
+    "section": "Sky", "showIf": { "field": "sky", "equals": "custom" } },
+  { "id": "days", "label": "Days", "type": "multi", "values": ["mon", "tue", "wed"], "default": ["mon"] },
+  { "id": "harbours", "label": "Harbours", "type": "list" }
+]
+```
+
+## Setting them from the command line
+
+`hive plugins set <plugin> <field> <value>` takes a value as its field does:
+
+| `type` | Type it as |
+|---|---|
+| `boolean` | `true` or `false` |
+| `color` | `#1d4ed8`, or `theme` for the theme's own |
+| `multi`, `list` | `a,b`, or a JSON list when an item holds a comma: `'["north, east", "south"]'` |
+| the rest | as it is |
+
+## A view's own colours
+
+A view can add colours of its own under `"tokens"` in its `hivemind-view.json`. Each one follows
+the theme until the person sets it, and the view paints with `var(--hm-token-<id>)`.
+
+```json
+"tokens": [
+  { "id": "sea", "label": "Sea", "description": "The water between the islands", "dark": "#123a5a", "light": "=info" }
+]
+```
+
+| Key | What it is |
+|---|---|
+| `id` | lowercase letters, digits and dashes, starting with a letter, up to 32 |
+| `label`, `description` | what the person reads on the plugin's page |
+| `dark`, `light` | the colour in each mode: `#rrggbb`, or `=` and one of the app's colours below to follow the theme |
+
+Each token is also one of the view's settings: a `color` field named `token-<id>` under
+**Colours**. So the person sets it on the view's page or with
+`hive plugins set view:<id> token-sea "#00ff88"`, and `theme` puts it back. A view can have up to
+24 tokens, and its own settings cannot use ids starting with `token-`.
+
+Call `applyThemeVars(hm)` and the view's document gets each token as `--hm-token-<id>`, updated as
+the theme or the person's choice changes. A host that does not send tokens (`hm.supports("tokens")`
+is false) leaves them unset, so give each `var()` a fallback:
+`background: var(--hm-token-sea, #123a5a)`.
+
+## The app's colours
+
+`applyThemeVars` also sets the app's own theme on the view's document. A token's `=name` refers to
+one of these colours.
+
+| Colour | `--hm-color-<name>` |
+|---|---|
+| `bg`, `bg2`, `bg3`, `bg4` | the window's background, a panel, a control, a pressed control |
+| `fg`, `fg2`, `fg3` | text, secondary text, faint text |
+| `line`, `line2` | a hairline border, a stronger border |
+| `brand`, `accent` | the app's mark, the person's accent |
+| `err`, `ok`, `warn`, `info` | an error, success, a warning, information |
+
+It also sets `--hm-status-<tone>` for each agent state, `--hm-accent`, `--hm-radius`,
+`--hm-font-ui`, `--hm-font-mono`, `--hm-surface`, `--hm-terminal-bg`, `--hm-glass` and `--hm-mode`.
+
+When the person applies a [theme](/packages#themes) with its own fonts, a host with view protocol
+1.17 (`hm.supports("fontFaces")`) sends the font files and the SDK loads them in the view, so
+`--hm-font-ui` and `--hm-font-mono` draw in them. The view does nothing for it.

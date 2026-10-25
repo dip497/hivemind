@@ -40,7 +40,7 @@ export async function offerToConnect(desktop: Page, inBrowser = false): Promise<
 
 /** The person at `desktop` says the device asking with its offer is theirs. */
 export async function itsMe(desktop: Page, timeout = 30_000): Promise<void> {
-  await desktop.locator(".hm-connect-request").getByRole("button", { name: "It's me — the words match" }).click({ timeout });
+  await desktop.locator("[data-connect-request]").getByRole("button", { name: "It's me — the words match" }).click({ timeout });
 }
 
 /** The phone page `page`, opened at an offer from `desktop`: it connects, the person at the computer

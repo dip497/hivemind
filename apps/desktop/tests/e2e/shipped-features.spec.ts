@@ -4,6 +4,8 @@
 // diff content is deterministic (real changes + a branch base).
 import { test, expect, type Page } from "@playwright/test";
 import { launchWindow, type AppWindow } from "./helpers/window";
+import { reveal } from "./helpers/canvas";
+import { near, readDiff } from "./helpers/diff";
 import { execSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -79,6 +81,22 @@ test("diff tile renders per-file headers with +/- counts and review controls", a
   expect(chrome).toMatch(/2f/);
 });
 
+test("a fullscreen diff keeps the tile's page and its changed rows' tints", async () => {
+  // Fullscreen draws the diff in a panel portalled out of the tile, where nothing the tile set
+  // reaches it; with glass on (the default), the panel is the tile's opaque bg2 too.
+  await openDiff();
+  // Its button shows on hover in the Code tile's bar.
+  await page.getByRole("button", { name: "fullscreen diff" }).first().dispatchEvent("click");
+  const panel = page.locator(".hm-term-fs-panel");
+  await expect.poll(() => readDiff(panel), { timeout: 12_000 }).not.toBeNull();
+  const d = (await readDiff(panel))!;
+  expect(d.bg2[3], "the panel's bg2 is opaque, as a tile's is").toBe(255);
+  expect(near(d.page, d.bg2, 1), `the page ${d.page} is bg2 ${d.bg2}`).toBe(true);
+  expect(near(d.addedRow, d.addedRowWant), `an added row ${d.addedRow} for ${d.addedRowWant}`).toBe(true);
+  await page.getByTitle("Leave fullscreen").dispatchEvent("click");
+  await expect(panel).toHaveCount(0);
+});
+
 test("in-diff search finds line matches and navigates", async () => {
   await openDiff();
   // The search box is collapsed to an icon — open it first.
@@ -120,13 +138,15 @@ test("commit bar stages and commits from the diff", async () => {
   // working mode commit bar present
   const stageAll = page.locator('button[title="stage all changes"]');
   await expect(stageAll).toBeVisible({ timeout: 4_000 });
+  // The tile opens at 100%: its commit bar can sit below the window, out of reach until zoomed out.
+  const commitBtn = page.locator('button', { hasText: /^commit$/ });
+  await reveal(page, commitBtn);
   await stageAll.click();
   await page.waitForTimeout(800);
   // message + commit
   const msg = page.locator('input[placeholder*="commit message"]');
   await expect(msg).toBeEnabled({ timeout: 4_000 });
   await msg.fill("test: commit from diff bar");
-  const commitBtn = page.locator('button', { hasText: /^commit$/ });
   await commitBtn.click();
   // after commit the working tree is clean (no changed files) -> empty state
   await page.waitForFunction(

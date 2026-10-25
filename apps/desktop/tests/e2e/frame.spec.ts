@@ -102,22 +102,30 @@ test("frame arrange menu offers Columns / Rows / Grid", async () => {
   await page.keyboard.press("Escape");
 });
 
-test("over a wallpaper (glass), a frame's name line stays one material with the frame: no bar of its own", async () => {
+test("over a wallpaper (glass), a frame's name line sits on the panel colour, and frosted tool content does not make it a tile's title bar", async () => {
   const label = page.locator(".react-flow__node-frame").first().locator("[data-frame-label]");
   await expect(label).toBeVisible();
+  // A fresh profile draws its wallpaper behind glass.
+  expect(await page.evaluate(() => ["glass-on", "wallpaper-drawn"].filter((c) => document.documentElement.classList.contains(c)))).toEqual(["glass-on", "wallpaper-drawn"]);
+  const bgOf = (className: string, style = "") => page.evaluate(([c, s]) => {
+    const el = document.createElement("div");
+    el.className = c;
+    el.style.cssText = s;
+    document.body.append(el);
+    const bg = getComputedStyle(el).backgroundColor;
+    el.remove();
+    return bg;
+  }, [className, style] as const);
+  // Over a picture the name reads on the palette's bg2, solid under glass too (42f19a0).
+  const panel = await bgOf("", "background: var(--surface-2)");
+  expect(await label.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(panel);
   await page.evaluate(() => document.documentElement.classList.add("content-glass"));
   try {
-    expect(await label.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
-    // A tile's title bar is still frosted there.
-    const bar = await page.evaluate(() => {
-      const el = document.createElement("div");
-      el.className = "tile-drag-handle";
-      document.body.append(el);
-      const bg = getComputedStyle(el).backgroundColor;
-      el.remove();
-      return bg;
-    });
+    expect(await label.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(panel);
+    // A tile's title bar is frosted there, which a frame's name line is not.
+    const bar = await bgOf("tile-drag-handle");
     expect(bar).not.toBe("rgba(0, 0, 0, 0)");
+    expect(bar).not.toBe(panel);
   } finally {
     await page.evaluate(() => document.documentElement.classList.remove("content-glass"));
   }

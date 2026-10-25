@@ -38,7 +38,7 @@ describe("hive plugins, writing a package", () => {
 
     const r = run("check", "kit", "--json");
     expect([r.code, (r.json as Report)]).toEqual([0, expect.objectContaining({
-      id: "@ada/kit", problems: [], steps: { manifest: "ok", "tool tools/prs": "ok", "view views/board/dist": "ok" },
+      id: "@ada/kit", problems: [], steps: { manifest: "ok", "tool tools/prs": "ok", "view views/board/dist": "ok", hub: "ok" },
     })]);
 
     const installed = run("install", "./kit", "--json");
@@ -67,6 +67,43 @@ describe("hive plugins, writing a package", () => {
       expect.objectContaining({ step: "manifest", file: "views/owl/hivemind-view.json", line: colourLine, member: "views/owl/dist", message: 'unknown field "colour"' }),
     ]);
   }, 120_000);
+
+  test("a new package names no empty member list, which a released app's manifest check refuses", () => {
+    expect(run("new", "package", "kit", "--owner", "ada").code).toBe(0);
+    const m = JSON.parse(fs.readFileSync(manifest(), "utf8"));
+    expect(Object.keys(m)).toEqual(["apiVersion", "id", "name", "version"]);
+    // The first member of a kind writes its list.
+    run("new", "widget", "dog", "--in", "kit");
+    expect(JSON.parse(fs.readFileSync(manifest(), "utf8")).widgets).toEqual([{ path: "widgets/dog" }]);
+  }, 60_000);
+
+  test("add takes a theme folder: copied to themes/<folder>, named in the manifest, and read as the package will hold it", () => {
+    run("new", "package", "kit", "--owner", "ada");
+    run("new", "package", "scratch", "--owner", "ada");
+    expect(run("new", "theme", "harbour", "--in", "scratch").code).toBe(0);
+    const r = run("add", "scratch/themes/harbour", "--to", "kit", "--json");
+    expect([r.code, r.json]).toEqual([0, expect.objectContaining({ kind: "theme", id: "@ada/kit/harbour", path: "themes/harbour", copied: true })]);
+    expect(fs.existsSync(path.join(tmp, "kit", "themes", "harbour", "theme.json"))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(manifest(), "utf8")).themes).toEqual([{ path: "themes/harbour" }]);
+    expect((run("check", "kit", "--json").json as Report).steps).toEqual({ manifest: "ok", "theme themes/harbour": "ok", hub: "ok" });
+    // A folder that is not a theme's name is refused before anything is copied.
+    fs.cpSync(path.join(tmp, "scratch", "themes", "harbour"), path.join(tmp, "Bad_Name"), { recursive: true });
+    const bad = run("add", "Bad_Name", "--to", "kit", "--json");
+    expect([bad.code, JSON.stringify(bad.json)]).toEqual([1, expect.stringContaining("named like its id")]);
+    expect(fs.existsSync(path.join(tmp, "kit", "themes", "Bad_Name"))).toBe(false);
+  }, 60_000);
+
+  test("check sizes the package as HiveHub does: a file over 2 MB in a member's folder is refused there", () => {
+    run("new", "package", "kit", "--owner", "ada");
+    run("new", "widget", "dog", "--in", "kit");
+    fs.writeFileSync(path.join(tmp, "kit", "widgets", "dog", "bark.webm"), new Uint8Array(3 << 20));
+    // Beside the members, not installed: not counted.
+    fs.writeFileSync(path.join(tmp, "kit", "draft.webm"), new Uint8Array(3 << 20));
+    const r = run("check", "kit", "--json");
+    expect([r.code, (r.json as Report).steps.hub, (r.json as Report).problems]).toEqual([1, "failed", [{ step: "hub", message: "HiveHub would refuse it: widgets/dog/bark.webm is larger than 2 MB" }]]);
+    fs.rmSync(path.join(tmp, "kit", "widgets", "dog", "bark.webm"));
+    expect(run("check", "kit", "--json").code).toBe(0);
+  }, 60_000);
 
   test("add refuses a plugin with another owner's id, and leaves the package as it was", () => {
     run("new", "package", "kit", "--owner", "ada");

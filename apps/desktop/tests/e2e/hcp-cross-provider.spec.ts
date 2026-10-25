@@ -227,9 +227,13 @@ test("a busy worker closed in the Windows view ends, and a read waiting on its r
   await page.waitForTimeout(1_500); // the read is waiting before the tile goes
   const toView = (mode: string) => page.evaluate((m) => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: m } })), mode);
   await toView("windows");
+  await page.waitForSelector('[data-community-view="windows"][data-community-ready="1"]');
   const tab = page.frameLocator('[data-community-view="windows"] iframe').getByRole("tab", { name: "closed-early" });
-  await tab.hover();
-  await tab.getByRole("button", { name: "Close closed-early", exact: true }).click();
+  const close = tab.getByRole("button", { name: "Close closed-early", exact: true });
+  // A tab's Close shows while the pointer is on the tab. A view that draws its tabs again under a
+  // still pointer does not show it, so the pointer comes back to the tab until it does.
+  await expect(async () => { await tab.hover(); await expect(close).toBeVisible({ timeout: 500 }); }).toPass({ timeout: 10_000 });
+  await close.click();
   // Told at once, and told it is gone (exit 5): reading it again would wait for nothing.
   expect(await reading).toMatchObject({ code: 5, json: { finalStatus: "closed" } });
   await expect.poll(() => processesOf(worker), { timeout: 10_000 }).toEqual([]);

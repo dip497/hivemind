@@ -2,7 +2,7 @@
 // when the host invokes one: the handler's result, its error, or that nothing answers that name.
 import { expect, test } from "bun:test";
 import { fakeHost } from "../src/testing.js";
-import { chordMatches, parsePluginCommands } from "../src/commands.js";
+import { chordMatches, parsePluginCommands, pressIs, readChord } from "../src/commands.js";
 import { validateViewManifest } from "../src/manifest.js";
 
 test("a manifest's commands are named, described, and say what they take; anything else is refused", () => {
@@ -78,6 +78,34 @@ test("keys are matched by the key pressed, whatever shift makes of it; mod is Cm
   // A letter is the one the layout types (Dvorak puts k where QWERTY has J).
   expect(chordMatches("mod+alt+k", press("k", "KeyJ", { ctrl: true, alt: true }), false)).toBe(true);
   expect(chordMatches("mod+alt+k", press("j", "KeyK", { ctrl: true, alt: true }), false)).toBe(false);
+});
+
+test("a sign or digit is matched as the layout types it, its US place only when the layout types no other sign there", () => {
+  const ctrl = { ctrl: true };
+  // The app's own keys too, which a plugin may not take: read, not parsed.
+  const is = (keys: string, e: ReturnType<typeof press>) => pressIs(readChord(keys)!, e, false);
+  // German: `-` where US has `/`, `+` where US has `]`, `ß` and a dead key at US `-` and `=`.
+  expect(is("mod+-", press("-", "Slash", ctrl))).toBe(true);
+  expect(is("mod+/", press("-", "Slash", ctrl))).toBe(false);
+  expect(is("mod++", press("+", "BracketRight", ctrl))).toBe(true);
+  expect(is("mod+]", press("+", "BracketRight", ctrl))).toBe(false);
+  expect(is("mod+-", press("ß", "Minus", ctrl))).toBe(true);
+  // French: `=` where US has `/`, `-` on the 6 key, digits with shift. (Which of mod+- and mod+6 the
+  // app's keymap takes for that press is the keymap's to say: actionsFor.)
+  expect(is("mod+=", press("=", "Slash", ctrl))).toBe(true);
+  expect(is("mod+-", press("-", "Digit6", ctrl))).toBe(true);
+  expect(is("mod+0", press("à", "Digit0", ctrl))).toBe(true);
+  // The number pad.
+  expect(is("mod+-", press("-", "NumpadSubtract", ctrl))).toBe(true);
+  expect(is("mod++", press("+", "NumpadAdd", ctrl))).toBe(true);
+  expect(is("mod+0", press("0", "Numpad0", ctrl))).toBe(true);
+  // With Num Lock off the pad's keys are End, ArrowDown, ArrowLeft, Home and Insert, not digits.
+  for (const [key, n] of [["End", 1], ["ArrowDown", 2], ["ArrowLeft", 4], ["Home", 7], ["Insert", 0]] as const) {
+    for (const mods of [{}, ctrl]) expect(is(`${"ctrl" in mods ? "mod+" : ""}${n}`, press(key, `Numpad${n}`, mods))).toBe(false);
+  }
+  // US, with shift: its pair at its place.
+  expect(is("mod+shift+=", press("+", "Equal", { ...ctrl, shift: true }))).toBe(true);
+  expect(is("mod+shift+-", press("_", "Minus", { ...ctrl, shift: true }))).toBe(true);
 });
 
 test("keys the host names in hello run their command while focus is in the view", async () => {

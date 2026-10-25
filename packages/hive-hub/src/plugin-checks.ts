@@ -4,9 +4,11 @@
 import YAML from "yaml";
 import { agentDisclosures, defFromManifest, RESERVED_AGENTS, type AgentProviderDef } from "@hivemind/agents";
 import { parseToolManifest, type ToolPackage } from "@hivemind/core/tool-format";
+import { readTheme, THEME_MANIFEST, themeFiles } from "@hivemind/core/theme-format";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import { idProblem, pathsProblem, safeRelative, smallJson, UNSAFE_TEXT_RE, type CatalogFile, type CatalogType } from "./index-format.js";
+import { laterOf, sinceOf } from "./since.js";
 import { checkPackageManifest, entriesOf, MEMBER_FORMATS, ownedBy, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, type MemberFormat, type MemberRuns } from "./package-format.js";
 
 export const MAX_PLUGIN_FILES = 200;
@@ -97,25 +99,33 @@ export async function checkPluginFolder(folder: readonly PluginFile[]): Promise<
   }
 }
 
+/** What a hub refuses a folder for by its size alone: a file over 2 MB, or more than 8 MB in all.
+ *  `hive plugins check` runs it too, so a plugin it passes is one HiveHub takes. */
+export function sizeProblem(files: readonly { path: string; bytes: number }[]): string | null {
+  const big = files.find((f) => f.bytes > MAX_PLUGIN_FILE_BYTES);
+  if (big) return `${big.path} is larger than 2 MB`;
+  return files.reduce((n, f) => n + f.bytes, 0) > MAX_PLUGIN_BYTES ? "a plugin folder may be at most 8 MB" : null;
+}
+
 async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
   if (!folder.length) refuse("the folder is empty");
   if (folder.length > MAX_PLUGIN_FILES) refuse(`a plugin may have at most ${MAX_PLUGIN_FILES} files`);
-  let total = 0;
   const files: CatalogFile[] = [];
   const text = new Map<string, string>();
+  const sizes = new Map<string, number>();
+  for (const f of folder) if (!safeRelative(f.path)) refuse(`${shown(f.path)} is not a plain relative path`);
+  const big = sizeProblem(folder.map((f) => ({ path: f.path, bytes: f.bytes.byteLength })));
+  if (big) refuse(big);
   for (const f of folder) {
-    if (!safeRelative(f.path)) refuse(`${shown(f.path)} is not a plain relative path`);
-    if (f.bytes.byteLength > MAX_PLUGIN_FILE_BYTES) refuse(`${f.path} is larger than 2 MB`);
-    total += f.bytes.byteLength;
+    sizes.set(f.path, f.bytes.byteLength);
     files.push({ path: f.path, sha256: await sha256(f.bytes) });
     if (f.bytes.byteLength < MAX_TEXT) text.set(f.path, new TextDecoder().decode(f.bytes));
   }
-  if (total > MAX_PLUGIN_BYTES) refuse("a plugin folder may be at most 8 MB");
   const clash = pathsProblem(folder.map((f) => f.path));
   if (clash) refuse(clash);
   files.sort((a, b) => a.path.localeCompare(b.path));
   const pkg = text.get(PACKAGE_MANIFEST);
-  if (pkg !== undefined) return readPackage(pkg, files, text);
+  if (pkg !== undefined) return readPackage(pkg, files, text, sizes);
   return readPlugin(files, text) ?? refuse(`no ${PACKAGE_MANIFEST}, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder`);
 }
 
@@ -166,7 +176,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       description: plain("hivemind-view.json", "description", String(v.description ?? "A workspace view.").slice(0, 400)),
       version: plain("hivemind-view.json", "version", String(v.version ?? "0.1.0").slice(0, 40)),
       bin: null, homepage: null, icon: null, manifest: viewJson,
-      does: asks(v.permissions), traits: null, note: null, minAppVersion: null,
+      does: asks(v.permissions), traits: null, note: null, minAppVersion: sinceOf("view", v),
     };
   }
 
@@ -191,7 +201,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       bin: null, homepage: null, manifest: widgetJson,
       icon: svg && svg.length <= 16 << 10 ? { image: svgData(svg) } : null,
       iconFile: !svg && iconFile && /\.(png|webp|gif|jpe?g)$/i.test(iconFile) ? iconFile : null,
-      does: asks(w.permissions), traits: null, note: null, minAppVersion: null,
+      does: asks(w.permissions), traits: null, note: null, minAppVersion: sinceOf("widget", w),
     };
   }
 
@@ -233,7 +243,11 @@ const RUNS: Record<MemberRuns, string> = {
   sandboxed: "Runs in a sandbox that holds it to what it asks for",
   "in the app": "Runs inside Hivemind, with the app's access to your files and network, once you switch it on",
   "as an agent's instructions": "Instructions an agent follows",
+  "nothing: it is data": "Has no code",
 };
+
+/** What a theme does, in the words the app shows before it installs. */
+const THEME_DOES = "Changes how the app looks and sounds, once you apply it";
 
 /** Whether dotted version `a` is later than `b`. */
 const later = (a: string, b: string) => {
@@ -242,9 +256,12 @@ const later = (a: string, b: string) => {
   return false;
 };
 
+/** A file of the package itself, beside its manifest and its members: its README and licence. */
+const OWN_FILE = /^(?:readme|licen[cs]e|copying|notice)(?:\.[a-z]+)?$/i;
+
 /** A package: its `hivemind-package.json`, and every member in its folder read as that kind is
  *  read alone. Every member is the package owner's. Its files are the package's, checked as one. */
-function readPackage(json: string, files: CatalogFile[], text: Map<string, string>): CheckedPlugin {
+function readPackage(json: string, files: CatalogFile[], text: Map<string, string>, sizes: Map<string, number>): CheckedPlugin {
   let raw: unknown;
   try { raw = JSON.parse(json); } catch { return refuse(`${PACKAGE_MANIFEST} is not valid JSON`); }
   const checked = checkPackageManifest(raw);
@@ -252,7 +269,8 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   const m = checked.manifest;
   const owner = m.id.slice(0, m.id.indexOf("/"));
   const members: CheckedMember[] = [];
-  let minAppVersion: string | null = null;
+  // The package's own fields first, then the highest any member needs.
+  let minAppVersion = sinceOf("package", raw);
   for (const format of MEMBER_FORMATS) {
     for (const entry of entriesOf(m, format)) {
       if (!format.manifest) {
@@ -266,6 +284,16 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
       const prefix = at === "." ? "" : `${at}/`;
       const inside = files.filter((f) => f.path.startsWith(prefix)).map((f) => ({ ...f, path: f.path.slice(prefix.length) }));
       const sub = new Map([...text].filter(([f]) => f.startsWith(prefix)).map(([f, t]) => [f.slice(prefix.length), t]));
+      if (format.kind === "theme") {
+        // A theme is data: read from its folder as the app reads it (`readTheme`).
+        const source = sub.get(THEME_MANIFEST) ?? refuse(`${shown(at)}: ${format.list} names a folder holding no ${THEME_MANIFEST}`);
+        const t = readTheme(at.slice(at.lastIndexOf("/") + 1), m.id, source, inside.map((f) => ({ path: f.path, bytes: sizes.get(prefix + f.path) ?? 0 })));
+        if ("problem" in t) return refuse(`${shown(at)}: ${escaped(t.problem)}`);
+        const holds = themeFiles(t.theme).length;
+        members.push({ kind: "theme", id: t.id, name: t.theme.name, runs: format.runs, permissions: [],
+          does: [`${THEME_DOES}${holds ? ` (${holds} file${holds === 1 ? "" : "s"}: fonts, a wallpaper or sounds)` : ""}`] });
+        continue;
+      }
       let d: CheckedPlugin | null;
       try { d = readPlugin(inside, sub); } catch (e) { return refuse(`${shown(at)}: ${(e as Error).message}`); }
       if (!d || d.type !== format.kind) return refuse(`${shown(at)}: ${format.list} names a folder holding no ${format.manifest}`);
@@ -273,7 +301,7 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
       members.push({ kind: format.kind, id: d.id, name: d.name, runs: format.runs,
         permissions: Array.isArray(permissions) ? permissions.filter((x): x is string => typeof x === "string") : [],
         does: format.runs === "sandboxed" ? [RUNS[format.runs], ...d.does] : d.does });
-      if (d.minAppVersion && (!minAppVersion || later(d.minAppVersion, minAppVersion))) minAppVersion = d.minAppVersion;
+      minAppVersion = laterOf(minAppVersion, d.minAppVersion);
     }
   }
   // Each member's files are its own: a folder inside another member's would be shown as one kind
@@ -286,8 +314,12 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   const ids = members.map((x) => `${x.kind}:${x.id}`);
   if (new Set(ids).size !== ids.length) refuse("a member is named twice");
   const readmeName = [...text.keys()].find((f) => /^readme\.md$/i.test(f));
+  // What is listed is what installs: the package's own manifest, README and licence, and its
+  // members' folders. Anything else beside them (sources, build scripts, notes) is left out, so
+  // the app never downloads it and a view can never fetch it.
+  const listed = files.filter((f) => f.path === PACKAGE_MANIFEST || OWN_FILE.test(f.path) || folders.some((a) => a === "." || f.path.startsWith(`${a}/`)));
   return {
-    id: m.id, type: "package", name: m.name.slice(0, 80), category: "other", files,
+    id: m.id, type: "package", name: m.name.slice(0, 80), category: "other", files: listed,
     readme: readmeName ? text.get(readmeName)!.slice(0, MAX_README) : null,
     description: `A package of ${members.length}: ${members.map((x) => x.name).join(", ")}.`.slice(0, 400),
     version: m.version, bin: null, homepage: null, icon: null, iconFile: null, manifest: json,

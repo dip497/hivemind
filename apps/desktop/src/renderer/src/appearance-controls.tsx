@@ -17,14 +17,20 @@
  * settings-row, settings-stack, …); the controls themselves are the shared
  * shadcn primitives (Button/Switch), which own their look and focus rings.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
+import { NAMED_FONTS, fontNameOf, type FontSlot } from "@hivemind/core/font-names";
+import { cssColorToHex } from "@hivemind/core/css-color";
+import { accentOf } from "@hivemind/core/appearance-extra";
+import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
+import { useSettings } from "./settings-store";
 import {
-  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, removeOverlay, setTheme, updateOverlay,
+  ACCENTS, ANCHORS, CINEMATIC, WALLPAPERS, addOverlay, chooseAccent, chooseAccentColours, choosePreset, removeOverlay, setTheme, updateOverlay, wallpaperDrawn,
   type AccentId, type MediaAnchor, type MediaFit, type MediaLayer, type ThemeState, type WallpaperId,
 } from "./theme-store";
 
@@ -66,14 +72,17 @@ export function Section({ title, hint, action, children }: {
 // ── theme: presets + accent ─────────────────────────────────────────────────
 
 /** Theme row: a native select plus a small static swatch strip showing what the
- *  chosen preset looks like. The strip is five flat colours — no preview
- *  rendering, no motion.
+ *  chosen preset looks like, with the accent in use. The strip is five flat colours, chosen as a
+ *  theme's are (`themeSwatches`) — no preview rendering, no motion.
  *
  *  SELECTOR NOTE: `data-preset-option` lives on each item of the list; the control
  *  itself carries `data-preset-select`. */
 export function PresetRow({ t }: { t: ThemeState }) {
-  const preset = PRESETS[t.preset] ?? PRESETS.ubuntu!;
-  const swatches = [preset.palette.bg, preset.palette.bg3, preset.terminal.background, preset.terminal.ansi[1]!, preset.terminal.ansi[2]!];
+  // A look that is no built-in preset (imported, or a theme's) is shown as itself: as the theme
+  // in use, or as "Custom".
+  const preset = PRESETS[t.preset];
+  const themeName = useSettings().appearanceExtra.theme?.name;
+  const swatches = themeSwatches({ palette: (preset ?? t).palette, accent: t.accentCustom ?? t.accent });
   return (
     <div className="settings-row">
       <label htmlFor="theme-preset">Preset</label>
@@ -84,14 +93,15 @@ export function PresetRow({ t }: { t: ThemeState }) {
           ))}
         </span>
         <Select
-          value={t.preset in PRESETS ? t.preset : "ubuntu"}
+          value={preset ? t.preset : "custom"}
           onValueChange={(v) => {
             const p = PRESETS[v];
-            if (p) setTheme({ preset: p.id, mode: p.mode, palette: { ...p.palette }, accent: p.accent, terminal: { ...p.terminal, ansi: [...p.terminal.ansi] } });
+            if (p) choosePreset(p);
           }}
         >
           <SelectTrigger id="theme-preset" data-preset-select className="min-w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
+            {!preset && <SelectItem value="custom" disabled>{themeName ?? "Custom"}</SelectItem>}
             {Object.values(PRESETS).map((p) => (
               <SelectItem key={p.id} value={p.id} data-preset-option={p.id}>{p.label}</SelectItem>
             ))}
@@ -103,13 +113,22 @@ export function PresetRow({ t }: { t: ThemeState }) {
 }
 
 export function AccentPicker({ t }: { t: ThemeState }) {
+  const custom = t.accentCustom;
+  const wellRef = useRef<HTMLInputElement>(null);
+  // A colour of the person's own is a mark too: say when it is hard to see where it is drawn, by the
+  // rule a theme's accent is checked by.
+  const mark = custom ? accentMark(custom.brand, t.palette) : null;
   return (
     <div className="settings-row">
-      <div><label id="accent-label">Accent</label><p>Buttons, selection and focus.</p></div>
+      <div>
+        <label id="accent-label">Accent</label>
+        <p>The selected tile, sliders and the text cursor. A colour of your own, or a theme's, also fills the main button, a switch that is on and the focus ring.</p>
+        {mark && mark.ratio < ACCENT_CONTRAST && <p className="settings-note" data-accent-faint>Hard to see on {mark.on === "bg" ? "this background" : "the panels"} ({mark.ratio.toFixed(1)}:1).</p>}
+      </div>
       <div className="settings-accents" role="radiogroup" aria-labelledby="accent-label">
         {(Object.keys(ACCENTS) as AccentId[]).map((id) => {
           const a = ACCENTS[id];
-          const sel = t.accent === id;
+          const sel = !custom && t.accent === id;
           return (
             <button
               key={id}
@@ -118,15 +137,97 @@ export function AccentPicker({ t }: { t: ThemeState }) {
               aria-checked={sel}
               aria-label={a.label}
               title={a.label}
-              onClick={() => setTheme({ accent: id })}
+              onClick={() => chooseAccent(id)}
               className="settings-accent"
               data-selected={sel ? "" : undefined}
               style={{ background: a.swatch, ...(sel ? { boxShadow: `0 0 0 2px var(--color-bg2), 0 0 0 4px ${a.swatch}` } : {}) }}
             />
           );
         })}
+        {/* Any colour: the native colour well, as Terminal colours use, opened from a swatch that
+            takes focus like the others. */}
+        <button
+          type="button"
+          className="settings-accent settings-accent-custom"
+          role="radio"
+          aria-checked={!!custom}
+          aria-label="Your own colour"
+          title="Your own colour"
+          data-selected={custom ? "" : undefined}
+          style={custom ? { background: custom.brand, boxShadow: `0 0 0 2px var(--color-bg2), 0 0 0 4px ${custom.brand}` } : undefined}
+          onClick={() => wellRef.current?.showPicker?.() ?? wellRef.current?.click()}
+        />
+        <input
+          ref={wellRef}
+          type="color"
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden
+          data-accent-custom
+          value={cssColorToHex(accentOf({ accent: t.accent }, { accent: custom }).brand, ACCENTS.graphite.brand)}
+          onChange={(e) => chooseAccentColours({ brand: e.target.value, accent: e.target.value })}
+        />
       </div>
     </div>
+  );
+}
+
+// ── corners and fonts ───────────────────────────────────────────────────────
+
+/** A font, as core names it (`fontNameOf`): a face named here, the face a theme brought (by its
+ *  family, with the theme that set it), or any CSS font list the person types (Custom, its field
+ *  holding the whole list, the closed select reading its first family). */
+function FontRow({ id, slot, label, hint, value, onChange }: {
+  id: string; slot: FontSlot; label: string; hint: string; value: string; onChange: (v: string) => void;
+}) {
+  const name = fontNameOf(slot, value, useSettings().appearanceExtra);
+  const fonts = NAMED_FONTS[slot];
+  // Custom… chosen over a face opens the field on that face's list. The row stays mounted through
+  // Apply and Revert, so the choice is dropped the moment the value moves (a theme, Revert, `hive
+  // config set`): the same list coming back later is named afresh, not Custom again.
+  const [customFor, setCustomFor] = useState<string | null>(null);
+  if (customFor !== null && customFor !== value) setCustomFor(null);
+  const custom = name.kind === "custom" || customFor === value;
+  return (
+    <div className="settings-row">
+      <div><label htmlFor={id}>{label}</label><p>{hint}</p></div>
+      <div className="settings-inline">
+        {custom && (
+          <Input
+            className="min-w-48" aria-label={`${label}, custom`} defaultValue={value} key={value}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== value) onChange(v); }}
+            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          />
+        )}
+        <Select
+          value={custom ? "custom" : name.kind === "named" ? name.id : "face"}
+          onValueChange={(v) => {
+            const f = fonts.find((x) => x.id === v);
+            setCustomFor(v === "custom" ? value : null);
+            if (f) onChange(f.value);
+          }}
+        >
+          <SelectTrigger id={id} data-font-select={id} className="min-w-40">
+            {custom ? <SelectValue>{name.kind === "custom" ? name.label : "Custom…"}</SelectValue> : <SelectValue />}
+          </SelectTrigger>
+          <SelectContent>
+            {name.kind === "face" && <SelectItem value="face">{name.label}</SelectItem>}
+            {fonts.map((f) => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
+            <SelectItem value="custom">Custom…</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
+
+export function ShapeAndTypeControls({ t }: { t: ThemeState }) {
+  return (
+    <>
+      <Slider label="Corners" value={t.radius} min={0} max={24} suffix="px" onChange={(v) => setTheme({ radius: v })} />
+      <FontRow id="ui-font" slot="ui" label="Interface font" hint="Menus, panels and Settings." value={t.uiFont} onChange={(v) => setTheme({ uiFont: v })} />
+      <FontRow id="mono-font" slot="mono" label="Code font" hint="Terminals, code and diffs." value={t.monoFont} onChange={(v) => setTheme({ monoFont: v })} />
+    </>
   );
 }
 
@@ -196,7 +297,7 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
         <div><label>Animation</label><p>Drifting scenes and slow photo pans. Pauses when the window loses focus.</p></div>
         <Switch on={t.animate} onChange={(v) => setTheme({ animate: v })} label="Animate the background" />
       </div>
-      {t.wallpaper !== "none" && !t.glass && (
+      {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
       )}
     </>
@@ -346,7 +447,7 @@ const ansiLabel = (i: number) => `${i > 7 ? "Bright " : ""}${ANSI_NAMES[i % 8]}`
 /** 4 + 16 colour wells. Mounted only when its disclosure is open. */
 export function TerminalColors({ t }: { t: ThemeState }) {
   const setTerm = (patch: Partial<TerminalPalette>) => setTheme({ terminal: { ...t.terminal, ...patch } });
-  const preset = PRESETS[t.preset] ?? PRESETS.ubuntu!;
+  const preset = PRESETS[t.preset] ?? PRESETS.signal!;
   const dirty = JSON.stringify(t.terminal) !== JSON.stringify(preset.terminal);
   return (
     <>

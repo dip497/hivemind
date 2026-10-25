@@ -91,6 +91,30 @@ describe("hive plugins, packages", () => {
     expect(run("list").stdout).toMatch(/^on \s+view:@acme\/island\s+Island\s+\[@acme\/kit 1\.0\.0\]$/m);
   }, 60_000);
 
+  test("a package that opens with a view says which, and the command that switches to it; --json carries startView, and the open comes first in next", () => {
+    const harbour = path.join(tmp, "harbour");
+    const files: Record<string, string> = {
+      "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/harbour", name: "Harbour", version: "1.0.0", views: [{ path: "views/dock" }, { path: "views/isle" }], startup: { view: "@acme/isle" } }),
+      "views/dock/hivemind-view.json": JSON.stringify({ id: "@acme/dock", name: "Dock", version: "1.0.0", entry: "index.html" }),
+      "views/dock/index.html": "<!doctype html>",
+      "views/isle/hivemind-view.json": JSON.stringify({ id: "@acme/isle", name: "Isle", version: "1.0.0", entry: "index.html" }),
+      "views/isle/index.html": "<!doctype html>",
+    };
+    for (const [f, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(harbour, f)), { recursive: true });
+      fs.writeFileSync(path.join(harbour, f), text);
+    }
+    const said = run("install", harbour);
+    expect(said.stdout).toContain("It opens with the view Isle. The app offers to switch to it, unless it has offered that view before; `hive ctl plugin open view:@acme/isle` switches the running app now.");
+    const r = run("install", harbour, "--json");
+    expect(r.json).toMatchObject({ on: true, startView: { id: "@acme/isle", name: "Isle", open: "hive ctl plugin open view:@acme/isle" } });
+    expect((r.json as { next: string[] }).next).toEqual(["hive ctl plugin open view:@acme/isle", "hive ctl plugin open view:@acme/dock"]);
+    // One without a start view says nothing of one.
+    const plain = run("install", kit(), "--json");
+    expect(plain.json).toMatchObject({ startView: null });
+    expect(run("install", kit()).stdout).not.toContain("opens with the view");
+  }, 60_000);
+
   test("a package listed on HiveHub installs whole by its id, every file checked; a listing whose manifest names another package is refused", () => {
     const root = kit();
     const files = (dir: string, rel = ""): string[] => fs.readdirSync(path.join(dir, rel), { withFileTypes: true })

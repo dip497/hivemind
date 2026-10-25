@@ -4,10 +4,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, PRESETS, UBUNTU, SIGNAL, applyPreset, flattenAppearance, getPath, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
+  ACCENTS, DEFAULT_APPEARANCE, DEFAULT_SETTINGS, ISLAND_PLACEMENTS, GEIST_FONT, OLD_UI_FONT_DEFAULT, PRESETS, UBUNTU, SIGNAL, UI_FONT, applyPreset, exportAppearance, flattenAppearance, getPath, importAppearance, mergeAppearance, mergeSettings, nestAppearance, setPath, sharedAppearance, terminalThemeFor, toolPreferences,
 } from "./settings-schema.js";
 import { BUILTIN_TOOLBAR_ACTIONS, resolveToolbar } from "./toolbar.js";
-import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings, writeSettings } from "./settings.js";
+import { cssColorToRgb } from "./css-color.js";
+import { SettingsLockError, breakSettingsLock, patchSettingsExtras, patchSettingsFile, readSettings, settingsPath, updateSettings } from "./settings.js";
 
 // The pre-2.0 literal from TerminalTile.tsx, verbatim: the ubuntu preset must
 // derive exactly this (byte-identical terminal output).
@@ -41,6 +42,64 @@ describe("settings schema", () => {
     }
   });
 
+  test("Clean and Clean Light are a whole look: glass off and no wallpaper; corners and a colour preset's look stay the person's", () => {
+    const mine = { ...DEFAULT_APPEARANCE, radius: 16, wallpaper: { kind: "aurora" as const, brightness: 0.7 } };
+    for (const id of ["clean", "clean-light"]) {
+      const a = applyPreset(mine, PRESETS[id]!);
+      expect([a.glass.enabled, a.wallpaper.kind, a.radius, a.mode]).toEqual([false, "none", 16, id === "clean" ? "dark" : "light"]);
+      expect(a.wallpaper.brightness).toBe(0.7);
+      expect(a.glass.blur).toBe(mine.glass.blur);
+    }
+    const nord = applyPreset(mine, PRESETS.nord!);
+    expect([nord.glass.enabled, nord.wallpaper.kind, nord.radius]).toEqual([true, "aurora", 16]);
+  });
+
+  test("leaving Clean for a colour preset puts back the glass, wallpaper and corners it replaced, but not over the person's own change", () => {
+    const mine = { ...DEFAULT_APPEARANCE, radius: 16, wallpaper: { kind: "aurora" as const, brightness: 0.7 } };
+    const clean = applyPreset(mine, PRESETS.clean!);
+    // Through Clean Light and out again: what Clean replaced comes back, and nothing is remembered after.
+    const back = applyPreset(applyPreset(clean, PRESETS["clean-light"]!), PRESETS.signal!);
+    expect([back.glass.enabled, back.wallpaper.kind, back.radius]).toEqual([true, "aurora", 16]);
+    expect(back.lookBefore).toBeUndefined();
+    // A wallpaper chosen while on Clean is kept; the glass and corners still come back.
+    const chose = applyPreset({ ...clean, wallpaper: { ...clean.wallpaper, kind: "mono" } }, PRESETS.nord!);
+    expect([chose.glass.enabled, chose.wallpaper.kind, chose.radius]).toEqual([true, "mono", 16]);
+    // Remembered across a save and a load.
+    const saved = mergeSettings(JSON.parse(JSON.stringify({ appearance: clean }))).appearance;
+    expect(applyPreset(saved, PRESETS.signal!).wallpaper.kind).toBe("aurora");
+    // It is this computer's memory, no part of the look: not in a theme file, not shown to a guest.
+    expect(exportAppearance(clean).theme).not.toHaveProperty("lookBefore");
+    expect(sharedAppearance(clean)).not.toHaveProperty("lookBefore");
+    expect(importAppearance({ ...clean, lookBefore: { glass: false, wallpaper: "none", radius: 2 } }, mine).lookBefore).toBeUndefined();
+  });
+
+  test("Clean is Signal made flat, and Clean Light its light twin on the same graphite; text reads on every surface (WCAG 4.5:1)", () => {
+    // DESIGN.md: graphite tinted toward blue (hue 250). Clean is Signal's own palette and terminal.
+    expect(PRESETS.clean!.palette).toEqual(SIGNAL.palette);
+    expect(PRESETS.clean!.terminal).toEqual(SIGNAL.terminal);
+    for (const v of Object.values(PRESETS["clean-light"]!.palette)) expect(v).toMatch(/^oklch\([\d.]+ [\d.]+ (250|155|62|30)\)$/);
+    const lum = (c: string) => {
+      const [r, g, b] = cssColorToRgb(c)!.map((v) => { const x = v / 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+    };
+    const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x! + 0.05) / (y! + 0.05); };
+    for (const id of ["clean", "clean-light"]) {
+      const p = PRESETS[id]!.palette;
+      for (const fg of [p.fg, p.fg2, p.fg3]) for (const bg of [p.bg, p.bg2, p.bg3]) expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+    // What waits on you, and what failed, read as words too: on every surface, the selected row's included.
+    const light = PRESETS["clean-light"]!.palette;
+    for (const fg of [light.warn, light.err]) for (const bg of [light.bg, light.bg2, light.bg3, light.bg4]) expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("the interface font is the operating system's own, as DESIGN.md decided; Geist is a choice", () => {
+    expect(DEFAULT_APPEARANCE.uiFont).toBe(UI_FONT);
+    expect(UI_FONT.startsWith("system-ui")).toBe(true);
+    // What settings.json has long held is the system font too: nothing on disk needs rewriting.
+    expect(OLD_UI_FONT_DEFAULT.startsWith("system-ui")).toBe(true);
+    expect(GEIST_FONT.startsWith('"Geist Sans"')).toBe(true);
+  });
+
   test("a host's look as a guest gets it names no file on the host, and junk from a peer is dropped", () => {
     const host = {
       ...DEFAULT_APPEARANCE, preset: "nord", accent: "ice", mode: "light", uiFont: "Host Sans", monoFont: "Host Mono",
@@ -53,15 +112,61 @@ describe("settings schema", () => {
     expect(JSON.stringify(got)).not.toContain("host");
     expect(sharedAppearance({ ...host, wallpaper: { kind: "aurora", imageSrc: "file:///etc/passwd" } }).wallpaper).toEqual({ kind: "aurora", brightness: DEFAULT_APPEARANCE.wallpaper.brightness });
     expect(sharedAppearance({ accent: "<script>", radius: 9999, palette: { bg: "url(x)" } })).toMatchObject({ accent: DEFAULT_APPEARANCE.accent, radius: 24, palette: { bg: DEFAULT_APPEARANCE.palette.bg } });
+    // A key this build does not know, which settings keep, never reaches a guest; nor does a picture's path.
+    const later = sharedAppearance({ ...host, wallpaper: { kind: "image", imageSrc: "hivemedia://media/host-cat.png", brightness: 0.7 }, theme: { before: "/home/host/theme.json" } });
+    expect([Object.hasOwn(later, "theme"), JSON.stringify(later).includes("host")]).toEqual([false, false]);
+  });
+
+  test("a theme file holds the look without its media, says what it left out, and importing it keeps the media you have", () => {
+    const layer = (url: string) => ({ id: url, url, kind: "image", opacity: 1, fit: "cover", size: 1, anchor: "center" });
+    const mine = mergeAppearance({
+      ...applyPreset(DEFAULT_APPEARANCE, PRESETS.nord!), radius: 6,
+      wallpaper: { kind: "image", imageSrc: "hm-media://v/%2Fhome%2Falice%2Fcat.png", videoSrc: "hivemedia://media/alice-clip.mp4", brightness: 0.7 },
+      overlayMedia: [layer("hivemedia://media/alice-cat.png")], someFutureKey: { before: "/home/alice/theme.json" },
+    });
+    const { theme, leftOut, note } = exportAppearance(mine);
+    expect(JSON.stringify(theme)).not.toContain("alice");
+    expect(theme).toMatchObject({ preset: "nord", radius: 6, wallpaper: { kind: "image", brightness: 0.7 } });
+    expect([leftOut, note]).toEqual([["wallpaper.imageSrc", "wallpaper.videoSrc", "overlayMedia"], expect.stringContaining("the wallpaper picture, the wallpaper video and the overlays")]);
+    expect(exportAppearance(DEFAULT_APPEARANCE)).toMatchObject({ leftOut: [], note: null });
+    // Your own file back undoes everything; someone else's keeps their media.
+    const file = JSON.parse(JSON.stringify(theme));
+    expect(importAppearance(file, mine)).toEqual(mine);
+    const theirs = mergeAppearance({ wallpaper: { kind: "video", videoSrc: "hivemedia://media/bo.mp4" }, overlayMedia: [layer("hivemedia://media/bo.png")] });
+    const got = importAppearance(file, theirs);
+    expect([got.preset, got.wallpaper.videoSrc, got.wallpaper.imageSrc, got.overlayMedia]).toEqual(["nord", "hivemedia://media/bo.mp4", undefined, theirs.overlayMedia]);
+  });
+
+  test("an imported file gives only the look: a whole settings.json gives its appearance, no file adds a key this build does not know, and one with no appearance setting is refused", () => {
+    const mine = mergeAppearance({ preset: "signal", someFutureKey: { id: "harbour" } });
+    const keys = Object.keys(mine).sort();
+    // A file with one setting among others, and a whole settings.json whose appearance a newer build wrote.
+    const pkg = importAppearance({ name: "app", version: "1.0.0", scripts: { build: "tsc" }, radius: 4 }, mine);
+    const whole = importAppearance({ v: 1, appearance: { preset: "nord", later: true }, views: { defaultView: "orbit" }, agents: {} }, mine);
+    expect([Object.keys(pkg).sort(), Object.keys(whole).sort()]).toEqual([keys, keys]);
+    expect([pkg.radius, whole.preset]).toEqual([4, "nord"]);
+    // A package.json picked by mistake, a settings.json whose appearance is not one, and what is not an object at all.
+    for (const file of [{ name: "app", version: "1.0.0", scripts: { build: "tsc" } }, { v: 1, appearance: "nord" }, { v: 1, appearance: {} }, "nord", [], null]) {
+      expect(() => importAppearance(file, mine), JSON.stringify(file)).toThrow("not a hivemind theme");
+    }
+  });
+
+  test("an imported file that leaves out the mode or how tools look in a scene keeps yours", () => {
+    const light = mergeAppearance({ preset: "signal", mode: "light", pluginSurfaces: "opaque" });
+    const got = importAppearance({ preset: "nord", radius: 4 }, light);
+    expect([got.preset, got.radius, got.mode, got.pluginSurfaces]).toEqual(["nord", 4, "light", "opaque"]);
+    // One that names them gives its own.
+    const named = importAppearance({ mode: "dark", pluginSurfaces: "theme" }, light);
+    expect([named.mode, named.pluginSurfaces]).toEqual(["dark", "theme"]);
   });
 
   test("views.layers: the Layers View menu keeps each valid choice; an unknown one falls back, and a partial patch keeps the rest", () => {
-    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent" });
-    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"], recentsBy: "project" } as const;
+    expect(mergeSettings({ v: 1 }).views.layers).toEqual({ status: "all", activity: "all", groupBy: "group", sortBy: "canvas", machines: [], recentsBy: "agent", lines: "all" });
+    const chosen = { status: "needs-you", activity: "today", groupBy: "date", sortBy: "activity", machines: ["local", "m-1"], recentsBy: "project", lines: "off" } as const;
     const s = mergeSettings({ v: 1, views: { layers: chosen } });
     expect(s.views.layers).toEqual({ ...chosen, machines: ["local", "m-1"] });
-    expect(mergeSettings({ v: 1, views: { layers: { groupBy: "colour", sortBy: 3, machines: ["local", 7, "", "local"] } } }).views.layers)
-      .toMatchObject({ groupBy: "group", sortBy: "canvas", machines: ["local"] });
+    expect(mergeSettings({ v: 1, views: { layers: { groupBy: "colour", sortBy: 3, machines: ["local", 7, "", "local"], lines: "some" } } }).views.layers)
+      .toMatchObject({ groupBy: "group", sortBy: "canvas", machines: ["local"], lines: "all" });
     expect(mergeSettings(setPath(s, "views.layers.groupBy", "status"), s).views.layers).toEqual({ ...chosen, machines: ["local", "m-1"], groupBy: "status" });
   });
 
@@ -191,9 +296,9 @@ describe("settings schema", () => {
     expect(toolPreferences(s)).toEqual({ enabledPlugins: ["@hivemind/web"], disabledTools: ["@hivemind/web/browser"] });
   });
 
-  test("mergeSettings: junk falls back per field, values are clamped, unknown keys dropped", () => {
+  test("mergeSettings: junk falls back per field, values are clamped, an unknown top-level key is left to the file writer", () => {
     const s = mergeSettings({
-      v: 99, appearance: { preset: 7, glass: { opacity: 5, blur: "x", enabled: "yes" }, wallpaper: { kind: "lava", videoSrc: "blob:abc" }, terminal: { ansi: ["#000"] }, palette: { bg: "javascript:alert(1)" }, pluginSurfaces: "glass" },
+      v: "99", appearance: { preset: 7, glass: { opacity: 5, blur: "x", enabled: "yes" }, wallpaper: { kind: "lava", videoSrc: "blob:abc" }, terminal: { ansi: ["#000"] }, palette: { bg: "javascript:alert(1)" }, pluginSurfaces: "glass" },
       views: { defaultView: "orbit", chrome: { orbit: { island: "left" }, world: { island: "hidden" }, "../x": { island: "top" } } },
       plugins: { disabled: ["a", 3, "b"] }, agents: { defaultAgent: "" }, extra: true,
     });
@@ -317,7 +422,7 @@ describe("settings file", () => {
     expect(settingsPath()).toBe(path.join(tmp, "custom.json"));
     expect(await readSettings()).toEqual(mergeSettings(DEFAULT_SETTINGS));
     const next = mergeSettings({ appearance: applyPreset(DEFAULT_APPEARANCE, PRESETS.dracula!), views: { defaultView: "world" } });
-    await writeSettings(next);
+    await updateSettings(() => next, settingsPath(), ["appearance", "views"]);
     expect(fs.readdirSync(tmp).filter((f) => f.endsWith(".tmp"))).toEqual([]); // no temp file left behind
     expect(await readSettings()).toEqual(next);
     fs.writeFileSync(settingsPath(), "{ not json");
@@ -327,7 +432,7 @@ describe("settings file", () => {
   test("a write keeps top-level keys the schema does not own (the app's browserCdp flag)", async () => {
     process.env.HIVE_SETTINGS = path.join(tmp, "with-extras.json");
     fs.writeFileSync(settingsPath(), JSON.stringify({ browserCdp: true, browserCdpPort: "9333" }));
-    await writeSettings(mergeSettings({ views: { defaultView: "world" } }));
+    await patchSettingsFile([{ path: "views.defaultView", value: "world" }]);
     const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
     expect(raw.browserCdp).toBe(true);
     expect(raw.browserCdpPort).toBe("9333");
@@ -340,24 +445,6 @@ describe("settings concurrency", () => {
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "hm-settings-race-"));
     process.env.HIVE_SETTINGS = path.join(dir, "settings.json");
-  });
-
-  test("REGRESSION: a snapshot write loses a concurrent update; updateSettings does not", async () => {
-    // The old renderer path: read now, write the whole object 150ms later.
-    const stale = await readSettings();
-    await writeSettings({ ...stale, appearance: applyPreset(stale.appearance, PRESETS.nord!) }); // the CLI
-    await writeSettings({ ...stale, views: { ...stale.views, defaultView: "world" } });          // the debounce
-    expect((await readSettings()).appearance.preset).toBe("signal"); // ← the bug: nord reverted
-
-    // The same two writers through updateSettings: both edits survive.
-    fs.rmSync(settingsPath(), { force: true });
-    const snapshot = await readSettings();
-    void snapshot; // deliberately unused: a mutation never writes back a snapshot
-    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) }));
-    await updateSettings((cur) => ({ ...cur, views: { ...cur.views, defaultView: "world" } }));
-    const merged = await readSettings();
-    expect(merged.appearance.preset).toBe("nord");
-    expect(merged.views.defaultView).toBe("world");
   });
 
   test("concurrent writers to different paths all land (serialized, none lost)", async () => {
@@ -374,6 +461,14 @@ describe("settings concurrency", () => {
     expect(s.plugins.state["agent:claude"]?.options?.model).toBe("opus");
   });
 
+  test("an appearance key a newer build wrote survives a write through updateSettings", async () => {
+    const file = settingsPath();
+    fs.writeFileSync(file, JSON.stringify({ v: 1, appearance: { preset: "signal", someFutureKey: { id: "harbour" } } }));
+    await updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) })); // `hive theme use nord`
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    expect([raw.appearance.preset, raw.appearance.someFutureKey]).toEqual(["nord", { id: "harbour" }]);
+  });
+
   test("a patch is validated like any other write, and unknown top-level keys survive it", async () => {
     fs.writeFileSync(settingsPath(), JSON.stringify({ browserCdp: true }));
     const s = await patchSettingsFile([{ path: "appearance.glass.blur", value: 999 }]);
@@ -382,30 +477,33 @@ describe("settings concurrency", () => {
   });
 
   test("legacy top-level blobs and the theme are written concurrently without erasing each other", async () => {
-    // The app keeps `browserCdp` and `notifications` in the SAME settings.json as
-    // the theme (identical path in a packaged app). Both used to be written with
-    // a read-then-write, which erases whatever the other wrote in between.
+    // The app keeps `browserCdp` in the SAME settings.json as the theme, and
+    // `notifications` is a section of it. Each used to be written with a
+    // read-then-write, which erases whatever the other wrote in between.
     await Promise.all([
       patchSettingsExtras({ browserCdp: true }),
       patchSettingsFile([{ path: "appearance.accent", value: "ember" }]),
-      patchSettingsExtras({ notifications: { enabled: false } }),
+      patchSettingsFile([{ path: "notifications.enabled", value: false }]),
       updateSettings((cur) => ({ ...cur, appearance: applyPreset(cur.appearance, PRESETS.nord!) })),
       patchSettingsFile([{ path: "views.defaultView", value: "windows" }]),
     ]);
 
     const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
     expect(raw.browserCdp).toBe(true);                     // legacy blob survived
-    expect(raw.notifications).toEqual({ enabled: false }); // legacy blob survived
+    expect(raw.notifications.enabled).toBe(false);         // its section survived
     expect(raw.views.defaultView).toBe("windows");         // schema write survived
     expect(["ember", PRESETS.nord!.accent]).toContain(raw.appearance.accent);
     expect(raw.appearance.palette.bg).toBe(PRESETS.nord!.palette.bg); // preset survived
     expect(await readSettings()).toEqual(mergeSettings(raw)); // still a valid settings file
   });
 
-  test("extras cannot bypass the schema or assign prototype keys", async () => {
-    for (const key of ["appearance", "agents", "__proto__", "constructor", "prototype"]) {
+  test("extras cannot bypass the schema or set a prototype; constructor and prototype are keys like any other", async () => {
+    for (const key of ["appearance", "agents", "__proto__"]) {
       await expect(patchSettingsExtras(JSON.parse(`{"${key}":{}}`))).rejects.toThrow("not an extra settings key");
     }
+    await patchSettingsExtras({ constructor: { a: 1 }, prototype: 2 });
+    const raw = JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
+    expect([Object.hasOwn(raw, "constructor") && raw.constructor, raw.prototype, ({} as Record<string, unknown>).a]).toEqual([{ a: 1 }, 2, undefined]);
   });
 
   test("an extras patch leaves the schema settings untouched, and removes a key set to undefined", async () => {

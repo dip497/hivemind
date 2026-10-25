@@ -5,6 +5,7 @@
 // screen can show it to a window that opens late. Its own app, so its spawns count against a
 // rate limit of their own.
 import { addFromMenu } from "./helpers/board";
+import { reveal } from "./helpers/canvas";
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -265,8 +266,11 @@ test("two windows share where tiles and notes are, and each keeps its own camera
   expect(await cameraOf(second)).toBe(theirs);
   expect(await page.evaluate((r) => (window.hive.workspaceViewSync(r, "canvas") as { data?: { viewport?: unknown } } | null)?.data?.viewport, repo)).toBeUndefined();
 
-  // So is a pin: the tile floats on the screen of the window that pinned it.
-  await page.locator(`.react-flow__node[data-id="${shell}"]`).getByRole("button", { name: "Pin tile" }).click();
+  // So is a pin: the tile floats on the screen of the window that pinned it. Zoomed in, its header
+  // can be past the canvas's edge: zoomed out again, it is reached.
+  const pin = page.locator(`.react-flow__node[data-id="${shell}"]`).getByRole("button", { name: "Pin tile" });
+  await reveal(page, pin);
+  await pin.click();
   await expect(page.getByRole("button", { name: "Unpin tile" })).toHaveCount(1);
   await page.waitForTimeout(500); // its save has landed
   await expect(second.getByRole("button", { name: "Unpin tile" })).toHaveCount(0);

@@ -29,11 +29,20 @@ one wins.
 | `hello` (1.5) | `device? {touch, compact}` | What the view is on; `hm.device` reads a desktop's from a host that predates it |
 | `participants` (1.5) | `participants [{id, person, name, color, cursor: {tileId} \| null, selection}]` | After `subscribeParticipants`; everyone else here, on each change of who, the tile their pointer is over or their selection — only of your tiles and frames |
 | `structure` (1.14) | `tiles[].asleep? {since?}` | The agent is asleep: its process ended, its tile kept with its last screen and its conversation until it is woken. `since`: when it was put to sleep (ms since epoch). Absent while awake. Its `status` stays what it was left at: draw `asleep` over it |
+| `fonts` (1.17) | `fontFaces [{family, data, weight?, style?}]` | A theme's font files changed (applied, reverted): the SDK puts them in `document.fonts`, replacing the ones before. `hello.fontFaces` carries them when they are read by then. Nothing to do in the view |
 
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
 `history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
 `participants`; 1.14 adds `sleep` (tiles say `asleep`, and `wakeAgent` / `sleepAgent` run); 1.15
-adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone). A
+adds `hostMenu` (`openHostMenu` runs: the app's computer windows, not the phone); 1.16 adds
+`tokens` (`theme.tokens`: the view's own colours from its manifest's `tokens`, resolved, set as
+`--hm-token-<id>` by `applyThemeVars`; give each `var()` a fallback); 1.17 adds `fontFaces`
+(a theme's fonts: the SDK loads them into `document.fonts`, so the family `theme.fonts` names
+draws in the view; nothing to do in the view), `lineSlots`
+(the host draws each tile's last line in the rects `lineRects` reserves, and for a permission its
+own Review, never Allow; the computer's windows, not the phone) and `ownFiles` (the view may
+`fetch` its own files: it says `"files": true`, and the screen is the app's window or a browser
+tab, not the phone nor another computer's view). A
 host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
@@ -55,6 +64,7 @@ compute one from a theme token yourself.
 | `command` | `name`, `args[]` | Permission-gated; see below |
 | `subscribeStatus` / `unsubscribeStatus` | `tileId` | `subscribeStatus()` handles both ends |
 | `surfaceRects` | `rects[]` | ≤ 16. Deduplicated by the client |
+| `lineRects` (1.17) | `rects[] {tileId, x, y, w, h}` | ≤ 64, each ≥ 20px high; replaces the last set. `hm.setLineRects()`, sent only to a host with `lineSlots`. The host draws the line there; you never get its text |
 | `revealed` | `requestId`, `rect \| null` | The answer to `reveal` |
 | `framesDrawn` | `count` | Monotonic, throttled to ~1/s by the SDK |
 | `layout` | `data` | ≤ 64 KB, debounced |
@@ -108,6 +118,9 @@ is not something a view chooses. `spawnAgent` takes a catalog id, never a comman
   "assets": "dist",         // optional: dir served alongside the entry
   "wallpaper": false,       // optional: refuse the user's wallpaper (default: you get it)
   "widgets": "left",        // optional: start the app's widget cards down the left edge (default: right)
+  "settings": [],           // optional: fields the app draws (boolean, number/slider, text, choice, color, multi, list; section, showIf) — guide /plugin-settings
+  "tokens": [],             // optional: your own colours, {id, label, dark, light}, "#rrggbb" or "=accent"; read var(--hm-token-<id>)
+  "files": true,            // optional: it fetch()es its own files (Hivemind 2026.10.6+); without it connect-src is 'none'
   "author": "Ada",          // optional provenance, shown where the user decides to trust you
   "homepage": "https://…",  // https only — the host opens it in the user's browser
   "license": "MIT"          // a short identifier, not a sentence
@@ -127,6 +140,24 @@ translucent —
 `color-mix(in srgb, var(--hm-color-bg2) calc(100% - var(--hm-glass, 0) * 30%), transparent)`
 is what the shipped examples use. Set `"wallpaper": false` only if you paint an opaque
 scene of your own: nothing would show through, and its animation still costs every frame.
+
+**Frozen.** The 15 colours of `ViewTheme.colors` (`VIEW_THEME_COLORS` in the protocol): `bg`,
+`bg2`, `bg3`, `bg4`, `fg`, `fg2`, `fg3`, `line`, `line2`, `brand`, `err`, `ok`, `warn`, `info`,
+`accent`, each `#rrggbb`, set as `--hm-color-<id>`. A tool plugin's tile runs in the app's page
+and reads the app's own variables; these 11 are frozen for it: `--color-bg`, `--color-bg3`,
+`--color-fg`, `--color-fg3`, `--color-line`, `--color-select`, `--color-ok`, `--color-warn`,
+`--color-err`, `--color-info`, `--font-mono`. Adding to either list is fine; removing or renaming
+one is a **Breaking:** CHANGELOG line and, for the view colours, a protocol version bump. Tests
+hold both: `packages/hive-view-sdk/tests/theme-colors.test.ts` (each reaches a view as its
+variable), `apps/desktop/tests/unit/plugin-theme.test.ts` (the app asks its page for each),
+`apps/desktop/tests/unit/tool-css-vars.test.ts` (the stylesheet declares the 11), and e2e
+`plugin-contract.spec.ts` (on the built page, in a dark and a light preset with glass on and off:
+the 11 have values, and a view is told all 15 as `#rrggbb` in its hello and each theme).
+
+An agent's state is drawn the way the app draws it, never as your own dots: `STATUS_MARKS`
+(each tone's word, its shape as an SVG path, and whether it pulses: only `attention` does) and
+`statusMarkSvg(tone, size)` from the SDK, in the host's `--hm-status-<tone>` colour. An older app
+serves no `STATUS_MARKS`: read it through `import * as sdk` and fall back to a plain dot.
 
 `validateViewManifest()` from the SDK reports **every** problem, not the first — run it
 in your own build and you will never be surprised by `hive plugins install`.
@@ -153,15 +184,21 @@ are confined to the package dirs from the last scan, and every response carries:
 
 ```
 default-src 'none';
-script-src hm-view: 'nonce-…' 'wasm-unsafe-eval';
-style-src hm-view: 'unsafe-inline';
-img-src hm-view: data: blob:;
-font-src hm-view: data:;
-media-src hm-view: data: blob:;
+script-src hm-view://<host> 'nonce-…' 'wasm-unsafe-eval';
+style-src hm-view://<host> 'unsafe-inline';
+img-src hm-view://<host> data: blob:;
+font-src hm-view://<host> data:;
+media-src hm-view://<host> data: blob:;
 worker-src blob:;
-connect-src 'none'; frame-src 'none'; object-src 'none';
+connect-src hm-view://<host>; frame-src 'none'; object-src 'none';
 form-action 'none'; base-uri 'none';
 ```
+
+`connect-src` is `'none'` unless the manifest says `"files": true`. In a browser tab every
+`hm-view://<host>` above is the view's own path on the tab's server. On a phone, which serves one
+view per origin, the lists say `'self' hm-view:` and `connect-src 'none'`. The nonce is on the
+SDK's import map only, never on a module script: a module's imports inherit its nonce, and would
+then reach any address.
 
 Containment is checked on the **resolved** path with symlinks followed: a link inside a
 downloaded package pointing outside it is a 403, not a read.

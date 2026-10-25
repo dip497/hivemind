@@ -13,11 +13,16 @@ export function Popover({
   children,
   width = 200,
   align = "right",
+  label,
+  triggerClassName = "w-full text-left",
 }: {
   trigger: ReactNode;
   children: (close: () => void) => ReactNode;
   width?: number;
   align?: "left" | "right";
+  /** The trigger's name, when it shows only an icon. */
+  label?: string;
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -36,7 +41,7 @@ export function Popover({
   }, [open]);
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="nodrag w-full text-left">
+      <button type="button" aria-label={label} title={label} aria-expanded={open} onClick={() => setOpen((o) => !o)} className={`nodrag ${triggerClassName}`}>
         {trigger}
       </button>
       {open && (

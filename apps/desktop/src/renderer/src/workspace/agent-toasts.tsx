@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CircleAlert, CircleCheck, TriangleAlert, X } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { toastKindOf, toastTtlMs, type Toast, type NoticeKind } from "../useAgentAwareness";
+import { DecideButtons, useCut } from "../wait-decide";
 
 // ── Agent awareness ─────────────────────────────────────────────────────────
 
@@ -62,6 +63,11 @@ function ToastCard({
   const paused = hovered || winBlurred;
   const remainingRef = useRef(ttl);
   const startRef = useRef(0);
+  const detail = useRef<HTMLSpanElement>(null);
+  const cut = useCut(detail, t.detail ?? "", !!t.decide);
+
+  // The same tile told again (its toast keeps its id): its time starts again.
+  useEffect(() => { remainingRef.current = ttl; }, [t.at, ttl]);
 
   // Pause on window blur/focus (you're away → let the OS notification carry it).
   useEffect(() => {
@@ -83,7 +89,7 @@ function ToastCard({
       clearTimeout(id);
       remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startRef.current));
     };
-  }, [paused, leaving, t.id, onExpire]);
+  }, [paused, leaving, t.id, t.at, onExpire]);
 
   const go = () => onView(t.tileId);
   return (
@@ -116,29 +122,14 @@ function ToastCard({
           </span>
           <span className="hm-toast-verb text-label font-medium mt-0.5">{verb}</span>
           {t.detail && (
-            <span className="font-mono text-count mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>
+            <span ref={detail} className="font-mono text-count mt-1 text-[var(--color-fg2)] truncate">{t.detail}</span>
           )}
           <span className="text-count tracking-[0.01em] mt-1 text-[var(--color-fg3)] truncate">
             {t.frame ? <>{t.frame} · </> : null}{relTime(t.at, now)}
           </span>
-          {/* Inline actions (FUTURE SEAM — see Toast.actions). Renders a button row
-              only when a toast supplies actions; the first use is Approve/Deny on a
-              supervised-worker approval. stopPropagation so a button click doesn't
-              also fire the card's focus-tile onClick; each action dismisses the toast. */}
-          {t.actions && t.actions.length > 0 && (
-            <div className="flex gap-1.5 mt-2">
-              {t.actions.map((a) => (
-                <Button
-                  key={a.label}
-                  size="xs"
-                  variant={a.primary ? "default" : "ghost"}
-                  onClick={(ev) => { ev.stopPropagation(); a.run(); onExpire(t.id); }}
-                >
-                  {a.label}
-                </Button>
-              ))}
-            </div>
-          )}
+          {/* A permission answered from here: Deny and Allow, or Review when what it allows is
+              not all in sight. A press on them never reaches the card, which shows the tile. */}
+          {t.decide && <DecideButtons tile={t.tileId} name={displayName(t.label)} waiting={t.decide} cut={cut} className="mt-2 -ml-2.5" />}
         </div>
         <Button reveal="hidden"
           variant="ghost"

@@ -61,6 +61,9 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     fileWrite: (repo, file, contents) => workspace.call("file.write", repo, file, contents),
     ptyActivityWatch: (tiles) => workspace.notice("terminal.watchActivity", tiles),
     onPtyActivity: (cb) => workspace.on("terminal.activity", cb),
+    tileLinesWatch: (tiles) => workspace.call("tile.watchLines", tiles),
+    tileLinesRead: (tiles) => workspace.call("tile.readLines", tiles),
+    onTileLines: (cb) => workspace.on("tile.lines", cb),
     worktreeList: (repo) => workspace.call("worktree.list", repo),
     worktreeCreate: (repo, opts) => workspace.call("worktree.create", repo, opts),
     worktreeRemove: (repo, worktree, force) => workspace.call("worktree.remove", repo, worktree, force),
@@ -127,6 +130,9 @@ export function hiveOverWorkspace(workspace: WorkspaceClient) {
     },
     // The workspaces on this machine, as the drive socket serves them.
     hostWorkspaces: async () => (await workspace.call("host.status")).workspaces.map((w) => w.repo),
+    // The app's sounds: Recent, and one played by name (Settings' Play), as `hive notifications` asks.
+    recentSounds: () => workspace.call("notifications.recentSounds"),
+    playSound: (moment) => workspace.call("notifications.play", moment),
     onAgentChanged: (cb) => workspace.on("agent.changed", cb),
     onAgentEvent: (cb) => workspace.on("agent.event", cb),
     onHcpSpawn: (cb) => workspace.on("link.spawn", cb),

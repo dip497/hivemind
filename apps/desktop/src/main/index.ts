@@ -1,9 +1,10 @@
 import { installViewManagementIpc } from "./view-packages.js";
 import { installPluginSwitchIpc } from "./plugin-switch.js";
 import { installPackagesIpc } from "./packages-ipc.js";
+import { installThemesIpc } from "./themes-ipc.js";
 import { tileStatusOf } from "@hivemind/agent-host/tile-status";
 import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/plugin-settings";
-import { toolPreferences } from "@hivemind/core/settings-schema";
+import { lookForGuests, toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
 import { installToolPackageIpc, handleToolProtocol, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
@@ -18,7 +19,6 @@ import { installPluginCatalogIpc } from "./plugin-catalog-ipc.js";
 /** Electron main process — owns the BrowserWindow + IPC + PtyHost + git/worktree. */
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, Menu, nativeImage, net, powerMonitor, protocol, screen, session, shell, webContents, type WebContents } from "electron";
 import { isDay } from "@hivemind/view-sdk/protocol";
-import { ActivityMeter } from "./pty-activity.js";
 import { POLL_MS as PRESENCE_POLL_MS, PresenceMonitor, localDay, type PresenceTotals } from "./presence.js";
 import { StatusLedger } from "./status-ledger.js";
 import { ViewShare } from "./view-share.js";
@@ -63,9 +63,8 @@ const killAllPtys = ptyDaemon.killAll;
 import { dialogStart, rememberPick } from "./dialog-start";
 import { applyShellEnvToProcess, refreshShellEnv } from "@hivemind/agent-host/shell-env";
 import { watchRepo } from "./fs-watcher.js";
-import { registerAgentNotifications } from "./agent-notify.js";
-import { getNotificationSettings, setNotificationSettings } from "./notification-settings-store.js";
-import { normalizeNotificationSettings } from "../shared/notification-settings.js";
+import { registerWidgetNotifications } from "./agent-notify.js";
+import { noticeDeskDomain, registerNoticeDesk } from "./notice-desk.js";
 import { latestNightlyTag, newerNightlyTag, tagFromReleasesLatest } from "../shared/update-progress.js";
 import type { AppErrorEvent, MachineAddRequest } from "../shared/ipc.js";
 import { startPlanBridge, type PlanRequest } from "./plan-bridge.js";
@@ -79,12 +78,13 @@ import type { ReadScreen } from "@hivemind/agent-host/session-relay";
 import { ipcPath, upgradeCommand, windowsStartMenuShortcut } from "./platform.js";
 import { driveSockPath, readOrCreateToken } from "@hivemind/agent-host/hooks/token";
 import { ApiError, isErrorCode } from "@hivemind/workspace-api/protocol";
-import { appViewsDir, handleViewProtocol, listViewPackages, registerViewScheme, startViewWatchdog, viewSdk } from "./view-packages.js";
+import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, VIEW_SCHEME_PRIVILEGES, viewSdk } from "./view-packages.js";
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
+import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
 import { installIdentityIpc, machineIdentity } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
-import { agentFeed, dialDevice, homeChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
+import { agentFeed, dialDevice, homeLinesChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
 import { broadcast, openWindows, registerWindow, tabsOpen, userWindow } from "./windows.js";
 import { patchSettingsExtras } from "@hivemind/core/settings";
@@ -96,6 +96,8 @@ import { HANDED_OFF, handOff } from "@hivemind/host/hand-off";
 import { deviceFolders } from "@hivemind/host/device-files";
 import { agents } from "@hivemind/host/agents";
 import { Terminals, type SessionOutput, type StartOpts } from "@hivemind/host/terminals";
+import { TileLines } from "@hivemind/host/tile-lines";
+import { TileActivity } from "@hivemind/host/tile-activity";
 import { startSpawned, wakeSpawned } from "@hivemind/host/spawned";
 import { Layouts, type Shown } from "@hivemind/host/store";
 import { presence } from "@hivemind/host/presence";
@@ -113,11 +115,12 @@ import { StartPlaces } from "@hivemind/host/start-places";
 import { controlApi } from "@hivemind/host/control-api";
 import { views } from "@hivemind/host/views";
 import { listInstalledViews } from "@hivemind/core/views";
-import { askingOf, conversationOf, conversations, LastSaid, transcriptOf } from "@hivemind/host/conversations";
+import { askingOf, conversationOf, conversations, transcriptOf } from "@hivemind/host/conversations";
 import { TILE_SESSIONS_DIR } from "@hivemind/agents/node";
 import type { TerminalOpts } from "@hivemind/workspace-api/terminals";
 import { serveWorkspaceApi } from "./workspace-ipc.js";
 import { installBrowserApp } from "./browser-app.js";
+import { installPermissions } from "./permissions.js";
 import { serveScheme } from "./schemes.js";
 import { fileIn } from "@hivemind/host/repo-paths";
 
@@ -248,10 +251,15 @@ function attachWinStateSaver(win: BrowserWindow): void {
   win.on("unmaximize", save);
 }
 
+/** The app's own page: the dev server's in a dev run, else the built file. */
+function appPageUrl(): string {
+  return process.env["ELECTRON_RENDERER_URL"] ?? pathToFileURL(path.join(__dirname, "../renderer/index.html")).href;
+}
+
 async function createWindow(target: string | null = cliLaunchTarget): Promise<void> {
   // Remove the native File/Edit/View/Window/Help menu entirely (autoHideMenuBar
   // only hides it until Alt; this kills it outright). No app actions live there
-  // — everything is in the in-canvas chrome + ⌘K palette.
+  // — everything is in the in-app toolbar and the keymap (shared/keymap.ts).
   Menu.setApplicationMenu(null);
   // Export the browser-targets discovery path so spawned PTY agents inherit it
   // (set here — post-ready — because userData is only reliable now). Harmless
@@ -259,7 +267,7 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
   process.env.HIVEMIND_BROWSER_TARGETS = path.join(app.getPath("userData"), "browser-targets.json");
   const state = await loadWinState();
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
-  const appPage = devUrl ?? pathToFileURL(path.join(__dirname, "../renderer/index.html")).href;
+  const appPage = appPageUrl();
   const win = new BrowserWindow({
     width: state.width,
     height: state.height,
@@ -267,15 +275,16 @@ async function createWindow(target: string | null = cliLaunchTarget): Promise<vo
     ...(typeof state.y === "number" ? { y: state.y } : {}),
     minWidth: 720,
     minHeight: 560,
-    backgroundColor: "#0d0e12",
+    // The look's own background, so a light look does not open on a dark flash.
+    backgroundColor: initialWindowBackground(),
     // Window / taskbar icon (Linux). The AppImage's desktop icon comes from
     // electron-builder's linux.icon; this sets the live window icon too.
     icon: path.join(__dirname, "../renderer/icon.png"),
     titleBarStyle: "default",
     // Hide the native File/Edit/View/Window menu bar — it's redundant chrome
-    // (no app-specific actions live there; everything is in the in-app top bar
-    // + ⌘K palette) and it breaks the bespoke deep-navy frameless feel. Alt
-    // still reveals it on Linux/Windows if ever needed.
+    // (no app-specific actions live there; everything is in the in-app toolbar
+    // and the keymap). The window keeps the system's own frame and title bar.
+    // Alt still reveals the menu bar on Linux/Windows if ever needed.
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -576,15 +585,6 @@ handleEffect("setBrowserCdpEnabled", (enabled) => ({ detail: enabled ? "on" : "o
   return { ok: true as const };
 }), { local: true });
 
-// ── notification preferences ──────────────────────────────────────────────
-// The persisted blob lives in settings.json; this module owns the read + the
-// in-memory cache the per-notice OS-popup gate reads. The renderer caches its
-// own snapshot on load + on every change here (pushed back via the setter).
-handle("getNotificationSettings", () => getNotificationSettings());
-handleEffect("setNotificationSettings", () => ({}), wrap(async (_e, s: unknown) => {
-  await setNotificationSettings(normalizeNotificationSettings(s));
-  return { ok: true as const };
-}));
 // The install.sh launcher (`~/.local/bin/hivemind`). Relaunching THROUGH it is
 // what makes "restart after update" land on the new version: the running
 // AppImage can't overwrite itself, so install.sh stages the new build to
@@ -1008,10 +1008,6 @@ function writeTile(tileId: string, data: string, paste?: boolean): boolean {
   return false; // dead/unknown tile → agent.send surfaces NOT_FOUND
 }
 
-/** What each agent here last said, for the rows of the person's phone's Home. */
-let said: LastSaid | null = null;
-const lastSaid = (): LastSaid => (said ??= new LastSaid({ tileSessionsDir: path.join(app.getPath("userData"), TILE_SESSIONS_DIR) }));
-
 /** How the host watches a session it starts or wakes. */
 function hostStarted() {
   return {
@@ -1022,6 +1018,16 @@ function hostStarted() {
   };
 }
 
+/** Each tile's last line (what its agent last said, or its screen last showed), for the windows and
+ *  devices that watch it (`tile.watchLines`), and for the person's phone's Home, told as one
+ *  changes. */
+const tileLines = new TileLines({
+  server: () => workspaceServer, changed: () => homeLinesChanged(),
+  transcriptOf: (bare) => transcriptOf(heldBoards(workspaceStore()), bare, path.join(app.getPath("userData"), TILE_SESSIONS_DIR)),
+  runsHere: (bare) => !isRemote(runsIn(heldBoards(workspaceStore()), bare)),
+  reports: (bare) => !!manifestOf(heldBoards(workspaceStore()), bare)?.caps.turnSignal,
+});
+
 /** A session's screen and its cursor, wherever it runs. */
 function viewportOf(ptyId: string) {
   return hasRemotePty(ptyId) ? viewportRemotePty(ptyId) : ptyDaemon.viewportPty(ptyId);
@@ -1030,7 +1036,7 @@ function viewportOf(ptyId: string) {
 const control: ControlPlane = new ControlPlane({
   dir: () => app.getPath("userData"),
   waitsChanged: () => agentFeed()?.changed(),
-  lineChanged: () => homeChanged(),
+  lines: tileLines,
   waitingOf: (bare) => agentFeed()?.waitingOf(bare),
   publish: (event, ...params) => workspaceServer.publish(event, ...params),
   // Used by agent.send and pipe forwarding.
@@ -1099,10 +1105,8 @@ const control: ControlPlane = new ControlPlane({
     },
   }),
 });
-// View protocol 1.3: output levels for watched tiles (a window asks with terminal.watchActivity).
-const ptyActivity = new ActivityMeter((levels) => {
-  workspaceServer.publish("terminal.activity", levels);
-});
+// View protocol 1.3: output levels of the tiles each window watches (terminal.watchActivity).
+const ptyActivity = new TileActivity(() => workspaceServer);
 /** Push a NON-FATAL background-subsystem error to the renderer as a toast, so
  *  nothing fails silently (e.g. a stale PTY daemon that breaks hook injection).
  *  Fatal errors still use dialogs. Idempotent + cheap; safe to call pre-window. */
@@ -1178,7 +1182,6 @@ const terminals = new Terminals({
   machineOf: terminalMachine,
   folderOf: (bare) => sessionFolder(heldBoards(workspaceStore()), bare),
   conversationAsleep: (opts) => control.conversationAsleep(opts.tileId, opts.args ?? []),
-  watchActivity: (tiles) => ptyActivity.setWatched(tiles),
   onError: (m) => console.warn(`[terminals] ${m}`),
   backend: {
     start: startSession,
@@ -1344,6 +1347,10 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   layouts.domain,
   agents({ statuses: () => control.status.all(), links: () => control.links(), feed: agentFeed, workspaceOf: (repo) => workspaceStore().ownership(repo)?.workspaceId ?? null }),
   terminals.domain,
+  tileLines.domain,
+  ptyActivity.domain,
+  // The app's sounds by name, and Recent (0.35).
+  noticeDeskDomain,
   // What an agent here waits on the person for, answered from another of their devices (M5).
   answers({
     plane: () => control,
@@ -1411,7 +1418,7 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
   presence(() => workspaceServer, () => machineIdentity().personId),
   widgetDomain,
   // How this host looks to its guests, as its theme changes.
-  appearance({ current: () => getAppSettings().appearance, onChange: (l) => { onSettingsChange((s) => l(s.appearance)); }, server: () => workspaceServer }),
+  appearance({ current: () => lookForGuests(getAppSettings()), onChange: (l) => { onSettingsChange((s) => l(lookForGuests(s))); }, server: () => workspaceServer }),
   peopleHere.domain,
   grantsDomain({
     serving: () => driveServing,
@@ -1572,20 +1579,25 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
   // via a custom scheme. A blob: URL can't survive a reload (in-memory), and a
   // raw file:// is blocked by webSecurity + CSP — so the theme stores a stable
   // `hm-media://v/<encoded-abs-path>` URL and main streams the file here. Must be
-  // registered as privileged BEFORE app `ready`.
+  // registered as privileged BEFORE app `ready`, every scheme in this ONE call: Electron keeps only
+  // one call's list, so a second call drops the privileges of the first (hivemedia: lost the Fetch
+  // API that way, and no view got a theme's font bytes).
   protocol.registerSchemesAsPrivileged([
     { scheme: "hm-media", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
     // Custom-media layers (user-supplied background + transparent overlay). Same
     // sandbox model as hm-media, but keyed by BARE FILENAME (hivemedia://<file>)
     // and confined to userData/media. `stream: true` is REQUIRED so <video>
     // range-requests (seek/loop) work.
-    { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } },
+    // corsEnabled: a theme's fonts load with CORS; the handler answers the app's own window only.
+    { scheme: "hivemedia", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
     // Tool plugins' modules, imported into the app's windows; corsEnabled so module scripts load.
     { scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+    // Community view packages: hm-view://<id>/… served to sandboxed iframes.
+    VIEW_SCHEME_PRIVILEGES,
   ]);
-  // Community view packages: hm-view://<id>/… served to sandboxed iframes.
-  registerViewScheme();
   app.whenReady().then(async () => {
+    // Before any window or Browser tile page loads, so none is ever granted without them.
+    installPermissions(appPageUrl());
     await migrateOnStart();
     // A daemon of another protocol is replaced before anything connects to it: each connection
     // waits for this, the window does not.
@@ -1596,6 +1608,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     handleViewProtocol();
     handleToolProtocol();
     installSettingsIpc(broadcast);
+    followWindowLook();
     installBrowserApp(path.join(__dirname, "../renderer"), getAppSettings, onSettingsChange);
     installIdentityIpc();
     // The person's other devices run terminals here in this computer's daemon, when it has one.
@@ -1610,7 +1623,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       home: {
         links: () => control.links(),
         linkState,
-        line: (held, tile) => lastSaid().line(held, tile) ?? control.lines.get(tile),
+        lines: tileLines,
       },
     });
     installWorkspaceStoreIpc(layouts, workspaceIpc.connect, (change) =>
@@ -1625,6 +1638,7 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installToolPackageIpc();
     installPluginSwitchIpc();
     installPackagesIpc();
+    installThemesIpc();
     installServicesIpc();
     installPluginCatalogIpc();
     installQuitIpc({
@@ -1728,7 +1742,8 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       console.warn(`[browser] extension load failed: ${(err as Error).message}`);
     }
 
-    // Wallpaper media is CONFINED to a sandboxed dir under userData. The
+    // Wallpapers picked by older builds (settings that still name hm-media://) are CONFINED to a
+    // sandboxed dir under userData; new picks and theme files go to the media dir below. The
     // hm-media:// handler serves ONLY files inside it — never an arbitrary path
     // from the URL. Without this confinement the scheme is an arbitrary-file-read
     // primitive (e.g. hm-media://v/<encoded /etc/passwd>), reachable from the
@@ -1749,57 +1764,14 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
         return new Response("bad request", { status: 400 });
       }
     });
-    // Import a user-picked image/video INTO the sandboxed dir and return its
-    // hm-media:// URL. Copying (a) confines what the protocol can ever read to
-    // files the user explicitly chose, and (b) makes the wallpaper survive the
-    // original being moved/deleted. The dest name is a hash of the source path
-    // (+ext) so re-picking the same file is idempotent.
-    // Classify a wallpaper file by extension so import can prune OLD files of the
-    // same kind — only one video + one image can ever be active, so keeping every
-    // file the user ever picked just leaked hundreds of MB into userData.
-    const VIDEO_EXT = new Set([".mp4", ".webm", ".mov", ".mkv", ".m4v", ".ogv"]);
-    const IMAGE_EXT = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif", ".bmp"]);
-    const mediaKind = (f: string): "video" | "image" | null => {
-      const e = path.extname(f).toLowerCase();
-      return VIDEO_EXT.has(e) ? "video" : IMAGE_EXT.has(e) ? "image" : null;
-    };
-    handle("wallpaper:import", (_e, srcPath: unknown) => {
-      try {
-        const src = path.resolve(String(srcPath));
-        if (!existsSync(src) || !statSync(src).isFile()) return null;
-        mkdirSync(wallpaperDir, { recursive: true });
-        // Keep the original basename (sanitized) so the customizer shows a
-        // recognizable name; prefix a short hash of the source path for
-        // uniqueness + idempotent re-pick.
-        const base = path.basename(src).replace(/[^.\w-]/g, "_").slice(-60);
-        const dest = path.join(wallpaperDir, `${createHash("sha1").update(src).digest("hex").slice(0, 8)}-${base}`);
-        cpSync(src, dest);
-        // Prune previously-imported files of the SAME kind (the just-replaced
-        // wallpaper + any older orphans) — only the newest video/image is ever
-        // referenced, so this caps the dir at one video + one image instead of
-        // accumulating every pick forever.
-        const kind = mediaKind(dest);
-        if (kind) {
-          for (const f of readdirSync(wallpaperDir)) {
-            const abs = path.join(wallpaperDir, f);
-            if (abs !== dest && mediaKind(abs) === kind) {
-              try { unlinkSync(abs); } catch { /* best-effort */ }
-            }
-          }
-        }
-        return `hm-media://v/${encodeURIComponent(dest)}`;
-      } catch {
-        return null;
-      }
-    }, { local: true });
-
     // ── Custom-media layers (bring-your-own background + overlay) ─────────────
     // Files the user picks are COPIED into userData/media and served by bare
     // filename via hivemedia://<file>. Copying confines what the protocol can
     // ever read to files the user explicitly chose (never an arbitrary path from
     // the URL), and survives the original being moved/deleted.
     const mediaDir = path.join(path.dirname(settingsFile()), "media"); // beside settings.json (see wallpaperDir)
-    serveScheme("hivemedia", (request) => {
+    const mediaOrigins = new Set(["file://", ...(process.env.ELECTRON_RENDERER_URL ? [new URL(process.env.ELECTRON_RENDERER_URL).origin] : [])]);
+    serveScheme("hivemedia", async (request) => {
       try {
         // hivemedia://media/<filename> — the filename rides in the PATH (host is
         // the fixed marker "media"). Resolve against mediaDir, then verify it
@@ -1812,7 +1784,15 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
           return new Response("forbidden", { status: 403 });
         }
         if (!existsSync(abs) || !statSync(abs).isFile()) return new Response("not found", { status: 404 });
-        return net.fetch(pathToFileURL(abs).toString(), { headers: request.headers });
+        const res = await net.fetch(pathToFileURL(abs).toString(), { headers: request.headers });
+        // A font is fetched with CORS: allowed for the app's own page (file://, or the dev server),
+        // never for a view's sandboxed frame, whose origin is "null".
+        const origin = request.headers.get("origin");
+        if (!origin || !mediaOrigins.has(origin)) return res;
+        const headers = new Headers(res.headers);
+        headers.set("Access-Control-Allow-Origin", origin);
+        headers.set("Vary", "Origin");
+        return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
       } catch {
         return new Response("bad request", { status: 400 });
       }
@@ -1866,10 +1846,9 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
       }
     }, { local: true });
     void createWindow();
-    // Native OS notifications for agents that need you — driven by the renderer's
-    // agent-status bus over IPC (multi-agent, transition-deduped). Reads
-    // The window the user is at, read lazily; gated on it not being focused inside the bridge.
-    registerAgentNotifications(userWindow);
+    // Every window's agent changes, once each: pop-ups, sounds and Recent (notice-desk.ts).
+    registerNoticeDesk({ waitingOf: (bare) => agentFeed()?.waitingOf(bare), lineOf: (bare) => tileLines.get(bare) });
+    registerWidgetNotifications();
     startPlanReviewBridge();
     startHcpControlPlane();
     startViewHost();

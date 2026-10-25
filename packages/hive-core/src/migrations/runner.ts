@@ -31,6 +31,10 @@ export interface Migration {
   root: DataRootName;
   /** The paths under the root it changes or removes, copied into its backup before it runs. */
   backsUp: readonly string[];
+  /** Whether it changes anything on this machine; false: it is recorded as run, with no backup, so
+   *  restoring it puts nothing back over what changed since. A backup a run cut off earlier made
+   *  is kept whatever this says. Always when absent. */
+  changesHere?(ctx: Pick<MigrationContext, "root">): Promise<boolean>;
   /** It moves files that an older app, still running, reads: the CLI and `hive host` leave it
    *  until no older app runs. */
   movesFilesAnOlderAppReads: boolean;
@@ -121,7 +125,7 @@ export async function runMigrations(o: RunOptions): Promise<RootReport[]> {
           }
           const started = Date.now();
           try {
-            const backup = await backUp(root, m);
+            const backup = await backUp(root, m, !m.changesHere || await m.changesHere({ root }));
             const result = await m.run({ root, remove: (rel) => removeBackedUp(root, m, rel) });
             const entry: AppliedMigration = {
               id: m.id, app: o.app, by: o.by, at: new Date().toISOString(), ms: Date.now() - started,
@@ -162,13 +166,15 @@ function checkedPath(root: string, rel: string): string {
 
 /** Copy `m`'s paths into its backup, unless it has one: a run after a crash keeps the copy made
  *  before anything changed. The copy is made beside it and renamed into place, so a backup is
- *  whole or not there. Gives its path inside `migrations/`, or none for nothing to back up. */
-async function backUp(root: string, m: Migration): Promise<string | undefined> {
+ *  whole or not there. Gives its path inside `migrations/`, or none for nothing to back up (or,
+ *  `changes` false, nothing it changes here). */
+async function backUp(root: string, m: Migration, changes: boolean): Promise<string | undefined> {
   if (!m.backsUp.length) return undefined;
   const folder = backupsFolder(root);
   const dest = path.join(folder, m.id);
   const named = path.relative(migrationsFolder(root), dest).split(path.sep).join("/");
   if (await stat(dest).catch(() => null)) return named;
+  if (!changes) return undefined;
   const there = await Promise.all(m.backsUp.map((rel) => stat(checkedPath(root, rel)).then(() => true, () => false)));
   if (!there.includes(true)) return undefined;
   await mkdir(folder, { recursive: true, mode: 0o700 });

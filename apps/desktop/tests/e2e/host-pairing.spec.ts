@@ -35,7 +35,7 @@ const procs: ChildProcess[] = [];
 const hostEnv = () => ({ ...process.env, HIVEMIND_APP_DATA: path.join(root, "server"), HIVEMIND_PTY_SOCK: path.join(root, "pty.sock"), HIVEMIND_HIVE_NET: HIVE_NET, HIVEMIND_SHELL_ENV: "0" }) as Record<string, string>;
 const hive = (...args: string[]) => spawnSync(HIVE, args, { env: hostEnv(), encoding: "utf8", timeout: 60_000 });
 const status = () => {
-  try { return (JSON.parse(hive("host", "status", "--json").stdout) as { data?: { running: boolean; devices: unknown[] } }).data; } catch { return undefined; }
+  try { return (JSON.parse(hive("host", "status", "--json").stdout) as { running: boolean; devices: unknown[] }); } catch { return undefined; }
 };
 /** The lines a process prints, one at a time. */
 function lines(stream: NodeJS.ReadableStream): () => Promise<string> {
@@ -86,12 +86,12 @@ for (const entered of ["words", "link"] as const) test(`the app pairs with a hos
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
   const printed = lines(pairing.stdout!);
-  const offer = (JSON.parse(await printed()) as { data: { offer: { code: string; link: string } } }).data.offer;
+  const offer = (JSON.parse(await printed()) as { offer: { code: string; link: string } }).offer;
   // The words as a person reads them off the host's screen, or its link.
   await enterCode(laptop, entered === "words" ? offer.code.split("-").join(" ") : offer.link);
   await openConnect(laptop);
   await expect(laptop.locator('[data-device-kind="host"]')).toHaveCount(1);
-  expect(JSON.parse(await printed())).toMatchObject({ ok: true, data: { paired: { kind: "app" } } });
+  expect(JSON.parse(await printed())).toMatchObject({ paired: { kind: "app" } });
   await laptop.keyboard.press("Escape");
   // The host starts again as the laptop's person.
   await expect.poll(() => status()?.devices.length ?? 0, { timeout: 30_000 }).toBe(1);
@@ -134,7 +134,7 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   await expect.poll(() => status()?.running ?? false, { timeout: 30_000 }).toBe(true);
   expect(hive("host", "add", builds).status).toBe(0);
   // Its device, the same once it is the laptop's person.
-  const hostDevice = (JSON.parse(hive("host", "status", "--json").stdout) as { data: { device: string } }).data.device;
+  const hostDevice = (JSON.parse(hive("host", "status", "--json").stdout) as { device: string }).device;
 
   const elsewhere = path.join(root, "elsewhere");
   fs.mkdirSync(elsewhere);
@@ -142,7 +142,7 @@ test("a frame of the app's own workspace runs on the paired host: placed on one 
   const laptop = await person(root, "laptop", elsewhere, apps);
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
-  const offer = (JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer;
+  const offer = (JSON.parse(await lines(pairing.stdout!)()) as { offer: { link: string } }).offer;
   await enterCode(laptop, offer.link);
   await expect.poll(() => status()?.devices.length ?? 0, { timeout: 30_000 }).toBe(1);
 
@@ -237,10 +237,10 @@ test("a phone paired with the app is the person's at the host too: the host lets
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: onHost });
   procs.push(pairing);
   const printed = lines(pairing.stdout!);
-  const offer = (JSON.parse(await printed()) as { data: { offer: { link: string } } }).data.offer;
+  const offer = (JSON.parse(await printed()) as { offer: { link: string } }).offer;
   await enterCode(laptop, offer.link);
   // The host starts again as the laptop's person.
-  expect(JSON.parse(await printed())).toMatchObject({ ok: true, data: { paired: { kind: "app" } } });
+  expect(JSON.parse(await printed())).toMatchObject({ paired: { kind: "app" } });
 
   // A phone connects with the laptop's offer, Settings → Connect, and is the person's.
   const link = await offerToConnect(laptop);
@@ -253,7 +253,7 @@ test("a phone paired with the app is the person's at the host too: the host lets
   // The host learns of it from the laptop, as a phone.
   await expect.poll(() => status()?.devices.map((d) => `${(d as { kind: string }).kind} ${(d as { device: string }).device}`).sort(), { timeout: 30_000 })
     .toEqual(["app " + (await laptop.evaluate(() => window.hive.identity())).deviceId, `phone ${phoneId}`].sort());
-  const hostDevice = (JSON.parse(hive("host", "status", "--json").stdout) as { data: { device: string } }).data.device;
+  const hostDevice = (JSON.parse(hive("host", "status", "--json").stdout) as { device: string }).device;
 
   // The phone learns of the host from the laptop, and gives both where it is told what happens.
   const pushed = spawn(HIVE_PHONE, ["push", "--listen", "127.0.0.1:0", "--identity", phone, "--json"]);
@@ -346,7 +346,7 @@ test("a host that joined someone else's workspace as the person is let go there 
 
   const pairing = spawn(HIVE, ["host", "pair", "--json"], { env: hostEnv() });
   procs.push(pairing);
-  const offer = (JSON.parse(await lines(pairing.stdout!)()) as { data: { offer: { link: string } } }).data.offer;
+  const offer = (JSON.parse(await lines(pairing.stdout!)()) as { offer: { link: string } }).offer;
   await enterCode(laptop, offer.link);
   await openConnect(laptop);
   const row = laptop.locator('[data-device-kind="host"]');

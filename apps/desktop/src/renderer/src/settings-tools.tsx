@@ -7,7 +7,7 @@ import { isPluginOn, pluginOptions, resolveSettings } from "@hivemind/core/plugi
 import { patchPluginState, setPluginOption, switchPlugin, useSettings } from "./settings-store";
 import { Button } from "./components/ui/button";
 import { Switch } from "./components/ui/switch";
-import { useSettingsNavigate } from "./settings-panels";
+import { useSettingsNavigate } from "./settings-navigate";
 import { toolLabel } from "./settings-nav";
 import { useToolPackages, useToolProblem } from "./tiles/tool-plugins";
 import { SettingsForm } from "./plugins/SettingsForm";

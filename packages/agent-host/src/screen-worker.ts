@@ -8,8 +8,7 @@ import { parentPort } from "node:worker_threads";
 import * as HeadlessXtermNS from "@xterm/headless";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
 // Type imports only: run from source, a worker gets no loader that maps `./x.js` to `./x.ts`.
-import type { FromScreens, ToScreens } from "./screen-messages.js";
-import type { Viewport } from "./pty-protocol.js";
+import type { FromScreens, ScreenCursor, ScreenRows, ToScreens } from "./screen-messages.js";
 
 type HeadlessCtor = typeof import("@xterm/headless").Terminal;
 type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
@@ -46,6 +45,15 @@ function kittyFlagsSeq(term: InstanceType<HeadlessCtor>): string {
   return flags ? `\x1b[=${flags};1u` : "";
 }
 
+/**
+ * What it loses about the background: whether the program asked to hear when it goes light or dark
+ * (mode 2031, `CSI ? 2031 h`; xterm keeps no state for it). Every window that attaches learns it from
+ * the replay, so the one holding the keys tells the program after a restart, a reload or another
+ * window taking the keyboard.
+ */
+const THEME_NOTIFY_MODE = 2031;
+const themeNotifySeq = (s: Screen): string => (s.themeNotify ? `\x1b[?${THEME_NOTIFY_MODE}h` : "");
+
 interface Screen {
   id: string;
   /** The session instance it belongs to: what it tells main is dropped when another holds the id. */
@@ -55,8 +63,14 @@ interface Screen {
   /** Output position the terminal has taken in, within its session. */
   parsed: number;
   paste: boolean;
+  /** The program has mode 2031 on (`themeNotifySeq`). */
+  themeNotify: boolean;
   /** The last screen serialized, given again while no output or resize changed it. */
   last?: { at: number; lines: number; text: string };
+  /** Where the shell's prompt starts, while the shell waits at it, for a shell that marks its prompt
+   *  (OSC 133, its "shell integration"): set where a prompt starts (`A`), let go where the command
+   *  typed at it starts to run (`C`). */
+  prompt?: import("@xterm/headless").IMarker;
 }
 
 const port = parentPort!;
@@ -97,9 +111,20 @@ function open(m: Extract<ToScreens, { t: "open" }>): void {
   const term = new Terminal({ cols: m.cols, rows: m.rows, scrollback: m.scrollback, allowProposedApi: true, vtExtensions: { kittyKeyboard: true } });
   const serializer = new SerializeAddon();
   term.loadAddon(serializer);
-  const s: Screen = { id: m.id, epoch: m.epoch, term, serializer, parsed: m.parsed, paste: false };
+  const s: Screen = { id: m.id, epoch: m.epoch, term, serializer, parsed: m.parsed, paste: false, themeNotify: false };
   screens.set(m.id, s);
   term.onTitleChange((title) => post({ t: "title", id: s.id, epoch: s.epoch, title }));
+  // Heard, and left to xterm (false) for the other modes the same sequence sets.
+  const themeMode = (on: boolean) => (params: (number | number[])[]) => { if (params.includes(THEME_NOTIFY_MODE)) s.themeNotify = on; return false; };
+  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, themeMode(true));
+  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, themeMode(false));
+  term.parser.registerOscHandler(133, (data) => {
+    const mark = data.split(";", 1)[0];
+    if (mark === "A" || mark === "C") { s.prompt?.dispose(); s.prompt = undefined; }
+    // None on the alternate screen, where no shell draws its prompt.
+    if (mark === "A") s.prompt = term.registerMarker(0) ?? undefined;
+    return true;
+  });
   if (m.seed) write(s, m.seed, m.parsed);
 }
 
@@ -113,10 +138,14 @@ function write(s: Screen, data: string, end: number): void {
 }
 
 /** Run `then` once the terminal has taken in everything sent before it: a screen, the rows or its
- *  end keep their place among the session's output. */
+ *  end keep their place among the session's output. Not `write("")`: a resize first takes in what is
+ *  queued, and stops at an empty string (it is falsy), dropping it, its `then` and every write after
+ *  it, so a window waits for a screen that never comes (xterm's WriteBuffer.flushSync). Our patch of
+ *  @xterm/headless fixes that loop too; an empty array keeps this right without the patch. */
 function inTurn(s: Screen, then: () => void): void {
-  s.term.write("", then);
+  s.term.write(NOTHING, then);
 }
+const NOTHING = new Uint8Array(0);
 
 function screenOf(s: Screen, lines: number): string {
   const kept = s.last;
@@ -126,11 +155,27 @@ function screenOf(s: Screen, lines: number): string {
   return text;
 }
 
-function visibleRows(s: Screen): Viewport {
+function visibleRows(s: Screen): ScreenRows {
   const buf = s.term.buffer.active;
   const rows: string[] = [];
   for (let y = 0; y < s.term.rows; y++) rows.push(buf.getLine(buf.baseY + y)?.translateToString(true) ?? "");
-  return { text: rows.join("\n"), cursor: { x: buf.cursorX, y: buf.cursorY } };
+  return { text: rows.join("\n"), cursor: cursorOf(s) };
+}
+
+/** Read through the public API: `cursorY` counts from `baseY`, the row `visibleRows` starts at. The
+ *  input the cursor is in starts where the shell's prompt does, when it marked it, else on the
+ *  first row of its line: a command typed past the width wraps onto the rows below it. */
+function cursorOf(s: Screen): ScreenCursor {
+  const buf = s.term.buffer.active;
+  const row = buf.cursorY;
+  let top = row;
+  while (top > 0 && buf.getLine(buf.baseY + top)?.isWrapped) top--;
+  const prompt = buf.type === "normal" && s.prompt && !s.prompt.isDisposed ? s.prompt.line - buf.baseY : row + 1;
+  // A prompt below the cursor was drawn before the screen was cleared; one above the screen leaves
+  // every row up to the cursor to it.
+  const marked = prompt <= row;
+  if (marked) top = Math.max(0, Math.min(top, prompt));
+  return { x: buf.cursorX, y: row, top, hidden: !s.term.modes.showCursor, ...(marked ? { marked: true as const } : {}) };
 }
 
 port.on("message", (m: ToScreens) => {
@@ -147,11 +192,11 @@ port.on("message", (m: ToScreens) => {
     case "screen": {
       const s = current(m.id, m.epoch);
       if (!s) { post({ t: "screen", req: m.req, text: null, at: 0, modes: "" }); break; }
-      inTurn(s, () => post({ t: "screen", req: m.req, text: screenOf(s, m.lines), at: s.parsed, modes: mouseEncodingSeq(s.term) + kittyFlagsSeq(s.term) }));
+      inTurn(s, () => post({ t: "screen", req: m.req, text: screenOf(s, m.lines), at: s.parsed, modes: mouseEncodingSeq(s.term) + kittyFlagsSeq(s.term) + themeNotifySeq(s) }));
       break;
     }
     case "rows": {
-      const rows: Array<[string, Viewport]> = [];
+      const rows: Array<[string, ScreenRows]> = [];
       const ready = m.ids.flatMap((id) => {
         const s = screens.get(id);
         return s ? [new Promise<void>((r) => inTurn(s, () => { rows.push([id, visibleRows(s)]); r(); }))] : [];

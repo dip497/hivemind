@@ -6,6 +6,7 @@ import type { ServiceState } from "@hivemind/host/services";
 import type { ActivityLevel, HostMessage, PluginMessage, ShareOutcome, SurfaceRect, ViewHistoryDay, ViewSession, ViewPresence, ViewStatus } from "@hivemind/view-sdk/protocol";
 import type { ViewScreen } from "@hivemind/workspace-api/views";
 import type { NotificationSettings } from "./notification-settings.js";
+import type { RecentSound, SoundMoment, SoundResult } from "@hivemind/workspace-api/notifications";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { MachineKind } from "@hivemind/core";
 import type { LegacyLayout, WorkspaceChange } from "@hivemind/workspace-host/layout";
@@ -142,7 +143,7 @@ export type {
   WorktreeEntry,
 } from "@hivemind/workspace-api/git";
 import type { DiffPayload, DiffScope, GitBranchList, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "@hivemind/workspace-api/git";
-import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
+import type { LastLines, TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 
 // ── machines (saved ssh hosts, shared with `hive machine`) ────────────────
 /** One remote directory entry for the folder picker / tree. */
@@ -247,7 +248,7 @@ export interface UpdateStatus {
   staged: string | null;
 }
 
-import type { Appearance, Settings } from "@hivemind/core/settings-schema";
+import type { Settings, SharedAppearance } from "@hivemind/core/settings-schema";
 import type { CatalogEntry, SkippedEntry } from "@hivemind/hub";
 
 /** An installed package, as the Plugins page lists it: each member with where its code runs, and
@@ -267,6 +268,8 @@ export interface PackageReview {
   on: boolean;
   /** The version it replaces, and whether that one is on. */
   replaces: { version: string; on: boolean } | null;
+  /** The view it opens with (its manifest's `startup.view`), which the app offers once it is installed. */
+  opens: { id: string; name: string } | null;
   members: Array<{ kind: string; id: string; name: string; permissions: string[]; runs: MemberRuns }>;
   changes: Array<MemberChange & { name: string; runs: MemberRuns }>;
 }
@@ -291,6 +294,17 @@ export interface ViewPackageInfo {
 /** Settings → Advanced → In a browser: whether the app is served, at which link, or why not. */
 /** `url` is this computer's link; `others`, the same key at each of the person's other names. */
 export interface BrowserAppStatus { on: boolean; url: string | null; others: string[]; error: string | null }
+
+/** A Browser tile's page asks for something (`permissions`: "camera", "microphone", "geolocation",
+ *  "notifications"…) and the tile showing page `pageId` asks the person; or that ask is over
+ *  (`done`), answered or not. */
+export type BrowserPermissionEvent =
+  | { askId: number; pageId: number; site: string; permissions: string[] }
+  | { askId: number; done: true };
+
+/** A right a site in a Browser tile may be given ("notifications", "camera",
+ *  "openExternal:mailto"…) and the person's answer for it, until the app quits: "ask" when none. */
+export interface SiteRight { right: string; answer: "allow" | "block" | "ask" }
 
 export interface HiveIpc {
   // ── workspace layout (main owns it; see main/workspace-store-ipc.ts) ──
@@ -354,8 +368,6 @@ export interface HiveIpc {
    *  debounced UI snapshot reverts whatever the CLI (or another window) wrote in
    *  the meantime. Resolves with the settings as written. */
   settingsPatch(patches: readonly { path: string; value: unknown }[]): Promise<Settings>;
-  /** Whole-object write (a theme import). Merged onto the file under the same lock. */
-  settingsReplace(next: Settings): Promise<Settings>;
   settingsPath(): Promise<string>;
   onSettingsChanged(cb: (s: Settings) => void): () => void;
   // ── community views ───────────────────────────────────────
@@ -463,6 +475,10 @@ export interface HiveIpc {
   reviewPackageFolder?(): Promise<PackageReview | null>;
   /** Install the folder last reviewed. */
   installPackageFolder?(token: string): Promise<void>;
+  /** The packages whose start view (`startup.view`) this window should offer now, given the views
+   *  it loaded and the one it shows; each is recorded as offered, so it is offered once. Only the
+   *  window the person is at is offered any. */
+  startViewOffers?(registered: string[], showing: string | null): Promise<Array<{ package: string; name: string; view: string }>>;
   /** Main's watchdog saw a plugin frame peg a core for several samples. */
   onViewRunaway(cb: (e: { id: string; cpuPct: number }) => void): () => void;
   // ── identity (R3) ─────────────────────────────────────────
@@ -505,9 +521,9 @@ export interface HiveIpc {
   /** A joined workspace's connection changed. */
   onSharedStatus(cb: (workspace: string, status: SharedStatus) => void): () => void;
   /** How the joined workspace `workspace`'s host looks, checked; null before it says. */
-  sharedLooks(workspace: string): Promise<Appearance | null>;
+  sharedLooks(workspace: string): Promise<SharedAppearance | null>;
   /** A joined workspace's host changed how it looks. */
-  onSharedLooks(cb: (workspace: string, appearance: Appearance) => void): () => void;
+  onSharedLooks(cb: (workspace: string, appearance: SharedAppearance) => void): () => void;
   /** Leave a joined workspace: its connection closes, and the last copy is kept to read. */
   leave(workspace: string): Promise<void>;
   /** What this person lets the people in the joined workspace `workspace` do on this computer, in
@@ -727,6 +743,13 @@ export interface HiveIpc {
   /** Bare tile ids whose output level someone watches (main samples only these). */
   ptyActivityWatch(tileIds: string[]): void;
   onPtyActivity(cb: (levels: Record<string, ActivityLevel>) => void): () => void;
+  /** Watch the last lines of these tiles (bare ids), in place of those this window watched (none:
+   *  it watches none). Answered with each one's line now, for those that showed one. */
+  tileLinesWatch(tileIds: string[]): Promise<{ lines: LastLines }>;
+  /** The last lines of these tiles now, once, watching nothing: an agent's words read first. */
+  tileLinesRead(tileIds: string[]): Promise<{ lines: LastLines }>;
+  /** The watched tiles whose last line changed, each with its line now ("": it shows none). */
+  onTileLines(cb: (change: { lines: LastLines }) => void): () => void;
   presenceNow(): Promise<ViewPresence>;
   onPresence(cb: (p: ViewPresence) => void): () => void;
   viewSharePrepare?(png: ArrayBuffer): Promise<SharePrepared>;
@@ -790,19 +813,32 @@ export interface HiveIpc {
   onTyping(cb: (tileId: string, by: Typist) => void): () => void;
 
   // ── notifications ─────────────────────────────────────────
-  /** Forward a notable agent-status transition to the main process, which fires
-   *  a native OS notification IF the window is unfocused. Fire-and-forget. */
+  /** Forward a notable agent-status transition to main's notice desk, which dedupes every
+   *  window's copy, shows the OS pop-up while no window has the focus, and picks the window that
+   *  plays a sound (notice-desk.ts). Fire-and-forget. */
   notifyAgent?(notice: AgentNotice): void;
+  /** Main asks this window to play a sound (`notify:sound`); answer with `soundResult`. */
+  onSound?(cb: (sound: SoundRequest) => void): () => void;
+  /** What became of sound `id`: played (with the theme's pack, if it was one), or blocked and why. */
+  soundResult?(result: SoundResult): void;
+  /** The last 10 bursts the desk saw: their moment, agents, sound and pop-ups (newest first):
+   *  the workspace API's `notifications.recentSounds`. */
+  recentSounds?(): Promise<RecentSound[]>;
+  /** Play `moment`'s sound now in the window the person is at, as Settings' Play does: the
+   *  workspace API's `notifications.play`. */
+  playSound?(moment: SoundMoment): Promise<SoundResult>;
+  /** The bytes of one of the applied theme's sounds (its `hivemedia:` URL), which a window cannot
+   *  fetch itself; any other URL is refused. */
+  themeSoundBytes?(url: string): Promise<Uint8Array>;
+  /** A widget's `hive.notify`, from the window that runs its code: main shows it as an OS notice
+   *  when the notification settings allow, at most one per widget in 10 s. Fire-and-forget. */
+  notifyWidget?(notice: WidgetNotice): void;
   /** What the Layers panel shows of the workspace in `repo`: its tiles in the order listed, and
    *  the pinned ones (the person's phone's Home lists them so). */
   layersShown(repo: string, shown: { order: string[]; pinned: string[] }): void;
   /** The folders the person opened lately, here and on saved machines (`machine://`), newest
    *  first: their phone starts agents there. */
   recentFolders(folders: string[]): void;
-  /** Read the persisted notification preferences (normalized onto defaults). */
-  getNotificationSettings(): Promise<NotificationSettings>;
-  /** Persist + apply notification preferences live (no relaunch needed). */
-  setNotificationSettings(s: NotificationSettings): Promise<{ ok: true }>;
 
   // ── BrowserTile <webview> ↔ agent CDP bridge ──────────────
   /** A BrowserTile reports its guest <webview>'s webContents id (plus its frame
@@ -813,6 +849,12 @@ export interface HiveIpc {
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */
   browserCdp?(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
+  /** The person's answer to a Browser tile page's ask (`onBrowserPermission`). */
+  answerBrowserPermission?(askId: number, allowed: boolean): void;
+  /** The rights a site (an origin) in a Browser tile is asked about, each with the person's answer. */
+  browserSiteRights?(site: string): Promise<SiteRight[]>;
+  /** Answer for `site` before it asks, or change or forget ("ask") an answer. */
+  setBrowserSiteRight?(site: string, right: string, answer: SiteRight["answer"]): Promise<void>;
   /** Agent-browser bridge settings for the in-app toggle. `active` = live this
    *  session; `enabled` = persisted choice (applies on next launch). */
   getBrowserSettings?(): Promise<{ active: boolean; enabled: boolean; port: string }>;
@@ -872,6 +914,10 @@ export interface LedgerSince { id: string; bucket: ViewStatus; since: number; ex
 export interface SharePrepared { token: string; preview: string; width: number; height: number }
 
 
+/** A widget's `hive.notify`: the widget `widget` on the board of `repo`, its name as the title, and
+ *  the text its code sent, as it sent it. */
+export interface WidgetNotice { repo: string; widget: string; title: string; text: unknown }
+
 /** A notable agent-status transition worth a native OS notification. */
 export interface AgentNotice {
   tileId: string;
@@ -893,7 +939,30 @@ export interface AgentNotice {
   /** Free-form one-line detail for the body (error kind). Currently the exit
    *  signal/name when available; kept generic for future failure kinds. */
   detail?: string;
+  /** The tile is selected in the window that sent this (main counts it only while that window
+   *  has the focus): a finished sound for it is skipped. */
+  selected?: boolean;
+  /** When the host saw the state start (`SessionStatus.since`), the same in every window: copies
+   *  with it are one change however late one comes. Absent for a status only the window knows. */
+  since?: number;
 }
+
+/** A sound main asks a window to play (`notify:sound`). */
+export interface SoundRequest {
+  id: number;
+  moment: AgentNotice["kind"];
+  /** How many agents it stands for. */
+  count: number;
+  /** 0–1. */
+  volume: number;
+  /** The applied theme's sound for this moment (a `hivemedia:` URL) and the theme's name; none:
+   *  the built-in sound. */
+  theme?: { url: string; pack: string };
+}
+
+/** What became of a sound (`notify:sound-result`), and one burst of Recent: the drive socket's
+ *  shapes (workspace-api notifications.ts). */
+export type { RecentSound, SoundResult } from "@hivemind/workspace-api/notifications";
 
 /** Pushed main→renderer when a background subsystem hits a NON-fATAL error the
  *  user would otherwise never see (e.g. the PTY daemon couldn't be refreshed,
@@ -907,6 +976,13 @@ export interface AppErrorEvent {
 }
 
 /** `window.hive`: the IPC surface, and what only a window has. */
+/** Installed themes as Settings ▸ Appearance lists them (`theme-apply.ts`). */
+export interface ThemesInfo {
+  themes: Array<{ id: string; name: string; mode: "dark" | "light"; swatches: string[]; package: { id: string; name: string; version: string } }>;
+  /** The applied theme against what is installed: a newer version, or its package gone. */
+  status: { update: string | null; removed: boolean } | null;
+}
+
 export type HiveApi = HiveIpc & {
   /** Host OS, exposed synchronously so the first canvas can pick a shell. */
   platform: NodeJS.Platform;
@@ -955,12 +1031,21 @@ export type HiveApi = HiveIpc & {
   /** Where this window loads a URL of the app's schemes (a view, a tool's module, a wallpaper):
    *  the URL itself in an app window, a path on the browser server in a tab. */
   resourceUrl(url: string): string;
-  /** Copy a picked media file into the sandboxed wallpaper dir → its hm-media:// URL. */
-  importWallpaper?: (srcPath: string) => Promise<string | null>;
+  /** The themes installed packages hold, and how the applied one stands (an update, a removed package). */
+  themes?: {
+    list(): Promise<ThemesInfo>;
+    /** Apply an installed theme over the look in use; the settings broadcast carries the result. */
+    apply(id: string): Promise<void>;
+    /** Back to the look before the theme. */
+    revert(): Promise<void>;
+  };
   /** Pick a custom media file for a canvas layer (background/overlay) → copied
    *  into userData/media and served via the sandboxed hivemedia:// protocol. */
   pickMedia?: (slot: string) => Promise<{ url: string; kind: "video" | "image"; name: string } | null>;
   /** A BrowserTile guest requested a popup/new window (target=_blank,
    *  window.open) — the owning tile opens it as a new tab. */
   onBrowserPopup: (cb: (p: { fromId: number; url: string }) => void) => () => void;
+  /** A BrowserTile guest asks for the camera, the location… (or that ask is over): the owning tile
+   *  asks the person. */
+  onBrowserPermission: (cb: (e: BrowserPermissionEvent) => void) => () => void;
 };

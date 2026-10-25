@@ -4,9 +4,9 @@
 @import "tw-animate-css";
 @import "@xterm/xterm/css/xterm.css";
 @import "@xyflow/react/dist/style.css";
-/* Geist (sans body+display) and JetBrains Mono (code/paths/IDs + terminals) are bundled
-   via @fontsource (imported in main.tsx): the CSP allows no font CDN, and xterm must measure
-   the real face, not a fallback. */
+/* The interface speaks in the system's own UI font (DESIGN.md). JetBrains Mono (code, paths, IDs,
+   terminals) and Geist (a choice in Appearance) are bundled via @fontsource (imported in
+   main.tsx): the CSP allows no font CDN, and xterm must measure the real face, not a fallback. */
 /* The settings page's own sheet, LAST: an @import may not follow a rule, and inlining a
    whole stylesheet above would push the font @import past one (dropping the font). */
 @import "./settings.css";
@@ -32,7 +32,9 @@
   --border: var(--color-line2);
   --input: var(--color-line2);
   --ring: var(--color-fg3);
-  --radius: 0.5rem;
+  /* Corners follow the person's corner setting (appearance.radius, painted as --radius-user):
+     12px, the default, keeps the corners the app has always had (controls 8, tiles 12). */
+  --radius: calc(var(--radius-user, 12px) * 2 / 3);
 
   /* ── Motion + tracking. Deliberately in :root, NOT in @theme: Tailwind v4
      treats `--ease-*` as a theme namespace, so defining `--ease-out` there
@@ -95,8 +97,10 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: max(0px, calc(var(--radius) - 2px));
+  --radius-sm: max(0px, calc(var(--radius) - 4px));
+  /* Tiles and panels: the setting itself. */
+  --radius-xl: var(--radius-user, 12px);
 }
 
 @theme {
@@ -137,6 +141,10 @@
   --color-info:   oklch(0.74 0.035 245);
   /* New for the person (an unread tile): a clear blue, whatever the accent; it marks, never fills. */
   --color-unread: oklch(0.70 0.14 250);
+  /* A QR code: dark modules on white in every theme and mode, or a phone's camera cannot read it.
+     No preset sets these. */
+  --color-qr-paper: #fff;
+  --color-qr-ink:   #000;
 
   /* Behind a terminal, before the theme store has painted the preset's own. */
   --color-terminal-bg: #1A1C1F;
@@ -150,19 +158,30 @@
   --color-status-idle:      var(--color-fg3);
   --color-status-exited:    var(--color-fg3);
   --color-status-failed:    var(--color-err);
+  /* A status word straight on a header or a selected row, and the accent as a small mark: the theme
+     store fits each to the palette (core's statusTextInk, accentMarkInk); these are first paint. */
+  --color-status-failed-text:    var(--color-status-failed);
+  --color-status-attention-text: var(--color-status-attention);
+  --color-unread-text:           var(--color-unread);
+  --color-brand-mark:            var(--color-brand);
 
-  /* State palette — Plane's 5-group workflow states (backlog/unstarted/
-     started/completed/cancelled), with hivemind's in_progress/in_review split.
-     Tuned to Plane's priority/state hues. */
-  --color-state-backlog:   oklch(0.64 0.013 231.77);  /* Plane priority-none (slate) */
-  --color-state-todo:      oklch(0.55 0.18 265);       /* = brand lavender-blue */
-  --color-state-progress:  oklch(0.77 0.17 65);        /* amber-600 */
-  --color-state-review:    oklch(0.60 0.20 303);       /* purple (Plane extended-purple-500 hue) */
-  --color-state-done:      oklch(0.70 0.19 152);       /* green-700 */
-  --color-state-cancelled: oklch(0.52 0.01 230);       /* neutral grey */
+  /* Issue states (tools/issues): Plane's five groups (backlog, unstarted, started, completed,
+     cancelled), with In progress and In review apart. No state's hue is near a preset's warn, the
+     amber of what waits on you (DESIGN.md, The One Voice Rule): In progress is cyan where Plane's
+     is amber (tests/unit/issue-colours.test.ts). A state is a word too (the issue's state
+     picker), so each reads at 4.5:1 on bg, bg2 and bg3 in every dark preset, Nord's bg3 the
+     lightest; the light page has its own below. */
+  --color-state-backlog:   oklch(0.77 0.013 231.77);  /* Plane priority-none (slate) */
+  --color-state-todo:      oklch(0.77 0.11 265);       /* blue */
+  --color-state-progress:  oklch(0.77 0.11 200);       /* cyan: being worked on is not amber, which is what waits on you */
+  --color-state-review:    oklch(0.78 0.12 303);       /* purple (Plane extended-purple-500 hue) */
+  --color-state-done:      oklch(0.76 0.17 152);       /* green */
+  --color-state-cancelled: oklch(0.77 0.006 230);      /* neutral grey */
 
-  --font-sans: "Geist Sans", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace;
+  /* The person's fonts (appearance.uiFont / monoFont, painted as --font-*-user); the bundled
+     faces until the theme store has painted. */
+  --font-sans: var(--font-ui-user, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Ubuntu, Cantarell, sans-serif);
+  --font-mono: var(--font-mono-user, "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, monospace);
 
   /* Elevation tokens — Plane uses layered translucent shadows; Linear uses a
      4-level elevation ladder. Each step = outer drop + inner top highlight. */
@@ -194,8 +213,8 @@
 
   /* Corners beyond sm 4 / md 6 / lg 8 / xl 12. */
   --radius-keycap: 5px;
-  --radius-menu: 10px;
-  --radius-sheet: 14px;
+  --radius-menu: calc(var(--radius-user, 12px) * 5 / 6);
+  --radius-sheet: calc(var(--radius-user, 12px) * 7 / 6);
 
   /* Behind a modal, a sheet, the minimap's off-screen area. */
   --color-scrim: oklch(0 0 0 / 0.55);
@@ -206,14 +225,9 @@
   --color-bracket-match: color-mix(in oklab, var(--color-brand) 25%, transparent);
   --color-grid-dot: oklch(0.70 0.012 260 / 0.10);
 
-  /* The editor's syntax colours. */
-  --color-syntax-keyword: #c084fc;
-  --color-syntax-string: #22c55e;
-  --color-syntax-number: #f59e0b;
-  --color-syntax-function: #60a5fa;
-  --color-syntax-type: #5eead4;
-  --color-syntax-property: #93c5fd;
-  --color-syntax-tag: #f472b6;
+  /* The syntax colours (--color-syntax-*) and a diff's (--color-diff-*) are worked out from the
+     palette by @hivemind/core/diff-colours and painted by theme-store, so each reads on the look's
+     own bg2 and on a diff's changed rows, a theme's too. */
 }
 
 @layer base {
@@ -282,8 +296,9 @@ small, .u-caption { letter-spacing: var(--hm-track-caption); }
 
 /* ── Glass toasts (bottom-right stack) — borderless frosted cards. No hairline
    border: the inset top sheen + the soft drop define the edge. ONE accent (the
-   app brand, --color-brand) tints the icon, the verb line, and the auto-dismiss
-   progress line; the kind is encoded by the icon shape + verb text (+ a pulse on
+   app brand, --color-brand) tints the icon and the auto-dismiss progress line, both
+   marks; the verb is words, in the second text colour, since the accent is held to
+   3:1 as a mark and not to 4.5:1 as text (DESIGN.md, Steel Accent); the kind is encoded by the icon shape + verb text (+ a pulse on
    needs-you), never by a second color. Opaque in the default theme; frosts
    against the live wallpaper under glass mode. NOT under .react-flow__node, so
    the canvas motion-strip rule (which clears backdrop-filter during pan/drag)
@@ -310,9 +325,9 @@ html.glass-on .hm-toast {
   background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(145%);
 }
-/* The single accent — applied to exactly three spots (icon, verb, TTL line). */
-.hm-toast-icon { color: var(--color-brand); }
-.hm-toast-verb { color: var(--color-brand); }
+/* The single accent — applied to exactly two marks (icon, TTL line). */
+.hm-toast-icon { color: var(--color-brand-mark); }
+.hm-toast-verb { color: var(--color-fg2); }
 /* Auto-dismiss progress line — shrinks 100%→0 over --ttl (set inline to match
    the JS dismiss timer exactly, both via toastTtlMs). */
 .hm-toast-bar {
@@ -367,7 +382,6 @@ html.glass-on .hm-toast {
 .agent-added-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .agent-added-label { font-weight: 600; }
 .agent-added-does { color: var(--color-fg2); margin-top: 2px; }
-.agent-added-remove { flex: none; }
 @media (prefers-reduced-motion: reduce) {
   /* Reduced motion is a gentler equivalent, NOT the absence of feedback: keep an
      opacity cross-fade (non-vestibular) and drop the slide/scale/blur. */
@@ -498,8 +512,39 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
 
 /* The one focus ring. Native controls take the theme, not the operating system's colours. */
 :root { color-scheme: dark; accent-color: var(--color-brand); }
-:root[data-theme-mode="light"] { color-scheme: light; }
+:root[data-theme-mode="light"] {
+  color-scheme: light;
+  /* What the dark ladder draws in black or a pale tint, redrawn for a light page: softer
+     shadows, no top highlight, a darker grid dot and syntax colours that read on white. */
+  --hm-shadow-1: 0 1px 2px oklch(0.2 0.01 260 / 0.08), 0 1px 3px oklch(0.2 0.01 260 / 0.06);
+  --hm-shadow-2: 0 4px 12px oklch(0.2 0.01 260 / 0.10), 0 1px 3px oklch(0.2 0.01 260 / 0.07);
+  --hm-shadow-3: 0 12px 32px oklch(0.2 0.01 260 / 0.14), 0 4px 12px oklch(0.2 0.01 260 / 0.08);
+  --hm-shadow-float: 0 6px 18px oklch(0.2 0.01 260 / 0.12);
+  --hm-shadow-glass: 0 8px 28px oklch(0.2 0.01 260 / 0.14);
+  --hm-highlight: inset 0 0 0 0 transparent;
+  --hm-highlight-glass: inset 0 0 0 0 transparent;
+  --color-grid-dot: oklch(0.35 0.012 260 / 0.16);
+  --color-scrim: oklch(0.2 0.01 260 / 0.35);
+  /* Issue states, labels and people's initials, drawn dark on the light page: 4.5:1 on Clean
+     Light's bg, bg2 and bg3, and a label's text on its chip in every hue. */
+  --color-state-backlog:   oklch(0.52 0.013 231.77);
+  --color-state-todo:      oklch(0.52 0.18 265);
+  --color-state-progress:  oklch(0.5 0.08 200);
+  --color-state-review:    oklch(0.52 0.2 303);
+  --color-state-done:      oklch(0.5 0.12 152);
+  --color-state-cancelled: oklch(0.52 0.01 230);
+  --color-label-text: oklch(0.45 0.10 0);
+  --color-label-fill: oklch(0.93 0.04 0 / 0.6);
+  --color-label-edge: oklch(0.80 0.04 0 / 0.5);
+  --color-label-dot:  oklch(0.60 0.15 0);
+  --color-person:     oklch(0.48 0.13 0);
+}
 :focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+/* An island that is one control (the widgets toggle) clips that control's ring: the island draws it. */
+.hm-island:has(> :only-child:focus-visible) {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
@@ -517,6 +562,10 @@ html.glass-on:not([data-wallpaper="none"]) .hm-popover {
    solid backdrop now. */
 .react-flow {
   background-color: var(--color-bg) !important;
+  /* Clipped, never scrolled (React Flow sets hidden inline). Focusing a control in a tile that runs
+     past the canvas's edge scrolled this box, and React Flow scrolled it back on the next frame: the
+     canvas jumped, and a press and its release could land on different things. */
+  overflow: clip !important;
 }
 .react-flow__attribution {
   display: none !important;
@@ -725,6 +774,23 @@ body.canvas-resizing .react-flow__node .hm-term-root {
   pointer-events: none;
   z-index: 5;
 }
+/* Over a picture (theme-store `wallpaper-drawn`, with glass or without), what the canvas draws
+   straight on it takes the panel colour behind it instead of whatever the picture holds there:
+   foam behind the tile count, an island behind the handle. The panel colour is `--surface-2`, the
+   palette's bg2 itself (solid under glass too), which a theme's text (4.5:1) and accent (3:1, a
+   mark) are checked against (theme-format.ts). CSS only: nothing runs per frame. */
+html.wallpaper-drawn .react-flow__node .hm-node-selected::after {
+  box-shadow: 0 0 0 2px var(--surface-2), 0 0 8px -1px color-mix(in srgb, var(--color-brand) 70%, transparent);
+}
+html.wallpaper-drawn .hm-canvas-word {
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+html.wallpaper-drawn [data-frame-label] {
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--surface-2);
+}
 
 /* Pinned tile — the screen-fixed floating panel a pinned tile portals into (see
    canvas-nodes.tsx FloatingPinnedPanel). A soft brand-tinted ring + drop shadow
@@ -796,8 +862,9 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
 .md-preview h3 { font-size: 1.2em; }
 .md-preview h4 { font-size: 1.05em; }
 .md-preview p, .md-preview ul, .md-preview ol, .md-preview blockquote, .md-preview table { margin: 0.7em 0; }
-.md-preview a { color: var(--color-accent); text-decoration: none; }
-.md-preview a:hover { text-decoration: underline; }
+/* A link is the text colour, underlined: the accent is held to 3:1 as a mark, not to 4.5:1 as text. */
+.md-preview a { color: var(--color-fg); text-decoration: underline; text-decoration-color: var(--color-fg3); text-underline-offset: 2px; }
+.md-preview a:hover { text-decoration-color: currentColor; }
 .md-preview strong { color: var(--color-fg); font-weight: 650; }
 .md-preview ul, .md-preview ol { padding-left: 1.5em; }
 .md-preview li { margin: 0.25em 0; }
@@ -871,6 +938,15 @@ body.canvas-resizing .react-flow__node .react-flow__resize-control {
   --color-note-blue:   oklch(0.84 0.06 235);
   --color-note-green:  oklch(0.86 0.08 150);
   --color-note-ink:    oklch(0.24 0.01 250);
+  /* An issue's label chips and the discs behind people's initials (tools/issues): each takes its
+     hue from the name (name-hue.ts, never a warn's), put in with oklch(from …), and its lightness
+     from here, so the light page redraws them (:root[data-theme-mode="light"]). Read from inline
+     styles, like the notes. */
+  --color-label-text: oklch(0.82 0.10 0);
+  --color-label-fill: oklch(0.28 0.04 0 / 0.5);
+  --color-label-edge: oklch(0.34 0.03 0 / 0.4);
+  --color-label-dot:  oklch(0.72 0.15 0);
+  --color-person:     oklch(0.78 0.13 0);
 }
 
 /* The master switch. Recolor the panel TOKENS to translucent variants of the
@@ -888,8 +964,9 @@ html.glass-on {
    tile draws and wash text out over a busy wallpaper. How see-through a tile's content
    is belongs to "Frost tool content" alone — html.content-glass sets those backgrounds
    explicitly, from the surface source at --content-opacity. Scoped to the tile surface,
-   so a pinned or docked tile gets it too. */
-html.glass-on .hm-tile-surface {
+   so a pinned or docked tile gets it too, and to the fullscreen panel that stands for a tile. */
+html.glass-on .hm-tile-surface,
+html.glass-on .hm-term-fs-panel {
   --color-bg2: var(--surface-2);
   --color-bg3: var(--surface-3);
   --color-bg4: var(--surface-4);
@@ -903,6 +980,31 @@ html.glass-on .hm-tile-surface {
 html.glass-on .react-flow,
 html.glass-on [data-windows-view] {
   background-color: transparent !important;
+}
+/* A theme's wallpaper without glass (theme-store `wallpaper-on`): the canvas and the shell clear
+   so it shows between tiles, and every panel keeps its solid colour. */
+html.wallpaper-on .react-flow,
+html.wallpaper-on [data-windows-view] {
+  background-color: transparent !important;
+}
+html.wallpaper-on .react-flow__background {
+  display: none !important;
+}
+html.wallpaper-on body {
+  background: transparent;
+}
+/* A theme's accent, or one the person picked (theme-store `accent-marks`), colours the primary
+   button, the focus ring and a switch that is on. Never a status: the accent is not a signal. */
+html.accent-marks {
+  --primary: var(--color-brand);
+  --primary-foreground: var(--color-brand-fg, var(--color-bg));
+  --ring: var(--color-brand);
+}
+html.accent-marks [data-slot="switch"][data-state="checked"] {
+  background-color: var(--color-brand);
+}
+html.accent-marks [data-slot="switch-thumb"][data-state="checked"] {
+  background-color: var(--color-brand-fg, var(--color-bg));
 }
 /* Kill the dotted grid under glass — it reads as noise over a live wallpaper. */
 html.glass-on .react-flow__background {
@@ -986,13 +1088,48 @@ html.content-glass .cm-editor .cm-scroller,
 html.content-glass .cm-gutters {
   background-color: transparent !important;
 }
-/* Diff (Pierre): Pierre paints its OWN opaque row/buffer/gutter backgrounds via
-   --diffs-bg-* vars, which hid the tile tint. Clear them through Pierre's
-   intended -override hooks so the wallpaper shows, then tint the whole pane at
-   content-opacity. The add/del/modified line colors keep their own overrides. */
-html.content-glass [data-pierre-tile] {
-  background-color: transparent !important;
-  --diffs-bg-override: transparent;
+/* Every diff (Pierre's `diffs-container`, wherever it mounts: a tile, fullscreen, a tool) takes the
+   app's type and the diff's colours (theme-store paints them from @hivemind/core/diff-colours).
+   Pierre mixes each row's tint into the page itself (20% dark, 12% light), and a changed word's
+   highlight over it; a removed line's hatched bar keeps Pierre's own dark stripe (PIERRE_OPTIONS
+   in pierre-codeview.ts). The Diff tile sets its own size (--hm-diff-font-size). */
+diffs-container {
+  --diffs-font-family: var(--font-mono);
+  --diffs-font-size: var(--hm-diff-font-size, var(--text-body));
+  --diffs-line-height: 1.6;
+  --diffs-tab-size: 2;
+  --diffs-min-number-column-width: 3ch;
+  --diffs-header-font-family: var(--font-sans);
+  --diffs-gap-inline: 8px;
+  --diffs-gap-block: 8px;
+  /* Solid: Pierre sets the +N/−N, the bars and the changed line numbers in them. */
+  --diffs-addition-color-override: var(--color-diff-added);
+  --diffs-deletion-color-override: var(--color-diff-removed);
+  --diffs-modified-color-override: var(--color-diff-changed);
+  --diffs-fg-number-override: var(--color-diff-number);
+  --diffs-bg-addition-override: var(--color-diff-added-tint);
+  --diffs-bg-addition-number-override: var(--color-diff-added-tint);
+  --diffs-bg-deletion-override: var(--color-diff-removed-tint);
+  --diffs-bg-deletion-number-override: var(--color-diff-removed-tint);
+  --diffs-bg-addition-emphasis-override: var(--color-diff-added-word);
+  --diffs-bg-deletion-emphasis-override: var(--color-diff-removed-word);
+  --conflict-bg-current-override: var(--color-diff-added-tint);
+  --conflict-bg-current-number-override: var(--color-diff-added-tint);
+  --conflict-bg-current-header-override: var(--color-diff-added-tint);
+  --conflict-bg-incoming-override: var(--color-diff-changed-tint);
+  --conflict-bg-incoming-number-override: var(--color-diff-changed-tint);
+  --conflict-bg-incoming-header-override: var(--color-diff-changed-tint);
+  /* A selected line: the accent, which is the person's, not a signal. */
+  --diffs-bg-selection-override: color-mix(in srgb, var(--color-brand) 22%, transparent);
+  --diffs-bg-selection-number-override: color-mix(in srgb, var(--color-brand) 34%, transparent);
+}
+/* A diff's page (every Pierre surface, `diffs-container`) is the preset's bg2, through the theme in
+   pierre-codeview.ts, which reads it as `--diffs-background`. Glass on the content clears it, so the
+   tile's own tint (.hm-glass-surface) is the one layer over the wallpaper, as a terminal's is, and
+   with it the fills Pierre lays over the page (a folded run's bar, the hatching, an expanded run),
+   which would stack where they nest once the page is see-through. Changed rows stay tinted. */
+html.content-glass diffs-container {
+  --diffs-background: transparent;
   --diffs-bg-buffer-override: transparent;
   --diffs-bg-context-override: transparent;
   --diffs-bg-context-gutter-override: transparent;
@@ -1326,6 +1463,18 @@ html.glass-on .react-flow__node-browser {
     border: 1px solid var(--color-fg2);   /* a defined edge, not an implied one */
   }
   .hm-wallpaper { display: none !important; }
+}
+
+/* Increased contrast with glass off too: faint text takes the secondary text colour, and lines
+   stand at least 3:1 on the canvas. The theme store writes the palette inline on <html>, so these
+   need !important; each is mixed from the preset's own text and canvas, so a light preset gets
+   darker lines, not lighter ones. */
+@media (prefers-contrast: more) {
+  :root {
+    --color-fg3: var(--color-fg2) !important;
+    --color-line: color-mix(in oklab, var(--color-fg) 50%, var(--color-bg)) !important;
+    --color-line2: color-mix(in oklab, var(--color-fg) 65%, var(--color-bg)) !important;
+  }
 }
 
 /* Vibrancy: text over a translucent surface needs more weight and a touch of

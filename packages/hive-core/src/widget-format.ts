@@ -4,7 +4,7 @@
  * no code. One installed under the same id replaces a built-in. Pure, so the window has them from
  * its first frame; reading folders is `./widgets.ts`.
  */
-import { resolveSettings, type SettingField } from "@hivemind/view-sdk/settings";
+import { resolveSettings, type SettingField, type SettingValue } from "@hivemind/view-sdk/settings";
 import type { ViewWidget } from "@hivemind/view-sdk/protocol";
 import type { PluginCategory } from "@hivemind/view-sdk/category";
 import type { PluginCommand } from "@hivemind/view-sdk/commands";
@@ -97,7 +97,7 @@ export interface PlacedWidget {
 }
 
 /** A placed widget's options: what the person set, else each option's default. */
-export const widgetOptions = (pkg: WidgetPackage, w: PlacedWidget): Record<string, string | number | boolean> => resolveSettings(pkg.options, w.options);
+export const widgetOptions = (pkg: WidgetPackage, w: PlacedWidget): Record<string, SettingValue> => resolveSettings(pkg.options, w.options);
 
 /** `tree` with each "$options.<id>" string replaced by that option's value. */
 function withOptions(tree: unknown, options: Record<string, unknown>, depth = 0): unknown {
@@ -114,10 +114,19 @@ export function widgetTree(w: PlacedWidget, pkg: WidgetPackage | undefined, draw
   return drawn ?? null;
 }
 
-/** The note colour a widget's drawing tints its card (`tint`), if any. */
+/** The note colour a widget's drawing tints its card (`tint`), if any: one of the note colours,
+ *  else none (any other word would draw dark ink on a card of no colour). */
 export function widgetTint(tree: unknown): string | null {
   const t = (tree as { tint?: unknown } | null)?.tint;
-  return typeof t === "string" && /^[a-z]+$/.test(t) ? t : null;
+  return typeof t === "string" && NOTE_COLORS.includes(t) ? t : null;
+}
+
+/** Why the `tint` of a drawing (`at`) colours nothing: it is set, and is not a note colour; else
+ *  null. Null and "" are no tint, as is an option left empty ("$options.<id>" drawn as ""). */
+export function tintProblem(tree: unknown, at = "the tree"): string | null {
+  const t = (tree as { tint?: unknown } | null)?.tint;
+  if (t === undefined || t === null || t === "" || widgetTint(tree)) return null;
+  return `${at} has the tint ${JSON.stringify(t)}, which is not a note colour, so its card is drawn without one; the note colours: ${NOTE_COLORS.join(", ")}`;
 }
 
 const MAX_VIEW_IMAGES = 1_000_000;

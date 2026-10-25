@@ -28,12 +28,17 @@ export const SCHEMES = ["hm-view", "hm-plugin", "hm-media", "hivemedia"] as cons
 /** Loaded by a sandboxed frame, whose requests carry no cookie: its paths carry the views key. */
 export const KEYED_SCHEME = "hm-view";
 
+/** The path a tab serves the view at `hm-view://<host>/` under: `/hm-view/<key>/<host>/`. */
+export function viewBase(host: string, viewsKey: string): string {
+  return `/${KEYED_SCHEME}/${viewsKey}/${host}/`;
+}
+
 /** Where a tab loads `url`: `<scheme>://<host>/<path>` at `/<scheme>/<host>/<path>`, a view's with
- *  the views key before its host. Any other URL is loaded as it is. */
+ *  the views key before its host (`viewBase`). Any other URL is loaded as it is. */
 export function tabUrl(url: string, viewsKey: string): string {
-  const m = /^([a-z-]+):\/\/(.*)$/.exec(url);
+  const m = /^([a-z-]+):\/\/([^/?#]*)\/?(.*)$/.exec(url);
   if (!m || !(SCHEMES as readonly string[]).includes(m[1]!)) return url;
-  return m[1] === KEYED_SCHEME ? `/${m[1]}/${viewsKey}/${m[2]}` : `/${m[1]}/${m[2]}`;
+  return m[1] === KEYED_SCHEME ? `${viewBase(m[2]!, viewsKey)}${m[3]}` : `/${m[1]}/${url.slice(m[1]!.length + 3)}`;
 }
 
 /** The scheme URL a tab's path names, and the views key it carries; null for any other path. */

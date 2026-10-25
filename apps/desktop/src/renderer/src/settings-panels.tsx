@@ -21,13 +21,19 @@ import { ChevronDown } from "./components/icons";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
-import { getSettings, patchSettings } from "./settings-store";
+import { getSettings, patchSettingsMany } from "./settings-store";
+import { importedExtra } from "@hivemind/core/appearance-extra";
+import { exportAppearance, getPath, importAppearance, themeImportPaths } from "@hivemind/core/settings-schema";
 import { setTheme, useTheme } from "./theme-store";
 import {
-  AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, TerminalColors,
+  AccentPicker, BackgroundControls, GlassControls, OverlayControls, PresetRow, Section, ShapeAndTypeControls, TerminalColors,
 } from "./appearance-controls";
-import { createContext, useContext } from "react";
+import { ThemeList } from "./appearance-themes";
+import { Fragment } from "react";
+import { SettingsNavigate } from "./settings-navigate";
 import { pluginPage } from "./settings-registry";
+import { doesWhat, KEYMAP, keysLabel, reachesApp, type KeyOS, type Where } from "../../shared/keymap";
+import { keyOS } from "./shortcut";
 
 // ── Appearance ──────────────────────────────────────────────────────────────
 // Everyday choices first (theme, accent, background, glass, how tools look in a
@@ -41,8 +47,8 @@ function AppearancePrefs() {
   const [advanced, setAdvanced] = useState(false);
 
   const exportTheme = async () => {
-    const json = JSON.stringify(getSettings().appearance, null, 2);
-    try { await navigator.clipboard.writeText(json); toast.success("Theme copied as JSON."); }
+    const { theme, note } = exportAppearance(getSettings().appearance, getSettings().appearanceExtra);
+    try { await navigator.clipboard.writeText(JSON.stringify(theme, null, 2)); toast.success("Theme copied as JSON.", note ? { description: note } : undefined); }
     catch { toast.error("Could not reach the clipboard. Use `hive theme export <file>`."); }
   };
   const importTheme = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,9 +57,13 @@ function AppearancePrefs() {
     if (!f) return;
     try {
       const raw: unknown = JSON.parse(await f.text());
-      // Accept either a whole settings.json or a bare appearance object.
-      const a = raw && typeof raw === "object" && "appearance" in (raw as Record<string, unknown>) ? (raw as { appearance: unknown }).appearance : raw;
-      patchSettings("appearance", a); // main + mergeAppearance validate it
+      // A theme file or a whole settings.json, checked; the wallpaper media and overlays a theme
+      // file leaves out stay yours. Its custom accent comes with it, and a look imported is not
+      // the applied theme's, so Revert does not undo it (`importedExtra`). Only the paths it names
+      // are written (`themeImportPaths`), as `hive theme import` does.
+      const s = getSettings();
+      const next = { appearance: importAppearance(raw, s.appearance), appearanceExtra: importedExtra(raw, s.appearanceExtra) };
+      patchSettingsMany(themeImportPaths(raw).map((path) => ({ path, value: getPath(next, path) })));
       toast.success(`Imported ${f.name}`);
     } catch { toast.error("That file is not a hivemind theme."); }
   };
@@ -62,7 +72,9 @@ function AppearancePrefs() {
     <div className="settings-stack">
       <Section title="Theme">
         <PresetRow t={t} />
+        <ThemeList />
         <AccentPicker t={t} />
+        <ShapeAndTypeControls t={t} />
       </Section>
 
       <Section title="Workspace">
@@ -104,89 +116,62 @@ function AppearancePrefs() {
 
 // ── Shortcuts (read-only) ───────────────────────────────────────────────────
 
-// The keymap's rows (shared/keymap.ts), split by where they work.
-const SHORTCUTS_ANYWHERE: [string, string][] = [
-  ["⌘/Ctrl + ⇧ + `", "New terminal"],
-  ["⌘/Ctrl + ⇧ + A", "New agent"],
-  ["⌘/Ctrl + ⇧ + E", "File tree"],
-  ["⌘/Ctrl + ⇧ + N", "New frame"],
-  ["⌘/Ctrl + 1 … 9", "Go to tile 1 … 9"],
-  ["⌘/Ctrl + Tab", "Next tile (⇧ for previous)"],
-  ["⌘/Ctrl + ,", "Settings"],
-  ["⌘/Ctrl + .", "Focus the selected tile"],
-  ["⌘/Ctrl + ⇧ + F", "Fit the selected terminal to the screen, and back"],
-  ["⌘/Ctrl + ⇧ + 0", "Size the selected terminal's text to the screen"],
-  ["F11", "Full screen"],
-  ["⌘/Ctrl + Q", "Quit, asking first while agents or terminals run"],
-];
-const SHORTCUTS_CANVAS: [string, string][] = [
-  ["⌘/Ctrl + B", "Show or hide Layers (⌘B in a terminal too)"],
-  ["⌘/Ctrl + E", "Switch views, in any view"],
-  ["1", "New terminal"],
-  ["2", "New agent"],
-  ["3", "File tree"],
-  ["6", "New frame"],
-  ["7", "New browser"],
-  ["⌫", "Delete the selected widget or arrow on the board"],
-  ["⌘/Ctrl + D", "Duplicate the selected widget"],
-  ["⌘/Ctrl + Z / ⇧Z", "Undo / redo on the board"],
-  ["⌘/Ctrl + = / −", "Zoom in / out"],
-  ["⌘/Ctrl + 0", "Zoom to 100%"],
-  ["Esc", "Leave full screen, or fit everything in view"],
-  ["⌘/Ctrl + O", "Open a folder as the project"],
-  ["⌘/Ctrl + R", "Open a recent project"],
-  [".", "Focus the selected tile"],
-  ["⌘/Ctrl + W", "Close the selected tile"],
-  ["F2", "Rename the selected frame"],
-  ["⇧ Esc", "Undock a tile from a scene view"],
+const SHORTCUT_PLACES: Array<[Where, string, string]> = [
+  ["anywhere", "Anywhere", "Work even while a terminal has focus — everything else goes to the terminal"],
+  ["canvas", "On the canvas", "When no terminal or field has focus"],
+  ["terminal", "In a terminal", "Every other key goes to the program"],
 ];
 
-const SHORTCUTS_TERMINAL: [string, string][] = [
-  ["⇧ + Enter", "A new line in an agent's prompt"],
-  ["⌘/Ctrl + C", "Copy the selection; with none, the program's Ctrl+C"],
-  ["⌘/Ctrl + = / − / 0", "Text size"],
-  ["⌘/Ctrl + ⇧ + K", "Take back the keyboard from a guest"],
-];
-
-function ShortcutList({ items }: { items: [string, string][] }) {
-  return (
-    <dl className="settings-shortcuts">
-      {items.map(([k, what]) => (
-        <div className="settings-shortcut" key={k}>
-          <dt><kbd>{k}</kbd></dt>
-          <dd>{what}</dd>
-        </div>
-      ))}
-    </dl>
-  );
+/** The keymap's rows for one place as this platform writes them (shared/keymap.ts), one row per
+ *  action: `tile:1` … `tile:9` are one, and actions on the same keys are one, in the order tried.
+ *  A key the system takes here (Super on Windows and Linux) is left out. */
+function shortcutRows(where: Where, os: KeyOS): Array<{ keys: string[]; does: string }> {
+  const byAction = new Map<string, { keys: string[]; does: string }>();
+  for (const b of KEYMAP) {
+    if (b.where !== where || !reachesApp(b.keys, os)) continue;
+    const id = b.action.startsWith("tile:") ? "tile" : b.action;
+    const row = byAction.get(id) ?? { keys: [], does: doesWhat(b.action) };
+    byAction.set(id, row);
+    const label = keysLabel(b.keys, os);
+    if (!row.keys.includes(label)) row.keys.push(label);
+  }
+  const rows: Array<{ keys: string[]; does: string }> = [];
+  for (const [id, row] of byAction) {
+    if (id === "tile") row.keys = [`${row.keys[0]} … ${row.keys.at(-1)}`];
+    const same = rows.find((r) => r.keys.join("\n") === row.keys.join("\n"));
+    if (same) same.does += `, or ${row.does[0]!.toLowerCase()}${row.does.slice(1)}`;
+    else rows.push(row);
+  }
+  return rows;
 }
 
 function ShortcutPrefs() {
+  const os = keyOS();
   return (
     <div className="settings-stack">
-      <Section title="Anywhere" hint="Work even while a terminal has focus — everything else goes to the terminal">
-        <ShortcutList items={SHORTCUTS_ANYWHERE} />
-      </Section>
-      <Section title="On the canvas" hint="When no terminal or field has focus">
-        <ShortcutList items={SHORTCUTS_CANVAS} />
-      </Section>
-      <Section title="In a terminal" hint="Every other key goes to the program">
-        <ShortcutList items={SHORTCUTS_TERMINAL} />
-      </Section>
+      {SHORTCUT_PLACES.map(([where, title, hint]) => (
+        <Section key={where} title={title} hint={hint}>
+          <dl className="settings-shortcuts">
+            {shortcutRows(where, os).map((r) => (
+              <div className="settings-shortcut" key={r.keys.join(" ")}>
+                <dt>{r.keys.map((k, i) => <Fragment key={k}>{i > 0 && " "}<kbd>{k}</kbd></Fragment>)}</dt>
+                <dd>{r.does}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
+      ))}
     </div>
   );
 }
 
-/** The lazy half of the Settings dialog — one chunk, loaded when it opens
- *  (App.tsx keeps only the cheap pages, so the entry bundle does not grow). */
-const NavigateContext = createContext<(id: string) => void>(() => {});
-export const useSettingsNavigate = (): ((id: string) => void) => useContext(NavigateContext);
-
 /** Must match the registry's `chunk: "lazy"` pages (unit tested); plugin pages (`agent:…`) are always lazy. */
 export const LAZY_SETTINGS_PAGES = ["profile", "appearance", "shortcuts", "connect", "api", "plugins", "browser", "servers"] as const;
 
+/** The lazy half of the Settings dialog — one chunk, loaded when it opens
+ *  (App.tsx keeps only the cheap pages, so the entry bundle does not grow). */
 export default function SettingsPages({ page, navigate }: { page: string; navigate: (id: string) => void }) {
-  return <NavigateContext.Provider value={navigate}>{renderPage(page)}</NavigateContext.Provider>;
+  return <SettingsNavigate.Provider value={navigate}>{renderPage(page)}</SettingsNavigate.Provider>;
 }
 
 function renderPage(page: string) {

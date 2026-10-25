@@ -1,0 +1,7 @@
+{
+  "id": "sandbox-neighbour",
+  "name": "Sandbox neighbour",
+  "version": "0.1.0",
+  "entry": "index.html",
+  "protocol": 1
+}

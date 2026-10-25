@@ -1,7 +1,7 @@
 /**
  * Base/head branch chooser for the branch and unpushed diff modes.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Search } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -95,7 +95,7 @@ export function BranchPicker({
                 {b}
               </MenuItem>
             ))}
-            <ShowMore left={local.length - localLimit} step={BRANCHES_FIRST} onClick={moreLocal} className="text-chip" />
+            <ShowMore left={local.length - localLimit} step={BRANCHES_FIRST} onClick={moreLocal} size="sm" />
             {remote.length > 0 && (
               <div className="px-2 pt-1.5 pb-0.5 text-count font-medium text-[var(--color-fg2)]">Remote</div>
             )}
@@ -111,7 +111,7 @@ export function BranchPicker({
                 {b}
               </MenuItem>
             ))}
-            <ShowMore left={remote.length - remoteLimit} step={BRANCHES_FIRST} onClick={moreRemote} className="text-chip" />
+            <ShowMore left={remote.length - remoteLimit} step={BRANCHES_FIRST} onClick={moreRemote} size="sm" />
             {local.length === 0 && remote.length === 0 && (
               <div className="px-2 py-2 text-[var(--color-fg3)]">{branches ? "no match" : "loading…"}</div>
             )}

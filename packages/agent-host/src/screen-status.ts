@@ -4,6 +4,8 @@
  * `detect` rules) on the headless screen it keeps for every session, a poll at a time.
  */
 import type { ScreenReading, TileStatus } from "@hivemind/agents";
+import { oneLine } from "./one-line.js";
+import type { ScreenCursor } from "./screen-messages.js";
 
 /**
  * A screen, sampled every poll, can show an agent's idle prompt for a moment between two
@@ -31,35 +33,68 @@ export function stabilizeScreenStatus(
 }
 
 
-/** The longest last line told. */
-const LINE_MAX = 160;
+/** A box-drawing, block or braille glyph. */
+const GLYPH = /[\u2500-\u259f\u2800-\u28ff]/;
+/** A row of only those glyphs, spaces and punctuation: a box's edge, a rule, a bar's track. The
+ *  punctuation is spelled out (ASCII's, the middle dot, General Punctuation's) and not `\p{P}`,
+ *  which V8 runs about three times slower, here on the daemon's I/O thread. */
+const DRAWN = /^[\s\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e\u00b7\u2010-\u2027\u2030-\u205e\u2500-\u259f\u2800-\u28ff]*$/;
 
-/** The last line of `screen` with text, trimmed and cut to `LINE_MAX` characters. */
-export function lastLine(screen: string): string {
-  const lines = screen.split("\n");
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i]!.trim();
-    if (l) return [...l].slice(0, LINE_MAX).join("");
+/**
+ * The line a screen ends on: walking up, the first row with text that is not drawn only of glyphs,
+ * as one line of plain text (one-line.ts). "" when there is none.
+ *
+ * While the cursor shows and the session's own program holds the terminal (`own`; undefined where
+ * that cannot be told), the cursor waits in that program's input: a shell's prompt, an agent's
+ * input box. The walk starts above it: the input's rows (from `cursor.top`: a marked prompt of two
+ * rows, a command typed past the width) are what the person types, and the rows under it are that
+ * input's own chrome (a footer, a completion list). While a command the shell ran holds the
+ * terminal, the cursor waits on its question (`Overwrite b? [y/N]`, a password), which is the
+ * line. A question the shell asks itself (`read -p`) is its prompt's, and is passed over.
+ *
+ * `agent`: the agent the session runs, as its manifest says; undefined for a program that is none
+ * (a shell). Rows of the agent's own chrome (`chrome`: its spinner and timer, its status bar) are
+ * passed over. A shell's prompt of two rows that it did not mark (starship's, powerlevel10k's
+ * without shell integration) ends on a row that opens with its mark alone (`❯`, `╰─`), and the row
+ * above that is the prompt's too: the path, the branch.
+ */
+export function lastLine(screen: string, cursor: ScreenCursor, own = true, agent?: { chrome?: (row: string) => boolean }): string {
+  const rows = screen.split("\n");
+  const input = !cursor.hidden && own;
+  const from = !input ? rows.length - 1 : !agent && !cursor.marked && PROMPT_END.test(rows[cursor.top] ?? "") ? cursor.top - 2 : cursor.top - 1;
+  const chrome = agent?.chrome;
+  for (let y = Math.min(from, rows.length - 1); y >= 0; y--) {
+    const l = oneLine(rows[y]!);
+    if (l && !(GLYPH.test(l) && DRAWN.test(l)) && !chrome?.(rows[y]!)) return l;
   }
   return "";
 }
 
+/** The last row of a prompt of two rows: its mark alone before what is typed, a `❯` (starship,
+ *  pure, powerlevel10k's lean style) or a corner that closes the row above (`╰─`, `└─❯`). Not `$`,
+ *  `%`, `>` or `➜`, the marks of prompts of one row. */
+const PROMPT_END = /^\s*(?:[╰└]─*[❯>]?|❯)(?:\s|$)/;
+
 /** Reads the screens of sessions that produced output since the last tick, and reports each
  *  one's reading when it changes: its status, or for a wait, the screen it says it is; and its
- *  last line with text. */
+ *  last line. */
 export class ScreenWatcher {
   private dirty = new Set<string>();
   private seen = new Map<string, { reading: ScreenReading; lastBusyAt: { t: number | null } }>();
   private lines = new Map<string, string>();
 
   constructor(private readonly o: {
-    /** Each session's screen and what it runs; a session that is gone is left out. Null: the
-     *  screens could not be read this time, which says nothing about the sessions. */
-    read: (ids: string[]) => Promise<Map<string, { cmd: string; screen: string }> | null>;
+    /** Each session's screen, its cursor and what it runs, and whether that holds its terminal
+     *  (`lastLine`'s `own`); a session that is gone is left out. Null: the screens could not be
+     *  read this time, which says nothing about the sessions. */
+    read: (ids: string[]) => Promise<Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }> | null>;
     /** The agent's own detector for what it runs; undefined for a program that is not an agent. */
     detect: (cmd: string, screen: string) => ScreenReading | undefined;
+    /** The agent a command runs, for its chrome (`lastLine`); undefined for a program that is no
+     *  agent. Left out: every program is taken as none. */
+    agent?: (cmd: string) => { chrome?: (row: string) => boolean } | undefined;
     report: (id: string, reading: ScreenReading) => void;
-    /** A session's last line with text, as it changes. */
+    /** A session's last line, as it changes: "" once, when the line told goes blank. */
     line?: (id: string, line: string) => void;
     now?: () => number;
   }) {}
@@ -83,16 +118,20 @@ export class ScreenWatcher {
     const ids = [...this.dirty];
     this.dirty.clear();
     this.reading = true;
-    let got: Map<string, { cmd: string; screen: string }> | null;
+    let got: Map<string, { cmd: string; screen: string; cursor: ScreenCursor; own?: boolean }> | null;
     try { got = await this.o.read(ids); } finally { this.reading = false; }
     if (!got) { for (const id of ids) this.dirty.add(id); return; }
     for (const id of ids) {
       const s = got.get(id);
       if (!s) { this.seen.delete(id); continue; }
-      const line = lastLine(s.screen);
-      if (line && this.o.line && this.lines.get(id) !== line) {
-        this.lines.set(id, line);
-        this.o.line(id, line);
+      if (this.o.line) {
+        const line = lastLine(s.screen, s.cursor, s.own, this.o.agent?.(s.cmd));
+        // A screen cleared no longer says what it said: its blank is told, once. A screen that
+        // never had a line says nothing.
+        if ((this.lines.get(id) ?? "") !== line) {
+          this.lines.set(id, line);
+          this.o.line(id, line);
+        }
       }
       const raw = this.o.detect(s.cmd, s.screen);
       if (!raw) continue;

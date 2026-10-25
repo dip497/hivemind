@@ -16,12 +16,12 @@
  *     component feeds these in from a PerformanceObserver.
  *
  * What a host cannot do at all is not held against a view, which could not have known: a remote
- * screen has no live surfaces to place (`surfaceRects`), no folder picker (`openFolder`) and no
+ * screen has no live surfaces to place (`surfaceRects`), no lines to draw (`lineRects`), no folder picker (`openFolder`) and no
  * tiles but agents' to start. Those are refused as UNSUPPORTED and not counted.
  */
 import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
-  type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type ViewEvent,
+  type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type LineRect, type ViewEvent,
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
   type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary,
 } from "@hivemind/view-sdk/protocol";
@@ -136,6 +136,13 @@ export interface LinkDeps {
   /** Where the view wants live surfaces, said to it as the feature `surfaces` (1.6); none: this host
    *  places none (a remote screen that does not place its own). */
   onSurfaceRects?: (rects: SurfaceRect[]) => void;
+  /** Where the view reserves room for tiles' last lines, which the host draws there, said to it as
+   *  the feature `lineSlots` (1.17); none: this host draws none (a phone's, a remote screen's). */
+  onLineRects?: (rects: LineRect[]) => void;
+  /** The view may `fetch` its own files here, said to it as the feature `ownFiles` (1.17): its
+   *  manifest says `"files": true` and this screen's policy names its files (the app's window and a
+   *  browser tab; not a phone's, nor a screen whose host serves it). */
+  ownFiles?: boolean;
   onLayout: (data: unknown) => void;
   onFramesDrawn: (count: number) => void;
   onError: (message: string) => void;
@@ -206,6 +213,8 @@ export class CommunityLink {
     this.features = linkFeatures(this.services, deps.onSurfaceRects !== undefined);
     if (deps.commands.wakeAgent && deps.commands.sleepAgent) this.features.push("sleep");
     if (deps.commands.openHostMenu) this.features.push("hostMenu");
+    if (deps.onLineRects) this.features.push("lineSlots");
+    if (deps.ownFiles) this.features.push("ownFiles");
     this.scope = {
       capabilities: deps.capabilities, features: this.features,
       hasTile: (id) => deps.hasTile(id), hasFrame: (id) => deps.hasFrame(id), announced: (id) => this.announced.has(id),
@@ -372,6 +381,12 @@ export class CommunityLink {
         const place = this.deps.onSurfaceRects;
         if (!place) { this.unsupported("surfaceRects"); return; }
         place(m.rects.filter((r) => this.deps.hasTile(r.tileId)));
+        return;
+      }
+      case "lineRects": {
+        const draw = this.deps.onLineRects;
+        if (!draw) { this.unsupported("lineRects"); return; }
+        draw(m.rects.filter((r) => this.deps.hasTile(r.tileId)));
         return;
       }
       case "revealed": {

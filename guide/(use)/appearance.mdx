@@ -1,6 +1,6 @@
 ---
 title: "Change how Hivemind looks"
-description: "Pick a theme and accent, set the wallpaper and frosted glass, add overlays, and share your theme as a file."
+description: "Pick a preset or a theme from a package, choose any accent colour, set corners and fonts, the wallpaper, frosted glass and overlays, and share your look as a file."
 ---
 
 Change the look when you want other colours, a calmer background, or more contrast. Every change
@@ -9,12 +9,12 @@ applies at once and is saved for you.
 <AgentPrompt description="Paste this into your coding agent to change Hivemind's look from the terminal." page="appearance">{`
 Change how Hivemind looks, from the terminal, with the \`hive theme\` and \`hive config\` commands.
 
-1. Show me the themes: \`hive theme list\`. Ask me which one I want, then run \`hive theme use <name>\`.
-2. Before changing anything else, save the current look: \`hive theme export ~/hivemind-theme-backup.json\`.
+1. Show me the looks: \`hive theme list\` prints the presets and the themes my installed packages hold (\`@owner/package/theme\`). Ask me which one I want, then run \`hive theme use <id>\`. After a theme, \`hive theme revert\` goes back to the look before it.
+2. Before changing anything else, save the current settings, with the look's photo, video, overlays and accent colour: \`hive config get > ~/hivemind-look-backup.json\`.
 3. For anything else I ask (blur, wallpaper, glass), read the value first with \`hive config get <dotted.path>\`, for example \`hive config get appearance.glass.blur\`. Then set it with \`hive config set <dotted.path> '<JSON value>'\`. The value is JSON: a number as is (\`12\`), text in double quotes inside single quotes (\`'"ice"'\`), \`true\` or \`false\`.
-4. If \`hive config set\` refuses a value, show me its message. Do not edit the settings file by hand.
+4. If \`hive config set\` refuses a path or a value, show me its message. Do not edit the settings file by hand.
 
-At the end, show the new values with \`hive config get appearance\`, and tell me that \`hive theme import ~/hivemind-theme-backup.json\` undoes it all.
+At the end, show the new values with \`hive config get appearance\`, and tell me that \`hive theme import ~/hivemind-look-backup.json\` puts the look back.
 `}</AgentPrompt>
 
 <Tabs>
@@ -24,15 +24,26 @@ At the end, show the new values with \`hive config get appearance\`, and tell me
         Open **Settings → Appearance**. Settings is the gear at the right end of the toolbar.
       </Step>
       <Step title="Pick a theme">
-        Under **Theme**, pick a **Preset**. Then pick an **Accent**: the colour of buttons,
-        selection and focus.
+        Under **Theme**, pick a **Preset**. **Clean** and **Clean Light** are flat and quiet: they
+        also turn glass and the background off. **Clean Light** is the light
+        one. Pick another preset after them and your glass, background and corners come back. Then
+        pick an **Accent**: the colour of the selected tile, sliders and the text cursor. A theme from a package sits under **Themes**: see [Themes](#themes).
 
         Check: the whole window changes colour at once.
+      </Step>
+      <Step title="Set corners and fonts">
+        **Corners** rounds tiles, panels and controls, from square (0) to round (24). **Interface
+        font** is for menus, panels and Settings; **Code font** is for terminals, code and diffs.
+        Pick **System** for your computer's own font, or **Custom…** and type any font you have
+        installed. A theme's font shows by name, with the theme's, such as **Nunito · Harbour**.
+
+        Check: the corners of a tile change as you drag, and terminals redraw in the new font.
       </Step>
       <Step title="Set the background">
         Under **Workspace**, pick a **Background**: a moving wallpaper, a **Photo**, a **Video**, or
         **None**. **Media brightness** dims a photo or video. Turn off **Animate the background**
-        for a still one.
+        for a still one. Over a background, the tile count, a frame's name and the selected tile's
+        mark sit on the panel colour, so they read whatever the picture shows there.
 
         Check: the background shows behind your tiles.
       </Step>
@@ -52,7 +63,8 @@ At the end, show the new values with \`hive config get appearance\`, and tell me
   <Tab title="In a terminal">
     ```bash
     hive theme list                 # the presets
-    hive theme use nord
+    hive theme use clean-light
+    hive config set appearance.radius 6
     hive config set appearance.glass.blur 12
     hive config set appearance.wallpaper.kind '"ice"'
     ```
@@ -64,6 +76,57 @@ At the end, show the new values with \`hive config get appearance\`, and tell me
 <Frame caption="Settings → Appearance">
   <img src="/images/app/settings-appearance.dark.webp" alt="Settings → Appearance: the theme Preset and Accent colours, then the workspace Background, Animation and Glass." />
 </Frame>
+
+## Themes
+
+A theme is a whole look that a package brings: colours, an accent, and often terminal colours,
+corners, fonts and a wallpaper. Install a package that holds one from **Settings → Plugins**, on
+the **HiveHub** tab, or with `hive plugins install @owner/package`. A package of only themes,
+views and widgets arrives switched on.
+
+Its themes then show under **Settings → Appearance → Themes**, each with five colours (its
+background, text, accent, done and failed, as a preset shows), its package and version, and **Apply**. Press **Apply** and the theme is written over your look:
+
+- What the theme leaves out stays yours. Glass is always yours.
+- Its fonts and wallpaper are copied beside your settings, so the look keeps working without the
+  package.
+- A theme's wallpaper shows even with glass off.
+- Your look before it is kept. **Revert to previous look** puts back what the theme set, and
+  nothing else: corners, fonts or a wallpaper the theme left out and you changed since stay.
+
+```bash
+hive theme list                   # presets, and themes as @owner/package/theme
+hive theme use @owner/kit/harbour
+hive theme revert                 # back to the look before it
+```
+
+When a newer version of the package is installed, the row says so:
+"Harbour 1.2 is installed; you have 1.1 applied." Press **Apply 1.2**, or run `hive theme use`
+again. **Revert to previous look** still goes back to the look before the theme.
+
+Removing the package keeps the look. The row then reads "Using Harbour 1.1 (its package was
+removed)", and **Revert to previous look** still works. Picking a **Preset** leaves the theme:
+Revert goes, and so does a theme's own accent colour.
+
+A guest in your shared workspace sees the theme's colours and accent, but not its fonts or its
+picture wallpaper. The phone page keeps its own colours.
+
+### An accent of your own
+
+Under **Accent**, the last circle opens a colour picker: pick any colour. The accent marks the
+selected tile, sliders and the text cursor. A colour of your own, or a theme's, also fills
+the main button, a switch that is on and the focus ring. Words are never drawn in it (a link is
+your text colour, underlined), so any accent leaves them readable. If it is hard to see on your
+background or on the panels, the row says so with its contrast. Picking a built-in accent or a **Preset** drops
+your own colour.
+
+To set it from a terminal, with a second colour for the accent's lighter uses:
+
+```bash
+hive config set appearanceExtra.accent '{"brand":"#c08552","accent":"#d9a273"}'
+```
+
+To make a theme of your own, see [Packages](/packages#themes).
 
 ## Words on this page
 
@@ -86,7 +149,18 @@ hive theme export my-theme.json
 hive theme import my-theme.json
 ```
 
-A guest who joins your workspace sees your theme, except your photo, video, overlays and fonts.
+The file holds no media: your photo, video and overlays stay on this computer, and the export says
+what it left out. Importing a file keeps the ones you have. If the theme used a photo or video,
+pick your own under **Background**.
+
+**Import…** and `hive theme import` also take a whole settings.json, and read only the look from
+any file. What a file leaves out, such as light or dark, stays as you have it. A file with none of
+the look in it, such as a package.json, is refused and changes nothing. The file carries your own
+accent colour; importing one over a theme leaves the theme, so **Revert to previous look** does not undo it. To
+keep a copy of your look with its photo, video and overlays, save `hive config get > my-look.json`:
+importing that file puts them back.
+
+A guest who joins your workspace sees your colours and accent, your own accent colour too, but not your photo, video, overlays or fonts.
 
 ## Check it worked
 
@@ -98,7 +172,9 @@ A guest who joins your workspace sees your theme, except your photo, video, over
 | You see | Do this |
 |---|---|
 | `hive config set` refuses a value | The value must be JSON: text in double quotes inside single quotes (`'"ice"'`). Its range is in the [Settings reference](/settings#appearance). |
+| `hive config set` says this version has no such setting | Check the path. The message lists the settings in that group, and the one you may mean (`appearance.glass.blur` for `appearance.blur`). |
 | The text is hard to read over a photo | Lower **Media brightness**, or raise **Panel opacity**. |
+| An agent keeps its dark colours after you switch to a light terminal | An agent that asks to hear of the change (Claude Code does) switches at once. Others, such as Codex and Gemini CLI, read the background when they start: restart them in that tile. |
 | Something else | [Troubleshooting](/troubleshooting) |
 
 ## Related

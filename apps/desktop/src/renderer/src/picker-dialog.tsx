@@ -56,12 +56,12 @@ export function PickerDialog({ title, description, rows, extra = [], onPick, onC
   let lastGroup: string | undefined;
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent ref={card} tabIndex={-1} padding="none" className="w-[380px] max-w-[92vw] gap-0 overflow-hidden outline-none" onKeyDown={onKeyDown}
+      <DialogContent ref={card} tabIndex={-1} padding="none" className="w-[380px] max-w-[92vw] overflow-hidden" onKeyDown={onKeyDown}
         // The search box takes the keys when there is one; else the card, for the arrows and Enter.
         onOpenAutoFocus={(e) => { if (!searchable) { e.preventDefault(); card.current?.focus(); } }}>
         <div className="border-b border-[var(--color-line)] px-3.5 pb-2.5 pt-3 pr-10">
-          <DialogTitle className="text-body font-semibold">{title}</DialogTitle>
-          {description && <DialogDescription className="mt-1 line-clamp-2 text-label text-[var(--color-fg3)]">{description}</DialogDescription>}
+          <DialogTitle variant="list">{title}</DialogTitle>
+          {description && <DialogDescription variant="list" className="mt-1">{description}</DialogDescription>}
         </div>
         {searchable && (
           <div className="px-2 pt-2">

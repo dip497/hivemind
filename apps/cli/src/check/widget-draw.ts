@@ -8,7 +8,7 @@
  *  timers firing included, arrives as JSON its own context parses. */
 import { drawingProblem, WIDGET_PRELUDE } from "@hivemind/core/widget-api";
 import { resolveSettings } from "@hivemind/core/plugin-settings";
-import type { WidgetPackage } from "@hivemind/core/widget-format";
+import { tintProblem, widgetTree, type WidgetPackage } from "@hivemind/core/widget-format";
 import { fakeHost } from "@hivemind/view-sdk/testing";
 import path from "node:path";
 import { placeIn, type Problem } from "./problem.js";
@@ -76,7 +76,8 @@ self.onmessage = (e) => {
 export async function drawWidget(w: WidgetPackage, dir: string): Promise<Problem[]> {
   const problems: Problem[] = [];
   if (w.draw !== undefined) {
-    const why = drawingProblem(w.draw, "its draw");
+    // Its tint as it is drawn: each "$options.<id>" being that option's default.
+    const why = drawingProblem(w.draw, "its draw") ?? tintProblem(widgetTree({ id: w.id, widget: w.id }, w, undefined), "its draw");
     if (why) problems.push({ step: "draw", file: "widget.json", message: why });
   }
   if (!w.code) return problems;
@@ -114,7 +115,7 @@ export async function drawWidget(w: WidgetPackage, dir: string): Promise<Problem
       problems.push({ step: "draw", file: "widget.js", message: `it drew nothing within ${FIRST_DRAW_MS / 1000} s of starting: call hive.render() on "start"` });
     }
     if (renders.length) {
-      const why = drawingProblem(renders[0]);
+      const why = drawingProblem(renders[0]) ?? tintProblem(renders[0]);
       if (why) problems.push({ step: "draw", file: "widget.js", message: `its first drawing: ${why}` });
     }
     return problems;

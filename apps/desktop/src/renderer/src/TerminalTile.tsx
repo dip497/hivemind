@@ -8,11 +8,12 @@ import { followsLink, linkHint, registerFileLinks } from "./terminal-file-links"
 import { installCrispDpr } from "./terminal-dpr";
 import { drawnSize, nextPtySize, resizeBurst, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
+import { answerThemeNotify, colorFgBg, isDarkBackground, ThemeNotify } from "./theme-notify";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
 import { useTileFont, FontScaleControl } from "./tile-font";
-import { IS_MAC, onShortcut } from "./shortcut";
+import { actionKey, IS_MAC, onShortcut, runShortcut } from "./shortcut";
 import { actionsFor } from "../../shared/keymap";
 import { identifyAgent } from "./agent-state";
 import { agentById } from "@hivemind/agents";
@@ -36,7 +37,7 @@ import { terminalThemeFor } from "@hivemind/core/settings-schema";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
-import { statusColor } from "./workspace/tile-status-bucket";
+import { exitFailed, LOOKS, paintGlyph, StatusGlyph, statusLook, statusWord } from "./workspace/status-look";
 import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
 import { useShown } from "./multiplayer/shown";
@@ -45,6 +46,14 @@ import { useShown } from "./multiplayer/shown";
 // by tileId) — A−/A+ in the header + Ctrl/Cmd +/−/0 adjust it. Crispness is
 // DPR-driven (see terminal-dpr.ts); 15 is the default for comfortable reading.
 const DEFAULT_FONT = 15;
+/** The faces xterm measures for a font list: its first family, regular and bold. A generic name
+ *  (monospace) is the system's and is already there. */
+function measuredFaces(fontList: string): string[] {
+  const first = fontList.split(",")[0]?.trim() ?? "";
+  if (!first || /^(monospace|ui-monospace|sans-serif|serif|system-ui)$/.test(first)) return [];
+  const family = /^["']/.test(first) ? first : `"${first}"`;
+  return [`400 12px ${family}`, `700 12px ${family}`];
+}
 /**
  * Terminals whose host resized are fitted together, once per frame: every visibility read
  * first, then every fit. Reading visibility inside the ResizeObserver callback forced a
@@ -232,18 +241,26 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const term = termRef.current;
     if (!term) return;
     term.options.theme = { ...withScrollbar(terminalThemeFor(termPalette)), background: termBg };
+    // A program that asked (mode 2031) hears the background went light or dark; the window whose
+    // keys reach the session tells it, so two windows showing it do not say it twice.
+    const report = themeNotifyRef.current?.theme(isDarkBackground(termPalette.background));
+    if (report && kbRef.current.mayType) window.hive.ptyWrite(ptyIdRef.current, report);
   }, [termBg, termPalette]);
   // One session per tile, its id the tile's: the same tile reattaches to its session in the daemon
   // across restarts, a remount (StrictMode, a view move) shares it, and an unmount lets go of it
   // (only a close kills it). Not keyed on cwd: a frame rebinding its folder keeps the session, which
   // the daemon keeps at the folder it began in, where an agent's history is.
   const ptyId = session ?? toPtyId(tileId);
+  const ptyIdRef = useRef(ptyId);
+  ptyIdRef.current = ptyId;
   useEffect(() => trackOpenSession(ptyId), [ptyId]);
   // One keyboard per terminal (M2): who has it, whether this window's keys reach the session, and
   // the size the session was given. Heard before the session is opened, which tells it both.
   const kb = useTerminalKeyboard(ptyId, cwd);
   const kbRef = useRef<TerminalKeyboard>(kb);
   kbRef.current = kb;
+  /** The mounted terminal's mode 2031 (theme-notify.ts). */
+  const themeNotifyRef = useRef<ThemeNotify | null>(null);
   // What fits this tile, and the sizes this window last asked the session to take (drawnSize).
   const ownSizeRef = useRef<PtySize | null>(null);
   // The session has a size another screen gave it (a phone fitted it), not this window's.
@@ -261,7 +278,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // Agent/terminal status — driven by PTY activity, mutated imperatively via
   // refs (NOT React state) so high-frequency output never triggers re-renders.
   //   working = output within the last ~1.5s · idle = quiet · exited = PTY gone
-  const dotRef = useRef<HTMLSpanElement | null>(null);
+  const dotRef = useRef<SVGSVGElement | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** Wrapper around the status dot+label — hidden entirely while idle. */
@@ -285,49 +302,35 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
 
   useEffect(() => {
     if (!agentsScanned) return;
-    // [color, label, pulse]. permission/question = needs the human (from the
-    // real Claude-state scrape); working/idle from screen or PTY activity.
-    // Labels and pulse only; colours come from workspace/tile-status-bucket so this header
-    // agrees with the layers panel and every surface bar. Only actionable states pulse.
-    const STATUS: Record<string, [string, boolean]> = {
-      working: ["working", false],
-      idle: ["idle", false],
-      exited: ["exited", false],
-      permission: ["approve?", true],
-      question: ["input?", true],
-      blocked: ["blocked", true],
-      plan_review: ["review?", true],
-      awaiting_approval: ["approval?", true],
-    };
+    // permission/question = needs the human (from the real Claude-state scrape); working/idle
+    // from screen or PTY activity. The words, shape and colour are workspace/status-look's, so
+    // this header agrees with Layers and every surface bar.
     /** The header chip. An agent tile's follows the bus (the host's status); a shell's its own activity. */
-    const paint = (s: TileStatusKind, extra?: { exitCode?: number; detail?: string }) => {
+    const paint = (s: TileStatusKind, extra?: { exitCode?: number; failed?: boolean; detail?: string }) => {
       const dot = dotRef.current;
       const label = labelRef.current;
       if (!dot || !label) return;
       // A shell calls this on every output chunk; rewriting an unchanged chip
       // replaced its text node and dirtied the header's layout each time.
       if (s === lastStatusRef.current && !extra) return;
-      const [text, pulse] = STATUS[s]!;
-      // The colour is the shared one for this state; only a failed exit is not neutral.
-      const color = statusColor(s, { failed: s === "exited" && !!extra?.exitCode });
+      // Only a failed exit is not neutral.
+      const failed = exitFailed({ status: s, ...extra });
+      const look = statusLook(s, { failed });
       // `idle` is the ABSENCE of a state, not a state — and it rendered as a green
       // dot, which reads as "success" when it means "nothing is happening". Hide the
       // whole chip so a quiet tile has a quiet header, and every chip that remains
       // (working / approve? / blocked / exited) is worth looking at. Matches
       // LayersPanel, which already skips idle rows.
       if (statusWrapRef.current) statusWrapRef.current.style.display = s === "idle" ? "none" : "inline-flex";
-      dot.style.background = color;
-      // No glow (box-shadow) — the pulsing-glow-on-dark dot is a textbook
-      // AI-slop tell. A solid dot + pulse on actionable states reads cleaner.
-      dot.classList.toggle("animate-pulse", pulse);
-      label.textContent = text;
-      label.style.color = color;
+      paintGlyph(dot, look);
+      label.textContent = statusWord(s, { failed });
+      label.style.color = LOOKS[look].text;
       lastStatusRef.current = s;
     };
     const offStatus = agent ? subscribeTileStatus(tileId, (e) => paint(e.status, e.status === "exited" ? e : undefined)) : undefined;
     /** What the tile itself knows: a shell's activity, and how any process exited — the code
      *  and detail let the awareness layer tell a crash from a clean close. */
-    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; detail?: string }) => {
+    const setStatus = (s: "working" | "idle" | "exited", extra?: { exitCode?: number; signal?: number; failed?: boolean; detail?: string }) => {
       paint(s, extra);
       if (s === "exited") publishStatus({ tileId, label: chipLabelRef.current, status: s, ...extra });
     };
@@ -354,7 +357,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const host = hostRef.current;
     if (!host) return;
     const term = new Terminal({
-      fontFamily: '"JetBrains Mono", monospace',
+      fontFamily: getTheme().monoFont,
       fontSize: fontSizeRef.current,
       lineHeight: 1.3,
       // ONLY when Frost-tile-content is on at mount. allowTransparency disables
@@ -370,7 +373,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       scrollback: SCROLLBACK,
       allowProposedApi: true,
       // A program may ask for keys by the kitty protocol: Shift+Enter, Ctrl+I and Tab stay apart.
-      vtExtensions: { kittyKeyboard: true },
+      // Mode 2031 is theme-notify.ts's alone: xterm's own reports on every colour change and reads a
+      // glass terminal's clear background as dark.
+      vtExtensions: { kittyKeyboard: true, colorSchemeQuery: false },
       // Render perf + UX tuning
       fastScrollSensitivity: 5,           // Alt-wheel jumps 5x faster
       scrollSensitivity: 1,
@@ -428,6 +433,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     fitRef.current = { fit: fitTerm, draw: drawTerm };
     fitTerm();
     termRef.current = term;
+    const notify = new ThemeNotify(isDarkBackground(getTheme().terminal.background));
+    themeNotifyRef.current = notify;
     /** Ask the session to take this tile's size, when it has not been asked already. Only while
      *  this window's keys reach it: the keyboard's holder sizes a session (R4). */
     const syncPtySize = (): void => {
@@ -450,7 +457,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // selected and focus landed on the CANVAS CHROME — body, the react-flow pane,
     // or ANY node wrapper (a re-render/selection steal) and NOT a real editable
     // field — take focus straight back next frame. Never fights a deliberate move
-    // into another tile's terminal, a rename box, or the command palette (all
+    // into another tile's terminal, a rename box, or a search field (all
     // editable elements), so it can't trap focus.
     const reclaimFocusIfStolen = () => {
       if (!selectedRef.current) return;
@@ -632,6 +639,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     /** Every spawn and attach of this tile's session: its size now, and the history it holds. */
     const spawn = (more: Partial<Parameters<typeof window.hive.ptySpawn>[0]> = {}) => window.hive.ptySpawn({
       tileId: ptyId, tile: tileId, cwd, cmd, args: args ?? [], cols: term.cols, rows: term.rows,
+      // What it starts on: a program that reads its colours from COLORFGBG picks them for this.
+      env: { COLORFGBG: colorFgBg(isDarkBackground(getTheme().terminal.background)) },
       ...(history === undefined ? {} : { history }), ...more,
     });
     term.onScroll(() => {
@@ -707,12 +716,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     let unsubAgentSend: (() => void) | undefined;
 
     // Rebuild the glyph atlas once the web font is truly loaded. xterm measures
-    // the font at open(); "JetBrains Mono" loads async (web font), so the first
-    // atlas is often built from FALLBACK metrics → permanently blurry glyphs that
-    // never self-correct. Force-load the exact faces, then re-fit + clear the
-    // WebGL texture atlas so glyphs re-rasterize at the right metrics + density.
+    // the font at open(); the terminal font (JetBrains Mono unless the person chose
+    // another) loads async, so the first atlas is often built from FALLBACK metrics
+    // → permanently blurry glyphs that never self-correct. Force-load the exact
+    // faces, then re-fit + clear the WebGL texture atlas so glyphs re-rasterize at
+    // the right metrics + density.
     if (typeof document !== "undefined" && document.fonts?.ready) {
-      const fams = ['400 12px "JetBrains Mono"', '700 12px "JetBrains Mono"'];
+      const fams = measuredFaces(getTheme().monoFont);
       Promise.all(fams.map((f) => document.fonts.load(f).catch(() => undefined)))
         .then(() => document.fonts.ready)
         .then(() => {
@@ -756,15 +766,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         bootSettle = setTimeout(releaseBoot, Math.max(BOOT_SETTLE_MS, bootAt + BOOT_MIN_MS - Date.now()));
       }
       flowPending += d.length;
+      // Once the reset is drawn. In the data's own write: xterm's resize stopped at an empty write
+      // and dropped it with every write after it (see screen-worker's inTurn). Our patch of
+      // @xterm/xterm fixes that loop; folding the scroll into this write keeps it right without it.
+      const had = keepPlace !== undefined && d.startsWith(SCREEN_RESET) ? keepPlace : undefined;
+      if (had !== undefined) keepPlace = undefined;
       term.write(d, () => {
         flowPending -= d.length;
         if (flowPaused && flowPending <= FLOW_LOW_CHARS) releaseFlowPause();
+        if (had !== undefined) term.scrollToLine(Math.max(0, term.buffer.active.baseY - had));
       });
-      if (keepPlace !== undefined && d.startsWith(SCREEN_RESET)) {
-        const had = keepPlace;
-        keepPlace = undefined;
-        term.write("", () => term.scrollToLine(Math.max(0, term.buffer.active.baseY - had)));
-      }
       if (flowPending >= FLOW_HIGH_CHARS) requestFlowPause();
       // An agent tile's status comes from the host; a plain shell uses the cheap heuristic.
       if (agent) agentDirty = true;
@@ -784,6 +795,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         `\r\n\x1b[2m[hivemind] exited code=${code} signal=${signal ?? ""} — press Enter to restart\x1b[0m`,
       );
       exited = true;
+      // Enter starts the next program in this session, which asks for itself.
+      notify.reset();
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (agentPoll) { clearInterval(agentPoll); agentPoll = undefined; }
       // Thread the exit code + a one-line detail so the awareness layer can
@@ -820,6 +833,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       window.hive.ptyWrite(ptyId, `\x1b]11;${reply}\x1b\\`);
       return true;
     });
+    // Mode 2031: the program asks to hear when the background goes light or dark, or asks now. One
+    // for this mount, the restarts in it too; a later mount learns the mode from the replay.
+    answerThemeNotify(term.parser, notify, (reply) => { if (kbRef.current.mayType) window.hive.ptyWrite(ptyId, reply); });
     // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
     // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
     // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls
@@ -835,13 +851,6 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         const left = e.key === "ArrowLeft";
         term.input(IS_MAC ? (left ? "\x1bb" : "\x1bf") : (left ? "\x1b[1;5D" : "\x1b[1;5C"), true);
-        e.preventDefault();
-        return false;
-      }
-      // Shift+Enter: a new line in the prompt, not a send. A program that turned the kitty protocol
-      // on is told Shift+Enter as itself; any other gets ESC CR, which agents read as Alt+Enter.
-      if (e.key === "Enter" && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !kittyFlags(term)) {
-        term.input("\x1b\r", true);
         e.preventDefault();
         return false;
       }
@@ -864,6 +873,12 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           term.clearSelection();
           return true;
         }
+        // Shift+Enter: a new line in the prompt, not a send. A program that turned the kitty protocol
+        // on is told Shift+Enter as itself; any other gets ESC CR, which agents read as Alt+Enter.
+        case "new-line":
+          if (kittyFlags(term)) return false;
+          term.input("\x1b\r", true);
+          return true;
         case "take-keyboard":
           if (!kbRef.current.mayTake) return false;
           window.hive.keyboardTake(ptyId);
@@ -871,6 +886,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         case "font-bigger": font.inc(); return true;
         case "font-smaller": font.dec(); return true;
         case "font-reset": font.reset(); return true;
+        // The slot bar of the view this terminal is docked in undocks it (slot-chrome.tsx).
+        case "undock": return runShortcut("undock");
         default: return false;
       }
     }
@@ -951,12 +968,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
         if (pid === -1) {
           // An adopted session that is gone; or, in a workspace joined from elsewhere, one its host
           // is not running.
-          term.writeln(session
-            ? `\x1b[2m[hivemind] could not open session ${session}: it has ended, or its machine is unreachable\x1b[0m`
-            : "\x1b[2m[hivemind] this terminal is not running on the machine it belongs to\x1b[0m");
+          const detail = session
+            ? `could not open session ${session}: it has ended, or its machine is unreachable`
+            : "this terminal is not running on the machine it belongs to";
+          term.writeln(`\x1b[2m[hivemind] ${detail}\x1b[0m`);
           attachedRef.current = false;
           exited = true;
-          setStatus("exited");
+          setStatus("exited", { failed: true, detail });
           return;
         }
         // Force the live PTY to match our CURRENT geometry. On a RE-ATTACH the
@@ -1007,9 +1025,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       } catch (e) {
         attachedRef.current = false;
         releaseBoot();
-        term.writeln(`\x1b[31m[hivemind] spawn failed: ${(e as Error).message}\x1b[0m`);
+        const detail = `spawn failed: ${(e as Error).message}`;
+        term.writeln(`\x1b[31m[hivemind] ${detail}\x1b[0m`);
         exited = true;
-        setStatus("exited");
+        setStatus("exited", { failed: true, detail });
       }
     }
     void doSpawn();
@@ -1152,6 +1171,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       cancelMousePatch();
       term.dispose();
       termRef.current = null;
+      themeNotifyRef.current = null;
       fitRef.current = null;
       webglRef.current = null;
     };
@@ -1215,6 +1235,26 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     } catch { /* torn down */ }
   }, [font.size]);
 
+  // The person's terminal font, applied as it changes: once its faces have loaded, the cells are
+  // measured again (the pty follows the new size) and the glyph atlas is drawn afresh.
+  const monoFont = useThemeField("monoFont");
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || term.options.fontFamily === monoFont) return;
+    term.options.fontFamily = monoFont;
+    let gone = false;
+    void Promise.all(measuredFaces(monoFont).map((f) => document.fonts.load(f).catch(() => undefined))).then(() => {
+      if (gone) return;
+      try {
+        fitRef.current?.fit();
+        syncSizeRef.current?.();
+        webglRef.current?.clearTextureAtlas();
+        term.refresh(0, term.rows - 1);
+      } catch { /* torn down */ }
+    });
+    return () => { gone = true; };
+  }, [monoFont]);
+
   // A workspace joined from elsewhere: once the connection to its host is back, the session is
   // shown again (the host let go of it as the connection went); until then it is not.
   const joined = !!shared;
@@ -1238,6 +1278,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     typedBefore.current = kb.mayType;
     if (kb.mayType) sentSizeRef.current = null;
     else askedRef.current = [];
+    // The background may have changed while another window had the keys: a program that asked hears it.
+    const report = kb.mayType ? themeNotifyRef.current?.now() : null;
+    if (report) window.hive.ptyWrite(ptyIdRef.current, report);
     try { fitRef.current?.fit(); syncSizeRef.current?.(); } catch { /* torn down */ }
   }, [kb.mayType]);
 
@@ -1345,7 +1388,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             and whole-tile scale (−/+, grows the node box + font in proportion). */}
         <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-150">
           {/* Font size only (A−/A+) */}
-          <span className="nodrag inline-flex items-center divide-x divide-[var(--color-line2)] rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden" title="Font size (Ctrl/Cmd ±)">
+          <span className="nodrag inline-flex items-center divide-x divide-[var(--color-line2)] rounded bg-[var(--color-bg)] border border-[var(--color-line2)] overflow-hidden" title={`Font size (${actionKey("font-bigger")} / ${actionKey("font-smaller")})`}>
             <Button variant="ghost" size="micro" onClick={font.dec} aria-label="decrease font size">
               A−
             </Button>
@@ -1370,7 +1413,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
             onClick={() => setOverlay((v) => !v)}
             className="nodrag"
             aria-label="fullscreen terminal"
-            title="Fullscreen (Ctrl/Cmd ⇧F) · Esc to exit"
+            title={`Fullscreen (${actionKey("fit-to-screen")})`}
           >
             ⤢
           </Button>
@@ -1380,12 +1423,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
           className="inline-flex items-center gap-1.5 text-chip"
           title="agent status — working / blocked / exited (idle is not shown)"
         >
-          <span
-            ref={dotRef}
-            aria-hidden
-            className="size-1.5 rounded-full"
-            style={{ background: "var(--color-fg3)" }}
-          />
+          <StatusGlyph ref={dotRef} look="idle" className="size-1.5" />
           <span ref={labelRef} style={{ color: "var(--color-fg3)" }}>
             starting
           </span>
