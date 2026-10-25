@@ -35,6 +35,8 @@ const SESSION_CHECK_MS = 1000;
 /** The least time between two looks for the file of an agent that keeps none yet, however often it
  *  reports from the same session: each look may scan the agent's store. */
 export const RESOLVE_EVERY_MS = 3000;
+/** How long since which file `s`'s agent keeps was last looked for, on the clock the timers run on. */
+const sinceLook = (s: { resolvedAt: number }): number => performance.now() - s.resolvedAt;
 
 /** The session the agent of `tile` keeps its conversation in now, among the boards `held`, and its
  *  file, as its manifest says it is kept (`session.transcript`, `session.resume.exists`); null
@@ -96,7 +98,8 @@ interface SaidOf {
   again: boolean;
   /** Which file it keeps is looked for again before its next read. */
   resolve: boolean;
-  /** When which file it keeps was last looked for, and the session its agent last reported from. */
+  /** When which file it keeps was last looked for (`performance.now()`, the clock the timers run on),
+   *  and the session its agent last reported from. */
   resolvedAt: number;
   reported?: string;
   /** Asked for within 3 s of that look, its file not written yet: looked for once they are up. */
@@ -179,7 +182,7 @@ export class LastSaid {
     const s = this.of(bare);
     s.stale = false;
     this.reportedFrom(s, o.session);
-    if (o.resolve || (!s.t?.file && Date.now() - s.resolvedAt >= RESOLVE_EVERY_MS)) s.resolve = true;
+    if (o.resolve || (!s.t?.file && sinceLook(s) >= RESOLVE_EVERY_MS)) s.resolve = true;
     else if (s.t && !s.t.file) this.lookLater(bare, s);
     if (s.resolve) this.resolve(bare, s);
     if (!s.t) return;
@@ -235,14 +238,14 @@ export class LastSaid {
     s.later = setTimeout(() => {
       s.later = undefined;
       if (this.tiles.get(bare) === s && !s.t?.file) this.refresh(bare);
-    }, RESOLVE_EVERY_MS - (Date.now() - s.resolvedAt));
+    }, RESOLVE_EVERY_MS - sinceLook(s));
     (s.later as { unref?: () => void }).unref?.();
   }
 
   /** Look for which file `bare`'s agent keeps now: another one is read from its end. */
   private resolve(bare: string, s: SaidOf): void {
     s.resolve = false;
-    s.resolvedAt = Date.now();
+    s.resolvedAt = performance.now();
     const t = this.o.transcriptOf(bare);
     if (t?.file === s.t?.file && t?.format === s.t?.format) { s.t = t; return; }
     s.t = t;

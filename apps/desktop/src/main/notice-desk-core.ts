@@ -5,10 +5,12 @@
  * ten agents finish together. The desk:
  *
  *  1. dedupes: a notice with the host's `since` is a copy of the last event of its (tile, kind)
- *     when that one had the same `since` (or a later one), however late it comes: a busy window
- *     can see a change seconds after another; without `since` (a status only the window knows),
- *     the first notice for (tile, kind) in DEDUPE_MS is the event. A copy only merges into its
- *     event (`selected ||= copy.selected`);
+ *     when that one had the same `since`, however late it comes, or a later one that came under
+ *     LATE_COPY_MS ago: a busy window can see a change seconds after another. `since` is the
+ *     host's time of day, so a tile's next session, after the clock was set back, starts lower
+ *     than its last; once LATE_COPY_MS have passed it is told. Without `since` (a status only the
+ *     window knows), the first notice for (tile, kind) in DEDUPE_MS is the event. A copy only
+ *     merges into its event (`selected ||= copy.selected`);
  *  2. gates the OS pop-up on that event, and groups a burst: the first pop-up of a kind shows at
  *     once, the rest within GROUP_MS gather into one ("9 more agents finished"), and needs you is
  *     never folded into finished (each kind groups on its own);
@@ -24,7 +26,10 @@
  *
  * Per notice: two Map gets and sets, an array push, and at most one timer per pacer or group.
  * The dedupe maps are pruned from their oldest end and capped at DEDUPE_MAX each, so nothing
- * rescans. `now` and `schedule` are given, as `CommunityLink` takes them.
+ * rescans. Every wait is timed on the clock the timers run on (`performance.now()`), so setting the
+ * computer's clock back or forward neither holds a sound back nor lets a copy through; the time of
+ * day (`Date.now()`) decides Do Not Disturb and is what Recent shows. Both, and `setTimeout`, are
+ * the desk's own unless given, as `CommunityLink`'s are; the tests give a clock they move.
  */
 import type { AgentNotice } from "../shared/ipc.js";
 import { NOTICE_TONES, shouldNotify, type NoticeKind, type NotificationSettings } from "../shared/notification-settings.js";
@@ -35,6 +40,8 @@ import type { AppearanceExtra } from "@hivemind/core/appearance-extra";
 import { STATUS_MARKS } from "@hivemind/view-sdk/status";
 
 export const DEDUPE_MS = 2000;
+/** How long a copy of an earlier change than the last one told still counts as a copy. */
+export const LATE_COPY_MS = 10_000;
 export const DEDUPE_MAX = 1024;
 export const GATHER_MS = 150;
 export const SOUND_GAP_MS = 1200;
@@ -44,6 +51,7 @@ export const RECENT_MAX = 10;
 const RANK: Record<NoticeKind, number> = { needs: 3, error: 2, done: 1 };
 
 export interface Clock {
+  /** Milliseconds on the clock `schedule` runs on, for every wait. */
   now(): number;
   schedule(fn: () => void, ms: number): unknown;
 }
@@ -71,8 +79,8 @@ export interface Popup { kind: NoticeKind; notices: AgentNotice[]; more: boolean
 class NoticeDesk {
   /** The events of the last DEDUPE_MS, oldest first: a copy merges into its event here. */
   private readonly seen = new Map<string, Admitted>();
-  /** Each (tile, kind)'s last event's `since`, least recently changed first. */
-  private readonly since = new Map<string, number>();
+  /** Each (tile, kind)'s last event's `since`, and when it came, least recently changed first. */
+  private readonly since = new Map<string, { since: number; at: number }>();
   constructor(private readonly clock: Pick<Clock, "now">) {}
 
   /** The event for `n`, or null when it is a copy of one (merged into it, while it is recent). */
@@ -86,7 +94,9 @@ class NoticeDesk {
     const key = `${n.tileId}\u0000${n.kind}`;
     const was = this.seen.get(key);
     const last = this.since.get(key);
-    const copy = n.since !== undefined && last !== undefined ? n.since <= last : !!was;
+    const copy = n.since !== undefined && last !== undefined
+      ? n.since === last.since || (n.since < last.since && now - last.at < LATE_COPY_MS)
+      : !!was;
     if (copy) {
       if (was) was.selected ||= selected;
       return null;
@@ -97,7 +107,7 @@ class NoticeDesk {
     if (this.seen.size > DEDUPE_MAX) this.seen.delete(this.seen.keys().next().value!);
     if (n.since !== undefined) {
       this.since.delete(key);
-      this.since.set(key, n.since);
+      this.since.set(key, { since: n.since, at: now });
       if (this.since.size > DEDUPE_MAX) this.since.delete(this.since.keys().next().value!);
     }
     return a;
@@ -154,7 +164,9 @@ export class PopupGrouper {
   }
 }
 
-export interface DeskDeps extends Clock {
+export interface DeskDeps extends Partial<Clock> {
+  /** The time of day (ms since the epoch): Do Not Disturb, and when a burst started. */
+  wall?(): number;
   settings(): NotificationSettings;
   /** Whether an app window has the focus: the window already shows it, so no OS pop-up. */
   focused(): boolean;
@@ -173,14 +185,20 @@ export class NoticeDeskCore {
   private readonly openBurst = new Map<NoticeKind, { burst: Burst; last: number }>();
   private readonly playing = new Map<number, Burst>();
   private ids = 0;
+  private readonly clock: Clock & { wall(): number };
 
   constructor(private readonly deps: DeskDeps) {
-    this.desk = new NoticeDesk(deps);
-    this.pacer = new SoundPacer(deps, (moment, carried, dropped) => this.fired(moment, carried, dropped));
-    this.grouper = new PopupGrouper(deps, (kind, group, more) => {
+    this.clock = {
+      now: deps.now ?? (() => performance.now()),
+      wall: deps.wall ?? (() => Date.now()),
+      schedule: deps.schedule ?? ((fn, ms) => setTimeout(fn, ms)),
+    };
+    this.desk = new NoticeDesk(this.clock);
+    this.pacer = new SoundPacer(this.clock, (moment, carried, dropped) => this.fired(moment, carried, dropped));
+    this.grouper = new PopupGrouper(this.clock, (kind, group, more) => {
       if (more && this.deps.focused()) return;
       for (const b of new Set(group.map((a) => a.burst!))) b.popups++;
-      this.deps.popup({ kind, notices: group.map((a) => a.notice), more, silent: shouldNotify(this.deps.settings(), kind, "sound", this.deps.now()) });
+      this.deps.popup({ kind, notices: group.map((a) => a.notice), more, silent: shouldNotify(this.deps.settings(), kind, "sound", this.clock.wall()) });
     });
   }
 
@@ -189,12 +207,13 @@ export class NoticeDeskCore {
     const a = this.desk.admit(n, selected);
     if (!a) return;
     const s = this.deps.settings();
-    const now = this.deps.now();
+    const now = this.clock.now();
+    const wall = this.clock.wall();
     const kind = n.kind;
-    const sound = shouldNotify(s, kind, "sound", now);
+    const sound = shouldNotify(s, kind, "sound", wall);
     a.burst = this.burstFor(kind, now, sound);
     a.burst.agents++;
-    if (!this.deps.focused() && shouldNotify(s, kind, "osPopups", now)) this.grouper.offer(a);
+    if (!this.deps.focused() && shouldNotify(s, kind, "osPopups", wall)) this.grouper.offer(a);
     if (sound) this.pacer.offer(a);
   }
 
@@ -216,7 +235,7 @@ export class NoticeDeskCore {
   /** A sound asked for by name (Settings' Play, `hive notifications play`): no gate, no pacing.
    *  `asking` hears its id before it is sent, so an answer that comes at once finds who asked. */
   play(moment: NoticeKind, asking?: (s: Sound) => void): Sound {
-    const b = this.newBurst(moment, this.deps.now(), "waiting");
+    const b = this.newBurst(moment, "waiting");
     const sound = { id: b.id, moment, count: 1 };
     b.count = 1;
     this.playing.set(b.id, b);
@@ -231,13 +250,13 @@ export class NoticeDeskCore {
       open.last = now;
       return open.burst;
     }
-    const burst = this.newBurst(kind, now, sound ? "waiting" : "off");
+    const burst = this.newBurst(kind, sound ? "waiting" : "off");
     this.openBurst.set(kind, { burst, last: now });
     return burst;
   }
 
-  private newBurst(moment: NoticeKind, at: number, sound: Burst["sound"]): Burst {
-    const burst: Burst = { id: ++this.ids, moment, agents: 0, at, popups: 0, sound };
+  private newBurst(moment: NoticeKind, sound: Burst["sound"]): Burst {
+    const burst: Burst = { id: ++this.ids, moment, agents: 0, at: this.clock.wall(), popups: 0, sound };
     this.bursts.push(burst);
     if (this.bursts.length > RECENT_MAX) {
       const gone = this.bursts.shift()!;

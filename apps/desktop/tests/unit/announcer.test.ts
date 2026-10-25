@@ -8,7 +8,16 @@ import { forgetStatus, publishStatus, subscribeStatus, type StatusEvent } from "
 import { markBackgroundTile } from "../../src/renderer/src/worker-tiles.ts";
 import { setNotificationSetting } from "../../src/renderer/src/notification-settings.ts";
 
-mock.timers.enable({ apis: ["setTimeout", "Date"] });
+// The timers run on `performance.now()`, which the announcer reads to time them; `Date.now()` is the
+// time of day, which `setWall` moves alone, as a person setting their computer's clock does.
+let mono = 0;
+let wall = Date.parse("2026-10-25T12:00:00Z");
+mock.timers.enable({ apis: ["setTimeout"] });
+mock.method(performance, "now", () => mono);
+mock.method(Date, "now", () => wall + mono);
+/** Move the timers' clock on `ms`, running what falls due on the way. */
+const tick = (ms: number) => { mono += ms; mock.timers.tick(ms); };
+const setWall = (ms: number) => { wall += ms; };
 
 const tiles = new Set<string>();
 /** A tile's status, on the bus. */
@@ -41,12 +50,12 @@ test("a tile that needs you, finished or failed is said once, with the others th
   ev("h1", "plan_review"); // a plan to review needs you, as its amber mark says
   ev("i1", "awaiting_approval"); // a supervised worker's approval is its lead's to give, not the person's
   assert.deepEqual(said, [], "nothing is said before the states hold");
-  mock.timers.tick(1000);
+  tick(1000);
   assert.deepEqual(said, ["A1 needs you. B1 finished. C1 failed. D1 finished. G1 failed. H1 needs you"]);
 
   ev("a1", "permission", { detail: "still waiting" });
   ev("b1", "idle", { detail: "turn ended" });
-  mock.timers.tick(1000);
+  tick(1000);
   assert.equal(said.length, 1, "a status that repeats is not said again");
 });
 
@@ -54,7 +63,7 @@ test("a tile is told only after it changes: an exit it was not working before, a
   const said = listen(t);
   ev("a2", "idle"); ev("b2", "working"); ev("c2", "permission");
   ev("a2", "exited", { exitCode: 2 }); // a shell: it never said it was working
-  mock.timers.tick(1000);
+  tick(1000);
   assert.deepEqual(said, ["C2 needs you"], "a tile that waits for you when first seen is told, as its toast is");
 });
 
@@ -64,7 +73,7 @@ test("a background worker's end is not said, one by one; that it needs you is", 
   ev("a3", "idle");
   ev("b3", "exited", { exitCode: 1 });
   ev("c3", "permission");
-  mock.timers.tick(1000);
+  tick(1000);
   assert.deepEqual(said, ["C3 needs you"]);
 });
 
@@ -73,12 +82,12 @@ test("the notification settings mute it as they mute a toast", (t) => {
   ev("a4", "working"); ev("b4", "working");
   setNotificationSetting("kinds.done", false);
   ev("a4", "idle"); ev("b4", "permission");
-  mock.timers.tick(1000);
+  tick(1000);
   assert.deepEqual(said, ["B4 needs you"], "finished is off");
   setNotificationSetting("kinds.done", true);
   setNotificationSetting("inApp", false);
   ev("b4", "working"); ev("b4", "permission");
-  mock.timers.tick(1000);
+  tick(1000);
   assert.equal(said.length, 1, "in-app notices are off");
 });
 
@@ -86,11 +95,11 @@ test("each tile is said once its own state has held: one that changed just now w
   const said = listen(t);
   ev("a5", "working"); ev("b5", "working");
   ev("a5", "permission");
-  mock.timers.tick(600);
+  tick(600);
   ev("b5", "idle");
-  mock.timers.tick(400);
+  tick(400);
   assert.deepEqual(said, ["A5 needs you"], "B5 changed 400 ms ago");
-  mock.timers.tick(1000);
+  tick(1000);
   assert.deepEqual(said, ["A5 needs you", "B5 finished"]);
 });
 
@@ -99,6 +108,16 @@ test("a tile closed before its state held is not said", (t) => {
   ev("a6", "working"); ev("b6", "working");
   ev("a6", "idle"); ev("b6", "idle");
   forgetStatus("a6");
-  mock.timers.tick(1000);
+  tick(1000);
   assert.deepEqual(said, ["B6 finished"]);
+});
+
+test("the computer's clock set back an hour holds nothing back: a tile is said once its state has held", (t) => {
+  const said = listen(t);
+  ev("a7", "working");
+  ev("a7", "permission");
+  tick(300);
+  setWall(-3_600_000);
+  tick(400);
+  assert.deepEqual(said, ["A7 needs you"]);
 });

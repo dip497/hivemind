@@ -76,8 +76,6 @@ async function playNamed(moment: NoticeKind): Promise<SoundResult> {
 /** Start the desk: `notify:agent` and the sound channels. */
 export function registerNoticeDesk(o: NoticeDeskOptions): void {
   desk = new NoticeDeskCore({
-    now: Date.now,
-    schedule: (fn, ms) => setTimeout(fn, ms),
     settings: getNotificationSettings,
     focused: () => !!userWindow()?.isFocused(),
     popup: (p) => {

@@ -8,7 +8,7 @@
 // a one-shot read; an agent that runs on another machine keeps none here, and its screen's line stands.
 // A tile asked for before its board holds it is looked for again; an agent that reports nothing is
 // read as its screen changes.
-import { test, after } from "node:test";
+import { test, after, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -64,13 +64,31 @@ let n = 0;
 const words = (text: string) => `${JSON.stringify({ type: "assistant", uuid: `a${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content: text } })}\n`;
 /** A session `session` whose file is not written yet. */
 const sessionAt = (session: string): Transcript => ({ session, file: path.join(tmp, `${session}.jsonl`), format: FORMAT });
+/** Mocked timers, and the clock the code times them on (`performance.now()`), which moves with them
+ *  and counts from the process's start, far behind the time of day: a wait timed on the one and
+ *  started on the other goes wrong. */
+const mockTimers = (t: TestContext) => {
+  const start = Date.parse("2026-10-25T12:00:00Z");
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: start });
+  t.mock.method(performance, "now", () => Date.now() - start);
+};
+/** Mocked timers on the clock the code times them on (`performance.now()`), and the time of day
+ *  (`Date.now()`), which `setWall` moves alone, as a person setting their computer's clock does. */
+function twoClocks(t: TestContext) {
+  let mono = 0;
+  let wall = Date.parse("2026-10-25T12:00:00Z");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  t.mock.method(performance, "now", () => mono);
+  t.mock.method(Date, "now", () => wall + mono);
+  return { tick: (ms: number) => { mono += ms; t.mock.timers.tick(ms); }, setWall: (ms: number) => { wall += ms; } };
+}
 /** Until `ok` holds, or a second passed. */
 const until = async (ok: () => boolean) => {
   for (let i = 0; i < 100 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
 };
 
 test("a tile's line reaches only the clients that watch it, with the tiles that changed alone, and a line it showed already tells nobody", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  mockTimers(t);
   const h = host();
   const [a, b] = [h.client(), h.client()];
   await h.watch(a, ["t1"]);
@@ -88,7 +106,7 @@ test("a tile's line reaches only the clients that watch it, with the tiles that 
 });
 
 test("once a client goes, nothing more is sent for what it watched", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  mockTimers(t);
   const h = host();
   const a = h.client();
   await h.watch(a, ["t1"]);
@@ -110,7 +128,7 @@ test("a line is kept and told as one line of plain text of at most 160 character
   const h = host({ t2: said });
   assert.deepEqual(await h.read(h.client(), ["t2"]), { t2: `rm -rf build ${"y".repeat(147)}` }, "what an agent said");
 
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  mockTimers(t);
   const a = h.client();
   await h.watch(a, ["t1"]);
   // What a tile's own process may send over the control-plane socket: an override, a line break, and
@@ -123,7 +141,7 @@ test("a line is kept and told as one line of plain text of at most 160 character
 });
 
 test("a client that watches a tile is answered its line now, by its bare id, and told only what changes after; watching others in its place stops it", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  mockTimers(t);
   const h = host();
   h.lines.set("t1", "building");
   const a = h.client();
@@ -138,7 +156,7 @@ test("a client that watches a tile is answered its line now, by its bare id, and
 });
 
 test("a client is told at once after a quiet spell, then at most every 250 ms, what changed meanwhile in one message with each line as it is now", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  mockTimers(t);
   const h = host();
   const a = h.client();
   await h.watch(a, ["t1", "t2"]);
@@ -153,6 +171,21 @@ test("a client is told at once after a quiet spell, then at most every 250 ms, w
   assert.equal(h.heard(a).length, 1);
   t.mock.timers.tick(1);
   assert.deepEqual(h.heard(a), [{ t1: "compiling" }, { t1: "done", t2: "waiting" }]);
+});
+
+test("the computer's clock set back an hour holds no line back: the next is told 250 ms after the last", async (t) => {
+  const c = twoClocks(t);
+  const h = host();
+  const a = h.client();
+  await h.watch(a, ["t1"]);
+  h.lines.set("t1", "compiling");
+  c.tick(0);
+  c.setWall(-3_600_000);
+  h.lines.set("t1", "linking");
+  c.tick(LINES_EVERY_MS - 1);
+  assert.equal(h.heard(a).length, 1);
+  c.tick(1);
+  assert.deepEqual(h.heard(a), [{ t1: "compiling" }, { t1: "linking" }]);
 });
 
 test("an agent that keeps a conversation shows what it last said there, \"\" until it says something; its screen never stands in; read when watched and again as it reports, the session it reports from looked for", async () => {
@@ -288,7 +321,7 @@ test("a tile asked for before its board holds it is looked for again as it is as
 });
 
 test("an agent whose session file is not written yet, read again within 3 s of the last look for it, is looked for once they are up: its first words, though it reports nothing more", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  mockTimers(t);
   const transcripts: Record<string, Transcript> = { t1: { session: "s11", file: null, format: FORMAT } };
   const h = host(transcripts, [], ["t1"]);
   const a = h.client();
@@ -302,4 +335,21 @@ test("an agent whose session file is not written yet, read again within 3 s of t
   // The read is the file system's: wait on the event loop, not on the mocked clock.
   for (let i = 0; i < 10_000 && h.lines.get("t1") !== "You said ship it"; i++) await new Promise((r) => setImmediate(r));
   assert.equal(h.lines.get("t1"), "You said ship it");
+});
+
+test("an agent whose session file is not written yet is still looked for once the 3 s are up when the computer's clock was set back an hour meanwhile", async (t) => {
+  const c = twoClocks(t);
+  const transcripts: Record<string, Transcript> = { t1: { session: "s12", file: null, format: FORMAT } };
+  const h = host(transcripts, [], ["t1"]);
+  const a = h.client();
+  assert.deepEqual(await h.watch(a, ["t1"]), { t1: "" });
+
+  c.setWall(-3_600_000);
+  const s12 = sessionAt("s12");
+  fs.writeFileSync(s12.file!, words("You said wait"));
+  transcripts.t1 = s12;
+  h.lines.set("t1", "heard: wait");
+  c.tick(3_000);
+  for (let i = 0; i < 10_000 && h.lines.get("t1") !== "You said wait"; i++) await new Promise((r) => setImmediate(r));
+  assert.equal(h.lines.get("t1"), "You said wait");
 });

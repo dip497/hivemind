@@ -66,6 +66,8 @@ export class TileLines {
   /** Home follows every tile, while a phone follows it. */
   private all = false;
   private due: ReturnType<typeof setTimeout> | null = null;
+  /** When clients were last told, on the clock the timers run on: the wall clock set back would
+   *  hold every line back as long. */
   private toldAt = -Infinity;
   readonly domain: Domain<"tile.watchLines" | "tile.readLines">;
 
@@ -197,13 +199,13 @@ export class TileLines {
    *  spell, else 250 ms after it was last told. */
   private tellSoon(): void {
     if (this.due) return;
-    this.due = setTimeout(() => this.tell(), Math.max(0, LINES_EVERY_MS - (Date.now() - this.toldAt)));
+    this.due = setTimeout(() => this.tell(), Math.max(0, LINES_EVERY_MS - (performance.now() - this.toldAt)));
     (this.due as { unref?: () => void }).unref?.();
   }
 
   private tell(): void {
     this.due = null;
-    this.toldAt = Date.now();
+    this.toldAt = performance.now();
     const server = this.o.server();
     for (const [to, tiles] of this.changed) {
       const lines = this.linesOf(tiles);
