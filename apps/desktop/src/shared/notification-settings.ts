@@ -14,12 +14,20 @@ const WIDGET_NOTICE_MAX = 200;
  *  WIDGET_NOTICE_MAX characters, however many units each takes. */
 export const WIDGET_NOTICE_SENT_MAX = WIDGET_NOTICE_MAX * 2;
 
-/** A widget's `hive.notify`: the text to show as an OS pop-up now, or null. It follows the master
- *  switch, the pop-up switch and Do Not Disturb (a widget is never urgent), and stays quiet within
- *  WIDGET_NOTICE_GAP_MS of that widget's last notice (`last`). The text is cut to WIDGET_NOTICE_MAX. */
-export function widgetNotice(s: NotificationSettings, text: unknown, last: number | undefined, now: number): string | null {
-  if (!s.enabled || !s.osPopups || dndActive(s, now)) return null;
-  if (last !== undefined && now - last < WIDGET_NOTICE_GAP_MS) return null;
+/** Whether a widget's `hive.notify` may show as an OS pop-up at `now`: it follows the master
+ *  switch, the pop-up switch and Do Not Disturb (a widget is never urgent). */
+export function widgetNoticeAllowed(s: NotificationSettings, now: number): boolean {
+  return s.enabled && s.osPopups && !dndActive(s, now);
+}
+
+/** A widget's notice text as it shows: cut to WIDGET_NOTICE_MAX characters. */
+export function widgetNoticeText(text: unknown): string {
   const chars = [...String(text ?? "").slice(0, WIDGET_NOTICE_SENT_MAX)];
   return chars.length > WIDGET_NOTICE_MAX ? `${chars.slice(0, WIDGET_NOTICE_MAX - 1).join("")}…` : chars.join("");
+}
+
+/** A notice's body: the widget's latest text and, on a line of its own, how many more it sent
+ *  while it waited for its turn ("and 2 more"). */
+export function widgetNoticeBody(text: string, more: number): string {
+  return more > 0 ? `${text}\nand ${more} more` : text;
 }

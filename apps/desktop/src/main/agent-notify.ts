@@ -10,7 +10,7 @@ import { Notification, app, type BrowserWindow } from "electron";
 import { on } from "./app-ipc.js";
 import type { AgentNotice } from "../shared/ipc.js";
 import { composeGroup, composeNotice, withText } from "./agent-notify-core.js";
-import { widgetNoticeToShow } from "./widget-notices.js";
+import { widgetNotices } from "./widget-notices.js";
 
 /** Show one pop-up: one agent (`more` false) with its `text` when given, or a gathered group.
  *  `silent` when the app plays its own sound for it. Its click brings `win()` forward on the first
@@ -40,14 +40,14 @@ export function showAgentPopup(p: { kind: AgentNotice["kind"]; notices: AgentNot
 }
 
 /** Register `notify:widget`: a widget's `hive.notify`, from the window that runs it, shown as an
- *  OS notice when `widgetNoticeToShow` says so. */
+ *  OS notice when and as `widgetNotices` decides. */
 export function registerWidgetNotifications(): void {
-  on("notify:widget", (_e: unknown, raw: unknown) => {
-    if (!Notification.isSupported()) return;
-    const shown = widgetNoticeToShow(raw, Date.now());
-    if (!shown) return;
+  const notice = widgetNotices((shown) => {
     const n = new Notification(shown);
     n.on("failed", (_e, error) => console.warn("[notify] the OS did not show a widget's notice:", error));
     n.show();
+  });
+  on("notify:widget", (_e: unknown, raw: unknown) => {
+    if (Notification.isSupported()) notice(raw);
   }, { local: true });
 }

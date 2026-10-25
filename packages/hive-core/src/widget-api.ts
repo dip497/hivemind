@@ -168,7 +168,9 @@ interface Hive {
   setState(state: unknown): void;
   /** What the person set it to, as its widget.json's \`options\` declare. */
   readonly options: Record<string, string | number | boolean | string[]>;
-  /** A desktop notification on the machine that runs it. */
+  /** A desktop notification on the machine that runs it, as the person's notification settings
+   *  allow: at most one every 10 seconds, and what comes in between shows once when the time is up,
+   *  the latest text and how many more. */
   notify(text: string): void;
   /** The workspace, as a view sees it, held to the permissions in widget.json. */
   readonly hm: Hm;
