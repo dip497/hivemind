@@ -62,8 +62,11 @@ test("hive add skill installs the skills of the tool plugins on for this workspa
     expect(execFileSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: wt, encoding: "utf8" })).not.toMatch(/skills\/(prs|sync)/);
 
     expect(run("plugins", "disable", "@ada/prs").code).toBe(0);
+    // Off, its folder waits for the next install to take it away, still out of git status.
+    expect(git("status", "--porcelain", "--untracked-files=all")).not.toMatch(/skills\/(prs|sync)/);
     expect(added()).toMatchObject({ removed: ["prs"] });
     expect(fs.existsSync(path.join(ws, ".claude", "skills", "prs"))).toBe(false);
+    expect(git("status", "--porcelain", "--untracked-files=all")).not.toMatch(/skills\/(prs|sync)/);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
