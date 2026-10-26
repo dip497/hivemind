@@ -235,6 +235,8 @@ describe("a folder read a few files at a time", () => {
     expect(firstReads(sized(["index.js", "notes.txt"]))).toEqual({ problem: "no hivemind-package.json, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder" });
     expect(firstReads(sized(["widget.json", "Widget.json"]))).toEqual({ problem: "Widget.json is listed twice" });
     expect(firstReads([{ path: "widget.json", bytes: 1 }, { path: "a.bin", bytes: (2 << 20) + 1 }])).toEqual({ problem: "a.bin is larger than 2 MB" });
+    // A package manifest too large to read is named, not missed.
+    expect(firstReads([{ path: "hivemind-package.json", bytes: 300 << 10 }, { path: "pet/widget.json", bytes: 1 }])).toEqual({ problem: "hivemind-package.json is larger than 256 KB" });
   });
 
   test("a listing without a hash or a text the plan names is refused, never read as missing", async () => {

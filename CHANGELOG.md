@@ -9,8 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-- Changed: a hub can check a plugin it reads a few files at a time. The hub kit's `checkPluginListing` gives the answer `checkPluginFolder` gives, from each file's hash and only the texts the check reads: the manifests, the README at the top and the icon. `firstReads` and `planRead` say which files those are, the top's manifests first. HiveHub uses it to publish large packages such as Archipelago, reading only the files that install, so a package's sources and build scripts beside its members are not read. A view's icon is read by the kit, as a widget's is.
-- Fixed: `hive plugins check` counts a package's files that install against HiveHub's 200-file limit; it checked only their sizes. An SVG icon that is not UTF-8 is no longer listed larger than the index takes, which left its plugin out of the catalog.
+- Changed: a hub can check a plugin it reads a few files at a time. The hub kit's `checkPluginListing` gives the answer `checkPluginFolder` gives for the same files, from each file's hash and only the texts the check reads: the manifests, the README at the top and the icon. `firstReads` and `planRead` say which files those are, the top's manifests first. HiveHub uses it to publish large packages such as Archipelago, reading only the files that install, so a package's sources and build scripts beside its members are not read. A view's icon is read by the kit, as a widget's is.
+- Fixed: `hive plugins check` counts a package's files that install against HiveHub's 200-file limit, leaving out the dot files HiveHub leaves out; it checked only their sizes. A package manifest over 256 KB is refused for its size, not as missing. An SVG icon that is not UTF-8 is no longer listed larger than the index takes, which left its plugin out of the catalog.
 
 ## [2026.10.6] — 2026-10-26
 

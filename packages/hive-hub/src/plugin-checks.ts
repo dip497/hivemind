@@ -128,8 +128,9 @@ export async function checkPluginFolder(folder: readonly PluginFile[]): Promise<
 }
 
 /** Check a folder from its files as `listedFile` reads them, with the texts `planRead` names: what
- *  a hub keeps of a folder it reads a few files at a time. The same check, and the same answer, as
- *  `checkPluginFolder`. Every file it is given is held to the limits. */
+ *  a hub keeps of a folder it reads a few files at a time. For the same files it gives the answer
+ *  `checkPluginFolder` gives. Every file it is given is held to the limits, so a hub gives it the
+ *  files `planRead` names: for a package, what installs, without its sources beside. */
 export async function checkPluginListing(listing: readonly ListedFile[]): Promise<FolderCheck> {
   try {
     return { plugin: check(listing) };
@@ -192,9 +193,10 @@ const rootTexts = (files: readonly { path: string; bytes: number }[]): string[] 
   return files.filter((f) => f.bytes < MAX_TEXT && (pkg ? f.path === PACKAGE_MANIFEST : PLUGIN_MANIFESTS.includes(f.path)) || (f.bytes < MAX_TEXT && README_RE.test(f.path)))
     .map((f) => f.path);
 };
-/** Why one plugin's folder is refused by its paths and sizes, or for having no manifest. */
+/** Why one plugin's folder is refused by its paths and sizes, or for having no manifest it reads. */
 const pluginProblem = (files: readonly { path: string; bytes: number }[]) =>
-  folderProblem(files) ?? (files.some((f) => f.bytes < MAX_TEXT && PLUGIN_MANIFESTS.includes(f.path)) ? null : NO_MANIFEST);
+  folderProblem(files) ?? (files.some((f) => f.bytes < MAX_TEXT && PLUGIN_MANIFESTS.includes(f.path)) ? null
+    : files.some((f) => f.path === PACKAGE_MANIFEST) ? `${PACKAGE_MANIFEST} is larger than 256 KB` : NO_MANIFEST);
 
 /** A package manifest's text, read as the check reads it. */
 function manifestOf(json: string): { raw: unknown; manifest: PackageManifest } | { problem: string } {

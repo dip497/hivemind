@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { checkPackageManifest, entriesOf, ownedBy, PACKAGE_MANIFEST, packageFiles, sizeProblem } from "@hivemind/hub";
+import { checkPackageManifest, entriesOf, ownedBy, PACKAGE_MANIFEST, packageFiles, safeRelative, sizeProblem } from "@hivemind/hub";
 import { MEMBER_KINDS } from "@hivemind/core/package-kinds";
 import { kindNamed } from "../plugin-kinds.js";
 import { sourceOf } from "../package-authoring.js";
@@ -88,9 +88,10 @@ export async function checkPackage(dir: string): Promise<PackageCheckReport> {
       report.problems.push(...problems);
     }
   }
-  // Sized as HiveHub sizes it: what installs (the manifest, a README or licence, the members'
-  // folders), without what a build or a checkout leaves beside it.
-  const big = sizeProblem(packageFiles(m, filesOf(dir)));
+  // Sized and counted as HiveHub reads it: what installs (the manifest, a README or licence, the
+  // members' folders), without what a build or a checkout leaves beside it, and without the dot
+  // files and odd names HiveHub leaves out.
+  const big = sizeProblem(packageFiles(m, filesOf(dir).filter((f) => safeRelative(f.path))));
   if (big) report.problems.push({ step: "hub", message: `HiveHub would refuse it: ${big}` });
   report.steps = { manifest: report.problems.some((p) => !p.member && p.step === "manifest") ? "failed" : "ok", ...report.steps, hub: big ? "failed" : "ok" };
   return report;
