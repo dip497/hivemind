@@ -160,6 +160,11 @@ Its errors are those of [one plugin](#one-plugin).
 `POST /api/publish`. Two steps: send the request without `confirm` to see what would be listed,
 then again with `"confirm": true` to list it. The web form and `hivehub publish` both do this.
 
+HiveHub reads at most about 30 files or 2 MB of a folder in one request. With `"steps": true`, a
+larger folder is read over several: until it is read, each answer is a `reading`, and you send the
+same request again with that `reading` added. The preview carries a `reading` too. Send it with
+`"confirm": true` to publish what you were shown, without the folder being read again.
+
 ```bash
 curl -s https://hivehub.griiken.workers.dev/api/publish \
   -H "authorization: Bearer $HIVEHUB_TOKEN" -H 'content-type: application/json' \
@@ -183,11 +188,14 @@ curl -s https://hivehub.griiken.workers.dev/api/publish \
 | `path` | The plugin's folder in the repository. | the top of it |
 | `description` | The one line on its card, at most 400 characters. Empty keeps the line it has, or uses the manifest's `description` the first time. | |
 | `confirm` | `true` to publish. Anything else returns the preview. | |
+| `steps` | `true` to read a large folder over several requests. Without it, a folder one request cannot read is refused. | |
+| `reading` | The `reading` from the last answer, sent back unchanged. It is good for one hour, for the account it was read for. | |
 
-**Response:** `{"preview": {...}}` without `confirm`, with the fields of [one plugin](#one-plugin)
-that describe it (`id`, `type`, `name`, `description`, `version`, `repo`, `ref`, `path`,
-`source`, `files`, `does`, `manifest`, `category` and the rest). `{"published": "<id>"}` with
-it.
+**Response:** `{"preview": {...}, "reading": "…"}` without `confirm`, with the fields of
+[one plugin](#one-plugin) that describe it (`id`, `type`, `name`, `description`, `version`,
+`repo`, `ref`, `path`, `source`, `files`, `does`, `manifest`, `category` and the rest).
+`{"published": "<id>"}` with it. With `steps`, until the folder is read:
+`{"reading": "…", "read": 30, "of": 50}`, the files read so far and how many there are.
 
 What it checks, in order: that you can push to the repository (asked of GitHub), the folder
 against the [limits](#limits), the manifest by Hivemind's own rules, and that the id is yours.
@@ -199,6 +207,8 @@ Only with `confirm` does it check that nobody else has the id.
 |---|---|---|
 | 400 | `expected JSON` | The body is not JSON. |
 | 400 | `give a repository as owner/name` | No `repo`, or not `owner/name`. |
+| 400 | `that reading is not one HiveHub gave you in the last hour — start again without it` | The `reading` was changed, is more than an hour old, or was read for another account. |
+| 400 | `that reading is of <repo> at <folder>, not this request's folder — start again without it` | The `reading` is of another folder. |
 | 401 | `sign in to publish` | No sign-in. |
 | 401 | `your GitHub sign-in expired — sign in again` | A web sign-in more than 8 hours old. |
 | 401 | `GitHub did not accept that token — <reason>` | GitHub refused the token, or an id token was refused. The reasons include `only the agents repository's main branch publishes from CI` and `send the job's GITHUB_TOKEN as X-GitHub-Token, to read the repository`. |
@@ -206,8 +216,9 @@ Only with `confirm` does it check that nobody else has the id.
 | 422 | `you do not have write access to <repo>` | Your account cannot push to it. |
 | 422 | `that is not a folder in the repository` | `path` is not a plain folder path. |
 | 422 | `nothing to publish at <folder> in <repo>` | The folder is empty or missing. |
+| 422 | `this folder has <n> files to read, more than one request reads, and this client reads in one — …` | A large folder sent without `steps`. Get the current `hivehub`, or publish from the web form. |
 | 422 | `a plugin may have at most 200 files`, `a plugin folder may be at most 8 MB`, `<file> is larger than 2 MB` | Over a [limit](#limits). |
-| 422 | `no agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder` | No manifest. |
+| 422 | `no hivemind-package.json, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder` | No manifest. |
 | 422 | A manifest problem, such as `widget.json needs a "version", like "1.0.0"` | The manifest is one Hivemind would refuse. |
 | 422 | `cannot publish this: <reason>` | The id is not in your account, is the wrong shape, or an agent is not from `dip497/hivemind-plugins`. |
 | 422 | `"<id>" is published by someone else` | The id is taken. |
@@ -220,7 +231,7 @@ What to do about each: [If it didn't](/publish-to-hivehub#if-it-didnt).
 
 | What | Limit |
 |---|---|
-| Files in a plugin's folder | 200. Files whose name starts with `.` are left out. |
+| Files in a plugin's folder | 200. Files whose name starts with `.` are left out. A package counts the files that install: its manifest, README and licence, and its members' folders. |
 | One file | 2 MB |
 | The whole folder | 8 MB |
 | `README.md` kept | 64 KB. The rest is cut off. |
