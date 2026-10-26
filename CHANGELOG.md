@@ -9,7 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
-- Changed: a hub can check a plugin it reads a few files at a time. The hub kit's `checkPluginListing` gives the answer `checkPluginFolder` gives, from each file's hash and the few texts the checks read; `planRead` says which files those are, a package's manifest first. HiveHub uses it to publish Archipelago and other large packages. A package is held to the 200-file and 8 MB limits by the files that install, as `hive plugins check` already counted them, and no longer by the sources and build scripts beside them. A view's icon is read by the kit, as a widget's is.
+- Changed: a hub can check a plugin it reads a few files at a time. The hub kit's `checkPluginListing` gives the answer `checkPluginFolder` gives, from each file's hash and only the texts the check reads: the manifests, the README at the top and the icon. `firstReads` and `planRead` say which files those are, the top's manifests first. HiveHub uses it to publish large packages such as Archipelago, reading only the files that install, so a package's sources and build scripts beside its members are not read. A view's icon is read by the kit, as a widget's is.
+- Fixed: `hive plugins check` counts a package's files that install against HiveHub's 200-file limit; it checked only their sizes. An SVG icon that is not UTF-8 is no longer listed larger than the index takes, which left its plugin out of the catalog.
 
 ## [2026.10.6] — 2026-10-26
 

@@ -103,6 +103,10 @@ describe("hive plugins, writing a package", () => {
     expect([r.code, (r.json as Report).steps.hub, (r.json as Report).problems]).toEqual([1, "failed", [{ step: "hub", message: "HiveHub would refuse it: widgets/dog/bark.webm is larger than 2 MB" }]]);
     fs.rmSync(path.join(tmp, "kit", "widgets", "dog", "bark.webm"));
     expect(run("check", "kit", "--json").code).toBe(0);
+    // And counted as HiveHub counts it: more than 200 files that install.
+    fs.mkdirSync(path.join(tmp, "kit", "widgets", "dog", "marks"));
+    for (let i = 0; i < 200; i++) fs.writeFileSync(path.join(tmp, "kit", "widgets", "dog", "marks", `m${i}.svg`), "<svg/>");
+    expect((run("check", "kit", "--json").json as Report).problems).toEqual([{ step: "hub", message: "HiveHub would refuse it: a plugin may have at most 200 files" }]);
   }, 60_000);
 
   test("add refuses a plugin with another owner's id, and leaves the package as it was", () => {
