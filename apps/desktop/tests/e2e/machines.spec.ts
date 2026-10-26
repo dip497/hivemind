@@ -116,7 +116,19 @@ test.afterAll(async () => {
 test("add a machine: probe, put this version's hive there, save", async () => {
   test.setTimeout(180_000);
   await page.locator('.hm-layers [data-layers-rail="machines"]').click();
-  await page.locator('[data-layers-action="machine"]').click();
+  // A field chosen as soon as the form shows keeps the keys: the form's first focus never takes them.
+  const kept = await page.evaluate(() => new Promise<string | undefined>((resolve) => {
+    const seen = new MutationObserver(() => {
+      const name = document.getElementById("machine-label");
+      if (!name) return;
+      seen.disconnect();
+      name.focus();
+      setTimeout(() => resolve(document.activeElement?.id), 200);
+    });
+    seen.observe(document.body, { childList: true, subtree: true });
+    (document.querySelector('[data-layers-action="machine"]') as HTMLElement).click();
+  }));
+  expect(kept).toBe("machine-label");
   await page.getByLabel("Host").fill(`ssh://${os.userInfo().username}@127.0.0.1:${port}`);
   await page.getByLabel("Name", { exact: true }).fill("build-box");
   await page.getByRole("button", { name: "Add", exact: true }).click();

@@ -350,7 +350,10 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
   const [error, setError] = useState<{ attention: boolean; text: string } | null>(null);
   const [warn, setWarn] = useState<MachineInfo | null>(null);
   const first = useRef<HTMLInputElement>(null);
-  useEffect(() => { const t = setTimeout(() => first.current?.focus(), 30); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    const t = setTimeout(() => { if (!first.current?.form?.contains(document.activeElement)) first.current?.focus(); }, 30);
+    return () => clearTimeout(t);
+  }, []);
 
   async function add() {
     if (!target.trim() || busy) return;

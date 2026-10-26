@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.
 - Fixed: the first terminal you open on a machine without `hive` runs there over plain ssh. It used to stop at once with "this terminal is not running on the machine it belongs to" while the next one worked.
 - Changed: Hivemind puts its own `hive` on a machine you reach over ssh, in `~/.hivemind/bin/<version>/`, the first time it connects, and its new version after you update. **Install hive**, **Update hive** and "the hive on this machine is older than this app" are gone.
 - Fixed: people who log in to one machine as the same user each get their own terminals there, in `~/.hivemind/people/<person>/`. Before, one person updating the app stopped everyone's agents on that machine.
