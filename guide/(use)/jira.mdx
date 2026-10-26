@@ -1,0 +1,123 @@
+---
+title: "Work on Jira issues"
+description: "Mirror a Jira Cloud project onto the Issues board, start agents on its issues, and send their status, comments and PRs back to Jira."
+sidebarTitle: "Jira"
+---
+
+Your Jira issues on the Issues board, in Jira's own columns, for you and your agents to work on.
+The **Jira** tool pulls them every few minutes and sends what changes in hive back to Jira. It
+works with Jira Cloud.
+
+<AgentPrompt description="Paste this into your coding agent to link this project to Jira." page="jira">{`
+Link this project's Hivemind issues to Jira Cloud with the Jira tool.
+
+1. Check Hivemind is set up here: \`hive list --json\` works. If it says there is no .hivemind/ folder, ask me for an issue prefix and run \`hive init --prefix <PREFIX>\`.
+2. Install the tool: \`hive plugins install @dip497/jira\`. It runs with my access, so it arrives switched off. Ask me before you run \`hive plugins enable @dip497/jira\`.
+3. Let its service work on this project: \`hive plugins workspaces @dip497/jira .\`
+4. Open its tile: \`hive ctl open-tool @dip497/jira/jira\`. Tell me to sign in there with Sign in with Atlassian, then pick the project, check the workflow and the scope, and press Finish. Never ask me for a password or an API token, and never type one yourself.
+5. Check: \`hive ctl plugin call @dip497/jira status '{}'\` says \`connected: true\` with the project, and \`hive list --json\` lists issues with Jira keys as ids.
+
+Tell me how many issues it pulled, and that the Issues board now shows them.
+`}</AgentPrompt>
+
+## Link a project
+
+<Steps>
+  <Step title="Install and switch on the tool">
+    ```bash
+    hive plugins install @dip497/jira
+    hive plugins enable @dip497/jira
+    ```
+
+    A tool runs with your access, so it arrives switched off: see [Tools](/tool-plugins#try-one).
+  </Step>
+  <Step title="Pick the workspace">
+    In **Settings ▸ Plugins ▸ Jira**, pick the workspaces its service may work on. Where
+    `hive host` runs it, use `hive plugins workspaces @dip497/jira <folder>`.
+  </Step>
+  <Step title="Open the tile and connect">
+    `hive ctl open-tool @dip497/jira/jira` opens it. In **Connect**:
+
+    - **Sign in with Atlassian** opens Atlassian's sign-in page in your browser. Approve it there
+      and the tile moves on by itself.
+    - **Scoped API token** is for heavy use, or when your organisation blocks the sign-in. Make a
+      scoped token on Atlassian's API tokens page with the Jira read and write scopes and the board
+      and sprint scopes. Enter the site, your email, the token and the day it expires, then **Test
+      and connect**. It names any scope the token lacks, and asks for the site's Cloud ID only when
+      Atlassian doesn't give it.
+
+    hive keeps the sign-in or the token in the system keychain, never in `settings.json`.
+  </Step>
+  <Step title="Choose what to pull">
+    - **Project**, and its board when it has several.
+    - **Workflow:** each Jira status and the hive state it maps to. hive adds **PR Created**,
+      which shows in Jira as your review status.
+    - **Scope:** *Assigned to me* (the default), *Mine and unassigned*, *Everything in scope*, or
+      *My own JQL*, always within the project. On a Scrum board, also which sprints.
+    - **Send to Jira:** *Status changes* (the default), *Nothing*, *Status and comments* or
+      *Everything hive owns*.
+
+    **Finish** writes `.hivemind/workflow.yaml`, runs the first sync and shows what it pulled.
+  </Step>
+</Steps>
+
+The board now has a column for each Jira status. Each card shows its Jira key, type, priority,
+estimate and assignee, and the assignee filter starts at **Me**. The issues are kept out of git.
+
+## Work on an issue
+
+Start an agent on a Jira issue as on any other: [Hand an issue to an agent](/issues#hand-an-issue-to-an-agent).
+
+- **Starting asks Jira first.** Whether it is yours, in the sprint, and whether you may move it,
+  and whether another hivemind install is already on it. **Assign to me** makes you the Jira
+  assignee, never an agent. The questions are in [Before work starts](/issues#before-work-starts).
+- **Finishing opens the PR** and moves the issue to **PR Created**: see
+  [Pull requests](/issues#pull-requests). Merging it moves the issue to Done, in hive and in Jira.
+- **Agents get a `jira` skill.** It knows how to import an epic and its children, triage a sprint,
+  and start and finish an issue. Ask "import epic PAY-300" or "triage the sprint". A triage
+  only proposes: it changes nothing until you say yes.
+
+## What goes to Jira
+
+Jira moves an issue only along its workflow's transitions. So a status you set in hive goes to
+Jira as transitions, about 5 seconds after the last move:
+
+- With no transition straight there, hive takes the shortest way, at most 3 steps, and checks each
+  step with Jira first.
+- When a transition asks for a field, such as a resolution, it waits in the tile's **Status** tab
+  under **Needs your input**. **Send to Jira** moves it; **Put back** returns the issue to where it
+  was. An agent's move never answers one.
+- When Jira refuses, hive puts the issue back and writes Jira's reason in its activity, with
+  **Open in Jira**.
+
+With anything but *Nothing*, a PR you open is linked on the Jira issue. With comments on, what you
+write on an issue, an agent's plan or summary, and "PR opened" or "merged" go to Jira as comments.
+An agent's progress notes never do.
+
+## When both sides changed
+
+An issue moved to different statuses in hive and in Jira since the last sync shows in the tile's
+**Conflicts** tab. **Keep Jira** takes Jira's status; **Keep hive** sends hive's. Jira's wins after
+a day if nobody answers.
+
+An issue that leaves the scope is archived, never deleted. One with a branch or a PR stays on the
+board, marked *not in scope*.
+
+## If it didn't
+
+| You see | Do |
+|---|---|
+| The tile says the service is off, or not on for this workspace | Pick the workspace in **Settings ▸ Plugins ▸ Jira**. |
+| **Test and connect** says Atlassian refused the email and token | Check both, and that the token is a scoped one with the Jira scopes. |
+| The token lacks a scope | Make a new token with it: what needs it stays off until then. |
+| The **Status** tab says the token expires soon | Make a new token and connect again before that day. |
+| A move went back, with Jira's reason in the activity | Do what Jira asks in Jira (**Open in Jira**), then move it again. |
+| An issue you expected isn't on the board | Check the **Scope** tab, or find it in **Browse** and press **Track**. |
+
+## Related
+
+- [Track work as issues](/issues)
+- [Tools](/tool-plugins): how a tool and its service run.
+- [CLI reference](/cli#issues): `hive ingest`, `hive ctl complete` and `hive pr`.
+
+<LastValidated />
