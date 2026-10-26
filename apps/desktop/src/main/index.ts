@@ -6,7 +6,7 @@ import { disabledPlugins, pluginOptions, stringOptions } from "@hivemind/core/pl
 import { toolPreferences } from "@hivemind/core/settings-schema";
 import { installWidgetIpc, widgetAsset, widgetsChanged } from "./widgets.js";
 import { listWidgets } from "@hivemind/core/widgets";
-import { installToolPackageIpc, handleToolProtocol, listTools, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
+import { appToolsDir, installToolPackageIpc, handleToolProtocol, listTools, PLUGIN_SCHEME, safeMode, toolsChanged } from "./tool-packages.js";
 import { appSecrets, installSecretsIpc } from "./secrets.js";
 import { PluginServices, optionsOf } from "@hivemind/host/plugin-services";
 import { pluginKey } from "@hivemind/core/plugin-settings";
@@ -44,6 +44,7 @@ import {
   writeConfig,
   WORKSPACE_FORMAT,
   installAgenticStack as coreInstallAgenticStack,
+  installPluginSkills,
   refreshSkills,
 } from "@hivemind/core";
 import os from "node:os";
@@ -1304,10 +1305,12 @@ async function startSession(opts: StartOpts, out: SessionOutput): Promise<{ pid:
   if (opts.cwd) {
     const st = await fsp.stat(opts.cwd).catch(() => null);
     if (!st?.isDirectory()) throw new Error(`pty cwd is not a directory: ${opts.cwd}`);
-    // An agent reads the hive skills as this version of the app wrote them.
+    // An agent reads the hive skills as this version of the app wrote them, and the skills of the
+    // tool plugins on for its workspace.
     if (spawning && !opts.attachOnly) {
       const root = await findRoot(opts.cwd).catch(() => null);
       if (root) await refreshSkills(path.dirname(root)).catch(() => {});
+      if (root) await installPluginSkills(path.dirname(root), appToolsDir()).catch(() => {});
     }
   }
   // Ensure the user's PATH/tokens are patched into process.env BEFORE the session starts: it

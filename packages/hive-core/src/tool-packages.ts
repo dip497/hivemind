@@ -9,6 +9,7 @@ import path from "node:path";
 import { parseToolManifest, toolOfFolder, type ToolPackage } from "./tool-format.js";
 import { installedMembers } from "./installed-packages.js";
 import { readSvgIcon } from "./svg-icon.js";
+import { skillProblem } from "./plugin-skills.js";
 
 export { TOOL_MANIFEST } from "./tool-format.js";
 import { TOOL_MANIFEST } from "./tool-format.js";
@@ -19,6 +20,10 @@ export async function readToolPackage(dir: string, folderId: string | null, sour
   try { raw = JSON.parse(await readFile(path.join(dir, TOOL_MANIFEST), "utf8")); } catch { throw new Error(`no readable ${TOOL_MANIFEST} in that folder`); }
   const pkg = parseToolManifest(raw, dir, folderId, source);
   if (!(await stat(path.join(dir, pkg.entry)).catch(() => null))?.isFile()) throw new Error(`its entry ${pkg.entry} is missing`);
+  for (const rel of pkg.skills ?? []) {
+    const problem = await skillProblem(dir, rel);
+    if (problem) throw new Error(problem);
+  }
   for (const tile of Object.values(pkg.tiles)) {
     if (!tile.icon) continue;
     const icon = await readSvgIcon(dir, tile.icon);

@@ -13,7 +13,7 @@ import {
   writeAgentContext,
 } from "@hivemind/core";
 import { err, ok } from "../format.js";
-import { installAgenticStack } from "../agentic-install.js";
+import { installAgenticStack, pluginSkillLines } from "../agentic-install.js";
 
 export const initCmd = defineCommand({
   meta: {
@@ -146,6 +146,7 @@ export const initCmd = defineCommand({
               `  AGENTS.md  written`,
               `  CLAUDE.md  ${claudeAction} + agentic section ${ag.claudeAgentic}`,
               `  skills     ${ag.skills.length ? ag.skills.join(", ") : "up to date"}  (.claude/skills/)`,
+              ...pluginSkillLines(ag.pluginSkills),
               ``,
               `next: hive new "first issue title"`,
             ].join("\n"),
@@ -190,6 +191,7 @@ async function installAgentic(ctx: { json: boolean }, cwd: string): Promise<unkn
           `✓ agentic stack installed`,
           `  CLAUDE.md  agentic section ${r.claudeAgentic}`,
           `  skills     ${r.skills.length ? r.skills.join(", ") : "up to date"}  (.claude/skills/)`,
+          ...pluginSkillLines(r.pluginSkills),
           ...(r.mcpRetired ? [`  .mcp.json  removed the retired hive MCP server entry`] : []),
           ``,
           `start an agent in this dir — the skills teach it the hive workflow.`,

@@ -9,14 +9,17 @@
  *     "tools": [{ "key": "prs", "label": "Pull requests", "description": "…",
  *                 "tileKind": "acme-prs", "size": { "width": 1100, "height": 760 },
  *                 "needsRepo": true, "singleton": true, "glyph": "⇅" }],
- *     "service": { "command": ["node", "service.js"], "role": "agents" }
+ *     "service": { "command": ["node", "service.js"], "role": "agents" },
+ *     "skills": ["skills/prs"]
  *   }
  *
  * The module's default export is `{ tiles: { [tileKind]: Component } }`; what each is handed is
  * `@hivemind/tile-sdk`'s contract, versioned by `apiVersion`. `permissions` and `settings` are a
  * view's: the same `hm` client, held to the same words. `service` is a program the app keeps
  * running while the plugin is on, driving the workspaces picked for it through the drive socket at
- * `role` (docs/design/drive-api-2026-10-09.md, D8). No I/O here.
+ * `role` (docs/design/drive-api-2026-10-09.md, D8). `skills` are agent skills in its folder (each
+ * a folder with a SKILL.md) that hive installs into the workspaces it is on for
+ * (`./plugin-skills.ts`). No I/O here.
  */
 import { VIEW_PERMISSIONS, type ViewPermission } from "@hivemind/view-sdk/protocol";
 import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category";
@@ -82,6 +85,8 @@ export interface ToolPackage extends ToolPluginContribution {
   tiles: Record<string, ToolTile>;
   /** What it keeps running while it is on, if anything. */
   service?: ToolService;
+  /** Its agent skills: folders in its folder, each named as its skill is. */
+  skills?: string[];
   /** Its folder on this machine. */
   dir: string;
   /** Why it cannot load here; null when it can. */
@@ -108,6 +113,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   const listed = Array.isArray(raw.tools) ? raw.tools : [];
   if (listed.length === 0) throw new Error("it lists no tools");
   const service = raw.service === undefined ? undefined : parseService(raw.service);
+  const skills = raw.skills === undefined ? [] : parseSkills(raw.skills);
   if (listed.length > 16) throw new Error("it lists more than 16 tools");
   const tools: { key: string; label: string; description?: string; tileKind: string; singleton?: boolean }[] = [];
   const tiles: Record<string, ToolTile> = {};
@@ -148,6 +154,7 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
       ? [...new Set(raw.permissions.filter((p): p is ViewPermission => (VIEW_PERMISSIONS as readonly unknown[]).includes(p)))] : [],
     settings,
     ...(service ? { service } : {}),
+    ...(skills.length ? { skills } : {}),
     name: text(raw.name, 60) ?? id,
     description: text(raw.description, 300) ?? "",
     ...(version ? { version } : {}),
@@ -158,6 +165,25 @@ export function parseToolManifest(raw: unknown, dir: string, folderId: string | 
   };
 }
 
+/** The most agent skills one plugin ships. */
+export const MAX_PLUGIN_SKILLS = 8;
+/** A skill's name, which is its folder's: what `.claude/skills/<name>/` is called. */
+export const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** The skill a folder of a plugin holds: the folder's last part. */
+export const skillName = (folder: string): string => folder.slice(folder.lastIndexOf("/") + 1);
+
+function parseSkills(raw: unknown): string[] {
+  if (!Array.isArray(raw) || raw.length > MAX_PLUGIN_SKILLS) throw new Error(`skills is a list of at most ${MAX_PLUGIN_SKILLS} folders in its folder, like ["skills/prs"]`);
+  const seen = new Set<string>();
+  for (const f of raw) {
+    if (typeof f !== "string" || !/^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/.test(f) || f.split("/").some((p) => p === ".." || p === ".")) throw new Error(`skill "${String(f)}" is not a folder inside its folder`);
+    const name = skillName(f);
+    if (!SKILL_NAME.test(name)) throw new Error(`skill folder "${f}" is not named as a skill is: lowercase letters, digits and dashes`);
+    if (seen.has(name)) throw new Error(`skill "${name}" is listed twice`);
+    seen.add(name);
+  }
+  return [...(raw as string[])];
+}
 
 function parseService(raw: unknown): ToolService {
   if (!isObj(raw)) throw new Error("service is not an object");

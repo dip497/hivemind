@@ -11,6 +11,7 @@ export * from "./registry.js";
 export * from "./cross-repo.js";
 export * from "./json.js";
 export * from "./agentic.js";
+export * from "./plugin-skills.js";
 export * from "./views.js";
 export * from "./review.js";
 export * from "./settings-schema.js";

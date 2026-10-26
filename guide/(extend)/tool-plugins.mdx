@@ -184,6 +184,7 @@ Next: [Publish a plugin](/publish-to-hivehub) on HiveHub, or ship it with your w
 | `permissions`, `settings` | the same as a view's ([Write a view](/extension-authoring#permissions)) |
 | `"commands"` | what an agent can run while a tile of the tool is open |
 | `"category"` | where it is grouped in the Add menu and on HiveHub |
+| `"skills"` | agent skills it ships: see [Agent skills](#agent-skills) |
 
 ### What a tile gets
 
@@ -343,6 +344,31 @@ page, where it is never shown again, or pipe it in: `printf %s "$TOKEN" | hive p
 @acme/jira token`. It is kept in the system keychain, or, where there is none (`hive host`, a Linux
 with no keyring), in `secrets.json` beside `settings.json`, readable by you alone. `settings.json`
 says only that it is set, and the tool's tiles never see it.
+
+### Agent skills
+
+A tool can teach agents how to use it. List skill folders in the manifest, each holding a
+`SKILL.md` whose frontmatter `name` is the folder's name:
+
+```json
+"skills": ["skills/prs"]
+```
+
+Hive copies each one to `.claude/skills/<name>/` in every workspace the tool is on for, when you
+run `hive init` or `hive add skill`, and before the app starts an agent there. A tool with a
+service is on for the workspaces its service drives, and their linked worktrees.
+
+- **It stays out of git.** Each folder hive writes is listed in the clone's `.git/info/exclude`,
+  never in your `.gitignore`, so it is never committed by accident.
+- **It follows the tool.** An update replaces it, and switching the tool off or removing it takes
+  it away, the next time hive installs skills there.
+- **Your edits are kept.** A copy you changed is left as it is, and `hive add skill` says so.
+  Delete the folder to get the tool's copy back, or its `.hive-plugin` file to make it yours.
+- **Your skills are never touched.** If a skill hive did not write already has that name, the
+  tool's skill is not installed, and `hive add skill` names it.
+
+A skill can have at most 32 files and 512 KB, with no links. It cannot take the name of one of
+hive's own skills. `hive plugins check` reports a skill that breaks these rules.
 
 ### On a shared canvas
 

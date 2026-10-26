@@ -130,3 +130,31 @@ test("a tool's icon is the .svg its manifest names, carried as a data URL; one t
   expect((await readToolPackage(plugin(tool("../outside.svg")), null)).tiles["acme-prs"]!.icon).toBeUndefined();
   expect((await readToolPackage(plugin(tool("icon.png")), null)).tiles["acme-prs"]!.icon).toBeUndefined();
 });
+
+test("a plugin's agent skill is read only when it is a folder inside it, named as its SKILL.md says, and not one of hive's own", async () => {
+  const skill = (name: string, front = `name: ${name}\ndescription: does things`) => ({ [`skills/${name}/SKILL.md`]: `---\n${front}\n---\nbody\n` });
+  const cases: { skills: unknown; files: Record<string, string>; refused?: string }[] = [
+    { skills: ["skills/prs"], files: skill("prs") },
+    { skills: ["../prs"], files: {}, refused: `skill "../prs" is not a folder inside its folder` },
+    { skills: ["skills/hive-work"], files: skill("hive-work"), refused: `skill "hive-work" has the name of one of hive's own skills` },
+    { skills: ["skills/prs"], files: { "skills/prs/README.md": "x" }, refused: "skill skills/prs has no SKILL.md" },
+    { skills: ["skills/prs"], files: skill("prs", "name: other\ndescription: x"), refused: "frontmatter says name: other, not prs" },
+    { skills: ["skills/prs"], files: skill("prs", "name: prs"), refused: "has no description" },
+    { skills: ["skills/prs", "more/prs"], files: skill("prs"), refused: `skill "prs" is listed twice` },
+  ];
+  for (const c of cases) {
+    const dir = plugin({ skills: c.skills }, { "index.js": "export default { tiles: {} };" });
+    for (const [rel, text] of Object.entries(c.files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), text);
+    }
+    if (c.refused) await expect(readToolPackage(dir, null)).rejects.toThrow(c.refused);
+    else expect((await readToolPackage(dir, null)).skills).toEqual(c.skills as string[]);
+  }
+  // A link in a skill could hand an agent any file on the machine.
+  const linked = plugin({ skills: ["skills/prs"] });
+  fs.mkdirSync(path.join(linked, "skills", "prs"), { recursive: true });
+  fs.writeFileSync(path.join(linked, "skills", "prs", "SKILL.md"), "---\nname: prs\ndescription: x\n---\n");
+  fs.symlinkSync("/etc/hostname", path.join(linked, "skills", "prs", "host.md"));
+  await expect(readToolPackage(linked, null)).rejects.toThrow("host.md is not a file");
+});
