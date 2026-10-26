@@ -3,7 +3,7 @@ import { defineCommand } from "citty";
 import { HiveError, newMachineId, readMachines, resolveMachine, validateLabel, validateTarget, writeMachines, type Machine } from "@hivemind/core";
 import { err, ok } from "../format.js";
 import { EXIT } from "../exit-codes.js";
-import { installSelf, probe, type ProbeResult } from "../remote.js";
+import { ensureHive, probe } from "../remote.js";
 
 const EXIT_FOR: Record<string, number> = { machine_unreachable: EXIT.unavailable, machine_not_found: EXIT.notFound, machine_target_invalid: EXIT.usage, machine_label_invalid: EXIT.usage };
 const fail = (ctx: { json: boolean }, e: unknown, fallback: string): never => {
@@ -19,11 +19,10 @@ export function defaultLabel(target: string): string {
 const line = (m: Machine) => `${m.id}  ${m.enabled ? "on " : "off"}  ${m.label.padEnd(16)}  ${m.target}${m.platform ? `  (${m.platform})` : ""}`;
 
 const addCmd = defineCommand({
-  meta: { name: "add", description: "Probe an ssh target and save it as a machine" },
+  meta: { name: "add", description: "Reach an ssh target, put this version's hive there, and save it as a machine" },
   args: {
     target: { type: "positional", required: true, description: "ssh destination: alias, user@host, or ssh://user@host:port" },
     label: { type: "string", description: "display name (default: the host)" },
-    install: { type: "boolean", description: "if hive is missing there, put it in ~/.local/bin/hive (this binary, or the same version's release download)" },
     json: { type: "boolean" },
   },
   async run({ args }) {
@@ -33,16 +32,8 @@ const addCmd = defineCommand({
       const label = validateLabel(String(args.label ?? defaultLabel(target)));
       const list = await readMachines();
       if (list.some((m) => m.target === target)) throw new HiveError("machine_exists", `${target} is already saved as '${list.find((m) => m.target === target)!.label}'`);
-      let found: ProbeResult = probe(target);
-      let installed = false;
-      if (!found.hivePath || !found.daemon) {
-        const what = found.hivePath ? `hive ${found.hiveVersion ?? ""} on ${target} is too old for terminal sessions` : `hive is not installed on ${target} (${found.platform})`;
-        if (!args.install) throw new HiveError("machine_no_hive", `${what} — rerun with --install, or install hive-${found.platform} there`);
-        installSelf(target, found.platform);
-        installed = true;
-        found = probe(target);
-        if (!found.hivePath || !found.daemon) throw new HiveError("machine_install_failed", `installed hive on ${target} but the probe still cannot run its daemon`);
-      }
+      const found = ensureHive(target);
+      const installed = !!found.put;
       const m: Machine = { id: newMachineId(), label, target, enabled: true, hivePath: found.hivePath!, platform: found.platform, ...(found.kind ? { kind: found.kind } : {}) };
       await writeMachines([...list, m]);
       return ok(ctx, { ...m, hiveVersion: found.hiveVersion ?? null, installed }, () =>
@@ -78,7 +69,7 @@ const checkCmd = defineCommand({
         await writeMachines(next);
       }
       return ok(ctx, { id: m.id, label: m.label, reachable: true, ...found }, () =>
-        `${m.label}: reachable, ${found.platform}, ${found.hivePath ? `${found.hiveVersion ?? "hive"} at ${found.hivePath}` : "hive NOT installed"}`);
+        `${m.label}: reachable, ${found.platform}, ${found.hivePath ? `hive ${found.hiveVersion ?? ""} at ${found.hivePath}` : "hive is put there the first time it is used"}`);
     } catch (e) { return fail(ctx, e, "machine_check_failed"); }
   },
 });

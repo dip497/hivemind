@@ -6,21 +6,18 @@
  * Connections and their state are kept by host id, the address's key.
  */
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import {
-  PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, machinesPath, newMachineId,
-  releaseAssetUrl, validateLabel, validateTarget, KIND_SCRIPT, kindIn, type Machine, type MachineKind, type ProbeResult,
-} from "@hivemind/core";
+import { machinesPath, newMachineId, validateLabel, validateTarget, KIND_SCRIPT, kindIn, type Machine, type MachineKind, type ProbeResult } from "@hivemind/core";
 import { machineHostId, parseDeviceUri, parseMachineUri, parseRemote, sshUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import type { MachineAddRequest, MachineAddResult, MachineInfo, MachineProbe, MachineState, MachineStatus, MachinesSnapshot, SessionSummary } from "../../shared/ipc.js";
 import type { SessionInfo } from "@hivemind/agent-host/pty-protocol";
 import { remoteConns } from "@hivemind/host/remote/conn";
 import { machines as catalog, onMachinesChange } from "@hivemind/host/remote/catalog";
 import { remoteTarget } from "@hivemind/host/remote/targets";
-import { needsAttention, probeCommand, probeRemote } from "@hivemind/host/remote/ssh";
+import { needsAttention } from "@hivemind/host/remote/ssh";
+import { ensureHive, probeHive } from "./hive-there.js";
 import { closeIdle, endpointFor, hostConnected, hostFailure, hostServingTiles, readyEndpoints, reconnectHost, resetHost, setHostPaused, setRemoteStatusSink, sshPaths } from "./pty.js";
 import { forgetSavedHost, passwordState, saveHost } from "./saved-hosts.js";
 
@@ -36,7 +33,6 @@ const status = new Map<string, MachineStatus>();
 let sink: ((s: MachinesSnapshot) => void) | undefined;
 let emitTimer: ReturnType<typeof setTimeout> | null = null;
 let listSessionsLocal: () => Promise<SessionInfo[]> = async () => [];
-let appVersion = "0.0.0";
 
 const info = (m: Machine): MachineInfo => ({ ...m, hostId: machineHostId(m.target) });
 const targetOf = (m: Machine): RemoteTarget => parseRemote(sshUri(m.target));
@@ -122,10 +118,9 @@ function pingAll(): void {
 
 const mutate = (fn: (list: Machine[]) => Machine[]) => catalog.mutate(fn);
 
-export async function initMachines(opts: { send: (s: MachinesSnapshot) => void; listLocalSessions: () => Promise<SessionInfo[]>; version: string }): Promise<void> {
+export async function initMachines(opts: { send: (s: MachinesSnapshot) => void; listLocalSessions: () => Promise<SessionInfo[]> }): Promise<void> {
   sink = opts.send;
   listSessionsLocal = opts.listLocalSessions;
-  appVersion = opts.version;
   setRemoteStatusSink(setStatus);
   await catalog.reload();
   const file = machinesPath();
@@ -162,56 +157,7 @@ function probeError(target: string, e: unknown): Error {
   return new Error(needsAttention(msg) ? `[attention] ${msg}` : `[offline] ${target}: ${msg}`);
 }
 
-async function probe(t: RemoteTarget): Promise<ProbeResult> {
-  return probeRemote(probeCommand(t, remoteConns.resolveAuthFor(t.hostId), sshPaths()));
-}
-
-function isNativeBinary(file: string): boolean {
-  try {
-    const st = fs.statSync(file);
-    if (!st.isFile() || st.size < 10 * 1024 * 1024) return false;
-    const head = Buffer.alloc(4);
-    const fd = fs.openSync(file, "r");
-    try { fs.readSync(fd, head, 0, 4, 0); } finally { fs.closeSync(fd); }
-    return head.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) || head.readUInt32LE(0) === 0xfeedfacf;
-  } catch {
-    return false;
-  }
-}
-
-/** A compiled `hive` here of this app's version (so an update never downgrades) that runs the daemon; copying needs no network. */
-async function localHiveBinary(): Promise<string | null> {
-  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
-  const cands = [process.env.HIVE_BIN, ...dirs.map((d) => path.join(d, "hive")), path.join(os.homedir(), ".local/bin/hive"), path.join(os.homedir(), ".hivemind-app/hive")];
-  for (const c of new Set(cands)) {
-    if (!c) continue;
-    let real: string;
-    try { real = fs.realpathSync(c); } catch { continue; }
-    if (!isNativeBinary(real)) continue;
-    try {
-      // One picked by hand (HIVE_BIN) is taken as asked; one merely found on PATH must match this app.
-      if (c !== process.env.HIVE_BIN && (await run(real, ["--version"], { timeout: 10_000 })).stdout.trim() !== appVersion) continue;
-      const help = await run(real, ["daemon", "--help"], { timeout: 10_000 });
-      if (`${help.stdout}${help.stderr}`.includes("bridge")) return real;
-    } catch { /* not a working hive */ }
-  }
-  return null;
-}
-
-async function installHive(t: RemoteTarget, platform: string): Promise<void> {
-  const bin = localPlatform() === platform ? await localHiveBinary() : null;
-  if (!bin && !PUBLISHED_PLATFORMS.includes(platform)) throw new Error(`no hive release is published for ${platform} — install it there from source`);
-  const url = releaseAssetUrl(platform, appVersion);
-  const body = bin ? fs.readFileSync(bin) : undefined;
-  console.log(`[machines] installing hive on ${t.hostId} from ${bin ?? url}`);
-  const r = await remoteConns.exec(t, body ? installCopyCommand(body.length) : installFetchCommand(url), { input: body, timeoutMs: 300_000 });
-  if (r.code === 0) return;
-  const why = r.stderr.trim() || `exit ${r.code}`;
-  if (body) throw new Error(`copying hive failed: ${why}`);
-  // curl 22 on a release URL: that version was never published for this platform (a build from source).
-  if (/\b22\b|404/.test(why)) throw new Error(`no published hive ${appVersion} for ${platform} — install it there by hand, or run a released build of this app`);
-  throw new Error(`downloading ${url} failed: ${why}`);
-}
+const probe = (t: RemoteTarget): Promise<ProbeResult> => probeHive(t, sshPaths());
 
 function toProbe(p: ProbeResult): MachineProbe {
   return { platform: p.platform, ...(p.hivePath ? { hivePath: p.hivePath } : {}), ...(p.hiveVersion ? { hiveVersion: p.hiveVersion } : {}), ...(p.daemon ? { daemon: true } : {}) };
@@ -228,26 +174,20 @@ export async function addMachine(req: MachineAddRequest): Promise<MachineAddResu
   clashWith(catalog.list, target, t.hostId);
   const label = validateLabel(req.label?.trim() || t.host);
   if (req.password) remoteConns.setAuth(t.hostId, { ...remoteConns.resolveAuthFor(t.hostId), password: req.password });
-  let found: ProbeResult;
+  let ensured: Awaited<ReturnType<typeof ensureHive>>;
   try {
-    found = await probe(t);
+    ensured = await ensureHive(t, sshPaths());
   } catch (e) {
     if (req.password) remoteConns.clearAuth(t.hostId);
     throw probeError(target, e);
   }
-  let installed = false;
-  if ((!found.hivePath || !found.daemon) && req.install) {
-    await installHive(t, found.platform);
-    installed = true;
-    found = await probe(t);
-    if (!found.daemon) throw new Error(`installed hive ${found.hiveVersion ?? ""} on ${target}, but it cannot run terminal sessions yet (needs a newer release)`);
-  }
+  const { found, missing } = ensured;
   const passwordSaved = req.password ? saveHost(t.host, t.port, t.user ?? "", { password: req.password }) : true;
   const m: Machine = { id: newMachineId(), label, target, enabled: true, platform: found.platform, ...(found.kind ? { kind: found.kind } : {}), ...(found.hivePath ? { hivePath: found.hivePath } : {}) };
   await mutate((list) => { clashWith(list, target, t.hostId); return [...list, m]; });
   resetHost(t.hostId);
-  setStatus(t.hostId, found.daemon ? "online" : "no-hive");
-  return { machine: info(m), probe: toProbe(found), installed, ...(passwordSaved ? {} : { passwordSaved: false }) };
+  setStatus(t.hostId, missing ? "no-hive" : "online", missing);
+  return { machine: info(m), probe: toProbe(found), installed: !!ensured.put, ...(passwordSaved ? {} : { passwordSaved: false }) };
 }
 
 export async function checkMachine(id: string): Promise<MachineProbe> {
@@ -273,17 +213,10 @@ export async function checkMachine(id: string): Promise<MachineProbe> {
       return { ...rest, platform: found.platform, ...(found.kind ? { kind: found.kind } : {}), ...(found.hivePath ? { hivePath: found.hivePath } : {}) };
     });
   }).then(() => {}, () => { /* an unreadable catalog: the check still reports */ });
-  if (!live()) setStatus(t.hostId, found.daemon ? "online" : "no-hive");
-  if (found.daemon) resetHost(t.hostId);
+  // Reachable is ready: this app's hive is put there the first time a terminal needs it.
+  if (!live()) setStatus(t.hostId, "online");
+  resetHost(t.hostId);
   return toProbe(found);
-}
-
-export async function installOnMachine(id: string): Promise<MachineProbe> {
-  const m = byId(id);
-  const t = targetOf(m);
-  const before = await probe(t).catch((e: unknown) => { throw probeError(m.target, e); });
-  await installHive(t, before.platform);
-  return checkMachine(id);
 }
 
 export async function updateMachine(id: string, patch: { label?: string; enabled?: boolean }): Promise<void> {
@@ -325,7 +258,7 @@ export async function editMachine(id: string, patch: { target: string; label?: s
         : { ...x, label };
     });
   });
-  if (found) { resetHost(t.hostId); setStatus(t.hostId, found.daemon ? "online" : "no-hive"); }
+  if (found) { resetHost(t.hostId); setStatus(t.hostId, "online"); }
   if (moved && t.hostId !== oldHostId) forgetSavedHost(oldHostId);
   return { machine: info(byId(id)) };
 }
@@ -356,7 +289,7 @@ export async function machineSessions(uri: string | null): Promise<SessionSummar
   if (!uri) return (await listSessionsLocal()).slice(0, MAX_SESSIONS).map(summary);
   const t = remoteTarget(uri);
   const ep = await endpointFor(t);
-  if (!ep) throw new Error(hostFailure(t.hostId) ?? "hive is not installed there (or is too old) — install it from Machines");
+  if (!ep) throw new Error(hostFailure(t.hostId) ?? "this machine's terminals cannot be listed right now");
   return (await ep.sessions()).slice(0, MAX_SESSIONS).map(summary);
 }
 

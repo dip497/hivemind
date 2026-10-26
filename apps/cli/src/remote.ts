@@ -1,7 +1,13 @@
 /** `--machine` routing and the `machine add` probe, through the system `ssh` so the user's ssh config and keys apply. */
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { HiveError, PROBE, PUBLISHED_PLATFORMS, installCopyCommand, installFetchCommand, localPlatform, parseProbe, readMachines, releaseAssetUrl as coreReleaseAssetUrl, resolveMachine, shq, sshDestination, type Machine, type ProbeResult } from "@hivemind/core";
+import path from "node:path";
+import {
+  HiveError, PUBLISHED_PLATFORMS, hiveThere, installCopyCommand, installFetchCommand, localPlatform, parseProbe, personFolder, probeScript,
+  readMachines, releaseAssetUrl as coreReleaseAssetUrl, resolveMachine, sshDestination, type Machine, type ProbeResult,
+} from "@hivemind/core";
+import { appData } from "@hivemind/core/app-data";
+import { machineKeys } from "@hivemind/workspace-host/keyring";
 import pkg from "../package.json" with { type: "json" };
 
 export { parseProbe, platformOf, shq } from "@hivemind/core";
@@ -20,13 +26,18 @@ export function sshArgv(target: string, remoteCommand: string, tty: boolean): st
 export async function loadMachine(ref: string): Promise<Machine> {
   const m = resolveMachine(await readMachines(), ref);
   if (!m.enabled) throw new HiveError("machine_disabled", `machine '${m.label}' is disabled — \`hive machine enable ${m.id}\``);
-  if (!m.hivePath) throw new HiveError("machine_no_hive", `machine '${m.label}' has no hive path recorded — \`hive machine check ${m.id}\``);
   return m;
 }
 
-/** Runs the remote `hive` by its recorded absolute path and exits with its status. */
+/** The folder on machines that this person's terminals run in: the same one their app uses. */
+function person(): string {
+  return personFolder(machineKeys(path.join(appData(), "identity")).personId);
+}
+
+/** Runs this version's `hive` there, as this person's, and exits with its status; puts it there first when it is not. */
 export function execOnMachine(m: Machine, args: string[], tty: boolean): Promise<never> {
-  const cmd = [m.hivePath!, ...args].map(shq).join(" ");
+  ensureHive(m.target);
+  const cmd = hiveThere(pkg.version, person(), args);
   return new Promise(() => {
     const child = spawn("ssh", sshArgv(m.target, cmd, tty), { stdio: "inherit" });
     child.on("error", (e) => { process.stderr.write(`ssh failed: ${e.message}\n`); process.exit(3); });
@@ -36,7 +47,7 @@ export function execOnMachine(m: Machine, args: string[], tty: boolean): Promise
 }
 
 export function probe(target: string): ProbeResult {
-  const r = spawnSync("ssh", sshArgv(target, PROBE, false), { encoding: "utf8", timeout: 30_000 });
+  const r = spawnSync("ssh", sshArgv(target, probeScript(pkg.version), false), { encoding: "utf8", timeout: 30_000 });
   if (r.error) throw new HiveError("machine_unreachable", `ssh failed: ${r.error.message}`);
   if (r.status === 255) {
     throw new HiveError("machine_unreachable", `ssh ${target} failed: ${(r.stderr || "").trim().split("\n").pop() || "connection refused"} — check that plain \`ssh ${target}\` works (host key, keys/agent) first`);
@@ -56,20 +67,25 @@ export function releaseAssetUrl(platform: string, version = pkg.version): string
   return coreReleaseAssetUrl(platform, version, process.env.HIVEMIND_REPO || undefined);
 }
 
-/** Copies this binary when the platforms match; otherwise the remote downloads the release asset of this same version. */
-export function installSelf(target: string, remotePlatform: string): string {
+/** `target` with this version's `hive` in place: this binary copied there when the platforms
+ *  match, else the same version's release downloaded there. `put`: it was not there before. */
+export function ensureHive(target: string): ProbeResult & { put?: true } {
+  const found = probe(target);
+  if (found.daemon) return found;
   const self = compiledSelf();
-  const copy = self !== null && localPlatform() === remotePlatform;
-  if (!copy && !PUBLISHED_PLATFORMS.includes(remotePlatform)) {
-    throw new HiveError("machine_install_unavailable", `no hive release is published for ${remotePlatform} — build it there from source (install.sh --dev), then rerun`);
+  const copy = self !== null && localPlatform() === found.platform;
+  if (!copy && !PUBLISHED_PLATFORMS.includes(found.platform)) {
+    throw new HiveError("machine_install_unavailable", `no hive release is published for ${found.platform} — build it there from source (install.sh --dev)`);
   }
-  const url = releaseAssetUrl(remotePlatform);
+  const url = releaseAssetUrl(found.platform);
   const bin = copy ? fs.readFileSync(self!) : null;
-  const cmd = bin ? installCopyCommand(bin.length) : installFetchCommand(url);
+  const cmd = bin ? installCopyCommand(pkg.version, bin.length) : installFetchCommand(pkg.version, url);
   const r = spawnSync("ssh", sshArgv(target, cmd, false), { input: bin ?? "", encoding: "utf8", timeout: 300_000, maxBuffer: 1 << 20 });
   if (r.status !== 0) {
     const why = (r.stderr || "").trim() || `exit ${r.status}`;
     throw new HiveError("machine_install_failed", copy ? `copying hive to ${target} failed: ${why}` : `${target} could not download ${url}: ${why}`);
   }
-  return r.stdout.trim().split("\n").pop()!;
+  const again = probe(target);
+  if (!again.daemon) throw new HiveError("machine_install_failed", `put hive ${pkg.version} on ${target}, but it cannot run terminal sessions on ${again.platform}`);
+  return { ...again, put: true };
 }

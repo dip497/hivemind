@@ -2,7 +2,7 @@
 import { spawn } from "node:child_process";
 import { Duplex, PassThrough } from "node:stream";
 import path from "node:path";
-import { PROBE, parseProbe, shq, type ProbeResult } from "@hivemind/core";
+import { hiveThere, parseProbe, probeScript, shq, type ProbeResult } from "@hivemind/core";
 import type { RemoteTarget } from "@hivemind/core/remote-uri";
 import { BRIDGE_READY } from "@hivemind/agent-host/pty-protocol";
 import type { HostAuth } from "./conn.js";
@@ -67,9 +67,10 @@ export const ASKPASS_SCRIPT = `#!/bin/sh
 case "$1" in *assphrase*) printf '%s\\n' "$HIVE_SSH_PASSPHRASE" ;; *) printf '%s\\n' "$HIVE_SSH_PASSWORD" ;; esac
 `;
 
-/** The remote side of the bridge, run through a login shell so sessions get the user's PATH. */
-export function bridgeRemoteCommand(hivePath: string): string {
-  return `exec bash -lc ${shq(`exec ${shq(hivePath)} daemon bridge`)}`;
+/** The remote side of the bridge to person `person`'s terminal server, through `hive` `version`;
+ *  run through a login shell so sessions get the user's PATH. */
+export function bridgeRemoteCommand(version: string, person: string): string {
+  return `exec bash -lc ${shq(hiveThere(version, person, ["daemon", "bridge"]))}`;
 }
 
 const lastLine = (s: string) => s.trim().split("\n").pop() ?? "";
@@ -91,8 +92,9 @@ export function probeRemote(cmd: SshCommand, timeoutMs = 30_000): Promise<ProbeR
   });
 }
 
-export function probeCommand(t: RemoteTarget, auth: HostAuth, paths: SshPaths): SshCommand {
-  return sshCommand(t, auth, paths, PROBE);
+/** Probes `t` for the platform, the kind of computer and the `hive` of `version` there. */
+export function probeCommand(t: RemoteTarget, auth: HostAuth, paths: SshPaths, version: string): SshCommand {
+  return sshCommand(t, auth, paths, probeScript(version));
 }
 
 /** Resolves once the remote bridge reports ready; ssh's own error otherwise. Destroying the stream ends ssh. */

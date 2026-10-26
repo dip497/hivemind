@@ -17,7 +17,8 @@ import { DaemonEndpoint, type EndpointState } from "@hivemind/agent-host/daemon-
 import { DAEMON_PROTOCOL_VERSION, type Viewport } from "@hivemind/agent-host/pty-protocol";
 import { daemonProtocol, retireDaemon, wakeSessions } from "@hivemind/agent-host/daemon-replace";
 import { acceptRemoteEvent } from "./events.js";
-import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, probeCommand, probeRemote, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
+import { ASKPASS_SCRIPT, bridgeRemoteCommand, needsAttention, openBridge, sshCommand, type SshPaths } from "@hivemind/host/remote/ssh";
+import { ensureHive, hivePerson, hiveVersion } from "./hive-there.js";
 
 interface SpawnOpts {
   tileId: string;
@@ -102,27 +103,26 @@ export function hostFailure(hostId: string): string | undefined {
   return failure.get(hostId);
 }
 
-/** This host's daemon endpoint, or null when it has no daemon-capable `hive` (or cannot be probed right now);
- *  rejects when its `hive` needs the person (too old, a login refused), whose sessions plain ssh would start twice. */
+/** This host's daemon endpoint: this person's terminal server there, run by this app's own `hive`,
+ *  put in place first when it is not. Null when it cannot be put there (or the host cannot be
+ *  probed right now); rejects when the login needs the person. */
 export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null> {
   if (paused.has(target.hostId)) return Promise.reject(new Error("this machine is turned off"));
   const cached = endpoints.get(target.hostId);
   if (cached) return cached;
   report(target.hostId, "connecting");
   const made = (async () => {
-    const auth = remoteConns.resolveAuthFor(target.hostId);
-    const paths = sshPaths();
-    const found = await probeRemote(probeCommand(target, auth, paths));
-    if (!found.hivePath || !found.daemon) {
-      failure.set(target.hostId, found.hivePath ? `hive ${found.hiveVersion ?? ""} there is too old for terminal sessions` : "hive is not installed there");
-      report(target.hostId, "no-hive", found.hivePath ? `hive ${found.hiveVersion ?? ""} there is too old` : undefined);
+    const { missing } = await ensureHive(target, sshPaths(), () => report(target.hostId, "connecting", `putting hive ${hiveVersion()} there`));
+    if (missing) {
+      failure.set(target.hostId, missing);
+      report(target.hostId, "no-hive", missing);
       setTimeout(() => { if (endpoints.get(target.hostId) === made) endpoints.delete(target.hostId); }, NO_HIVE_RECHECK_MS).unref?.();
       return null;
     }
-    const hivePath = found.hivePath;
+    const command = bridgeRemoteCommand(hiveVersion(), hivePerson());
     // Auth is looked up per connect, so a password changed in Machines applies to the next attempt.
-    const bridge = () => openBridge(sshCommand(target, remoteConns.resolveAuthFor(target.hostId), sshPaths(), bridgeRemoteCommand(hivePath)));
-    await replaceOtherProtocol(target, hivePath, bridge);
+    const bridge = () => openBridge(sshCommand(target, remoteConns.resolveAuthFor(target.hostId), sshPaths(), command));
+    await replaceOtherProtocol(target, bridge);
     const ep: DaemonEndpoint = new DaemonEndpoint({
       connect: bridge,
       retryInitialMs: 500,
@@ -154,15 +154,11 @@ export function endpointFor(target: RemoteTarget): Promise<DaemonEndpoint | null
 const isAttention = (msg: string) => msg.startsWith("[attention] ") || needsAttention(msg);
 const withoutTag = (msg: string) => msg.replace(/^\[attention\] /, "");
 
-/** The daemon there kept when it speaks this app's protocol, as on this computer; else, when the
- *  `hive` there speaks it, replaced once no agent is mid-turn, each session woken in the new one. */
-async function replaceOtherProtocol(target: RemoteTarget, hivePath: string, bridge: () => Promise<import("node:stream").Duplex>): Promise<void> {
+/** This person's server there kept when it speaks this app's protocol, as on this computer; one an
+ *  older app of theirs started is replaced once no agent is mid-turn, each session woken in the new one. */
+async function replaceOtherProtocol(target: RemoteTarget, bridge: () => Promise<import("node:stream").Duplex>): Promise<void> {
   const protocol = await daemonProtocol(bridge, 30_000);
   if (protocol === null || protocol === DAEMON_PROTOCOL_VERSION) return;
-  const r = await remoteConns.exec(target, `${shq(hivePath)} daemon status --json`, { timeoutMs: 30_000 });
-  let speaks: unknown;
-  try { speaks = (JSON.parse(String(r.stdout)) as { data?: { speaks?: unknown } }).data?.speaks; } catch { /* an older hive */ }
-  if (speaks !== DAEMON_PROTOCOL_VERSION) throw new Error(`[attention] the hive on this machine is older than this app: press Update hive in Machines, or run "hive upgrade" there`);
   const retired = await retireDaemon(bridge, {
     waiting: (ids) => report(target.hostId, "connecting", ids.length ? `updating its terminals once ${ids.length === 1 ? "an agent finishes its turn" : `${ids.length} agents finish their turns`}` : undefined),
     now: new Promise(() => {}),

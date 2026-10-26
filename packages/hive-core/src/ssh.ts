@@ -55,15 +55,45 @@ export function shScript(script: string, ...args: string[]): string {
   return `sh -c ${shq(script)} hive${args.map((a) => ` ${shq(a)}`).join("")}`;
 }
 
-// Tagged lines, so a noisy remote shell profile cannot confuse the parser.
-export const PROBE = shScript([
-  `printf 'HIVEPROBE-UNAME %s %s\\n' "$(uname -s)" "$(uname -m)"`,
-  KIND_SCRIPT,
-  `for p in "$HOME/.local/bin/hive" /usr/local/bin/hive /opt/homebrew/bin/hive "$(command -v hive 2>/dev/null)"; do`,
-  `  if [ -n "$p" ] && [ -x "$p" ]; then printf 'HIVEPROBE-PATH %s\\n' "$p"; printf 'HIVEPROBE-VERSION %s\\n' "$("$p" --version 2>/dev/null | head -n1)";`,
-  `    if "$p" daemon --help 2>&1 | grep -q bridge; then printf 'HIVEPROBE-DAEMON yes\\n'; fi; break; fi`,
-  `done`,
-].join("\n"));
+/**
+ * Where the app keeps `hive` on a machine, under the login's home: one copy per version in
+ * `.hivemind/bin/<version>/hive`, so apps of different versions never replace each other's, and
+ * one folder per person in `.hivemind/people/<person>/` holding that person's terminal server and
+ * sessions, so people who share a login never share, or stop, each other's terminals.
+ */
+const HIVE_HOME = ".hivemind";
+/** Copies of other versions kept beside this one and any a process still runs. */
+const KEEP_OTHER_VERSIONS = 2;
+
+const isVersion = (v: string) => /^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/.test(v);
+
+/** The folder name of the person `personId` (64 hex characters) under `.hivemind/people/`. */
+export function personFolder(personId: string): string {
+  if (!/^[0-9a-f]{16,}$/.test(personId)) throw new HiveError("person_invalid", "a person id is hex");
+  return personId.slice(0, 16);
+}
+
+/** A remote shell command that runs `hive` `version` with `args` as person `person` (a `personFolder`):
+ *  the terminal server it reaches or starts, and everything it keeps, are that person's. */
+export function hiveThere(version: string, person: string, args: readonly string[]): string {
+  if (!isVersion(version)) throw new HiveError("version_invalid", `not a version: ${JSON.stringify(version)}`);
+  if (!/^[0-9a-f]{16}$/.test(person)) throw new HiveError("person_invalid", "not a person folder");
+  // A socket named in the login's env would put everyone back in one server.
+  return `unset HIVEMIND_PTY_SOCK; HIVEMIND_APP_DATA="$HOME/${HIVE_HOME}/people/${person}" exec "$HOME/${HIVE_HOME}/bin/${version}/hive"${args.map((a) => ` ${shq(a)}`).join("")}`;
+}
+
+/** Tagged lines, so a noisy remote shell profile cannot confuse the parser: the platform, the kind
+ *  of computer, and the `hive` of `version` there when it is in place and runs. */
+export function probeScript(version: string): string {
+  if (!isVersion(version)) throw new HiveError("version_invalid", `not a version: ${JSON.stringify(version)}`);
+  return shScript([
+    `printf 'HIVEPROBE-UNAME %s %s\\n' "$(uname -s)" "$(uname -m)"`,
+    KIND_SCRIPT,
+    `p="$HOME/${HIVE_HOME}/bin/$1/hive"`,
+    `if [ -x "$p" ] && [ "$("$p" --version 2>/dev/null | head -n1)" = "$1" ]; then printf 'HIVEPROBE-PATH %s\\n' "$p"; printf 'HIVEPROBE-VERSION %s\\n' "$1";`,
+    `  if "$p" daemon --help 2>&1 | grep -q bridge; then printf 'HIVEPROBE-DAEMON yes\\n'; fi; fi`,
+  ].join("\n"), version);
+}
 
 export function parseProbe(out: string): ProbeResult {
   const line = (tag: string) => out.split("\n").find((l) => l.startsWith(`HIVEPROBE-${tag} `))?.slice(`HIVEPROBE-${tag} `.length).trim();
@@ -93,15 +123,27 @@ export function releaseAssetUrl(platform: string, version: string, repo = "dip49
 }
 
 // Temp file + rename, so a dropped connection or failed download can't leave a truncated `hive`.
-const INSTALL_HEAD = `set -e; mkdir -p "$HOME/.local/bin"; tmp="$HOME/.local/bin/.hive.$$.tmp"; trap 'rm -f "$tmp"' EXIT`;
-const INSTALL_TAIL = `chmod 755 "$tmp"; mv -f "$tmp" "$HOME/.local/bin/hive"; printf '%s\\n' "$HOME/.local/bin/hive"`;
+const INSTALL_HEAD = `set -e; d="$HOME/${HIVE_HOME}/bin/$1"; mkdir -p "$d"; tmp="$d/.hive.$$.tmp"; trap 'rm -f "$tmp"' EXIT`;
+// Then the copies of other versions go, but the newest few and any a process here still runs.
+const INSTALL_TAIL = [
+  `chmod 755 "$tmp"; mv -f "$tmp" "$d/hive"; set +e`,
+  `running=$(for e in /proc/[0-9]*/exe; do readlink "$e" 2>/dev/null; done)`,
+  `n=0; for v in $(ls -t "$HOME/${HIVE_HOME}/bin"); do`,
+  `  [ "$v" = "$1" ] && continue; n=$((n+1)); [ $n -le ${KEEP_OTHER_VERSIONS} ] && continue`,
+  `  case "$running" in *"/${HIVE_HOME}/bin/$v/hive"*) continue ;; esac`,
+  `  rm -rf "$HOME/${HIVE_HOME}/bin/$v"`,
+  `done`,
+  `printf '%s\\n' "$d/hive"`,
+].join("\n");
 
-/** Installs stdin as `~/.local/bin/hive`, only if exactly `bytes` arrived (a cut connection ends `cat` cleanly). */
-export function installCopyCommand(bytes: number): string {
-  return shScript(`${INSTALL_HEAD}; cat > "$tmp"; n=$(wc -c < "$tmp"); [ $n -eq "$1" ] || { echo "received $n of $1 bytes" >&2; exit 1; }; ${INSTALL_TAIL}`, String(bytes));
+/** Puts stdin there as `hive` `version`, only if exactly `bytes` arrived (a cut connection ends `cat` cleanly). */
+export function installCopyCommand(version: string, bytes: number): string {
+  if (!isVersion(version)) throw new HiveError("version_invalid", `not a version: ${JSON.stringify(version)}`);
+  return shScript(`${INSTALL_HEAD}; cat > "$tmp"; n=$(wc -c < "$tmp"); [ $n -eq "$2" ] || { echo "received $n of $2 bytes" >&2; exit 1; }\n${INSTALL_TAIL}`, version, String(bytes));
 }
 
-/** Downloads `url` on the remote as `~/.local/bin/hive`. */
-export function installFetchCommand(url: string): string {
-  return shScript(`${INSTALL_HEAD}; if command -v curl >/dev/null 2>&1; then curl -fsSL -o "$tmp" "$1"; elif command -v wget >/dev/null 2>&1; then wget -qO "$tmp" "$1"; else echo "neither curl nor wget is installed" >&2; exit 1; fi; ${INSTALL_TAIL}`, url);
+/** Downloads `url` there as `hive` `version`. */
+export function installFetchCommand(version: string, url: string): string {
+  if (!isVersion(version)) throw new HiveError("version_invalid", `not a version: ${JSON.stringify(version)}`);
+  return shScript(`${INSTALL_HEAD}; if command -v curl >/dev/null 2>&1; then curl -fsSL -o "$tmp" "$2"; elif command -v wget >/dev/null 2>&1; then wget -qO "$tmp" "$2"; else echo "neither curl nor wget is installed" >&2; exit 1; fi\n${INSTALL_TAIL}`, version, url);
 }

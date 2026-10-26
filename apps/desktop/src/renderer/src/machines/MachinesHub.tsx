@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { ShowMore, useShowMore } from "../components/ui/show-more";
-import { Switch } from "../components/ui/switch";
 import type { DeviceWorkspace, MachineInfo, PairedDeviceSummary, RemoteDirEntry } from "../../../shared/ipc";
 import { machineUri, posixJoin } from "@hivemind/core/remote-uri";
 import { errText, machineForRequest, statusOf, useMachines, type MachinesRequest } from "./store";
@@ -253,7 +252,7 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
                 {s.detail && s.state !== "online" && s.state !== "attention" && <span className="min-w-0 text-[var(--color-fg3)] truncate" title={s.detail}>— {s.detail}</span>}
               </dd>
               <dt className="text-[var(--color-fg3)]">hive</dt>
-              <dd className="font-mono text-[var(--color-fg2)] truncate">{m.hivePath ?? "not installed"}</dd>
+              <dd className="font-mono text-[var(--color-fg2)] truncate">{m.hivePath ?? "put there when a terminal opens"}</dd>
               <dt className="text-[var(--color-fg3)]">Used by</dt>
               <dd className="text-[var(--color-fg2)]">{u.frames > 0 ? `${plural(u.frames, "frame")} · ${plural(u.terminals, "terminal")}` : "nothing on this canvas"}</dd>
             </dl>
@@ -262,17 +261,15 @@ function MachineList({ picking, onChoose, onChooseDevice, onEdit, onAdd, usageOf
               <AttentionNote target={m.target} detail={s.detail} needsPassword={s.needsPassword} onSetPassword={() => setAskPassword(m.id)} />
             )}
             {m.enabled && s.state === "no-hive" && (
-              <div className="flex items-center gap-2 rounded-lg bg-[var(--color-bg2)] border border-[var(--color-line2)] px-3 py-2 text-label text-[var(--color-fg2)]">
-                <span className="min-w-0 flex-1">Without hive there, terminals stop when the connection drops.</span>
-                <Button size="xs" className="shrink-0" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Install hive</Button>
-              </div>
+              <p className="rounded-lg bg-[var(--color-bg2)] border border-[var(--color-line2)] px-3 py-2 text-label text-[var(--color-fg2)]">
+                hive could not be put there, so terminals run over plain ssh and stop when the connection drops.
+              </p>
             )}
 
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => run(m, "checking", () => window.hive.machineCheck(m.id))}><RefreshCw /> Check now</Button>
               <Button variant="secondary" onClick={() => onEdit(m)}>Edit…</Button>
               <Button variant="secondary" onClick={() => setAskPassword(askPassword === m.id ? null : m.id)}>Set password…</Button>
-              {s.state !== "no-hive" && <Button variant="secondary" onClick={() => run(m, "installing", () => window.hive.machineInstall(m.id))}>Update hive</Button>}
               <Button variant="secondary" onClick={() => run(m, "saving", () => window.hive.machineUpdate(m.id, { enabled: !m.enabled }))}>{m.enabled ? "Pause" : "Resume"}</Button>
               <Button variant="destructive" className="ml-auto" onClick={() => setRemoving({ id: m.id, end: false })}>Remove…</Button>
             </div>
@@ -347,7 +344,6 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
 }) {
   const [target, setTarget] = useState(editing?.target ?? initialTarget ?? "");
   const [label, setLabel] = useState(editing?.label ?? "");
-  const [install, setInstall] = useState(true);
   const [usePassword, setUsePassword] = useState(false);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -366,7 +362,7 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
         onAdded(r.machine);
         return;
       }
-      const r = await window.hive.machineAdd({ target: target.trim(), label: label.trim() || undefined, install, password: usePassword && password ? password : undefined });
+      const r = await window.hive.machineAdd({ target: target.trim(), label: label.trim() || undefined, password: usePassword && password ? password : undefined });
       if (r.passwordSaved === false) { setWarn(r.machine); return; }
       onAdded(r.machine);
     } catch (e) {
@@ -408,10 +404,6 @@ function AddMachine({ initialTarget, editing, onCancel, onAdded }: {
         <Button type="button" variant="link" size="xs" onClick={() => setUsePassword(true)} className="-mt-2 justify-self-start ">Use a password instead</Button>
       )}
       {editing && <p className="-mt-1 text-count text-muted-foreground">A new address is reached before it is saved. Frames on {editing.label} move with it; terminals already open keep their session.</p>}
-      {!editing && <div className="flex items-center justify-between gap-4">
-        <Label htmlFor="machine-install" className="cursor-pointer">Install <span className="font-mono">hive</span> if missing</Label>
-        <Switch id="machine-install" checked={install} onCheckedChange={setInstall} />
-      </div>}
       {error && (error.attention
         ? <AttentionNote target={target.trim()} detail={error.text} />
         : <p className="text-label text-destructive break-words">{error.text}</p>)}

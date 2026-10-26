@@ -9,6 +9,9 @@ import path from "node:path";
 import { hive, type Run } from "./helpers.js";
 import { parseProbe, platformOf, sshArgv, shq } from "../src/remote.js";
 import { defaultLabel } from "../src/commands/machine.js";
+import { machineKeys } from "@hivemind/workspace-host/keyring";
+
+const { version } = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "package.json"), "utf8")) as { version: string };
 
 let tmp = "";
 let env: Record<string, string> = {};
@@ -19,18 +22,25 @@ beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hive-machine-"));
   const bin = path.join(tmp, "bin");
   fs.mkdirSync(bin);
-  // `good` has hive, `bare` does not, `down` refuses the connection (exit 255).
+  // `good` has this version's hive, `arm` gets it downloaded there, `oldmac` has no release,
+  // `down` refuses the connection (exit 255), and `shell` runs what it is sent in a home of its own.
+  const rhome = path.join(tmp, "rhome");
+  const there = path.join(rhome, ".hivemind", "bin", version);
+  fs.mkdirSync(there, { recursive: true });
+  fs.writeFileSync(path.join(there, "hive"), `#!/bin/sh
+case "$1" in --version) echo ${version} ;; daemon) echo "bridge  connect to the terminal daemon" ;; *) echo "$* as $HIVEMIND_APP_DATA" ;; esac
+`, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, "ssh"), `#!/bin/sh
 for a; do target_prev="$last"; last="$a"; done
 case "$target_prev" in
   down) echo "ssh: connect to host down port 22: Connection refused" >&2; exit 255 ;;
-  good) printf 'motd noise\\nHIVEPROBE-UNAME Linux aarch64\\nHIVEPROBE-KIND virtual-machine\\nHIVEPROBE-PATH /home/u/.local/bin/hive\\nHIVEPROBE-VERSION 1.17.0\\nHIVEPROBE-DAEMON yes\\n' ;;
+  good) printf 'motd noise\\nHIVEPROBE-UNAME Linux aarch64\\nHIVEPROBE-KIND virtual-machine\\nHIVEPROBE-PATH /home/u/.hivemind/bin/${version}/hive\\nHIVEPROBE-VERSION ${version}\\nHIVEPROBE-DAEMON yes\\n' ;;
   arm) case "$last" in
-    *releases/download*) printf '%s' "$last" > "${path.join(tmp, "installed")}"; echo /home/u/.local/bin/hive ;;
-    *) printf 'HIVEPROBE-UNAME Linux aarch64\\n'; if [ -f "${path.join(tmp, "installed")}" ]; then printf 'HIVEPROBE-PATH /home/u/.local/bin/hive\\nHIVEPROBE-DAEMON yes\\n'; fi ;;
+    *releases/download*) printf '%s' "$last" > "${path.join(tmp, "installed")}"; echo /home/u/.hivemind/bin/${version}/hive ;;
+    *) printf 'HIVEPROBE-UNAME Linux aarch64\\n'; if [ -f "${path.join(tmp, "installed")}" ]; then printf 'HIVEPROBE-PATH /home/u/.hivemind/bin/${version}/hive\\nHIVEPROBE-DAEMON yes\\n'; fi ;;
   esac ;;
   oldmac) printf 'HIVEPROBE-UNAME Darwin x86_64\\n' ;;
-  oldhive) printf 'HIVEPROBE-UNAME Linux x86_64\\nHIVEPROBE-PATH /usr/local/bin/hive\\nHIVEPROBE-VERSION 1.16.0\\n' ;;
+  shell) HOME=${rhome} PATH=/usr/bin:/bin exec sh -c "$last" ;;
   *)    printf 'HIVEPROBE-UNAME Linux x86_64\\n' ;;
 esac
 `);
@@ -43,39 +53,34 @@ describe("hive machine", () => {
   test("add probes, records the absolute hive path, platform and kind of computer", () => {
     const r = run("machine", "add", "good", "--label", "gpu", "--json");
     expect(r.code).toBe(0);
-    expect(data(r)).toMatchObject({ label: "gpu", target: "good", enabled: true, hivePath: "/home/u/.local/bin/hive", platform: "linux-arm64", kind: "virtual-machine", hiveVersion: "1.17.0", installed: false });
+    expect(data(r)).toMatchObject({ label: "gpu", target: "good", enabled: true, hivePath: `/home/u/.hivemind/bin/${version}/hive`, platform: "linux-arm64", kind: "virtual-machine", hiveVersion: version, installed: false });
     const saved = JSON.parse(fs.readFileSync(path.join(tmp, "xdg", "hivemind", "machines.json"), "utf8"));
     expect(saved.machines).toHaveLength(1);
     expect(saved.machines[0].kind).toBe("virtual-machine");
     expect(fs.statSync(path.join(tmp, "xdg", "hivemind", "machines.json")).mode & 0o777).toBe(0o600);
   });
 
-  test("a host without hive is not saved unless --install", () => {
-    const r = run("machine", "add", "bare", "--json");
-    expect(r.code).toBe(1);
-    expect(r.json).toMatchObject({ error: { code: "MACHINE_NO_HIVE" } });
-    expect(data(run("machine", "list", "--json")).machines).toHaveLength(1);
-  });
-
-  test("--install on another platform has the remote download this version's release asset", () => {
-    const r = run("machine", "add", "arm", "--install", "--json");
-    expect(r.json).toMatchObject({ target: "arm", platform: "linux-arm64", installed: true });
+  test("a machine without this version's hive gets it, downloaded there, in a folder of that version", () => {
+    const r = run("machine", "add", "arm", "--json");
+    expect(r.json).toMatchObject({ target: "arm", platform: "linux-arm64", installed: true, hivePath: `/home/u/.hivemind/bin/${version}/hive` });
     const cmd = fs.readFileSync(path.join(tmp, "installed"), "utf8");
-    const { version } = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "package.json"), "utf8")) as { version: string };
     expect(cmd).toContain(`'https://github.com/dip497/hivemind/releases/download/v${version}/hive-linux-arm64'`);
     expect(cmd.startsWith("sh -c ")).toBe(true);
     expect(run("machine", "remove", "arm", "--json").code).toBe(0);
   });
 
-  test("a hive too old to run the daemon counts as missing", () => {
-    const r = run("machine", "add", "oldhive", "--json");
-    expect(r.json).toMatchObject({ error: { code: "MACHINE_NO_HIVE" } });
-    expect(String((r.json as { error: { message: string } }).error.message)).toContain("too old");
+  test("a platform with no release is not saved, and says so", () => {
+    const r = run("machine", "add", "oldmac", "--json");
+    expect(r.json).toMatchObject({ error: { code: "MACHINE_INSTALL_UNAVAILABLE" } });
+    expect((data(run("machine", "list", "--json")).machines as { target: string }[]).map((m) => m.target)).toEqual(["good"]);
   });
 
-  test("--install for a platform with no release says so", () => {
-    const r = run("machine", "add", "oldmac", "--install", "--json");
-    expect(r.json).toMatchObject({ error: { code: "MACHINE_INSTALL_UNAVAILABLE" } });
+  test("a command sent to a machine runs this version's hive there as this person's", () => {
+    expect(run("machine", "add", "shell", "--json").code).toBe(0);
+    const r = run("ps", "--machine", "shell");
+    const person = machineKeys(path.join(tmp, "xdg", "hivemind", "identity")).personId.slice(0, 16);
+    expect(r.stdout.trim()).toBe(`ps as ${path.join(tmp, "rhome")}/.hivemind/people/${person}`);
+    expect(run("machine", "remove", "shell", "--json").code).toBe(0);
   });
 
   test("an unreachable host is exit 3 and says to check plain ssh first", () => {

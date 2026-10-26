@@ -54,7 +54,6 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
     onMachines: (cb) => port.on("machines:changed", cb),
     machineAdd: (req) => port.invoke("machines:add", req),
     machineCheck: (id) => port.invoke("machines:check", id),
-    machineInstall: (id) => port.invoke("machines:install", id),
     machineUpdate: (id, patch) => port.invoke("machines:update", id, patch),
     machineEdit: (id, patch) => port.invoke("machines:edit", id, patch),
     viewLedgerAppend: (lines) => port.send("viewLedger:append", lines),
