@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Changed: a hub can check a plugin it reads a few files at a time. The hub kit's `checkPluginListing` gives the answer `checkPluginFolder` gives, from each file's hash and the few texts the checks read; `planRead` says which files those are, a package's manifest first. HiveHub uses it to publish Archipelago and other large packages. A package is held to the 200-file and 8 MB limits by the files that install, as `hive plugins check` already counted them, and no longer by the sources and build scripts beside them. A view's icon is read by the kit, as a widget's is.
+
 ## [2026.10.6] — 2026-10-26
 
 - Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.

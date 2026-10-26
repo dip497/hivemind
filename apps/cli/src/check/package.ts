@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { checkPackageManifest, entriesOf, ownedBy, PACKAGE_MANIFEST, sizeProblem } from "@hivemind/hub";
+import { checkPackageManifest, entriesOf, ownedBy, PACKAGE_MANIFEST, packageFiles, sizeProblem } from "@hivemind/hub";
 import { MEMBER_KINDS } from "@hivemind/core/package-kinds";
 import { kindNamed } from "../plugin-kinds.js";
 import { sourceOf } from "../package-authoring.js";
@@ -90,15 +90,11 @@ export async function checkPackage(dir: string): Promise<PackageCheckReport> {
   }
   // Sized as HiveHub sizes it: what installs (the manifest, a README or licence, the members'
   // folders), without what a build or a checkout leaves beside it.
-  const folders = MEMBER_KINDS.flatMap((k) => entriesOf(m, k).flatMap((e) => ((e as { path?: string }).path ? [(e as { path: string }).path.replace(/\/$/, "")] : [])));
-  const big = sizeProblem(filesOf(dir).filter((f) => f.path === PACKAGE_MANIFEST || OWN_FILE.test(f.path) || folders.some((a) => a === "." || f.path.startsWith(`${a}/`))));
+  const big = sizeProblem(packageFiles(m, filesOf(dir)));
   if (big) report.problems.push({ step: "hub", message: `HiveHub would refuse it: ${big}` });
   report.steps = { manifest: report.problems.some((p) => !p.member && p.step === "manifest") ? "failed" : "ok", ...report.steps, hub: big ? "failed" : "ok" };
   return report;
 }
-
-/** A package's own files beside its manifest, as HiveHub lists them. */
-const OWN_FILE = /^(?:readme|licen[cs]e|copying|notice)(?:\.[a-z]+)?$/i;
 
 /** Every file under `dir` by its path inside it, with its size; links, node_modules and .git left out. */
 function filesOf(dir: string): { path: string; bytes: number }[] {

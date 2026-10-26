@@ -9,7 +9,7 @@ import { parseCategory, type PluginCategory } from "@hivemind/view-sdk/category"
 import { permissionWords } from "@hivemind/view-sdk/protocol";
 import { idProblem, pathsProblem, safeRelative, smallJson, UNSAFE_TEXT_RE, type CatalogFile, type CatalogType } from "./index-format.js";
 import { laterOf, sinceOf } from "./since.js";
-import { checkPackageManifest, entriesOf, MEMBER_FORMATS, ownedBy, PACKAGE_MANIFEST, type AgentPreset, type FolderEntry, type MemberFormat, type MemberRuns } from "./package-format.js";
+import { checkPackageManifest, entriesOf, MEMBER_FORMATS, memberFolders, ownedBy, PACKAGE_MANIFEST, packageFiles, type AgentPreset, type FolderEntry, type MemberFormat, type MemberRuns, type PackageManifest } from "./package-format.js";
 
 export const MAX_PLUGIN_FILES = 200;
 export const MAX_PLUGIN_FILE_BYTES = 2 << 20;
@@ -18,6 +18,13 @@ export const MAX_PLUGIN_BYTES = 8 << 20;
 const MAX_README = 64 << 10;
 /** Files larger than this are hashed but never read as text. */
 const MAX_TEXT = 256 << 10;
+/** An SVG this size or smaller is a plugin's icon the listing keeps; a larger one is not shown. */
+const MAX_ICON = 16 << 10;
+/** The manifests that make a folder one plugin, as the check looks for them at its top. */
+const PLUGIN_MANIFESTS = ["agent.yaml", "agent.yml", "hivemind-view.json", "widget.json", "hivemind-tool.json"];
+/** The files the check reads as text, by name, wherever they are in the folder. */
+const TEXT_NAMES = new Set([PACKAGE_MANIFEST, ...PLUGIN_MANIFESTS, THEME_MANIFEST]);
+const NO_MANIFEST = `no ${PACKAGE_MANIFEST}, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder`;
 
 /** An agent is one global name for one CLI. */
 export const AGENT_ID_RE = /^(?!.*--)[a-z0-9][a-z0-9-]{0,31}$/;
@@ -25,6 +32,11 @@ export const AGENT_ID_RE = /^(?!.*--)[a-z0-9][a-z0-9-]{0,31}$/;
 export const SCOPED_ID_RE = /^(?!.*--)@[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9][a-z0-9-]{0,63}$/;
 
 export interface PluginFile { path: string; bytes: Uint8Array }
+
+/** A file of a plugin folder as the check reads it: its path, its size, its SHA-256, and its text
+ *  when the check reads it as text (`readsText`). A hub that reads a folder a few files at a time
+ *  keeps this much of each file, not its bytes. */
+export interface ListedFile { path: string; bytes: number; sha256: string; text?: string }
 
 /** A plugin folder as a hub lists it. */
 export interface CheckedPlugin {
@@ -89,14 +101,52 @@ const categoryOf = (file: string, raw: unknown): PluginCategory => {
   return "category" in c ? c.category : refuse(`${file}: ${c.error}`);
 };
 
+/** Whether the check reads this file as text: a manifest, a README, or an SVG small enough to be an
+ *  icon. Every other file is only hashed. */
+export function readsText(path: string, bytes: number): boolean {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return bytes < MAX_TEXT && (TEXT_NAMES.has(name) || /^readme\.md$/i.test(name) || (/\.svg$/i.test(name) && bytes <= MAX_ICON));
+}
+
+/** One file of a folder as the check reads it, from its bytes. */
+export async function listedFile(path: string, bytes: Uint8Array): Promise<ListedFile> {
+  const file: ListedFile = { path, bytes: bytes.byteLength, sha256: await sha256(bytes) };
+  if (readsText(path, bytes.byteLength)) file.text = new TextDecoder().decode(bytes);
+  return file;
+}
+
 /** Check a plugin folder: its files, its manifest, its id and its category. */
 export async function checkPluginFolder(folder: readonly PluginFile[]): Promise<FolderCheck> {
+  return checkPluginListing(await Promise.all(folder.map((f) => listedFile(f.path, f.bytes))));
+}
+
+/** Check a folder from its files as `listedFile` reads them, which is what a hub keeps of a folder it
+ *  reads a few files at a time. The same check, and the same answer, as `checkPluginFolder`. */
+export async function checkPluginListing(listing: readonly ListedFile[]): Promise<FolderCheck> {
   try {
-    return { plugin: await check(folder) };
+    return { plugin: check(listing) };
   } catch (e) {
     // A folder is someone else's bytes: whatever it holds is a reason to refuse it, never a crash.
     return { problem: e instanceof Refused ? e.message : `the folder could not be read: ${escaped(String((e as Error)?.message ?? e))}` };
   }
+}
+
+/** What a hub reads of a folder before it can check it, from the folder's paths and sizes: every
+ *  file of one plugin, or what a package lists (`packageFiles`). A package's manifest is read first,
+ *  and `packageManifest` is its text once read; one that cannot be read is all there is to read,
+ *  and the check says what is wrong with it. Refuses what the paths and sizes alone refuse, so a hub
+ *  reads nothing it would turn away. */
+export function planRead(files: readonly { path: string; bytes: number }[], packageManifest?: string): { read: string[] } | { problem: string } {
+  if (!files.length) return { problem: "the folder is empty" };
+  if (!isPackage(files)) {
+    const problem = folderProblem(files) ?? (files.some((f) => PLUGIN_MANIFESTS.includes(f.path) && readsText(f.path, f.bytes)) ? null : NO_MANIFEST);
+    return problem ? { problem } : { read: files.map((f) => f.path) };
+  }
+  const m = packageManifest === undefined ? null : manifestOf(packageManifest);
+  if (!m || "problem" in m) return { read: [PACKAGE_MANIFEST] };
+  const listed = packageFiles(m.manifest, files);
+  const problem = folderProblem(listed);
+  return problem ? { problem } : { read: listed.map((f) => f.path) };
 }
 
 /** What a hub refuses a folder for by its size alone: a file over 2 MB, or more than 8 MB in all.
@@ -107,26 +157,53 @@ export function sizeProblem(files: readonly { path: string; bytes: number }[]): 
   return files.reduce((n, f) => n + f.bytes, 0) > MAX_PLUGIN_BYTES ? "a plugin folder may be at most 8 MB" : null;
 }
 
-async function check(folder: readonly PluginFile[]): Promise<CheckedPlugin> {
-  if (!folder.length) refuse("the folder is empty");
-  if (folder.length > MAX_PLUGIN_FILES) refuse(`a plugin may have at most ${MAX_PLUGIN_FILES} files`);
+/** What the files a listing holds are refused for by their paths and sizes alone: too many, a path
+ *  that is not plain, too large, or two that would land on one another. */
+function folderProblem(files: readonly { path: string; bytes: number }[]): string | null {
+  if (files.length > MAX_PLUGIN_FILES) return `a plugin may have at most ${MAX_PLUGIN_FILES} files`;
+  const odd = files.find((f) => !safeRelative(f.path));
+  if (odd) return `${shown(odd.path)} is not a plain relative path`;
+  return sizeProblem(files) ?? pathsProblem(files.map((f) => f.path));
+}
+
+/** Whether the folder is a package: it has a package manifest the check reads. */
+const isPackage = (files: readonly { path: string; bytes: number }[]) => files.some((f) => f.path === PACKAGE_MANIFEST && readsText(f.path, f.bytes));
+
+/** A package manifest's text, read as the check reads it. */
+function manifestOf(json: string): { raw: unknown; manifest: PackageManifest } | { problem: string } {
+  let raw: unknown;
+  try { raw = JSON.parse(json); } catch { return { problem: `${PACKAGE_MANIFEST} is not valid JSON` }; }
+  const checked = checkPackageManifest(raw);
+  return "problem" in checked ? { problem: `${PACKAGE_MANIFEST}: ${checked.problem}` } : { raw, manifest: checked.manifest };
+}
+
+function check(listing: readonly ListedFile[]): CheckedPlugin {
+  if (!listing.length) refuse("the folder is empty");
+  // A package lists only what installs, and only that is held to the limits.
+  let held = listing;
+  let pkg: { raw: unknown; manifest: PackageManifest; json: string } | null = null;
+  if (isPackage(listing)) {
+    const json = listing.find((f) => f.path === PACKAGE_MANIFEST)!.text ?? refuse(`${PACKAGE_MANIFEST} was listed without its text`);
+    const m = manifestOf(json);
+    if ("problem" in m) return refuse(m.problem);
+    pkg = { ...m, json };
+    held = packageFiles(m.manifest, listing);
+  }
+  const problem = folderProblem(held);
+  if (problem) refuse(problem);
   const files: CatalogFile[] = [];
   const text = new Map<string, string>();
   const sizes = new Map<string, number>();
-  for (const f of folder) if (!safeRelative(f.path)) refuse(`${shown(f.path)} is not a plain relative path`);
-  const big = sizeProblem(folder.map((f) => ({ path: f.path, bytes: f.bytes.byteLength })));
-  if (big) refuse(big);
-  for (const f of folder) {
-    sizes.set(f.path, f.bytes.byteLength);
-    files.push({ path: f.path, sha256: await sha256(f.bytes) });
-    if (f.bytes.byteLength < MAX_TEXT) text.set(f.path, new TextDecoder().decode(f.bytes));
+  for (const f of held) {
+    if (!/^[0-9a-f]{64}$/.test(f.sha256)) refuse(`${shown(f.path)} was listed without its SHA-256`);
+    files.push({ path: f.path, sha256: f.sha256 });
+    sizes.set(f.path, f.bytes);
+    // Only what the check reads as text, so a hub that keeps no other text gets the same answer.
+    if (readsText(f.path, f.bytes)) text.set(f.path, f.text ?? refuse(`${shown(f.path)} was listed without its text`));
   }
-  const clash = pathsProblem(folder.map((f) => f.path));
-  if (clash) refuse(clash);
   files.sort((a, b) => a.path.localeCompare(b.path));
-  const pkg = text.get(PACKAGE_MANIFEST);
-  if (pkg !== undefined) return readPackage(pkg, files, text, sizes);
-  return readPlugin(files, text) ?? refuse(`no ${PACKAGE_MANIFEST}, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder`);
+  if (pkg) return readPackage(pkg, files, text, sizes);
+  return readPlugin(files, text) ?? refuse(NO_MANIFEST);
 }
 
 /** The one plugin a folder holds, read by its manifest; null when it holds none. */
@@ -171,11 +248,16 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     const id = String(v.id ?? "");
     if (!SCOPED_ID_RE.test(id)) refuse(`hivemind-view.json's id is ${shown(id)} — a published view's id is @owner/name`);
     if (!has(v.entry)) refuse("hivemind-view.json names an entry file that is not in the folder");
+    // Its icon as a widget's is shown: a one-colour SVG kept in the listing, any other picture linked.
+    const iconFile = has(v.icon) && /\.(svg|png|webp|gif|jpe?g)$/i.test(v.icon as string) ? (v.icon as string) : null;
+    const svg = iconFile && /\.svg$/i.test(iconFile) ? text.get(iconFile) : undefined;
     return {
       ...common, id, type: "view", name: plain("hivemind-view.json", "name", String(v.name ?? id).slice(0, 80)), category: categoryOf("hivemind-view.json", v.category),
       description: plain("hivemind-view.json", "description", String(v.description ?? "A workspace view.").slice(0, 400)),
       version: plain("hivemind-view.json", "version", String(v.version ?? "0.1.0").slice(0, 40)),
-      bin: null, homepage: null, icon: null, manifest: viewJson,
+      bin: null, homepage: null, manifest: viewJson,
+      icon: svg !== undefined ? { image: svgData(svg) } : null,
+      iconFile: iconFile && !/\.svg$/i.test(iconFile) ? iconFile : null,
       does: asks(v.permissions), traits: null, note: null, minAppVersion: sinceOf("view", v),
     };
   }
@@ -191,7 +273,8 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
     // What the app compares an installed copy against to offer an update.
     if (typeof w.version !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(w.version)) refuse('widget.json needs a "version", like "1.0.0"');
     // Its icon as the app shows it: a one-colour SVG kept in the listing (drawn in the page's
-    // colour, in an image, where it cannot run), any other picture linked from the folder.
+    // colour, in an image, where it cannot run), any other picture linked from the folder. An SVG
+    // over MAX_ICON is not read, so it is not shown.
     const iconFile = has(w.icon) ? (w.icon as string) : null;
     const svg = iconFile && /\.svg$/i.test(iconFile) ? text.get(iconFile) : undefined;
     return {
@@ -199,8 +282,8 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       description: plain("widget.json", "description", String(w.description ?? "A widget.").slice(0, 400)),
       version: w.version as string,
       bin: null, homepage: null, manifest: widgetJson,
-      icon: svg && svg.length <= 16 << 10 ? { image: svgData(svg) } : null,
-      iconFile: !svg && iconFile && /\.(png|webp|gif|jpe?g)$/i.test(iconFile) ? iconFile : null,
+      icon: svg !== undefined ? { image: svgData(svg) } : null,
+      iconFile: iconFile && /\.(png|webp|gif|jpe?g)$/i.test(iconFile) ? iconFile : null,
       does: asks(w.permissions), traits: null, note: null, minAppVersion: sinceOf("widget", w),
     };
   }
@@ -224,7 +307,7 @@ function readPlugin(files: CatalogFile[], text: Map<string, string>): CheckedPlu
       description: plain("hivemind-tool.json", "description", (t.description || "A tool.").slice(0, 400)),
       version: t.version!,
       bin: null, homepage: null, manifest: toolJson,
-      icon: svg && svg.length <= 16 << 10 ? { image: svgData(svg) } : null,
+      icon: svg !== undefined ? { image: svgData(svg) } : null,
       // It is code the app loads into itself, which is why it arrives switched off.
       does: [
         "Runs inside Hivemind, with the app's access to your files and network, once you switch it on",
@@ -256,17 +339,10 @@ const later = (a: string, b: string) => {
   return false;
 };
 
-/** A file of the package itself, beside its manifest and its members: its README and licence. */
-const OWN_FILE = /^(?:readme|licen[cs]e|copying|notice)(?:\.[a-z]+)?$/i;
-
 /** A package: its `hivemind-package.json`, and every member in its folder read as that kind is
  *  read alone. Every member is the package owner's. Its files are the package's, checked as one. */
-function readPackage(json: string, files: CatalogFile[], text: Map<string, string>, sizes: Map<string, number>): CheckedPlugin {
-  let raw: unknown;
-  try { raw = JSON.parse(json); } catch { return refuse(`${PACKAGE_MANIFEST} is not valid JSON`); }
-  const checked = checkPackageManifest(raw);
-  if ("problem" in checked) return refuse(`${PACKAGE_MANIFEST}: ${checked.problem}`);
-  const m = checked.manifest;
+function readPackage(pkg: { raw: unknown; manifest: PackageManifest; json: string }, files: CatalogFile[], text: Map<string, string>, sizes: Map<string, number>): CheckedPlugin {
+  const { raw, manifest: m, json } = pkg;
   const owner = m.id.slice(0, m.id.indexOf("/"));
   const members: CheckedMember[] = [];
   // The package's own fields first, then the highest any member needs.
@@ -306,7 +382,7 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   }
   // Each member's files are its own: a folder inside another member's would be shown as one kind
   // and installed as part of the other.
-  const folders = MEMBER_FORMATS.filter((f) => f.manifest).flatMap((f) => entriesOf(m, f).map((e) => (e as FolderEntry).path.replace(/\/$/, "")));
+  const folders = memberFolders(m);
   for (const a of folders) for (const b of folders) {
     if (a !== b && (a === "." || b.startsWith(`${a}/`))) refuse(`${shown(b)} is inside ${shown(a)}, another member's folder`);
   }
@@ -314,12 +390,9 @@ function readPackage(json: string, files: CatalogFile[], text: Map<string, strin
   const ids = members.map((x) => `${x.kind}:${x.id}`);
   if (new Set(ids).size !== ids.length) refuse("a member is named twice");
   const readmeName = [...text.keys()].find((f) => /^readme\.md$/i.test(f));
-  // What is listed is what installs: the package's own manifest, README and licence, and its
-  // members' folders. Anything else beside them (sources, build scripts, notes) is left out, so
-  // the app never downloads it and a view can never fetch it.
-  const listed = files.filter((f) => f.path === PACKAGE_MANIFEST || OWN_FILE.test(f.path) || folders.some((a) => a === "." || f.path.startsWith(`${a}/`)));
+  // What is listed is what installs (`packageFiles`): `files` are those already.
   return {
-    id: m.id, type: "package", name: m.name.slice(0, 80), category: "other", files: listed,
+    id: m.id, type: "package", name: m.name.slice(0, 80), category: "other", files,
     readme: readmeName ? text.get(readmeName)!.slice(0, MAX_README) : null,
     description: `A package of ${members.length}: ${members.map((x) => x.name).join(", ")}.`.slice(0, 400),
     version: m.version, bin: null, homepage: null, icon: null, iconFile: null, manifest: json,

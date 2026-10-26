@@ -41,13 +41,15 @@ The index format and its reader are one package in the Hivemind repository, the 
 
 The kit also holds the checks a plugin folder must pass. A hub built on the kit runs them before it lists a plugin. The app runs the same checks on the files it downloaded, before it installs them:
 
-- at most 200 files, 2 MB per file and 8 MB in all, each a plain relative path;
+- at most 200 files, 2 MB per file and 8 MB in all, each a plain relative path (in a package, the files that install: its manifest, README and licence, and its members' folders);
 - one manifest Hivemind accepts: `hivemind-package.json`, `agent.yaml`, `hivemind-view.json`, `widget.json` or `hivemind-tool.json`;
 - in a package, every member checked as that kind is checked alone, and owned by the package's owner;
 - an id that fits its kind, and a category Hivemind knows;
 - a view's entry file, a widget's code or drawing, and a version on widgets and tools.
 
 A folder that fails, or that says it is another plugin than the one listed, is not installed, and the install says why.
+
+A hub that cannot read a whole folder in one go, such as one on a Cloudflare Worker, reads it a few files at a time. `planRead` names the files it needs from the folder's paths and sizes, a package's manifest first. `listedFile` keeps each file's size, SHA-256 and the few texts the checks read. `checkPluginListing` then gives the answer `checkPluginFolder` gives for the whole folder.
 
 Each Hivemind release carries the kit as `hivemind-hub-<version>.tgz`. Its one dependency, `zod`, comes from npm. It runs in Node, Bun and a Cloudflare Worker. A hub depends on it by its address on the release, for example:
 

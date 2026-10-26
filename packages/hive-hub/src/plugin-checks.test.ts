@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { checkPluginFolder, MAX_PLUGIN_FILE_BYTES, ownerProblem } from "./plugin-checks.js";
+import { checkPluginFolder, checkPluginListing, listedFile, MAX_PLUGIN_FILE_BYTES, ownerProblem, planRead } from "./plugin-checks.js";
 import { THEME_FILE_LIMITS } from "@hivemind/core/theme-format";
 import { parseHubIndex, writeHubIndex } from "./index-format.js";
 import { laterOf, SINCE, sinceOf } from "./since.js";
@@ -172,6 +172,76 @@ describe("checking a package", () => {
     // Sized as the app sizes it: a sound past 400 KB.
     expect(await problem({ "hivemind-package.json": pkg, ...pet(), ...harbour({ ...THEME, sounds: { done: "bell.ogg" } }), "themes/harbour/bell.ogg": new Uint8Array(500 * 1024) }))
       .toMatch(/sounds\.done: bell\.ogg is 500 KB; .* at most 400 KB/);
+  });
+});
+
+describe("a folder read a few files at a time", () => {
+  const pkg = (extra: object = {}) => JSON.stringify({ apiVersion: 2, id: "@ada/kit", name: "Kit", version: "1.0.0", widgets: [{ path: "pet" }], views: [{ path: "graph/dist" }], ...extra });
+  const kit = (over: Record<string, string | Uint8Array> = {}) => ({
+    "hivemind-package.json": pkg(), "README.md": "# Kit", "LICENSE": "MIT",
+    "pet/widget.json": JSON.stringify({ id: "@ada/pet", name: "Pet", version: "1.0.0", icon: "pet.svg" }), "pet/widget.js": "", "pet/pet.svg": "<svg/>",
+    "graph/dist/hivemind-view.json": JSON.stringify({ id: "@ada/graph", entry: "index.html" }), "graph/dist/index.html": "<p>",
+    // What the view is built from, beside what installs.
+    "graph/src/main.ts": "", "graph/hivemind-view.json": "{", "scripts/build.mjs": "", ...over,
+  });
+  /** What a hub that reads only what `planRead` names, a manifest first, makes of the folder. */
+  const readByPlan = async (files: Record<string, string | Uint8Array>) => {
+    const all = folder(files);
+    const sized = all.map((f) => ({ path: f.path, bytes: f.bytes.byteLength }));
+    const manifest = all.find((f) => f.path === "hivemind-package.json");
+    let plan = planRead(sized);
+    if ("read" in plan && manifest && plan.read.length === 1) plan = planRead(sized, (await listedFile(manifest.path, manifest.bytes)).text);
+    if ("problem" in plan) return { plan, check: null };
+    const read = all.filter((f) => plan.read.includes(f.path));
+    return { plan, check: await checkPluginListing(await Promise.all(read.map((f) => listedFile(f.path, f.bytes)))) };
+  };
+
+  test("reading only what the plan names gives the check's own answer, and a package's plan is what installs", async () => {
+    const view = { "hivemind-view.json": JSON.stringify({ id: "@ada/graph", entry: "index.html", icon: "icon.svg" }), "index.html": "<p>", "icon.svg": "<svg/>", "README.md": "# Graph" };
+    for (const files of [kit(), widget(), view, { ...kit(), "pet/widget.json": "{" }, { ...widget(), "big.bin": new Uint8Array((2 << 20) + 1) }]) {
+      const { plan, check } = await readByPlan(files);
+      expect(check ?? plan).toEqual(await checkPluginFolder(folder(files)));
+    }
+    expect((await readByPlan(kit())).plan).toEqual({ read: ["hivemind-package.json", "README.md", "LICENSE", "pet/widget.json", "pet/widget.js", "pet/pet.svg", "graph/dist/hivemind-view.json", "graph/dist/index.html"] });
+  });
+
+  test("a package's manifest is read first, and what it leaves out counts toward no limit", async () => {
+    const files = kit(Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`graph/src/f${i}.ts`, ""])));
+    const sized = folder(files).map((f) => ({ path: f.path, bytes: f.bytes.byteLength }));
+    expect(planRead(sized)).toEqual({ read: ["hivemind-package.json"] });
+    // A manifest that cannot be read is all there is to read; the check then says what is wrong with it.
+    expect(planRead(sized, "{")).toEqual({ read: ["hivemind-package.json"] });
+    expect(await problem({ ...files, "hivemind-package.json": "{" })).toBe("hivemind-package.json is not valid JSON");
+    // 300 sources beside it, 8 files that install: taken.
+    expect((await plugin(files)).files).toHaveLength(8);
+    // What installs is held to the limits.
+    const many = kit(Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`pet/f${i}.svg`, ""])));
+    expect(planRead(folder(many).map((f) => ({ path: f.path, bytes: f.bytes.byteLength })), pkg())).toEqual({ problem: "a plugin may have at most 200 files" });
+    expect(await problem(many)).toBe("a plugin may have at most 200 files");
+  });
+
+  test("a folder the paths alone refuse is refused before anything is read", () => {
+    const sized = (paths: string[]) => paths.map((path) => ({ path, bytes: 1 }));
+    expect(planRead([])).toEqual({ problem: "the folder is empty" });
+    expect(planRead(sized(["index.js", "notes.txt"]))).toEqual({ problem: "no hivemind-package.json, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder" });
+    expect(planRead(sized(["widget.json", "Widget.json"]))).toEqual({ problem: "Widget.json is listed twice" });
+    expect(planRead([{ path: "widget.json", bytes: 1 }, { path: "a.bin", bytes: (2 << 20) + 1 }])).toEqual({ problem: "a.bin is larger than 2 MB" });
+  });
+
+  test("a listing without a hash or a text the check reads is refused, never read as missing", async () => {
+    const listing = await Promise.all(folder(widget({ icon: "pet.svg" })).concat(folder({ "pet.svg": "<svg/>" })).map((f) => listedFile(f.path, f.bytes)));
+    expect("plugin" in (await checkPluginListing(listing))).toBe(true);
+    const without = (path: string, key: "text" | "sha256") => listing.map((f) => (f.path === path ? { ...f, [key]: undefined } : f)) as typeof listing;
+    expect(await checkPluginListing(without("pet.svg", "text"))).toEqual({ problem: '"pet.svg" was listed without its text' });
+    expect(await checkPluginListing(without("widget.json", "text"))).toEqual({ problem: '"widget.json" was listed without its text' });
+    expect(await checkPluginListing(without("widget.js", "sha256"))).toEqual({ problem: '"widget.js" was listed without its SHA-256' });
+  });
+
+  test("a view's icon is listed as a widget's is: a small SVG kept, a picture linked, a large SVG not shown", async () => {
+    const view = (icon: string, body: string | Uint8Array) => plugin({ "hivemind-view.json": JSON.stringify({ id: "@ada/graph", entry: "index.html", icon }), "index.html": "<p>", [icon]: body });
+    expect(await view("icon.svg", "<svg/>")).toMatchObject({ icon: { image: `data:image/svg+xml;base64,${btoa("<svg/>")}` }, iconFile: null });
+    expect(await view("icon.png", new Uint8Array(8))).toMatchObject({ icon: null, iconFile: "icon.png" });
+    expect(await view("icon.svg", `<svg>${" ".repeat(16 << 10)}</svg>`)).toMatchObject({ icon: null, iconFile: null });
   });
 });
 

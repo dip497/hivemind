@@ -122,3 +122,18 @@ export function checkPackageManifest(raw: unknown): { manifest: PackageManifest 
 
 /** Whether member `id` is the package owner's, as every member of a package must be. */
 export const ownedBy = (packageId: string, id: string): boolean => id.startsWith(`${packageId.slice(0, packageId.indexOf("/"))}/`);
+
+/** The folders a package's members are in, as its manifest names them. */
+export const memberFolders = (m: PackageManifest): string[] =>
+  MEMBER_FORMATS.filter((f) => f.manifest).flatMap((f) => entriesOf(m, f).map((e) => (e as FolderEntry).path.replace(/\/$/, "")));
+
+/** A file of the package itself, beside its manifest and its members: its README and licence. */
+const OWN_FILE = /^(?:readme|licen[cs]e|copying|notice)(?:\.[a-z]+)?$/i;
+
+/** What a package lists, so what installs: its manifest, its own README and licence, and its
+ *  members' folders. Anything else beside them (sources, build scripts, notes) is left out: the app
+ *  never downloads it, a view can never fetch it, and it counts toward no limit. */
+export function packageFiles<T extends { path: string }>(m: PackageManifest, files: readonly T[]): T[] {
+  const folders = memberFolders(m);
+  return files.filter((f) => f.path === PACKAGE_MANIFEST || OWN_FILE.test(f.path) || folders.some((a) => a === "." || f.path.startsWith(`${a}/`)));
+}
