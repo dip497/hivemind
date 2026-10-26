@@ -12,4 +12,4 @@ from .errors import ApiError
 from .places import default_token, default_workspace, drive_socket_path
 
 __all__ = ["ApiError", "Client", "connect", "default_token", "default_workspace", "drive_socket_path"]
-__version__ = "2026.10.5"
+__version__ = "2026.10.6"

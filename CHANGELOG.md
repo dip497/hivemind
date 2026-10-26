@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.10.6] — 2026-10-26
+
 - Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.
 - Fixed: the first terminal you open on a machine without `hive` runs there over plain ssh. It used to stop at once with "this terminal is not running on the machine it belongs to" while the next one worked.
 - Changed: Hivemind puts its own `hive` on a machine you reach over ssh, in `~/.hivemind/bin/<version>/`, the first time it connects, and its new version after you update. **Install hive**, **Update hive** and "the hive on this machine is older than this app" are gone.
@@ -2125,7 +2127,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.5...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.6...HEAD
+[2026.10.6]: https://github.com/dip497/hivemind/releases/tag/v2026.10.6
 [2026.10.5]: https://github.com/dip497/hivemind/releases/tag/v2026.10.5
 [2026.10.4]: https://github.com/dip497/hivemind/releases/tag/v2026.10.4
 [2026.10.3]: https://github.com/dip497/hivemind/releases/tag/v2026.10.3

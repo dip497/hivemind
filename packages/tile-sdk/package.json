@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/tile-sdk",
-  "version": "2026.10.5",
+  "version": "2026.10.6",
   "description": "Write a hivemind tool plugin: the contract its tiles are drawn by, loaded into the app.",
   "license": "MIT",
   "type": "module",
