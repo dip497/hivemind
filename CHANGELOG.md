@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: an upgrade restarts a running network server (`hive-net serve`) through its systemd user service, so it runs the new build and serves the new phone page. Before, it kept the old build until it was restarted by hand, and messages from the phone showed as sent but never arrived. One no service holds is named, with its pid.
 ## [2026.10.6] — 2026-10-26
 
 - Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.

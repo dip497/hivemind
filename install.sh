@@ -442,6 +442,25 @@ trap cleanup_tmp EXIT INT TERM
 rm -rf "$APP_DIR"/sdk.*.new 2>/dev/null || true
 rm -f "$APP_DIR"/hive.*.new "$APP_DIR"/hive-net.*.new "$APP_DIR"/hivemind.AppImage.*.new "$APP_DIR"/hivemind.app.*.new 2>/dev/null || true
 
+# A network server (`hive-net serve`) keeps running the build it started with, and serves its
+# phone page, until it starts again: the systemd user service holding it is restarted, and one
+# nothing would restart is named.
+restart_net_servers() {
+  [ -d /proc ] || return 0
+  local f pid cmd unit
+  for f in /proc/[0-9]*/cmdline; do
+    cmd=" $(tr '\0' ' ' < "$f" 2>/dev/null) " || continue
+    case "$cmd" in *" $APP_DIR/hive-net serve "*|*" $BIN_DIR/hive-net serve "*) ;; *) continue ;; esac
+    pid=${f#/proc/}; pid=${pid%/cmdline}
+    unit=$(systemctl --user status "$pid" 2>/dev/null | sed -n '1s/^[^[:alnum:]]*\([^ ]*\.service\) .*/\1/p') || unit=""
+    if [ -n "$unit" ] && [ "${unit#user@}" = "$unit" ] && systemctl --user restart "$unit" 2>/dev/null; then
+      ok "restarted $unit, so the network server runs this build"
+    else
+      warn "hive-net (pid $pid) still runs the build before: restart it to finish"
+    fi
+  done
+}
+
 # hive-net, beside hive: this machine's device on the network (R10). Its release build is
 # allowed to fail on its own, so a release without it installs the rest, and one installed
 # before stays.
@@ -452,6 +471,7 @@ install_net() {
     mv -f "$NET_TMP" "$APP_DIR/hive-net"
     ln -sf "$APP_DIR/hive-net" "$BIN_DIR/hive-net"
     ok "linked $BIN_DIR/hive-net → $APP_DIR/hive-net"
+    restart_net_servers
   else
     rm -f "$NET_TMP"
     warn "hive-net is not in $TAG; the rest is installed without it"
