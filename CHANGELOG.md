@@ -15,6 +15,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Fixed: the line under an agent in **Layers** is what the agent last said, as you would read it: never your own message (or one added for you, such as "This session is being continued…"), and without markdown marks such as `**` or `` ` ``.
 - Changed: a row in **Layers** is one line high unless its agent waits on you; what a terminal or agent last showed is in the row's hover card. **View ▸ Lines** is **Needs you** (the default) or **Off**.
 - Fixed: an upgrade restarts a running network server (`hive-net serve`) through its systemd user service, so it runs the new build and serves the new phone page. Before, it kept the old build until it was restarted by hand, and messages from the phone showed as sent but never arrived. One no service holds is named, with its pid.
+- Fixed: text you select with the mouse in Claude Code (fullscreen) is copied every time. A program in a terminal may now put text on the clipboard (OSC 52) while you are at that terminal; asking to read it is refused. Before, the copy landed only when Claude Code's own fallback happened to work.
 ## [2026.10.6] — 2026-10-26
 
 - Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.
