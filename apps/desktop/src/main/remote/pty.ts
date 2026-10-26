@@ -45,7 +45,6 @@ interface Callbacks {
 }
 
 const remotePtys = new Map<string, nodePty.IPty>();
-let remotePidSeq = 0;
 
 // ── remote daemon route ─────────────────────────────────────────────────────
 
@@ -282,7 +281,8 @@ async function spawnThroughDaemon(opts: SpawnOpts, target: RemoteTarget, cb: Cal
     cb.onExit(exitCode, signal);
   });
   remotePtys.set(opts.tileId, p);
-  return { pid: -(++remotePidSeq) };
+  // The local ssh's pid, never 1, so it cannot read as -1, "no such session".
+  return { pid: -p.pid };
 }
 
 export function writeRemotePty(tileId: string, data: string, paste?: boolean): void {

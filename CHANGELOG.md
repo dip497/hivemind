@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: the first terminal you open on a machine without `hive` runs there over plain ssh. It used to stop at once with "this terminal is not running on the machine it belongs to" while the next one worked.
 - Fixed: the large QR code in **Settings ▸ Connect** is white to its edges in every theme; in a dark one it sat in a dark ring, as the dialog's own surface drew over its paper. The widgets button (bottom right) and a package's **Roll back to …** button now light up on hover, as other buttons do.
 - Fixed: a theme's font shows by name in **Settings ▸ Appearance**, with the theme's, such as "Nunito · Harbour", instead of "Custom…" and a field holding its CSS font list. A font list you typed still shows as **Custom…** with its field, and the closed menu reads its first font.
 - Fixed: a package that opens with a view (Archipelago) offers it after `hive plugins install` too, not only after an install from **Settings → Plugins**: "Archipelago is installed. Open Archipelago?" appears once in the corner of the window, at once if the app is open or the next time it starts, and **Open** switches to it. The install prints the view and `hive ctl plugin open view:<id>`, which switches the running app; `--json` gives them as `startView`. The app never switches the view by itself.
