@@ -13,6 +13,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Fixed: `hive plugins check` counts a package's files that install against HiveHub's 200-file limit, leaving out the dot files HiveHub leaves out; it checked only their sizes. A package manifest over 256 KB is refused for its size, not as missing. An SVG icon that is not UTF-8 is no longer listed larger than the index takes, which left its plugin out of the catalog.
 
 - Fixed: the line under an agent in **Layers** is what the agent last said, as you would read it: never your own message (or one added for you, such as "This session is being continued…"), and without markdown marks such as `**` or `` ` ``.
+- Changed: a row in **Layers** is one line high unless its agent waits on you; what a terminal or agent last showed is in the row's hover card. **View ▸ Lines** is **Needs you** (the default) or **Off**.
 ## [2026.10.6] — 2026-10-26
 
 - Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.

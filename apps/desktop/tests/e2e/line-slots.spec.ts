@@ -34,12 +34,17 @@ test("a shell's last line shows in the slot a view left for it, drawn by the app
   const term = page.locator(".react-flow__node-terminal");
   await expect(term).toHaveCount(1);
   await term.locator(".xterm-screen").click();
-  // The Layers row shows it once the shell ran it: then main has it.
+  // The Layers row's hover card shows it once the shell ran it: then main has it.
   await expect.poll(async () => {
     await page.keyboard.type("echo $((200+14)) tests passed\n");
-    const line = page.locator('aside[aria-label="Layers"] [data-layer-line]');
-    return (await line.count()) ? line.first().textContent() : null;
-  }, { timeout: 30_000, intervals: [2_500] }).toBe("214 tests passed");
+    await page.mouse.move(0, 0);
+    await page.locator('aside[aria-label="Layers"] [data-layer-tile]').first().hover();
+    const line = page.locator("[data-layers-card-line]");
+    await line.waitFor({ timeout: 1_500 }).catch(() => {});
+    const text = (await line.count()) ? await line.textContent() : null;
+    await term.locator(".xterm-screen").click();
+    return text;
+  }, { timeout: 30_000, intervals: [1_000] }).toBe("214 tests passed");
 
   await page.locator("[data-view-switch]").click();
   await page.locator('[data-view-choice="line-slots"]').click();
