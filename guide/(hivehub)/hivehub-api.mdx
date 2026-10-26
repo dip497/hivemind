@@ -160,10 +160,11 @@ Its errors are those of [one plugin](#one-plugin).
 `POST /api/publish`. Two steps: send the request without `confirm` to see what would be listed,
 then again with `"confirm": true` to list it. The web form and `hivehub publish` both do this.
 
-HiveHub reads at most about 30 files or 2 MB of a folder in one request. With `"steps": true`, a
-larger folder is read over several: until it is read, each answer is a `reading`, and you send the
-same request again with that `reading` added. The preview carries a `reading` too. Send it with
-`"confirm": true` to publish what you were shown, without the folder being read again.
+HiveHub reads about 30 files of a folder in one request. With `"steps": true`, a larger folder is
+read over several, about 30 files or 2 MB each: until it is read and checked, each answer is a
+`reading`, and you send the same request again with that `reading` added. The preview carries a
+`reading` too. Send it with `"confirm": true` to publish what you were shown, without the folder
+being read again; HiveHub still asks GitHub that you can push.
 
 ```bash
 curl -s https://hivehub.griiken.workers.dev/api/publish \
@@ -188,8 +189,8 @@ curl -s https://hivehub.griiken.workers.dev/api/publish \
 | `path` | The plugin's folder in the repository. | the top of it |
 | `description` | The one line on its card, at most 400 characters. Empty keeps the line it has, or uses the manifest's `description` the first time. | |
 | `confirm` | `true` to publish. Anything else returns the preview. | |
-| `steps` | `true` to read a large folder over several requests. Without it, a folder one request cannot read is refused. | |
-| `reading` | The `reading` from the last answer, sent back unchanged. It is good for one hour, for the account it was read for. | |
+| `steps` | `true` to read a large folder over several requests. Without it, a folder of more than about 30 files is refused. | |
+| `reading` | The `reading` from the last answer, sent back unchanged. It is good for one hour from the first request, for the account it was read for. | |
 
 **Response:** `{"preview": {...}, "reading": "…"}` without `confirm`, with the fields of
 [one plugin](#one-plugin) that describe it (`id`, `type`, `name`, `description`, `version`,
@@ -207,7 +208,7 @@ Only with `confirm` does it check that nobody else has the id.
 |---|---|---|
 | 400 | `expected JSON` | The body is not JSON. |
 | 400 | `give a repository as owner/name` | No `repo`, or not `owner/name`. |
-| 400 | `that reading is not one HiveHub gave you in the last hour — start again without it` | The `reading` was changed, is more than an hour old, or was read for another account. |
+| 400 | `that reading is not one HiveHub gave you in the last hour — start again without it` | The `reading` was changed, was first read more than an hour ago, or was read for another account. |
 | 400 | `that reading is of <repo> at <folder>, not this request's folder — start again without it` | The `reading` is of another folder. |
 | 401 | `sign in to publish` | No sign-in. |
 | 401 | `your GitHub sign-in expired — sign in again` | A web sign-in more than 8 hours old. |
@@ -216,7 +217,8 @@ Only with `confirm` does it check that nobody else has the id.
 | 422 | `you do not have write access to <repo>` | Your account cannot push to it. |
 | 422 | `that is not a folder in the repository` | `path` is not a plain folder path. |
 | 422 | `nothing to publish at <folder> in <repo>` | The folder is empty or missing. |
-| 422 | `this folder has <n> files to read, more than one request reads, and this client reads in one — …` | A large folder sent without `steps`. Get the current `hivehub`, or publish from the web form. |
+| 422 | `this folder has <n> files to read, more than one request reads, and this client reads in one — …` | A folder of more than about 30 files sent without `steps`. Get the current `hivehub`, or publish from the web form. |
+| 422 | `this folder's manifests and README are too large to read over several requests` | Its manifests, README and icon come to more than a `reading` holds, 512 KB. |
 | 422 | `a plugin may have at most 200 files`, `a plugin folder may be at most 8 MB`, `<file> is larger than 2 MB` | Over a [limit](#limits). |
 | 422 | `no hivemind-package.json, agent.yaml, hivemind-view.json, widget.json or hivemind-tool.json in that folder` | No manifest. |
 | 422 | A manifest problem, such as `widget.json needs a "version", like "1.0.0"` | The manifest is one Hivemind would refuse. |
