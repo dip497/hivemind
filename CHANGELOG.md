@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: the line under an agent in **Layers** is what the agent last said, as you would read it: never your own message (or one added for you, such as "This session is being continued…"), and without markdown marks such as `**` or `` ` ``.
 ## [2026.10.6] — 2026-10-26
 
 - Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.
