@@ -10,7 +10,7 @@ Run agents on a bigger or always-on computer while you watch them from your own.
 1. Ask me for the ssh destination (\`user@host\` or an alias from \`~/.ssh/config\`), a short name for it, and the folder on it to open.
 2. Check ssh works without questions: \`ssh -o BatchMode=yes user@host true\`. If it asks about the host key or for a password, stop. Ask me to run \`ssh user@host\` once myself and answer it. Never type a password.
 3. Check the platform: \`ssh user@host uname -sm\`. It must be Linux (x86_64 or arm64) or macOS on arm64. Otherwise stop and tell me.
-4. Add it: \`hive machine add user@host --label <name> --install\`. Then \`hive machine check <name>\` must print \`<name>: reachable\`, the platform and a hive version.
+4. Add it: \`hive machine add user@host --label <name>\`. It puts this version's \`hive\` there. Then \`hive machine check <name>\` must print \`<name>: reachable\`, the platform and a hive version.
 5. With the Hivemind app open, open the folder as a frame: \`hive ctl frame add --machine <name> --folder <full path> --name <frame name>\`.
 6. Ask me which agent to start there. Its program must be installed on that machine: check with \`ssh user@host command -v <agent program>\`. Start it with \`hive ctl spawn --frame <frame name> --agent <agent> --prompt "<task>"\` only if I gave a task.
 
@@ -33,15 +33,15 @@ Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A
     1. Open the <Tooltip tip="The list beside the canvas of your projects, frames and tiles." cta="Glossary" href="/glossary#layers-panel">Layers panel</Tooltip> (⌘B / Ctrl+B) and choose **Machines**.
     2. Press **New machine**.
     3. Fill in **Host** (`user@host` or an ssh alias) and **Name**.
-    4. Leave **Install hive if missing** on, and press **Add**.
+    4. Press **Add**. Hivemind puts its own `hive` on the machine.
 
     Check: the machine shows in the **Machines** pane, not grey.
   </Tab>
   <Tab title="In a terminal">
-    1. Add it, and install `hive` there if it is missing:
+    1. Add it. `hive` puts its own version there:
 
        ```bash
-       hive machine add dev@build-box --label build --install
+       hive machine add dev@build-box --label build
        ```
 
     2. Check it:
@@ -50,12 +50,12 @@ Hivemind uses your own OpenSSH: your keys, your ssh agent and `~/.ssh/config`. A
        hive machine check build
        ```
 
-       It prints a line like `build: reachable, linux-x86_64, 2026.10.3 at /home/dev/.local/bin/hive`.
+       It prints a line like `build: reachable, linux-x86_64, hive 2026.10.6 at /home/dev/.hivemind/bin/2026.10.6/hive`.
   </Tab>
 </Tabs>
 
 <Frame caption="Add a machine">
-  <img src="/images/app/new-machine.dark.webp" alt="The Add a machine dialog: Host for user@host or an ssh config alias, an optional Name, Use a password instead, and Install hive if missing switched on." />
+  <img src="/images/app/new-machine.dark.webp" alt="The Add a machine dialog: Host for user@host or an ssh config alias, an optional Name, and Use a password instead." />
 </Frame>
 
 ## Open a folder on it
@@ -91,6 +91,19 @@ hive run --machine build --cwd /srv/web -- npm test
 hive kill <session> --machine build
 ```
 
+## Nothing to install or update there
+
+Hivemind keeps `hive` on the machine itself, one copy per version in `~/.hivemind/bin/`. When you
+update the app, it puts its new version there the next time it connects, and keeps the two
+before it.
+
+## Several people on one login
+
+People who log in to a machine as the same user each get their own terminals there, in
+`~/.hivemind/people/<person>/`. One person's update never stops another's agents. They are kept
+apart, not hidden: anyone on that login can still open the other folders. For privacy, give each
+person a login of their own.
+
 ## Manage it
 
 A machine's ⋯ menu in the **Machines** pane has:
@@ -99,7 +112,7 @@ A machine's ⋯ menu in the **Machines** pane has:
 |---|---|
 | **Check now** | Connects again and checks it. |
 | **Pause** | Stops connecting. Nothing on the machine stops. **Resume** connects again. |
-| **Manage machines…** | Edit it, **Install hive**, **Update hive** or **Remove…** it. |
+| **Manage machines…** | Edit it, set its password, or **Remove…** it. |
 
 To be told when an agent there needs you, even with your laptop closed, run this on the machine:
 
@@ -114,7 +127,7 @@ hive push test
 |---|---|
 | The machine is grey | It is paused or unreachable. Press **Check now**. |
 | **Sign in** on the machine | It asks for a password. Give it once, or set up an ssh key. |
-| `hive is not installed on …` | Add it again with `--install`, or turn on **Install hive if missing**. |
+| **hive could not be put there** | The machine has no `curl` or `wget`, or its disk is full. Fix that and press **Check now**; until then its terminals end when the connection drops. |
 | `unsupported remote platform` | Windows cannot be a machine. |
 
 More in [Troubleshooting](/troubleshooting).

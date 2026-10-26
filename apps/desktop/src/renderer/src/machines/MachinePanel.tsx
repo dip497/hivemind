@@ -72,7 +72,7 @@ export default function MachinePanel({ anchor, uri, frameId, onUnbind, onClose }
       )}
       {status.state === "no-hive" && (
         <p className="mx-1 rounded-md bg-[var(--color-bg)] px-2 py-1.5 text-count text-[var(--color-fg2)]">
-          No <span className="font-mono">hive</span> there, so terminals stop when the connection drops. Install it from Machines.
+          <span className="font-mono">hive</span> could not be put there{status.detail ? ` (${status.detail})` : ""}, so terminals stop when the connection drops.
         </p>
       )}
       <div className="h-px bg-[var(--color-line2)] my-0.5" />

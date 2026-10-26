@@ -139,7 +139,7 @@ On macOS, the installer does not replace a running app. Quit Hivemind before `hi
 
 **Fix:** press **Sign in** on the machine, or run `ssh <user@host>` once to accept its host key. Then run `hive machine check <name>`: it shows what it finds.
 
-If its terminals end whenever the connection drops, the machine has no `hive`. Use **Manage machines… → Install hive**.
+If its terminals end whenever the connection drops, `hive` could not be put on the machine. **Manage machines…** says why: often no `curl` or `wget`, or a full disk.
 
 **Check:** `hive machine check <name>` prints the machine's platform and `hive` version.
 

@@ -48,7 +48,7 @@ import { agentAllowedIn, loadAgents, toWire } from "@hivemind/agents/load";
 import * as ptyDaemon from "./daemon-client.js";
 import { isRemote, parseDeviceUri, type RemoteTarget } from "@hivemind/core/remote-uri";
 import { savedAuth } from "./remote/saved-hosts.js";
-import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, installOnMachine, linkState, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
+import { addMachine, checkMachine, deviceStatus, editMachine, initMachines, linkState, machineSessions, reconnectMachineHost, removeMachine, setMachinePassword, snapshot as machinesSnapshot, updateMachine } from "./remote/machines.js";
 import { deviceSessions } from "@hivemind/host/device-sessions";
 import { remoteTarget } from "@hivemind/host/remote/targets";
 import {
@@ -82,7 +82,7 @@ import { appViewsDir, handleViewProtocol, listViewPackages, startViewWatchdog, V
 import { installSettingsIpc, reloadSettings, getSettings as getAppSettings, onSettingsChange, settingsFile, settingsBusy, settingsSettled } from "./settings-store.js";
 import { followWindowLook, initialWindowBackground } from "./window-look.js";
 import { flushWorkspaceStore, installWorkspaceStoreIpc, storeFor, workspaceStore } from "./workspace-store-ipc.js";
-import { installIdentityIpc, machineIdentity } from "./identity.js";
+import { machineIdentity, suggestedName } from "./identity.js";
 import { defaultShellFor } from "@hivemind/agent-host/shell-spec";
 import { agentFeed, dialDevice, homeLinesChanged, installNetworkIpc, isYourDevice, joinLink, knownMachines, machinesToRunOn, movedAway, openJoined, peopleHere, personName, shownFrom, stopNetwork, terminalMachine } from "./network.js";
 import { elsewhere, mayWriteShared, onceStarted, placedRun, refusedShared, startedByOthers, wroteShared } from "./shared-workspaces.js";
@@ -970,7 +970,6 @@ remoteConns.setAuthResolver((hostId) => {
 handle("machines:get", wrap(async () => machinesSnapshot()));
 handleEffect("machines:add", (req) => ({ target: named(req?.target) }), wrap(async (_e, req: MachineAddRequest) => addMachine(req)));
 handleEffect("machines:check", (id) => ({ target: named(id) }), wrap(async (_e, id: string) => checkMachine(String(id))));
-handleEffect("machines:install", (id) => ({ target: named(id) }), wrap(async (_e, id: string) => installOnMachine(String(id))));
 handleEffect("machines:update", (id) => ({ target: named(id) }), wrap(async (_e, id: string, patch: { label?: string; enabled?: boolean }) => updateMachine(String(id), patch ?? {})));
 handleEffect("machines:edit", (id, patch) => ({ target: named(id), detail: named(patch?.target) }), wrap(async (_e, id: string, patch: { target: string; label?: string; password?: string }) => editMachine(String(id), {
   target: String(patch?.target ?? ""),
@@ -1610,7 +1609,10 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     installSettingsIpc(broadcast);
     followWindowLook();
     installBrowserApp(path.join(__dirname, "../renderer"), getAppSettings, onSettingsChange);
-    installIdentityIpc();
+    handle("identity:get", async () => {
+      const { deviceId, personId } = machineIdentity();
+      return { deviceId, personId, suggestedName: await suggestedName() };
+    });
     // The person's other devices run terminals here in this computer's daemon, when it has one.
     // A participant who lends their machine's keyboards, or keeps them again (M4).
     installNetworkIpc(workspaceServer, {
@@ -1631,7 +1633,6 @@ if (process.argv.slice(1).some((a) => a === "upgrade" || a === "--upgrade")) {
     void initMachines({
       send: (snap) => broadcast("machines:changed", snap),
       listLocalSessions: () => ptyDaemon.listSessions(),
-      version: app.getVersion(),
     }).catch((e: unknown) => console.warn("[machines] init failed:", e));
     installViewManagementIpc();
     installWidgetIpc();

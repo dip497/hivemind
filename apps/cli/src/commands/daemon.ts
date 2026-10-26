@@ -63,6 +63,9 @@ async function runForeground(sock: string): Promise<never> {
   // The daemon runs agents' hooks through hive-net when it is named here.
   const hiveNet = hiveNetBin();
   if (hiveNet) process.env.HIVEMIND_HIVE_NET = hiveNet;
+  // The agents in its terminals reach this same `hive`, wherever it is kept.
+  const self = compiledSelf();
+  if (self) process.env.PATH = `${path.dirname(self)}${path.delimiter}${process.env.PATH ?? ""}`;
   await import("@hivemind/agent-host/pty-daemon");
   return new Promise<never>(() => { /* the daemon owns the process now */ });
 }

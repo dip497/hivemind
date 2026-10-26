@@ -9,7 +9,6 @@ import os from "node:os";
 import path from "node:path";
 import { adoptPerson, machineKeys, type MachineKeys } from "@hivemind/workspace-host/keyring";
 import type { Seed } from "@hivemind/workspace-host/identity";
-import { handle } from "./app-ipc.js";
 
 let keys: MachineKeys | null = null;
 const dir = () => path.join(app.getPath("userData"), "identity");
@@ -35,19 +34,12 @@ export async function displayName(profileName: string): Promise<string> {
 
 /** The name to offer while the profile has none: git's global `user.name`, else this machine's
  *  account name. */
-function suggestedName(): Promise<string> {
+export function suggestedName(): Promise<string> {
   return new Promise((resolve) => {
     execFile("git", ["config", "--global", "--get", "user.name"], { timeout: 5_000 }, (err, stdout) => {
       const name = err ? "" : stdout.trim();
       if (name) return resolve(name);
       try { resolve(os.userInfo().username); } catch { resolve(""); }
     });
-  });
-}
-
-export function installIdentityIpc(): void {
-  handle("identity:get", async () => {
-    const { deviceId, personId } = machineIdentity();
-    return { deviceId, personId, suggestedName: await suggestedName() };
   });
 }

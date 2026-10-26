@@ -1,5 +1,5 @@
 // Machines, end to end against a real OpenSSH server this spec starts on 127.0.0.1 with its own
-// keys, agent and remote $HOME: add a machine (hive installed over ssh), run a frame on it, adopt a
+// keys, agent and remote $HOME: add a machine (this version's hive put there), run a frame on it, adopt a
 // job started with `hive run` there, lose the server and get it back. A frame names the machine it
 // runs on, not its address (R9): the address edited, the frame follows; the machine removed, the
 // frame goes back to the address, still running there; saved again, it is on the new machine.
@@ -34,7 +34,13 @@ let port = 0;
 /** The terminal opened on the machine (the canvas also has a local one). */
 let remoteTile = "";
 const sshdCfg = () => path.join(dir, "sshd_config");
-const rhive = () => path.join(dir, "rhome/.local/bin/hive");
+const VERSION = (JSON.parse(fs.readFileSync(path.join(APP_DIR, "package.json"), "utf8")) as { version: string }).version;
+/** This person's `hive` on the machine, as the app runs it there: its version, in its person's folder. */
+const rhive = () => {
+  const people = path.join(dir, "rhome/.hivemind/people");
+  const [person] = fs.readdirSync(people);
+  return `HIVEMIND_APP_DATA=${path.join(people, person!)} ${path.join(dir, "rhome/.hivemind/bin", VERSION, "hive")}`;
+};
 const remote = (cmd: string) => execFileSync("ssh", ["-F", path.join(dir, "ssh_config"), "-T", "rtest", cmd], { encoding: "utf8", timeout: 30_000 });
 const startSshd = () => execFileSync(SSHD, ["-f", sshdCfg()]);
 const sshdPid = () => Number(fs.readFileSync(path.join(dir, "sshd.pid"), "utf8"));
@@ -66,7 +72,7 @@ test.beforeAll(async () => {
   fs.writeFileSync(sshdCfg(), [
     `Port ${port}`, "ListenAddress 127.0.0.1", `HostKey ${dir}/host_key`, `AuthorizedKeysFile ${dir}/authorized_keys`,
     `PidFile ${dir}/sshd.pid`, "PasswordAuthentication no", "KbdInteractiveAuthentication no", "UsePAM no", "StrictModes no", "LogLevel ERROR",
-    `SetEnv HOME=${dir}/rhome XDG_CONFIG_HOME=${dir}/rhome/.config HIVEMIND_PTY_SOCK=${dir}/r.sock PATH=${dir}/rbin:/usr/local/bin:/usr/bin:/bin`, "",
+    `SetEnv HOME=${dir}/rhome XDG_CONFIG_HOME=${dir}/rhome/.config PATH=${dir}/rbin:/usr/local/bin:/usr/bin:/bin`, "",
   ].join("\n"));
   fs.writeFileSync(path.join(dir, "ssh_config"), [
     "Host rtest", "  HostName 127.0.0.1", `  Port ${port}`, `  IdentityFile ${dir}/client_key`, "  IdentitiesOnly yes",
@@ -100,14 +106,14 @@ test.afterAll(async () => {
   try { remote(`${rhive()} daemon stop`); } catch { /* not running */ }
   // The "remote" daemon is a local process; its socket path is unique to this spec. So is the
   // app's own daemon's, which outlives the app.
-  spawnSync("pkill", ["-f", `${dir}/r.sock`]);
+  spawnSync("pkill", ["-f", `${dir}/rhome/.hivemind/`]);
   stopDaemons(dir);
   try { const listener = sshdPid(); spawnSync("pkill", ["-P", String(listener)]); process.kill(listener); } catch { /* not running */ }
   if (agentPid) try { process.kill(agentPid); } catch { /* gone */ }
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test("add a machine: probe, install hive over ssh, save", async () => {
+test("add a machine: probe, put this version's hive there, save", async () => {
   test.setTimeout(180_000);
   await page.locator('.hm-layers [data-layers-rail="machines"]').click();
   await page.locator('[data-layers-action="machine"]').click();
@@ -116,7 +122,7 @@ test("add a machine: probe, install hive over ssh, save", async () => {
   await page.getByRole("button", { name: "Add", exact: true }).click();
   const row = page.locator('ul[aria-label="machines"] li', { hasText: "build-box" });
   await expect(row).toContainText("online", { timeout: 150_000 });
-  expect(fs.existsSync(rhive())).toBe(true);
+  expect(fs.existsSync(path.join(dir, "rhome/.hivemind/bin", VERSION, "hive"))).toBe(true);
   await page.keyboard.press("Escape");
   // Layers is where machines live: listed before anything runs there, with its link and actions.
   const header = page.locator('.hm-layers [data-machine-header="build-box"]');

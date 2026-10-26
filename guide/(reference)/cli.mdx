@@ -345,9 +345,9 @@ hive kill <session>                     # end it and its process
 To add other computers over ssh. Guide: [Run agents on another computer](/machines).
 
 ```text
-hive machine add me@build-box [--label build] [--install]
+hive machine add me@build-box [--label build]
                                         # also an ssh alias or ssh://me@build-box:2222;
-                                        # --install puts hive in ~/.local/bin there when it is missing
+                                        # puts this version's hive in ~/.hivemind/bin there
 hive machine list
 hive machine check build                # reachable, platform, hive path and version
 hive machine rename build gpu-box

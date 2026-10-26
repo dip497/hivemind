@@ -9,9 +9,9 @@ reach it.
 
 <Diagram name="machines-paths" caption="Two ways to run on another machine" />
 
-- **Your computer** → **machine**: ssh, with your own `~/.ssh/config` and keys. The app runs `hive daemon bridge` there, which joins that machine's **background process**.
+- **Your computer** → **machine**: ssh, with your own `~/.ssh/config` and keys. The app puts its own version of `hive` there and runs `hive daemon bridge`, which joins your own **background process** on that machine. Each person who logs in as the same user has their own.
 - **Your computer** → **host**: hive-net, directly or through your relay. The host runs `hive host`, whose background process runs the workspace's terminals and agents.
-- A machine without `hive` gets plain ssh terminals, which end when the connection drops.
+- A machine `hive` cannot be put on gets plain ssh terminals, which end when the connection drops.
 
 ## Machine or host
 

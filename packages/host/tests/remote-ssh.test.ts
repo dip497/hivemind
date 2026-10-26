@@ -1,5 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { bridgeRemoteCommand, sshCommand } from "../src/remote/ssh.ts";
 import type { RemoteTarget } from "@hivemind/core/remote-uri";
 
@@ -46,6 +50,15 @@ test("a host or user that would read as an ssh option is refused", () => {
   assert.throws(() => sshCommand(target({ host: "gpu box" }), {}, paths, "CMD"), /invalid ssh host/);
 });
 
-test("the bridge runs hive by absolute path inside a login shell, quoted once per shell", () => {
-  assert.equal(bridgeRemoteCommand("/home/me/.local/bin/hive"), `exec bash -lc 'exec '\\''/home/me/.local/bin/hive'\\'' daemon bridge'`);
+test("the bridge runs this version's hive, in a login shell, as the person's own", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "hive-bridge-"));
+  try {
+    const at = path.join(home, ".hivemind", "bin", "2026.10.6");
+    fs.mkdirSync(at, { recursive: true });
+    fs.writeFileSync(path.join(at, "hive"), `#!/bin/sh\necho "$* for $HIVEMIND_APP_DATA"\n`, { mode: 0o755 });
+    const out = execFileSync("sh", ["-c", bridgeRemoteCommand("2026.10.6", "0123456789abcdef")], { env: { PATH: "/usr/bin:/bin", HOME: home }, encoding: "utf8" });
+    assert.equal(out.trim(), `daemon bridge for ${home}/.hivemind/people/0123456789abcdef`);
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 });

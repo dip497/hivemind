@@ -199,8 +199,6 @@ export interface MachineProbe {
 export interface MachineAddRequest {
   target: string;
   label?: string;
-  /** Put this version's `hive` there when it has none (or one too old). */
-  install?: boolean;
   /** For hosts without key auth; kept in the OS keychain, never in the catalog. */
   password?: string;
 }
@@ -725,10 +723,9 @@ export interface HiveIpc {
   // ── machines ──────────────────────────────────────────────
   machinesGet(): Promise<MachinesSnapshot>;
   onMachines(cb: (s: MachinesSnapshot) => void): () => void;
-  /** Probe, optionally install hive, then save. Errors starting `[attention]` need the user to run `ssh <target>` once. */
+  /** Reach it, put this version's hive there, then save. Errors starting `[attention]` need the user to run `ssh <target>` once. */
   machineAdd(req: MachineAddRequest): Promise<MachineAddResult>;
   machineCheck(id: string): Promise<MachineProbe>;
-  machineInstall(id: string): Promise<MachineProbe>;
   machineUpdate(id: string, patch: { label?: string; enabled?: boolean }): Promise<void>;
   /** Change where a machine is (tested before it is saved). The frames on it follow: they name the machine. */
   machineEdit(id: string, patch: { target: string; label?: string; password?: string }): Promise<{ machine: MachineInfo }>;
