@@ -49,6 +49,8 @@ The kit also holds the checks a plugin folder must pass. A hub built on the kit 
 
 A folder that fails, or that says it is another plugin than the one listed, is not installed, and the install says why.
 
+A hub that cannot read a whole folder in one go, such as one on a Cloudflare Worker, reads it a few files at a time. `firstReads` names the manifests and README at the folder's top, from its paths and sizes. With their texts, `planRead` names everything else to read, which for a package is only what installs, and the few files whose text the checks read. `listedFile` keeps each file's size, SHA-256 and, for those few, its text. `checkPluginListing` then gives the answer `checkPluginFolder` gives for the same files. Give it only the files `planRead` names: it holds every file it is given to the limits, so a package's sources beside its members would count.
+
 Each Hivemind release carries the kit as `hivemind-hub-<version>.tgz`. Its one dependency, `zod`, comes from npm. It runs in Node, Bun and a Cloudflare Worker. A hub depends on it by its address on the release, for example:
 
 ```bash

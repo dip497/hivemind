@@ -194,6 +194,8 @@ the line it has. Everyone who has the plugin sees **Update** on the **HiveHub** 
 | `you do not have write access to …` | Publish from an account that can push to the repository. |
 | `… but you are publishing as …` | Change the id in the manifest to your own account. |
 | `"…" is published by someone else` | That id is taken. Pick another name. |
+| `this folder has … files to read, more than one request reads, and this client reads in one` | Your `hivehub` is older than reading a large folder in steps. Get it again with the `curl` line above, then publish again. |
+| `that reading is not one HiveHub gave you in the last hour` | Publish again from the start. |
 | `only the agents repository's main branch publishes from CI` | Set `HIVEHUB_TOKEN` in the job. |
 | Something else | [Troubleshooting](/troubleshooting) |
 
