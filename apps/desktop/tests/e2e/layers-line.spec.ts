@@ -1,7 +1,7 @@
-// A terminal's Layers row says what its screen last showed, under its name
-// (docs/design/last-line-2026-10-23.md): the line its pty daemon read, kept by main and sent to the
-// window that watches that tile. Hidden, the panel watches nothing; shown again, it is answered the
-// line as it is, with nothing new printed.
+// A terminal's Layers row stays one line high while its agent waits on nothing; what its screen last
+// showed is in the row's hover card (docs/design/last-line-2026-10-23.md): the line its pty daemon
+// read, kept by main and sent to the window that watches that tile. Hidden, the panel watches nothing;
+// shown again, it is answered the line as it is, with nothing new printed.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -25,34 +25,45 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
 const panel = () => page.locator('aside[aria-label="Layers"]');
+/** The line the row's hover card shows, the card opened afresh. */
+const cardLine = async () => {
+  await page.mouse.move(0, 0);
+  await panel().locator("[data-layer-tile]").hover();
+  await expect(page.locator("[data-layers-card]")).toBeVisible();
+  return page.locator("[data-layers-card-line]");
+};
+/** What the terminals draw on their canvas, read through the hook the app leaves on each. */
+const screens = () => page.evaluate(() => [...document.querySelectorAll(".xterm")]
+  .map((x) => (x.parentElement as (HTMLElement & { __hmScreen?: () => string }) | null)?.__hmScreen?.() ?? "").join("\n"));
 
-test("a shell's row shows the line it printed last; hidden and shown again, the panel shows it with no new output", async () => {
+test("a shell's row is one line high, and its hover card shows the line it printed last; hidden and shown again, the card shows it with no new output", async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   const term = page.locator(".react-flow__node-terminal");
   await expect(term).toHaveCount(1);
   await term.locator(".xterm-screen").click();
   const row = panel().locator("[data-layer-tile]");
   await expect(row).toHaveCount(1);
-  const line = row.locator("[data-layer-line]");
   // Worked out by the shell, so the line is what it printed, not the keys typed. Typed again until
   // the shell is up to run it: running it twice changes nothing.
   await expect.poll(async () => {
     await page.keyboard.type("echo $((200+14)) tests passed\n");
-    return (await line.count()) ? line.textContent() : null;
-  }, { timeout: 30_000, intervals: [2_500] }).toBe("214 tests passed");
-  // The row is two lines high while it has one.
-  await expect(row).toHaveCSS("height", "44px");
+    return screens();
+  }, { timeout: 30_000, intervals: [2_500] }).toContain("214 tests passed");
+  await expect(await cardLine()).toHaveText("214 tests passed", { timeout: 10_000 });
+  // Its agent waits on nothing: the row says nothing more under its name.
+  await expect(row.locator("[data-layer-line]")).toHaveCount(0);
+  await expect(row).toHaveCSS("height", "32px");
 
   await panel().locator("[data-layers-close]").click();
   await expect(panel()).toHaveCount(0);
   await page.getByRole("button", { name: "show layers" }).click();
-  await expect(panel().locator("[data-layer-tile] [data-layer-line]")).toHaveText("214 tests passed");
+  await expect(await cardLine()).toHaveText("214 tests passed");
 });
 
 // Hidden is kept for every window (localStorage): one that reloads into a hidden panel has no row
 // to say it watches nothing, while main still holds the watch its connection had before.
 test("a window that reloads with the panel hidden is sent no lines", async () => {
-  await expect(panel().locator("[data-layer-tile] [data-layer-line]")).toHaveText("214 tests passed");
+  await expect(await cardLine()).toHaveText("214 tests passed");
   await page.evaluate(() => localStorage.setItem("hivemind:layers-hidden", "1"));
   await page.reload();
   await page.waitForSelector(".react-flow", { timeout: 30_000 });
@@ -68,13 +79,11 @@ test("a window that reloads with the panel hidden is sent no lines", async () =>
   await term.locator(".xterm-screen").click();
   await page.keyboard.type("echo $((300+1)) after reload\n");
   // The terminal draws on a canvas: its screen is read through the hook the app leaves on it.
-  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll(".xterm")]
-    .map((x) => (x.parentElement as (HTMLElement & { __hmScreen?: () => string }) | null)?.__hmScreen?.() ?? "").join("\n")))
-    .toContain("301 after reload");
+  await expect.poll(screens).toContain("301 after reload");
   // Past the daemon's next read (1.2 s) and main's next send (250 ms).
   await page.waitForTimeout(3_000);
   expect(await page.evaluate(() => (window as unknown as { sent: number }).sent)).toBe(0);
   // Main had the line all along: shown, the panel is answered it.
   await page.getByRole("button", { name: "show layers" }).click();
-  await expect(panel().locator("[data-layer-tile] [data-layer-line]")).toHaveText("301 after reload");
+  await expect(await cardLine()).toHaveText("301 after reload");
 });
