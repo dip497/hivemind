@@ -9,6 +9,7 @@ import { installCrispDpr } from "./terminal-dpr";
 import { drawnSize, nextPtySize, resizeBurst, scaleToFit, type PtySize } from "./pty-size-sync";
 import { oscColorReply } from "./osc-color";
 import { answerThemeNotify, colorFgBg, isDarkBackground, ThemeNotify } from "./theme-notify";
+import { takeClipboardWrites } from "./terminal-clipboard";
 import { patchTerminalMouseWithRetry } from "./terminal-mouse-patch";
 import { wantsDomRenderer } from "./terminal-renderer-policy";
 import { registerWebglSlotClient, unregisterWebglSlotClient, reconcileWebglSlots } from "./webgl-slots";
@@ -836,6 +837,8 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // Mode 2031: the program asks to hear when the background goes light or dark, or asks now. One
     // for this mount, the restarts in it too; a later mount learns the mode from the replay.
     answerThemeNotify(term.parser, notify, (reply) => { if (kbRef.current.mayType) window.hive.ptyWrite(ptyId, reply); });
+    // What the program copies (Claude Code's mouse selection): only while the person is at this terminal.
+    takeClipboardWrites(term.parser, () => !!selectedRef.current && !!kbRef.current.mayType, (text) => { void navigator.clipboard.writeText(text).catch(() => {}); });
     // Clipboard COPY only. xterm doesn't copy on its own (Ctrl+C just sends
     // SIGINT): Cmd/Ctrl(+Shift)+C copies the selection (and clears it, so a
     // second press still sends SIGINT); plain Ctrl+C with NOTHING selected falls

@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: text you select with the mouse in Claude Code (fullscreen) is copied every time. A program in a terminal may now put text on the clipboard (OSC 52) while you are at that terminal; asking to read it is refused. Before, the copy landed only when Claude Code's own fallback happened to work.
 ## [2026.10.6] — 2026-10-26
 
 - Fixed: in **Add a machine**, a name typed as soon as the form opens stays in **Name**; it could land at the end of **Host**.
