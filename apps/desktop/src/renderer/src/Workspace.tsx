@@ -63,6 +63,7 @@ import { useStateWithRef } from "./use-state-with-ref";
 import { useBoard } from "./board-objects/useBoard";
 import type { BoardChoice, Point } from "./board-objects/board-model";
 import { useEnabledWidgetPackages, useShownWorkspace, useWidgetRuntime } from "./board-objects/widget-runtime";
+import { useViewBringsWidgets } from "./board-objects/view-widgets";
 import { BoardContext } from "./board-objects/board-context";
 import { markRestored, whenBootIdle } from "./boot-queue";
 /** How long the catalog check waits for restored tiles to start before going anyway: an agent
@@ -733,6 +734,8 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   }, []);
   const activeViewId = resolveViewId(useViewMode());
   useSharedDefaultView(persistKey, activeViewId);
+  // A package's view brings its widgets, once a workspace (after the board above is this workspace's).
+  useViewBringsWidgets({ repo: persistKey, joined: !!joinedId(repoPath ?? null), view: activeViewId, widgets: widgetPackages, board });
   const activeViewIdRef = useRef(activeViewId);
   activeViewIdRef.current = activeViewId;
   // View protocol 1.3: the event hub hears every tile whatever view is active. Off the first
