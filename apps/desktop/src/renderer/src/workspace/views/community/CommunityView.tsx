@@ -17,7 +17,7 @@ import { PORT_HANDSHAKE, type SurfaceRect, type LineRect, type ViewPermission } 
 import { viewSettingFields } from "@hivemind/view-sdk/manifest";
 import type { CommunityLink } from "@hivemind/view-host/link";
 import type { ViewPackageInfo } from "../../../../../shared/ipc";
-import type { WorkspaceViewProps } from "../../workspace-view";
+import { REVEAL_TILE, type WorkspaceViewProps } from "../../workspace-view";
 import { usePluginLink } from "../../plugin-link";
 import { LayersPanel } from "../../../LayersPanel";
 import { disableCommunityView } from "./registry";
@@ -95,6 +95,14 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
       setRects((rs) => rs.filter((r) => r.tileId !== tileId));
       send({ type: "undock", tileId });
     }, [send]);
+
+    // Someone asked to see a tile (a widget's button, a notification, `hive ctl focus`): this view
+    // owns its camera, so it is asked to show it.
+    useEffect(() => {
+      const show = (e: Event) => { const id = (e as CustomEvent<unknown>).detail; if (typeof id === "string") void link.reveal(id); };
+      window.addEventListener(REVEAL_TILE, show);
+      return () => window.removeEventListener(REVEAL_TILE, show);
+    }, [link]);
 
     // Test seam (same spirit as the World view's `__world`).
     useEffect(() => {

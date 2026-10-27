@@ -188,6 +188,10 @@ export const FALLBACK_VIEW_ID = "canvas";
 /** Window event, detail a tile id: put the keyboard in that tile if it is the selected one. */
 export const TILE_KEYBOARD = "hivemind:tile-keyboard";
 
+/** Window event, detail a tile id: someone asked to see that tile while a view package is on
+ *  screen, which owns its camera, so the view is asked to show it (its `reveal`). */
+export const REVEAL_TILE = "hivemind:reveal-tile";
+
 export function registerView(plugin: WorkspaceViewPlugin): void {
   views.set(plugin.id, plugin);
   changed();

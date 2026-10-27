@@ -159,12 +159,15 @@ It runs in a worker: no network, no files. What it draws and its state are each 
 | Node | Fields |
 |---|---|
 | `stack`, `row` | `children`; on the outermost `stack`, `tint` colours the card as a note: `yellow`, `peach`, `pink`, `violet`, `blue` or `green` |
-| `text` | `text`, `size: "large"`, `muted: true` |
+| `text` | `text`, `size: "large"`, `muted: true`, `wrap: true` |
 | `number` | `value`, `label` |
 | `meter` | `value`, `max`, `label` |
 | `button` | `label`, `action` |
 | `image` | `src` (an image in its folder), `w`, `h` |
 | `sprite` | `src` (a sheet of frames), `frameW`, `frameH`, `row`, `frames`, `fps`, `scale`, `flip` |
+
+A `text` or a button's `label` longer than the card is cut short with "…"; a button shows the whole
+label when the pointer rests on it. `wrap: true` wraps a `text` onto more lines instead.
 
 Images (`.png`, `.gif`, `.webp`, `.jpg`, `.svg`, up to 1 MB) go in the widget's folder.
 `"chrome": "none"` drops the card, for a pet that walks the screen.
@@ -207,6 +210,10 @@ permissions `widget.json` asks for:
 hive.hm.onEvents(["turn", "needsInput"], (e) => hive.notify(`${e.kind} in ${e.tileId}`));
 hive.on("hm", draw);
 ```
+
+A button that goes to an agent calls `hive.hm.commands.focusTile(tileId)`. The view on screen shows
+it: the canvas moves to the tile, and a view such as Archipelago is asked to show it (its
+`hm.onReveal`).
 
 An agent can run a command the widget declares under `"commands"`. The widget answers with
 `hive.hm.onCommand(name, handler)`:

@@ -124,7 +124,7 @@ function draw(node: unknown, id: string, images: Images, key: number | string = 
     case "image": return <Picture key={key} n={n} images={images} />;
     case "stack": return <div key={key} className={`flex min-w-0 flex-col gap-1.5${n.fill ? " h-full" : ""}`}>{kids}</div>;
     case "row": return <div key={key} className="flex min-w-0 items-center gap-2">{kids}</div>;
-    case "text": return <span key={key} className={`${n.wrap ? "min-w-0 whitespace-pre-wrap break-words" : "truncate"} ${n.size === "large" ? "text-heading font-semibold" : n.muted ? "text-count text-[var(--color-fg3)]" : "text-body"}`}>{str(n.text)}</span>;
+    case "text": return <span key={key} className={`min-w-0 ${n.wrap ? "whitespace-pre-wrap break-words" : "truncate"} ${n.size === "large" ? "text-heading font-semibold" : n.muted ? "text-count text-[var(--color-fg3)]" : "text-body"}`}>{str(n.text)}</span>;
     case "number": return <div key={key} className="flex flex-col"><span className="text-heading font-semibold tabular-nums leading-none">{str(n.value)}</span>{n.label != null && <span className="text-count text-[var(--color-fg3)]">{str(n.label)}</span>}</div>;
     case "meter": {
       const max = Math.max(num(n.max, 1), 1e-9);
@@ -136,8 +136,10 @@ function draw(node: unknown, id: string, images: Images, key: number | string = 
         </div>
       </div>;
     }
-    case "button": return <Button key={key} size="sm" variant="outline" className="nodrag nopan self-start"
-      onClick={() => pressWidget(id, n.action)}>{str(n.label)}</Button>;
+    // A label longer than the card is cut short inside it; the whole of it shows on hover.
+    case "button": return <Button key={key} size="sm" variant="outline" className="nodrag nopan min-w-0 max-w-full shrink self-start"
+      onPointerEnter={(e) => { const label = e.currentTarget.firstElementChild; e.currentTarget.title = label && label.scrollWidth > label.clientWidth ? str(n.label) : ""; }}
+      onClick={() => pressWidget(id, n.action)}><span className="min-w-0 truncate">{str(n.label)}</span></Button>;
     default: return null;
   }
 }

@@ -91,6 +91,26 @@ If you genuinely animate (an easing, a spring settling), drive it from `invalida
 while the animation is live and stop calling it when the animation ends. An animation
 that never ends is a rAF loop wearing a costume.
 
+## A 3D view: nothing comes close enough to fill the screen
+
+The camera comes close (a workspace of one project, a walk through someone's eyes), and
+whatever flies or floats between it and the ground comes closer still. Give each such
+thing the most it may show on screen: a pin keeps one size, a bird nearer than 90 px is
+drawn smaller, a cloud fades out near the camera. Work that out from the thing's
+farthest reach (animation at its widest), from its nearest point, stretched as the lens
+stretches what is off to the side. Test it by projecting its real shape at the closest
+distances the camera allows, against a number the test states itself.
+
+Two three.js traps that drew Archipelago's birds as black shards:
+
+- A transparent `DoubleSide` material is drawn in two passes, and in both every face
+  drawn reads as front facing: `gl_FrontFacing` cannot tell a back from a belly. Decide
+  by where the camera is, or keep the material opaque. A transparent one that does not
+  write depth is also painted over by every transparent layer drawn after it.
+- `camera.lookAt` leaves `matrixWorldInverse` with last frame's rotation until the
+  renderer draws. Call `camera.updateMatrixWorld()` where the camera moves when anything
+  that frame projects through it.
+
 ## Surfaces: the hole punch
 
 A live terminal is a real xterm the host owns. A view cannot render one. What you do
@@ -254,17 +274,26 @@ It comes back as `hm.hello.layout` on the next mount. Use it for view-owned stat
 zoom level, a spread, which panel is open. Do not put workspace state there; the
 workspace already has some.
 
-## Answer `reveal`
+## Answer `reveal`: show the tile
 
-The host asks "where is this tile?" when something elsewhere wants to point at it.
-Answer with a rect in your coordinates, or `null` if you are not showing it:
+When someone asks to see a tile while your view is on screen (a widget's "go to"
+button, a notification's **View**, a toast's **Show**, `hive ctl focus <tile>`), the
+app does not move a canvas that is not there: it selects the tile and sends your view
+`reveal`. Bring the tile into view (move your camera to it, open it, dock its terminal
+if that is how your view shows one), then answer where it is drawn, in your
+coordinates, or `null` for a tile you do not draw:
 
 ```ts
-hm.onReveal((tileId) => rectFor(tileId) ?? null);
+hm.onReveal((tileId) => {
+  if (!drawn(tileId)) return null;
+  flyTo(tileId);
+  return rectFor(tileId);
+});
 ```
 
-Ignoring it is not fatal, but "reveal in view" silently does nothing, which reads as a
-broken app rather than an unimplemented view.
+Answering with a rect and moving nothing is the mistake to avoid: every "go to" in the
+app then does nothing while your view is open, which reads as a broken app. `reveal`
+names tiles only; a frame is never revealed.
 
 ## Build and install
 
@@ -361,7 +390,8 @@ reads as finished, correctly, because a real one never stops.
 | Unreadable in light mode | Hardcoded colours. Use `--hm-color-*` |
 | Terminal appears in the wrong place | Rects are viewport pixels, and stale after `resize` |
 | A closed tile still has a surface | You ignored `undock`, or leaked its status subscription |
-| "Reveal in view" does nothing | No `onReveal` handler |
+| A widget's "go to", a notification's View or `hive ctl focus` does nothing in your view | No `onReveal`, or it answers without moving to the tile |
+| Something near the camera covers the view | Nothing caps its size on screen: see "A 3D view" |
 | Button silently dead | Command needs a permission the manifest did not request |
 
 Work [checklist.md](checklist.md) before calling a view done; it is the definition of
