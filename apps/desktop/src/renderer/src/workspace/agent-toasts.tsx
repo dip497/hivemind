@@ -148,7 +148,7 @@ function ToastCard({
   );
 }
 
-/** Background-event toast stack — borderless glass cards. Click to show the
+/** Background-event toast stack — borderless solid cards. Click to show the
  *  tile + mark seen; hover the [×] to dismiss. One accent (the app brand) tints
  *  the icon, verb, and the TTL line; see `.hm-toast` in styles.css. */
 function Toasts({
@@ -182,8 +182,11 @@ function Toasts({
     onDismiss(id);
   };
 
+  // A card slides in and out from 16px to the right. The stack reaches the window's edge and keeps
+  // its cards 14px in from it, so the slide stays inside its own padding: overflowing the stack
+  // gave it a sideways scrollbar for the length of the slide, which lifted every card by its height.
   return (
-    <div className="flex flex-col items-end gap-2 max-h-[60vh] overflow-y-auto pr-0.5">
+    <div className="flex flex-col items-end gap-2 max-h-[60vh] overflow-y-auto overflow-x-hidden pr-3.5">
       {toasts.map((t) => (
         <ToastCard
           key={t.id}
@@ -200,10 +203,13 @@ function Toasts({
 }
 
 /** The page's other notices (sonner, main.tsx) share the bottom-right corner
- *  and stack above this one by this height. */
+ *  and stack above this one by this height, and the widgets' Hide toggle rises
+ *  by it: the stack's height and the gap above it, 0px when there is none. */
 const AGENT_TOASTS_HEIGHT = "--agent-toasts-height";
 
-/** The stack, bottom-right in the page's notification layer (over widgets). */
+/** The stack, bottom-right in the page's notification layer (over widgets). It
+ *  stands left of a widget column floating along the window's right edge, by the
+ *  width the widget layer publishes, so no card hides that column's lower rows. */
 export function AgentToasts({ toasts, onDismiss, onView }: {
   toasts: Toast[];
   onDismiss: (id: string) => void;
@@ -222,7 +228,7 @@ export function AgentToasts({ toasts, onDismiss, onView }: {
   }, [any]);
   if (!any) return null;
   return (
-    <div ref={ref} className="fixed bottom-3 right-3 z-(--layer-notifications)" data-notifications>
+    <div ref={ref} className="fixed bottom-3 right-[var(--widgets-right-inset,0px)] z-(--layer-notifications)" data-notifications>
       <Toasts toasts={toasts} onDismiss={onDismiss} onView={onView} />
     </div>
   );

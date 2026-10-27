@@ -294,13 +294,12 @@ small, .u-caption { letter-spacing: var(--hm-track-caption); }
   box-shadow: var(--hm-shadow-float);
 }
 
-/* ── Glass toasts (bottom-right stack) — borderless frosted cards. No hairline
+/* ── Toasts (bottom-right stack) — borderless solid cards. No hairline
    border: the inset top sheen + the soft drop define the edge. ONE accent (the
    app brand, --color-brand) tints the icon and the auto-dismiss progress line, both
    marks; the verb is words, in the second text colour, since the accent is held to
    3:1 as a mark and not to 4.5:1 as text (DESIGN.md, Steel Accent); the kind is encoded by the icon shape + verb text (+ a pulse on
-   needs-you), never by a second color. Opaque in the default theme; frosts
-   against the live wallpaper under glass mode. NOT under .react-flow__node, so
+   needs-you), never by a second color. NOT under .react-flow__node, so
    the canvas motion-strip rule (which clears backdrop-filter during pan/drag)
    doesn't touch it. */
 .hm-toast {
@@ -310,20 +309,14 @@ small, .u-caption { letter-spacing: var(--hm-track-caption); }
   max-width: 324px;
   border: none;
   border-radius: 12px;
-  /* Solid without glass: a blur behind an opaque theme costs a re-blur on every frame the
-     canvas streams and shows nothing. html.glass-on below brings the frost back. */
-  background: var(--color-bg3);
+  /* Solid in every theme, glass too: a toast lands over whatever is open, a view's bright scene
+     included, and frosted it let the scene through, so its needs-you icon (1.5:1) and project
+     line (2.3:1) all but vanished there. The surface source, since --color-bg3 is translucent
+     under glass. */
+  background: var(--surface-3);
   /* liquid-glass: inset top highlight (lit from above) + a deep drop so the
      borderless card still reads as a floating slab against the canvas. */
   box-shadow: var(--hm-highlight-glass), var(--hm-shadow-glass);
-}
-/* Under glass, lean into the live wallpaper frost (matches .hm-island's glass
-   rule). The translucent bg lets the blurred wallpaper bleed through. */
-html.glass-on .hm-toast {
-  /* The SOURCE surface: --color-bg2 is already mixed at --glass-opacity under glass,
-     and mixing it again squared the transparency (55% read as 30%). */
-  background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
-  backdrop-filter: blur(var(--glass-blur)) saturate(145%);
 }
 /* The single accent — applied to exactly two marks (icon, TTL line). */
 .hm-toast-icon { color: var(--color-brand-mark); }
@@ -358,9 +351,9 @@ html.glass-on .hm-toast {
    arrival; the flourish was decorative). */
 .hm-toast-in { animation: hm-toast-in var(--hm-dur-3) var(--hm-ease-out); }
 @keyframes hm-toast-in {
-  /* transform + opacity ONLY (GPU). The static backdrop-filter already reads as
-     glass; animating a second `filter: blur` on top — on up to 3 glass cards at
-     once — was the most expensive thing here and risked jank on spawn storms. */
+  /* transform + opacity ONLY (GPU). Animating a `filter: blur` as well — on up to
+     3 cards at once — was the most expensive thing here and risked jank on spawn
+     storms. The 16px slide stays inside the stack's right padding (agent-toasts.tsx). */
   from { opacity: 0; transform: translateX(16px) scale(0.97); }
   to   { opacity: 1; transform: translateX(0) scale(1); }
 }
@@ -1051,7 +1044,7 @@ html.glass-on .hm-island {
 /* Tiles are CLEAR glass: the wallpaper shows through their tint, unblurred. A blur here
    re-rasterised under every tile each frame the canvas moved, so it was dropped during
    motion — the tile flipped frosted → clear → frosted on every pan. The chrome (island,
-   Layers, toasts) keeps the --glass-blur frost. */
+   Layers) keeps the --glass-blur frost; toasts are solid (.hm-toast). */
 html.glass-on .react-flow__node-terminal,
 html.glass-on .react-flow__node-diff,
 html.glass-on .react-flow__node-editor,

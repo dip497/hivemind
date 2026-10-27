@@ -288,7 +288,7 @@ The components are calm, exact and small. Nothing raises its voice until it need
 
 ### Chips
 - **Status chip:** 10px medium, pill, 3px by 6px. The status colour is the text, on a 16% tint of itself.
-- **State:** only needs-you chips pulse and stay visible on hover. Others hide on hover so row actions can show.
+- **State:** only needs-you chips move and stay visible on hover. Their 6px needs-you mark pulses before the word; the word holds still, so it keeps its 4.5:1. Others hide on hover so row actions can show.
 
 ### Cards / Containers
 - **Sheet:** graphite-sheet, 14px corners, hairline edge, Lifted shadow, 8px inset from the window.
@@ -307,7 +307,7 @@ The components are calm, exact and small. Nothing raises its voice until it need
 - **Menu item:** 12px, 6px by 8px, 6px corners, graphite-card on hover and focus. A shortcut sits at the far end in 11px pencil-text.
 
 ### Tile Row (signature)
-A 32px row: a 16px icon slot (an agent's own logo, or the tool's mark), the name at 14px, an unread dot, a spacer, then one status mark. Working is a working-white dot. Done or failed is a chip that hides on hover. Needs-you is an amber chip that pulses. Idle shows nothing. While Ctrl or ⌘ is held, an 18px keycap with the jump number replaces the status. The selected row takes graphite-hover with a 12% chalk inner ring. The failed, finished and needs-you colours are fitted to the preset (`statusInk` in core's `theme-format.ts`): a chip's word reads at 4.5:1 on its own fill and on the panel, and a mark at 3:1 on a row at rest, under the pointer and selected, in the colour's own hue with as much of its chroma as it can keep, so failed stays red. A status word drawn straight on a header or a selected row takes the text colour fitted to those surfaces (`statusTextInk`, `--color-status-*-text`).
+A 32px row: a 16px icon slot (an agent's own logo, or the tool's mark), the name at 14px, an unread dot, a spacer, then one status mark. Working is a working-white dot. Done or failed is a chip that hides on hover. Needs-you is an amber chip whose mark pulses. Idle shows nothing. While Ctrl or ⌘ is held, an 18px keycap with the jump number replaces the status. The selected row takes graphite-hover with a 12% chalk inner ring. The failed, finished and needs-you colours are fitted to the preset (`statusInk` in core's `theme-format.ts`): a chip's word reads at 4.5:1 on its own fill and on the panel, and a mark at 3:1 on a row at rest, under the pointer and selected, in the colour's own hue with as much of its chroma as it can keep, so failed stays red. A status word drawn straight on a header or a selected row takes the text colour fitted to those surfaces (`statusTextInk`, `--color-status-*-text`).
 
 A terminal's row may say one more thing, on a second line under the name and lined up with it: what its screen last showed (`214 tests passed`), in 11px mono pencil-text (`text-count font-mono`), cut with an ellipsis. While its agent waits on the person, the line is what it waits on instead (`Bash: npm test`, `Asks: …`, Plan ready for review), in Signal Amber. The row grows to 44px (row-tall) only while it has a line; with none it stays 32px. The line never pulses or moves; for an agent that keeps a conversation it is the first line of what it last said. The View menu's **Lines** shows them for all agents, only for those that need you, or not at all.
 
