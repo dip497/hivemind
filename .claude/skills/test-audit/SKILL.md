@@ -64,6 +64,12 @@ Note the mutations that matter in the commit message or the tracker.
 `scripts/mutate.sh <file> <exact text> <replacement> -- <test command>` does the edit, the run
 and the restore; `apps/desktop/scripts/e2e.sh <spec> -g <title>` runs one e2e test.
 
+Break code only in a tree nobody else is editing. An agent checking someone else's change works
+in its own copy (a worktree): a backup taken before another edit, copied back after it, puts the
+old file over the new one. `mutate.sh` will not restore over a file written during its run (it
+keeps the old code beside it and exits 2), and builds `apps/desktop/out` again when the run built
+the mutation into it, so nothing after it tests broken code.
+
 ## Changing an existing test
 
 Hold the lines you touch to the same gate. Deleting a test needs evidence: what it can

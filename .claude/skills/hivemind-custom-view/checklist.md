@@ -48,7 +48,8 @@ thing that has been wrong in a view someone shipped.
 
 ## Protocol manners
 
-- [ ] `onReveal` answers with a real rect, or `null` when not showing that tile
+- [ ] `onReveal` brings the tile into view (camera, open, dock) and answers its rect, or `null` for a tile the view does not draw
+- [ ] A 3D view: nothing that can come near the camera shows wider than a set size on screen
 - [ ] `selection` with `fresh: false` does not animate or steal focus on mount
 - [ ] `setLayout` holds only view-owned state, under 64 KB
 - [ ] State restored from `hm.hello.layout` on mount, and a **missing or corrupt**
