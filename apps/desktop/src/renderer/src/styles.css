@@ -1048,6 +1048,23 @@ html.glass-on .hm-island {
   background: color-mix(in srgb, var(--surface-2) var(--glass-opacity), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(140%);
 }
+/* A widget card floats over whatever the view under it draws, a bright sea as often as the dark
+   canvas, and its muted lines are often all it says: at the usual 72% they fell to 2:1 over a
+   bright scene, and the card changed colour as the camera moved. At 97% muted text reads at 4.5:1
+   over white in every built-in preset where it does on the solid panel (Nord needs 96.5%). */
+html.glass-on .hm-island[data-widget-chrome="card"],
+html.glass-on [data-widget-chrome] .hm-island {
+  background: color-mix(in srgb, var(--surface-2) 97%, transparent);
+}
+/* Asked for less transparency or more contrast, it is solid. Said here, not through
+   --glass-opacity: the theme store writes that inline on <html>, where the 100% the blocks at the
+   end of this file give it cannot reach. */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  html.glass-on .hm-island[data-widget-chrome="card"],
+  html.glass-on [data-widget-chrome] .hm-island {
+    background: var(--surface-2);
+  }
+}
 /* Tiles are CLEAR glass: the wallpaper shows through their tint, unblurred. A blur here
    re-rasterised under every tile each frame the canvas moved, so it was dropped during
    motion — the tile flipped frosted → clear → frosted on every pan. The chrome (island,

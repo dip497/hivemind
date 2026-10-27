@@ -113,26 +113,36 @@ type Tree = Record<string, unknown>;
 const str = (v: unknown): string => (typeof v === "string" || typeof v === "number" ? String(v) : "");
 const num = (v: unknown, d = 0): number => (typeof v === "number" && Number.isFinite(v) ? v : d);
 
-function draw(node: unknown, id: string, images: Images, key: number | string = 0, depth = 0): ReactNode {
+function draw(node: unknown, id: string, images: Images, key: number | string = 0, depth = 0, inRow = false): ReactNode {
   if (depth > 8 || typeof node !== "object" || node === null) return null;
   const n = node as Tree;
-  const kids = Array.isArray(n.children) ? n.children.slice(0, 50).map((c, i) => draw(c, id, images, i, depth + 1)) : null;
+  const kids = Array.isArray(n.children) ? n.children.slice(0, 50).map((c, i) => draw(c, id, images, i, depth + 1, n.type === "row")) : null;
+  // In a row, a stack or a meter takes the width the rest leave, so the bars of rows drawn one
+  // under another end at the same place, and a meter with no label is not drawn 0px wide.
+  const grow = inRow ? " flex-1" : "";
   switch (n.type) {
     case "sprite": return <Sprite key={key} n={n} images={images} />;
     case "input": case "textarea": return <TextField key={key} n={n} />;
     case "list": return <ListField key={key} n={n} />;
     case "image": return <Picture key={key} n={n} images={images} />;
-    case "stack": return <div key={key} className={`flex min-w-0 flex-col gap-1.5${n.fill ? " h-full" : ""}`}>{kids}</div>;
+    case "stack": return <div key={key} className={`flex min-w-0 flex-col gap-1.5${n.fill ? " h-full" : ""}${grow}`}>{kids}</div>;
     case "row": return <div key={key} className="flex min-w-0 items-center gap-2">{kids}</div>;
     case "text": return <span key={key} className={`min-w-0 ${n.wrap ? "whitespace-pre-wrap break-words" : "truncate"} ${n.size === "large" ? "text-heading font-semibold" : n.muted ? "text-count text-[var(--color-fg3)]" : "text-body"}`}>{str(n.text)}</span>;
     case "number": return <div key={key} className="flex flex-col"><span className="text-heading font-semibold tabular-nums leading-none">{str(n.value)}</span>{n.label != null && <span className="text-count text-[var(--color-fg3)]">{str(n.label)}</span>}</div>;
     case "meter": {
       const max = Math.max(num(n.max, 1), 1e-9);
-      const pct = Math.min(100, Math.max(0, (num(n.value) / max) * 100));
-      return <div key={key} className="flex flex-col gap-1">
-        {n.label != null && <span className="text-count text-[var(--color-fg3)]">{str(n.label)}</span>}
-        <div className="h-2 overflow-hidden rounded-full bg-[var(--color-bg3)]" role="meter" aria-valuenow={num(n.value)} aria-valuemax={max}>
-          <div className="h-full rounded-full bg-[var(--color-select)]" style={{ width: `${pct}%` }} />
+      const value = num(n.value);
+      const pct = Math.min(100, Math.max(0, (value / max) * 100));
+      const label = n.label != null ? str(n.label) : undefined;
+      // The bar is named by its label, so a screen reader that reaches it says what it counts
+      // toward and how far it got; the words above it are the same name, for the eye. It is drawn
+      // in the text colours: a panel colour for the track vanished into the card at night, and the
+      // selection colour for the fill is a dark background in Nord or Dracula, lost on the track.
+      return <div key={key} className={`flex min-w-0 flex-col gap-1${grow}`}>
+        {label != null && <span aria-hidden className="text-count text-[var(--color-fg3)]">{label}</span>}
+        <div className="h-2 overflow-hidden rounded-full bg-[color-mix(in_oklab,var(--color-fg3)_30%,transparent)]" role="meter" aria-label={label}
+          aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.min(Math.max(value, 0), max)} aria-valuetext={`${value} of ${max}`}>
+          <div className="h-full rounded-full bg-[var(--color-fg2)]" style={{ width: `${pct}%` }} />
         </div>
       </div>;
     }
