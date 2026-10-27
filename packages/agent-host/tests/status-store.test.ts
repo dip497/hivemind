@@ -74,6 +74,18 @@ test("a lone Esc or Ctrl+C during a hook-reported turn interrupts it; anything e
   expect(s.get("b")!.state).toBe("working");
 });
 
+test("Esc and Ctrl+C interrupt as kitty keys too, as Claude Code has the terminal send them; a key let go or another key does not", () => {
+  const s = store();
+  for (const key of ["\x1b[27u", "\x1b[99;5u", "\x1b[27;129u", "\x1b[99;69:1u"]) {
+    s.event("a", { event: "turn.started" });
+    s.input("a", key);
+    expect(s.get("a")!.state, JSON.stringify(key)).toBe("interrupted");
+  }
+  s.event("a", { event: "turn.started" });
+  for (const key of ["\x1b[27;1:3u", "\x1b[99u", "\x1b[27;5u", "\x1b[13u", "\x1b[99;5u\x1b[99;5u"]) s.input("a", key);
+  expect(s.get("a")!.state).toBe("working");
+});
+
 test("answering the permission an agent waits on sets it working at once, not when the allowed tool finishes", () => {
   const s = store();
   s.event("a", { event: "turn.started" });
