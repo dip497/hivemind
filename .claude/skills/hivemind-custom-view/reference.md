@@ -30,6 +30,7 @@ one wins.
 | `participants` (1.5) | `participants [{id, person, name, color, cursor: {tileId} \| null, selection}]` | After `subscribeParticipants`; everyone else here, on each change of who, the tile their pointer is over or their selection — only of your tiles and frames |
 | `structure` (1.14) | `tiles[].asleep? {since?}` | The agent is asleep: its process ended, its tile kept with its last screen and its conversation until it is woken. `since`: when it was put to sleep (ms since epoch). Absent while awake. Its `status` stays what it was left at: draw `asleep` over it |
 | `fonts` (1.17) | `fontFaces [{family, data, weight?, style?}]` | A theme's font files changed (applied, reverted): the SDK puts them in `document.fonts`, replacing the ones before. `hello.fontFaces` carries them when they are read by then. Nothing to do in the view |
+| `widgetBand` (1.18) | `edge: left \| right`, `width` | How much of the view the app's widget cards take: CSS px from the view's widget edge to the far side of the cards, the gap included; 0 when none. Right after `hello`, then on every change (cards added or removed, a second column, a window resize). `hm.onWidgetBand(cb)` hears the current one at once and each change |
 
 `hello.features` (1.3) lists what the host wired: `since`, `events`, `activity`, `presence`,
 `history`, `share`; 1.4 adds `agentStatus`, `agents`, `sessions`, `prompt`; 1.5 adds
@@ -42,8 +43,9 @@ draws in the view; nothing to do in the view), `lineSlots`
 (the host draws each tile's last line in the rects `lineRects` reserves, and for a permission its
 own Review, never Allow; the computer's windows, not the phone) and `ownFiles` (the view may
 `fetch` its own files: it says `"files": true`, and the screen is the app's window or a browser
-tab, not the phone nor another computer's view). A
-host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
+tab, not the phone nor another computer's view); 1.18 adds `widgetBand` (the app says how much
+of the view its floating widget cards take, `widgetBand`; the computer's windows, not the phone).
+A host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
 approval | input}`, `subagents {active}`, `tileOpened {frameId, tileKind, agent?, spawnedBy?}`,

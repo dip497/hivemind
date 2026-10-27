@@ -104,11 +104,17 @@ Which packages arrive switched off, and which updates need your trust again, are
 
     A package's view brings the package's widgets. The first time a workspace shows the view,
     however it was opened, each of the package's widgets that is on goes down the edge the view
-    keeps for widgets (`"widgets": "left"` in its `hivemind-view.json`, or the right). A widget you
-    close stays closed: the view never brings it to that workspace again, in any window. One that
-    a later version of the package adds comes when the view shows: at once if it is open. A
+    keeps for widgets (`"widgets": "left"` in its `hivemind-view.json`, or the right). They show
+    over that view alone, so the canvas and your other views stay clear. To have one over every
+    view, point at it and press its pin, **Show on every view**. **Hide widgets**, in the bottom-right
+    corner, hides them over the view you are in, and each view keeps its own choice.
+
+    A widget you close with its × stays closed, unless you press **Undo** on the notice that says
+    it was removed: the view never brings it to that workspace again, in any window. One that a
+    later version of the package adds comes when the view shows: at once if it is open. A
     workspace where you had already put some of the package's widgets is left as you arranged it.
-    So the install's `next` does not list them: `hive ctl plugin open widget:…` adds another copy.
+    So the install's `next` does not list them: `hive ctl plugin open widget:…` adds another copy,
+    over every view.
   </Step>
   <Step title="Update it">
     Change a member, raise `version` in `hivemind-package.json`, check, and install again. When a

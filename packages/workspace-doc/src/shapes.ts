@@ -130,11 +130,16 @@ interface BoardObjectFields {
  * list's lines) one by one; changing it is an edit, taken back by undo. `state` is what its code
  * keeps and `options` what the person set for it, each capped at `WIDGET_FIELD_BYTES`; neither is
  * an undo step. What it draws is never stored here (the workspace API's `widget.drawn`).
+ *
+ * `view` names the view that brought it (a package's view brings the package's widgets): a
+ * floating widget with one is drawn only while that view is on screen, until someone chooses to
+ * show it on every view, which takes `view` away. An app that predates it draws it over every view.
  */
 export interface WidgetObject extends BoardObjectFields {
   kind: "widget";
   widget: string;
   placement?: "board" | "screen";
+  view?: string;
   x?: number;
   y?: number;
   w?: number;

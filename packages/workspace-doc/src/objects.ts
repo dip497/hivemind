@@ -177,6 +177,8 @@ function toBoardObject(raw: unknown): BoardObject | null {
     // Too big a state is dropped, not the widget.
     if (fields.state !== undefined && !fits(fields.state)) delete fields.state;
     if (fields.options !== undefined && (!isObject(fields.options) || !fits(fields.options))) delete fields.options;
+    // A view that is not a name is dropped, not the widget: it shows over every view.
+    if (fields.view !== undefined && typeof fields.view !== "string") delete fields.view;
     const lines = Array.isArray(items)
       ? firstOfEachId(items, (item) => typeof item.text === "string" && typeof item.done === "boolean").map(({ id, text: line, done }) => ({ id, text: line, done }))
       : undefined;

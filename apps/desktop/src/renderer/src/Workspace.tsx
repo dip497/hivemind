@@ -1343,7 +1343,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       />
       {repoPath && <SayHere repo={repoPath} selection={presenceSelection} />}
       <Suspense fallback={null}>
-        <BoardContext.Provider value={board}><WidgetLayer repo={persistKey} board={board} packages={widgetPackages} edge={chrome.widgets} /></BoardContext.Provider>
+        <BoardContext.Provider value={board}><WidgetLayer repo={persistKey} board={board} packages={widgetPackages} edge={chrome.widgets} view={activeViewId} /></BoardContext.Provider>
       </Suspense>
       {/* Reset transient toolbar expansion on view/placement changes without
           touching live tile bodies. Settings lives above this in App. */}

@@ -1,7 +1,8 @@
 /**
  * A package's view brings the package's widgets. The first time a workspace shows a view that came
  * in a package (Archipelago), each of that package's widgets that is switched on and not on the
- * workspace already is added, floating down the view's widget edge. However the view was opened:
+ * workspace already is added, floating down the view's widget edge, and drawn over that view alone
+ * (`WidgetObject.view`) until the person shows it on every view. However the view was opened:
  * the switcher, Layers, ⌘E, "Open Archipelago?", `hive ctl plugin open view:`, or the view the app
  * starts in.
  *
@@ -33,7 +34,7 @@ export function useViewBringsWidgets({ repo, joined, view, widgets, board }: {
   view: string | null;
   /** The widgets that are switched on. */
   widgets: readonly WidgetPackage[];
-  board: { objectsRef: { current: BoardObject[] }; bringWidgets: (pkgs: readonly string[]) => void };
+  board: { objectsRef: { current: BoardObject[] }; bringWidgets: (pkgs: readonly string[], view: string) => void };
 }): void {
   const { packages } = useCommunityReport();
   const pkg = packages.find((p) => p.id === view)?.package;
@@ -42,7 +43,7 @@ export function useViewBringsWidgets({ repo, joined, view, widgets, board }: {
   const members = pkgId ? widgets.filter((w) => w.package?.id === pkgId).map((w) => w.id).join("\n") : "";
   const { objectsRef, bringWidgets } = board;
   useEffect(() => {
-    if (!repo || joined || !members) return;
+    if (!repo || joined || !members || !view) return;
     // Read, decided and written at once through the store, so a second window on the workspace
     // reads what this one brought.
     const known = readBrought(repo);
@@ -50,6 +51,7 @@ export function useViewBringsWidgets({ repo, joined, view, widgets, board }: {
     const { add, brought } = widgetsToBring(members.split("\n"), onBoard, known);
     if (!brought.length) return;
     writeView(repo, BROUGHT, { v: 1, data: [...known, ...brought] });
-    bringWidgets(add);
-  }, [repo, joined, members, objectsRef, bringWidgets]);
+    // Drawn over this view alone: they are its company, not the canvas's.
+    bringWidgets(add, view);
+  }, [repo, joined, members, view, objectsRef, bringWidgets]);
 }

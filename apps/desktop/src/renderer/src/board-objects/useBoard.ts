@@ -38,9 +38,11 @@ export interface Board {
   /** Add a widget of the package `pkg`: on the board at `board.at`, else floating over every view. */
   /** The new widget's id. */
   addWidget: (pkg: string, board?: { at: Point; size: { w: number; h: number }; lines?: boolean }) => string;
-  /** Widgets the app brings (a package's view), floating, saved at once as an edit of their own:
-   *  never taken back by the same undo as the person's last edit. */
-  bringWidgets: (pkgs: readonly string[]) => void;
+  /** Widgets the app brings (a package's view), floating over that view alone, saved at once as an
+   *  edit of their own: never taken back by the same undo as the person's last edit. */
+  bringWidgets: (pkgs: readonly string[], view: string) => void;
+  /** Put back an object taken away, as it was: a widget with its options and what it keeps. */
+  restore: (object: BoardObject) => void;
   update: (id: string, change: (o: BoardObject) => BoardObject) => void;
   remove: (id: string) => void;
   duplicate: (id: string) => void;
@@ -148,12 +150,12 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
   }, [set, edit, framesRef]);
 
 
-  const bringWidgets = useCallback((pkgs: readonly string[]) => {
+  const bringWidgets = useCallback((pkgs: readonly string[], view: string) => {
     if (!pkgs.length) return;
     // What the person did is saved first, as its own step.
     flush();
     let z = frontZ(latest.current);
-    const brought = pkgs.map((pkg) => newWidget(pkg, mintId("widget"), z++));
+    const brought = pkgs.map((pkg) => ({ ...newWidget(pkg, mintId("widget"), z++), view }));
     set((board) => [...board, ...brought]);
     if (persistKey) writeBoard(persistKey, toStored(latest.current, framesRef.current));
   }, [persistKey, flush, set, framesRef]);
@@ -162,6 +164,10 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
     set((board) => withoutObject(board, id));
     setSelectedId((cur) => (cur === id ? null : cur));
     setEditingId((cur) => (cur === id ? null : cur));
+  }, [set]);
+
+  const restore = useCallback((object: BoardObject) => {
+    set((board) => (board.some((o) => o.id === object.id) ? board : [...board, object]));
   }, [set]);
 
   const duplicate = useCallback((id: string) => {
@@ -275,11 +281,11 @@ export function useBoard({ persistKey, frames, framesRef, onSelect }: {
 
   return useMemo(() => ({
     objects, objectsRef: latest, selectedId, editingId, arrowFrom,
-    select, edit, addWidget, bringWidgets, update, remove, duplicate, moveTo, resize, shiftFrames, place,
+    select, edit, addWidget, bringWidgets, update, remove, restore, duplicate, moveTo, resize, shiftFrames, place,
     startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   }), [
     objects, selectedId, editingId, arrowFrom,
-    select, edit, addWidget, bringWidgets, update, remove, duplicate, moveTo, resize, shiftFrames, place,
+    select, edit, addWidget, bringWidgets, update, remove, restore, duplicate, moveTo, resize, shiftFrames, place,
     startArrow, pickArrowEnd, cancelArrow, undo, redo, reload, merge,
   ]);
 }
