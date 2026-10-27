@@ -16,7 +16,7 @@ import { actionKey } from "./shortcut";
 import { MachineDot, MachineIcon, machineFacts, statusWords } from "./machines/status";
 import { A_DEVICE, GONE_MACHINE, openMachines, placeOf, statusOf, useMachines } from "./machines/store";
 import type { MachineInfo } from "../../shared/ipc";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { PanelLeftOpen, ChevronRight, ChevronDown, GitBranch, Server, Folder, FolderOpen, PanelLeftClose, Plus, RefreshCw, Ellipsis, EllipsisVertical, X, Pencil, Trash, Pin, PinOff, Search, Bell, SquarePen, FolderPlus, AddWidget, Blocks, History, Mail, MailOpen, AlarmClock, AlarmClockOff, LayoutList, LogIn, Settings, Settings2, Monitor, Moon, Play } from "./components/icons";
 import { subscribeStatus, type TileStatusKind } from "./agent-status-bus";
 import { AgentIcon, agentById, useAgents } from "./agents";
@@ -116,6 +116,18 @@ const NEEDS_YOU = (s: TileStatusKind | null): boolean => statusLook(s) === "need
 /** A status chip: its colour on an opaque 16% fill over the panel colour, so its word reads the same
  *  on a row at rest, under the pointer or selected (core's statusInk is fitted to that fill). */
 const pillStyle = (look: StatusLook) => ({ color: LOOKS[look].color, background: `color-mix(in srgb, ${LOOKS[look].color} 16%, var(--surface-2))` });
+/** A status chip, its word on its own fill. Only one that waits on the person moves, and then only
+ *  its mark before the word: pulsing the whole chip faded the 10px word to half strength, under
+ *  3:1, for as long as the agent waited. The mark says it in a shape as well, not in colour alone. */
+function StatusChip({ look, className = "", children, ...rest }: { look: StatusLook } & ComponentProps<"span">) {
+  return (
+    <span {...rest} className={`shrink-0 flex items-center gap-1 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full ${className}`}
+      style={pillStyle(look)} title={LOOKS[look].word}>
+      {LOOKS[look].pulse && <StatusGlyph look={look} className="size-1.5" />}
+      {children}
+    </span>
+  );
+}
 
 /**
  * The panel's one type and icon scale: the title 15px semibold; a row (an action, a group, a tile)
@@ -270,15 +282,10 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, star
         <span className={`shrink-0 ${COUNT} group-hover:hidden`} data-layer-until>{until}</span>
       ) : asleep ? (
         <span aria-label="asleep" title="Asleep" data-layer-asleep className="shrink-0 grid place-items-center text-[var(--color-fg3)] group-hover:hidden"><Moon size={12} /></span>
-      ) : /* A word only for what you must act on; working is the mark on its icon. Only needs-you pulses. */ st !== "idle" && st !== "working" ? (
-        <span
-          className={`shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full ${LOOKS[look].pulse ? "animate-pulse" : "group-hover:hidden"}`}
-          style={pillStyle(look)}
-          title={LOOKS[look].word}
-          data-layer-status={look}
-        >
+      ) : /* A word only for what you must act on; working is the mark on its icon. Only needs-you's mark pulses. */ st !== "idle" && st !== "working" ? (
+        <StatusChip look={look} className={LOOKS[look].pulse ? "" : "group-hover:hidden"} data-layer-status={look}>
           {statusWord(isPlan ? "plan_review" : st, { failed })}
-        </span>
+        </StatusChip>
       ) : null}
       {actions.close && (st === "working" || st === "exited") && (
         <Button variant="ghost" size="icon-2xs" reveal="hidden" onClick={(e) => { e.stopPropagation(); actions.close!(t.id); }} title={`Close ${t.name}`} aria-label={`Close ${t.name}`}>
@@ -659,9 +666,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
               <span className="ml-auto flex items-center gap-1.5 min-w-0">
                 {/* A summary of what is hidden: when folded, or when a child needs a person. */}
                 {agg === "needs" ? (
-                  <span className="shrink-0 text-chip font-medium leading-none px-1.5 py-[3px] rounded-full animate-pulse" style={pillStyle(agg)} title={LOOKS[agg].word}>
-                    {LOOKS[agg].word}
-                  </span>
+                  <StatusChip look={agg} data-layers-frame-status={agg}>{LOOKS[agg].word}</StatusChip>
                 ) : agg && isCollapsed ? (
                   <span aria-label={LOOKS[agg].word} title={LOOKS[agg].word} className="grid shrink-0"><StatusGlyph look={agg} className="size-1.5" /></span>
                 ) : null}
