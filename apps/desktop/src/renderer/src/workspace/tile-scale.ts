@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState, type CSSProperties, type RefObject } from "react";
 
 const listeners = new Set<() => void>();
 
@@ -38,4 +38,29 @@ export function useScaleOnScreen(ref: RefObject<HTMLElement | null>, settleMs = 
     };
   }, [ref, settleMs]);
   return scale;
+}
+
+/** While `on`, a tile scrolled out of its view is drawn inside it, unseen and untouchable, so a
+ *  page in it that someone elsewhere watches keeps drawing. `ref` is the tile's place, never moved;
+ *  the returned style goes on what it holds. */
+export function useDrawnOutOfView(ref: RefObject<HTMLElement | null>, on: boolean): CSSProperties | undefined {
+  const [offset, setOffset] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!on || !el) { setOffset(null); return; }
+    const view = el.closest<HTMLElement>(".react-flow");
+    const place = () => {
+      const r = el.getBoundingClientRect();
+      const v = view?.getBoundingClientRect() ?? { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+      if (r.right > v.left && r.left < v.right && r.bottom > v.top && r.top < v.bottom) { setOffset(null); return; }
+      const scale = el.offsetWidth ? r.width / el.offsetWidth : 1;
+      setOffset({ x: (v.left - r.left) / scale, y: (v.top - r.top) / scale });
+    };
+    place();
+    listeners.add(place);
+    const resize = new ResizeObserver(place);
+    if (view) resize.observe(view);
+    return () => { listeners.delete(place); resize.disconnect(); };
+  }, [ref, on]);
+  return offset ? { transform: `translate(${offset.x}px, ${offset.y}px)`, opacity: 0, pointerEvents: "none" } : undefined;
 }

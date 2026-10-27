@@ -5,6 +5,8 @@
 import { test, expect, chromium, type Browser, type Frame, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { freePort, launchWindow, type AppWindow } from "./helpers/window";
@@ -204,6 +206,60 @@ test("a view in the tab reaches neither the tab's cookie nor its socket, and its
   }), `ws://127.0.0.1:${port}/socket`)).not.toBe("open");
   expect(await frame.evaluate(() => fetch("/").then((r) => `fetched ${r.status}`, () => "blocked"))).toBe("blocked");
   await tab.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "canvas" } })));
+});
+
+test("a browser tile's page in the tab is the app window's own: it shows there, and a click and typing in the tab reach it", async () => {
+  // A page of its own, on this machine: a button over the top half, a box to type in below.
+  const site = http.createServer((_req, res) => {
+    res.setHeader("content-type", "text/html");
+    res.end(`<!doctype html><title>Counter page</title><body style="margin:0">
+      <button id=b style="display:block;width:100vw;height:50vh;font:40px sans-serif" onclick="this.textContent='clicked '+(++window.n)">press</button>
+      <input id=t style="display:block;width:100vw;height:50vh;font:40px sans-serif"><script>window.n=0</script>`);
+  });
+  await new Promise<void>((r) => site.listen(0, "127.0.0.1", r));
+  const pageUrl = `http://127.0.0.1:${(site.address() as AddressInfo).port}/`;
+  try {
+    await app.page.evaluate(() => window.hive.settingsSet("plugins.state.tool:@hivemind/web", { enabled: true }));
+    await tab.locator('[data-toolbar-action="board"]').first().click();
+    await tab.locator('[data-board-choice="tile:browser"]').click();
+    const watched = tab.locator("[data-watched-page]");
+    await expect(watched).toHaveCount(1, { timeout: 15_000 });
+    const tileId = await tab.locator(".react-flow__node-browser").first().getAttribute("data-id");
+    // The window holds the page; the tab sends it somewhere from its own address bar.
+    const inWindow = (expression: string) => app.page.evaluate(([t, x]) => window.hive.browserCdp!(t, "Runtime.evaluate", { expression: x, returnByValue: true })
+      .then((r) => (r as { result: { value: unknown } }).result.value, () => null), [tileId!, expression] as const);
+    const address = watched.locator("[data-watched-page-address]");
+    // Sent again until the window has the page: the tab's first send can come before its watch.
+    await expect.poll(async () => {
+      const title = await inWindow("document.title");
+      if (title === "Counter page") return title;
+      await address.fill(pageUrl);
+      await address.press("Enter");
+      return title;
+    }, { timeout: 20_000, intervals: [2000] }).toBe("Counter page");
+
+    // Its picture comes, and is the page: the tab draws what the window shows.
+    const picture = watched.locator("[data-watched-page-picture] img");
+    await expect(picture).toBeVisible({ timeout: 10_000 });
+    await expect(address).toHaveValue(pageUrl);
+    const before = await picture.getAttribute("src");
+
+    const box = (await picture.boundingBox())!;
+    await tab.mouse.click(box.x + box.width * 0.2, box.y + box.height * 0.2);
+    await expect.poll(() => inWindow("window.n"), { timeout: 10_000 }).toBe(1);
+    // The page changed, so a new picture came.
+    await expect.poll(() => picture.getAttribute("src"), { timeout: 10_000 }).not.toBe(before);
+
+    await tab.mouse.click(box.x + box.width * 0.2, box.y + box.height * 0.8);
+    await expect.poll(() => inWindow("document.activeElement.id"), { timeout: 10_000 }).toBe("t");
+    const frames = await tab.locator(".react-flow__node-frame").count();
+    await tab.keyboard.type("typed in the tab");
+    await expect.poll(() => inWindow("document.getElementById('t').value"), { timeout: 10_000 }).toBe("typed in the tab");
+    // Typing went to the page, not the canvas: no frame was added by a key.
+    expect(await tab.locator(".react-flow__node-frame").count()).toBe(frames);
+  } finally {
+    site.close();
+  }
 });
 
 test("turned off, the port closes", async () => {
