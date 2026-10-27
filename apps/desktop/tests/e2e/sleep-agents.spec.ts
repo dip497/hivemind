@@ -8,6 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { person } from "./helpers/multiplayer";
 import { stopDaemons } from "./helpers/daemons";
+import { installPlugin } from "./helpers/install";
+import { TILE_LIST_DIR, dockFromList, tileListReady } from "./helpers/tile-list-view";
 
 const CLI = path.resolve("../cli/src/index.ts");
 let root: string;
@@ -53,8 +55,9 @@ function sleepyAgent(): { PATH: string; SLEEPY_TALKS: string } {
 
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-test("an agent put to sleep ends, its tile shows Resume; Resume brings it back in its conversation, taking keys", async () => {
-  test.setTimeout(120_000);
+/** A window on a new repo whose default agent is the stand-in, with one started: the window, the
+ *  repo, the environment the app has, the agent's tile and its process. */
+async function startSleepy() {
   const repo = path.join(root, "api");
   fs.mkdirSync(repo);
   execSync("git init -q", { cwd: repo });
@@ -70,7 +73,13 @@ test("an agent put to sleep ends, its tile shows Resume; Resume brings it back i
   const tile = (await node.getAttribute("data-id"))!;
   const pidFile = path.join(env.SLEEPY_TALKS, "pid");
   await expect.poll(() => fs.existsSync(pidFile), { timeout: 20_000 }).toBe(true);
-  const pid = Number(fs.readFileSync(pidFile, "utf8"));
+  return { desktop, repo, env, tile, pid: Number(fs.readFileSync(pidFile, "utf8")) };
+}
+
+test("an agent put to sleep ends, its tile shows Resume; Resume brings it back in its conversation, taking keys", async () => {
+  test.setTimeout(120_000);
+  const { desktop, repo, env, tile, pid } = await startSleepy();
+  const node = desktop.locator(".react-flow__node-terminal");
   const screen = () => desktop.evaluate(() => [...document.querySelectorAll(".xterm")]
     .map((x) => (x.parentElement as (HTMLElement & { __hmScreen?: () => string }) | null)?.__hmScreen?.() ?? "").join("\n"));
   await expect.poll(screen, { timeout: 20_000 }).toContain("MARK");
@@ -92,4 +101,19 @@ test("an agent put to sleep ends, its tile shows Resume; Resume brings it back i
   await expect.poll(screen, { timeout: 20_000 }).toContain("echo after the nap");
   // The same conversation: what it said before it slept, then what it took after.
   expect(fs.readFileSync(path.join(env.SLEEPY_TALKS, fs.readdirSync(env.SLEEPY_TALKS).find((f) => f !== "pid")!), "utf8")).toBe("MARK\necho after the nap\n");
+});
+
+test("docked in a view, an agent sleeps from the bar above it", async () => {
+  test.setTimeout(120_000);
+  installPlugin(path.join(root, "desktop"), TILE_LIST_DIR);
+  const { desktop, tile, pid } = await startSleepy();
+  await desktop.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:set-view-mode", { detail: { mode: "tile-list" } })));
+  await desktop.waitForSelector(tileListReady, { timeout: 20_000 });
+  await dockFromList(desktop, tile);
+  const slot = desktop.locator(`[data-community-slot="${tile}"]`);
+  await slot.locator("[data-slot-bar]").getByRole("button", { name: "Put agent to sleep" }).click();
+  await expect(slot.locator("[data-sleeping]").getByRole("button", { name: "resume agent" })).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => alive(pid), { timeout: 20_000 }).toBe(false);
+  // Asleep, there is nothing more to put to sleep.
+  await expect(slot.getByRole("button", { name: "Put agent to sleep" })).toHaveCount(0);
 });

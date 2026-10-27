@@ -1489,6 +1489,8 @@ html.glass-on .u-eyebrow { color: var(--color-fg); }
   border-radius: 8px;
 }
 
-/* A view that draws its own chrome around a tile (a slot rect with `chrome: "none"`, as the Windows
-   view's tabs do) gets the body without the bar that only names it; a browser's address bar stays. */
-[data-slot-bare] [data-tile-titlebar] { display: none; }
+/* A tile in a view's slot gets its body without the bar that only names it: the slot's own bar (the
+   host's, slot-chrome.tsx), or the chrome a view draws around it with `chrome: "none"` as the Windows
+   view's tabs do, already names it. Two bars would give it two ×, one undocking and one ending the
+   agent, a few pixels apart. A browser's address bar stays. */
+[data-community-slot] [data-tile-titlebar] { display: none; }

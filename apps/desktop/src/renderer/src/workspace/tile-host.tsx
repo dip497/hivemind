@@ -119,6 +119,11 @@ function park(): HTMLElement {
   return el;
 }
 
+/** True when `el` is in a surface no slot shows: out of sight, though a key still reaches it. */
+export function inPark(el: Element | null): boolean {
+  return !!el?.closest(`#${PARK_ID}`);
+}
+
 /** The DOM element a tile's body renders into — stable for the tile's life. */
 export function surfaceEl(tileId: string): HTMLDivElement {
   let el = surfaces.get(tileId);
