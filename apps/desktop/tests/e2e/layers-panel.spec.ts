@@ -302,3 +302,22 @@ test("a tile that fails reads failed and not finished: an exit 3 while you look 
     await page.screenshot({ path: test.info().outputPath(`selected-failed-${preset}.png`) });
   }
 });
+
+test("scrolling a long list keeps the pinned tiles and the list's heading with its View menu in sight", async () => {
+  if (await panel().locator("[data-layers-pinned] [data-layer-tile]").count() === 0) {
+    await rows().first().hover();
+    await rows().first().locator("[data-layer-tile-menu]").click();
+    await page.keyboard.press("p");
+  }
+  for (let i = 0; i < 12; i++) await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
+  await app.evaluate(({ BrowserWindow }) => { const win = BrowserWindow.getAllWindows()[0]!; win.unmaximize(); win.setContentSize(1280, 640); });
+  const list = panel().locator('[data-layers-pane="tiles"]');
+  await expect.poll(() => list.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(100);
+  await list.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+  await expect(panel().locator("[data-layers-pinned] [data-layer-tile]").first()).toBeInViewport();
+  await expect(panel().locator("[data-layers-view-menu]")).toBeInViewport();
+  await panel().locator("[data-layers-view-menu]").click();
+  await expect(page.locator('[data-layers-view="groupBy"]')).toBeVisible();
+  await page.keyboard.press("Escape");
+});
