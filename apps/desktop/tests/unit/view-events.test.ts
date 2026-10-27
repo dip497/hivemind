@@ -56,7 +56,7 @@ test("seed: a reload keeps main's exact start for a tile whose bucket did not ch
   assert.equal(h.hub.sinceOf("u")!.exact, false);
 });
 
-test("turns: a hook turn is reported; an agent without hooks gets inferred ones, but not from a staleness decay or a shell", () => {
+test("turns: a hook turn is reported; an agent without hooks gets inferred ones, but not from a staleness decay or a shell; history keeps both", () => {
   const h = harness();
   h.hub.setWorkspace("ws", [h.tile("hooked"), h.tile("plain"), h.tile("sh", "shell")]);
   for (const id of ["hooked", "plain", "sh"]) h.hub.onStatus({ tileId: id, label: "", status: "working" });
@@ -68,6 +68,9 @@ test("turns: a hook turn is reported; an agent without hooks gets inferred ones,
   h.hub.onStatus({ tileId: "plain", label: "", status: "idle", synthetic: true });
   const turns = h.events.filter((e) => e.kind === "turn") as Array<{ tileId: string; inferred?: boolean }>;
   assert.deepEqual(turns.map((e) => [e.tileId, !!e.inferred]), [["hooked", false], ["plain", true]]);
+  // A view that mounts after a switch, a restart or the next day reads turns from history.
+  h.runTimers();
+  assert.deepEqual(h.lines.filter((l) => l.e === "t").map((l) => [l.id, l.t]), turns.map((e) => [e.tileId, e.at]));
 });
 
 test("lifecycle: opened after start is an event with its parent; closing reports the last bucket and a failed exit", () => {
