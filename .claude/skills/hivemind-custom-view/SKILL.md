@@ -155,6 +155,25 @@ if (hm.supports("lineSlots")) hm.setLineRects([{ tileId, x: 16, y: 40, w: 480, h
 - Never ask for the text by another road. The rule is the one for `invokeResult` and your saved
   layout: what you hold, you can pass on.
 
+## Widget band: keep clear of the cards the app floats over you
+
+The app floats the workspace's widget cards over your view, stacked down its widget edge (the
+right, or the left with `"widgets": "left"` in the manifest). Your header, labels and the part of
+your scene you frame things in belong outside them (protocol 1.18, feature `widgetBand`):
+
+```ts
+let band = { edge: "left", width: 268 }; // your guess for a host that does not say
+if (hm.supports("widgetBand")) hm.onWidgetBand((b) => { band = b; layout(); });
+```
+
+- `width` is CSS px from your widget edge to the far side of the cards, the gap beside them
+  included; 0 when there are none (none added, all hidden, a person moved them all).
+- It comes right after `hello`, then whenever cards come or go, start a second column, or the
+  window is resized. A late listener hears the current one at once.
+- Check `supports` first: the app serves your view its own SDK, and an app before 1.18 has no
+  `onWidgetBand`. A phone and a remote screen float no cards over a view and do not say the
+  feature either: keep your own guess there.
+
 ## Theme: never hardcode a colour
 
 `applyThemeVars(hm)` writes the host theme onto your document as custom properties and

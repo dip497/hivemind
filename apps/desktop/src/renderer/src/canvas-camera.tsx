@@ -6,8 +6,9 @@
  * Canvas.tsx focused on orchestration.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useReactFlow, useStore } from "@xyflow/react";
-import { focusZoom } from "./camera-fit";
+import { useReactFlow, useStore, useStoreApi } from "@xyflow/react";
+import { focusZoom, roomLeftOfCards } from "./camera-fit";
+import { widgetBand } from "./board-objects/widget-band";
 import { tilePlugin } from "./tiles";
 
 /** Snap a settled viewport so canvas-rendered text stays crisp: round the pan to
@@ -93,12 +94,22 @@ export function FocusOnTile({
   req: { id: string; cx: number; cy: number; w?: number; h?: number; n: number; exact?: boolean } | null;
 }) {
   const { setCenter } = useCamera();
+  const flow = useStoreApi();
   // Pane size (CSS px). At the exact-path's zoom 1, flow units == screen px, so
   // we can frame the tile against the viewport directly.
   const paneW = useStore((s) => s.width);
   const paneH = useStore((s) => s.height);
   useEffect(() => {
     if (!req) return;
+    // A column of widget cards along the right edge covers the pane's right side: the tile is
+    // framed in the room left of it, so its header (status, sleep, close) is never under a card.
+    // Read when asked, as the pane size is: the cards moving must not re-fly an old request.
+    const band = widgetBand();
+    const paneRight = flow.getState().domNode?.getBoundingClientRect().right ?? window.innerWidth;
+    const roomW = band.edge === "right" && paneW > 0 ? roomLeftOfCards(paneW, band.width, window.innerWidth - paneRight) : paneW;
+    // How far right of the tile the camera's centre goes, in screen px, for the tile to sit in the
+    // middle of that room.
+    const shift = (paneW - roomW) / 2;
     // `exact`: text tiles (terminal/editor/diff) need EXACTLY 100% — xterm
     // selection + DOM-text crispness are only pixel-accurate at 1:1. Pan to the
     // tile at zoom 1 in a SINGLE animation; do NOT chase it with a fitView
@@ -112,11 +123,11 @@ export function FocusOnTile({
       const PAD = 24;
       const w = req.w ?? 0;
       const h = req.h ?? 0;
-      let tx = req.cx;
+      let tx = req.cx + shift;
       let ty = req.cy;
       // Guard paneW/paneH > 0: the store reports 0 until the pane is measured;
       // clamping against 0 would shove the tile hard off-screen.
-      if (paneW > 0 && w > paneW - 2 * PAD) tx = req.cx - w / 2 + paneW / 2 - PAD; // left-anchor
+      if (paneW > 0 && w > roomW - 2 * PAD) tx = req.cx - w / 2 + paneW / 2 - PAD; // left-anchor
       if (paneH > 0 && h > paneH - 2 * PAD) ty = req.cy - h / 2 + paneH / 2 - PAD; // top-anchor
       // At zoom 1 a flow unit is a screen pixel: land the pan on whole pixels, or an odd-sized
       // pane leaves the text on a half pixel (blurred) with nothing left to snap it.
@@ -129,13 +140,13 @@ export function FocusOnTile({
     // DOM measurement, so a brand-new tile or frame is framed on the first frame,
     // and nothing is read from the live zoom (see camera-fit.ts). A newer request
     // interrupting this one then lands exactly where it would have from rest.
-    const zoom = focusZoom(req.w ?? 0, req.h ?? 0, paneW, paneH);
+    const zoom = focusZoom(req.w ?? 0, req.h ?? 0, roomW, paneH);
     // Same whole-pixel landing as the exact path, at whatever zoom the fit chose.
-    const cx = paneW > 0 ? (paneW / 2 - Math.round(paneW / 2 - req.cx * zoom)) / zoom : req.cx;
+    const cx = paneW > 0 ? (paneW / 2 - Math.round(paneW / 2 - req.cx * zoom - shift)) / zoom : req.cx;
     const cy = paneH > 0 ? (paneH / 2 - Math.round(paneH / 2 - req.cy * zoom)) / zoom : req.cy;
     void setCenter(cx, cy, { zoom, ...FLY });
     // Pane size is read, not depended on: a window resize must not re-fly an old request.
-  }, [req, setCenter]);
+  }, [req, setCenter, flow]);
   return null;
 }
 

@@ -1,7 +1,9 @@
 // A package's view brings the package's widgets: the first time a workspace shows the view, its
-// widgets float down the edge the view keeps for them. One the person closes stays closed, through
-// a view switch, the view opened by the CLI and a relaunch, and a widget a later version of the
-// package adds comes at once while the view shows. (The start-view offer itself is
+// widgets float down the edge the view keeps for them, over that view alone, and the view is told
+// how much room they take. One the person closes stays closed, through a view switch, the view
+// opened by the CLI and a relaunch (unless they press Undo), and a widget a later version of the
+// package adds comes at once while the view shows. One shown on every view floats over the canvas
+// too, where a tile the camera flies to is framed clear of it. (The start-view offer itself is
 // start-view-cli.spec.ts.)
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
@@ -26,6 +28,26 @@ const hive = (...args: string[]) => {
   return { status: r.status, data: JSON.parse(r.stdout) as Record<string, unknown> };
 };
 
+/** The view's own code: it writes on its page the band of widget cards the app says it has. */
+const ISLE = `
+window.addEventListener("message", (e) => {
+  const port = e.ports && e.ports[0];
+  if (!port || !e.data || e.data.type !== "hivemind-view:port") return;
+  port.start();
+  port.postMessage({ type: "ready", v: 1 });
+  port.onmessage = (m) => { if (m.data && m.data.type === "widgetBand") document.body.dataset.band = m.data.edge + ":" + m.data.width; };
+});
+`;
+/** The bell counts its starts in what it keeps, and says its step option: a bell put back as it
+ *  was says the step it was set to and a count past the one it had. */
+const BELL = `
+hive.on("start", () => {
+  const n = ((hive.state && hive.state.n) || 0) + 1;
+  hive.setState({ n });
+  hive.render({ type: "text", text: "bell here, start " + n + ", step " + hive.options.step });
+});
+`;
+
 /** Package @e2e/kit at `version`: view Isle, whose widgets go down the left, and the widgets named. */
 function kit(version: string, widgets: string[]): string {
   const dir = path.join(root, `kit-${version}`);
@@ -33,9 +55,15 @@ function kit(version: string, widgets: string[]): string {
     "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@e2e/kit", name: "Kit", version,
       views: [{ path: "views/isle" }], widgets: widgets.map((w) => ({ path: `widgets/${w}` })), startup: { view: "@e2e/isle" } }),
     "views/isle/hivemind-view.json": JSON.stringify({ id: "@e2e/isle", name: "Isle", version, entry: "index.html", widgets: "left" }),
-    "views/isle/index.html": "<!doctype html>",
+    "views/isle/index.html": `<!doctype html><body><script src="isle.js"></script></body>`,
+    "views/isle/isle.js": ISLE,
   };
   for (const w of widgets) {
+    if (w === "bell") {
+      files["widgets/bell/widget.json"] = JSON.stringify({ id: "@e2e/bell", name: "bell", version, options: [{ id: "step", label: "Step", type: "number", default: 1 }] });
+      files["widgets/bell/widget.js"] = BELL;
+      continue;
+    }
     files[`widgets/${w}/widget.json`] = JSON.stringify({ id: `@e2e/${w}`, name: w, version, draw: { type: "text", text: `${w} here` } });
   }
   for (const [f, text] of Object.entries(files)) {
@@ -64,6 +92,13 @@ const settled = () => page.evaluate(() => new Promise<void>((done) => requestAni
 /** The widgets the workspace holds, as stored. */
 const stored = () => page.evaluate((r) => (window.hive.workspaceObjectsSync(r) as Array<{ kind: string; widget?: string }>)
   .flatMap((o) => (o.kind === "widget" && o.widget ? [o.widget] : [])).sort(), repo);
+/** One stored widget, as the workspace holds it. */
+const storedWidget = (w: string) => page.evaluate(([r, id]) => (window.hive.workspaceObjectsSync(r) as Array<Record<string, unknown>>)
+  .find((o) => o.kind === "widget" && o.widget === id), [repo, `@e2e/${w}`] as const);
+/** The band of widget cards Isle was last told of, as `edge:width`. */
+const band = () => page.frameLocator('[data-community-view="@e2e/isle"] iframe').locator("body").getAttribute("data-band");
+const rightInset = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--widgets-right-inset"));
+const toggle = () => page.locator("[data-widgets-toggle]");
 
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
@@ -72,37 +107,109 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await app?.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
-test("opening a package's view brings its widgets, down the edge the view keeps for them", async () => {
+test("opening a package's view brings its widgets, down the edge the view keeps for them, and tells the view the room they take", async () => {
   expect(hive("plugins", "install", kit("1.0.0", ["bell", "log"]))).toMatchObject({ status: 0, data: { on: true } });
   await page.locator('[data-start-view-offer="@e2e/kit"]').getByRole("button", { name: "Open" }).click();
   await expect(isle()).toBeVisible();
-  await expect(card("bell")).toContainText("bell here");
+  await expect(card("bell")).toContainText("bell here, start 1, step 1");
   await expect(card("log")).toContainText("log here");
-  // Down the left edge, Isle's choice.
+  // Down the left edge, Isle's choice; each says it came with Isle.
   for (const w of ["bell", "log"]) expect((await card(w).boundingBox())!.x).toBeLessThan(400);
+  for (const w of ["bell", "log"]) expect((await storedWidget(w))?.view).toBe("@e2e/isle");
+  // One column of cards from the left edge, with the gap beside it; the window's right corner is clear.
+  await expect.poll(band).toBe("left:268");
+  expect(await rightInset()).toBe("0px");
+  // The card's buttons sit on its top edge, on a backing: never over its first line.
+  await card("log").hover();
+  const strip = (await card("log").locator("[data-widget-strip]").boundingBox())!;
+  const line = (await card("log").getByText("log here").boundingBox())!;
+  expect(strip.y + strip.height).toBeLessThanOrEqual(line.y + 0.5);
+  expect(await card("log").locator("[data-widget-strip]").evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
   await shot("1-brought");
 });
 
-test("a widget closed stays closed when the view shows again, opened by the CLI", async () => {
+test("× takes a widget away with an Undo that puts it back as it was; one closed stays closed, and one a view brought waits for that view", async () => {
+  // Set to step 5 first: Undo puts back what it was set to and what its code kept.
+  await card("bell").hover();
+  await card("bell").getByRole("button", { name: "bell options" }).click();
+  await card("bell").getByLabel("Step").fill("5");
+  await card("bell").getByLabel("Step").blur();
+  await expect.poll(async () => (await storedWidget("bell"))?.options).toEqual({ step: 5 });
+  await card("bell").getByRole("button", { name: "bell options" }).click();
+  await card("bell").getByRole("button", { name: "remove bell" }).click();
+  await expect(card("bell")).toHaveCount(0);
+  const removed = page.locator("[data-sonner-toast]").filter({ hasText: "bell removed" });
+  await removed.getByRole("button", { name: "Undo" }).click();
+  // Started again on what it kept (its second start) and the step it was set to, where it was.
+  await expect(card("bell")).toContainText("bell here, start 2, step 5");
+  await expect.poll(() => storedWidget("bell")).toMatchObject({ options: { step: 5 }, view: "@e2e/isle" });
   await card("bell").hover();
   await card("bell").getByRole("button", { name: "remove bell" }).click();
   await expect(card("bell")).toHaveCount(0);
   await toView("canvas");
   await expect(isle()).toHaveCount(0);
-  // The one left stays on the canvas, as any widget does.
-  await expect(card("log")).toHaveCount(1);
+  // The one left came with Isle: it waits for Isle, kept and not drawn over the canvas.
+  await expect(card("log")).toHaveCount(0);
+  await expect(toggle()).toHaveCount(0);
+  expect(await rightInset()).toBe("0px");
   expect(hive("ctl", "plugin", "open", "view:@e2e/isle")).toMatchObject({ status: 0, data: { view: "@e2e/isle" } });
   await expect(isle()).toBeVisible();
   await settled();
   expect(await stored()).toEqual(["@e2e/log"]);
   await expect(card("bell")).toHaveCount(0);
+  await expect(card("log")).toContainText("log here");
   await shot("2-closed-stays-closed");
+});
+
+test("one shown on every view floats over the canvas too, hidden over each view on its own, and a frame flown to is framed clear of it", async () => {
+  await card("log").hover();
+  await card("log").getByRole("button", { name: "show log on every view" }).click();
+  await expect.poll(async () => (await storedWidget("log"))?.view).toBeUndefined();
+  await toView("canvas");
+  await expect(card("log")).toContainText("log here");
+  // Down the canvas's right edge: the app's corners keep clear of the column by its width.
+  expect((await card("log").boundingBox())!.x).toBeGreaterThan(1000);
+  await expect.poll(rightInset).toBe("268px");
+  // The toggle rises above the agents' notices in its corner by however tall they stand.
+  const bottom = async () => { const b = (await toggle().boundingBox())!; return Math.round(900 - b.y - b.height); };
+  const alone = await bottom();
+  await page.evaluate(() => document.documentElement.style.setProperty("--agent-toasts-height", "120px"));
+  expect(await bottom()).toBe(alone + 120);
+  await page.evaluate(() => document.documentElement.style.setProperty("--agent-toasts-height", "0px"));
+  // Hidden over the canvas, shown over Isle: what the person chose for each view.
+  await toggle().click();
+  await expect(card("log")).toHaveCount(0);
+  await expect.poll(rightInset).toBe("0px");
+  await toView("@e2e/isle");
+  await expect(card("log")).toContainText("log here");
+  await expect.poll(band).toBe("left:268");
+  await toView("canvas");
+  await expect(card("log")).toHaveCount(0);
+  await toggle().click();
+  await expect(card("log")).toContainText("log here");
+  // A narrower window: a new frame is flown to and framed in the room left of the column.
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await expect.poll(rightInset).toBe("268px");
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:add-frame")));
+  const column = (await card("log").boundingBox())!.x;
+  const lastFrame = () => page.evaluate(() => {
+    const all = [...document.querySelectorAll(".react-flow__node-frame")];
+    const r = all.at(-1)?.getBoundingClientRect();
+    return r ? { left: r.left, right: r.right } : null;
+  });
+  await expect.poll(async () => { const f = await lastFrame(); return !!f && f.left > 0 && f.right <= column; }, { timeout: 10_000 }).toBe(true);
+  await shot("3-every-view");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await toView("@e2e/isle");
+  await expect(isle()).toBeVisible();
 });
 
 test("through a relaunch with both closed, only the widget a later version adds comes, at once while the view shows", async () => {
   await card("log").hover();
   await card("log").getByRole("button", { name: "remove log" }).click();
   await expect(card("log")).toHaveCount(0);
+  // The cards went: the view is told it has the room back.
+  await expect.poll(band).toBe("left:0");
   // Saved before closing (debounced): the relaunch opens on Isle with nothing on the board.
   await expect.poll(() => JSON.parse(fs.readFileSync(path.join(xdg, "hivemind", "settings.json"), "utf8")).views?.defaultView).toBe("@e2e/isle");
   await expect.poll(stored).toEqual([]);
@@ -115,5 +222,5 @@ test("through a relaunch with both closed, only the widget a later version adds 
   await expect(card("tide")).toContainText("tide here");
   await settled();
   expect(await stored()).toEqual(["@e2e/tide"]);
-  await shot("3-update");
+  await shot("4-update");
 });

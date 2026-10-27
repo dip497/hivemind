@@ -150,17 +150,20 @@ test("a record another writer left without what its kind needs is skipped when r
   expect(readObjects(doc)).toEqual([note("n1", "kept")]);
 });
 
-test("a widget keeps its state and options; too big a state, options that are not a map, and a widget without its package are not kept", () => {
+test("a widget keeps its state, options and the view that brought it; too big a state, options that are not a map, a view that is not a name, and a widget without its package are not kept", () => {
   const doc = new LoroDoc();
   const base = { kind: "widget", z: 1, widget: "meter" };
   writeBoard(doc, [
-    { id: "w1", ...base, state: { resets: 1 }, options: { minutes: 25 } },
+    { id: "w1", ...base, state: { resets: 1 }, options: { minutes: 25 }, view: "@kit/isle" },
     { id: "w4", ...base, options: "not a map" },
     { id: "w2", ...base, state: { big: "x".repeat(20_000) } },
     { id: "w3", ...base, widget: "" },
+    { id: "w5", ...base, view: 7 },
   ]);
   doc.commit();
-  expect(readObjects(doc)).toEqual([{ id: "w1", ...base, state: { resets: 1 }, options: { minutes: 25 } }, { id: "w2", ...base }, { id: "w4", ...base }] as BoardObject[]);
+  expect(readObjects(doc)).toEqual([
+    { id: "w1", ...base, state: { resets: 1 }, options: { minutes: 25 }, view: "@kit/isle" }, { id: "w2", ...base }, { id: "w4", ...base }, { id: "w5", ...base },
+  ] as BoardObject[]);
 });
 
 test("a widget on the board has a box, and what people write in it merges as a note's does: text by character, lines one by one", () => {

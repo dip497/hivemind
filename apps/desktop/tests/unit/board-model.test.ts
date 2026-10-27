@@ -64,7 +64,7 @@ test("a new board widget is centred where it is added and joins the frame there;
   // A list's lines exist from the start; a widget added without a place floats, and is no box.
   assert.deepEqual(newWidget("checklist", "c9", 1, { at: { x: 0, y: 0 }, size, lines: true, frames }).items, []);
   const floating = newWidget("clock", "w1", 1);
-  assert.deepEqual(widgetsOf([floating, box]).map((w) => w.id), ["w1"]);
+  assert.deepEqual(widgetsOf([floating, box], "canvas").map((w) => w.id), ["w1"]);
 
   const list = { id: "c1", kind: "widget", widget: "checklist", placement: "board", x: 0, y: 0, w: 260, h: 200, text: "t", items: [{ id: "i1", text: "a", done: true }] } as BoxObject;
   let n = 0;

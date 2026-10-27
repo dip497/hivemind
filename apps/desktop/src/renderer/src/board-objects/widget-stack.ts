@@ -35,3 +35,17 @@ export function stackDownEdge(ids: readonly string[], sizes: Readonly<Record<str
   }
   return spots;
 }
+
+/**
+ * How far the cards at `spots` reach in from the `edge` of a screen `screenW` wide, with the gap the
+ * stack keeps beside them: the room a view leaves them (protocol `widgetBand`, the
+ * `--widgets-right-inset` the app's own corners read). 0 when there are none.
+ */
+export function bandWidth(spots: Readonly<Record<string, Spot>>, sizes: Readonly<Record<string, Size>>, screenW: number, edge: "left" | "right"): number {
+  let reach = 0;
+  for (const [id, spot] of Object.entries(spots)) {
+    const w = sizes[id]?.w ?? CARD_W;
+    reach = Math.max(reach, edge === "left" ? spot.x + w : screenW - spot.x);
+  }
+  return reach > 0 ? Math.min(Math.ceil(reach) + GAP, screenW) : 0;
+}

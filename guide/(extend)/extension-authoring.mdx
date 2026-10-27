@@ -158,6 +158,7 @@ Check `hm.supports("<feature>")` before using a newer feature.
 | Suggest a prompt (the person confirms) | `await hm.prompt(tileId, "run the tests")` |
 | Who else is here | `hm.onParticipants(cb)` (`participants`) |
 | The canvas's widgets | `hm.onWidgets(cb)`, `hm.pressWidget(id, action)` (`widgets`) |
+| Keep clear of the widget cards over your view | `hm.onWidgetBand(({ edge, width }) => …)` (`widgetBand`): how far the cards reach in from your widget edge, the gap beside them included, or 0 when there are none. It comes at once, then each time cards come or go, start a second column, or the window is resized |
 | Issues | `hm.onIssues(cb)`, `hm.issues.read(id)`, `create`, `update`, … (`issues`) |
 | Its settings | `hm.settings`, `hm.on("settings", cb)` (`settings`) |
 | Draw your own toolbar | `"toolbar": "off"`, then `hm.commands.openHostMenu("views", rect)`, `"add"`, `"appearance"` or `"settings"` opens the app's own (`hostMenu`) |
@@ -208,7 +209,7 @@ Selection and focus need none.
 | `"files"` | `true` when it `fetch`es its own files; without it every `fetch` is refused |
 | `"commands"` | what an agent can run in it (`hm.onCommand(name, handler)`), optionally with `"keys": "mod+alt+k"` |
 | `"toolbar"` | `"top"`, `"bottom"` (the default), `"hidden"` or `"off"` |
-| `"widgets": "left"` | start widget cards down the left edge over the view instead of the right, for a view that keeps its own panels on the right; a card the person moved stays put |
+| `"widgets": "left"` | start widget cards down the left edge over the view instead of the right, for a view that keeps its own panels on the right; a card the person moved stays put. `hm.onWidgetBand` says how much room they take |
 | `"layout": "personal"` | keep the layout per person instead of shared |
 | `"layers": true` | show the app's Layers panel beside the view |
 | `"phone": true` | offer it on the phone page; use `hm.device.compact` and `hm.device.touch` |

@@ -203,6 +203,8 @@ export function usePluginLink(o: PluginLinkOptions): PluginLink {
       confirmPrompt,
       issueRoot: () => optsRef.current.issueRoot?.() ?? rootRef.current,
       issueFolder: () => { const d = optsRef.current.issueFolder?.() ?? repoRef.current; return d && !isRemote(d) ? d : null; },
+      // A view fills the window's middle, where the widget cards float; a tool's tile and a widget do not.
+      ...(o.record.kind === "view" ? { box: () => optsRef.current.root.current } : {}),
     }),
     onDisable: (reason) => { running.current?.disabled(reason); optsRef.current.onDisable(reason); },
   // eslint-disable-next-line react-hooks/exhaustive-deps
