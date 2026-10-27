@@ -139,7 +139,9 @@ test("× takes a widget away with an Undo that puts it back as it was; one close
   await card("bell").getByRole("button", { name: "remove bell" }).click();
   await expect(card("bell")).toHaveCount(0);
   const removed = page.locator("[data-sonner-toast]").filter({ hasText: "bell removed" });
-  await removed.getByRole("button", { name: "Undo" }).click();
+  // Still there after the 4 s a notice usually stays: there is time to reach it.
+  await page.waitForTimeout(5_000);
+  await removed.getByRole("button", { name: "Undo" }).click({ timeout: 1_000 });
   // Started again on what it kept (its second start) and the step it was set to, where it was.
   await expect(card("bell")).toContainText("bell here, start 2, step 5");
   await expect.poll(() => storedWidget("bell")).toMatchObject({ options: { step: 5 }, view: "@e2e/isle" });

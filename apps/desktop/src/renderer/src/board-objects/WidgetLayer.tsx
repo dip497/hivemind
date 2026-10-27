@@ -77,7 +77,8 @@ export function WidgetLayer({ repo, board, packages, edge, view }: {
   // person set it to and what its code keeps, where it sat.
   const remove = (w: WidgetObject) => {
     board.remove(w.id);
-    toast(`${nameOf(w.widget)} removed`, { id: `widget-removed:${w.id}`, action: { label: "Undo", onClick: () => board.restore(w) } });
+    // Twice sonner's 4 s: time to notice the card went and reach the button.
+    toast(`${nameOf(w.widget)} removed`, { id: `widget-removed:${w.id}`, duration: 8_000, action: { label: "Undo", onClick: () => board.restore(w) } });
   };
   const sized = (id: string, size: Size) => setSizes((all) => {
     const was = all[id];
