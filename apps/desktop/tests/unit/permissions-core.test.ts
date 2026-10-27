@@ -13,6 +13,8 @@ test("the app's own page gets what the app uses, and nothing else", () => {
     // A widget's hive.notify, and the Copy buttons.
     [APP, APP, "notifications", "allow"],
     [`${APP}#/settings`, APP, "clipboard-sanitized-write", "allow"],
+    // Appearance's font rows list the computer's fonts.
+    [`${APP}#/settings`, APP, "local-fonts", "allow"],
     // The dev server is the app's page in a dev run, whatever path it is on.
     [`${DEV}#/x`, DEV, "notifications", "allow"],
     [APP, APP, "media", "deny"],
@@ -31,7 +33,7 @@ test("the app's own page gets what the app uses, and nothing else", () => {
 
 test("a view's frame, a tool's page or any other plugin page in the app's window gets nothing", () => {
   for (const url of ["hm-view://tile-list/index.html", "hm-plugin://tool/page.html", "http://127.0.0.1:4555/", "about:blank", ""]) {
-    for (const permission of ["notifications", "clipboard-sanitized-write", "media", "geolocation", "fullscreen", "pointerLock"]) {
+    for (const permission of ["notifications", "clipboard-sanitized-write", "local-fonts", "media", "geolocation", "fullscreen", "pointerLock"]) {
       assert.equal(decide({ permission, url, guest: false, appPage: APP }), "deny", `${permission} from ${url}`);
     }
   }

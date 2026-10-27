@@ -21,10 +21,11 @@ import { useRef, useState } from "react";
 import { Film, Image as ImageIcon, Plus, Trash, ChevronDown } from "./components/icons";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "./components/ui/select";
+import { computerFonts, type ComputerFont } from "./computer-fonts";
 import { Switch as SwitchPrimitive } from "./components/ui/switch";
 import { PRESETS, type TerminalPalette } from "@hivemind/core/settings-schema";
-import { NAMED_FONTS, fontNameOf, type FontSlot } from "@hivemind/core/font-names";
+import { NAMED_FONTS, fontNameOf, fontStack, type FontSlot } from "@hivemind/core/font-names";
 import { cssColorToHex } from "@hivemind/core/css-color";
 import { accentOf } from "@hivemind/core/appearance-extra";
 import { ACCENT_CONTRAST, accentMark, themeSwatches } from "@hivemind/core/theme-format";
@@ -175,8 +176,9 @@ export function AccentPicker({ t }: { t: ThemeState }) {
 // ── corners and fonts ───────────────────────────────────────────────────────
 
 /** A font, as core names it (`fontNameOf`): a face named here, the face a theme brought (by its
- *  family, with the theme that set it), or any CSS font list the person types (Custom, its field
- *  holding the whole list, the closed select reading its first family). */
+ *  family, with the theme that set it), one installed on the computer (listed once the select
+ *  opens, each in its own face; for code, monospace ones first), or any CSS font list the person
+ *  types (Custom, its field holding the whole list, the closed select reading its first family). */
 function FontRow({ id, slot, label, hint, value, onChange }: {
   id: string; slot: FontSlot; label: string; hint: string; value: string; onChange: (v: string) => void;
 }) {
@@ -186,6 +188,12 @@ function FontRow({ id, slot, label, hint, value, onChange }: {
   // Apply and Revert, so the choice is dropped the moment the value moves (a theme, Revert, `hive
   // config set`): the same list coming back later is named afresh, not Custom again.
   const [customFor, setCustomFor] = useState<string | null>(null);
+  const [onComputer, setOnComputer] = useState<ComputerFont[]>([]);
+  const named = new Set(fonts.map((f) => f.label));
+  const listed = onComputer.filter((f) => !named.has(f.family));
+  const groups = slot === "mono"
+    ? [["Monospace on this computer", listed.filter((f) => f.mono)], ["Other fonts on this computer", listed.filter((f) => !f.mono)]] as const
+    : [["On this computer", listed]] as const;
   if (customFor !== null && customFor !== value) setCustomFor(null);
   const custom = name.kind === "custom" || customFor === value;
   return (
@@ -200,11 +208,13 @@ function FontRow({ id, slot, label, hint, value, onChange }: {
           />
         )}
         <Select
-          value={custom ? "custom" : name.kind === "named" ? name.id : "face"}
+          value={custom ? "custom" : name.kind === "named" ? name.id : name.kind === "computer" ? `computer:${name.family}` : "face"}
+          onOpenChange={(open) => { if (open) void computerFonts().then(setOnComputer); }}
           onValueChange={(v) => {
             const f = fonts.find((x) => x.id === v);
             setCustomFor(v === "custom" ? value : null);
             if (f) onChange(f.value);
+            else if (v.startsWith("computer:")) onChange(fontStack(slot, v.slice("computer:".length)));
           }}
         >
           <SelectTrigger id={id} data-font-select={id} className="min-w-40">
@@ -212,7 +222,14 @@ function FontRow({ id, slot, label, hint, value, onChange }: {
           </SelectTrigger>
           <SelectContent>
             {name.kind === "face" && <SelectItem value="face">{name.label}</SelectItem>}
-            {fonts.map((f) => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
+            {fonts.map((f) => <SelectItem key={f.id} value={f.id} style={{ fontFamily: f.value }}>{f.label}</SelectItem>)}
+            {name.kind === "computer" && !listed.some((f) => f.family === name.family) && <SelectItem value={`computer:${name.family}`}>{name.label}</SelectItem>}
+            {groups.map(([heading, list]) => list.length > 0 && (
+              <SelectGroup key={heading} data-font-group={heading}>
+                <SelectLabel>{heading}</SelectLabel>
+                {list.map((f) => <SelectItem key={f.family} value={`computer:${f.family}`} style={{ fontFamily: fontStack(slot, f.family) }}>{f.family}</SelectItem>)}
+              </SelectGroup>
+            ))}
             <SelectItem value="custom">Custom…</SelectItem>
           </SelectContent>
         </Select>

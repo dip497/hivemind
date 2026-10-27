@@ -202,7 +202,8 @@ test("Revert to previous look puts back what was there", async () => {
 
 test("a font list of the person's own is Custom: its field holds the list, the closed select its first family", async () => {
   const was = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--font-ui-user").trim());
-  const typed = `"Iosevka Term", ${was}`;
+  // Not the list a font picked from the computer is set as (the family, then the app's own).
+  const typed = `"Iosevka Term", sans-serif`;
   await page.evaluate((v) => window.hive.settingsSet("appearance.uiFont", v), typed);
   await appearance();
   await expect(uiFontRow().select).toHaveText("Iosevka Term");

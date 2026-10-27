@@ -26,9 +26,9 @@ export interface PermissionRequest {
   externalUrl?: string;
 }
 
-/** What the app's page uses: notifications (a widget's `hive.notify`) and copying (the Copy
- *  buttons, a terminal's selection). */
-const APP_USES = new Set(["notifications", "clipboard-sanitized-write"]);
+/** What the app's page uses: notifications (a widget's `hive.notify`), copying (the Copy
+ *  buttons, a terminal's selection) and the computer's font list (Appearance's font rows). */
+const APP_USES = new Set(["notifications", "clipboard-sanitized-write", "local-fonts"]);
 /** What any site gets, as Chrome gives it without asking: full screen in its tile's window,
  *  copying what it was given, holding the pointer (a game, a 3D view) and, in full screen, the keys,
  *  until Esc (held, for the keys), keeping its data when the disk runs short, playing protected
