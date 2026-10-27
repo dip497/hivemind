@@ -212,6 +212,9 @@ catalogs:
     '@xterm/addon-serialize':
       specifier: 0.15.0-beta.310
       version: 0.15.0-beta.310
+    '@xterm/addon-unicode-graphemes':
+      specifier: 0.5.0-beta.310
+      version: 0.5.0-beta.310
     '@xterm/addon-web-links':
       specifier: 0.13.0-beta.310
       version: 0.13.0-beta.310
@@ -517,6 +520,9 @@ importers:
       '@xterm/addon-serialize':
         specifier: 'catalog:'
         version: 0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
+      '@xterm/addon-unicode-graphemes':
+        specifier: 'catalog:'
+        version: 0.5.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
       '@xterm/addon-web-links':
         specifier: 'catalog:'
         version: 0.13.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
@@ -674,6 +680,9 @@ importers:
       '@xterm/addon-serialize':
         specifier: 'catalog:'
         version: 0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
+      '@xterm/addon-unicode-graphemes':
+        specifier: 'catalog:'
+        version: 0.5.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))
       '@xterm/headless':
         specifier: 'catalog:'
         version: 6.1.0-beta.313(patch_hash=29daca9ddf230d8379977193ce0966fcd5faf181aae44fed783fe96acbe736f7)
@@ -3082,6 +3091,11 @@ packages:
 
   '@xterm/addon-serialize@0.15.0-beta.310':
     resolution: {integrity: sha512-Kc2+SBXmlTXU8bava1mxFBipRkqUT7hWkwJpO8Bafq0oDq1HkMF4eb6JcYZ6kGHunylUSIUudO3ufGjnOZ2sLQ==}
+    peerDependencies:
+      '@xterm/xterm': ^6.1.0-beta.315
+
+  '@xterm/addon-unicode-graphemes@0.5.0-beta.310':
+    resolution: {integrity: sha512-oCvQV7rKNekf7KcNdVicPhOo47W160QS6tIhXG7VpQ9OKGKTrAnMAxD+fr/nTlbd3h86+zvMqJpfd7NKEm/fYA==}
     peerDependencies:
       '@xterm/xterm': ^6.1.0-beta.315
 
@@ -7201,6 +7215,10 @@ snapshots:
       '@xterm/xterm': 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
 
   '@xterm/addon-serialize@0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))':
+    dependencies:
+      '@xterm/xterm': 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
+
+  '@xterm/addon-unicode-graphemes@0.5.0-beta.310(@xterm/xterm@6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6))':
     dependencies:
       '@xterm/xterm': 6.1.0-beta.315(patch_hash=47ad25d1a5776c3d4455ebca38960bf9e7d7105208669d7f58801ef348acead6)
 

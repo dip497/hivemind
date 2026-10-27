@@ -133,6 +133,20 @@ test("Shift+Enter reaches the program as its own key, not as Enter", async () =>
   await page.keyboard.press("Enter");
 });
 
+test("Ctrl+_ reaches the program: undo in a shell's and an agent's prompt", async () => {
+  await shortcut("tile:1");
+  await page.locator(".hm-node-selected .xterm-helper-textarea").focus();
+  await page.keyboard.type("cat -v");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Control+Shift+-");
+  await page.keyboard.press("Enter");
+  await expect.poll(screen, { timeout: 5_000 }).toContain("^_");
+  await page.keyboard.press("Control+c");
+  await page.keyboard.type("clear");
+  await page.keyboard.press("Enter");
+});
+
 test("Esc in a full-screen terminal is the program's; Ctrl+Shift+F leaves", async () => {
   const fullScreen = () => page.locator(".hm-term-fs-panel").count();
   await shortcut("tile:1");

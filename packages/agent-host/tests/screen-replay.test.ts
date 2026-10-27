@@ -2,6 +2,7 @@
 // session's size, it is the screen the session has now.
 import { test, expect } from "bun:test";
 import { Terminal } from "@xterm/headless";
+import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { SessionManager, type ManagedPty } from "../src/pty-session-manager.ts";
 
 function fakePty() {
@@ -24,9 +25,10 @@ async function session(cols: number, rows: number) {
   return { m, say: f.say };
 }
 
-/** The screen a window draws from `replay`, at `cols` x `rows`. */
+/** The screen a window draws from `replay`, at `cols` x `rows`: its terminal counts widths by grapheme. */
 async function drawn(replay: string, cols: number, rows: number) {
   const t = new Terminal({ cols, rows, scrollback: 100, allowProposedApi: true });
+  t.loadAddon(new UnicodeGraphemesAddon() as unknown as Parameters<typeof t.loadAddon>[0]);
   await new Promise<void>((r) => t.write(replay, r));
   const b = t.buffer.active;
   const lines = Array.from({ length: b.length }, (_, y) => b.getLine(y)?.translateToString(true) ?? "").filter(Boolean);
@@ -42,6 +44,14 @@ test("a screen asked for while output is still arriving, then again, shows all o
   await first;
   const screen = await drawn((await second)!.replay, 80, 24);
   expect(screen.lines).toEqual(["$ make", "built in 3s", "$ "]);
+});
+
+test("text a program placed after an emoji or a Devanagari word is shown again in the columns it chose", async () => {
+  const s = await session(80, 24);
+  // A program measures 👍 as two columns and वानराणामधीशं as seven, and puts the next text after them.
+  s.say("👍\x1b[4GX\r\nवानराणामधीशं\x1b[9GY");
+  const screen = await drawn((await s.m.snapshot("t1"))!.replay, 80, 24);
+  expect(screen.lines).toEqual(["👍 X", "वानराणामधीशं Y"]);
 });
 
 test("a screen asked for after the session is resized puts the cursor where the session has it", async () => {

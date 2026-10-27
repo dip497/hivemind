@@ -44,7 +44,8 @@ test("Esc on the canvas is tried in order, and Shift+Esc only undocks", () => {
 test("the same key is the canvas's zoom and the terminal's font", () => {
   assert.deepEqual(on("canvas", "=", "Equal", { ctrl: true }), ["zoom-in"]);
   assert.deepEqual(on("terminal", "=", "Equal", { ctrl: true }), ["font-bigger"]);
-  assert.deepEqual(on("terminal", "_", "Minus", { ctrl: true, shift: true }), ["font-smaller"]);
+  assert.deepEqual(on("terminal", "-", "Minus", { ctrl: true }), ["font-smaller"]);
+  assert.deepEqual(on("terminal", "_", "Minus", { ctrl: true, shift: true }), [], "Ctrl+_ is undo in a shell's and an agent's prompt");
   assert.deepEqual(actionsFor(letter("c", { ctrl: true }), "terminal", false), ["copy"]);
   assert.deepEqual(actionsFor(letter("c", { ctrl: true, shift: true }), "terminal", false), ["copy"]);
   assert.deepEqual(actionsFor(letter("r", { ctrl: true }), "terminal", false), [], "Ctrl+R is the shell's history search");

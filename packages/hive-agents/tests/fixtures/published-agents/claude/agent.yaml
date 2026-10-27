@@ -167,18 +167,29 @@ detect:
       - contains: Esc to cancel
       - contains: "[use arrows"
       # Its chooser's selected option, its footer cut (a viewer's repaint shrinks the screen a
-      # row): above it, the person's last message starts with the prompt's mark too.
-      - seq:
-        - run: "❯"
-          min: 1
-          max: 1
-        - run: space
-          min: 1
-          max: 1
-        - run: digit
-          min: 1
-        - lit: "."
-        at: start
+      # row): above it, the person's last message starts with the prompt's mark too, and may start
+      # with a number ("❯ 1. fix the login"). The chooser takes the place of its empty prompt.
+      - all:
+        - seq:
+          - run: "❯"
+            min: 1
+            max: 1
+          - run: space
+            min: 1
+            max: 1
+          - run: digit
+            min: 1
+          - lit: ". "
+          at: start
+        - not:
+            seq:
+            - run: "❯"
+              min: 1
+              max: 1
+            - run: space
+              min: 0
+            - end: true
+            at: start
     then: question
   - when:
       contains: esc to interrupt

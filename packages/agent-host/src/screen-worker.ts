@@ -7,17 +7,20 @@ import { parentPort } from "node:worker_threads";
 // Namespace import: bundlers disagree on whether these expose `.default` or named ESM exports.
 import * as HeadlessXtermNS from "@xterm/headless";
 import * as SerializeAddonNS from "@xterm/addon-serialize";
+import * as UnicodeGraphemesAddonNS from "@xterm/addon-unicode-graphemes";
 // Type imports only: run from source, a worker gets no loader that maps `./x.js` to `./x.ts`.
 import type { FromScreens, ScreenCursor, ScreenRows, ToScreens } from "./screen-messages.js";
 
 type HeadlessCtor = typeof import("@xterm/headless").Terminal;
 type SerializeCtor = typeof import("@xterm/addon-serialize").SerializeAddon;
+type UnicodeGraphemesCtor = typeof import("@xterm/addon-unicode-graphemes").UnicodeGraphemesAddon;
 const pick = <T>(ns: unknown, name: string): T => {
   const m = ns as Record<string, unknown> & { default?: Record<string, unknown> };
   return (m[name] ?? m.default?.[name] ?? m.default) as T;
 };
 const Terminal = pick<HeadlessCtor>(HeadlessXtermNS, "Terminal");
 const SerializeAddon = pick<SerializeCtor>(SerializeAddonNS, "SerializeAddon");
+const UnicodeGraphemesAddon = pick<UnicodeGraphemesCtor>(UnicodeGraphemesAddonNS, "UnicodeGraphemesAddon");
 
 /**
  * What a reattach's replay loses about the mouse. `SerializeAddon` writes the tracking mode an app
@@ -111,6 +114,8 @@ function open(m: Extract<ToScreens, { t: "open" }>): void {
   const term = new Terminal({ cols: m.cols, rows: m.rows, scrollback: m.scrollback, allowProposedApi: true, vtExtensions: { kittyKeyboard: true } });
   const serializer = new SerializeAddon();
   term.loadAddon(serializer);
+  // The window's terminal counts widths the same way (TerminalTile.tsx), or its text lands in other columns.
+  term.loadAddon(new UnicodeGraphemesAddon() as unknown as Parameters<typeof term.loadAddon>[0]);
   const s: Screen = { id: m.id, epoch: m.epoch, term, serializer, parsed: m.parsed, paste: false, themeNotify: false };
   screens.set(m.id, s);
   term.onTitleChange((title) => post({ t: "title", id: s.id, epoch: s.epoch, title }));
