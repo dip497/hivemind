@@ -21,10 +21,11 @@ import { issueService } from "./issue-service";
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
 
 /** What a session's status change means for views: a turn its hooks ended, a new subagent count. */
-export function feedHostedStatus(hub: Pick<ViewEventHub, "onHookTurn" | "onSubagents">, last: Map<string, { state: string; subagents: number }>, e: HcpStatusEvent): void {
+export function feedHostedStatus(hub: Pick<ViewEventHub, "onHookStatus" | "onHookTurn" | "onSubagents">, last: Map<string, { state: string; subagents: number }>, e: HcpStatusEvent): void {
   const prev = last.get(e.tileId);
   const { state, subagents, source } = e.status;
   last.set(e.tileId, { state, subagents: subagents.length });
+  if (source === "hooks") hub.onHookStatus(e.tileId);
   if (source === "hooks" && TURN_ENDS.has(state) && prev && !TURN_ENDS.has(prev.state)) hub.onHookTurn(e.tileId, state as TurnOutcome);
   if ((prev?.subagents ?? 0) !== subagents.length) hub.onSubagents(e.tileId, subagents.length);
 }

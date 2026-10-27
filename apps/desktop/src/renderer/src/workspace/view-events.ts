@@ -65,6 +65,7 @@ export class ViewEventHub {
   private layoutKey: string | null = null;
   private initialized = false;
   private openedThisRun = new Set<string>();
+  /** Tiles whose hooks report their turns: none is inferred for them. */
   private hookTurns = new Set<string>();
   private failed = new Set<string>();
   /** Tiles whose exit line says how the process ended. */
@@ -109,6 +110,9 @@ export class ViewEventHub {
     }
     if (cur?.bucket === "working" && bucket === "idle" && !e.synthetic && !this.hookTurns.has(e.tileId) && this.isAgent(e.tileId)) {
       this.emit({ kind: "turn", tileId: e.tileId, inferred: true }, t);
+      // History keeps it as it keeps a hook's: a view that mounts later, or reads another day,
+      // counts the turns of an agent without a turn hook too.
+      this.line({ t, e: "t", id: e.tileId });
     }
     let next: SinceInfo;
     if (cur) next = { bucket, since: t, exact: true };
@@ -175,6 +179,12 @@ export class ViewEventHub {
     }
     this.tiles = next;
     this.initialized = true;
+  }
+
+  /** The host's status for this tile came from its hooks, so they report its turns. Told of
+   *  every status, not only a turn's end: the window hears a turn's idle before its hook. */
+  onHookStatus(tileId: string): void {
+    this.hookTurns.add(tileId);
   }
 
   /** A turn hook fired for this tile, ending the turn this way. */

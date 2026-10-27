@@ -240,7 +240,7 @@ export interface ViewHistoryTile {
   openedAt?: number; closedAt?: number;
   /** [start, end, status], clipped to the day */
   intervals: [number, number, ViewStatus][];
-  /** turn-finished times */
+  /** turn-finished times: a turn hook's, and those inferred for an agent without one */
   turns: number[];
 }
 export interface ViewHistoryDay {

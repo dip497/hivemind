@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Download, Earth, Spinner, Palette, RotateCw, SquareDashed, AddWidget, Upload, Icon } from "../components/icons";
+import { Check, ChevronDown, Download, Earth, History, Spinner, Palette, RotateCw, SquareDashed, AddWidget, Upload, Icon } from "../components/icons";
 import type { ToolbarAction, ToolbarActionId } from "@hivemind/core/toolbar";
 import { Button } from "../components/ui/button";
 import { MenuItem } from "../components/ui/menu-item";
@@ -10,6 +10,7 @@ import { setViewMode, useViewMode } from "./view-mode-store";
 import { AppControls } from "./app-controls";
 import { openAdd } from "./add-dialog";
 import { actionKey } from "../shortcut";
+import { useShown } from "../multiplayer/shown";
 
 export interface StandardToolbarProps {
   actions: readonly ToolbarAction[];
@@ -99,14 +100,34 @@ function ViewSwitch({ compact }: { compact: boolean }) {
   </div>;
 }
 
-/** Every view to switch to, the current one ticked: the toolbar's list, and the one a view opens. */
+/** Every view to switch to, the current one ticked: the toolbar's list, and the one a view opens.
+ *  It starts with the workspace shown: a view may leave out the Layers panel, whose title says it. */
 function ViewChoices({ onPicked }: { onPicked: () => void }) {
   const views = useViews();
   const current = resolveViewId(useViewMode());
-  return <>{views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint} role="menuitemradio" aria-checked={view.id === current}
-    onClick={() => { setViewMode(view.id); onPicked(); }}>
-    <view.icon /><span className="flex-1">{view.label}</span>{view.id === current && <Check />}
-  </MenuItem>)}</>;
+  return <>
+    <WorkspaceChoice onPicked={onPicked} />
+    {views.map((view) => <MenuItem key={view.id} variant="muted" data-view-choice={view.id} title={view.hint} role="menuitemradio" aria-checked={view.id === current}
+      onClick={() => { setViewMode(view.id); onPicked(); }}>
+      <view.icon /><span className="flex-1">{view.label}</span>{view.id === current && <Check />}
+    </MenuItem>)}
+  </>;
+}
+
+/** The workspace this window shows, by name, and the way to another: Open recent, the switcher
+ *  the Layers panel's menu and its key open too. */
+function WorkspaceChoice({ onPicked }: { onPicked: () => void }) {
+  const { repo, shared } = useShown();
+  if (!repo) return null;
+  const name = shared?.names.workspace ?? repo.split(/[\\/]/).filter(Boolean).pop() ?? repo;
+  return <>
+    <div className="max-w-[176px] truncate px-2 pb-1 pt-1.5 text-count font-medium text-[var(--color-fg2)]" title={repo} data-view-menu-workspace>{name}</div>
+    <MenuItem variant="muted" role="menuitem" data-switch-workspace title={`Open recent  (${actionKey("open-recent")})`}
+      onClick={() => { onPicked(); window.dispatchEvent(new CustomEvent("hivemind:open-recent")); }}>
+      <History /><span className="flex-1">Switch workspace…</span>
+    </MenuItem>
+    <div role="separator" className="-mx-1 my-1 h-px bg-muted" />
+  </>;
 }
 
 const VIEW_MENU = "hivemind:view-menu";
