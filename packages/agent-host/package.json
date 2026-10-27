@@ -16,6 +16,7 @@
     "@hivemind/core": "workspace:*",
     "@lydell/node-pty": "catalog:",
     "@xterm/addon-serialize": "catalog:",
+    "@xterm/addon-unicode-graphemes": "catalog:",
     "@xterm/headless": "catalog:"
   },
   "devDependencies": {

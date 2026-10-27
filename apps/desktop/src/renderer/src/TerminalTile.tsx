@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { trackOpenSession } from "./machines/open-sessions";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { followsLink, linkHint, registerFileLinks } from "./terminal-file-links";
@@ -419,6 +420,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     );
     const fit = new FitAddon();
     term.loadAddon(fit);
+    // Widths by grapheme, as programs measure their text: 👍 and ⚠️ take two columns, a Devanagari
+    // syllable one. The daemon's screens count the same way (screen-worker.ts).
+    term.loadAddon(new UnicodeGraphemesAddon());
     term.open(host);
     // The screen as text for tests: a WebGL terminal renders none into the DOM.
     (host as HTMLElement & { __hmScreen?: () => string }).__hmScreen = readScreen;

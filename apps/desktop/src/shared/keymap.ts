@@ -129,7 +129,6 @@ export const KEYMAP: readonly Binding[] = [
   { keys: "mod+shift+=", where: "terminal", action: "font-bigger" },
   { keys: "mod++", where: "terminal", action: "font-bigger" },
   { keys: "mod+-", where: "terminal", action: "font-smaller" },
-  { keys: "mod+shift+-", where: "terminal", action: "font-smaller" },
   { keys: "mod+0", where: "terminal", action: "font-reset" },
 ];
 
