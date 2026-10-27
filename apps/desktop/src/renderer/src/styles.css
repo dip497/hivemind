@@ -1445,8 +1445,9 @@ html.glass-on .react-flow__node-browser {
 @media (prefers-reduced-transparency: reduce) {
   html.glass-on {
     /* 100% of the surface source = the opaque token, so every
-       bg-[var(--color-bg2/3/4)] surface solidifies with no component edits. */
-    --glass-opacity: 100%;
+       bg-[var(--color-bg2/3/4)] surface solidifies with no component edits. !important, because the
+       theme writes --glass-opacity inline on <html> (theme-store paintTheme). */
+    --glass-opacity: 100% !important;
     --frame-fill: 7%;
   }
   /* Blur costs GPU and buys nothing behind an opaque panel. */
@@ -1465,7 +1466,7 @@ html.glass-on .react-flow__node-browser {
 
 @media (prefers-contrast: more) {
   html.glass-on {
-    --glass-opacity: 100%;
+    --glass-opacity: 100% !important;
   }
   html.glass-on .hm-island,
   html.glass-on .react-flow__node {

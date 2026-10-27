@@ -184,6 +184,26 @@ test("increased contrast strengthens faint text and lines with glass off, over t
   }
 });
 
+test("with glass on, asking for less transparency or more contrast makes the panels solid, over the theme's inline opacity", async () => {
+  expect(hive("config", "set", "appearance.glass.enabled", "true").value).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains("glass-on"))).toBe(true);
+  const opacity = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--glass-opacity").trim());
+  expect(await opacity()).not.toBe("100%");
+  expect(await page.evaluate(() => document.documentElement.style.getPropertyValue("--glass-opacity")), "the theme store writes it inline").not.toBe("");
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    for (const [name, value] of [["prefers-reduced-transparency", "reduce"], ["prefers-contrast", "more"]] as const) {
+      await cdp.send("Emulation.setEmulatedMedia", { features: [{ name, value }] });
+      await expect.poll(opacity, `${name}: ${value}`).toBe("100%");
+      await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+      await expect.poll(opacity).not.toBe("100%");
+    }
+  } finally {
+    await cdp.send("Emulation.setEmulatedMedia", { features: [] });
+    hive("config", "set", "appearance.glass.enabled", "false");
+  }
+});
+
 test("an accent of your own that is hard to see on the panels says so, by the rule a theme's accent is refused by", async () => {
   // Signal: its page #0d0e10, its panels and menus #141517.
   expect(hive("theme", "use", "signal").rescanned).toBe(true);

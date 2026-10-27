@@ -156,7 +156,13 @@ export function KeyboardChip({ tile, name, kb }: { tile: string; name: string; k
       <span className="inline-flex items-center gap-1 rounded bg-[var(--color-bg)] px-1 py-px" title={kb.holder.you ? "You have the keyboard" : kb.holder.machine ? `Runs on ${kb.holder.name}'s machine: typed into there` : `${kb.holder.name} has the keyboard`}>
         <Keyboard size={11} /> {kb.holder.name}
       </span>
-      {typing && <span className="animate-pulse text-[var(--color-fg2)]" data-typing={tile}>{typing} is typing</span>}
+      {/* A small dot pulses; the words hold still, so they stay readable. */}
+      {typing && (
+        <span className="inline-flex items-center gap-1 text-[var(--color-fg2)]" data-typing={tile}>
+          <span aria-hidden className="size-1 rounded-full bg-current animate-pulse" />
+          {typing} is typing
+        </span>
+      )}
       {kb.mayTake && (
         <Button variant="ghost" size="micro" onClick={() => window.hive.keyboardTake(tile)} title={`Take the keyboard back (${actionKey("take-keyboard")})`} data-keyboard-take>
           Take back

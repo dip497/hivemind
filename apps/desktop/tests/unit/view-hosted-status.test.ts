@@ -2,7 +2,7 @@
 // counts once, a screen-read idle is not a hook turn, and every change in subagents is passed on.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { feedHostedStatus } from "../../src/renderer/src/workspace/view-services.ts";
+import { feedHostedStatus, viewEvents, viewLinkServices } from "../../src/renderer/src/workspace/view-services.ts";
 import { ViewEventHub, type LedgerLine } from "../../src/renderer/src/workspace/view-events.ts";
 import { forgetStatus, setHostedStatus, subscribeStatus } from "../../src/renderer/src/agent-status-bus.ts";
 
@@ -60,5 +60,25 @@ test("each turn counts once in events and in history, whichever of the window's 
   } finally {
     off();
     for (const id of ids) forgetStatus(id);
+  }
+});
+
+test("a view reading the day's history gets the turn that ended a moment ago, not only those the hub sent before", async () => {
+  const sent: string[] = [];
+  const hive = {
+    viewLedgerAppend: (lines: LedgerLine[]) => { for (const l of lines) sent.push(`${l.e} ${"id" in l ? l.id : ""}`); },
+    viewHistory: async () => { sent.push("history"); return { day: "2026-10-27", from: 0, to: 0, tiles: [], frames: {}, gaps: [] }; },
+  };
+  const was = (globalThis as { window?: unknown }).window;
+  (globalThis as { window?: unknown }).window = { hive };
+  try {
+    viewEvents.setWorkspace("ws-history", [{ id: "vh-now", frameId: null, kind: "agent", name: "now" }]);
+    viewEvents.onHookTurn("vh-now", "done");
+    const services = viewLinkServices({ layoutKey: () => "ws-history", repo: () => null, share: async () => ({ ok: false }) as never, frameFolder: () => null, isAgentTile: () => true, confirmPrompt: async () => true, issueRoot: () => null, issueFolder: () => null });
+    await services.history!("2026-10-27");
+    assert.deepEqual(sent.slice(sent.indexOf("t vh-now")), ["t vh-now", "history"]);
+  } finally {
+    viewEvents.setWorkspace(null, []);
+    (globalThis as { window?: unknown }).window = was;
   }
 });

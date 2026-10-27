@@ -188,6 +188,9 @@ export function viewLinkServices(opts: {
     history: async (day) => {
       const key = opts.layoutKey();
       if (!key) throw new Error("this workspace keeps no history");
+      // The lines the hub still holds (it sends them every few seconds) go first, on the same channel,
+      // so a turn that ended a moment ago is in the day a view reads now.
+      viewEvents.flushLedger();
       return window.hive.viewHistory(key, day);
     },
     share: opts.share,
