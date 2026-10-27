@@ -1,6 +1,7 @@
 // A view that lists the workspace's tiles and docks the chosen one's live terminal beside the
-// list: a row click or J/K selects the tile in the app and docks it, Escape releases it. It draws
-// only when something changes. The view the e2e specs drive a docked terminal through.
+// list: a row click or J/K selects the tile in the app and docks it, as does the app asking it to
+// show one (a widget's button, `hive ctl focus`); Escape releases it. It draws only when something
+// changes. The view the e2e specs drive a docked terminal through.
 import { applyThemeVars, connect, createInvalidator } from "@hivemind/view-sdk";
 
 const hm = await connect();
@@ -71,4 +72,8 @@ hm.on("names", ({ names }) => { tiles = tiles.map((t) => ({ ...t, name: names[t.
 hm.on("resize", () => { if (docked) hm.setSurfaceRects([dockRect(docked)]); });
 hm.on("undock", () => { docked = null; });
 hm.on("visibility", () => invalidate());
-hm.onReveal((tileId) => (tiles.some((t) => t.id === tileId) ? dockRect(tileId) : null));
+hm.onReveal((tileId) => {
+  if (!tiles.some((t) => t.id === tileId)) return null;
+  void pick(tileId);
+  return dockRect(tileId);
+});

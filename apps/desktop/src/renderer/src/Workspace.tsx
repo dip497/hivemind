@@ -109,7 +109,7 @@ import { loadCommunityViews } from "./workspace/views/community/registry";
 import { StartViewOffers } from "./plugins/open-start-view";
 import { agentScanProblems, syncAgentPlugins } from "./agent-plugins";
 import {
-  FALLBACK_VIEW_ID, getView, resolveChrome, resolveViewId, useViews,
+  FALLBACK_VIEW_ID, REVEAL_TILE, getView, resolveChrome, resolveViewId, useViews,
   type SpawnOpts, type WorkspaceCommands, type WorkspaceViewModel,
 } from "./workspace/workspace-view";
 import { saveViewLayout, useDebouncedSave, useViewLayout } from "./workspace/view-layout-store";
@@ -535,6 +535,14 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
   const focusTile = useCallback(
     (id: string, opts?: { exact?: boolean }) => {
       const frame = framesRef.current.find((f) => f.id === id);
+      // A view package draws the workspace its own way: the tile is selected and the view asked to
+      // show it. A frame, which `reveal` does not name, is the canvas's.
+      if (!frame && getView(activeViewIdRef.current ?? FALLBACK_VIEW_ID)?.source === "community") {
+        if (!tilesRef.current.some((t) => t.id === id)) return;
+        setSelectedTileId(id);
+        window.dispatchEvent(new CustomEvent(REVEAL_TILE, { detail: id }));
+        return;
+      }
       let cx: number, cy: number, w: number, h: number;
       if (frame) {
         cx = frame.x + frame.w / 2;
@@ -554,7 +562,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       // Text is only sharp at exactly 100%, so a tile always lands there; only a frame zooms to fit.
       setFocusReq((prev) => ({ id, cx, cy, w, h, n: (prev?.n ?? 0) + 1, exact: opts?.exact ?? !frame }));
     },
-    [],
+    [setSelectedTileId],
   );
 
   // Frame CRUD + opt-in arrange + the reactive auto-fit effect. See useFrameOps.

@@ -149,6 +149,7 @@ Check `hm.supports("<feature>")` before using a newer feature.
 | Show what a tile last said, or what its agent waits on, with Review | `hm.setLineRects([{ tileId, x, y, w, h }])` (`lineSlots`): the app draws it in the room you leave, at least 20px high, and its own **Review** for a permission (never Allow in your room); your view never gets the text |
 | Save your layout (64 KB, per workspace) | `hm.setLayout(blob)` |
 | An agent's status as it changes | `hm.subscribeStatus(tileId, (status, info) => …)` |
+| Show a tile when someone asks to see it: a widget's button, a notification's **View**, `hive ctl focus` | `hm.onReveal((tileId) => …)`: move your camera to it and answer where it is drawn (`{ x, y, w, h }`), or `null` for a tile you do not draw |
 | What happens: replies, waits, closes | `hm.onEvents(["turn", "needsInput"], cb)` |
 | How busy a terminal is (0 to 3) | `hm.activity(tileId, cb)` |
 | A day's history per tile | `await hm.history("2026-09-23")` |
