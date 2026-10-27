@@ -70,13 +70,23 @@ export const SINCE_BYTES_MAX = 1024 * 1024;
 /** Where one line said ends and the next begins. */
 const LINE_BREAKS = /[\n\v\f\r\u2028\u2029]/;
 
-/** What the last thing said is in a line, of `entries`: the first line of what was last said, or
- *  the tool last used and what it is about; undefined when they say neither. Made one line of plain
- *  text (one-line.ts): what an agent wrote reaches a tile's line, Home and `hive ctl agents`. */
+/** A line of markdown as the text it reads: no heading or quote marks, no bold, italics or code marks. */
+function markdownText(line: string): string {
+  return line
+    .replace(/^\s*(?:#{1,6}\s+|(?:>\s?)+)/, "")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/(^|[^\w*])[*_](?=\S)([^*_]*?\S)[*_](?![\w*])/g, "$1$2");
+}
+
+/** What the agent last said, in a line, of `entries`: the first line of its last words, or the tool
+ *  it last used and what it is about; undefined when they say neither. What the person wrote is
+ *  passed over. Made one line of plain text (one-line.ts): what an agent wrote reaches a tile's
+ *  line, Home and `hive ctl agents`. */
 function lastLineOf(entries: TranscriptEntry[]): string | undefined {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]!;
-    const line = "text" in e ? e.text.split(LINE_BREAKS).map(oneLine).find(Boolean) : "tool" in e ? oneLine([e.tool.name, e.tool.about].filter(Boolean).join(" · ")) : undefined;
+    const line = "text" in e ? (e.who === "agent" ? e.text.split(LINE_BREAKS).map((l) => oneLine(markdownText(l))).find(Boolean) : undefined)
+      : "tool" in e ? oneLine([e.tool.name, e.tool.about].filter(Boolean).join(" · ")) : undefined;
     if (line) return line;
   }
   return undefined;

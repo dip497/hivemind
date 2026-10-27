@@ -11,6 +11,10 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 - Changed: a hub can check a plugin it reads a few files at a time. The hub kit's `checkPluginListing` gives the answer `checkPluginFolder` gives for the same files, from each file's hash and only the texts the check reads: the manifests, the README at the top and the icon. `firstReads` and `planRead` say which files those are, the top's manifests first. HiveHub uses it to publish large packages such as Archipelago, reading only the files that install, so a package's sources and build scripts beside its members are not read. A view's icon is read by the kit, as a widget's is.
 - Fixed: `hive plugins check` counts a package's files that install against HiveHub's 200-file limit, leaving out the dot files HiveHub leaves out; it checked only their sizes. A package manifest over 256 KB is refused for its size, not as missing. An SVG icon that is not UTF-8 is no longer listed larger than the index takes, which left its plugin out of the catalog.
+- Fixed: the line under an agent in **Layers** is what the agent last said, as you would read it: never your own message (or one added for you, such as "This session is being continued…"), and without markdown marks such as `**` or `` ` ``.
+- Changed: a row in **Layers** is one line high unless its agent waits on you; what a terminal or agent last showed is in the row's hover card. **View ▸ Lines** is **Needs you** (the default) or **Off**.
+- Fixed: an upgrade restarts a running network server (`hive-net serve`) through its systemd user service, so it runs the new build and serves the new phone page. Before, it kept the old build until it was restarted by hand, and messages from the phone showed as sent but never arrived. One no service holds is named, with its pid.
+- Fixed: text you select with the mouse in Claude Code (fullscreen) is copied every time. A program in a terminal may now put text on the clipboard (OSC 52) while you are at that terminal; asking to read it is refused. Before, the copy landed only when Claude Code's own fallback happened to work.
 
 ## [2026.10.6] — 2026-10-26
 

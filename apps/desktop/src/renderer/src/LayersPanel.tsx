@@ -151,7 +151,7 @@ const VIEW_CHOICES = {
   activity: [["all", "All"], ["hour", "Past hour"], ["today", "Today"], ["week", "This week"]],
   groupBy: [["group", "Project"], ["machine", "Machine"], ["date", "Date"], ["status", "Status"], ["agent", "Agent"], ["none", "None"]],
   sortBy: [["canvas", "Canvas order"], ["activity", "Last activity"], ["name", "Name"]],
-  lines: [["all", "All"], ["needs-you", "Needs you"], ["off", "Off"]],
+  lines: [["needs-you", "Needs you"], ["off", "Off"]],
 } as const satisfies Record<string, ReadonlyArray<readonly [string, string]>>;
 const choiceLabel = <K extends keyof typeof VIEW_CHOICES>(k: K, v: string) => (VIEW_CHOICES[k] as ReadonlyArray<readonly [string, string]>).find(([id]) => id === v)?.[1] ?? v;
 
@@ -204,7 +204,7 @@ interface RowActions {
 }
 
 /** One tile's row: its mark, its name, and its status when that is worth reading. A terminal's
- *  may say more under its name, as the View menu's Lines says (`lines`): it is two lines high then. */
+ *  says what its agent waits on under its name, unless the View menu's Lines is Off: it is two lines high then. */
 const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, started = 0, folded = false, jumpKey, until, asleep = false, failed = false }: { t: ModelTile; depth: number; selected: boolean; actions: RowActions; lines: LayersPrefs["lines"]; started?: number; folded?: boolean; jumpKey?: number; until?: string; asleep?: boolean; failed?: boolean }) {
   const st = t.status;
   const unread = isUnread(t);
@@ -259,7 +259,7 @@ const TileRow = memo(function TileRow({ t, depth, selected, actions, lines, star
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate">{t.name}</span>
-        {lined && <RowLine tileId={t.id} show={lines} />}
+        {lined && <RowLine tileId={t.id} />}
       </span>
       {/* While Ctrl/⌘ is held: the number that jumps here, in place of its status. */}
       {jumpKey !== undefined ? (

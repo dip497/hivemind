@@ -1,12 +1,11 @@
 /**
  * The line a terminal's Layers row shows under its name (docs/design/last-line-2026-10-23.md §3):
- * what its agent waits on, in Signal Amber, else what its screen last showed. The row draws it
+ * what its agent waits on, in Signal Amber; its hover card also says what its screen last showed. The row draws it
  * through `RowLine`, which listens to its own tile alone (line-store.ts, agent-waits.ts), so a line
  * that changes redraws that line: never the panel's model of the tiles, nor the row.
  */
 import { memo, useCallback, useRef, useSyncExternalStore } from "react";
 import { oneLine } from "@hivemind/agent-host/one-line";
-import type { LayersPrefs } from "@hivemind/core/settings-schema";
 import { subscribeWait, waitOf, type TileWait } from "./agent-waits";
 import { lineFor } from "../../shared/line-for";
 import { tileLines } from "./line-store";
@@ -28,23 +27,21 @@ export function useWait(tile: string | null): TileWait | undefined {
 /** The id of `tile`'s line, which its row is described by. */
 export const lineId = (tile: string) => `layer-line-${tile}`;
 
-/** The second line of a terminal's row, as the View menu's Lines says (`show`): nothing at all
- *  when there is nothing to say, so the row stays one line high. For an agent that keeps a
- *  conversation main's line is what it last said there, never its screen's chrome. A permission
- *  that can be answered from here adds a band of Deny and Allow under it (wait-decide.tsx). */
-export const RowLine = memo(function RowLine({ tileId, show }: { tileId: string; show: LayersPrefs["lines"] }) {
-  const agent = useWait(show === "off" ? null : tileId);
-  const line = useLine(show === "all" ? tileId : null);
-  const text = lineFor(agent?.waiting, line);
+/** The second line of a terminal's row: what its agent waits on, and nothing while it waits on
+ *  nothing, so the row stays one line high. A permission that can be answered from here adds a band
+ *  of Deny and Allow under it (wait-decide.tsx). */
+export const RowLine = memo(function RowLine({ tileId }: { tileId: string }) {
+  const agent = useWait(tileId);
   const waiting = agent?.waiting;
+  const text = waiting ? lineFor(waiting, undefined) : "";
   const decides = decidable(waiting);
   const el = useRef<HTMLSpanElement>(null);
   const cut = useCut(el, text, decides);
   if (!text) return null;
   return (
     <>
-      <span ref={el} id={lineId(tileId)} data-layer-line={waiting ? "waiting" : "line"} className={`truncate font-mono text-count leading-4 ${waiting ? "" : "text-[var(--color-fg2)]"}`}
-        style={waiting ? { color: LOOKS.needs.text } : undefined}>
+      <span ref={el} id={lineId(tileId)} data-layer-line="waiting" className="truncate font-mono text-count leading-4"
+        style={{ color: LOOKS.needs.text }}>
         {text}
       </span>
       {/* The ghost button's text, not its box, lines up with the line above. */}

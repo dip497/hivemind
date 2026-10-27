@@ -68,7 +68,7 @@ case "$url" in
     tar -czf "$out" -C "$src" hivemind_api-x; rm -rf "$src";;
   *hive-net*)
     [ "$(cat "$TMP_NO_NET" 2>/dev/null || echo 0)" = 1 ] && exit 22
-    printf '#!/usr/bin/env bash\necho hive-net %s\n' "$want" > "$out"; chmod +x "$out";;
+    printf '#!/usr/bin/env bash\n[ "$1" = serve ] && while :; do sleep 1; done\necho hive-net %s\n' "$want" > "$out"; chmod +x "$out";;
   *AppImage*)
     cat > "$out" <<IMG
 #!/usr/bin/env bash
@@ -161,6 +161,32 @@ echo 0 > "$TMP_NO_REDIRECT"
 # ── 6. and now there is nothing to do ────────────────────────────────────
 run_installer > "$TMP/out6"
 check "an up-to-date install is a no-op" "yes" "$(grep -qi "already on v9.9.12" "$TMP/out6" && echo yes || echo no)"
+
+# ── 6b. a network server runs the hive-net replaced: the upgrade restarts it ──
+# A systemd user service holding it is restarted; one nothing restarts is named, with its pid.
+cat > "$TMP/shims/systemctl" <<'SHIM'
+#!/usr/bin/env bash
+echo "$*" >> "$TMP_SYSTEMCTL"
+case "$*" in
+  "--user status "*) [ -s "$TMP_UNIT" ] || exit 4; printf '● %s - the network server\n' "$(cat "$TMP_UNIT")";;
+esac
+SHIM
+chmod +x "$TMP/shims/systemctl"
+export TMP_SYSTEMCTL="$TMP/systemctl" TMP_UNIT="$TMP/unit"
+"$HIVEMIND_BIN_DIR/hive-net" serve --all --phone & served=$!
+sleep 0.3
+echo hive-network.service > "$TMP_UNIT"
+echo v9.9.12b > "$TMP_LATEST"
+run_installer > "$TMP/out6b"
+check "its service is restarted" "yes" "$(grep -qx -- "--user restart hive-network.service" "$TMP_SYSTEMCTL" && echo yes || echo no)"
+: > "$TMP_UNIT"
+echo v9.9.12c > "$TMP_LATEST"
+run_installer > "$TMP/out6c"
+check "one with no service is named, with its pid" "yes" "$(grep -q "hive-net (pid $served) still runs the build before" "$TMP/out6c" && echo yes || echo no)"
+kill "$served" 2>/dev/null; wait "$served" 2>/dev/null || true
+: > "$TMP_SYSTEMCTL"
+run_installer --version v9.9.12 > "$TMP/out6d"
+check "with none running, nothing is restarted" "" "$(cat "$TMP_SYSTEMCTL")"
 
 # ── 7. a release without hive-net (its build may fail on its own) ────────
 echo 1 > "$TMP_NO_NET"

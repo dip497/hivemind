@@ -391,6 +391,26 @@ test("what an agent last said, in a line: the first line of its last words, or t
   assert.deepEqual(await lastSaidSince(path.join(tmp, "none.jsonl"), TOOLS), { line: undefined, cursor: undefined });
 });
 
+test("what an agent last said is its own words, read as text: what the person wrote after them never replaces them, and its markdown marks are not shown", async () => {
+  const BOTH: AgentTranscript = {
+    id: "uuid", at: "timestamp",
+    said: [
+      { require: { type: "assistant" }, text: "message.content", who: "agent" },
+      { require: { type: "user" }, text: "message.content", who: "person" },
+    ],
+  };
+  let n = 0;
+  const record = (type: string, text: string) =>
+    `${JSON.stringify({ type, uuid: `p${n}`, timestamp: new Date(1_790_000_000_000 + n++).toISOString(), message: { content: text } })}\n`;
+  const at = sessionFile(record("assistant", "## Done\n**Yes, upgrade prod to `v1.106.2`.**") + record("user", "This session is being continued from a previous conversation"));
+  const first = await lastSaidSince(at, BOTH);
+  assert.equal(first.line, "Done");
+  fs.appendFileSync(at, record("user", "<artifact-content-authored-by-others/>"));
+  assert.equal((await lastSaidSince(at, BOTH, first.cursor)).line, undefined, "the person's words say nothing new: what the agent said stands");
+  fs.appendFileSync(at, record("assistant", "> **Yes, upgrade prod to `v1.106.2`.** _now_ - a_b_c 2*3*4"));
+  assert.equal((await lastSaidSince(at, BOTH)).line, "Yes, upgrade prod to v1.106.2. now - a_b_c 2*3*4");
+});
+
 test("from a cursor more than 1 MiB behind, what an agent last said is read from the end of its file, never the whole gap: its last words, and none from megabytes back", async () => {
   const AGENT: AgentTranscript = { id: "uuid", at: "timestamp", said: [{ require: { type: "assistant" }, text: "message.content", who: "agent" }] };
   let n = 0;
