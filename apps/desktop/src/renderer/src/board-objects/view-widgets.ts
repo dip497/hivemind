@@ -5,26 +5,24 @@
  * the switcher, Layers, ⌘E, "Open Archipelago?", `hive ctl plugin open view:`, or the view the app
  * starts in.
  *
- * What it brought is kept for the workspace, on this machine as card spots are, so a widget the
- * person closed is never brought back, and one a later version of the package adds is brought the
- * next time the view shows. Never in a workspace joined from someone else: the board is theirs.
+ * What it brought is kept with the workspace, in its store beside the board, so every window and
+ * browser tab on it reads one record: a widget the person closed is never brought back, and one a
+ * later version of the package adds is brought when the view shows. Never in a workspace joined
+ * from someone else: the board is theirs.
  */
 import { useEffect } from "react";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import type { WidgetPackage } from "../../../shared/ipc";
 import { useCommunityReport } from "../workspace/views/community/registry";
+import { readView, writeView } from "../workspace/workspace-store-client";
 import { widgetsToBring } from "./board-model";
 
-const broughtKey = (repo: string) => `hivemind:widgets-brought:${repo}`;
+/** The workspace's record of the widgets views brought it. */
+const BROUGHT = "widgets-brought";
 
 function readBrought(repo: string): string[] {
-  try {
-    const v: unknown = JSON.parse(localStorage.getItem(broughtKey(repo)) ?? "[]");
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-  } catch { return []; }
-}
-function writeBrought(repo: string, ids: readonly string[]): void {
-  try { localStorage.setItem(broughtKey(repo), JSON.stringify(ids)); } catch { /* not kept: brought again next time, never twice on the board */ }
+  const v = readView(repo, BROUGHT);
+  return v?.v === 1 && Array.isArray(v.data) ? v.data.filter((x): x is string => typeof x === "string") : [];
 }
 
 export function useViewBringsWidgets({ repo, joined, view, widgets, board }: {
@@ -35,21 +33,23 @@ export function useViewBringsWidgets({ repo, joined, view, widgets, board }: {
   view: string | null;
   /** The widgets that are switched on. */
   widgets: readonly WidgetPackage[];
-  board: { objectsRef: { current: BoardObject[] }; addWidget: (pkg: string) => string };
+  board: { objectsRef: { current: BoardObject[] }; bringWidgets: (pkgs: readonly string[]) => void };
 }): void {
   const { packages } = useCommunityReport();
   const pkg = packages.find((p) => p.id === view)?.package;
   const pkgId = pkg?.on ? pkg.id : null;
   // A key, so a list that only came back equal starts nothing.
   const members = pkgId ? widgets.filter((w) => w.package?.id === pkgId).map((w) => w.id).join("\n") : "";
-  const { objectsRef, addWidget } = board;
+  const { objectsRef, bringWidgets } = board;
   useEffect(() => {
     if (!repo || joined || !members) return;
+    // Read, decided and written at once through the store, so a second window on the workspace
+    // reads what this one brought.
     const known = readBrought(repo);
     const onBoard = objectsRef.current.flatMap((o) => (o.kind === "widget" ? [o.widget] : []));
     const { add, brought } = widgetsToBring(members.split("\n"), onBoard, known);
     if (!brought.length) return;
-    for (const id of add) addWidget(id);
-    writeBrought(repo, [...known, ...brought]);
-  }, [repo, joined, members, objectsRef, addWidget]);
+    writeView(repo, BROUGHT, { v: 1, data: [...known, ...brought] });
+    bringWidgets(add);
+  }, [repo, joined, members, objectsRef, bringWidgets]);
 }

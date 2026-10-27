@@ -74,11 +74,14 @@ test("a new board widget is centred where it is added and joins the frame there;
 
 test("a package's view brings each of its widgets to a workspace once: never a second copy, never one closed", () => {
   const members = ["@ada/harbour", "@ada/ledger", "@ada/weather"];
-  // The first time: all of them, in the package's order; one already there is counted, not copied.
-  assert.deepEqual(widgetsToBring(members, ["@ada/ledger", "note"], []),
-    { add: ["@ada/harbour", "@ada/weather"], brought: ["@ada/harbour", "@ada/ledger", "@ada/weather"] });
+  // The first time: all of them, in the package's order.
+  assert.deepEqual(widgetsToBring(members, ["note"], []), { add: members, brought: members });
   // Again, with the harbour closed since: nothing comes back.
   assert.deepEqual(widgetsToBring(members, ["@ada/ledger", "@ada/weather"], members), { add: [], brought: [] });
-  // A later version of the package with a fourth widget: that one comes.
+  // A later version of the package with a fourth widget: that one comes, the others are not copied.
   assert.deepEqual(widgetsToBring([...members, "@ada/log"], ["@ada/ledger"], members), { add: ["@ada/log"], brought: ["@ada/log"] });
+  // One the person already added by hand is counted, not copied.
+  assert.deepEqual(widgetsToBring([...members, "@ada/log"], ["@ada/log"], members), { add: [], brought: ["@ada/log"] });
+  // A workspace where the person put some of them by hand, before any view brought one: as arranged.
+  assert.deepEqual(widgetsToBring(members, ["@ada/ledger"], []), { add: [], brought: members });
 });
