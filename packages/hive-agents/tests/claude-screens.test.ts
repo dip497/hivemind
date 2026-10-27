@@ -88,3 +88,21 @@ test("a numbered option under the mark is a chooser waiting on the person, not i
   expect(claude().detect!(CHOOSER_CUT.replace("❯ 1. Nothing", "  1. Nothing").replace("  2. A timestamp", "❯ 2. A timestamp"))).toEqual({ status: "question" });
   expect(claude().detect!("✻ Baked for 7s\n\n❯ ask me a question\n  ⎿  done\n\n❯ \n")).toEqual({ status: "idle" });
 });
+
+// The person's message starts with a number, and Claude works on it.
+const WORKING_ON = (message: string) => [
+  "✻ Crunched for 8m 1s · done 11:50 AM", "",
+  `❯ ${message}`, "",
+  "  Calling plugin:context-mode:context-mode · 58s…", "",
+  "✶ Kneading… (1m 9s · ↓ 619 tokens)", "  ⎿  Tip: Use /statusline to set up a custom status line", "",
+  "───────────────────────────────────────────────────────────────────────────────",
+  "❯ ",
+  "───────────────────────────────────────────────────────────────────────────────",
+  "  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt",
+].join("\n");
+
+test("a message that starts with a number is not a chooser's option, while Claude works on it or after", () => {
+  expect(claude().detect!(WORKING_ON("25.04.1+1 GA check this version"))).toEqual({ status: "working" });
+  expect(claude().detect!(WORKING_ON("1. fix the login, 2. then the logout"))).toEqual({ status: "working" });
+  expect(claude().detect!("✻ Baked for 7s\n\n❯ 1. fix the login\n  ⎿  done\n\n❯ \n")).toEqual({ status: "idle" });
+});
