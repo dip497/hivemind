@@ -253,6 +253,85 @@ export const PRESETS: Record<string, ThemePreset> = {
     terminal: { background: "#282c34", foreground: "#abb2bf", cursor: "#528bff", selection: "rgba(62,68,81,0.7)",
       ansi: ["#282c34", "#e06c75", "#98c379", "#e5c07b", "#61afef", "#c678dd", "#56b6c2", "#abb2bf", "#5c6370", "#e06c75", "#98c379", "#e5c07b", "#61afef", "#c678dd", "#56b6c2", "#ffffff"] },
   },
+  // The light ones are flat, as Clean Light is: glass over a dark wallpaper turns their sheets grey.
+  "catppuccin-mocha": {
+    id: "catppuccin-mocha", label: "Catppuccin Mocha", mode: "dark", accent: "violet",
+    palette: { bg: "#181825", bg2: "#1e1e2e", bg3: "#313244", bg4: "#45475a", line: "#313244", line2: "#585b70", fg: "#cdd6f4", fg2: "#bac2de", fg3: "#9399b2", select: "#b4befe", ok: "#a6e3a1", warn: "#f9e2af", err: "#f38ba8" },
+    terminal: { background: "#1e1e2e", foreground: "#cdd6f4", cursor: "#f5e0dc", selection: "rgba(88,91,112,0.6)",
+      ansi: ["#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#bac2de", "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5", "#a6adc8"] },
+  },
+  "catppuccin-latte": {
+    id: "catppuccin-latte", label: "Catppuccin Latte", mode: "light", accent: "graphite",
+    palette: { bg: "#dce0e8", bg2: "#eff1f5", bg3: "#e6e9ef", bg4: "#ccd0da", line: "#ccd0da", line2: "#bcc0cc", fg: "#4c4f69", fg2: "#5c5f77", fg3: "#6c6f85", select: "#7287fd", ok: "#40a02b", warn: "#df8e1d", err: "#d20f39" },
+    terminal: { background: "#eff1f5", foreground: "#4c4f69", cursor: "#dc8a78", selection: "rgba(172,176,190,0.6)",
+      ansi: ["#5c5f77", "#d20f39", "#40a02b", "#df8e1d", "#1e66f5", "#ea76cb", "#179299", "#acb0be", "#6c6f85", "#d20f39", "#40a02b", "#df8e1d", "#1e66f5", "#ea76cb", "#179299", "#bcc0cc"] },
+    look: { glass: false, wallpaper: "none" },
+  },
+  "tokyo-night": {
+    id: "tokyo-night", label: "Tokyo Night", mode: "dark", accent: "indigo",
+    palette: { bg: "#16161e", bg2: "#1a1b26", bg3: "#292e42", bg4: "#3b4261", line: "#292e42", line2: "#545c7e", fg: "#c0caf5", fg2: "#a9b1d6", fg3: "#737aa2", select: "#7aa2f7", ok: "#9ece6a", warn: "#e0af68", err: "#f7768e" },
+    terminal: { background: "#1a1b26", foreground: "#c0caf5", cursor: "#c0caf5", selection: "rgba(59,66,97,0.7)",
+      ansi: ["#15161e", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff", "#a9b1d6", "#414868", "#ff899d", "#9fe044", "#faba4a", "#8db0ff", "#c7a9ff", "#a4daff", "#c0caf5"] },
+  },
+  "tokyo-night-day": {
+    id: "tokyo-night-day", label: "Tokyo Night Day", mode: "light", accent: "graphite",
+    palette: { bg: "#e1e2e7", bg2: "#e9eaee", bg3: "#e1e2e7", bg4: "#d0d5e3", line: "#c4c8da", line2: "#a8aecb", fg: "#3760bf", fg2: "#6172b0", fg3: "#68709a", select: "#2e7de9", ok: "#587539", warn: "#8c6c3e", err: "#f52a65" },
+    terminal: { background: "#e1e2e7", foreground: "#3760bf", cursor: "#3760bf", selection: "rgba(168,174,203,0.6)",
+      ansi: ["#b4b5b9", "#f52a65", "#587539", "#8c6c3e", "#2e7de9", "#9854f1", "#007197", "#6172b0", "#a1a6c5", "#ff4774", "#5c8524", "#a27629", "#358aff", "#a463ff", "#007ea8", "#3760bf"] },
+    look: { glass: false, wallpaper: "none" },
+  },
+  "gruvbox-dark": {
+    id: "gruvbox-dark", label: "Gruvbox Dark", mode: "dark", accent: "ember",
+    palette: { bg: "#1d2021", bg2: "#282828", bg3: "#3c3836", bg4: "#504945", line: "#3c3836", line2: "#665c54", fg: "#ebdbb2", fg2: "#d5c4a1", fg3: "#a89984", select: "#83a598", ok: "#b8bb26", warn: "#fabd2f", err: "#fb4934" },
+    terminal: { background: "#282828", foreground: "#ebdbb2", cursor: "#ebdbb2", selection: "rgba(80,73,69,0.7)",
+      ansi: ["#282828", "#cc241d", "#98971a", "#d79921", "#458588", "#b16286", "#689d6a", "#a89984", "#928374", "#fb4934", "#b8bb26", "#fabd2f", "#83a598", "#d3869b", "#8ec07c", "#ebdbb2"] },
+  },
+  "gruvbox-light": {
+    id: "gruvbox-light", label: "Gruvbox Light", mode: "light", accent: "graphite",
+    palette: { bg: "#f2e5bc", bg2: "#fbf1c7", bg3: "#f2e5bc", bg4: "#ebdbb2", line: "#ebdbb2", line2: "#d5c4a1", fg: "#3c3836", fg2: "#504945", fg3: "#7c6f64", select: "#076678", ok: "#79740e", warn: "#b57614", err: "#9d0006" },
+    terminal: { background: "#fbf1c7", foreground: "#3c3836", cursor: "#3c3836", selection: "rgba(213,196,161,0.7)",
+      ansi: ["#fbf1c7", "#cc241d", "#98971a", "#d79921", "#458588", "#b16286", "#689d6a", "#7c6f64", "#928374", "#9d0006", "#79740e", "#b57614", "#076678", "#8f3f71", "#427b58", "#3c3836"] },
+    look: { glass: false, wallpaper: "none" },
+  },
+  "rose-pine": {
+    id: "rose-pine", label: "Rosé Pine", mode: "dark", accent: "violet",
+    palette: { bg: "#16141f", bg2: "#191724", bg3: "#1f1d2e", bg4: "#26233a", line: "#26233a", line2: "#524f67", fg: "#e0def4", fg2: "#908caa", fg3: "#6e6a86", select: "#ebbcba", ok: "#9ccfd8", warn: "#f6c177", err: "#eb6f92" },
+    terminal: { background: "#191724", foreground: "#e0def4", cursor: "#524f67", selection: "#403d52",
+      ansi: ["#26233a", "#eb6f92", "#31748f", "#f6c177", "#9ccfd8", "#c4a7e7", "#ebbcba", "#e0def4", "#6e6a86", "#eb6f92", "#31748f", "#f6c177", "#9ccfd8", "#c4a7e7", "#ebbcba", "#e0def4"] },
+  },
+  "rose-pine-dawn": {
+    id: "rose-pine-dawn", label: "Rosé Pine Dawn", mode: "light", accent: "graphite",
+    palette: { bg: "#f2e9e1", bg2: "#fffaf3", bg3: "#faf4ed", bg4: "#dfdad9", line: "#dfdad9", line2: "#cecacd", fg: "#464261", fg2: "#797593", fg3: "#9893a5", select: "#907aa9", ok: "#56949f", warn: "#ea9d34", err: "#b4637a" },
+    terminal: { background: "#faf4ed", foreground: "#575279", cursor: "#cecacd", selection: "#dfdad9",
+      ansi: ["#f2e9e1", "#b4637a", "#286983", "#ea9d34", "#56949f", "#907aa9", "#d7827e", "#575279", "#9893a5", "#b4637a", "#286983", "#ea9d34", "#56949f", "#907aa9", "#d7827e", "#575279"] },
+    look: { glass: false, wallpaper: "none" },
+  },
+  "github-dark": {
+    id: "github-dark", label: "GitHub Dark", mode: "dark", accent: "indigo",
+    palette: { bg: "#010409", bg2: "#0d1117", bg3: "#161b22", bg4: "#21262d", line: "#30363d", line2: "#484f58", fg: "#e6edf3", fg2: "#c9d1d9", fg3: "#8b949e", select: "#2f81f7", ok: "#3fb950", warn: "#d29922", err: "#f85149" },
+    terminal: { background: "#0d1117", foreground: "#e6edf3", cursor: "#2f81f7", selection: "rgba(230,237,243,0.2)",
+      ansi: ["#484f58", "#ff7b72", "#3fb950", "#d29922", "#58a6ff", "#bc8cff", "#39c5cf", "#b1bac4", "#6e7681", "#ffa198", "#56d364", "#e3b341", "#79c0ff", "#d2a8ff", "#56d4dd", "#ffffff"] },
+  },
+  "github-light": {
+    id: "github-light", label: "GitHub Light", mode: "light", accent: "graphite",
+    palette: { bg: "#f6f8fa", bg2: "#ffffff", bg3: "#f6f8fa", bg4: "#eaeef2", line: "#d0d7de", line2: "#afb8c1", fg: "#1f2328", fg2: "#424a53", fg3: "#656d76", select: "#0969da", ok: "#1a7f37", warn: "#9a6700", err: "#d1242f" },
+    terminal: { background: "#ffffff", foreground: "#1f2328", cursor: "#0969da", selection: "rgba(31,35,40,0.15)",
+      ansi: ["#24292f", "#cf222e", "#116329", "#4d2d00", "#0969da", "#8250df", "#1b7c83", "#6e7781", "#57606a", "#a40e26", "#1a7f37", "#633c01", "#218bff", "#a475f9", "#3192aa", "#8c959f"] },
+    look: { glass: false, wallpaper: "none" },
+  },
+  "solarized-light": {
+    id: "solarized-light", label: "Solarized Light", mode: "light", accent: "graphite",
+    palette: { bg: "#eee8d5", bg2: "#fdf6e3", bg3: "#f5efdc", bg4: "#e6dfca", line: "#eee8d5", line2: "#d6cfb9", fg: "#073642", fg2: "#586e75", fg3: "#657b83", select: "#268bd2", ok: "#859900", warn: "#b58900", err: "#dc322f" },
+    terminal: { background: "#fdf6e3", foreground: "#586e75", cursor: "#586e75", selection: "rgba(147,161,161,0.35)",
+      ansi: ["#073642", "#dc322f", "#859900", "#b58900", "#268bd2", "#d33682", "#2aa198", "#eee8d5", "#002b36", "#cb4b16", "#586e75", "#657b83", "#839496", "#6c71c4", "#93a1a1", "#fdf6e3"] },
+    look: { glass: false, wallpaper: "none" },
+  },
+  monokai: {
+    id: "monokai", label: "Monokai", mode: "dark", accent: "ember",
+    palette: { bg: "#1e1f1c", bg2: "#272822", bg3: "#3e3d32", bg4: "#49483e", line: "#3e3d32", line2: "#75715e", fg: "#f8f8f2", fg2: "#cfcfc2", fg3: "#90908a", select: "#66d9ef", ok: "#a6e22e", warn: "#e6db74", err: "#f92672" },
+    terminal: { background: "#272822", foreground: "#fdfff1", cursor: "#c0c1b5", selection: "#57584f",
+      ansi: ["#272822", "#f92672", "#a6e22e", "#e6db74", "#fd971f", "#ae81ff", "#66d9ef", "#fdfff1", "#6e7066", "#f92672", "#a6e22e", "#e6db74", "#fd971f", "#ae81ff", "#66d9ef", "#fdfff1"] },
+  },
 };
 
 /** The faces the app ships with (apps/desktop/DESIGN.md): the operating system's own UI font for the
