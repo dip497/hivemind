@@ -35,6 +35,15 @@ export function widgetsOf(board: BoardObject[]): WidgetObject[] {
     .sort((a, b) => (a.z ?? 0) - (b.z ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
+/** What a view brings of its package's switched-on widgets (`members`, in the package's order) to a
+ *  workspace that holds `onBoard` and was brought `brought` before: those to add, and those now
+ *  counted as brought. One already on the board is brought without a second copy; one brought
+ *  before is never brought again, closed or not. */
+export function widgetsToBring(members: readonly string[], onBoard: readonly string[], brought: readonly string[]): { add: string[]; brought: string[] } {
+  const fresh = members.filter((id) => !brought.includes(id));
+  return { add: fresh.filter((id) => !onBoard.includes(id)), brought: fresh };
+}
+
 export function isBox(o: BoardObject): o is BoxObject {
   return o.kind === "widget" && o.placement === "board";
 }

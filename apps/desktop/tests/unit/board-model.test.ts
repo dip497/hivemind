@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { BoardObject } from "@hivemind/workspace-doc/shapes";
 import {
-  duplicateBox, facingSides, newWidget, sidePoint, toCanvas, toStored, widgetsOf, withoutObject, type BoxObject,
+  duplicateBox, facingSides, newWidget, sidePoint, toCanvas, toStored, widgetsOf, widgetsToBring, withoutObject, type BoxObject,
 } from "../../src/renderer/src/board-objects/board-model.ts";
 import type { FrameState } from "../../src/renderer/src/canvas-persistence.ts";
 
@@ -70,4 +70,15 @@ test("a new board widget is centred where it is added and joins the frame there;
   let n = 0;
   const copy = duplicateBox(list, "c2", 7, () => `item-${++n}`);
   assert.deepEqual(copy, { ...list, id: "c2", x: 24, y: 24, z: 7, items: [{ id: "item-1", text: "a", done: true }] });
+});
+
+test("a package's view brings each of its widgets to a workspace once: never a second copy, never one closed", () => {
+  const members = ["@ada/harbour", "@ada/ledger", "@ada/weather"];
+  // The first time: all of them, in the package's order; one already there is counted, not copied.
+  assert.deepEqual(widgetsToBring(members, ["@ada/ledger", "note"], []),
+    { add: ["@ada/harbour", "@ada/weather"], brought: ["@ada/harbour", "@ada/ledger", "@ada/weather"] });
+  // Again, with the harbour closed since: nothing comes back.
+  assert.deepEqual(widgetsToBring(members, ["@ada/ledger", "@ada/weather"], members), { add: [], brought: [] });
+  // A later version of the package with a fourth widget: that one comes.
+  assert.deepEqual(widgetsToBring([...members, "@ada/log"], ["@ada/ledger"], members), { add: ["@ada/log"], brought: ["@ada/log"] });
 });
