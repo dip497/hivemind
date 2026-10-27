@@ -56,6 +56,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
     });
     const linkRef = useRef<CommunityLink>(link);
     linkRef.current = link;
+    const tileOf = useMemo(() => new Map(model.layerTiles.map((t) => [t.id, t])), [model.layerTiles]);
     const nameOf = useMemo(() => new Map(model.layerTiles.map((t) => [t.id, t.name])), [model.layerTiles]);
     const box = () => {
       const r = rootRef.current?.getBoundingClientRect();
@@ -154,7 +155,7 @@ function CommunityView({ pkg, url, manifest, capabilities, model, commands }: Wo
           style={clip ? { clipPath: clip } : undefined}
           data-community-clip={clip ?? undefined}
         />
-        <SurfaceSlots rects={rects} width={hostBox.w} names={nameOf} commands={commands} onUndock={undock} />
+        <SurfaceSlots rects={rects} width={hostBox.w} tiles={tileOf} commands={commands} onUndock={undock} frame={iframeRef} />
         <LineSlots rects={lines} box={hostBox} names={nameOf} />
         {dialogs}
         {!ready && <Loading className="pointer-events-none absolute inset-0" label={`Loading ${manifest.name}`} />}

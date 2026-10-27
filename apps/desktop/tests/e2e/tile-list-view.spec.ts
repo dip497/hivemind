@@ -64,6 +64,39 @@ test("with the host toolbar off, the view docks a preserved terminal by mouse an
   await original?.dispose();
 });
 
+test("a docked terminal has one bar, whose × undocks; undocked, the view has the keyboard again without a click", async () => {
+  await toView("canvas");
+  const [tileId] = await terminalIds();
+  await toView("tile-list");
+  await page.waitForSelector(tileListReady);
+  await dockFromList(page, tileId!);
+  const slot = page.locator(`[data-community-slot="${tileId}"]`);
+  // The app's bar names it and undocks it. The terminal's own bar, whose × ends the tile, is not
+  // shown, and the terminal starts right under the one bar.
+  await expect(slot.locator("[data-slot-bar]").getByRole("button", { name: "Undock" })).toBeVisible();
+  await expect(slot.locator("[data-tile-titlebar]")).toBeHidden();
+  await expect(slot.getByRole("button", { name: "close tile" })).toBeHidden();
+  // A shell has no agent to put to sleep (an agent's Sleep: sleep-agents.spec.ts).
+  await expect(slot.getByRole("button", { name: "Put agent to sleep" })).toHaveCount(0);
+  expect(await slot.evaluate((el) => el.querySelector(".xterm-screen")!.getBoundingClientRect().top - el.querySelector("[data-slot-bar]")!.getBoundingClientRect().bottom)).toBeLessThan(16);
+
+  // Whichever way it is undocked, from inside the terminal or from the bar, the next key is the
+  // view's: J docks the tile again, with no click into the view first.
+  const viewHasKeys = () => page.evaluate(() => document.activeElement?.tagName === "IFRAME");
+  await slot.locator(".xterm-screen").click();
+  await page.keyboard.press("Shift+Escape");
+  await expect(page.locator("[data-community-slot]")).toHaveCount(0);
+  await expect.poll(viewHasKeys).toBe(true);
+  await page.keyboard.press("j");
+  await expect(dockedTerminals()).toHaveCount(1);
+
+  await slot.locator("[data-slot-bar]").getByRole("button", { name: "Undock" }).click();
+  await expect(page.locator("[data-community-slot]")).toHaveCount(0);
+  await expect.poll(viewHasKeys).toBe(true);
+  await page.keyboard.press("j");
+  await expect(dockedTerminals()).toHaveCount(1);
+});
+
 test("moving through the list changes the host's selection", async () => {
   await toView("canvas");
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
