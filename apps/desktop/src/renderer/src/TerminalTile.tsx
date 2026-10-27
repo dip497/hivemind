@@ -29,6 +29,7 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Skeleton } from "./components/ui/skeleton";
 import { acquireBoot, bootPosition, cancelBoot, isRestored, subscribeBoot } from "./boot-queue";
+import { whenTerminalMayBuild } from "./terminal-mount-queue";
 import { isRemote } from "@hivemind/core/remote-uri";
 import { toPtyId } from "@hivemind/workspace-api/tile-id";
 import { webUrlForInternalBrowser } from "./browser-open";
@@ -288,6 +289,16 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // null = plain shell. Read after the first agent scan: before it, every restored agent tile
   // would look like a shell.
   const agentsScanned = useAgentsScanned();
+  // Restored with the workspace, its terminal is built when on screen, or at an idle moment; one
+  // opened since, or selected, at once.
+  const [mayBuild, setMayBuild] = useState(() => !isRestored(tileId));
+  const builtOnScreenRef = useRef(true);
+  useEffect(() => {
+    if (mayBuild) return;
+    if (selected) { setMayBuild(true); return; }
+    const host = hostRef.current;
+    if (host) return whenTerminalMayBuild(host, (onScreen) => { builtOnScreenRef.current = onScreen; setMayBuild(true); });
+  }, [mayBuild, selected]);
   const agent = identifyAgent(cmd);
   // The label shown on canvas chips / toasts / notifications: the tile's name (tile-name.ts).
   // Kept in a ref so the long-lived status effect always publishes the CURRENT label.
@@ -302,7 +313,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   }, [effLabel, tileId]);
 
   useEffect(() => {
-    if (!agentsScanned) return;
+    if (!agentsScanned || !mayBuild) return;
     // permission/question = needs the human (from the real Claude-state scrape); working/idle
     // from screen or PTY activity. The words, shape and colour are workspace/status-look's, so
     // this header agrees with Layers and every surface bar.
@@ -605,12 +616,13 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       requestAnimationFrame(() => { try { fitRef.current?.fit(); syncSizeRef.current?.(); } catch { /* torn down */ } });
       restoreFocusIfSelected();
     };
-    // Viewport visibility → priority. Assume visible on mount (a fresh tile is
-    // usually in view); the observer corrects on the next frame. A PARKED
+    // Viewport visibility → priority. Built off screen, it starts off screen; else it
+    // is assumed visible (a fresh tile is usually in view) and the observer corrects
+    // on the next frame. A PARKED
     // surface (no view shows this tile — see workspace/tile-host.tsx) still
     // intersects geometrically, so the host's park/adopt events override it:
     // parked tiles rank 0 and never hold a WebGL slot.
-    let inViewport = true;
+    let inViewport = builtOnScreenRef.current;
     let parked = !!host.closest("#hm-tile-park");
     /** Laid out AND visible (not under a `visibility:hidden` ancestor — an
      *  inactive Windows tab, the park). */
@@ -1188,7 +1200,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     // session would otherwise tear down and re-attach silently (the daemon ignores a new cwd on
     // re-attach), looking like nothing happened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ptyId, cmd, agentsScanned]);
+  }, [ptyId, cmd, agentsScanned, mayBuild]);
 
   // Gate keyboard on selection. pointer-events:none (tile-locked) blocks the
   // mouse but NOT the keyboard — a focused xterm keeps eating keystrokes after
@@ -1223,7 +1235,7 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
       const t2 = setTimeout(repaint, 560);
       return () => { clearTimeout(t1); clearTimeout(t2); };
     } else term.blur();
-  }, [selected]);
+  }, [selected, mayBuild]);
 
   // Apply THIS tile's font size to xterm whenever it changes, then re-fit so
   // cols/rows track the new cell size.
