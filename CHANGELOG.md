@@ -9,6 +9,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: a package's view brings the package's widgets. The first time a workspace shows Archipelago, or any view that came in a package, the package's widgets that are on go down the edge the view keeps for them, however the view was opened: the view switcher, **Open Archipelago?**, `hive ctl plugin open view:…` or the view the app starts in. A widget you close stays closed in that workspace, in every window, and one a later version of the package adds comes when the view shows. A workspace where you had already put some of them is left as it is. `hive plugins install` no longer lists those widgets in `next`. Before, each widget had to be opened by hand.
 - Fixed: emoji and Devanagari text take the columns programs measure them by, so an agent's tables and prompt no longer scramble or leave stray pieces on screen.
 - Fixed: Ctrl+_ reaches the program in a terminal, where it is undo in a shell's and an agent's prompt; Ctrl+- still makes the text smaller.
 - Changed: a workspace with many terminals opens about twice as fast. The terminals on screen are drawn first, and those off screen are built when the window is idle; with 20 terminals the canvas showed in 0.8 s instead of 1.4 s. Their sessions run all along.

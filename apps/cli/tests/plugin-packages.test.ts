@@ -91,10 +91,11 @@ describe("hive plugins, packages", () => {
     expect(run("list").stdout).toMatch(/^on \s+view:@acme\/island\s+Island\s+\[@acme\/kit 1\.0\.0\]$/m);
   }, 60_000);
 
-  test("a package that opens with a view says which, and the command that switches to it; --json carries startView, and the open comes first in next", () => {
+  test("a package that opens with a view says which, and the command that switches to it; --json carries startView, and the open comes first in next, without its widgets, which the view brings", () => {
     const harbour = path.join(tmp, "harbour");
     const files: Record<string, string> = {
-      "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/harbour", name: "Harbour", version: "1.0.0", views: [{ path: "views/dock" }, { path: "views/isle" }], startup: { view: "@acme/isle" } }),
+      "hivemind-package.json": JSON.stringify({ apiVersion: 2, id: "@acme/harbour", name: "Harbour", version: "1.0.0", views: [{ path: "views/dock" }, { path: "views/isle" }], widgets: [{ path: "widgets/bell" }], startup: { view: "@acme/isle" } }),
+      "widgets/bell/widget.json": JSON.stringify({ id: "@acme/bell", name: "Bell", version: "1.0.0", draw: { type: "text", text: "ding" } }),
       "views/dock/hivemind-view.json": JSON.stringify({ id: "@acme/dock", name: "Dock", version: "1.0.0", entry: "index.html" }),
       "views/dock/index.html": "<!doctype html>",
       "views/isle/hivemind-view.json": JSON.stringify({ id: "@acme/isle", name: "Isle", version: "1.0.0", entry: "index.html" }),
@@ -105,7 +106,7 @@ describe("hive plugins, packages", () => {
       fs.writeFileSync(path.join(harbour, f), text);
     }
     const said = run("install", harbour);
-    expect(said.stdout).toContain("It opens with the view Isle. The app offers to switch to it, unless it has offered that view before; `hive ctl plugin open view:@acme/isle` switches the running app now.");
+    expect(said.stdout).toContain("It opens with the view Isle, which brings its widget. The app offers to switch to it, unless it has offered that view before; `hive ctl plugin open view:@acme/isle` switches the running app now.");
     const r = run("install", harbour, "--json");
     expect(r.json).toMatchObject({ on: true, startView: { id: "@acme/isle", name: "Isle", open: "hive ctl plugin open view:@acme/isle" } });
     expect((r.json as { next: string[] }).next).toEqual(["hive ctl plugin open view:@acme/isle", "hive ctl plugin open view:@acme/dock"]);

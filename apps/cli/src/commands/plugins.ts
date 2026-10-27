@@ -551,7 +551,7 @@ const installCmd = defineCommand({
         ...installed.tookOver.map((t) => `It took over ${t}, installed on its own before; what you set it to is kept.`),
         dryRun ? (record.on ? "It would be on." : "It would be off until you switch it on.")
           : record.on ? "It is on." : installed.changes.some((c) => c.switchesOff) && installed.replaced ? `It is off: a change above needs you to trust it again. \`hive plugins rollback ${record.id}\` puts back ${installed.replaced.version}.` : "It is off until you switch it on, if you trust who wrote it.",
-        ...(report.startView && !dryRun ? [startViewLine(report.startView, record.on)] : []),
+        ...(report.startView && !dryRun ? [startViewLine(report.startView, record.on, installed.members.filter((m) => m.kind === "widget").length)] : []),
         ...(dryRun ? [] : ["Next:", steps(report.next)]),
       ].join("\n"));
     } catch (e) { await discard(); return fail(ctx, e, "install_failed"); }
@@ -563,8 +563,10 @@ function installReport(installed: InstalledPackage, app: AppAnswer) {
   const { record } = installed;
   const opens = installed.members.find((m) => m.kind === "view" && m.id === installed.startView);
   const startView = opens ? { id: opens.id, name: opens.name, open: `hive ctl plugin open view:${opens.id}` } : null;
-  // The view it opens with comes first: switching to it is what installing it was for.
-  const sees = installed.members.flatMap((m) => (m.kind === THEME.kind ? [`hive theme use ${m.id}`] : kindNamed(m.kind)?.see(m.id) ?? []));
+  // The view it opens with comes first: switching to it is what installing it was for. It brings
+  // the package's widgets, so they are not opened again on their own, which would be a second copy.
+  const sees = installed.members.flatMap((m) => (startView && m.kind === "widget" ? []
+    : m.kind === THEME.kind ? [`hive theme use ${m.id}`] : kindNamed(m.kind)?.see(m.id) ?? []));
   const next = [...(record.on ? [] : [`hive plugins enable ${record.members.length === 1 ? `${record.members[0]!.kind}:${record.members[0]!.id}` : record.id}`]),
     ...(startView ? [startView.open, ...sees.filter((c) => c !== startView.open)] : sees)];
   return {
@@ -576,11 +578,12 @@ function installReport(installed: InstalledPackage, app: AppAnswer) {
 
 /** The view a package opens with, and how to get there. The CLI never switches the person's view
  *  itself (an agent may be the one installing): the app offers it, and the command switches now. */
-function startViewLine(view: { name: string; open: string }, on: boolean): string {
+function startViewLine(view: { name: string; open: string }, on: boolean, widgets: number): string {
   // The app offers each view once (start-view-offers.ts), so this says so rather than promise one.
+  const brings = widgets ? `, which brings its ${widgets === 1 ? "widget" : `${widgets} widgets`}` : "";
   return on
-    ? `It opens with the view ${view.name}. The app offers to switch to it, unless it has offered that view before; \`${view.open}\` switches the running app now.`
-    : `It opens with the view ${view.name} once it is on. The app offers to switch to it then, unless it has offered that view before; \`${view.open}\` switches the running app.`;
+    ? `It opens with the view ${view.name}${brings}. The app offers to switch to it, unless it has offered that view before; \`${view.open}\` switches the running app now.`
+    : `It opens with the view ${view.name}${brings} once it is on. The app offers to switch to it then, unless it has offered that view before; \`${view.open}\` switches the running app.`;
 }
 
 /** One member's change, in a sentence. */
