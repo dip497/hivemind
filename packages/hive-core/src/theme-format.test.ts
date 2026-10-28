@@ -79,6 +79,8 @@ describe("checkTheme", () => {
     ["a file deeper than the app reads the folder", { wallpaper: { image: "a/b/c/d/e/still.webp" } }, /a\/b\/c\/d\/e\/still.webp is more than 4 folders deep/],
     ["a wallpaper of the wrong type", { wallpaper: { image: "clip.webm" } }, /is not an image/],
     ["a built-in wallpaper it does not have", { wallpaper: { kind: "image" } }, /wallpaper.kind is one of/],
+    // An app without Shoal would refuse the whole theme over it.
+    ["Shoal, which a theme cannot name yet", { wallpaper: { kind: "shoal" } }, /wallpaper.kind is one of/],
     ["brightness out of range", { wallpaper: { kind: "mono", brightness: 2 } }, /brightness is from 0.4 to 1.1/],
     ["a sound of the wrong type", { sounds: { error: "wallpaper.webp" } }, /is not a sound/],
     ["a moment it does not have", { sounds: { hello: "sounds/needs.ogg" } }, /no moment hello/],
@@ -172,6 +174,12 @@ describe("themeFromLook", () => {
     expect(t.wallpaper).toEqual({ kind: "mono", brightness: 0.7 });
     expect(t.accent).toEqual(accent);
     expect(JSON.stringify(t)).not.toContain("hivemedia");
+  });
+
+  test("a Shoal look: the theme gets Mono in its place, and the check takes it", () => {
+    const t = themeFromLook("Mine", { ...DEFAULT_APPEARANCE, wallpaper: { kind: "shoal", brightness: 0.85 } }, {});
+    expect(t.wallpaper).toEqual({ kind: "mono", brightness: 0.85 });
+    expect(checkTheme(t, [])).toHaveProperty("theme");
   });
 });
 

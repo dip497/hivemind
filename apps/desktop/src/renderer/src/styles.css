@@ -1247,7 +1247,8 @@ html.content-glass .hm-term-fs-panel {
 /* Shoal draws its own water in the theme's page colour (shoal/render.ts), on a canvas that fills
    the layer; its characters take the terminal's font. */
 .hm-wallpaper[data-scene="shoal"] { background: var(--color-bg); }
-.hm-shoal { position: absolute; inset: 0; display: block; width: 100%; height: 100%; font-family: var(--font-mono); }
+.hm-shoal { position: absolute; inset: 0; font-family: var(--font-mono); }
+.hm-shoal > canvas { display: block; width: 100%; height: 100%; }
 
 /* PERF — the blooms are plain composited textures on purpose. They used to
    carry `border-radius: 50%` + `filter: blur(60px)` + `mix-blend-mode: screen`,

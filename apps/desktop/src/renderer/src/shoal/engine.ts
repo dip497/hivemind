@@ -1,8 +1,9 @@
 /**
- * The page's side of the Shoal. It hands the canvas to the scene's worker (scene.ts), where the
- * simulation and its drawing run, and tells it what changes. What stays on the page is cheap: the
- * canvas's size, the pointer over empty canvas (at most once a frame, and only while it is there),
- * a click on the water, and what the component passes on.
+ * The page's side of the Shoal. It puts a canvas in its host, hands it to the scene's worker
+ * (scene.ts), where the simulation and its drawing run, and tells it what changes. What stays on
+ * the page is cheap: the canvas's size and pixel ratio, the font, the pointer over empty canvas (at
+ * most once a frame, and only while it is there), a click on the water, and what the component
+ * passes on. Each engine makes its own canvas: one can be handed to a worker only once.
  */
 import ShoalWorker from "./scene?worker";
 import type { FaceSource, ShoalMessage, ShoalMode } from "./scene";
@@ -15,54 +16,74 @@ const overWater = (e: PointerEvent) => e.target instanceof Element && e.target.c
 
 const unquote = (s: string) => s.trim().replace(/^["']|["']$/g, "");
 
-/** The page's @font-face sources for the scene's font at weight 600, latin only (the scene draws
- *  ASCII). A font installed on the computer needs none: the worker sees those as the page does. */
+const weightOf = (w: string) => (w === "bold" ? 700 : w === "normal" || w === "" ? 400 : Number(w));
+
+/** The page's @font-face sources for the scene's font, latin only (the scene draws ASCII): its faces
+ *  that cover weight 600, which the scene draws in, else all it has (the nearest is used). A font
+ *  installed on the computer needs none: the worker sees those as the page does. */
 function facesOf(stack: string): FaceSource[] {
   const family = unquote(stack.split(",")[0] ?? "");
-  const out: FaceSource[] = [];
+  const all: (FaceSource & { bold: boolean })[] = [];
   for (const sheet of document.styleSheets) {
     let rules: CSSRuleList;
     try { rules = sheet.cssRules; } catch { continue; }
     for (const r of rules) {
       if (!(r instanceof CSSFontFaceRule) || unquote(r.style.getPropertyValue("font-family")) !== family) continue;
-      if (!r.style.getPropertyValue("font-weight").includes("600")) continue;
       const range = r.style.getPropertyValue("unicode-range");
       if (range && !/U\+0+-0*FF\b/i.test(range)) continue;
+      const weight = r.style.getPropertyValue("font-weight").trim() || "normal";
+      const [lo = 400, hi = lo] = weight.split(/\s+/).map(weightOf);
       const base = sheet.href ?? location.href;
       const src = r.style.getPropertyValue("src").replace(/url\((["']?)([^"')]+)\1\)/g, (_m, _q, u: string) => `url("${new URL(u, base).href}")`);
-      out.push({ family, src, ...(range ? { range } : {}) });
+      all.push({ family, src, weight, bold: lo <= 600 && 600 <= hi, ...(range ? { range } : {}) });
     }
   }
-  return out;
+  const at600 = all.filter((f) => f.bold);
+  return (at600.length ? at600 : all).map(({ bold: _bold, ...f }) => f);
 }
 
 export class ShoalEngine {
   private worker = new ShoalWorker();
+  private canvas = document.createElement("canvas");
+  private font: string;
   private resizeObserver: ResizeObserver;
   private running = false;
   private pointer = { x: 0, y: 0, active: false };
   private pointerQueued = false;
+  private stopRatio = () => {};
 
-  constructor(private canvas: HTMLCanvasElement) {
-    const font = getComputedStyle(canvas).fontFamily;
-    const offscreen = canvas.transferControlToOffscreen();
-    this.post({ type: "start", canvas: offscreen, font, faces: facesOf(font) }, [offscreen]);
+  constructor(private host: HTMLElement) {
+    host.appendChild(this.canvas);
+    this.font = getComputedStyle(host).fontFamily;
+    const offscreen = this.canvas.transferControlToOffscreen();
+    this.post({ type: "start", canvas: offscreen, font: this.font, faces: facesOf(this.font) }, [offscreen]);
     this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(canvas);
+    this.resizeObserver.observe(this.canvas);
     window.addEventListener("pointermove", this.onPointerMove, { passive: true });
     window.addEventListener("pointerdown", this.onPointerDown, { passive: true });
     window.addEventListener("blur", this.onLeave);
     document.documentElement.addEventListener("pointerleave", this.onLeave);
+    this.watchRatio();
     this.resize();
   }
 
   destroy() {
     this.worker.terminate();
     this.resizeObserver.disconnect();
+    this.stopRatio();
+    this.canvas.remove();
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerdown", this.onPointerDown);
     window.removeEventListener("blur", this.onLeave);
     document.documentElement.removeEventListener("pointerleave", this.onLeave);
+  }
+
+  /** The terminal's font changed (Settings): the scene's characters follow it. */
+  fontChanged() {
+    const font = getComputedStyle(this.host).fontFamily;
+    if (font === this.font) return;
+    this.font = font;
+    this.post({ type: "font", font, faces: facesOf(font) });
   }
 
   setColours(page: number, text: number) {
@@ -90,6 +111,17 @@ export class ShoalEngine {
 
   private post(m: ShoalMessage, transfer: Transferable[] = []) {
     this.worker.postMessage(m, transfer);
+  }
+
+  /** A window moved to a screen of another pixel ratio is not resized: watch the ratio itself. */
+  private watchRatio() {
+    const ratio = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    const changed = () => {
+      this.resize();
+      this.watchRatio();
+    };
+    ratio.addEventListener("change", changed, { once: true });
+    this.stopRatio = () => ratio.removeEventListener("change", changed);
   }
 
   private resize() {

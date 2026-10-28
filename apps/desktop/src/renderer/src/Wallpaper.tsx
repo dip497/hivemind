@@ -12,11 +12,11 @@ const NO_AGENTS: readonly ShoalAgent[] = [];
  * z-index:0) of its positioned parent instead of the default fixed full-window
  * layer — used by the terminal fit-to-screen overlay so the fullscreen terminal
  * sits over a clean copy of the live wallpaper (not the canvas + other tiles).
- * `agents` are the workspace's agents, for a scene that draws them (Shoal); a copy without them
- * draws the scene's water alone.
+ * `agents` are the workspace's agents, for a scene that draws them (Shoal). `live` is false behind
+ * a plugin view, which paints its own scene: Shoal shows its water's colour there and runs nothing.
  */
-export function Wallpaper({ embedded = false, covering = false, agents = NO_AGENTS }: { embedded?: boolean; covering?: boolean; agents?: readonly ShoalAgent[] } = {}): React.ReactElement | null {
-  const { glass, wallpaper, videoSrc, imageSrc, themeId, animate, palette } = useTheme();
+export function Wallpaper({ embedded = false, covering = false, agents = NO_AGENTS, live = true }: { embedded?: boolean; covering?: boolean; agents?: readonly ShoalAgent[]; live?: boolean } = {}): React.ReactElement | null {
+  const { glass, wallpaper, videoSrc, imageSrc, themeId, animate, palette, monoFont } = useTheme();
   const cls = embedded ? " embedded" : "";
   const [inactive, setInactive] = useState(false);
   const occluded = useWorkspaceOccluded();
@@ -84,11 +84,13 @@ export function Wallpaper({ embedded = false, covering = false, agents = NO_AGEN
   const sceneEl: React.ReactElement | null = (() => {
     if (!wallpaperDrawn({ glass, wallpaper, themeId })) return null;
 
-    // Shoal: drawn live on a canvas in the theme's own colours, its sharks the agents.
+    // Shoal: drawn live on a canvas in the theme's own colours, its sharks the agents. Only the
+    // full-window copy behind the app's own views runs it; a copy behind a fullscreen tile or a
+    // docked slot is covered by the tile, so it shows the water's colour alone.
     if (wallpaper === "shoal") {
       return (
         <div className={`hm-wallpaper${cls}`} data-scene="shoal" aria-hidden="true">
-          <Shoal agents={agents} paused={paused} animate={animate} page={palette.bg} text={palette.fg} />
+          {!embedded && live && <Shoal agents={agents} paused={paused} animate={animate} page={palette.bg} text={palette.fg} monoFont={monoFont} />}
         </div>
       );
     }

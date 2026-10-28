@@ -209,19 +209,59 @@ export class World {
   }
 
   /** The agents' sharks. A new key swims in from an edge, a missing one swims off, and the rest
-   *  take their new mood. */
-  setRoster(specs: SharkSpec[]) {
+   *  take their new mood. `instant`, for a still picture: a missing one is gone at once, a new one
+   *  is put straight into the open water, one that comes to need you is put beside its tile, and
+   *  each is already as near as its mood has it; no other shark moves. */
+  setRoster(specs: SharkSpec[], instant = false) {
     const want = new Map(specs.map((s) => [s.key, s]));
+    if (instant) this.sharks = this.sharks.filter((sh) => want.has(sh.key));
     for (const sh of this.sharks) {
       const s = want.get(sh.key);
       sh.leaving = !s;
       if (!s) continue;
+      const surfaced = s.mood === "surface" && sh.mood !== "surface";
       sh.mood = s.mood;
       sh.kind = s.kind;
       sh.size = s.size;
       want.delete(sh.key);
+      if (instant) {
+        sh.depth = MOODS[sh.mood].depth;
+        if (surfaced) this.place(sh);
+      }
     }
-    for (const s of want.values()) this.sharks.push(this.enter(s));
+    for (const s of want.values()) {
+      const sh = this.enter(s);
+      if (instant) this.place(sh);
+      this.sharks.push(sh);
+    }
+    if (instant) this.sharks.sort((a, b) => a.depth - b.depth);
+  }
+
+  /** Put a shark where its mood has it, at once: on the ring round its tile if it needs you and the
+   *  tile is in sight, else in the open water (near the bottom if it rests). */
+  private place(sh: Shark) {
+    const { width: W, height: H } = this;
+    const L = (sh.length = this.unit() * sh.size * (0.8 + 0.3 * sh.depth));
+    const tile = sh.mood === "surface" ? this.tileBox.get(sh.key) : undefined;
+    let x: number;
+    let y: number;
+    let heading: number;
+    if (tile) {
+      // Over the tile's top edge, swimming along it.
+      x = clamp((tile.x0 + tile.x1) / 2, L * 0.15, W - L * 0.15);
+      y = clamp(tile.y0 - L * 0.3, L * 0.15, H - L * 0.15);
+      heading = sh.orbitDir > 0 ? 0 : Math.PI;
+    } else {
+      ({ x, y } = this.openPoint(sh.mood === "rest" ? 0.72 : 0.08, 0.92, { x: W / 2, y: H / 2 }));
+      heading = rand(0, TAU);
+    }
+    const seg = L / (SHARK_NODES - 1);
+    for (let n = 0; n < SHARK_NODES; n++) {
+      sh.nodes[n * 2] = x - Math.cos(heading) * seg * n;
+      sh.nodes[n * 2 + 1] = y - Math.sin(heading) * seg * n;
+    }
+    sh.heading = heading;
+    sh.goal = null;
   }
 
   /** Where the tiles and panels are. The fish and the sharks keep to the water between them, and a
@@ -241,15 +281,25 @@ export class World {
 
   /** A point in the open water between `top` and `bottom` (shares of the height), and one the
    *  shark at `from` can swim to without passing under a tile if there is one: of a few tries, the
-   *  first with a clear way there, else the one with the least of its way covered. */
+   *  first with a clear way there, else the one with the least of its way covered. On a canvas
+   *  too full for any try to be clear of the tiles, the try with the most room round it. */
   private openPoint(top: number, bottom: number, from: { x: number; y: number }) {
     const { width: W, height: H } = this;
     let best = { x: W / 2, y: H / 2 };
     let bestCover = Infinity;
+    let fallback = best;
+    let fallbackRoom = -Infinity;
     for (let i = 0; i < 16; i++) {
       const x = rand(W * 0.08, W * 0.92);
       const y = rand(H * top, H * bottom);
-      if (this.covered(x, y, 60)) continue;
+      if (this.covered(x, y, 60)) {
+        const room = this.roomAt(x, y);
+        if (room > fallbackRoom) {
+          fallback = { x, y };
+          fallbackRoom = room;
+        }
+        continue;
+      }
       let cover = 0;
       for (let k = 1; k < 8; k++) if (this.covered(from.x + ((x - from.x) * k) / 8, from.y + ((y - from.y) * k) / 8, 30)) cover++;
       if (cover < bestCover) {
@@ -258,7 +308,18 @@ export class World {
         if (cover === 0) break;
       }
     }
-    return best;
+    return bestCover < Infinity ? best : fallback;
+  }
+
+  /** How far a point is from the nearest box or the window's edge; less than 0 under a box, by how
+   *  far it is in from that box's nearest side. */
+  private roomAt(x: number, y: number) {
+    let room = Math.min(x, this.width - x, y, this.height - y);
+    for (const b of this.boxes) {
+      const inside = x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1;
+      room = Math.min(room, inside ? -Math.min(x - b.x0, b.x1 - x, y - b.y0, b.y1 - y) : Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1)));
+    }
+    return room;
   }
 
   /** Its agent finished a turn: the shark bites where it is, the fish near it scatter, and it is fed. */
@@ -615,7 +676,7 @@ export class World {
       }
       const t = sh.target;
       let tile: Box | undefined;
-      /** Far from the tile it should be circling, or under a tile: it hurries. */
+      /** Far from the tile it should be circling, or under a tile: it hurries, as fast as it hunts. */
       let hurry = false;
       let hunting = false;
       let closing = 0;
@@ -735,7 +796,7 @@ export class World {
       sh.turn += (turned / dt - sh.turn) * Math.min(1, dt * 3);
 
       const cruise = 30 + L * 0.04;
-      const targetSpeed = hunting ? cruise * (1.45 + closing * 1.5) : cruise * (sh.leaving ? 1.3 : hurry ? 1.6 : mood.pace);
+      const targetSpeed = hunting ? cruise * (1.45 + closing * 1.5) : cruise * (sh.leaving ? 1.3 : hurry ? 3 : mood.pace);
       sh.speed += (targetSpeed - sh.speed) * Math.min(1, dt * 1.1);
       sh.phase += dt * (2 + sh.speed / 24);
 

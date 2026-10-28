@@ -4,7 +4,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MAX_SHARKS, roster, type ShoalAgent } from "../../src/renderer/src/shoal/roster";
+import { MAX_SHARKS, roster, turnEnded, type ShoalAgent } from "../../src/renderer/src/shoal/roster";
 import type { TileStatusKind } from "../../src/renderer/src/agent-status-bus";
 
 const agent = (tileId: string, sleeping = false): ShoalAgent => ({ tileId, agent: "a", sleeping });
@@ -40,4 +40,16 @@ test("a full shoal keeps the agents that need you, then those at work, in the ag
   assert.deepEqual(keys, [...keys].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))));
   // The same agent is the same shark every time.
   assert.deepEqual(roster([agent("t3")], () => "idle"), roster([agent("t3")], () => "idle"));
+});
+
+test("only a turn that ends well is a bite: not one interrupted, failed or cut short by a limit", () => {
+  assert.equal(turnEnded("working", { status: "idle" }), true);
+  assert.equal(turnEnded("working", { status: "idle", synthetic: true, detail: "interrupted" }), false);
+  // A tile's own idle that is not a finish says so without a reason.
+  assert.equal(turnEnded("working", { status: "idle", synthetic: true }), false);
+  assert.equal(turnEnded("working", { status: "idle", detail: "turn failed" }), false);
+  assert.equal(turnEnded("working", { status: "idle", detail: "usage limit reached" }), false);
+  assert.equal(turnEnded("working", { status: "permission" }), false);
+  assert.equal(turnEnded("idle", { status: "idle" }), false);
+  assert.equal(turnEnded("question", { status: "idle" }), false);
 });

@@ -59,8 +59,10 @@ export type Moment = (typeof MOMENTS)[number];
 
 export interface ThemeFontFile { path: string; weight?: string; style?: string }
 export interface ThemeFace { family: string; files: ThemeFontFile[] }
+/** A built-in wallpaper a theme may name. Not Shoal yet: an app without it refuses the whole theme. */
+type ThemeWallpaperKind = Exclude<WallpaperId, "image" | "video" | "shoal">;
 export type ThemeWallpaper =
-  | { kind: Exclude<WallpaperId, "image" | "video">; brightness?: number }
+  | { kind: ThemeWallpaperKind; brightness?: number }
   | { image: string; brightness?: number }
   | { video: string; brightness?: number };
 
@@ -275,9 +277,9 @@ function wallpaperOf(v: unknown, files: readonly ThemeFolderFile[]): ThemeWallpa
   const b = brightness === undefined ? {} : { brightness };
   if (v.image !== undefined) return { image: fileIn(files, v.image, "wallpaper.image", IMAGE_EXT, "an image (.png, .jpg, .webp, .avif or .gif)", THEME_FILE_LIMITS.image), ...b };
   if (v.video !== undefined) return { video: fileIn(files, v.video, "wallpaper.video", VIDEO_EXT, "a video (.webm or .mp4)", THEME_FILE_LIMITS.video), ...b };
-  const kinds: WallpaperId[] = WALLPAPERS.map((w) => w.id).filter((k) => k !== "image" && k !== "video");
+  const kinds: WallpaperId[] = WALLPAPERS.map((w) => w.id).filter((k) => k !== "image" && k !== "video" && k !== "shoal");
   if (!kinds.includes(v.kind as WallpaperId)) refuse(`wallpaper.kind is one of ${kinds.join(", ")}`);
-  return { kind: v.kind as Exclude<WallpaperId, "image" | "video">, ...b };
+  return { kind: v.kind as ThemeWallpaperKind, ...b };
 }
 
 function themeOf(raw: unknown, files: readonly ThemeFolderFile[]): Theme {
@@ -376,7 +378,8 @@ export function themeSwatches(t: Pick<Theme, "palette" | "accent">): string[] {
  *  corners and a built-in wallpaper. Font files, a picture wallpaper and sounds are files the
  *  author adds to the folder and names. */
 export function themeFromLook(name: string, a: Appearance, extra: AppearanceExtra): Record<string, unknown> {
-  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video";
+  // A picture, a video and Shoal are not a theme's to carry: the theme gets Mono in their place.
+  const media = a.wallpaper.kind === "image" || a.wallpaper.kind === "video" || a.wallpaper.kind === "shoal";
   return {
     format: THEME_FORMAT,
     name,

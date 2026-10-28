@@ -15,11 +15,13 @@ export type ShoalMode = "run" | "hold" | "still";
 export interface FaceSource {
   family: string;
   src: string;
+  weight: string;
   range?: string;
 }
 
 export type ShoalMessage =
   | { type: "start"; canvas: OffscreenCanvas; font: string; faces: FaceSource[] }
+  | { type: "font"; font: string; faces: FaceSource[] }
   | { type: "size"; width: number; height: number; dpr: number }
   | { type: "colours"; page: number; text: number }
   | { type: "roster"; sharks: SharkSpec[] }
@@ -47,6 +49,8 @@ const cancelFrame = (id: number) => (scope.cancelAnimationFrame ? scope.cancelAn
 
 const world = new World();
 let renderer: AsciiRenderer | null = null;
+/** The agents' sharks as last told, for a still picture made again from scratch. */
+let roster: SharkSpec[] = [];
 let mode: ShoalMode = "hold";
 let raf = 0;
 let last = 0;
@@ -72,8 +76,10 @@ function frame(now: number) {
 
 const draw = () => renderer?.render(world, STEP);
 
-/** Motion off: let the sharks swim in and the schools form, then show that one frame. */
+/** Motion off: put the sharks where their moods have them, let the schools form, then show that
+ *  one frame. */
 function settle() {
+  world.setRoster(roster, true);
   for (let i = 0; i < 360; i++) world.step(STEP);
   draw();
 }
@@ -92,7 +98,7 @@ async function loadFaces(faces: FaceSource[]) {
   const fonts = scope.fonts;
   if (!fonts) return;
   await Promise.all(faces.map(async (f) => {
-    const face = new FontFace(f.family, f.src, { weight: "600", ...(f.range ? { unicodeRange: f.range } : {}) });
+    const face = new FontFace(f.family, f.src, { weight: f.weight, ...(f.range ? { unicodeRange: f.range } : {}) });
     fonts.add(face);
     await face.load().catch(() => {});
   }));
@@ -106,19 +112,27 @@ scope.onmessage = ({ data: m }) => {
       renderer.setFontFamily(m.font);
       void loadFaces(m.faces);
       break;
+    case "font":
+      renderer?.setFontFamily(m.font);
+      void loadFaces(m.faces);
+      draw();
+      break;
     case "size":
       if (!renderer) return;
       renderer.resize(m.width, m.height, m.dpr);
       world.resize(m.width, m.height, renderer.cellWidth, renderer.cellHeight);
-      if (mode !== "run") draw();
+      // Resizing clears the canvas: draw now, not at the next paced frame, so it never shows blank.
+      draw();
       break;
     case "colours":
       renderer?.setColours(m.page, m.text);
       if (mode !== "run") draw();
       break;
     case "roster":
-      world.setRoster(m.sharks);
-      if (mode === "still") settle();
+      roster = m.sharks;
+      // In a still picture only what changed moves: a shark comes, goes or comes up to its tile.
+      world.setRoster(m.sharks, mode === "still");
+      if (mode === "still") draw();
       break;
     case "boxes":
       world.setBoxes(m.boxes);

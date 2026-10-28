@@ -112,7 +112,7 @@ test("a shark a tile is put down over swims out from under it quickly", () => {
     w.setBoxes([box]);
     let secs = 0;
     while (secs < 10 && outside(box, a.nodes[0]!, a.nodes[1]!) === 0) { run(w, 0.1); secs += 0.1; }
-    // Over 40 seeds it was out within 3 s; at its cruising pace it would take 5 s or more.
+    // Over 40 seeds it was out within 2 s; at its cruising pace it would take 5 s or more.
     assert.ok(secs < 4, `seed ${seed}: out after ${secs.toFixed(1)} s`);
   });
 });
@@ -158,5 +158,27 @@ test("a finished turn is a bite where the shark is, and the fish there scatter",
     w.events.length = 0;
     w.finished("nobody");
     assert.deepEqual(w.events, []);
+  });
+});
+
+test("a still picture changes only what changed: a closed agent's shark goes at once, a new one is in sight, one that needs you is by its tile", () => {
+  seeded(31, () => {
+    const w = water([shark("a", "cruise"), shark("b", "cruise")], [tile]);
+    w.setRoster([shark("a", "cruise"), shark("b", "cruise")], true);
+    run(w, 6);
+    const b = sharkOf(w, "b");
+    const bWas = [...b.nodes];
+    w.setRoster([shark("b", "cruise"), shark("c", "hunt")], true);
+    assert.deepEqual(w.sharks.map((s) => s.key).sort(), ["b", "c"]);
+    assert.deepEqual([...b.nodes], bWas, "the shark nothing happened to has not moved");
+    const c = sharkOf(w, "c");
+    assert.ok(c.nodes[0]! > 0 && c.nodes[0]! < W && c.nodes[1]! > 0 && c.nodes[1]! < H, "the new shark is in sight");
+    assert.equal(c.depth, 0.85, "already as near as its mood has it");
+    // b's agent comes to need you: its shark is put by its tile, at once.
+    const bTile: Box = { ...tile, key: "b" };
+    w.setBoxes([bTile]);
+    w.setRoster([shark("b", "surface"), shark("c", "hunt")], true);
+    assert.ok(outside(bTile, b.nodes[0]!, b.nodes[1]!) < b.length * 0.6, "the shark that needs you is by its tile");
+    assert.equal(b.depth, 1, "and already come up");
   });
 });

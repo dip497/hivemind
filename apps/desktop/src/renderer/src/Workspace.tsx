@@ -1335,7 +1335,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     <div className="relative h-full w-full flex flex-col" data-active-view={activeViewId ?? ""}>
       {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
           -1), so it shows through every view AND the panels beside it. */}
-      {chrome.wallpaper && <Wallpaper agents={shoalAgents} />}
+      {chrome.wallpaper && <Wallpaper agents={shoalAgents} live={!pluginScene} />}
       {/* Custom OVERLAY media — user's transparent foreground plane OVER the
           tiles. Fixed full-window + pointer-events:none. Same policy as the
           wallpaper: never over a view that paints its own scene. */}

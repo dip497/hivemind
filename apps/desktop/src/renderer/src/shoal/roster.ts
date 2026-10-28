@@ -1,6 +1,6 @@
 /** Which shark each agent is, and what its status has it do. The wallpaper only echoes status: the
  *  bell, the tile and Layers still say an agent needs you, so turning the wallpaper off loses nothing. */
-import type { TileStatusKind } from "../agent-status-bus";
+import type { StatusEvent, TileStatusKind } from "../agent-status-bus";
 import { hash3 } from "./math";
 import type { Mood, SharkKind, SharkSpec } from "./world";
 
@@ -30,6 +30,12 @@ export function moodOf(status: TileStatusKind | null | undefined, sleeping: bool
     case "exited": return "rest";
     default: return "cruise";
   }
+}
+
+/** Whether a status change ends a turn well, which is its shark's bite: at work, then ready, and not
+ *  because the person interrupted it, it failed or a usage limit cut it short (those say why). */
+export function turnEnded(was: TileStatusKind | null | undefined, e: Pick<StatusEvent, "status" | "synthetic" | "detail">): boolean {
+  return was === "working" && e.status === "idle" && !e.synthetic && !e.detail;
 }
 
 const RANK: Record<Mood, number> = { surface: 0, hunt: 1, cruise: 2, rest: 3 };
