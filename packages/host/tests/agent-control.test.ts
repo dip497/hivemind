@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AgentProviderDef } from "@hivemind/agents";
+import type { AgentCommands, AgentProviderDef } from "@hivemind/agents";
 import { KEY_GAP_MS } from "@hivemind/agent-host/keys";
 import type { CoreLayout, FrameRecord } from "@hivemind/workspace-doc/shapes";
 import { agentControl, PROMPT_MAX, type Start } from "../src/agent-control.ts";
@@ -22,6 +22,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "hm-agent-control-"));
 after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const BOX = "b0".repeat(32);
+/** The person's home, where their own commands are kept. */
+const HOME = path.join(tmp, "home");
 
 const claude = {
   id: "claude", label: "Claude Code", bin: "claude", enabled: true,
@@ -43,7 +45,7 @@ function device(repo = "/home/p/api") {
   } as CoreLayout;
   const started: Array<{ repo: string; start: Start }> = [];
   const typed: Array<{ tile: string; data: string; at: number }> = [];
-  const state = { now: "working" as string, terminal: true, keys: ["escape"] as string[] | undefined, folder: repo as string | null };
+  const state = { now: "working" as string, terminal: true, keys: ["escape"] as string[] | undefined, folder: repo as string | null, commands: undefined as AgentCommands | undefined };
   const opened: FrameRecord[] = [];
   const machines = { self: () => ({ device: "d1".repeat(32), name: "desk" }), mine: (d: string) => (d === BOX ? "build-box" : undefined), whose: () => undefined, saved: () => undefined };
   // The photos kept on the saved machine "box1", by the path it gave each.
@@ -63,7 +65,8 @@ function device(repo = "/home/p/api") {
     openFrame: (r, f) => { if (r === repo) { opened.push(f); core.frames.push(f); } },
     start: async (r, start) => { started.push({ repo: r, start }); return "t9"; },
     status: (tile) => (tile === "t1" ? { state: state.now } : undefined),
-    interruptKeys: () => state.keys,
+    agentOf: (tile) => (tile === "t1" ? { ...claude, interrupt: state.keys, commands: state.commands } : undefined),
+    home: HOME,
     type: (tile, data) => { typed.push({ tile, data, at: Date.now() }); return state.terminal; },
     close: async (tile) => tile === "t1",
     folderOf: (tile) => (tile === "t1" ? state.folder : null),
@@ -226,6 +229,25 @@ test("a patch past 512 KiB is cut at the end of a line and says so; a folder tha
   d.state.folder = `machine://${BOX}/srv/api`;
   await assert.rejects(Promise.resolve().then(() => d.call("agent.diff", "t1")), (e: Error & { code?: string }) => e.code === "FAILED" && /another machine/.test(e.message));
   await refused(() => d.call("agent.diff", "t7"), /no such agent/, "NOT_FOUND");
+});
+
+test("the commands an agent takes: its own, the person's and the project's, by name; on another machine its own only; no agent here is refused", async () => {
+  const d = device();
+  const project = fs.mkdtempSync(path.join(tmp, "project-"));
+  fs.mkdirSync(path.join(HOME, ".claude/commands"), { recursive: true });
+  fs.writeFileSync(path.join(HOME, ".claude/commands/standup.md"), "Write today's standup\n");
+  fs.mkdirSync(path.join(project, ".claude/commands"), { recursive: true });
+  fs.writeFileSync(path.join(project, ".claude/commands/release.md"), "---\ndescription: Cut a release\n---\n");
+  d.state.folder = project;
+  d.state.commands = { builtIn: [{ name: "clear", description: "Start over" }], folders: [{ path: "{home}/.claude/commands" }, { path: "{folder}/.claude/commands" }] };
+  assert.deepEqual(await d.call("agent.commands", "hm:t1"), { commands: [
+    { name: "clear", description: "Start over", from: "built-in" },
+    { name: "release", description: "Cut a release", from: "project" },
+    { name: "standup", description: "Write today's standup", from: "yours" },
+  ] });
+  d.state.folder = `machine://${BOX}/srv/api`;
+  assert.deepEqual(await d.call("agent.commands", "t1"), { commands: [{ name: "clear", description: "Start over", from: "built-in" }] });
+  await refused(() => d.call("agent.commands", "t7"), /no such agent/, "NOT_FOUND");
 });
 
 test("starting, interrupting and closing an agent from another device is recorded against its tile as that device; seeing what may be started, or what an agent changed, is not", async () => {

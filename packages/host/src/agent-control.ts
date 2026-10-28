@@ -6,6 +6,7 @@
  * hands in.
  */
 import type { AgentProviderDef } from "@hivemind/agents";
+import { commandsOf, type SlashCommand } from "@hivemind/agents/commands";
 import { typeKeys } from "@hivemind/agent-host/keys";
 import { machineCalled, type KnownMachines } from "@hivemind/core/remote-uri";
 import type { StartImage } from "@hivemind/workspace-api/agents";
@@ -52,8 +53,10 @@ export interface AgentControlOptions {
   start(repo: string, start: Start): Promise<string>;
   /** A tile's agent's status now. */
   status(tile: string): { state: string } | undefined;
-  /** The keys its manifest says interrupt its turn; undefined for one that says none. */
-  interruptKeys(tile: string): readonly string[] | undefined;
+  /** The agent that runs in `tile`, as its manifest says; undefined for a tile that runs none. */
+  agentOf(tile: string): AgentProviderDef | undefined;
+  /** The person's home folder on this machine, where an agent's own commands are kept. */
+  home: string;
   /** Type `data` into the terminal of `tile` as the person types, now; false when it has none. */
   type(tile: string, data: string): boolean;
   /** End the session of `tile` and take it off its board; false when no workspace here has it. */
@@ -119,7 +122,7 @@ function superviseOf(value: unknown): string | true | undefined {
 /** Whether `folder` is on this machine, where git can read it. */
 const here = (folder: string): boolean => !/^[a-z][a-z0-9+.-]*:\/\//i.test(folder);
 
-export function agentControl(o: AgentControlOptions): Domain<"agent.startable" | "agent.start" | "agent.interrupt" | "agent.close" | "agent.diff"> {
+export function agentControl(o: AgentControlOptions): Domain<"agent.startable" | "agent.start" | "agent.interrupt" | "agent.close" | "agent.diff" | "agent.commands"> {
   /** A workspace's board; an empty one when it was never saved. */
   const board = (repo: string): KeptCore => {
     if (!o.repos().includes(repo)) throw new ApiError("NOT_FOUND", "no such workspace here");
@@ -153,7 +156,7 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
       },
       "agent.interrupt": (_from, tile) => {
         const bare = toBareId(text(tile, "tile"));
-        const keys = o.interruptKeys(bare);
+        const keys = o.agentOf(bare)?.interrupt;
         if (!keys) throw new ApiError("BAD_REQUEST", "this agent says no keys that interrupt its turn");
         const state = o.status(bare)?.state;
         if (state !== "working" && state !== "waiting") return { interrupted: false };
@@ -165,6 +168,14 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
         if (folder === null) throw new ApiError("NOT_FOUND", "no such agent here");
         if (!here(folder)) throw new ApiError("FAILED", "this agent runs on another machine: what it changed is read there");
         return changesIn(folder);
+      },
+      "agent.commands": async (_from, tile): Promise<{ commands: SlashCommand[] }> => {
+        const bare = toBareId(text(tile, "tile"));
+        const folder = o.folderOf(bare);
+        if (folder === null) throw new ApiError("NOT_FOUND", "no such agent here");
+        const def = o.agentOf(bare);
+        // One on another machine keeps its folders there: only the commands it says it takes.
+        return { commands: def ? await commandsOf(def, here(folder) ? { home: o.home, folder } : null) : [] };
       },
     },
     effects: {

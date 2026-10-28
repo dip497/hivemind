@@ -232,6 +232,13 @@ export interface AgentSessions {
   sessions: Array<{ id: string; cwd?: string; title?: string; prompt?: string; updated?: number }>;
 }
 
+/** A slash command an agent takes at its prompt (0.36): `from`, whose it is. */
+export interface SlashCommand {
+  name: string;
+  description?: string;
+  from: "built-in" | "yours" | "project";
+}
+
 /** Every link there is now. */
 export interface Links {
   pipes: Array<{ src: string; dst: string }>;

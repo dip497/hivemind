@@ -91,6 +91,7 @@ const LEAST: Record<string, Role> = {
   "agent.read": "view",
   "agent.output": "view",
   "agent.sessions": "view",
+  "agent.commands": "view",
   "tool.open": "edit",
   "agent.close": "agents",
   "agent.sleep": "agents",

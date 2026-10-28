@@ -346,7 +346,8 @@ export async function startHeadlessHost(o: HeadlessHostOptions): Promise<Headles
       openFrame: (repo, frame) => { store.addFrame(repo, frame, { writer: "frames" }); },
       start: (repo, start) => control.start(repo, start),
       status: (bare) => control.status.get(bare),
-      interruptKeys: (bare) => manifestOf(heldBoards(store), bare)?.interrupt,
+      agentOf: (bare) => manifestOf(heldBoards(store), bare),
+      home: os.homedir(),
       // As the person types: an interrupt key ends the turn in the agent's status too.
       type: (bare, data) => control.typed(`hm:${bare}`, data),
       close: (bare) => control.close(bare),

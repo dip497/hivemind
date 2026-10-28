@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- New: on the phone page, typing `/` in an agent's message box lists the slash commands it takes, with what each does: its own, yours (such as `~/.claude/commands` and your skills) and the project's. The ones that start with what you typed come first. Tap one to put it in the box. An agent's manifest says which commands it has and the folders it reads them from (`commands`). An agent on another machine lists only its own commands.
+- New: workspace API 0.36 adds `agent.commands`, the slash commands an agent takes. Phones may ask for it.
 - Changed: on the phone page, an agent that asks several questions at once asks them one at a time, as Claude Code does. A chip for each question shows which are answered, and choosing an option goes on to the next. A last step shows every answer: tap one to change it, then Send. Before, the questions were stacked in one long card.
 - Fixed: on the phone page, a tap in the terminal of a program that takes the mouse, such as Claude Code, clicks there, as a click does on the computer. In a shell, a tap still brings up the keyboard, and the ⌨ key always does. Before, a tap only brought up the keyboard.
 - Fixed: in the Layers panel, pinned tiles stay in place while the list scrolls, and the list's heading with its View menu (**By project**) stays at the top of it. Many pins take at most a third of the panel and scroll on their own.

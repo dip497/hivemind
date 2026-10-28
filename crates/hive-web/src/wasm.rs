@@ -551,6 +551,14 @@ impl Host {
             .map_err(err)
     }
 
+    /// The slash commands the agent of `tile` takes: `[{name, description?, from}]`, by name.
+    pub async fn commands(&self, workspace: String, tile: String) -> Result<JsValue, JsError> {
+        let commands = control::commands(&self.connection, &workspace, &tile)
+            .await
+            .map_err(err)?;
+        to_js(&serde_json::to_value(commands).map_err(err)?)
+    }
+
     /// Close the agent of `tile`. Whether it was open.
     #[wasm_bindgen(js_name = closeAgent)]
     pub async fn close_agent(&self, workspace: String, tile: String) -> Result<bool, JsError> {

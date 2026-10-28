@@ -41,6 +41,7 @@ const app = {
   conversation: (a, said) => (window.calls.push(["conversation", a.tile]), window.said = said, () => {}),
   terminal: () => null,
   tool: async () => ({}),
+  commands: async (a) => (window.calls.push(["commands", a.tile]), window.commands ?? []),
   answer: async (a, reply) => (window.calls.push(["answer", a.tile, reply]), true),
   send: async (a, text) => (window.calls.push(["send", a.tile, text]), window.sent === undefined ? { held: false } : window.sent),
   stop: async (a) => (window.calls.push(["stop", a.tile]), true),
@@ -200,6 +201,36 @@ test("several questions are asked one at a time, as Claude Code asks them: choos
   expect(await calls()).toEqual([]);
   await card.locator("[data-answer=send]").click();
   await expect.poll(calls).toEqual([["answer", "t1", { answers: [{ text: "Durian" }, { chosen: [0, 2] }] }]]);
+});
+
+test("typing / offers the agent's commands, those that start as typed first, each with what it does; a tap puts one in the box, and they are asked of the computer once", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  await page.evaluate(() => { (window as unknown as { commands: unknown }).commands = [
+    { name: "clear", description: "Start over", from: "built-in" },
+    { name: "pr-review", from: "yours" },
+    { name: "release", description: "Cut a release", from: "project" },
+    { name: "review", description: "Review the diff", from: "built-in" },
+  ]; });
+  await show(page, overview(agent("t1", "Phone test")));
+  await open(page, "t1");
+  const box = page.locator("[data-message] textarea");
+  const offered = page.locator("[data-commands] [data-command]");
+  await box.fill("hello /");
+  await expect(page.locator("[data-commands]")).toBeHidden();
+  await box.fill("/");
+  await expect(offered.locator(".label")).toHaveText(["/clear", "/pr-review", "/release", "/review"]);
+  await box.fill("/re");
+  await expect(offered.locator(".label")).toHaveText(["/release", "/review", "/pr-review"]);
+  await expect(offered.nth(1).locator(".description")).toHaveText("Review the diff");
+  await offered.nth(1).click();
+  await expect(box).toHaveValue("/review ");
+  await expect(box).toBeFocused();
+  await expect(page.locator("[data-commands]")).toBeHidden();
+  await box.fill("/zzz");
+  await expect(page.locator("[data-commands]")).toBeHidden();
+  const asked = await page.evaluate(() => (window as unknown as { calls: unknown[][] }).calls.filter((c) => c[0] === "commands"));
+  expect(asked).toEqual([["commands", "t1"]]);
 });
 
 test("in its terminal, which shows the chooser itself, a waiting agent's card is put away and its header still says it waits; back in its chat the card is as it was", async () => {
