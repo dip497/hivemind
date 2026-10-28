@@ -1,5 +1,6 @@
 import type { SessionStatus } from "@hivemind/agent-host/status-store";
 /** Typed contract for IPC between main and renderer. */
+import type { PageFrame, PageInput } from "./page-input.js";
 import type { Issue, IssueSummary, IssueState, AcceptanceItem, Assignee, LinkType, IssuePatch } from "@hivemind/core/types";
 import type { ViewManifest } from "@hivemind/view-sdk/manifest";
 import type { ServiceState } from "@hivemind/host/services";
@@ -846,6 +847,21 @@ export interface HiveIpc {
    *  (auto-attaches on first use). Navigate / click / read DOM / screenshot /
    *  evaluate — the surface an agent uses to "use" the browser. */
   browserCdp?(tileId: string, method: string, params?: Record<string, unknown>): Promise<unknown>;
+  /** Watch a tile's page from where there is no web view (a browser tab the app serves): its
+   *  pictures arrive through `onBrowserFrame`, each acknowledged with `browserFrameShown` once
+   *  drawn. Says whether the app window holding it draws (not minimized or hidden). */
+  browserWatch(tileId: string): Promise<{ shown: boolean }>;
+  browserUnwatch(tileId: string): void;
+  browserFrameShown(tileId: string): void;
+  /** Click, scroll, type or go somewhere on a watched page. */
+  browserInput(tileId: string, input: PageInput): Promise<void>;
+  onBrowserFrame: (cb: (tileId: string, frame: PageFrame) => void) => () => void;
+  /** The app window holding a watched page started or stopped drawing it. */
+  onBrowserPageShown: (cb: (tileId: string, shown: boolean) => void) => () => void;
+  /** A watched page closed. */
+  onBrowserPageGone: (cb: (tileId: string) => void) => () => void;
+  /** In the app window: a tile's page is watched from elsewhere, so it must keep drawing. */
+  onBrowserWatched: (cb: (tileId: string, watched: boolean) => void) => () => void;
   /** The person's answer to a Browser tile page's ask (`onBrowserPermission`). */
   answerBrowserPermission?(askId: number, allowed: boolean): void;
   /** The rights a site (an origin) in a Browser tile is asked about, each with the person's answer. */

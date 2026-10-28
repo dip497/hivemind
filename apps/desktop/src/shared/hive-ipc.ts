@@ -8,6 +8,7 @@ import { WorkspaceClient } from "@hivemind/workspace-api/client";
 import type { Answer, EventMessage } from "@hivemind/workspace-api/protocol";
 import type { HiveApi } from "./ipc.js";
 import { hiveOverWorkspace } from "./hive-over-workspace.js";
+import { FRAME_EVENT, GONE_EVENT, SHOWN_EVENT, WATCHED_EVENT } from "./page-input.js";
 
 /** One way to reach main's channels. */
 export interface IpcPort {
@@ -80,6 +81,14 @@ export function hiveOverIpc(port: IpcPort, workspace: WorkspaceClient): Omit<Hiv
 
     browserRegister: local("browser:register", send("browser:register")),
     browserCdp: local("browserCdp", invoke("browserCdp")),
+    browserWatch: (tileId) => port.invoke("browserWatch", tileId),
+    browserUnwatch: (tileId) => port.send("browserUnwatch", tileId),
+    browserFrameShown: (tileId) => port.send("browserFrameShown", tileId),
+    browserInput: (tileId, input) => port.invoke("browserInput", tileId, input),
+    onBrowserFrame: (cb) => port.on(FRAME_EVENT, cb),
+    onBrowserPageShown: (cb) => port.on(SHOWN_EVENT, cb),
+    onBrowserPageGone: (cb) => port.on(GONE_EVENT, cb),
+    onBrowserWatched: (cb) => port.on(WATCHED_EVENT, cb),
     answerBrowserPermission: local("browser:permission-answer", send("browser:permission-answer")),
     browserSiteRights: local("browser:site-rights", invoke("browser:site-rights")),
     setBrowserSiteRight: local("browser:set-site-right", invoke("browser:set-site-right")),

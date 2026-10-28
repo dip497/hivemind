@@ -1,4 +1,6 @@
 import { installViewManagementIpc } from "./view-packages.js";
+import { PageStreams } from "./page-stream.js";
+import { pageInputOf } from "../shared/page-input.js";
 import { installPluginSwitchIpc } from "./plugin-switch.js";
 import { installPackagesIpc } from "./packages-ipc.js";
 import { installThemesIpc } from "./themes-ipc.js";
@@ -534,12 +536,15 @@ on("browser:register", (e, tileId: unknown, webContentsId: unknown, frameId: unk
   if (typeof tileId !== "string" || typeof webContentsId !== "number" || !browserPages.get(e.sender)?.has(webContentsId)) return;
   browserGuests.set(tileId, { webContentsId, frameId: typeof frameId === "string" ? frameId : null, url: typeof url === "string" ? url : "" });
   void writeBrowserTargets();
+  void pageStreams.moved(tileId);
 }, { local: true });
 /** A page that has gone takes its tile's registration with it (the tile closed, or its tab did). */
 function forgetBrowserPage(pageId: number): void {
   let gone = false;
   for (const [tileId, g] of browserGuests) if (g.webContentsId === pageId) { browserGuests.delete(tileId); gone = true; }
-  if (gone) void writeBrowserTargets();
+  if (!gone) return;
+  void writeBrowserTargets();
+  for (const tileId of pageStreams.watched()) void pageStreams.moved(tileId);
 }
 
 function browserGuestFor(tileId: string): Electron.WebContents | null {
@@ -548,6 +553,21 @@ function browserGuestFor(tileId: string): Electron.WebContents | null {
   const guest = webContents.fromId(g.webContentsId);
   return guest && !guest.isDestroyed() ? guest : null;
 }
+
+// The same page, watched and used from a browser tab the app serves, which has no web view.
+const pageStreams = new PageStreams(browserGuestFor);
+const tileIdOf = (t: unknown): string => {
+  if (typeof t !== "string" || !t) throw new Error("a tile id is needed");
+  return t;
+};
+handle("browserWatch", (e, tileId: unknown) => pageStreams.watch(tileIdOf(tileId), e.sender));
+on("browserUnwatch", (e, tileId: unknown) => { if (typeof tileId === "string") pageStreams.unwatch(tileId, e.sender); });
+on("browserFrameShown", (e, tileId: unknown) => { if (typeof tileId === "string") pageStreams.shown(tileId, e.sender); });
+handle("browserInput", (e, tileId: unknown, input: unknown) => {
+  const done = pageInputOf(input);
+  if (!done) throw new Error("not an input a page takes");
+  return pageStreams.input(tileIdOf(tileId), e.sender, done);
+});
 
 handleEffect(
   "browserCdp",

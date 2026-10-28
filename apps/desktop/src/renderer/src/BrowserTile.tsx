@@ -4,11 +4,12 @@ import { ArrowLeft, ArrowRight, RotateCw, X as XIcon, Plus, Search, Wrench, Bot,
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import { useScaleOnScreen } from "./workspace/tile-scale";
+import { useDrawnOutOfView, useScaleOnScreen } from "./workspace/tile-scale";
 import { BrowserAsk, useBrowserAsks } from "./browser-asks";
 import { SiteButton } from "./browser-site";
 import { siteOf } from "../../shared/site";
 import { keyLabel } from "./shortcut";
+import { WatchedPage } from "./WatchedPage";
 
 interface Props {
   tileId: string;
@@ -123,20 +124,10 @@ function TabView({
   );
 }
 
-/** A page: in the app window, a web view on the canvas; in a browser tab, which has none, a link
- *  that opens it in a tab of that browser. */
+/** A page: in the app window, a web view on the canvas; where there is none (a browser tab the
+ *  app serves), that same page, watched and used from there. */
 export function BrowserTile(props: Props) {
-  return window.hive.browserRegister ? <WebView {...props} /> : <OpensInATab url={props.url} />;
-}
-
-function OpensInATab({ url }: { url?: string }) {
-  const href = url ?? DEFAULT_URL;
-  return (
-    <div className="tile-drag-handle flex h-full flex-col items-center justify-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] p-6 text-center text-label" data-browser-elsewhere>
-      <p className="text-[var(--color-fg2)]">Pages show here in the app window. In this browser, open it in a tab of its own.</p>
-      <a className="nodrag font-mono text-[var(--color-fg)] underline" href={href} target="_blank" rel="noopener noreferrer">{href}</a>
-    </div>
-  );
+  return window.hive.browserRegister ? <WebView {...props} /> : <WatchedPage tileId={props.tileId} url={props.url} onClose={props.onClose} />;
 }
 
 function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onTogglePin }: Props) {
@@ -151,6 +142,10 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
   const [findText, setFindText] = useState("");
   const [zoom, setZoom] = useState(1);
   const [cdpMsg, setCdpMsg] = useState<string | null>(null);
+  const [watched, setWatched] = useState(false);
+  useEffect(() => window.hive.onBrowserWatched((id, on) => { if (id === tileId) setWatched(on); }), [tileId]);
+  const placeRef = useRef<HTMLDivElement>(null);
+  const keptDrawn = useDrawnOutOfView(placeRef, watched);
 
   // The page is drawn at the scale the tile shows on screen, then shrunk back by the same amount,
   // so the canvas zoom lands it on screen pixels one for one instead of stretching a 100% image.
@@ -317,7 +312,8 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
   };
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]" onKeyDown={onKeyDown}>
+    <div ref={placeRef} className="h-full">
+    <div className="flex h-full flex-col rounded-xl border border-[var(--color-line)] bg-[var(--color-bg2)] overflow-hidden shadow-[var(--hm-shadow-float)]" style={keptDrawn} onKeyDown={onKeyDown} data-kept-drawn={keptDrawn ? "" : undefined}>
       {/* Tab strip (doubles as the drag handle). */}
       <div className="tile-drag-handle flex items-stretch gap-0.5 px-1.5 pt-1 bg-[var(--color-bg3)] border-b border-[var(--color-line)] cursor-grab active:cursor-grabbing">
         <GripVertical size={13} className="text-[var(--color-fg3)] self-center shrink-0 mr-0.5" />
@@ -466,6 +462,7 @@ function WebView({ tileId, frameId, url, selected, openReq, onClose, pinned, onT
         ))}
         </div>
       </div>
+    </div>
     </div>
   );
 }
