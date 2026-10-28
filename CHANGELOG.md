@@ -15,6 +15,9 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - New: a photo pasted into a terminal, in a browser tab or with Ctrl+Shift+V in the app, is kept on the machine the session runs on and its path pasted, which an agent such as Claude Code attaches.
 - Added (workspace API 0.37): `terminal.photo` keeps a photo pasted into a terminal on the machine its session runs on and returns its path.
 - Fixed: in the Layers panel, a project whose one frame has the project's name no longer shows that name twice, as a heading and again as the row under it.
+- Fixed: a message sent with a photo to an agent that attaches it, such as Claude Code, is sent, not left at its prompt for someone to press Enter: the agent was still attaching the photo when Enter came. When its turn does not begin and its words still wait there, Enter is pressed again.
+- Fixed: on the phone, a message sent with a photo shows once, with the photo, instead of a second time with the agent's "[Image #1]" mark in its words.
+- Fixed: on the phone, the slash-command list no longer draws commands over each other; a long description shows two lines.
 
 ## [2026.10.7] — 2026-10-28
 

@@ -307,3 +307,38 @@ test("a steering agent the person typed to earlier in its turn is not typed over
   assert.deepEqual(writes, [], "not glued to the person's words");
   assert.equal(mb.pending(PID), 1);
 });
+
+test("an Enter the agent drops while it attaches a photo is pressed again until its turn begins, and no more", async () => {
+  // Its screen: what was typed waits at the prompt; the first Enter is dropped, the next sends.
+  const writes: string[] = [];
+  const screen = { words: "", drops: 1 };
+  const mb = new Mailbox((_id, data) => {
+    writes.push(data);
+    if (data !== "\r") screen.words += data;
+    else if (screen.drops-- <= 0) { screen.words = ""; mb.setBusy(PID); }
+    return true;
+  }, 1, undefined, undefined, () => true, async () => screen.words === "");
+  mb.setBusy(PID); mb.setIdle(PID);
+  await settle();
+  mb.deliver(PID, "what is wrong here?", undefined, { pasted: ["/p/a.png"] });
+  await new Promise((r) => setTimeout(r, 2000));
+  assert.deepEqual(writes, ["/p/a.png", " what is wrong here?", "\r", "\r"]);
+  assert.equal(screen.words, "");
+});
+
+test("an Enter is not pressed again over the person's own typing", async () => {
+  const writes: string[] = [];
+  const screen = { words: "" };
+  const mb = new Mailbox((_id, data) => {
+    writes.push(data);
+    if (data !== "\r") screen.words += data;
+    return true;
+  }, 1, undefined, undefined, () => true, async () => screen.words === "");
+  mb.setBusy(PID); mb.setIdle(PID);
+  await settle();
+  mb.deliver(PID, "look", undefined, { pasted: ["/p/a.png"] });
+  await settle();
+  mb.typed(PID, "x");
+  await new Promise((r) => setTimeout(r, 2000));
+  assert.deepEqual(writes, ["/p/a.png", " look", "\r"]);
+});

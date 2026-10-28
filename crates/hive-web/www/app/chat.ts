@@ -25,6 +25,10 @@ export interface Sending {
   failed(): void;
 }
 
+/** Where an agent attached a photo, its mark in the message: "[Image #2]". */
+const PHOTO_MARK = /\[Image #\d+\]\s*/g;
+const wordsOf = (text: string): string => text.replace(PHOTO_MARK, "").trim();
+
 /** How long one task draws for. */
 const SLICE_MS = 12;
 /** Scrolled this far up from the newest, a button brings it back (hapi
@@ -50,7 +54,9 @@ export class Chat {
   private drawing = new Set<string>();
   private session = "";
   /** The person's messages not yet in the session file, oldest first, with when each was sent. */
-  private pending: Array<{ el: HTMLElement; text: string; photos: boolean; at: number }> = [];
+  private pending: Array<{ el: HTMLElement; text: string; photos: HTMLElement | null; at: number }> = [];
+  /** The thumbnails of photos sent from here, by the entry that has their message. */
+  private photosOf = new Map<string, HTMLElement>();
 
   /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. */
   constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
@@ -126,7 +132,7 @@ export class Chat {
     const line = h("p", { class: "pending-state", "data-pending-state": "" }, state);
     const thumbs = photos.length ? h("div", { class: "photos", "data-pending-photos": "" }, ...photos.map((src) => h("span", { class: "photo" }, h("img", { src, alt: "" })))) : null;
     const el = h("div", { class: "pending", "data-pending": "going" }, thumbs, text ? h("div", { class: "said-person", "data-who": "person" }, text) : null, line);
-    const mine = { el, text: text.trim(), photos: photos.length > 0, at: Date.now() };
+    const mine = { el, text: text.trim(), photos: thumbs, at: Date.now() };
     this.pending.push(mine);
     this.el.append(el);
     this.nothing.hidden = true;
@@ -154,10 +160,12 @@ export class Chat {
 
   /** A message of the person's in the session file: the same one shown as being sent goes. */
   private arrived(e: Entry): void {
-    const text = (e.text ?? "").trim();
+    const text = wordsOf(e.text ?? "");
     // With photos, the session file has their paths after the words, or the agent's own marks.
     const mine = this.pending.find((p) => (p.text === text || (p.photos && text.startsWith(p.text))) && e.at >= p.at - SKEW_MS);
-    if (mine) this.drop(mine);
+    if (!mine) return;
+    if (mine.photos) this.photosOf.set(e.id, mine.photos);
+    this.drop(mine);
   }
 
   private drop(mine: { el: HTMLElement }): void {
@@ -224,11 +232,15 @@ export class Chat {
     this.tools = new Map();
     this.given = new Map();
     this.drawing = new Set();
+    this.photosOf = new Map();
   }
 
   private row(e: Entry): HTMLElement {
     const use = e.tool?.id;
     const row = rowOf(e, use !== undefined && this.unfold ? () => this.unfold!(use) : undefined);
+    const photos = this.photosOf.get(e.id);
+    if (photos) row.prepend(photos);
+    this.photosOf.delete(e.id);
     if (!e.tool) return row;
     this.tools.set(e.tool.id, row);
     this.drawing.delete(e.tool.id);
@@ -248,7 +260,7 @@ function rowOf(e: Entry, unfold?: () => Promise<Unfolded>): HTMLElement {
     gaveBack(row, e.result);
     return row;
   }
-  if (e.who === "person") return h("div", { class: "said-person", ...props }, e.text ?? "");
+  if (e.who === "person") return h("div", { class: "said-person", ...props }, wordsOf(e.text ?? ""));
   return h("div", { class: "said-agent md", ...props }, ...markdown(e.text ?? ""));
 }
 
