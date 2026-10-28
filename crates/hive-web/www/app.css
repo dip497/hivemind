@@ -317,6 +317,9 @@ button { cursor: pointer; }
 .tool .part.problem { color: var(--err); }
 .tool .whole pre[data-input] { color: var(--text2); }
 .ended { text-align: center; color: var(--text3); font-size: 13px; }
+.chat .loading { display: flex; align-items: center; justify-content: center; gap: 8px; margin: auto 0; }
+/* Not running: nothing is coming to load. */
+.agent-screen > [data-gone]:not([hidden]) ~ .chat .loading { display: none; }
 .dock {
   flex: none; display: flex; flex-direction: column; gap: 8px;
   padding: 8px 12px calc(10px + env(safe-area-inset-bottom));

@@ -40,6 +40,8 @@ export class Chat {
    *  coming up among them. */
   private away = 0;
   private readonly nothing = h("p", { class: "ended", hidden: true }, "Nothing said yet");
+  /** Until the computer first answers. */
+  private readonly loading = h("p", { class: "ended loading", role: "status", "data-loading": "" }, h("span", { class: "dot", "data-state": "working" }), "Loading chat…");
   private ids = new Set<string>();
   private tools = new Map<string, HTMLElement>();
   /** What a tool gave back before its row was drawn, by the tool's id. */
@@ -52,7 +54,7 @@ export class Chat {
 
   /** `unfold`: a tool use of its, whole; none, a tool shows what it gave back as sent. */
   constructor(private readonly unfold?: (use: string) => Promise<Unfolded>) {
-    this.el.append(this.nothing);
+    this.el.append(this.loading, this.nothing);
     this.el.addEventListener("scroll", () => this.placed(), { passive: true });
     new ResizeObserver(() => (this.el.scrollTop = this.el.scrollHeight - this.el.clientHeight - this.away)).observe(this.el);
     this.newest.addEventListener("click", () => {
@@ -65,6 +67,7 @@ export class Chat {
     // Another session began: what was said before it is not this conversation.
     if (this.session && piece.session !== this.session) this.clear();
     this.session = piece.session;
+    this.loading.remove();
     const following = this.el.scrollHeight - this.el.scrollTop - this.el.clientHeight < 48;
     const fresh: Entry[] = [];
     for (const e of piece.entries) {
@@ -176,6 +179,7 @@ export class Chat {
 
   /** Why the conversation is told no more. */
   ended(why: string): void {
+    this.loading.remove();
     this.nothing.hidden = true;
     this.el.append(h("p", { class: "ended" }, why));
   }

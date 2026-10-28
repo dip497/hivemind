@@ -22,7 +22,7 @@ export class AgentScreen {
   /** Where the chat's button back to its newest sits: over the dock's right. */
   private readonly newestSlot = h("div", { class: "newest-slot" });
   private readonly waits = h("div", { "data-waits": "" });
-  private readonly gone = h("p", { class: "quiet", hidden: true }, NOTICES.notRunning);
+  private readonly gone = h("p", { class: "quiet", hidden: true, "data-gone": "" }, NOTICES.notRunning);
   /** While it works, above the box: for how long (Happy's AgentInput.tsx:545-580). */
   private readonly workingFor = h("span", {});
   private readonly working = h("p", { class: "working-line", hidden: true, "data-working-line": "" }, h("span", { class: "dot", "data-state": "working" }), this.workingFor);

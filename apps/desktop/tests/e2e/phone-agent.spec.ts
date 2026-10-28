@@ -140,6 +140,23 @@ test("an agent that keeps no conversation the phone can read opens in its termin
   await expect(flip).toHaveAttribute("aria-label", "Terminal");
 });
 
+test("a chat says it is loading, with a spinner, until the computer first answers; an agent that is not running loads nothing", async () => {
+  test.skip(!built(), "no page build: run crates/hive-web/build.sh");
+  const page = await screen();
+  const loading = page.locator("[data-chat] [data-loading]");
+  await show(page, overview(agent("t1", "Claude")));
+  await open(page, "t1");
+  await expect(loading).toBeVisible();
+  await expect(loading).toHaveText("Loading chat…");
+  await expect(loading.locator(".dot[data-state=working]")).toBeVisible();
+  await page.evaluate(() => (window as unknown as { said(p: object): void }).said({ entries: [], cursor: 0, session: "s1" }));
+  await expect(loading).toHaveCount(0);
+  await expect(page.locator("[data-chat]")).toContainText("Nothing said yet");
+  await open(page, "t9");
+  await expect(page.locator("[data-gone]")).toBeVisible();
+  await expect(page.locator("[data-chat] [data-loading]")).toBeHidden();
+});
+
 test("a question its agent asks shows each option with what it means, chosen by its place, and a line typed for anything else; never Allow or Deny", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await screen();
