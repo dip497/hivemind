@@ -684,6 +684,11 @@ uint64_t uniffi_hive_phone_ffi_fn_clone_watch(uint64_t handle, RustCallStatus *_
 void uniffi_hive_phone_ffi_fn_free_watch(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_CLICK
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_CLICK
+int8_t uniffi_hive_phone_ffi_fn_method_watch_click(uint64_t ptr, uint16_t col, uint16_t row, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_FIT
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_FN_METHOD_WATCH_FIT
 void uniffi_hive_phone_ffi_fn_method_watch_fit(uint64_t ptr, uint16_t cols, uint16_t rows, RustCallStatus *_Nonnull out_status
@@ -1319,6 +1324,12 @@ uint16_t uniffi_hive_phone_ffi_checksum_method_screenlistener_keyboard(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_SCREENLISTENER_ENDED
 #define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_SCREENLISTENER_ENDED
 uint16_t uniffi_hive_phone_ffi_checksum_method_screenlistener_ended(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_CLICK
+#define UNIFFI_FFIDEF_UNIFFI_HIVE_PHONE_FFI_CHECKSUM_METHOD_WATCH_CLICK
+uint16_t uniffi_hive_phone_ffi_checksum_method_watch_click(void
     
 );
 #endif

@@ -1049,6 +1049,16 @@ impl Term {
         true
     }
 
+    /// A tap at the cell `col`, `row` (from 1): sent to the program as a click when it takes the
+    /// mouse; false: it does not.
+    pub fn click(&self, col: u16, row: u16) -> bool {
+        let Some(sent) = self.inner.screen.borrow().click(col, row) else {
+            return false;
+        };
+        let _ = self.inner.put.send(Input::Text(sent));
+        true
+    }
+
     /// The person scrolled to the oldest line kept: more of the session's scrollback is asked for,
     /// when the host may have more.
     pub fn earlier(&self) {

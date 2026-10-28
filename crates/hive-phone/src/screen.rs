@@ -283,6 +283,12 @@ impl Screen {
         Wheel::of(*self.term.mode()).keys(lines, col, row)
     }
 
+    /// What the program is sent for a tap at the cell `col`, `row` (from 1): a left press and
+    /// release, when it takes the mouse; none when it does not.
+    pub fn click(&self, col: u16, row: u16) -> Option<String> {
+        Wheel::of(*self.term.mode()).click(col, row)
+    }
+
     /// While a synchronized update is open: when it lapses, the frame held back until then.
     pub fn held(&self) -> Option<Instant> {
         self.sync
@@ -567,6 +573,27 @@ impl Wheel {
         }
     }
 
+    /// A left press and release at the cell `col`, `row` (from 1), when the program takes the mouse.
+    pub fn click(self, col: u16, row: u16) -> Option<String> {
+        let Self::Mouse { sgr, utf8 } = self else {
+            return None;
+        };
+        Some(if sgr {
+            format!("\x1b[<0;{col};{row}M\x1b[<0;{col};{row}m")
+        } else {
+            // The old way has no release of its own button: a release is button 3.
+            let report = |button: u8| Self::old_report(button, col, row, utf8);
+            format!("{}{}", report(0), report(3))
+        })
+    }
+
+    /// A mouse report the old way: each a character past 32, one byte or in UTF-8 two at most.
+    fn old_report(button: u8, col: u16, row: u16, utf8: bool) -> String {
+        let most = if utf8 { 2_015 } else { 95 };
+        let at = |n: u16| char::from_u32(32 + u32::from(n.clamp(1, most))).unwrap_or(' ');
+        format!("\x1b[M{}{}{}", char::from(32 + button), at(col), at(row))
+    }
+
     /// What the program is sent for scrolling `lines` (up, to earlier, below 0) at the cell `col`,
     /// `row` (from 1); none when the view scrolls its own scrollback.
     pub fn keys(self, lines: i32, col: u16, row: u16) -> Option<String> {
@@ -578,11 +605,7 @@ impl Wheel {
                 if sgr {
                     format!("\x1b[<{button};{col};{row}M")
                 } else {
-                    // Each a character past 32: one byte, or in UTF-8 two at most.
-                    let most = if utf8 { 2_015 } else { 95 };
-                    let at =
-                        |n: u16| char::from_u32(32 + u32::from(n.clamp(1, most))).unwrap_or(' ');
-                    format!("\x1b[M{}{}{}", char::from(32 + button), at(col), at(row))
+                    Self::old_report(button, col, row, utf8)
                 }
             }
             Self::Arrows { app_cursor } => {

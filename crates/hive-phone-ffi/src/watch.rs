@@ -135,6 +135,12 @@ impl Watch {
         self.0.scroll(lines, col, row)
     }
 
+    /// A tap at the cell `col`, `row` (from 1): a click sent to the program when it takes the
+    /// mouse; false when it does not.
+    pub fn click(&self, col: u16, row: u16) -> bool {
+        self.0.click(col, row)
+    }
+
     /// Size the terminal to `cols` × `rows` for this phone, until it is watched no more.
     pub fn fit(&self, cols: u16, rows: u16) {
         self.0.fit(Some((cols, rows)))
