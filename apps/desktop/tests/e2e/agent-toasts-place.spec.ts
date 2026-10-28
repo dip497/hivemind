@@ -2,7 +2,8 @@
 // inside its own stack (overflowing it gave the stack a sideways scrollbar for the slide, and lifted
 // every card by its height). It is solid, glass or not, since it lands on whatever is open, a view's
 // bright scene included. It stands left of a widget column floating along the window's right edge,
-// whose width the widget layer publishes as --widgets-right-inset, and it publishes its own height,
+// whose width the widget layer publishes as --widgets-right-inset, as far as the window has room for
+// it (a band of cards as wide as the window leaves it on screen), and it publishes its own height,
 // as --agent-toasts-height, for what stands above it: the app's other notices in the same column,
 // and the widgets' Hide toggle. And the Layers chips that ask for the person hold their words still:
 // pulsing, a chip's 10px word fell under 3:1 for as long as the agent waited.
@@ -124,6 +125,10 @@ test("the toasts stand left of a right-edge widget column; the agent stack's hei
   // What the widget layer publishes while a column floats along the right edge.
   await page.evaluate(() => document.documentElement.style.setProperty("--widgets-right-inset", "268px"));
   await expect.poll(async () => [right(await card().boundingBox()), right(await told.boundingBox())]).toEqual([width - 268 - 14, width - 268 - 12]);
+  // Cards in columns across the whole window (a small one): the notices stay on screen, over them.
+  await page.evaluate((w) => document.documentElement.style.setProperty("--widgets-right-inset", `${w}px`), width);
+  await expect.poll(async () => [(await card().boundingBox())!.x >= 0, (await told.boundingBox())!.x >= 0]).toEqual([true, true]);
+  await page.evaluate(() => document.documentElement.style.setProperty("--widgets-right-inset", "268px"));
 
   // The stack's height and the 8px gap over it: the app's notice sits that gap above the stack.
   const height = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--agent-toasts-height").trim());

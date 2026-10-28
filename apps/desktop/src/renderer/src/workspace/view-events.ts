@@ -111,8 +111,9 @@ export class ViewEventHub {
     if (cur?.bucket === "working" && bucket === "idle" && !e.synthetic && !this.hookTurns.has(e.tileId) && this.isAgent(e.tileId)) {
       this.emit({ kind: "turn", tileId: e.tileId, inferred: true }, t);
       // History keeps it as it keeps a hook's: a view that mounts later, or reads another day,
-      // counts the turns of an agent without a turn hook too.
-      this.line({ t, e: "t", id: e.tileId });
+      // counts the turns of an agent without a turn hook too. At the host's time for the change,
+      // the same in every window on the workspace: each writes the line, and the ledger keeps one.
+      this.line({ t: e.since ?? t, e: "t", id: e.tileId });
     }
     let next: SinceInfo;
     if (cur) next = { bucket, since: t, exact: true };
@@ -187,12 +188,13 @@ export class ViewEventHub {
     this.hookTurns.add(tileId);
   }
 
-  /** A turn hook fired for this tile, ending the turn this way. */
-  onHookTurn(tileId: string, outcome?: TurnOutcome): void {
+  /** A turn hook fired for this tile, ending the turn this way; `at`, when the host saw it end. */
+  onHookTurn(tileId: string, outcome?: TurnOutcome, at?: number): void {
     this.hookTurns.add(tileId);
     const t = this.now();
     this.emit({ kind: "turn", tileId, ...(outcome ? { outcome } : {}) }, t);
-    this.line({ t, e: "t", id: tileId });
+    // At the host's time, as an inferred turn is: every window on the workspace writes it.
+    this.line({ t: at ?? t, e: "t", id: tileId });
   }
 
   /** The in-flight subagent count changed; bursts coalesce to the last value per window. */

@@ -146,10 +146,12 @@ function draw(node: unknown, id: string, images: Images, key: number | string = 
         </div>
       </div>;
     }
-    // A label longer than the card is cut short inside it; the whole of it shows on hover.
-    case "button": return <Button key={key} size="sm" variant="outline" className="nodrag nopan min-w-0 max-w-full shrink self-start"
+    // A label longer than the card is cut short inside it; the whole of it shows on hover, and
+    // while the button has the keyboard it runs on over more lines, inside the card (one line is
+    // still the button's 28px: its 18px line, 4px above and below, and the border).
+    case "button": return <Button key={key} size="sm" variant="outline" className="nodrag nopan min-w-0 max-w-full shrink self-start focus-visible:h-auto focus-visible:py-1"
       onPointerEnter={(e) => { const label = e.currentTarget.firstElementChild; e.currentTarget.title = label && label.scrollWidth > label.clientWidth ? str(n.label) : ""; }}
-      onClick={() => pressWidget(id, n.action)}><span className="min-w-0 truncate">{str(n.label)}</span></Button>;
+      onClick={() => pressWidget(id, n.action)}><span className="min-w-0 truncate in-focus-visible:whitespace-normal in-focus-visible:text-left in-focus-visible:[overflow-wrap:anywhere]">{str(n.label)}</span></Button>;
     default: return null;
   }
 }

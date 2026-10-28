@@ -1,9 +1,10 @@
 // A package's view brings the package's widgets: the first time a workspace shows the view, its
 // widgets float down the edge the view keeps for them, over that view alone, and the view is told
 // how much room they take. One the person closes stays closed, through a view switch, the view
-// opened by the CLI and a relaunch (unless they press Undo), and a widget a later version of the
-// package adds comes at once while the view shows. One shown on every view floats over the canvas
-// too, where a tile the camera flies to is framed clear of it. (The start-view offer itself is
+// opened by the CLI and a relaunch (unless they press Undo, offered while that workspace is shown),
+// and a widget a later version of the package adds comes at once while the view shows. One shown on
+// every view, from its pin by pointer or keyboard or by an agent, floats over the canvas too, where a
+// tile the camera flies to is framed clear of it. (The start-view offer itself is
 // start-view-cli.spec.ts.)
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { spawnSync } from "node:child_process";
@@ -14,6 +15,8 @@ import path from "node:path";
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "hm-view-widgets-"));
 const xdg = path.join(root, "config");
 const repo = path.join(root, "repo");
+/** Another workspace the window can switch to. */
+const other = path.join(root, "other");
 const userData = path.join(xdg, "hivemind-dev");
 const env = { ...process.env, HOME: path.join(root, "home"), XDG_CONFIG_HOME: xdg, HIVEMIND_SHELL_ENV: "0" } as Record<string, string>;
 delete env.ELECTRON_RUN_AS_NODE;
@@ -102,6 +105,7 @@ const toggle = () => page.locator("[data-widgets-toggle]");
 
 test.beforeAll(async () => {
   fs.mkdirSync(repo, { recursive: true });
+  fs.mkdirSync(other, { recursive: true });
   fs.mkdirSync(path.join(root, "home"));
   await launch();
 });
@@ -148,6 +152,14 @@ test("× takes a widget away with an Undo that puts it back as it was; one close
   await card("bell").hover();
   await card("bell").getByRole("button", { name: "remove bell" }).click();
   await expect(card("bell")).toHaveCount(0);
+  // Its Undo puts it back on the workspace shown: switched to another, the offer goes, even while
+  // the pointer holds it open.
+  await removed.hover();
+  const showWorkspace = (folder: string) => page.evaluate((r) => window.dispatchEvent(new CustomEvent("hivemind:open-workspace", { detail: { repo: r } })), folder);
+  await showWorkspace(other);
+  await expect(removed).toHaveCount(0);
+  await showWorkspace(repo);
+  await expect(card("log")).toContainText("log here");
   await toView("canvas");
   await expect(isle()).toHaveCount(0);
   // The one left came with Isle: it waits for Isle, kept and not drawn over the canvas.
@@ -164,24 +176,34 @@ test("× takes a widget away with an Undo that puts it back as it was; one close
 });
 
 test("one shown on every view floats over the canvas too, hidden over each view on its own, and a frame flown to is framed clear of it", async () => {
-  await card("log").hover();
-  await card("log").getByRole("button", { name: "show log on every view" }).click();
+  // From the keyboard, the pointer nowhere near the card: Tab reaches its pin, which shows.
+  await page.mouse.move(900, 450);
+  const pin = card("log").getByRole("button", { name: "show log on every view" });
+  const keysOn = () => page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? null);
+  for (let i = 0; i < 60 && (await keysOn()) !== "show log on every view"; i++) await page.keyboard.press("Tab");
+  await expect(pin).toBeFocused();
+  expect(await card("log").locator("[data-widget-strip]").evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+  await shot("3a-pin-from-keyboard");
+  await page.keyboard.press("Enter");
   await expect.poll(async () => (await storedWidget("log"))?.view).toBeUndefined();
   await toView("canvas");
   await expect(card("log")).toContainText("log here");
   // Down the canvas's right edge: the app's corners keep clear of the column by its width.
   expect((await card("log").boundingBox())!.x).toBeGreaterThan(1000);
   await expect.poll(rightInset).toBe("268px");
-  // The toggle rises above the agents' notices in its corner by however tall they stand.
+  // The agents' notices stand left of the column, out of the toggle's corner: it stays where it is
+  // however tall they stand, off the column's cards.
   const bottom = async () => { const b = (await toggle().boundingBox())!; return Math.round(900 - b.y - b.height); };
   const alone = await bottom();
   await page.evaluate(() => document.documentElement.style.setProperty("--agent-toasts-height", "120px"));
-  expect(await bottom()).toBe(alone + 120);
-  await page.evaluate(() => document.documentElement.style.setProperty("--agent-toasts-height", "0px"));
+  expect(await bottom()).toBe(alone);
   // Hidden over the canvas, shown over Isle: what the person chose for each view.
   await toggle().click();
   await expect(card("log")).toHaveCount(0);
   await expect.poll(rightInset).toBe("0px");
+  // With no column the notices are in its corner: it rises above them by however tall they stand.
+  await expect.poll(bottom).toBe(alone + 120);
+  await page.evaluate(() => document.documentElement.style.setProperty("--agent-toasts-height", "0px"));
   await toView("@e2e/isle");
   await expect(card("log")).toContainText("log here");
   await expect.poll(band).toBe("left:268");

@@ -94,8 +94,9 @@ export interface LinkServices {
    *  issue methods, called for the view (the link has checked what writes). */
   issues?: { subscribe(cb: (issues: ViewIssueSummary[]) => void): () => void; call(call: IssueCall, args: unknown[]): Promise<unknown> };
   /** 1.18: the band of widget cards floating over the view along its widget edge, in the view's
-   *  pixels; the current one now, then each change. A host that floats none over it (a phone's, a
-   *  remote screen's) has none. */
+   *  pixels; the current one now, then each change. A host that floats none over it (a phone's)
+   *  has none. A guest's window floats the cards over the host's view and says it itself, so the
+   *  session the host runs for it has none either. */
   widgetBand?: { subscribe(cb: (band: ViewWidgetBand) => void): () => void };
 }
 

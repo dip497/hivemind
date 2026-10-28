@@ -1,10 +1,15 @@
 // Views' turn and subagent events come from the host's session statuses: a turn its hooks ended
 // counts once, a screen-read idle is not a hook turn, and every change in subagents is passed on.
+// Two windows on one workspace each write a turn's line, and the day's history counts it once.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { feedHostedStatus, viewEvents, viewLinkServices } from "../../src/renderer/src/workspace/view-services.ts";
 import { ViewEventHub, type LedgerLine } from "../../src/renderer/src/workspace/view-events.ts";
 import { forgetStatus, setHostedStatus, subscribeStatus } from "../../src/renderer/src/agent-status-bus.ts";
+import { StatusLedger } from "../../src/main/status-ledger.ts";
 
 const status = (state: string, source: "hooks" | "screen" | null, subagents: string[] = []) =>
   ({ state, source, subagents, background: 0, compacting: false, since: 0 }) as never;
@@ -81,4 +86,34 @@ test("a view reading the day's history gets the turn that ended a moment ago, no
     viewEvents.setWorkspace(null, []);
     (globalThis as { window?: unknown }).window = was;
   }
+});
+
+test("two windows on one workspace each write a turn; the day's history counts it once, hooked or not", () => {
+  const at = (m: number, sec = 0) => new Date(2026, 8, 23, 9, m, sec).getTime();
+  let clock = at(0);
+  const ledger = new StatusLedger(fs.mkdtempSync(path.join(os.tmpdir(), "ledger-two-windows-")), () => clock);
+  ledger.boot();
+  const hooked = (state: string, since: number) => ({ state, source: "hooks", subagents: [], background: 0, compacting: false, since }) as never;
+  // Each window has its own hub, writing to main's one ledger, and hears the host's changes a
+  // moment after the other: the host's time for each change is the same in both.
+  const windows = [0, 700].map((late) => {
+    const timers: Array<() => void> = [];
+    const hub = new ViewEventHub({ now: () => clock + late, schedule: (fn) => { timers.push(fn); }, ledger: (lines) => ledger.append(lines) });
+    hub.setWorkspace("ws", ["claude", "aider"].map((id) => ({ id, frameId: null, kind: "agent", name: id })));
+    return { hub, last: new Map(), flush: () => { while (timers.length) timers.shift()!(); } };
+  });
+  for (const w of windows) {
+    // aider has no turn hook: its turn is the working → idle the host read off its screen.
+    w.hub.onStatus({ tileId: "aider", label: "aider", status: "working", since: at(1) });
+    w.hub.onStatus({ tileId: "aider", label: "aider", status: "idle", since: at(4, 30) });
+    // claude's hook ended its turn.
+    feedHostedStatus(w.hub, w.last, { seq: 1, tileId: "claude", status: hooked("working", at(2)) });
+    feedHostedStatus(w.hub, w.last, { seq: 2, tileId: "claude", status: hooked("done", at(5)) });
+  }
+  // The windows flush their lines every few seconds, each on its own clock.
+  clock = at(6);
+  for (const w of windows) w.flush();
+  clock = at(10);
+  const turns = Object.fromEntries(ledger.history("ws", "2026-09-23").tiles.map((t) => [t.id, t.turns]));
+  assert.deepEqual(turns, { claude: [at(5)], aider: [at(4, 30)] });
 });

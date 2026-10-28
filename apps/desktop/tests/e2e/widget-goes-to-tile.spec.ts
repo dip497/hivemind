@@ -1,7 +1,9 @@
 // A widget's button that goes to a tile (`hive.hm.commands.focusTile`, as Archipelago's Harbour and
 // Ship's log do) shows it in the view on screen: a view package, which owns its camera, is asked to
-// show it (its `reveal`), and the tile-list fixture docks it; `hive ctl focus` does the same. A
-// label longer than the card stays inside the card, cut short.
+// show it (its `reveal`), and the tile-list fixture docks it; `hive ctl focus` does the same. The
+// docked terminal has the keyboard, and undocked with Shift+Esc the view has it back. A label
+// longer than the card stays inside the card, cut short, and shows whole while the button has the
+// keyboard.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -50,7 +52,7 @@ test.afterAll(async () => {
   fs.rmSync(ud, { recursive: true, force: true });
 });
 
-test("a widget's button with a long label stays inside its card, and in a view package it shows the tile there, as `hive ctl focus` does", async () => {
+test("a widget's button with a long label stays inside its card, and in a view package it shows the tile there with the keyboard in it, as `hive ctl focus` does", async () => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:canvas-toggle", { detail: "shell" })));
   await expect(page.locator(".react-flow__node-terminal")).toHaveCount(1, { timeout: 15_000 });
   const tileId = (await page.locator(".react-flow__node-terminal").getAttribute("data-id"))!;
@@ -69,13 +71,29 @@ test("a widget's button with a long label stays inside its card, and in a view p
   await page.waitForSelector(tileListReady);
   await expect(tileListFrame(page).locator(`.row[data-id="${tileId}"]`)).toHaveCount(1);
   await expect(page.locator("[data-community-slot]")).toHaveCount(0);
+
+  // Reached from the keyboard, the pointer elsewhere, the label shows whole, still inside the card.
+  await page.mouse.move(700, 450);
+  const focused = () => go.evaluate((el) => el === document.activeElement).catch(() => false);
+  for (let i = 0; i < 80 && !(await focused()); i++) await page.keyboard.press("Tab");
+  await expect(go).toBeFocused();
+  expect(await go.locator("span").evaluate((s) => s.scrollWidth <= s.clientWidth)).toBe(true);
+  const [wide, wrapped] = [await card().boundingBox(), await go.boundingBox()];
+  expect(wrapped!.x + wrapped!.width).toBeLessThanOrEqual(wide!.x + wide!.width);
+
+  // The press docks the tile with the keyboard in its terminal; Shift+Esc gives it to the view.
+  const keysIn = () => page.evaluate((id) => (document.activeElement?.closest(`[data-community-slot="${id}"]`) ? "terminal" : document.activeElement?.tagName === "IFRAME" ? "view" : document.activeElement?.tagName ?? "none"), tileId);
   await go.click();
   await expect(page.locator(`[data-community-slot="${tileId}"] .xterm`)).toHaveCount(1, { timeout: 10_000 });
   await expect(tileListFrame(page).locator(`.row[data-id="${tileId}"]`)).toHaveAttribute("aria-selected", "true");
-
-  // Released, then asked for by an agent: shown again.
-  await releaseFromList(page);
+  await expect.poll(keysIn).toBe("terminal");
+  await page.keyboard.press("Shift+Escape");
   await expect(page.locator("[data-community-slot]")).toHaveCount(0);
+  await expect.poll(keysIn).toBe("view");
+
+  // Asked for by an agent: shown again, with the keyboard.
   expect(hive("ctl", "focus", tileId)).toBe(0);
   await expect(page.locator(`[data-community-slot="${tileId}"] .xterm`)).toHaveCount(1, { timeout: 10_000 });
+  await expect.poll(keysIn).toBe("terminal");
+  await releaseFromList(page);
 });

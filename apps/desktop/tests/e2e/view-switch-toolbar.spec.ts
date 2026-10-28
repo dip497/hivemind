@@ -1,5 +1,6 @@
 // The toolbar carries a view switcher: the same views ⌘E cycles, picked by name. It says which
-// workspace is shown and opens the way to another, as the list a view's own button opens does.
+// workspace is shown, to a screen reader too, and opens the way to another, as the list a view's
+// own button opens does.
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -56,6 +57,8 @@ test("the views menu names the workspace shown and opens the switcher, from the 
   const recent = page.locator("[data-recent-projects]");
   await page.locator("[data-view-switch]").click();
   await expect(page.locator("[data-view-menu-workspace]")).toHaveText("harbour-town");
+  // Its choices are a group the name labels: a screen reader says it with the first one reached.
+  await expect(page.getByRole("group", { name: "harbour-town", exact: true }).getByRole("menuitem", { name: "Switch workspace…" })).toBeVisible();
   await page.locator("[data-switch-workspace]").click();
   await expect(recent).toBeVisible();
   await expect(page.locator("[data-view-choice]")).toHaveCount(0); // the menu closed
@@ -67,6 +70,8 @@ test("the views menu names the workspace shown and opens the switcher, from the 
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("hivemind:view-menu", { detail: { x: 600, y: 860, w: 120, h: 32 } })));
   const menu = page.locator("[data-view-menu]");
   await expect(menu.locator("[data-view-menu-workspace]")).toHaveText("harbour-town");
+  // It opens on the view shown, inside the group the name labels.
+  await expect(menu.getByRole("group", { name: "harbour-town", exact: true }).getByRole("menuitemradio", { checked: true })).toBeFocused();
   await menu.locator("[data-switch-workspace]").click();
   await expect(recent).toBeVisible();
   await expect(menu).toHaveCount(0);

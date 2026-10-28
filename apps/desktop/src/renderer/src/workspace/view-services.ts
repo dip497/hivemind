@@ -27,7 +27,7 @@ export function feedHostedStatus(hub: Pick<ViewEventHub, "onHookStatus" | "onHoo
   const { state, subagents, source } = e.status;
   last.set(e.tileId, { state, subagents: subagents.length });
   if (source === "hooks") hub.onHookStatus(e.tileId);
-  if (source === "hooks" && TURN_ENDS.has(state) && prev && !TURN_ENDS.has(prev.state)) hub.onHookTurn(e.tileId, state as TurnOutcome);
+  if (source === "hooks" && TURN_ENDS.has(state) && prev && !TURN_ENDS.has(prev.state)) hub.onHookTurn(e.tileId, state as TurnOutcome, e.status.since);
   if ((prev?.subagents ?? 0) !== subagents.length) hub.onSubagents(e.tileId, subagents.length);
 }
 
@@ -123,7 +123,7 @@ const coded = (code: "UNSUPPORTED" | "BAD_REQUEST", message: string) => Object.a
 
 /** The widget cards' band (1.18) as the view in `box` has it: now, then whenever the cards are laid
  *  out again or the view's box changes size; nothing once the view stops following it. */
-function bandOverView(box: () => HTMLElement | null): NonNullable<LinkServices["widgetBand"]> {
+export function bandOverView(box: () => HTMLElement | null): NonNullable<LinkServices["widgetBand"]> {
   return {
     subscribe: (cb) => {
       const tell = () => {

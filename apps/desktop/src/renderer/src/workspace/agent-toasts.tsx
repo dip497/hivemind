@@ -209,7 +209,8 @@ const AGENT_TOASTS_HEIGHT = "--agent-toasts-height";
 
 /** The stack, bottom-right in the page's notification layer (over widgets). It
  *  stands left of a widget column floating along the window's right edge, by the
- *  width the widget layer publishes, so no card hides that column's lower rows. */
+ *  width the widget layer publishes, so no card hides that column's lower rows,
+ *  while the window has room for it there (`--toasts-right-inset`, styles.css). */
 export function AgentToasts({ toasts, onDismiss, onView }: {
   toasts: Toast[];
   onDismiss: (id: string) => void;
@@ -228,7 +229,7 @@ export function AgentToasts({ toasts, onDismiss, onView }: {
   }, [any]);
   if (!any) return null;
   return (
-    <div ref={ref} className="fixed bottom-3 right-[var(--widgets-right-inset,0px)] z-(--layer-notifications)" data-notifications>
+    <div ref={ref} className="fixed bottom-3 right-(--toasts-right-inset) z-(--layer-notifications)" data-notifications>
       <Toasts toasts={toasts} onDismiss={onDismiss} onView={onView} />
     </div>
   );

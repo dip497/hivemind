@@ -15,7 +15,7 @@ import type { WidgetObject } from "@hivemind/workspace-doc/shapes";
 import type { WidgetPackage } from "../../../shared/ipc";
 import { SettingsForm } from "../plugins/SettingsForm";
 import { Button } from "../components/ui/button";
-import { widgetsOf } from "./board-model";
+import { onEveryView, widgetsOf } from "./board-model";
 import type { Board } from "./useBoard";
 import { WidgetContent, useWidgetLook } from "./WidgetBody";
 import { clickWidget, optionsOf, useDrawn } from "./widget-runtime";
@@ -73,12 +73,21 @@ export function WidgetLayer({ repo, board, packages, edge, view }: {
     });
   };
   const hide = (value: boolean) => { setChosen((all) => ({ ...all, [hiddenKey(view)]: value })); writeJson(hiddenKey(view), value); };
+  // Undo puts a widget back on the board shown, which after a switch is another workspace's: the
+  // offer goes with the workspace it came from.
+  const undoable = useRef(new Set<string>());
+  useEffect(() => () => {
+    for (const id of undoable.current) toast.dismiss(id);
+    undoable.current.clear();
+  }, [repo]);
   // Taken off at once, for everyone in the workspace; Undo puts it back as it was, with what the
   // person set it to and what its code keeps, where it sat.
   const remove = (w: WidgetObject) => {
     board.remove(w.id);
+    const id = `widget-removed:${w.id}`;
+    undoable.current.add(id);
     // Twice sonner's 4 s: time to notice the card went and reach the button.
-    toast(`${nameOf(w.widget)} removed`, { id: `widget-removed:${w.id}`, duration: 8_000, action: { label: "Undo", onClick: () => board.restore(w) } });
+    toast(`${nameOf(w.widget)} removed`, { id, duration: 8_000, action: { label: "Undo", onClick: () => board.restore(w) } });
   };
   const sized = (id: string, size: Size) => setSizes((all) => {
     const was = all[id];
@@ -98,15 +107,14 @@ export function WidgetLayer({ repo, board, packages, edge, view }: {
       {!hidden && widgets.map((w) => (
         <WidgetCard key={w.id} object={w} pkg={packages.find((p) => p.id === w.widget)} name={nameOf(w.widget)} onEdit={() => board.edit(w.id)}
           spot={onScreen(spots[w.id] ?? stacked[w.id]!, sizes[w.id])} onMove={place} onSize={sized} onRemove={() => remove(w)}
-          onEveryView={() => board.update(w.id, (o) => {
-            if (o.kind !== "widget" || o.view === undefined) return o;
-            const { view: _brought, ...everywhere } = o;
-            return everywhere;
-          })}
+          onEveryView={() => board.update(w.id, onEveryView)}
           onOption={(option, value) => board.update(w.id, (o) => (o.kind === "widget" ? { ...o, options: { ...o.options, [option]: value } } : o))} />
       ))}
-      {/* Above the agents' notices in the same corner, which would cover it while they show. */}
-      <div className="hm-island pointer-events-auto absolute right-4 size-control overflow-hidden" style={{ bottom: "calc(16px + var(--agent-toasts-height, 0px))" }}>
+      {/* Above the agents' notices in the same corner, which would cover it while they show. A
+          column down the right edge moves them left of it, out of this corner: then it stays, as
+          rising would put it on the column's lower cards. */}
+      <div className="hm-island pointer-events-auto absolute right-4 size-control overflow-hidden"
+        style={{ bottom: edge === "right" && band > 0 ? 16 : "calc(16px + var(--agent-toasts-height, 0px))" }}>
         <Button variant="ghost" size="icon" className="size-full" data-widgets-toggle
           aria-label={hidden ? `show widgets (${widgets.length})` : "hide widgets"} title={hidden ? "Show widgets" : "Hide widgets"}
           onClick={() => hide(!hidden)}>{hidden ? <LayoutGrid /> : <EyeOff />}</Button>
@@ -191,8 +199,10 @@ function WidgetCard({ object, pkg, name, spot, onMove, onSize, onRemove, onEvery
       style={{ left: 0, top: 0, transform: `translate3d(${spot.x}px, ${spot.y}px, 0)`, ...(bare ? {} : { width: CARD_W }), ...(tint && !bare ? { background: tint, color: "var(--color-note-ink)" } : {}), ...(glide ? { transition: `transform ${glide}ms linear` } : {}) }}
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
       onDoubleClick={() => { if (!setting) onEdit(); }}>
-      {/* On the card's top edge, on a backing of its own: never over the card's first line. */}
-      <div data-widget-strip className={`hm-island absolute -top-3.5 right-2 z-10 gap-0.5 rounded-md ${setting ? "flex" : "hidden group-hover:flex"}`}>
+      {/* On the card's top edge, on a backing of its own: never over the card's first line. Shown
+          while the card is pointed at or one of its buttons has the keyboard: only see-through
+          otherwise, never display:none, so Tab reaches the buttons and a screen reader lists them. */}
+      <div data-widget-strip className={`hm-island absolute -top-3.5 right-2 z-10 flex gap-0.5 rounded-md ${setting ? "" : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"}`}>
         {object.view !== undefined && <Button variant="ghost" size="icon-xs" aria-label={`show ${name} on every view`} title="Show on every view"
           onClick={onEveryView}><Pin /></Button>}
         {!!pkg?.options.length && <Button variant="ghost" size="icon-xs" aria-label={`${name} options`} aria-pressed={setting} data-widget-options

@@ -3,7 +3,8 @@
  * them out and sets it here, once per change; what must keep clear of the cards follows it: the
  * active view (protocol `widgetBand`, in its own pixels), the canvas framing a tile it flies to
  * (`FocusOnTile`), and the app's own corners through `--widgets-right-inset` on <html>, the width
- * of a column along the window's right edge (the toasts move left by it).
+ * of a column along the window's right edge (the toasts move left by it, as far as the window has
+ * room: `--toasts-right-inset` in styles.css).
  */
 import type { ViewWidgetBand } from "@hivemind/view-sdk/protocol";
 

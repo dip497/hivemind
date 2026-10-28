@@ -75,6 +75,12 @@
   --layer-dialogs: 90;
   --layer-menus: 100;
   --layer-tooltips: 110;
+
+  /* How far in from the window's right edge the notices stand (agent-toasts.tsx, sonner in
+     main.tsx): left of a widget column there (--widgets-right-inset, widget-band.ts), but never so
+     far that their column leaves the window, sonner's 356px with 12px each side. With no room left
+     of the cards they stand over the column's lower cards, still on screen. */
+  --toasts-right-inset: min(var(--widgets-right-inset, 0px), 100vw - 380px);
 }
 
 @theme inline {

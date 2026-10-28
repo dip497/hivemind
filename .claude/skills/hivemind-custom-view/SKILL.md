@@ -162,8 +162,13 @@ right, or the left with `"widgets": "left"` in the manifest). Your header, label
 your scene you frame things in belong outside them (protocol 1.18, feature `widgetBand`):
 
 ```ts
-let band = { edge: "left", width: 268 }; // your guess for a host that does not say
+let band = { edge: "left", width: 0 }; // a phone floats no cards: no band
 if (hm.supports("widgetBand")) hm.onWidgetBand((b) => { band = b; layout(); });
+// An app before 1.18 floats cards and does not say the band: one column while a card floats.
+else if (hm.supports("widgets") && !hm.device.compact) hm.onWidgets((ws) => {
+  band = { edge: "left", width: ws.some((w) => w.card && w.placement === "screen") ? 268 : 0 };
+  layout();
+});
 ```
 
 - `width` is CSS px from your widget edge to the far side of the cards, the gap beside them
@@ -171,8 +176,8 @@ if (hm.supports("widgetBand")) hm.onWidgetBand((b) => { band = b; layout(); });
 - It comes right after `hello`, then whenever cards come or go, start a second column, or the
   window is resized. A late listener hears the current one at once.
 - Check `supports` first: the app serves your view its own SDK, and an app before 1.18 has no
-  `onWidgetBand`. A phone and a remote screen float no cards over a view and do not say the
-  feature either: keep your own guess there.
+  `onWidgetBand`. Every app window says the band, a guest's over the host's view too. A phone
+  floats no cards over a view and does not say the feature: the band there is none, take 0.
 
 ## Theme: never hardcode a colour
 

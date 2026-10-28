@@ -340,7 +340,8 @@ export interface ViewWidget {
 // view's widget edge (its manifest's `"widgets"`, else the right), and says how much of the view
 // they take (`widgetBand`): right after `hello`, and again whenever cards come or go, stack into
 // another column, or the window is resized. A view keeps what it must show out of that band. A
-// phone's or a remote screen's host floats no cards over a view and does not say it.
+// computer's window says it, a guest's over the host's view too; a phone floats no cards over a
+// view and does not say it.
 
 /** The band of widget cards over a view (feature `widgetBand`): `width` CSS px in from the view's
  *  `edge` to the far side of the cards, the gap beside them included; 0 when there are none. */

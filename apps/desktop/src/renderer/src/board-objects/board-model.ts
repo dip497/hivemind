@@ -36,6 +36,14 @@ export function widgetsOf(board: BoardObject[], view: string | null): WidgetObje
     .sort((a, b) => (a.z ?? 0) - (b.z ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
+/** `o` shown over every view: a widget a view brought no longer waits for that view (its card's
+ *  pin, `hive ctl plugin open <its id>`). Anything else, as it is. */
+export function onEveryView(o: BoardObject): BoardObject {
+  if (o.kind !== "widget" || o.view === undefined) return o;
+  const { view: _brought, ...everywhere } = o;
+  return everywhere;
+}
+
 /** What a view brings of its package's switched-on widgets (`members`, in the package's order) to a
  *  workspace that holds `onBoard` and was brought `brought` before: those to add, and those now
  *  counted as brought. One already on the board is brought without a second copy; one brought

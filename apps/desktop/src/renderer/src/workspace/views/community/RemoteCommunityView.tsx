@@ -8,6 +8,7 @@ import type { WorkspaceViewProps } from "../../workspace-view";
 import { SurfaceSlots } from "./surface-slots";
 import { Loading } from "../../../components/ui/loading";
 import { readTheme } from "../../plugin-theme";
+import { bandOverView } from "../../view-services";
 
 export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
   const root = useRef<HTMLDivElement>(null);
@@ -33,7 +34,24 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
   useEffect(() => {
     if (!repo) return;
     let live = true;
-    const offSaid = window.hive.onViewSaid((id, message) => { if (id === session.current) deliver(message); });
+    // This window floats the workspace's widget cards over the view, as over one installed here, and
+    // the session on the host knows nothing of them: the view's hello says the band, and this window
+    // tells it, after each hello and on each change.
+    let band: { edge: "left" | "right"; width: number } | null = null;
+    let told: string | null = null;
+    const tellBand = () => {
+      if (told === null || !band || `${band.edge}:${band.width}` === told) return;
+      told = `${band.edge}:${band.width}`;
+      deliver({ type: "widgetBand", ...band });
+    };
+    const offBand = bandOverView(() => root.current).subscribe((next) => { band = next; tellBand(); });
+    const offSaid = window.hive.onViewSaid((id, message) => {
+      if (id !== session.current) return;
+      if (message.type !== "hello") { deliver(message); return; }
+      deliver({ ...message, features: [...(message.features ?? []).filter((f) => f !== "widgetBand"), "widgetBand"] });
+      told = "";
+      tellBand();
+    });
     const offRects = window.hive.onViewRects((id, next) => { if (id === session.current) setRects(next); });
     const offEnded = window.hive.onViewEnded((id, why) => { if (id === session.current) setError(why); });
     void window.hive.viewOpen(pkg.id, repo, screen()).then(({ session: id }) => {
@@ -48,7 +66,7 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-preset", "style"] });
     return () => {
       live = false;
-      offSaid(); offRects(); offEnded(); observer.disconnect(); theme.disconnect();
+      offSaid(); offRects(); offEnded(); offBand(); observer.disconnect(); theme.disconnect();
       if (session.current) void window.hive.viewClose(session.current, repo);
       session.current = null;
       port.current?.close(); port.current = null;

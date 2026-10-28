@@ -44,7 +44,8 @@ draws in the view; nothing to do in the view), `lineSlots`
 own Review, never Allow; the computer's windows, not the phone) and `ownFiles` (the view may
 `fetch` its own files: it says `"files": true`, and the screen is the app's window or a browser
 tab, not the phone nor another computer's view); 1.18 adds `widgetBand` (the app says how much
-of the view its floating widget cards take, `widgetBand`; the computer's windows, not the phone).
+of the view its floating widget cards take, `widgetBand`; the computer's windows, a guest's over
+the host's view too, not the phone).
 A host that predates 1.3 sends none. Check one with `hm.supports("sleep")`.
 
 `ViewEvent` kinds: `turn {inferred?, outcome? (1.4): done | failed | interrupted | limited}`, `needsInput {reason: permission | question | review |
