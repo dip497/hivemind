@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Added: **Shoal**, a live wallpaper (Settings → Appearance → Background). Fish and sharks drawn in characters swim between your tiles in the theme's own colours, and each shark is one of your agents. It hunts while its agent works, cruises when it is ready, circles the agent's tile when it needs you, bites when a turn ends, and rests on the bottom when the agent stops or sleeps. The bell, the tile and Layers still say when an agent needs you; the wallpaper only echoes them. Panels and tiles stay solid over it, glass or not. It draws on its own thread, at most 30 times a second, and stops when the window is hidden, unfocused or idle; with Animation off it shows one still frame. Ported from [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks) (MIT, © 2026 drewdi).
+
 ## [2026.10.7] — 2026-10-28
 
 - Changed: widgets a package's view brings, like Archipelago's, show only over that view, so the canvas and your other views stay clear. A card's pin, **Show on every view** (point at the card or Tab to it), puts it over every view, and **Hide widgets** is kept for each view. While a widget column sits on the canvas's right edge, a tile the canvas flies to is framed to the left of it.

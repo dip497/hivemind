@@ -43,6 +43,7 @@ import { tileName } from "@hivemind/workspace-doc/tile-list";
 import { cleanName } from "@hivemind/agents";
 import { frameAtPoint } from "./frame-layout";
 import { Wallpaper } from "./Wallpaper";
+import type { ShoalAgent } from "./shoal/roster";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { applyTheme, setPluginScene, setWallpaperActive } from "./theme-store";
 import { patchSettings, useSettings } from "./settings-store";
@@ -1261,6 +1262,14 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     [selectedTileId, selectedFrameId, board.selectedId],
   );
 
+  // Shoal's sharks (the wallpaper): the agents here. The same array until one comes, goes or falls
+  // asleep, so the wallpaper does no work when other tile changes go by.
+  const shoalKey = useMemo(() => tiles.filter((t) => t.kind === AGENT_TILE_KIND).map((t) => `${t.id}\t${agentOfTile(t) ?? ""}\t${t.sleeping ? 1 : 0}`).join("\n"), [tiles]);
+  const shoalAgents = useMemo((): ShoalAgent[] => (shoalKey ? shoalKey.split("\n").map((line) => {
+    const [tileId, agent, sleeping] = line.split("\t");
+    return { tileId: tileId!, agent: agent || null, sleeping: sleeping === "1" };
+  }) : []), [shoalKey]);
+
   // ── what the active view receives ─────────────────────────────────────────
   const links = useMemo(() => ({ pipes, spawnLinks }), [pipes, spawnLinks]);
   const model: WorkspaceViewModel = useMemo(() => ({
@@ -1326,7 +1335,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     <div className="relative h-full w-full flex flex-col" data-active-view={activeViewId ?? ""}>
       {/* Live wallpaper — fixed full-window layer behind ALL app content (z-index
           -1), so it shows through every view AND the panels beside it. */}
-      {chrome.wallpaper && <Wallpaper />}
+      {chrome.wallpaper && <Wallpaper agents={shoalAgents} />}
       {/* Custom OVERLAY media — user's transparent foreground plane OVER the
           tiles. Fixed full-window + pointer-events:none. Same policy as the
           wallpaper: never over a view that paints its own scene. */}

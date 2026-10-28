@@ -20,7 +20,7 @@ import { DEFAULT_NOTIFICATION_SETTINGS, normalizeNotificationSettings, type Noti
 // ── appearance ────────────────────────────────────────────────────────────────
 
 export type WallpaperId =
-  | "none" | "aurora" | "ember" | "ice" | "mesh" | "sunset" | "forest" | "nebula" | "mono" | "image" | "video";
+  | "none" | "aurora" | "ember" | "ice" | "mesh" | "sunset" | "forest" | "nebula" | "mono" | "shoal" | "image" | "video";
 export type AccentId =
   | "graphite" | "indigo" | "volt" | "ember" | "ice" | "pulse" | "rose" | "emerald" | "amber" | "violet";
 export type MediaFit = "cover" | "contain" | "tile";
@@ -71,6 +71,7 @@ export const WALLPAPERS: { id: WallpaperId; label: string }[] = [
   { id: "forest", label: "Forest" },
   { id: "nebula", label: "Nebula" },
   { id: "mono",   label: "Mono" },
+  { id: "shoal",  label: "Shoal" },
   { id: "image",  label: "Photo" },
   { id: "video",  label: "Video" },
 ];

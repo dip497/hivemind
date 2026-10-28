@@ -1,0 +1,162 @@
+/**
+ * Shoal's water (shoal/world): a shark whose agent needs you circles that agent's tile, the fish
+ * and the roaming sharks keep to the open water between the tiles, a closed agent's shark swims
+ * off, and a finished turn is a bite where the shark is. The simulation is random; each test runs
+ * it on fixed seeds so a failure repeats, and each bar sits well clear of what 40 or more other
+ * seeds measured (noted at each).
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { World, type Box, type SharkSpec } from "../../src/renderer/src/shoal/world";
+
+const W = 1440;
+const H = 900;
+const STEP = 1 / 60;
+
+/** Math.random on a fixed seed (mulberry32) for the length of `run`. */
+function seeded<T>(seed: number, run: () => T): T {
+  const real = Math.random;
+  let a = seed >>> 0;
+  Math.random = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  try { return run(); } finally { Math.random = real; }
+}
+
+function water(sharks: SharkSpec[], boxes: Box[] = []): World {
+  const w = new World();
+  w.resize(W, H, 12, 17);
+  w.setRoster(sharks);
+  w.setBoxes(boxes);
+  return w;
+}
+const run = (w: World, secs: number) => { for (let i = 0; i < secs / STEP; i++) w.step(STEP); };
+const shark = (key: string, mood: SharkSpec["mood"]): SharkSpec => ({ key, kind: "classic", size: 1, mood });
+const sharkOf = (w: World, key: string) => w.sharks.find((s) => s.key === key)!;
+/** How far a point is outside a box (0 inside it). */
+const outside = (b: Box, x: number, y: number) => Math.hypot(Math.max(b.x0 - x, 0, x - b.x1), Math.max(b.y0 - y, 0, y - b.y1));
+
+const tile: Box = { x0: 560, y0: 300, x1: 880, y1: 520, key: "a" };
+
+test("a shark whose agent needs you circles that agent's tile, and comes up nearest", () => {
+  for (const seed of [1, 2, 3]) seeded(seed, () => {
+    const w = water([shark("a", "surface"), shark("b", "cruise")], [tile, { x0: 60, y0: 600, x1: 360, y1: 860, key: "b" }]);
+    run(w, 30);
+    let near = 0;
+    let samples = 0;
+    for (let i = 0; i < 40; i++) {
+      run(w, 0.5);
+      const a = sharkOf(w, "a");
+      samples++;
+      if (outside(tile, a.nodes[0]!, a.nodes[1]!) < a.length * 0.6) near++;
+    }
+    // Over 60 seeds it was near its tile every time.
+    assert.ok(near / samples >= 0.95, `seed ${seed}: near its tile ${near} of ${samples} times`);
+    // Nearest of the two, so drawn last, over the other.
+    assert.equal(w.sharks.at(-1)!.key, "a");
+    assert.ok(sharkOf(w, "a").depth > 0.95);
+  });
+});
+
+test("a shark whose agent does not need you roams instead of circling that agent's tile", () => {
+  const own: Box = { ...tile, key: "b" };
+  let near = 0;
+  for (const seed of [11, 12, 13, 14]) seeded(seed, () => {
+    const w = water([shark("b", "cruise")], [own]);
+    run(w, 30);
+    for (let i = 0; i < 40; i++) {
+      run(w, 0.5);
+      const b = sharkOf(w, "b");
+      if (outside(own, b.nodes[0]!, b.nodes[1]!) < b.length * 0.6) near++;
+    }
+  });
+  // Circling, it would be near it every time; roaming, 36% to 64% of the time over 40 seeds.
+  assert.ok(near / 160 < 0.8, `near its tile ${near} of 160 times`);
+});
+
+test("fish keep out from under the tiles, and snouts turn away before them", () => {
+  seeded(5, () => {
+    const box: Box = { x0: 420, y0: 220, x1: 1020, y1: 680 };
+    const w = water([shark("a", "hunt"), shark("b", "cruise")], [box]);
+    run(w, 20);
+    let snoutsUnder = 0;
+    let fishUnder = 0;
+    let fish = 0;
+    for (let i = 0; i < 20; i++) {
+      run(w, 0.5);
+      for (const f of w.fish) {
+        if (!f.alive) continue;
+        fish++;
+        if (outside(box, f.x, f.y) === 0 && f.x > box.x0 + 10 && f.x < box.x1 - 10 && f.y > box.y0 + 10 && f.y < box.y1 - 10) fishUnder++;
+      }
+      // Well under it: a hunting shark's snout may dip under a tile's edge after a fish there.
+      for (const s of w.sharks) if (outside({ x0: box.x0 + s.length * 0.15, y0: box.y0 + s.length * 0.15, x1: box.x1 - s.length * 0.15, y1: box.y1 - s.length * 0.15 }, s.nodes[0]!, s.nodes[1]!) === 0) snoutsUnder++;
+    }
+    // The box is a fifth of the window: left alone, a fifth of the fish would be under it, and the
+    // snouts a third of the time. Over 40 seeds: at most 3.4% of the fish, and the snouts 11%.
+    assert.ok(fishUnder / fish < 0.06, `${fishUnder} of ${fish} fish under the tile`);
+    assert.ok(snoutsUnder / 40 < 0.2, `snouts under the tile ${snoutsUnder} of 40 times`);
+  });
+});
+
+test("a shark a tile is put down over swims out from under it quickly", () => {
+  for (const seed of [21, 22, 23, 24, 25, 26]) seeded(seed, () => {
+    const w = water([shark("a", "cruise")]);
+    run(w, 10);
+    const a = sharkOf(w, "a");
+    const box: Box = { x0: a.nodes[0]! - 150, y0: a.nodes[1]! - 150, x1: a.nodes[0]! + 150, y1: a.nodes[1]! + 150 };
+    w.setBoxes([box]);
+    let secs = 0;
+    while (secs < 10 && outside(box, a.nodes[0]!, a.nodes[1]!) === 0) { run(w, 0.1); secs += 0.1; }
+    // Over 40 seeds it was out within 3 s; at its cruising pace it would take 5 s or more.
+    assert.ok(secs < 4, `seed ${seed}: out after ${secs.toFixed(1)} s`);
+  });
+});
+
+test("a tile that fills most of the window is not kept out from under", () => {
+  seeded(6, () => {
+    const w = water([], [{ x0: 0, y0: 0, x1: W, y1: H * 0.8 }]);
+    run(w, 10);
+    // Well inside it: kept out, the fish would crowd its edges and the strip below it.
+    const under = w.fish.filter((f) => f.alive && f.x > 100 && f.x < W - 100 && f.y > 60 && f.y < H * 0.7).length;
+    assert.ok(under > w.fish.length * 0.4, `${under} of ${w.fish.length} fish under it`);
+  });
+});
+
+test("a closed agent's shark swims off before it is dropped, and one that comes back stays", () => {
+  seeded(7, () => {
+    const w = water([shark("a", "cruise"), shark("b", "cruise")]);
+    run(w, 5);
+    w.setRoster([shark("b", "cruise")]);
+    run(w, 0.5);
+    assert.ok(sharkOf(w, "a").leaving, "it is still there, swimming off");
+    run(w, 40);
+    assert.deepEqual(w.sharks.map((s) => s.key), ["b"]);
+    w.setRoster([shark("b", "cruise"), shark("a", "hunt")]);
+    w.setRoster([shark("b", "cruise")]);
+    w.setRoster([shark("b", "cruise"), shark("a", "hunt")]);
+    assert.equal(w.sharks.filter((s) => s.key === "a" && !s.leaving).length, 1);
+  });
+});
+
+test("a finished turn is a bite where the shark is, and the fish there scatter", () => {
+  seeded(8, () => {
+    const w = water([shark("a", "hunt")]);
+    run(w, 5);
+    const a = sharkOf(w, "a");
+    w.events.length = 0;
+    w.finished("a");
+    assert.deepEqual(w.events, [{ kind: "bite", x: a.nodes[0], y: a.nodes[1] }]);
+    assert.equal(a.hunger, 0);
+    const nearby = w.fish.filter((f) => f.alive && Math.hypot(f.x - a.nodes[0]!, f.y - a.nodes[1]!) < 150);
+    assert.ok(nearby.length > 0 && nearby.every((f) => f.alarm === 1));
+    // An agent the scene has no shark for bites nothing.
+    w.events.length = 0;
+    w.finished("nobody");
+    assert.deepEqual(w.events, []);
+  });
+});

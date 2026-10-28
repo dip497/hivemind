@@ -250,6 +250,9 @@ export function ShapeAndTypeControls({ t }: { t: ThemeState }) {
 
 // ── background ──────────────────────────────────────────────────────────────
 
+/** Shoal's swatch: a shark in the characters the scene draws it in, as text (no live preview). */
+const SHOAL_MARK = "   .;%.\n-:t%S8@8%>\n   ';t'";
+
 /** Filename of a picked media URL, for the "currently using" line. */
 function mediaName(src?: string): string | null {
   if (!src) return null;
@@ -286,6 +289,7 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
                 <span className="settings-wallpaper-preview" aria-hidden data-scene={w.id}>
                   {w.id === "video" && <Film size={13} />}
                   {w.id === "image" && <ImageIcon size={13} />}
+                  {w.id === "shoal" && <span className="settings-shoal-mark">{SHOAL_MARK}</span>}
                 </span>
                 <span className="settings-wallpaper-name">{w.label}</span>
               </button>
@@ -316,6 +320,9 @@ export function BackgroundControls({ t }: { t: ThemeState }) {
       </div>
       {t.wallpaper !== "none" && !wallpaperDrawn(t) && (
         <p className="settings-note">The background shows behind your tools when glass is on.</p>
+      )}
+      {t.wallpaper === "shoal" && t.glass && (
+        <p className="settings-note">Over Shoal, panels and tiles stay solid, glass or not.</p>
       )}
     </>
   );
