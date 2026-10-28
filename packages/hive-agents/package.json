@@ -11,7 +11,8 @@
     "./manifest": "./src/manifest.ts",
     "./detect-rules": "./src/detect-rules.ts",
     "./load": "./src/load.ts",
-    "./discover": "./src/discover.ts"
+    "./discover": "./src/discover.ts",
+    "./commands": "./src/commands.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -7,7 +7,7 @@ import type { LinkResult, TransferResult } from "@hivemind/core/cross-repo";
 import type { ReviewComment } from "@hivemind/core/review";
 import type { DiffPayload, DiffScope, GitBranchList, GitRevision, GitStatusSnapshot, HandedOff, WorktreeCreateOpts, WorktreeEntry } from "./git.js";
 import type { SleepAnswer, WakeAnswer } from "./agents.js";
-import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
+import type { AgentAnswer, AgentChange, Approval, Answerer, AgentChanges, AgentEvent, AgentItem, AgentRead, AgentSessions, ConversationEntry, SlashCommand, Folders, Links, PipeChange, Places, SpawnChange, StartAgent, StartImage, Startable, StatusChange, TileOpened, ToolUse } from "./agents.js";
 import type { ActivityLevels, ExitInfo, LastLines, TerminalOpts, Typist } from "./terminals.js";
 import type { JoinQuestion, JoinRequests, PersonHere } from "./people.js";
 import type { GuestAnswer } from "@hivemind/workspace-host/connect";
@@ -178,6 +178,9 @@ export interface WorkspaceMethods {
   /** (0.23) The sessions `program` keeps in `place` (the workspace's folder or one of its
    *  worktrees), newest first, `limit` of them at most. */
   "agent.sessions": (place: string, program: string, limit?: number) => AgentSessions;
+  /** (0.36) The slash commands the agent of `tile` takes at its prompt: its own, the person's and
+   *  the project's, as its manifest says where they are; by name. */
+  "agent.commands": (tile: string) => { commands: SlashCommand[] };
   /** (0.23) Open a tool's tile in the workspace at `repo`: the tool by its id
    *  (`@owner/name/tool`, or `@owner/name` when the package has one tool), in `frame` if given, at
    *  `url` for one that shows a page, with `state` (0.32) as the tile's first saved state. */

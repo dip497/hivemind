@@ -3072,6 +3072,12 @@ public func FfiConverterTypeViewSession_lower(_ value: ViewSession) -> UInt64 {
 public protocol WatchProtocol: AnyObject, Sendable {
     
     /**
+     * A tap at the cell `col`, `row` (from 1): a click sent to the program when it takes the
+     * mouse; false when it does not.
+     */
+    func click(col: UInt16, row: UInt16)  -> Bool
+    
+    /**
      * Size the terminal to `cols` × `rows` for this phone, until it is watched no more.
      */
     func fit(cols: UInt16, rows: UInt16) 
@@ -3160,6 +3166,21 @@ open class Watch: WatchProtocol, @unchecked Sendable {
 
     
 
+    
+    /**
+     * A tap at the cell `col`, `row` (from 1): a click sent to the program when it takes the
+     * mouse; false when it does not.
+     */
+open func click(col: UInt16, row: UInt16) -> Bool  {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_hive_phone_ffi_fn_method_watch_click(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt16.lower(col),
+        FfiConverterUInt16.lower(row),uniffiCallStatus
+    )
+})
+}
     
     /**
      * Size the terminal to `cols` × `rows` for this phone, until it is watched no more.
@@ -9519,6 +9540,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_screenlistener_ended() != 19695) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_hive_phone_ffi_checksum_method_watch_click() != 37912) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_hive_phone_ffi_checksum_method_watch_fit() != 57702) {

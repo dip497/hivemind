@@ -84,14 +84,14 @@ const NO_FACTS: AgentFacts = { program: () => undefined, decides: () => false, i
  *  screen, then its output as it comes) and type into it, asking for its keyboard while someone
  *  else holds it; to answer what an agent there waits on the person for (`agent.answer`), and to
  *  send one a message (`agent.send`); to start an agent where it may be started (its places and the
- *  folders in a project), interrupt its turn, close it, see what it changed, follow what it says and
+ *  folders in a project), interrupt its turn, close it, see what it changed and the commands it takes, follow what it says and
  *  unfold a tool it used (spec/agents.md); and to show the community views here that work on a
  *  phone, which may do there what the phone may (P8, `views.ts`), and to press the board's widgets
  *  from one (`widget.press`). To pace the output it is sent, and to fit a terminal to its screen
  *  until it goes (`terminal.fit`); never otherwise to size one, or to give or take a keyboard. */
 const PHONE_MAY = new Set([
   "agent.answer", "agent.send", "terminal.write", "terminal.keyboard.ask", "terminal.ack", "terminal.fit",
-  "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation", "agent.tool", "agent.approval",
+  "agent.startable", "agent.places", "agent.folders", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.approval",
   "view.list", "view.file", "view.open", "view.post", "view.screen", "view.close", "widget.press",
   // Someone asking to join, answered from the notice that told it (spec/push.md "Join").
   "people.answer",

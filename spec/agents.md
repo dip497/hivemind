@@ -1,4 +1,4 @@
-# Agents (0.9)
+# Agents (0.10)
 
 The person's agents, as their phone sees and drives them (M5, `docs/design/phone-app-2026-10-02.md`
 §4): every agent in the workspaces one of their devices holds, live; and starting one, stopping
@@ -191,6 +191,28 @@ the lines the patch adds and removes in it. `patch` is `git diff HEAD`, followed
 yet tracked as a new file (one over 64 KiB, or that is not text, is listed and not shown), cut at
 512 KiB at the end of a line, when `truncated` is `true`. A folder that is no git
 repository answers no files and an empty patch; one on another machine is `FAILED`, saying so.
+
+## Commands
+
+`agent.commands(tile)` (0.10) answers the slash commands the agent takes at its prompt, for a
+device to offer as the person types `/`:
+
+```json
+{ "commands": [ { "name": "review", "description": "Review the diff", "from": "project" } ] }
+```
+
+Its manifest says them (`commands`): its own (`builtIn`, each a `name` and a `description`), and the
+folders it reads more from (`folders`), each a `path` under `{home}/` (the person's, `from`
+`yours`) or `{folder}/` (the folder the agent runs in, `project`). In a folder, a command is a
+`*.md` file, a subfolder's name put before its own with `:` (`frontend/component.md` is
+`frontend:component`), three folders deep at most; with `skills`, a folder each, its `SKILL.md`
+saying it, and one whose front matter says `user-invocable: false` is left out. `prefix` goes
+before each name (`prompts:`). A command says what it does in its front matter's `description`, else
+in its first line of text that is no heading, cut to 200 characters. A name is a letter or digit,
+then letters, digits, `_`, `.`, `:` and `-`, 64 characters at most; another is left out. One of a
+name a later folder lists shadows the earlier, so the project's shadows the person's and both the
+agent's own. They come ordered by name, 500 at most. An agent on another machine answers its own
+only, its folders being there.
 
 ## Conversation
 

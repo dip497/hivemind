@@ -86,6 +86,7 @@ const app: App = {
   close: (agent) => act(() => phone!.close(agent), NOTICES.closed),
   conversation: (agent, said, ended) => phone?.conversation(agent, said, ended) ?? (() => {}),
   tool: (agent, use) => reached().tool(agent, use),
+  commands: (agent) => reached().commands(agent),
   terminal(workspace, tile, changed, ended) {
     if (!phone) return null;
     const { term, stop } = phone.watch(workspace, tile, changed, ended);

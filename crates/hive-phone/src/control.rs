@@ -1,5 +1,6 @@
 //! Driving the person's agents from the phone (spec/agents.md, M5): what may be started in a
-//! workspace, starting an agent there, interrupting its turn, closing it, and what it changed. Each
+//! workspace, starting an agent there, interrupting its turn, closing it, what it changed, and the
+//! slash commands it takes. Each
 //! is a call of the workspace API on the phone's connection to the device that holds the workspace,
 //! which carries it out as the person.
 
@@ -196,6 +197,32 @@ pub async fn diff(connection: &Connection, workspace: &str, tile: &str) -> Resul
     let mut w = Workspace::open(connection, workspace).await?;
     let answer = w.call("agent.diff", json!([tile])).await?;
     serde_json::from_value(answer).context("the device said what changed in a way not understood")
+}
+
+/// A slash command an agent takes at its prompt; `from`: `built-in`, `yours` or `project`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlashCommand {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub from: String,
+}
+
+/// The slash commands the agent of `tile` in `workspace` takes, by name.
+pub async fn commands(
+    connection: &Connection,
+    workspace: &str,
+    tile: &str,
+) -> Result<Vec<SlashCommand>> {
+    #[derive(Deserialize)]
+    struct Answer {
+        commands: Vec<SlashCommand>,
+    }
+    let mut w = Workspace::open(connection, workspace).await?;
+    let answer = w.call("agent.commands", json!([tile])).await?;
+    let said: Answer = serde_json::from_value(answer)
+        .context("the device listed the agent's commands in a way not understood")?;
+    Ok(said.commands)
 }
 
 #[cfg(test)]

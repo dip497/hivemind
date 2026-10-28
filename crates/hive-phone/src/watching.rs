@@ -163,6 +163,16 @@ impl Watching {
         true
     }
 
+    /// A tap at the cell `col`, `row` (from 1): sent to the program as a click when the newest
+    /// frame says it takes the mouse; false when it does not.
+    pub fn click(&self, col: u16, row: u16) -> bool {
+        let Some(keys) = self.newest().wheel.click(col, row) else {
+            return false;
+        };
+        let _ = self.typed.send(Input::Text(keys));
+        true
+    }
+
     /// Size the terminal to `cols` × `rows` for this phone, until it is watched no more; none:
     /// back to the size it had.
     pub fn fit(&self, size: Option<(u16, u16)>) {

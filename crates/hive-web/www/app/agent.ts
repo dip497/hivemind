@@ -8,7 +8,7 @@ import { Chat } from "./chat.js";
 import { Ask, type Composer, type Picked, composer, h, icon, iconButton, say } from "./dom.js";
 import { PHOTOS_MAX, photoOf } from "./photos.js";
 import { TerminalView } from "./terminal.js";
-import type { Agent, Overview } from "./types.js";
+import type { Agent, Overview, SlashCommand } from "./types.js";
 import { NOTICES, ago, elapsed, kindLabel, stateLabel, where } from "./words.js";
 
 export class AgentScreen {
@@ -22,7 +22,7 @@ export class AgentScreen {
   /** Where the chat's button back to its newest sits: over the dock's right. */
   private readonly newestSlot = h("div", { class: "newest-slot" });
   private readonly waits = h("div", { "data-waits": "" });
-  private readonly gone = h("p", { class: "quiet", hidden: true }, NOTICES.notRunning);
+  private readonly gone = h("p", { class: "quiet", hidden: true, "data-gone": "" }, NOTICES.notRunning);
   /** While it works, above the box: for how long (Happy's AgentInput.tsx:545-580). */
   private readonly workingFor = h("span", {});
   private readonly working = h("p", { class: "working-line", hidden: true, "data-working-line": "" }, h("span", { class: "dot", "data-state": "working" }), this.workingFor);
@@ -31,6 +31,10 @@ export class AgentScreen {
   private readonly problem = h("p", { class: "photo-problem", role: "status", hidden: true, "data-photo-problem": "" });
   private problemTimer = 0;
   private readonly message: HTMLTextAreaElement;
+  /** The agent's slash commands that start as typed, over the box while it holds `/` and a name. */
+  private readonly suggested = h("div", { class: "slash-commands", role: "listbox", "aria-label": "Commands", hidden: true, "data-commands": "" });
+  /** The commands of the agent shown, asked of the computer once, the first time `/` is typed. */
+  private commandsOf: { tile: string; list: Promise<SlashCommand[]> } | null = null;
   private readonly composing: Composer;
   private readonly term = new TerminalView();
   private readonly flip = iconButton("agents", "Terminal", () => this.showTerminal(!this.terminal), { "data-view-toggle": "" });
@@ -67,8 +71,9 @@ export class AgentScreen {
     const message = composer("Message", (text, photos) => this.sendIt(text, photos), { "data-message": "" },
       () => void this.stopIt(), { max: PHOTOS_MAX, photoOf, problem: (why) => this.photoProblem(why) });
     this.message = message.querySelector("textarea")!;
+    this.message.addEventListener("input", () => void this.suggest());
     this.composing = message;
-    this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, this.problem, message);
+    this.dock.append(this.newestSlot, this.closing.el, this.waits, this.working, this.problem, this.suggested, message);
   }
 
   /** `tile` was just started from here: until the computer lists it, it is starting, not gone. */
@@ -90,6 +95,7 @@ export class AgentScreen {
     this.menu.hidden = true;
     this.waitSig = "";
     this.typed = null;
+    this.suggested.hidden = true;
     this.waits.replaceChildren();
     this.chat = new Chat((use) => (this.agent ? this.app.tool(this.agent, use) : Promise.reject(new Error("it is no longer there"))));
     this.terminal = false;
@@ -100,6 +106,45 @@ export class AgentScreen {
     this.waits.hidden = false;
     this.flipTo(false);
     if (o) this.show(o);
+  }
+
+  /** The commands that start with what follows a `/` typed alone in the box, then those that hold
+   *  it; a tap puts one in the box. */
+  private async suggest(): Promise<void> {
+    const typed = () => /^\/(\S*)$/.exec(this.message.value)?.[1];
+    const agent = this.agent;
+    const now = typed();
+    if (now === undefined || !agent) {
+      this.suggested.hidden = true;
+      return;
+    }
+    if (this.commandsOf?.tile !== agent.tile) {
+      const asked = { tile: agent.tile, list: this.app.commands(agent).catch(() => {
+        // Asked again on the next `/`: the computer may answer then.
+        if (this.commandsOf === asked) this.commandsOf = null;
+        return [];
+      }) };
+      this.commandsOf = asked;
+    }
+    const all = await this.commandsOf.list;
+    // Typed on meanwhile: the newest typing shows.
+    if (typed() !== now || this.agent !== agent) return;
+    const t = now.toLowerCase();
+    const starts = all.filter((c) => c.name.toLowerCase().startsWith(t));
+    const found = [...starts, ...all.filter((c) => !starts.includes(c) && c.name.toLowerCase().includes(t))].slice(0, 8);
+    this.suggested.replaceChildren(...found.map((c) => {
+      const b = h("button", { type: "button", class: "slash-command", role: "option", "data-command": c.name },
+        h("span", { class: "label" }, `/${c.name}`), c.description ? h("span", { class: "description" }, c.description) : null);
+      // The keyboard stays up: the tap never takes the focus from the box.
+      b.addEventListener("pointerdown", (e) => e.preventDefault());
+      b.addEventListener("click", () => {
+        this.message.value = `/${c.name} `;
+        this.message.dispatchEvent(new Event("input"));
+        this.message.focus();
+      });
+      return b;
+    }));
+    this.suggested.hidden = found.length === 0;
   }
 
   /** No longer shown: its conversation is followed no more. */

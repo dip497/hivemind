@@ -1,4 +1,4 @@
-# Workspace API (0.35)
+# Workspace API (0.36)
 
 What a workspace's host is asked for, and what it answers. The host is the machine the
 workspace's repo is on; today its callers are the app's windows (in the app, or in a browser tab it serves), peers on
@@ -64,7 +64,7 @@ and not read (a program that stopped reading) is closed.
 The first line says who connects: `{"hello": {"token", "workspace"?}}`.
 
 - **The install's token** (`hcp.token`) is the person at this machine. The host answers
-  `{"hello": {"api": "0.35", "as": "person"}}` and serves every method, as to a window of theirs.
+  `{"hello": {"api": "0.36", "as": "person"}}` and serves every method, as to a window of theirs.
 - **A grant's token** is a program the person let drive workspaces (`grant.create`), or a tool
   plugin's service, whose grant is made when it starts and taken back when it stops (`plugin` in
   `grant.list` names the plugin). It names one of the grant's workspaces by its folder, which may
@@ -263,6 +263,7 @@ log.
 | `agent.close` | `tile` | `{closed}`: its session ended and its tile taken off its board, as `hive ctl close` (`agents.md`, 0.11) | target the agent's tile |
 | `agent.sleep` | `repo`, `target`? (a tile or a frame, by id or name; none: every agent of the workspace but the agent asking, 0.33), `force`? | `{slept, skipped: [{tile, why, already?}]}` (`already`: asleep already, 0.33): each agent's process ended, its tile kept with its last screen and its conversation to wake to; one working or waiting on someone is skipped unless `force`, as one that cannot resume its conversation, a shell and a session started elsewhere are; a name two tiles share is `BAD_REQUEST` (`agents.md`, "Sleep", 0.29) | target the workspace, detail the target |
 | `agent.wake` | `repo`, `target`? | `{woke, skipped: [{tile, why, already?}]}` (`already`: awake already, 0.33): each sleeping agent started again in its conversation, where it slept; skipped when another tile runs that conversation, or what it saved is gone, which also stops it being kept asleep (0.29) | target the workspace, detail the target |
+| `agent.commands` | `tile` | `{commands: [{name, description?, from}]}` (0.36): the slash commands the agent takes at its prompt, by name: its own (`from` `built-in`), and those in the folders its manifest names, the person's (`yours`) and the project's (`project`), one of a name the last said. An agent on another machine: its own only | read |
 | `agent.diff` | `tile` | `{files, patch, truncated}`: what it changed in the folder it runs in, against its last commit (`agents.md`, "Changes", 0.11) | — |
 | `agent.rename` | `tile`, `name` | `{name}`: what it is called now, on its tile and to the agents it talks to; an empty `name` takes it away, so it is called what its agent says again (0.23) | target the agent's tile |
 | `agent.keys` | `tile`, `keys` | `{keys}`: each key name (`Enter`, `Escape`, `Up`, `C-c`, …) or text typed into its terminal a moment after the last, how many there were (0.23) | target the agent's tile |

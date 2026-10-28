@@ -7,7 +7,7 @@ import init, { Device, type Host, Homes, Term, type ViewSession, connectWith, de
 import type { Filter } from "./home.js";
 import type { Account, Computer } from "./accounts.js";
 import { deviceKey, get } from "./store.js";
-import type { Agent, Folders, Held, Offered, Others, Overview, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, Folders, Held, Offered, Others, Overview, Paired, Photo, Piece, Places, Reply, Screen, Sent, Shown, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 import { message } from "./words.js";
 
 /** What connecting shows, step by step (pair.ts). */
@@ -362,6 +362,11 @@ export class Phone {
   /** The tool use `use` of `agent`, unfolded. */
   async tool(agent: Agent, use: string): Promise<Unfolded> {
     return (await this.on(agent.device).tool(agent.workspace, agent.tile, use)) as Unfolded;
+  }
+
+  /** The slash commands `agent` takes, by name. */
+  async commands(agent: Agent): Promise<SlashCommand[]> {
+    return (await this.on(agent.device).commands(agent.workspace, agent.tile)) as SlashCommand[];
   }
 
   /** The views the computer holding `workspace` offers there. */

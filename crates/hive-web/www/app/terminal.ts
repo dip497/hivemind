@@ -33,6 +33,8 @@ export interface TermSource {
   /** The person scrolls `lines` (up below 0) at a cell (from 1): sent to the program when it takes
    *  scrolls; false: the view scrolls itself. 0 lines asks whose a scroll is. */
   scroll(lines: number, col: number, row: number): boolean;
+  /** A tap at a cell (from 1): a click sent to the program when it takes the mouse; false when not. */
+  click(col: number, row: number): boolean;
   /** The person scrolled to the oldest line kept: more history is asked of the host, if it has it. */
   earlier(): void;
 }
@@ -487,11 +489,15 @@ export class TerminalView {
     };
     v.addEventListener("pointerup", up);
     v.addEventListener("pointercancel", up);
-    // A tap: the keyboard. On its click, as the mousedown a touch makes first would take the focus.
-    v.addEventListener("click", () => {
+    // A tap: a click, to a program that takes the mouse; else the keyboard. On its click, as the
+    // mousedown a touch makes first would take the focus.
+    v.addEventListener("click", (e) => {
       if (this.tapped) {
-        this.live();
-        this.input.focus();
+        const { col, row } = this.cellUnder(e);
+        if (!this.source?.click(col, row)) {
+          this.live();
+          this.input.focus();
+        }
       }
       this.tapped = false;
     });
@@ -577,21 +583,26 @@ export class TerminalView {
   private toProgram(dy: number, at: { clientX: number; clientY: number }): boolean {
     const source = this.source;
     if (!source) return false;
-    const { w, h: lh } = this.cell();
-    const lines = this.owed - dy / lh;
+    const lines = this.owed - dy / this.cell().h;
     const whole = Math.trunc(lines);
-    const box = this.view.getBoundingClientRect();
-    const x = (at.clientX - box.left) * this.dpr;
-    const y = (at.clientY - box.top) * this.dpr;
-    const col = Math.min(this.cols, Math.max(1, Math.floor((x + this.across) / w) + 1));
-    const line = Math.floor(this.top + y / lh) - (this.lines.length - this.rows);
-    const row = Math.min(this.rows, Math.max(1, line + 1));
+    const { col, row } = this.cellUnder(at);
     if (!source.scroll(whole, col, row)) {
       this.owed = 0;
       return false;
     }
     this.owed = lines - whole;
     return true;
+  }
+
+  /** The program's cell (from 1) under the point `at`. */
+  private cellUnder(at: { clientX: number; clientY: number }): { col: number; row: number } {
+    const { w, h: lh } = this.cell();
+    const box = this.view.getBoundingClientRect();
+    const x = (at.clientX - box.left) * this.dpr;
+    const y = (at.clientY - box.top) * this.dpr;
+    const col = Math.min(this.cols, Math.max(1, Math.floor((x + this.across) / w) + 1));
+    const line = Math.floor(this.top + y / lh) - (this.lines.length - this.rows);
+    return { col, row: Math.min(this.rows, Math.max(1, line + 1)) };
   }
 
   /** Zoom by `factor`, the point `x` (device pixels across the view) staying where it is. */

@@ -110,42 +110,92 @@ function option(q: Asked, n: number): HTMLButtonElement {
     h("span", { class: "label" }, q.options[n]!), ...(said ? [h("span", { class: "description" }, said)] : []));
 }
 
-/** Several questions, or one of several answers: each its own options and a line of its own, the
- *  one or the other; one Send once each has an answer (hapi keeps the same per question,
- *  AskUserQuestionFooter.tsx:59-115). */
+/** Several questions, or one of several answers: one question at a time, as Claude Code asks them.
+ *  A chip for each across the top, ticked once answered; choosing the one option of a question goes
+ *  on to the next, and a line of its own answers it instead. After the last, every answer to check,
+ *  each tapped to change it, and one Send. */
 function form(asks: Asked[], send: (answers: QuestionAnswer[]) => void): HTMLElement {
   const chosen = asks.map(() => new Set<number>());
   const own = asks.map(() => "");
-  const go = pill("Send", () => send(asks.map((_, i): QuestionAnswer => (own[i] ? { text: own[i]! } : { chosen: [...chosen[i]!].sort((a, b) => a - b) }))), "primary", { "data-answer": "send" });
-  const ready = () => (go.disabled = !asks.every((_, i) => own[i] || chosen[i]!.size));
-  const blocks = asks.map((q, i) => {
-    const typed = h("input", { class: "field", maxlength: 1000, enterkeyhint: "done", placeholder: "Type something", "aria-label": `Your own answer to: ${q.question}`, "data-own": "" });
+  const several = asks.length > 1;
+  const answered = (i: number) => !!own[i] || chosen[i]!.size > 0;
+  const said = (i: number) => own[i] || [...chosen[i]!].sort((a, b) => a - b).map((n) => asks[i]!.options[n]).join(", ");
+  const all = () => asks.every((_, i) => answered(i));
+  const sent = () => send(asks.map((_, i): QuestionAnswer => (own[i] ? { text: own[i]! } : { chosen: [...chosen[i]!].sort((a, b) => a - b) })));
+  const el = h("div", { class: "form", "data-questions": "" });
+  /** The question shown, by its place; `asks.length`: the answers to check. */
+  let at = 0;
+  const go = (to: number) => {
+    at = to;
+    show();
+  };
+  const next = () => go(several ? at + 1 : at);
+
+  const chips = () => h("div", { class: "steps", role: "tablist" }, ...asks.map((_, i) => {
+    const chip = h("button", { type: "button", class: "step", role: "tab", "aria-selected": String(i === at), "aria-label": `Question ${i + 1}`, "data-step": String(i), ...(answered(i) ? { "data-answered": "" } : {}) }, answered(i) ? `✓ ${i + 1}` : String(i + 1));
+    chip.addEventListener("click", () => go(i));
+    return chip;
+  }), (() => {
+    const chip = h("button", { type: "button", class: "step", role: "tab", "aria-selected": String(at === asks.length), "data-step": "check", disabled: !all() }, "Review");
+    chip.addEventListener("click", () => go(asks.length));
+    return chip;
+  })());
+
+  const question = (i: number) => {
+    const q = asks[i]!;
+    const typed = h("input", { class: "field", maxlength: 1000, enterkeyhint: "next", placeholder: "Type something", value: own[i], "aria-label": `Your own answer to: ${q.question}`, "data-own": "" });
     const buttons = q.options.map((_, n) => {
       const choice = option(q, n);
-      choice.setAttribute("aria-pressed", "false");
+      choice.setAttribute("aria-pressed", String(chosen[i]!.has(n)));
       choice.addEventListener("click", () => {
         const picked = chosen[i]!;
-        if (!q.many) picked.clear();
-        if (picked.has(n)) picked.delete(n);
+        own[i] = "";
+        if (!q.many) {
+          picked.clear();
+          picked.add(n);
+          if (several) return next();
+        } else if (picked.has(n)) picked.delete(n);
         else picked.add(n);
-        typed.value = own[i] = "";
         show();
       });
       return choice;
     });
-    const show = () => {
-      for (const [n, b] of buttons.entries()) b.setAttribute("aria-pressed", String(chosen[i]!.has(n)));
-      ready();
-    };
+    const done = several
+      ? pill(i === asks.length - 1 ? "Check answers" : "Next", next, "primary", { "data-answer": "next" })
+      : pill("Send", sent, "primary", { "data-answer": "send" });
+    done.disabled = !answered(i);
     typed.addEventListener("input", () => {
       own[i] = typed.value.trim();
       if (own[i]) chosen[i]!.clear();
-      show();
+      for (const [n, b] of buttons.entries()) b.setAttribute("aria-pressed", String(chosen[i]!.has(n)));
+      done.disabled = !answered(i);
     });
-    return h("div", { class: "asked", "data-question": String(i) },
-      h("p", {}, q.question), q.many ? h("p", { class: "status" }, "Choose any") : null,
-      h("div", { class: "choices" }, ...buttons), typed);
-  });
-  ready();
-  return h("div", { class: "form", "data-questions": "" }, ...blocks, go);
+    typed.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && answered(i)) done.click();
+    });
+    const back = several && i > 0 ? pill("Back", () => go(i - 1), "", { "data-answer": "back" }) : null;
+    return [
+      h("div", { class: "asked", "data-question": String(i) },
+        several ? h("p", { class: "status" }, `Question ${i + 1} of ${asks.length}`) : null,
+        h("p", {}, q.question), q.many ? h("p", { class: "status" }, "Choose any") : null,
+        h("div", { class: "choices" }, ...buttons), typed),
+      h("div", { class: "row" }, back, done),
+    ];
+  };
+
+  const check = () => [
+    h("div", { class: "checked", "data-check": "" }, ...asks.map((q, i) => {
+      const row = h("button", { type: "button", class: "choice", "data-change": String(i) },
+        h("span", { class: "description" }, q.question), h("span", { class: "label" }, said(i)));
+      row.addEventListener("click", () => go(i));
+      return row;
+    })),
+    h("div", { class: "row" }, pill("Back", () => go(asks.length - 1), "", { "data-answer": "back" }), pill("Send", sent, "primary", { "data-answer": "send" })),
+  ];
+
+  const show = () => {
+    el.replaceChildren(...(several ? [chips()] : []), ...(at === asks.length ? check() : question(at)));
+  };
+  show();
+  return el;
 }

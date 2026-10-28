@@ -506,6 +506,27 @@ fn a_scroll_goes_to_a_program_that_takes_the_mouse_or_shows_the_alternate_screen
 }
 
 #[test]
+fn a_tap_is_a_click_to_a_program_that_takes_the_mouse_and_nothing_to_one_that_does_not() {
+    let at = |output: &[u8], col: u16, row: u16| {
+        let mut screen = Screen::default();
+        screen.feed(output);
+        screen.click(col, row)
+    };
+    // Claude's TUI: a left press and release where it was tapped, as SGR reports.
+    let claude = b"\x1b[?1049h\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h";
+    assert_eq!(
+        at(claude, 10, 5).as_deref(),
+        Some("\x1b[<0;10;5M\x1b[<0;10;5m")
+    );
+    // The old way: a press, then a release, button 3, each a byte past 32.
+    assert_eq!(at(b"\x1b[?1000h", 10, 5).as_deref(), Some("\x1b[M *%\x1b[M#*%"));
+    // A shell, less, and a program that let the mouse go: nothing; the tap is the keyboard's.
+    assert_eq!(at(b"$ ls\r\n", 10, 5), None);
+    assert_eq!(at(b"\x1b[?1049h", 10, 5), None);
+    assert_eq!(at(b"\x1b[?1000h\x1b[?1006h\x1b[?1000l", 10, 5), None);
+}
+
+#[test]
 fn scrolled_to_the_oldest_line_a_page_asks_for_more_history_until_the_host_has_no_more_or_it_holds_all_it_keeps(
 ) {
     // The screen with `n` lines of scrollback above its 24 rows, as the host sends it.
