@@ -161,7 +161,7 @@ test("a question its agent asks shows each option with what it means, chosen by 
   await expect.poll(() => page.evaluate(() => (window as unknown as { calls: unknown[] }).calls.filter((c) => (c as string[])[0] === "answer"))).toEqual([["answer", "t1", { answers: [{ chosen: [1] }] }]]);
 });
 
-test("two questions, the second of several answers, each show their own options and a line of their own; Send waits for an answer to each and carries both, in order", async () => {
+test("several questions are asked one at a time, as Claude Code asks them: choosing goes on to the next, the answers are checked, any changed, and Send carries each in order", async () => {
   test.skip(!built(), "no page build: run crates/hive-web/build.sh");
   const page = await screen();
   const waiting = { kind: "question", since: 5, choose: true, asks: [
@@ -171,29 +171,34 @@ test("two questions, the second of several answers, each show their own options 
   await show(page, overview(agent("t1", "Phone test", { state: "waiting", waiting })));
   await open(page, "t1");
   const card = page.locator("[data-screen=agent] [data-waiting-card]");
-  const fruit = card.locator("[data-question]").nth(0);
-  const colour = card.locator("[data-question]").nth(1);
-  await expect(card.locator("[data-question] > p:first-child")).toHaveText(["Which fruit?", "Which colours?"]);
-  await expect(fruit.locator("[data-choice]")).toHaveText(["Apple", "Banana", "Mango"]);
-  await expect(colour.locator("[data-choice]")).toHaveText(["Red", "Green", "Blue"]);
-  await expect(card.locator("[data-answer=allow], [data-answer=deny]")).toHaveCount(0);
-  const send = card.locator("[data-answer=send]");
-  const pressed = (q: typeof fruit) => q.locator("[data-choice][aria-pressed=true]");
-  await expect(send).toBeDisabled();
-  await fruit.locator("[data-choice]").nth(1).click();
-  await expect(send).toBeDisabled();
-  // One fruit: a second replaces the first. Several colours: each toggles.
-  await fruit.locator("[data-choice]").nth(2).click();
-  await expect(pressed(fruit)).toHaveText(["Mango"]);
-  for (const n of [0, 1, 2, 1]) await colour.locator("[data-choice]").nth(n).click();
-  await expect(pressed(colour)).toHaveText(["Red", "Blue"]);
-  await expect(send).toBeEnabled();
+  const shown = card.locator("[data-question] > p:not(.status)");
+  const choices = card.locator("[data-question] [data-choice]");
   const calls = () => page.evaluate(() => (window as unknown as { calls: unknown[] }).calls.filter((c) => (c as string[])[0] === "answer"));
+  // One question in sight, a chip for each, and nothing to send yet.
+  await expect(shown).toHaveText(["Which fruit?"]);
+  await expect(card.locator("[data-step]")).toHaveText(["1", "2", "Review"]);
+  await expect(card.locator("[data-step=check]")).toBeDisabled();
+  await expect(card.locator("[data-answer=allow], [data-answer=deny], [data-answer=send]")).toHaveCount(0);
+  // Choosing the one fruit goes on to the colours, several of which toggle.
+  await choices.nth(1).click();
+  await expect(shown).toHaveText(["Which colours?"]);
+  await expect(card.locator("[data-step=\"0\"]")).toHaveText("✓ 1");
+  const next = card.locator("[data-answer=next]");
+  await expect(next).toBeDisabled();
+  for (const n of [0, 1, 2, 1]) await choices.nth(n).click();
+  await expect(card.locator("[data-question] [data-choice][aria-pressed=true]")).toHaveText(["Red", "Blue"]);
+  await next.click();
+  // Every answer to check; one tapped is asked again, and a line of its own answers it instead.
+  await expect(card.locator("[data-change] .label")).toHaveText(["Banana", "Red, Blue"]);
+  await card.locator("[data-change=\"0\"]").click();
+  await expect(card.locator("[data-question] [data-choice][aria-pressed=true]")).toHaveText(["Banana"]);
+  await card.locator("[data-own]").fill("Durian");
+  await card.locator("[data-own]").press("Enter");
+  await expect(shown).toHaveText(["Which colours?"]);
+  await next.click();
+  await expect(card.locator("[data-change] .label")).toHaveText(["Durian", "Red, Blue"]);
   expect(await calls()).toEqual([]);
-  // A line of its own answers the fruit instead of an option.
-  await fruit.locator("[data-own]").fill("Durian");
-  await expect(pressed(fruit)).toHaveCount(0);
-  await send.click();
+  await card.locator("[data-answer=send]").click();
   await expect.poll(calls).toEqual([["answer", "t1", { answers: [{ text: "Durian" }, { chosen: [0, 2] }] }]]);
 });
 

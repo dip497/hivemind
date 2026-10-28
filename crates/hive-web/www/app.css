@@ -543,3 +543,14 @@ button { cursor: pointer; }
 .photo { position: relative; width: 56px; height: 56px; }
 .photo img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
 .photo .remove { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--text); color: var(--on-text); line-height: 1; }
+.form .steps { display: flex; gap: 6px; overflow-x: auto; }
+.form .step {
+  flex: none; min-width: 44px; min-height: 32px; padding: 0 12px; border-radius: 16px;
+  border: 1px solid var(--line); background: none; color: var(--text2); font: 500 13px/18px var(--sans);
+}
+.form .step[aria-selected="true"] { background: var(--raised); color: var(--text); border-color: var(--text3); }
+.form .step[data-answered] { color: var(--text); }
+.form .step:disabled { opacity: 0.4; }
+.form .row .pill { min-height: 44px; }
+.form .row .pill:disabled { opacity: 0.4; }
+.form .checked { display: flex; flex-direction: column; gap: 8px; }
