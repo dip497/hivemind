@@ -17,7 +17,7 @@ import { imagesOf } from "./start-places.js";
 import type { ControlWork } from "./control/methods.js";
 
 type Method =
-  | "agent.send" | "terminal.photo" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
+  | "agent.send" | "agent.rename" | "agent.keys" | "agent.read" | "agent.output" | "agent.sessions" | "agent.sleep" | "agent.wake" | "tool.open" | "link.connect" | "link.disconnect"
   | "view.emit" | "plugin.list" | "plugin.commands" | "plugin.open" | "plugin.call" | "plugin.close" | "tile.focus" | "tile.look"
   | "views.rescan" | "agents.rescan" | "widgets.rescan" | "tools.rescan" | "settings.reload" | "host.status" | "host.join" | "host.add";
 
@@ -60,14 +60,6 @@ export function controlApi(o: ControlApiOptions): Domain<Method> {
         }
         const { sent, held } = (await o.control()).send(t, message as string, photos);
         return { sent, ...(held ? { held } : {}), ...(photos ? { photos } : {}) };
-      },
-      // Pasted where the program runs elsewhere (a browser tab, another device): kept beside it, so
-      // the path typed after is one it can open.
-      "terminal.photo": async (_from, tile, image) => {
-        const [photo] = imagesOf([image])!;
-        if (!o.keep) throw new ApiError("UNSUPPORTED", "a terminal here takes no photos");
-        const [path] = await o.keep(toBareId(text(tile, "tile")), [photo!]);
-        return { path: path! };
       },
       "agent.rename": async (_from, tile, name) => ({ name: (await o.control()).rename(text(tile, "tile"), typeof name === "string" ? name : "") }),
       "agent.keys": async (_from, tile, keys) => {

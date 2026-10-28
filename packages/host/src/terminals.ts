@@ -27,7 +27,9 @@
 import path from "node:path";
 import { SessionRelay, type ReadScreen, type SessionRelayOptions, type Viewer } from "@hivemind/agent-host/session-relay";
 import type { Intents } from "@hivemind/workspace-host/intents";
-import { fields, flag, text, texts, whole, written } from "@hivemind/workspace-api/protocol";
+import { ApiError, fields, flag, text, texts, whole, written } from "@hivemind/workspace-api/protocol";
+import type { StartImage } from "@hivemind/workspace-api/agents";
+import { imagesOf } from "./start-places.js";
 import { emit, named, type Connection, type Domain } from "@hivemind/workspace-api/server";
 import type { TerminalOpts, Typist } from "@hivemind/workspace-api/terminals";
 import type { EventParams } from "@hivemind/workspace-api/methods";
@@ -103,6 +105,9 @@ export interface TerminalsOptions {
   /** The tile asleep in the conversation a start would resume: refused, or two processes would
    *  write it once that tile wakes. */
   conversationAsleep?(opts: TerminalOpts): string | undefined;
+  /** Keep a photo pasted into the session of `tile` (bare) on the machine it runs on: its path.
+   *  None: a terminal here takes no photos. */
+  keepPhoto?(tile: string, photo: StartImage): Promise<string>;
 }
 
 /** A participant's machine a session runs on (M4): whose it is, and whether they lend its keyboard
@@ -129,7 +134,7 @@ const REPORT = /\x1b\[(?:I|O|<\d+;\d+;\d+[Mm]|M[\s\S]{3}|\d+;\d+R|[?>][\d;]*[cn]
 /** Whether `data` is only such reports: a mouse moved or a window focused, nobody typed. */
 export const onlyReports = (data: string): boolean => data.length > 0 && data.replace(REPORT, "") === "";
 
-type TerminalMethod = "terminal.open" | "terminal.saved";
+type TerminalMethod = "terminal.open" | "terminal.saved" | "terminal.photo";
 type TerminalNotice =
   | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow" | "terminal.ack" | "terminal.fit" | "terminal.history"
   | "terminal.close" | "terminal.detach"
@@ -185,8 +190,17 @@ export class Terminals {
           const cwd = opts.folderOf?.(toBareId(t));
           return cwd ? opts.backend.saved(t, cwd, lines == null ? undefined : whole(lines, "lines")) : null;
         },
+        // Pasted where the program runs elsewhere (a browser tab, another device): kept beside it,
+        // so the path typed after is one it can open. Pasting is typing: only by the keyboard's holder.
+        "terminal.photo": async (from, tile, image) => {
+          const t = tileOf(tile);
+          const [photo] = imagesOf([image])!;
+          if (!opts.keepPhoto) throw new ApiError("UNSUPPORTED", "a terminal here takes no photos");
+          if (this.machines.has(t) || !this.keyboards.mayType(t, from)) throw new ApiError("FORBIDDEN", "someone else has this terminal's keyboard");
+          return { path: await opts.keepPhoto(toBareId(t), photo!) };
+        },
       },
-      effects: {},
+      effects: { "terminal.photo": (tile) => ({ target: toBareId(tileOf(tile)) }) },
       notices: {
         "terminal.write": (from, tile, data, paste) => this.write(tileOf(tile), written(data, "data"), flag(paste, "paste"), from),
         "terminal.show": (from, tile, shown) => {

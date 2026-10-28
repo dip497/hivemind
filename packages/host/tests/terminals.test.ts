@@ -25,6 +25,7 @@ function host(opts: { hidden?: () => boolean; screen?: string } = {}) {
   const terminals = new Terminals({
     intents: new Intents(new AuditLog({ file })),
     relay: { record: () => {}, screenPrefix: "", hidden: opts.hidden },
+    keepPhoto: async (t, photo) => { calls.push(`photo ${t} ${photo.type}`); return `/kept/${t}.png`; },
     backend: {
       start: async (o, out) => { calls.push(`start ${o.tileId}`); outputs.set(o.tileId, out); return { pid: 7 }; },
       write: (t, d) => calls.push(`write ${t} ${d}`),
@@ -55,7 +56,8 @@ function host(opts: { hidden?: () => boolean; screen?: string } = {}) {
     return answer.result as { pid: number; joined: boolean };
   };
   const notice = (from: Connection, method: string, ...params: unknown[]) => server.notice(method, params, from);
-  return { terminals, calls, outputs, client, audited, open, notice };
+  const call = (from: Connection, method: string, ...params: unknown[]) => server.answer(method, params, from);
+  return { terminals, calls, outputs, client, audited, open, notice, call };
 }
 /** What a client was sent of its sessions' output and exits (the session's size aside). */
 const output = (c: { received: EventMessage[] }) => c.received.filter((m) => m.event === "terminal.data" || m.event === "terminal.exit");
@@ -144,6 +146,23 @@ test("a mouse moved, a click or a window focused over a program that hears them 
   h.notice(b, "terminal.write", "hm:t1", "x");
   h.notice(b, "terminal.write", "hm:t1", "\x1b[Ix");
   assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 120x40", "resize hm:t1 90x20"]);
+});
+
+// A one-pixel PNG.
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+test("a photo pasted is kept only for whoever may type there, as typing is; each kept is the caller's in the audit log", async () => {
+  const h = host();
+  const person = h.client();
+  const guest = h.client({ kind: "peer", person: "g".repeat(64), device: "e".repeat(64), access: "terminals" });
+  await h.open(person, "hm:t1");
+  assert.deepEqual(await h.call(person, "terminal.photo", "hm:t1", { type: "image/png", data: PNG }), { result: { path: "/kept/t1.png" } });
+  const refused = await h.call(guest, "terminal.photo", "hm:t1", { type: "image/png", data: PNG }) as { error?: { code: string } };
+  assert.equal(refused.error?.code, "FORBIDDEN");
+  const notPhoto = await h.call(person, "terminal.photo", "hm:t1", { type: "image/png", data: Buffer.from("not a png").toString("base64") }) as { error?: { code: string } };
+  assert.equal(notPhoto.error?.code, "BAD_REQUEST");
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("photo")), ["photo t1 image/png"]);
+  assert.ok(h.audited().some((a) => a.startsWith("terminal.photo t1")), h.audited().join("\n"));
 });
 
 test("a pause lasts a moment unless it is asked for again; a resume ends it at once", async () => {
