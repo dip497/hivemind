@@ -1,7 +1,7 @@
 // The slash commands an agent takes, as its manifest says where they are: its own, the person's
 // and the project's, read from real folders.
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { commandsOf } from "../src/commands.js";
@@ -45,6 +45,31 @@ test("its own, the person's, their skills and the project's, each said as it say
   // Run on another machine: its folders are there, not here; only its own.
   expect(await commandsOf(def, null)).toEqual([{ name: "clear", description: "Start over", from: "built-in" }, { name: "review", from: "built-in" }]);
   expect(agentDisclosures(def)).toContain("reads the names and descriptions of your commands in {home}/.acme/commands, {home}/.acme/skills, {home}/.acme/prompts, {folder}/.acme/commands");
+});
+
+test("a project's links never lead the reading outside it; the person's own may", async () => {
+  const home = dir();
+  const folder = dir();
+  const secret = dir();
+  put(join(secret, "key.md"), "SECRET-LINE\n");
+  put(join(secret, "skill/SKILL.md"), "---\nname: leak\ndescription: SECRET-LINE\n---\n");
+  mkdirSync(join(folder, ".acme/commands"), { recursive: true });
+  symlinkSync(join(secret, "key.md"), join(folder, ".acme/commands/key.md"));
+  mkdirSync(join(folder, ".acme/skills/skill"), { recursive: true });
+  symlinkSync(join(secret, "skill/SKILL.md"), join(folder, ".acme/skills/skill/SKILL.md"));
+  symlinkSync(secret, join(folder, ".acme/outside"));
+  mkdirSync(join(home, ".acme"), { recursive: true });
+  symlinkSync(secret, join(home, ".acme/commands"));
+  const def = agent({ folders: [
+    { path: "{folder}/.acme/commands" }, { path: "{folder}/.acme/skills", skills: true }, { path: "{folder}/.acme/outside", prefix: "out:" },
+    { path: "{home}/.acme/commands", prefix: "mine:" },
+  ] });
+  const listed = await commandsOf(def, { home, folder });
+  expect(listed.filter((c) => c.from === "project" && c.description?.includes("SECRET"))).toEqual([]);
+  expect(listed.map((c) => c.name)).not.toContain("out:key");
+  expect(listed).toContainEqual({ name: "mine:key", description: "SECRET-LINE", from: "yours" });
+  // Asked by someone who is not the person: none of theirs.
+  expect((await commandsOf(def, { home: null, folder })).filter((c) => c.from === "yours")).toEqual([]);
 });
 
 test("a folder that is not there lists nothing, and an agent that says no commands has none", async () => {

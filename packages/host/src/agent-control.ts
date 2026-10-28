@@ -169,13 +169,15 @@ export function agentControl(o: AgentControlOptions): Domain<"agent.startable" |
         if (!here(folder)) throw new ApiError("FAILED", "this agent runs on another machine: what it changed is read there");
         return changesIn(folder);
       },
-      "agent.commands": async (_from, tile): Promise<{ commands: SlashCommand[] }> => {
+      "agent.commands": async (from, tile): Promise<{ commands: SlashCommand[] }> => {
         const bare = toBareId(text(tile, "tile"));
         const folder = o.folderOf(bare);
         if (folder === null) throw new ApiError("NOT_FOUND", "no such agent here");
         const def = o.agentOf(bare);
-        // One on another machine keeps its folders there: only the commands it says it takes.
-        return { commands: def ? await commandsOf(def, here(folder) ? { home: o.home, folder } : null) : [] };
+        // One on another machine keeps its folders there: only the commands it says it takes. The
+        // person's own are shown to them and their devices only.
+        const theirs = from.actor.kind === "person" || (from.actor.kind === "peer" && from.actor.access === "owner");
+        return { commands: def ? await commandsOf(def, here(folder) ? { home: theirs ? o.home : null, folder } : null) : [] };
       },
     },
     effects: {

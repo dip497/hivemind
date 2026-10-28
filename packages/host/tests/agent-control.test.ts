@@ -245,6 +245,9 @@ test("the commands an agent takes: its own, the person's and the project's, by n
     { name: "release", description: "Cut a release", from: "project" },
     { name: "standup", description: "Write today's standup", from: "yours" },
   ] });
+  // Someone else's device in the workspace sees the project's, never the person's own.
+  const guest = d.as({ actor: { kind: "peer", person: "g".repeat(64), device: "e".repeat(64), access: "view" } } as never);
+  assert.deepEqual((await guest("agent.commands", "t1") as { commands: { name: string }[] }).commands.map((c) => c.name), ["clear", "release"]);
   d.state.folder = `machine://${BOX}/srv/api`;
   assert.deepEqual(await d.call("agent.commands", "t1"), { commands: [{ name: "clear", description: "Start over", from: "built-in" }] });
   await refused(() => d.call("agent.commands", "t7"), /no such agent/, "NOT_FOUND");

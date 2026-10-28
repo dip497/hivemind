@@ -3,7 +3,8 @@
  * `commands` says: its own, and those in the folders it reads, the person's and the project's.
  * Node-only: it reads those folders.
  */
-import { readdir, open } from "node:fs/promises";
+import { constants } from "node:fs";
+import { readdir, open, realpath } from "node:fs/promises";
 import path from "node:path";
 import { COMMAND_NAME_RE } from "./manifest.js";
 import type { AgentProviderDef } from "./types.js";
@@ -21,9 +22,9 @@ const DEPTH_MAX = 3;
 const HEAD_BYTES = 4096;
 const DESCRIPTION_MAX = 200;
 
-/** The first `HEAD_BYTES` of `file`; "" when it cannot be read. */
-async function headOf(file: string): Promise<string> {
-  const f = await open(file).catch(() => null);
+/** The first `HEAD_BYTES` of `file`; "" when it cannot be read, or is a link and `follow` is not set. */
+async function headOf(file: string, follow: boolean): Promise<string> {
+  const f = await open(file, follow ? "r" : constants.O_RDONLY | constants.O_NOFOLLOW).catch(() => null);
   if (!f) return "";
   try {
     const buf = Buffer.alloc(HEAD_BYTES);
@@ -67,10 +68,12 @@ async function files(dir: string, depth = 0): Promise<string[]> {
 /** The commands in one folder the manifest names. */
 async function inFolder(dir: string, skills: boolean, prefix: string, from: SlashCommand["from"]): Promise<SlashCommand[]> {
   const out: SlashCommand[] = [];
+  // A project is anyone's to write: a link in it never leads the reading outside it.
+  const follow = from === "yours";
   if (skills) {
     for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
       if (!e.isDirectory() || e.name.startsWith(".")) continue;
-      const text = await headOf(path.join(dir, e.name, "SKILL.md"));
+      const text = await headOf(path.join(dir, e.name, "SKILL.md"), follow);
       if (!text) continue;
       const { fields } = said(text);
       // One the person may not call is the agent's own to use.
@@ -79,22 +82,30 @@ async function inFolder(dir: string, skills: boolean, prefix: string, from: Slas
     }
   } else {
     for (const f of await files(dir)) {
-      const { fields, first } = said(await headOf(path.join(dir, `${f}.md`)));
+      const { fields, first } = said(await headOf(path.join(dir, `${f}.md`), follow));
       out.push({ name: prefix + f.split("/").join(":"), ...described(fields.description || first), from });
     }
   }
   return out.filter((c) => COMMAND_NAME_RE.test(c.name));
 }
 
+/** Whether `dir`, links resolved, is still inside `root`. */
+async function within(root: string, dir: string): Promise<boolean> {
+  const [r, d] = await Promise.all([realpath(root).catch(() => null), realpath(dir).catch(() => null)]);
+  return r !== null && d !== null && (d === r || d.startsWith(r + path.sep));
+}
+
 /** The commands `def` takes, run in `at.folder` by the person whose home is `at.home` (null: on
- *  another machine, whose folders are read there, so only its own): one of a name the last said,
- *  ordered by name. */
-export async function commandsOf(def: AgentProviderDef, at: { home: string; folder: string } | null): Promise<SlashCommand[]> {
+ *  another machine, whose folders are read there, so only its own; a null home: asked by someone
+ *  who is not that person, so not theirs): one of a name the last said, ordered by name. */
+export async function commandsOf(def: AgentProviderDef, at: { home: string | null; folder: string } | null): Promise<SlashCommand[]> {
   const byName = new Map<string, SlashCommand>();
   for (const b of def.commands?.builtIn ?? []) byName.set(b.name, { name: b.name, ...described(b.description), from: "built-in" });
   for (const f of at ? def.commands?.folders ?? [] : []) {
     const yours = f.path.startsWith("{home}/");
-    const dir = yours ? path.join(at!.home, f.path.slice("{home}/".length)) : path.join(at!.folder, f.path.slice("{folder}/".length));
+    if (yours && at!.home === null) continue;
+    const dir = yours ? path.join(at!.home!, f.path.slice("{home}/".length)) : path.join(at!.folder, f.path.slice("{folder}/".length));
+    if (!yours && !(await within(at!.folder, dir))) continue;
     for (const c of await inFolder(dir, f.skills === true, f.prefix ?? "", yours ? "yours" : "project")) byName.set(c.name, c);
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name)).slice(0, LISTED_MAX);
