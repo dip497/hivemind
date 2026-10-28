@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CommunityLink, LIMITS, PROMPT_DECLINES_MAX, SHARE_DECLINES_MAX, type LinkDeps, type LinkServices, type PortLike } from "../src/link.ts";
-import type { ActivityLevel, ShareOutcome, ViewParticipant, ViewPresence } from "@hivemind/view-sdk/protocol";
+import type { ActivityLevel, ShareOutcome, ViewParticipant, ViewPresence, ViewWidgetBand } from "@hivemind/view-sdk/protocol";
 
 /** A link on a host with `tiles` and the frame `f1`. `lacks`: the commands this host leaves out,
  *  `surfaceRects` when it places no surfaces, and `lineRects` when it draws no lines. */
@@ -490,6 +490,28 @@ test("1.5: participants: those here at once, then as they change, on the view's 
   tell([]);
   assert.equal(told().length, 3);
   assert.equal(h.link.stats.refused, 0);
+});
+
+test("1.18: the band of widget cards follows the view's hello, then each change of it, and stops with the view; a host without cards says none", () => {
+  let tell: (band: ViewWidgetBand) => void = () => {};
+  let following = 0;
+  const h = harness([], ["t1"], { widgetBand: { subscribe: (cb) => { following++; tell = cb; cb({ edge: "left", width: 268 }); return () => { following--; }; } } });
+  assert.ok(h.link.features.includes("widgetBand"));
+  const told = () => h.sent.flatMap((m) => ((m as { type: string }).type === "widgetBand" ? [m] : []));
+  h.link.handle({ type: "ready", v: 1 });
+  // Nothing before the view has its hello: a band before it would land in no view.
+  assert.deepEqual([following, told()], [0, []]);
+  h.link.send({ type: "hello", v: 1, pluginId: "p", capabilities: [], theme: { colors: {} }, layout: null, viewport: { w: 1280, h: 720 }, visible: true });
+  assert.deepEqual(h.sent.map((m) => (m as { type: string }).type), ["hello", "widgetBand"]);
+  // The same band again (a resize that moved nothing) is not told; a second column is.
+  tell({ edge: "left", width: 268 });
+  tell({ edge: "left", width: 520 });
+  tell({ edge: "left", width: 0 });
+  assert.deepEqual(told(), [{ type: "widgetBand", edge: "left", width: 268 }, { type: "widgetBand", edge: "left", width: 520 }, { type: "widgetBand", edge: "left", width: 0 }]);
+  h.link.dispose();
+  assert.equal(following, 0);
+  // A phone's screen floats no cards over a view: it does not say the feature.
+  assert.ok(!harness().link.features.includes("widgetBand"));
 });
 
 test("1.5: a rect for a tile the view was told of and that has closed since is dropped without a refusal; one for a tile never told of is refused", () => {

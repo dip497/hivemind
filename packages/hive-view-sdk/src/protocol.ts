@@ -161,7 +161,7 @@ export interface ViewTheme {
 
 /** What a host implements beyond 1.2, sent in `hello.features`. A host that predates 1.3 sends
  *  none, so read the field (`hm.hello.features ?? []`), never probe for a client method. */
-export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces", "lineSlots", "ownFiles"] as const;
+export const VIEW_FEATURES = ["since", "events", "activity", "presence", "history", "share", "agentStatus", "agents", "sessions", "prompt", /** 1.5 */ "participants", /** 1.6 */ "surfaces", /** 1.7 */ "settings", /** 1.8 */ "widgets", /** 1.9 */ "issues", /** 1.10 */ "invoke", /** 1.14 */ "sleep", /** 1.15 */ "hostMenu", /** 1.16 */ "tokens", /** 1.17 */ "fontFaces", "lineSlots", "ownFiles", /** 1.18 */ "widgetBand"] as const;
 export type ViewFeature = (typeof VIEW_FEATURES)[number];
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
@@ -240,7 +240,7 @@ export interface ViewHistoryTile {
   openedAt?: number; closedAt?: number;
   /** [start, end, status], clipped to the day */
   intervals: [number, number, ViewStatus][];
-  /** turn-finished times */
+  /** turn-finished times: a turn hook's, and those inferred for an agent without one */
   turns: number[];
 }
 export interface ViewHistoryDay {
@@ -334,6 +334,18 @@ export interface ViewWidget {
   images: Record<string, string>;
   placement: "board" | "screen";
 }
+
+// ── protocol 1.18 (additive) ────────────────────────────────────────────────
+// `widgetBand` in `hello.features`: the app floats widget cards over the view, stacked down the
+// view's widget edge (its manifest's `"widgets"`, else the right), and says how much of the view
+// they take (`widgetBand`): right after `hello`, and again whenever cards come or go, stack into
+// another column, or the window is resized. A view keeps what it must show out of that band. A
+// computer's window says it, a guest's over the host's view too; a phone floats no cards over a
+// view and does not say it.
+
+/** The band of widget cards over a view (feature `widgetBand`): `width` CSS px in from the view's
+ *  `edge` to the far side of the cards, the gap beside them included; 0 when there are none. */
+export interface ViewWidgetBand { edge: "left" | "right"; width: number }
 
 // ── protocol 1.17 (additive) ────────────────────────────────────────────────
 // `lineSlots` in `hello.features`: this host draws each tile's last line in the rects a view
@@ -429,7 +441,10 @@ export type HostMessage =
    *  host has already released the tile; drop the rect on your side. */
   | { type: "undock"; tileId: string }
   /** 1.10: run the declared command `name`; answer with one `invokeResult` of the same id. */
-  | { type: "invoke"; invokeId: number; name: string; args: unknown };
+  | { type: "invoke"; invokeId: number; name: string; args: unknown }
+  /** 1.18 (feature `widgetBand`): how much of the view the app's widget cards take, from its widget
+   *  edge (`ViewWidgetBand`). Sent right after `hello`, then on every change. */
+  | { type: "widgetBand"; edge: "left" | "right"; width: number };
 
 // ── plugin → host ───────────────────────────────────────────────────────────
 
@@ -921,6 +936,9 @@ export function parseHostMessage(raw: unknown): ParseResult<HostMessage> {
       return isId(raw.tileId) ? { ok: true, msg: raw as unknown as HostMessage } : bad("tileId must be a string");
     case "invoke":
       return isNum(raw.invokeId) && typeof raw.name === "string" ? { ok: true, msg: raw as unknown as HostMessage } : bad("invokeId must be a number and name a string");
+    case "widgetBand":
+      return (raw.edge === "left" || raw.edge === "right") && isNum(raw.width) && raw.width >= 0
+        ? { ok: true, msg: { type: "widgetBand", edge: raw.edge, width: raw.width } } : bad("edge must be \"left\" or \"right\" and width a number from 0");
     default:
       return { ok: false, reason: `unknown message type ${JSON.stringify(raw.type)}` };
   }

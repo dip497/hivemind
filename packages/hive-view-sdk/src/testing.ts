@@ -11,6 +11,7 @@
  *   await host.settle();
  *   host.rects;     // the live surfaces the view asked for
  *   host.lines;     // the line slots it asked for (1.17, a host with `lineSlots`)
+ *   host.send({ type: "widgetBand", edge: "left", width: 520 });   // 1.18: the cards took a second column
  *   host.refused;   // what the app would have refused, and why: [] for a view that behaves
  *
  * What it does not do is the app's: start tiles, or refuse a kind of tile the app cannot spawn.
@@ -20,7 +21,7 @@ import { connect, type ViewClient } from "./client.js";
 import {
   PORT_HANDSHAKE, PROTOCOL_VERSION, VIEW_FEATURES, parsePluginMessage, refusal,
   type CommandKeys, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type SurfaceRect, type LineRect,
-  type ViewDevice, type ViewEventKind, type ViewFeature, type ViewPermission, type ViewRect, type ViewTheme,
+  type ViewDevice, type ViewEventKind, type ViewFeature, type ViewPermission, type ViewRect, type ViewTheme, type ViewWidgetBand,
 } from "./protocol.js";
 
 type Request = Extract<PluginMessage, { type: "request" }>;
@@ -45,6 +46,9 @@ export interface FakeHostOptions {
   keys?: CommandKeys[];
   viewport?: { w: number; h: number };
   visible?: boolean;
+  /** The app's widget cards over the view (1.18), sent right after `hello` by a host with
+   *  `widgetBand`, as the app sends it. Default: none, `{ edge: "right", width: 0 }`. */
+  widgetBand?: ViewWidgetBand;
   /** The result for each request, by name; one not given is answered `UNSUPPORTED`. A throw is
    *  answered as an error, with the thrown `code` if it has one. A `prompt` to a tile the last
    *  `structure` said is asleep is answered `ASLEEP`, as the app answers it, whatever is given. */
@@ -144,6 +148,7 @@ export function fakeHost(opts: FakeHostOptions = {}): FakeHost {
         layout: opts.layout ?? null, viewport: opts.viewport ?? { w: 1280, h: 800 }, visible: opts.visible ?? true, features, device: opts.device ?? DESKTOP,
         ...(opts.settings ? { settings: opts.settings } : {}), ...(opts.keys ? { keys: opts.keys } : {}),
       });
+      if (features.includes("widgetBand")) post({ type: "widgetBand", ...(opts.widgetBand ?? { edge: "right", width: 0 }) });
       return;
     }
     if (m.type === "ready") { refused.push("duplicate ready"); return; }

@@ -23,7 +23,7 @@ import {
   ACTIVITY_MIN_INTERVAL_MS, EVENT_REPLAY_MAX, PROTOCOL_VERSION, customNameMatches, parsePluginMessage, refusal,
   type ActivityLevel, type CommandName, type HostMessage, type HostScope, type PluginMessage, type RequestErrorCode, type ShareOutcome, type SurfaceRect, type LineRect, type ViewEvent,
   type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewWidget,
-  type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary,
+  type ViewAgent, type ViewAgentStatus, type HostMenu, type ViewSession, type ViewStatus, type IssueCall, type ViewIssueSummary, type ViewWidgetBand,
 } from "@hivemind/view-sdk/protocol";
 import type { TileKind } from "@hivemind/workspace-doc/shapes";
 import type { TileStatusKind } from "@hivemind/agent-host/tile-status";
@@ -93,6 +93,11 @@ export interface LinkServices {
   /** 1.9: the issues of the workspace the view shows, now and on each change; and one of its
    *  issue methods, called for the view (the link has checked what writes). */
   issues?: { subscribe(cb: (issues: ViewIssueSummary[]) => void): () => void; call(call: IssueCall, args: unknown[]): Promise<unknown> };
+  /** 1.18: the band of widget cards floating over the view along its widget edge, in the view's
+   *  pixels; the current one now, then each change. A host that floats none over it (a phone's)
+   *  has none. A guest's window floats the cards over the host's view and says it itself, so the
+   *  session the host runs for it has none either. */
+  widgetBand?: { subscribe(cb: (band: ViewWidgetBand) => void): () => void };
 }
 
 export const SHARE_DECLINES_MAX = 3;
@@ -117,6 +122,7 @@ export function linkFeatures(s: LinkServices, placesSurfaces = false): ViewFeatu
   if (s.participants) f.push("participants");
   if (s.widgets) f.push("widgets");
   if (s.issues) f.push("issues");
+  if (s.widgetBand) f.push("widgetBand");
   f.push("invoke");
   if (placesSurfaces) f.push("surfaces");
   return f;
@@ -201,6 +207,8 @@ export class CommunityLink {
   private participantsUnsub: (() => void) | null = null;
   private widgetsUnsub: (() => void) | null = null;
   private issuesUnsub: (() => void) | null = null;
+  private bandUnsub: (() => void) | null = null;
+  private lastBand = "";
   private people: ViewParticipant[] | null = null;
   private lastParticipants = "";
   /** What this host cannot do that the view asked for, said once each. */
@@ -253,12 +261,25 @@ export class CommunityLink {
   send(msg: HostMessage): void {
     if (this.stats.disabled || !this.port) return;
     try { this.port.postMessage(msg); } catch { /* port gone */ }
+    if (msg.type === "hello") this.followBand();
     if (msg.type !== "structure") return;
     this.asleep = new Set(msg.tiles.flatMap((t) => (t.asleep ? [t.id] : [])));
     for (const t of msg.tiles) { this.announced.delete(t.id); this.announced.add(t.id); }
     for (const id of this.announced) { if (this.announced.size <= ANNOUNCED_KEPT) break; this.announced.delete(id); }
     // What others select is kept to the tiles the view knows, which just changed.
     this.sendParticipants();
+  }
+
+  /** 1.18: the band of widget cards beside the view, told once it has its hello and again when it
+   *  changes, unasked: a view lays itself out around it from its first frame. */
+  private followBand(): void {
+    if (this.bandUnsub || !this.services.widgetBand) return;
+    this.bandUnsub = this.services.widgetBand.subscribe(({ edge, width }) => {
+      const key = `${edge}:${width}`;
+      if (key === this.lastBand) return;
+      this.lastBand = key;
+      this.send({ type: "widgetBand", edge, width });
+    });
   }
 
   /** Ask the plugin where a tile is (its rect in the plugin viewport, or null). */
@@ -294,6 +315,7 @@ export class CommunityLink {
     this.participantsUnsub?.(); this.participantsUnsub = null;
     this.widgetsUnsub?.(); this.widgetsUnsub = null;
     this.issuesUnsub?.(); this.issuesUnsub = null;
+    this.bandUnsub?.(); this.bandUnsub = null;
     for (const u of this.statusUnsubs.values()) u();
     this.statusUnsubs.clear();
     this.stats.statusSubscriptions = 0;

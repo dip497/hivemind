@@ -111,13 +111,18 @@ beforeAll(async () => {
     answer("plugin.commands", () => ({ plugins: [{ plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", commands: [{ name: "add", description: "Add a step.", args: '{ "text": string }' }] }] })),
     // As the host answers (control/methods.ts pluginOpen): a tool's tile, else the window's answer.
     answer("plugin.open", (plugin) => (plugin === "tool:a/broken" ? { tile: "t-8", instance: "t-8", state: "failed", reason: "Unexpected token", commands: [] }
-      : String(plugin).startsWith("tool:") ? { tile: "t-9" } : { widget: "w-5" })),
+      : String(plugin).startsWith("tool:") ? { tile: "t-9" } : plugin === "w-7" ? { widget: "w-7" } : { widget: "w-5" })),
     answer("plugin.list", () => ({
       plugins: [
         { plugin: "@a/progress", kind: "widget", instance: "w1", label: "Progress", state: "ready", since: 1, commands: [{ name: "add", description: "Add a step." }] },
         { plugin: "@a/valley", kind: "view", instance: "@a/valley", label: "Valley", state: "failed", reason: "it did not start in 15 s", since: 2, commands: [] },
       ],
       views: [{ id: "canvas", label: "Canvas", active: true }, { id: "@a/valley", label: "Valley", active: false }],
+      widgets: [
+        { instance: "w1", widget: "@a/progress", placement: "screen", running: true },
+        { instance: "w-7", widget: "@a/harbour", placement: "screen", view: "@a/valley", running: false },
+        { instance: "n-1", widget: "note", placement: "board", running: false },
+      ],
     })),
     answer("plugin.close", (instance, plugin) => { if (instance === "ghost") throw new ApiError("NOT_FOUND", "no plugin runs as ghost"); return { closed: instance, plugin: plugin ?? "@a/progress", kind: "widget" }; }),
     answer("plugin.call", (_p, command, args, tile) => { if (command === "check") throw new ApiError("FAILED", "there is no step 7"); return { result: { echoed: args, tile: tile ?? null } }; }),
@@ -470,6 +475,8 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
   test("plugin: commands lists what runs; open says what it opened; call sends the JSON argument and prints the answer, or the plugin's error", async () => {
     expect((await hive(["ctl", "plugin", "open", "tool:a/b"], { env: env() })).stdout.trim()).toBe("opened tile t-9");
     expect((await hive(["ctl", "plugin", "open", "widget:@a/progress"], { env: env() })).stdout.trim()).toBe("added widget w-5");
+    // A widget already in the workspace, by its id: shown over every view.
+    expect((await hive(["ctl", "plugin", "open", "w-7"], { env: env() })).stdout.trim()).toBe("widget w-7 shows over every view");
     const broken = await hive(["ctl", "plugin", "open", "tool:a/broken"], { env: env() });
     expect([broken.code, broken.stdout.trim()]).toEqual([1, "opened tile t-8, and it failed: Unexpected token"]);
     expect((await hive(["ctl", "plugin", "open", "tool:a/broken", "--json"], { env: env() })).code).toBe(1);
@@ -486,12 +493,15 @@ describe.skipIf(!unix)("hive ctl on a real drive socket", () => {
     expect([bad.code === 0, bad.stderr.includes("must be JSON"), calls.length]).toEqual([false, true, before]);
   });
 
-  test("plugin: list says each one's state and why one failed, and the views there are; close names the copy, and one not running exits 5", async () => {
+  test("plugin: list says each one's state and why one failed, the views there are, and where each widget shows; close names the copy, and one not running exits 5", async () => {
     const list = await hive(["ctl", "plugin", "list"], { env: env() });
     expect(list.stdout.trim().split("\n")).toEqual([
       "w1  widget @a/progress (Progress)  ready  commands: add",
       "@a/valley  view @a/valley (Valley)  failed: it did not start in 15 s",
       "views: canvas (shown), @a/valley",
+      "widget w1  @a/progress  over every view",
+      "widget w-7  @a/harbour  over @a/valley alone  (not running)",
+      "widget n-1  note  on the board  (not running)",
     ]);
     const closed = await hive(["ctl", "plugin", "close", "w1", "--plugin", "@a/progress", "--json"], { env: env() });
     expect([closed.code, closed.json, last("plugin.close").params]).toEqual([0, { closed: "w1", plugin: "@a/progress", kind: "widget" }, ["w1", "@a/progress"]]);

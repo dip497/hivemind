@@ -8,6 +8,7 @@ import type { WorkspaceViewProps } from "../../workspace-view";
 import { SurfaceSlots } from "./surface-slots";
 import { Loading } from "../../../components/ui/loading";
 import { readTheme } from "../../plugin-theme";
+import { bandOverView } from "../../view-services";
 
 export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps & { pkg: ViewPackageInfo }) {
   const root = useRef<HTMLDivElement>(null);
@@ -33,7 +34,24 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
   useEffect(() => {
     if (!repo) return;
     let live = true;
-    const offSaid = window.hive.onViewSaid((id, message) => { if (id === session.current) deliver(message); });
+    // This window floats the workspace's widget cards over the view, as over one installed here, and
+    // the session on the host knows nothing of them: the view's hello says the band, and this window
+    // tells it, after each hello and on each change.
+    let band: { edge: "left" | "right"; width: number } | null = null;
+    let told: string | null = null;
+    const tellBand = () => {
+      if (told === null || !band || `${band.edge}:${band.width}` === told) return;
+      told = `${band.edge}:${band.width}`;
+      deliver({ type: "widgetBand", ...band });
+    };
+    const offBand = bandOverView(() => root.current).subscribe((next) => { band = next; tellBand(); });
+    const offSaid = window.hive.onViewSaid((id, message) => {
+      if (id !== session.current) return;
+      if (message.type !== "hello") { deliver(message); return; }
+      deliver({ ...message, features: [...(message.features ?? []).filter((f) => f !== "widgetBand"), "widgetBand"] });
+      told = "";
+      tellBand();
+    });
     const offRects = window.hive.onViewRects((id, next) => { if (id === session.current) setRects(next); });
     const offEnded = window.hive.onViewEnded((id, why) => { if (id === session.current) setError(why); });
     void window.hive.viewOpen(pkg.id, repo, screen()).then(({ session: id }) => {
@@ -48,7 +66,7 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "data-preset", "style"] });
     return () => {
       live = false;
-      offSaid(); offRects(); offEnded(); observer.disconnect(); theme.disconnect();
+      offSaid(); offRects(); offEnded(); offBand(); observer.disconnect(); theme.disconnect();
       if (session.current) void window.hive.viewClose(session.current, repo);
       session.current = null;
       port.current?.close(); port.current = null;
@@ -68,11 +86,11 @@ export function RemoteCommunityView({ pkg, model, commands }: WorkspaceViewProps
     for (const message of pending.current.splice(0)) channel.port1.postMessage(message);
     win.postMessage({ type: PORT_HANDSHAKE }, "*", [channel.port2]);
   };
-  const nameOf = new Map(model.layerTiles.map((tile) => [tile.id, tile.name]));
+  const tileOf = new Map(model.layerTiles.map((tile) => [tile.id, tile]));
   return <div ref={root} className="relative flex-1 min-h-0 overflow-hidden" data-community-view={pkg.id} data-community-ready={ready ? "1" : "0"}>
     {!error && <iframe ref={iframe} name={`hm-view:${pkg.id}`} title={pkg.manifest?.name ?? pkg.id} src={pkg.url ? window.hive.resourceUrl(pkg.url) : undefined}
       sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" onLoad={onLoad} className="absolute inset-0 h-full w-full border-0 bg-transparent" />}
-    <SurfaceSlots rects={rects} width={root.current?.clientWidth ?? 0} names={nameOf} commands={commands}
+    <SurfaceSlots rects={rects} width={root.current?.clientWidth ?? 0} tiles={tileOf} commands={commands} frame={iframe}
       onUndock={(tileId) => { setRects((old) => old.filter((item) => item.tileId !== tileId)); deliver({ type: "undock", tileId }); }} />
     {error && <div role="alert" className="absolute inset-0 grid place-items-center text-[var(--color-fg2)]">{error}</div>}
     {!ready && !error && <Loading className="pointer-events-none absolute inset-0" label={`Loading ${pkg.manifest?.name ?? pkg.id}`} />}

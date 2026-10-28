@@ -15,17 +15,19 @@ import { watchPeopleHere } from "../multiplayer/presence";
 import { colorOf } from "../multiplayer/people";
 import { ViewEventHub } from "./view-events";
 import { clickWidget, pressWidget, watchViewWidgets } from "../board-objects/widget-runtime";
+import { bandOver, followWidgetBand, widgetBand } from "../board-objects/widget-band";
 import type { HcpStatusEvent } from "../../../shared/ipc";
 import { issueService } from "./issue-service";
 
 const TURN_ENDS = new Set(["done", "failed", "interrupted", "limited"]);
 
 /** What a session's status change means for views: a turn its hooks ended, a new subagent count. */
-export function feedHostedStatus(hub: Pick<ViewEventHub, "onHookTurn" | "onSubagents">, last: Map<string, { state: string; subagents: number }>, e: HcpStatusEvent): void {
+export function feedHostedStatus(hub: Pick<ViewEventHub, "onHookStatus" | "onHookTurn" | "onSubagents">, last: Map<string, { state: string; subagents: number }>, e: HcpStatusEvent): void {
   const prev = last.get(e.tileId);
   const { state, subagents, source } = e.status;
   last.set(e.tileId, { state, subagents: subagents.length });
-  if (source === "hooks" && TURN_ENDS.has(state) && prev && !TURN_ENDS.has(prev.state)) hub.onHookTurn(e.tileId, state as TurnOutcome);
+  if (source === "hooks") hub.onHookStatus(e.tileId);
+  if (source === "hooks" && TURN_ENDS.has(state) && prev && !TURN_ENDS.has(prev.state)) hub.onHookTurn(e.tileId, state as TurnOutcome, e.status.since);
   if ((prev?.subagents ?? 0) !== subagents.length) hub.onSubagents(e.tileId, subagents.length);
 }
 
@@ -119,6 +121,24 @@ const viewParticipant = (p: Participant): ViewParticipant => ({
 
 const coded = (code: "UNSUPPORTED" | "BAD_REQUEST", message: string) => Object.assign(new Error(message), { code });
 
+/** The widget cards' band (1.18) as the view in `box` has it: now, then whenever the cards are laid
+ *  out again or the view's box changes size; nothing once the view stops following it. */
+export function bandOverView(box: () => HTMLElement | null): NonNullable<LinkServices["widgetBand"]> {
+  return {
+    subscribe: (cb) => {
+      const tell = () => {
+        const el = box();
+        if (el) cb(bandOver(widgetBand(), el.getBoundingClientRect(), window.innerWidth));
+      };
+      const stop = followWidgetBand(tell);
+      const resized = new ResizeObserver(tell);
+      const el = box();
+      if (el) resized.observe(el);
+      return () => { stop(); resized.disconnect(); };
+    },
+  };
+}
+
 /** What a community view's host link may read. `share` and `confirmPrompt` show the host's confirm. */
 export function viewLinkServices(opts: {
   layoutKey: () => string | null;
@@ -133,8 +153,11 @@ export function viewLinkServices(opts: {
   issueRoot: () => string | null;
   /** The local folder issues would be set up in, or null (none, or on another machine). */
   issueFolder: () => string | null;
+  /** The box a view draws in, which the window's widget cards float over; a tool's tile has none. */
+  box?: () => HTMLElement | null;
 }): LinkServices {
   return {
+    ...(opts.box ? { widgetBand: bandOverView(opts.box) } : {}),
     issues: issueService(opts.issueRoot, opts.issueFolder),
     agentStatus: (tileId, cb) => subscribeHostedStatus(tileId, (s) => cb(viewAgentStatus(s))),
     widgets: {
@@ -165,6 +188,9 @@ export function viewLinkServices(opts: {
     history: async (day) => {
       const key = opts.layoutKey();
       if (!key) throw new Error("this workspace keeps no history");
+      // The lines the hub still holds (it sends them every few seconds) go first, on the same channel,
+      // so a turn that ended a moment ago is in the day a view reads now.
+      viewEvents.flushLedger();
       return window.hive.viewHistory(key, day);
     },
     share: opts.share,

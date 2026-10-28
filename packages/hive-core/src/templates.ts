@@ -348,7 +348,9 @@ hive plugins search git pr --json                          # what HiveHub has, b
 hive ctl open-tool @hivemind/web/browser --url https://example.com --json   # a tool's tile beside you (the hive-browser skill drives it)
 hive ctl plugin open widget:@dip497/progress --json        # get one running: tool:…, widget:… or view:…, as plugins list keys it
                                                            # → answers once it can be called: {"widget","instance","state":"ready","commands":[…]}
-hive ctl plugin list --json                                # what runs: each {plugin,instance,state,reason?,commands}, and the views there are
+hive ctl plugin list --json                                # what runs: each {plugin,instance,state,reason?,commands}, the views there are,
+                                                           # and every widget {instance,widget,placement,view?,running}: view = shown over it alone
+hive ctl plugin open <widget instance> --json              # that widget shown over every view, as its card's pin does
 hive ctl plugin call <pluginId> <command> '{"key":"value"}' --json   # --tile <instance> when it runs twice
 hive ctl plugin close <instance> --json                    # close its tile, take the widget off the board, leave the view
 hive ctl view emit ci.build '{"status":"green"}' --json    # a named event to the active view

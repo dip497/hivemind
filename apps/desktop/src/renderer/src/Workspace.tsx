@@ -61,7 +61,7 @@ import {
 } from "./canvas-persistence";
 import { useStateWithRef } from "./use-state-with-ref";
 import { useBoard } from "./board-objects/useBoard";
-import type { BoardChoice, Point } from "./board-objects/board-model";
+import { onEveryView, type BoardChoice, type Point } from "./board-objects/board-model";
 import { useEnabledWidgetPackages, useShownWorkspace, useWidgetRuntime } from "./board-objects/widget-runtime";
 import { useViewBringsWidgets } from "./board-objects/view-widgets";
 import { BoardContext } from "./board-objects/board-context";
@@ -459,8 +459,10 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
     hasWidget: (id) => widgetPackages.some((w) => w.id === id),
     widgetRuns: (id) => !!widgetPackages.find((w) => w.id === id)?.code,
     closeTile: (id) => closeTile(id),
-    widgetsOnBoard: () => board.objects.flatMap((o) => (o.kind === "widget" ? [{ id: o.id, widget: o.widget }] : [])),
+    widgetsOnBoard: () => board.objects.flatMap((o) => (o.kind === "widget"
+      ? [{ id: o.id, widget: o.widget, placement: o.placement ?? "screen", ...(o.view !== undefined ? { view: o.view } : {}) }] : [])),
     removeWidget: (id) => board.remove(id),
+    showOnEveryView: (id) => board.update(id, onEveryView),
   };
 
   // Reload when the repo changes — each repo has its own workspace + view
@@ -1343,7 +1345,7 @@ export function Workspace({ cwd, repoPath, root = null, updateAvailable = false,
       />
       {repoPath && <SayHere repo={repoPath} selection={presenceSelection} />}
       <Suspense fallback={null}>
-        <BoardContext.Provider value={board}><WidgetLayer repo={persistKey} board={board} packages={widgetPackages} edge={chrome.widgets} /></BoardContext.Provider>
+        <BoardContext.Provider value={board}><WidgetLayer repo={persistKey} board={board} packages={widgetPackages} edge={chrome.widgets} view={activeViewId} /></BoardContext.Provider>
       </Suspense>
       {/* Reset transient toolbar expansion on view/placement changes without
           touching live tile bodies. Settings lives above this in App. */}

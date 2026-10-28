@@ -8,6 +8,7 @@
  *   hm.commands.selectTile(tileId);
  *   hm.setSurfaceRects([{ tileId, x, y, w, h }]);   // a live terminal appears here
  *   hm.onParticipants((people) => ring(people));      // 1.5: who else is here, and on what
+ *   hm.onWidgetBand(({ edge, width }) => keepClear(edge, width)); // 1.18: the app's widget cards
  *
  * The host hands the MessagePort over with a `PORT_HANDSHAKE` window message
  * right after the iframe loads; `connect()` resolves once `hello` arrives.
@@ -18,7 +19,7 @@ import { isTokenId, tokenVar } from "./tokens.js";
 import {
   CLIENT_VALUES_UNTIL_KNOWN, COMMAND_PERMISSION, areFontFaces, PORT_HANDSHAKE, PROTOCOL_VERSION, STATUS_TONES, customNameMatches, parseHostMessage, promptProblem,
   type ActivityLevel, type ViewFontFace, type PromptOutcome, type ViewAgent, type ViewAgentStatus, type ViewSession, type CommandName, type HostMessage, type PluginMessage, type RequestErrorCode, type ShareOutcome, type StatusTone, type SurfaceRect, type LineRect, type CommandKeys,
-  type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget,
+  type ViewCommands, type ViewDevice, type ViewEvent, type ViewEventKind, type ViewFeature, type ViewHistoryDay, type ViewParticipant, type ViewPermission, type ViewPresence, type ViewRect, type ViewStatus, type ViewTheme, type ViewWidget, type ViewWidgetBand,
   ISSUE_CALLS, type IssueCall, type ViewIssue, type ViewIssueAssignee, type ViewIssueState, type ViewIssueSummary,
 } from "./protocol.js";
 
@@ -81,6 +82,14 @@ export interface ViewClient {
   onParticipants(cb: (participants: ViewParticipant[]) => void): () => void;
   /** 1.8: every widget in the workspace, now and whenever one changes. A host before 1.8 sends none. */
   onWidgets(cb: (widgets: ViewWidget[]) => void): () => void;
+  /** 1.18 (feature `widgetBand`): how much of the view the app's widget cards take, from its widget
+   *  edge (`"widgets"` in its manifest, else the right): `width` CSS px from that edge to the far side
+   *  of the cards, the gap included, 0 when there are none. `cb` hears the band now (once the host
+   *  has said it, which it does right after `hello`) and again on every change: cards added or
+   *  removed, stacked into another column, the window resized. Never called on a host without the
+   *  feature: keep your own guess there. The app serves a view its own client, so an app before
+   *  1.18 has no such method: check `supports("widgetBand")` first. */
+  onWidgetBand(cb: (band: ViewWidgetBand) => void): () => void;
   /** 1.8, `workspace:widgets`: press one of a widget's buttons, as a person pressing it where it is drawn. */
   pressWidget(id: string, action: unknown): void;
   /** 1.8: click a widget's card, not on a button. */
@@ -219,6 +228,8 @@ class Client implements ViewClient {
   private commandHandlers = new Map<string, (args: unknown) => unknown>();
   readonly issues: ViewIssues = Object.fromEntries(ISSUE_CALLS.map((call) => [call, (...args: unknown[]) => this.issueCall(call, args)])) as unknown as ViewIssues;
   private widgetCbs = new Set<(widgets: ViewWidget[]) => void>();
+  private band: ViewWidgetBand | null = null;
+  private bandCbs = new Set<(band: ViewWidgetBand) => void>();
   private requests = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer?: ReturnType<typeof setTimeout> }>();
   private nextRequest = 1;
   private revealHandler: ((tileId: string) => ViewRect | null | Promise<ViewRect | null>) | null = null;
@@ -290,6 +301,10 @@ class Client implements ViewClient {
       case "widgets":
         this.widgets = m.widgets;
         for (const cb of this.widgetCbs) cb(m.widgets);
+        break;
+      case "widgetBand":
+        this.band = { edge: m.edge, width: m.width };
+        for (const cb of this.bandCbs) cb(this.band);
         break;
       case "issues":
         this.issueList = m.issues;
@@ -475,6 +490,13 @@ class Client implements ViewClient {
     return () => {
       if (this.widgetCbs.delete(cb) && this.widgetCbs.size === 0) { this.widgets = null; this.send({ type: "unsubscribeWidgets" }); }
     };
+  }
+
+  // Nothing to ask for: a host with the feature says the band unasked, and one without never does.
+  onWidgetBand(cb: (band: ViewWidgetBand) => void): () => void {
+    this.bandCbs.add(cb);
+    if (this.band) cb(this.band);
+    return () => { this.bandCbs.delete(cb); };
   }
 
   /** The declared commands' keys, run here while focus is in this frame; the host runs them elsewhere. */

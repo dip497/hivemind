@@ -1,9 +1,12 @@
 /**
  * slot-chrome — the thin bar the HOST draws on a tile surface it placed for a
  * view that is not an arrangement (the World's dock pane, a community view's
- * hole-punched rect): the tile's name, a live status mark, "pop out" (select
- * the tile on the canvas, 1:1, and switch there) and "undock". The bar is the
- * host's, so it looks and behaves the same whichever view asked for the slot.
+ * hole-punched rect): the tile's name, a live status mark, Sleep for an agent
+ * that is awake, "pop out" (select the tile on the canvas, 1:1, and switch
+ * there) and "undock". The bar is the host's, so it looks and behaves the same
+ * whichever view asked for the slot. It is the only bar there: the tile's own
+ * title bar, with the × that ends it, is hidden in a slot (styles.css), so
+ * what a person needs from that bar while the tile is docked is on this one.
  *
  * Keyboard: **Shift+Esc undocks even while the terminal has the keyboard**
  * (plain Esc belongs to a focused TUI — claude interrupts on it). One capture
@@ -11,7 +14,7 @@
  */
 import { actionKey, onShortcut } from "../shortcut";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, X } from "../components/icons";
+import { ArrowUpRight, Moon, X } from "../components/icons";
 import { Button } from "../components/ui/button";
 import { setViewMode } from "./view-mode-store";
 import type { WorkspaceCommands } from "./workspace-view";
@@ -19,11 +22,13 @@ import { exitFailed, LOOKS, StatusGlyph, statusLook, type StatusLook } from "./s
 
 export const SLOT_BAR_HEIGHT = 28;
 
-export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas" }: {
+export function SlotBar({ tileId, name, commands, onUndock, onSleep, popOutView = "canvas" }: {
   tileId: string;
   name: string;
   commands: Pick<WorkspaceCommands, "subscribeTileStatus" | "focusTile" | "selectTile" | "tileStatus">;
   onUndock: () => void;
+  /** Put its agent to sleep; absent for a tile that cannot sleep (a shell) or already does. */
+  onSleep?: () => void;
   /** The arranging view to pop the tile out into. */
   popOutView?: string;
 }) {
@@ -47,6 +52,11 @@ export function SlotBar({ tileId, name, commands, onUndock, popOutView = "canvas
     >
       <span className="grid shrink-0" title={LOOKS[look].word} data-slot-status={look}><StatusGlyph look={look} className="size-2" /></span>
       <span className="min-w-0 flex-1 truncate">{name}</span>
+      {onSleep && (
+        <Button variant="ghost" size="icon-xs" onClick={onSleep} aria-label="Put agent to sleep" title="Sleep: end its process, keep its screen and conversation">
+          <Moon />
+        </Button>
+      )}
       <kbd className="font-mono text-chip text-[var(--color-fg3)]">{actionKey("undock")}</kbd>
       <Button variant="ghost" size="icon-xs" onClick={popOut} aria-label="Pop out to canvas" title="Pop out: show this tile on the canvas">
         <ArrowUpRight />

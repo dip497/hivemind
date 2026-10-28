@@ -29,10 +29,19 @@ export const BOX_SIZE: Record<BoxKind, { minW: number; minH: number }> = {
   widget: { minW: 80, minH: 36 },
 };
 
-/** The widgets floating over every view (not placed on the board), oldest first. */
-export function widgetsOf(board: BoardObject[]): WidgetObject[] {
-  return board.filter((o): o is WidgetObject => o.kind === "widget" && o.placement !== "board")
+/** The widgets floating over the view `view` (not placed on the board), oldest first: those over
+ *  every view, and those `view` brought. One another view brought waits for that view. */
+export function widgetsOf(board: BoardObject[], view: string | null): WidgetObject[] {
+  return board.filter((o): o is WidgetObject => o.kind === "widget" && o.placement !== "board" && (o.view === undefined || o.view === view))
     .sort((a, b) => (a.z ?? 0) - (b.z ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/** `o` shown over every view: a widget a view brought no longer waits for that view (its card's
+ *  pin, `hive ctl plugin open <its id>`). Anything else, as it is. */
+export function onEveryView(o: BoardObject): BoardObject {
+  if (o.kind !== "widget" || o.view === undefined) return o;
+  const { view: _brought, ...everywhere } = o;
+  return everywhere;
 }
 
 /** What a view brings of its package's switched-on widgets (`members`, in the package's order) to a

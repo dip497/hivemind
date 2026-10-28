@@ -1,9 +1,12 @@
 // `hive ctl plugin close` closes what `plugin open` opened, named the way open names it
 // (`widget:@owner/name`, `tool:@owner/name`) or by the instance `plugin list` shows; and it takes
-// off the board any widget an agent can add, a built-in one drawn without code too.
+// off the board any widget an agent can add, a built-in one drawn without code too. `plugin list`
+// names every widget and the view one a view brought shows over alone, and `plugin open` with that
+// id shows it over every view, as the card's pin does.
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import type { Running } from "@hivemind/view-host/instances";
+import type { PluginList } from "@hivemind/workspace-api/plugins";
 import { pluginVerb, type PluginVerbHost } from "../../src/renderer/src/workspace/plugin-verbs";
 import { pluginInstances } from "../../src/renderer/src/workspace/plugin-instances";
 import { FALLBACK_VIEW_ID } from "../../src/renderer/src/workspace/workspace-view";
@@ -13,7 +16,7 @@ afterEach(() => { for (const r of started.splice(0)) r.stop(); });
 
 /** A window: its board's widgets and its tiles. A widget or tile with code runs while it is there. */
 function openWindow() {
-  const board = new Map<string, { widget: string; running?: Running }>();
+  const board = new Map<string, { widget: string; view?: string; running?: Running }>();
   const tiles = new Map<string, Running>();
   const run = (plugin: string, kind: "widget" | "tool", instance: string): Running => {
     const r = pluginInstances.start({ plugin, kind, instance, label: plugin, commands: [], call: async () => null });
@@ -24,12 +27,13 @@ function openWindow() {
   const host: PluginVerbHost = {
     activeView: () => FALLBACK_VIEW_ID, showView: () => {}, addWidget: () => undefined, hasWidget: () => false, widgetRuns: () => false,
     closeTile: (id) => { tiles.get(id)?.stop(); tiles.delete(id); },
-    widgetsOnBoard: () => [...board].map(([id, w]) => ({ id, widget: w.widget })),
+    widgetsOnBoard: () => [...board].map(([id, w]) => ({ id, widget: w.widget, placement: "screen" as const, ...(w.view ? { view: w.view } : {}) })),
     removeWidget: (id) => { board.get(id)?.running?.stop(); board.delete(id); },
+    showOnEveryView: (id) => { const w = board.get(id); if (w) delete w.view; },
   };
   return {
     host, board, tiles,
-    widget: (id: string, widget: string, code: boolean) => board.set(id, { widget, ...(code ? { running: run(widget, "widget", id) } : {}) }),
+    widget: (id: string, widget: string, code: boolean, view?: string) => board.set(id, { widget, ...(view ? { view } : {}), ...(code ? { running: run(widget, "widget", id) } : {}) }),
     tool: (tile: string, plugin: string) => tiles.set(tile, run(plugin, "tool", tile)),
   };
 }
@@ -77,4 +81,33 @@ test("plugin open by the id alone: the widget that has it is added; where none d
   assert.deepEqual(await pluginVerb("plugin.open", { kind: "any", id: "@me/progress" }, host), { widget: "widget-9" });
   assert.deepEqual(added, ["@me/progress"]);
   await assert.rejects(pluginVerb("plugin.open", { kind: "any", id: "@me/nothing" }, host), { code: "NOT_FOUND" });
+});
+
+test("plugin list names every widget and the view a brought one shows over; plugin open by its id shows it over every view, adding none", async () => {
+  const w = openWindow();
+  // Harbour came with Archipelago and is not drawn on the canvas, so its code is not running.
+  w.widget("widget-h", "@me/harbour", false, "@me/archipelago");
+  w.widget("widget-n", "note", false);
+  w.widget("widget-p", "@me/progress", true);
+  const added: string[] = [];
+  const host: PluginVerbHost = { ...w.host, hasWidget: () => true, addWidget: (id) => { added.push(id); return "widget-new"; } };
+  const list = await pluginVerb("plugin.list", {}, host) as PluginList;
+  assert.deepEqual(list.widgets, [
+    { instance: "widget-h", widget: "@me/harbour", placement: "screen", view: "@me/archipelago", running: false },
+    { instance: "widget-n", widget: "note", placement: "screen", running: false },
+    { instance: "widget-p", widget: "@me/progress", placement: "screen", running: true },
+  ]);
+  assert.deepEqual(await pluginVerb("plugin.open", { kind: "any", id: "widget-h" }, host), { widget: "widget-h" });
+  assert.equal(w.board.get("widget-h")?.view, undefined);
+  assert.deepEqual(added, []);
+  // By its package, as before: another copy.
+  assert.deepEqual(await pluginVerb("plugin.open", { kind: "widget", id: "@me/harbour" }, host), { widget: "widget-new" });
+  assert.deepEqual(added, ["@me/harbour"]);
+});
+
+test("a widget open twice is refused with each copy's id and the view a brought one shows over", async () => {
+  const w = openWindow();
+  w.widget("widget-a", "@me/harbour", false, "@me/archipelago");
+  w.widget("widget-b", "@me/harbour", false);
+  await assert.rejects(close(w.host, "widget:@me/harbour"), (e: Error & { code?: string }) => e.code === "BAD_REQUEST" && e.message.endsWith("widget-a (over @me/archipelago), widget-b"));
 });

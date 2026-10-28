@@ -169,6 +169,9 @@ It runs in a worker: no network, no files. What it draws and its state are each 
 A `text` or a button's `label` longer than the card is cut short with "…"; a button shows the whole
 label when the pointer rests on it. `wrap: true` wraps a `text` onto more lines instead.
 
+In a `row`, a `stack` or a `meter` fills the width left over, so the bars of rows drawn one under
+another end together. A `meter`'s `label` is also its name for a screen reader.
+
 Images (`.png`, `.gif`, `.webp`, `.jpg`, `.svg`, up to 1 MB) go in the widget's folder.
 `"chrome": "none"` drops the card, for a pet that walks the screen.
 

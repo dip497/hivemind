@@ -763,9 +763,9 @@ const pluginCall = defineCommand({
 });
 
 const pluginOpen = defineCommand({
-  meta: { name: "open", description: "Get a plugin running so its commands can be called: open a tool's tile, add a widget to the board, switch to a view" },
+  meta: { name: "open", description: "Get a plugin running so its commands can be called: open a tool's tile, add a widget to the board, switch to a view; a widget already there, by its id, is shown over every view" },
   args: {
-    plugin: { type: "positional", required: true, description: "tool:@owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it" },
+    plugin: { type: "positional", required: true, description: "tool:@owner/name[/tool], widget:@owner/name or view:id, as `hive plugins list` shows it; or a widget's id, as `hive ctl plugin list` shows it" },
     frame: { type: "string", description: "frame to open a tool's tile in (default: beside you)" },
     ...JSON_ARG,
   },
@@ -776,7 +776,8 @@ const pluginOpen = defineCommand({
       // Open but failed is a failure to branch on; what it opened is still printed, to look at or close.
       if (r.state === "failed") process.exitCode = EXIT.error;
       if (json) { console.log(JSON.stringify(r)); return; }
-      const what = r.tile ? `opened tile ${r.tile}` : r.widget ? `added widget ${r.widget}` : `switched to view ${r.view}`;
+      const placed = /^(?:widget:)?(.+)$/.exec(String(args.plugin))?.[1] === r.widget;
+      const what = r.tile ? `opened tile ${r.tile}` : r.widget ? (placed ? `widget ${r.widget} shows over every view` : `added widget ${r.widget}`) : `switched to view ${r.view}`;
       // A plugin with code says whether it can be called yet.
       console.log(r.state === "ready" ? `${what}: ready${r.commands?.length ? ` (${r.commands.map((c) => c.name).join(", ")})` : ""}`
         : r.state === "failed" ? `${what}, and it failed: ${r.reason ?? "it stopped"}`
@@ -786,7 +787,7 @@ const pluginOpen = defineCommand({
 });
 
 const pluginList = defineCommand({
-  meta: { name: "list", description: "Every plugin running (tool tiles, widgets with code, the view), each starting, ready or failed; and the views there are" },
+  meta: { name: "list", description: "Every plugin running (tool tiles, widgets with code, the view), each starting, ready or failed; the views there are; and every widget in the workspace, with the view it shows over alone" },
   args: { ...JSON_ARG },
   async run({ args }) {
     const json = !!args.json;
@@ -799,6 +800,10 @@ const pluginList = defineCommand({
         console.log(`${p.instance}  ${p.kind} ${p.plugin} (${p.label})  ${p.state}${p.reason ? `: ${p.reason}` : ""}${offers}`);
       }
       console.log(`views: ${r.views.map((v) => (v.active ? `${v.id} (shown)` : v.id)).join(", ")}`);
+      for (const w of r.widgets) {
+        const where = w.placement === "board" ? "on the board" : w.view ? `over ${w.view} alone` : "over every view";
+        console.log(`widget ${w.instance}  ${w.widget}  ${where}${w.running ? "" : "  (not running)"}`);
+      }
     } catch (e) { fail(e, json); }
   },
 });

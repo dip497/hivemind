@@ -172,11 +172,14 @@ To open plugins and run the commands they offer. Guide: [Plugins](/plugins).
 
 ```text
 hive ctl plugin list [--json]              # every plugin running, each starting, ready or failed,
-                                           # with its commands; and the views there are
+                                           # with its commands; the views there are; and every
+                                           # widget, with the view it shows over alone (`view`)
 hive ctl plugin open <record> [--frame f] [--json]
                                            # get it running: a tool's tile opened, a widget added
                                            # to the canvas, a view switched to; answers once it
                                            # can be called
+hive ctl plugin open <widget id> [--json]  # that widget, as plugin list names it, shown over
+                                           # every view
 hive ctl plugin commands [--json]          # what the ready plugins let you run, with what each takes
 hive ctl plugin call <plugin> <command> ['{"json":"argument"}' | -] [--tile id] [--json]
                                            # runs it and prints what the plugin answered

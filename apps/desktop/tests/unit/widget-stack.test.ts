@@ -2,7 +2,7 @@
 // is never covered by the cards placed under it.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stackDownEdge, type Size, type Spot } from "../../src/renderer/src/board-objects/widget-stack";
+import { bandWidth, stackDownEdge, type Size, type Spot } from "../../src/renderer/src/board-objects/widget-stack";
 
 const overlaps = (a: Spot & Size, b: Spot & Size) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -47,4 +47,17 @@ test("over a view that keeps the right for itself, cards stack down the left edg
   assert.deepEqual([spots.harbour, spots.ledger, spots.weather], [{ x: 16, y: 64 }, { x: 16, y: 376 }, { x: 16, y: 718 }]);
   // The log does not fit under the weather: a second column, beside the first and not off the left.
   assert.deepEqual(spots.log, { x: 268, y: 64 });
+});
+
+test("the band a view keeps clear reaches past the cards' far side by the gap, from whichever edge they stack down", () => {
+  const screen = { w: 1280, h: 720 };
+  const sizes = { harbour: { w: 240, h: 250 }, ledger: { w: 240, h: 300 }, log: { w: 240, h: 260 } };
+  // One column: the edge, a card and the gap after it, as Archipelago kept by hand (268).
+  const one = { harbour: sizes.harbour, ledger: sizes.ledger };
+  assert.equal(bandWidth(stackDownEdge(Object.keys(one), one, screen, "left"), one, screen.w, "left"), 268);
+  assert.equal(bandWidth(stackDownEdge(Object.keys(one), one, screen, "right"), one, screen.w, "right"), 268);
+  // The log runs on into a second column: the band covers both.
+  for (const edge of ["left", "right"] as const) assert.equal(bandWidth(stackDownEdge(Object.keys(sizes), sizes, screen, edge), sizes, screen.w, edge), 520);
+  // No card there: nothing to keep clear.
+  assert.equal(bandWidth({}, {}, screen.w, "right"), 0);
 });

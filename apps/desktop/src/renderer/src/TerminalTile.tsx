@@ -39,7 +39,7 @@ import { useThemeField, useSurfacePolicy, getTheme, effectiveGlass, type ThemeSt
 import { terminalThemeFor } from "@hivemind/core/settings-schema";
 import { FullscreenShell, useReparentFullscreen } from "./tile-fullscreen";
 import { HeaderPinButton, type PinRect } from "./canvas-nodes";
-import { SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
+import { inPark, SURFACE_ADOPTED, SURFACE_PARKED } from "./workspace/tile-host";
 import { exitFailed, LOOKS, paintGlyph, StatusGlyph, statusLook, statusWord } from "./workspace/status-look";
 import { useAgentsScanned } from "./agent-plugins";
 import { KeyboardChip, KeyboardPill, useTerminalKeyboard, type TerminalKeyboard } from "./multiplayer/keyboard";
@@ -212,6 +212,9 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   // Live `selected` for the WebGL slot manager's priority() (read outside render).
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  // The keyboard was asked for while no view showed the terminal, parked where nothing takes focus:
+  // it takes it when a view shows it (a view docking it for a widget's button or `hive ctl focus`).
+  const keysWhenShownRef = useRef(false);
   const openInBrowserRef = useRef(onOpenInBrowser);
   openInBrowserRef.current = onOpenInBrowser;
   /** An http(s) link opens where the workspace opens addresses; any other kind not at all. */
@@ -690,6 +693,10 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
     const surfaceEl = host.closest(".hm-tile-surface");
     const onAdopted = () => {
       parked = false;
+      if (keysWhenShownRef.current) {
+        keysWhenShownRef.current = false;
+        if (selectedRef.current) term.focus();
+      }
       reconcileInterest();
       // The park freezes the surface at its last slot size, so adopting into a
       // different-size slot fires the ResizeObserver below (one fit per tile),
@@ -1332,7 +1339,11 @@ export function TerminalTile({ tileId, cwd, cmd, args, session, label, name, giv
   }, []);
 
   useEffect(() => {
-    const onKeyboard = (e: Event) => { if ((e as CustomEvent<string>).detail === tileId && selectedRef.current) termRef.current?.focus(); };
+    const onKeyboard = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== tileId || !selectedRef.current) return;
+      if (inPark(hostRef.current)) keysWhenShownRef.current = true;
+      else termRef.current?.focus();
+    };
     window.addEventListener(TILE_KEYBOARD, onKeyboard);
     return () => window.removeEventListener(TILE_KEYBOARD, onKeyboard);
   }, [tileId]);

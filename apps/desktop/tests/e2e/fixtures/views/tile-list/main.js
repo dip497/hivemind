@@ -55,7 +55,9 @@ list.addEventListener("click", (e) => {
   const row = e.target.closest(".row");
   if (row) void pick(row.dataset.id);
 });
-list.addEventListener("keydown", (e) => {
+// Its keys work wherever the focus is in it, as a scene view's do: the frame given the keyboard
+// back has it on its body, not on the list.
+document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { release(); return; }
   if (e.key !== "j" && e.key !== "k" || !tiles.length) return;
   const at = tiles.findIndex((t) => t.id === cursor);

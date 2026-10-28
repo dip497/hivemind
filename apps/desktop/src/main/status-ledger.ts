@@ -160,7 +160,8 @@ export class StatusLedger {
           if (l.e === "i" || l.e === "o") { setInfo(x, l); if (l.e === "o") x.out.openedAt = t; }
           else if (l.e === "s") { close(x, t); if (x.unwatchedSince === undefined) x.cur = { s: l.s, start: t }; }
           else if (l.e === "c") { close(x, t); x.out.closedAt = t; x.out.name = l.n; }
-          else if (l.e === "t") x.out.turns.push(t);
+          // Every window on the workspace writes a turn, at the host's time for it: one turn there.
+          else if (l.e === "t") { if (x.out.turns.at(-1) !== t) x.out.turns.push(t); }
           else if (l.e === "u") {
             if (l.on) { close(x, t); x.unwatchedSince ??= t; }
             else if (x.unwatchedSince !== undefined) { result.gaps.push({ from: x.unwatchedSince, to: t, tileId: l.id }); x.unwatchedSince = undefined; }

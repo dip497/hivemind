@@ -35,10 +35,26 @@ export interface PluginInstance {
   commands: PluginCommandInfo[];
 }
 
-/** What `plugin.list` answers: every plugin running in the window, and the views it can show. */
+/** What `plugin.list` answers: every plugin running in the window, the views it can show, and
+ *  every widget in the workspace, its code running here or not. */
 export interface PluginList {
   plugins: PluginInstance[];
   views: Array<{ id: string; label: string; active: boolean }>;
+  widgets: WidgetListed[];
+}
+
+/** A widget in the workspace, as `plugin.list` names it. */
+export interface WidgetListed {
+  /** Its id: `plugin open` shows it over every view, `plugin close` takes it away. */
+  instance: string;
+  /** Its package. */
+  widget: string;
+  /** On the canvas's board, or floating over the views. */
+  placement: "board" | "screen";
+  /** The view that brought it: it floats over that view alone. None: over every view. */
+  view?: string;
+  /** Its code runs in this window now (one drawn from its `draw` alone never does). */
+  running: boolean;
 }
 
 /** How long a plugin call may take in the window, from the moment it gets there: waiting for a
