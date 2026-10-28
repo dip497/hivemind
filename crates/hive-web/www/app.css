@@ -317,6 +317,9 @@ button { cursor: pointer; }
 .tool .part.problem { color: var(--err); }
 .tool .whole pre[data-input] { color: var(--text2); }
 .ended { text-align: center; color: var(--text3); font-size: 13px; }
+.chat .loading { display: flex; align-items: center; justify-content: center; gap: 8px; margin: auto 0; }
+/* Not running: nothing is coming to load. */
+.agent-screen > [data-gone]:not([hidden]) ~ .chat .loading { display: none; }
 .dock {
   flex: none; display: flex; flex-direction: column; gap: 8px;
   padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
@@ -543,3 +546,26 @@ button { cursor: pointer; }
 .photo { position: relative; width: 56px; height: 56px; }
 .photo img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
 .photo .remove { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--text); color: var(--on-text); line-height: 1; }
+.form .steps { display: flex; gap: 6px; overflow-x: auto; }
+.form .step {
+  flex: none; min-width: 44px; min-height: 32px; padding: 0 12px; border-radius: 16px;
+  border: 1px solid var(--line); background: none; color: var(--text2); font: 500 13px/18px var(--sans);
+}
+.form .step[aria-selected="true"] { background: var(--raised); color: var(--text); border-color: var(--text3); }
+.form .step[data-answered] { color: var(--text); }
+.form .step:disabled { opacity: 0.4; }
+.form .row .pill { min-height: 44px; }
+.form .row .pill:disabled { opacity: 0.4; }
+.form .checked { display: flex; flex-direction: column; gap: 8px; }
+.dock .slash-commands {
+  display: flex; flex-direction: column; max-height: 40vh; overflow-y: auto; margin: 0 12px 8px;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--card);
+}
+.dock .slash-command {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 10px 14px;
+  border: 0; border-bottom: 1px solid var(--line); background: none; color: var(--text); text-align: left;
+}
+.dock .slash-command:last-child { border-bottom: 0; }
+.dock .slash-command:active { background: var(--raised); }
+.dock .slash-command .label { font: 500 15px/20px var(--mono); }
+.dock .slash-command .description { font: 13px/18px var(--sans); color: var(--text2); }

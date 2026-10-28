@@ -91,6 +91,21 @@ test("a shell tile opened on the paired page draws the computer's screen on a la
   await expect.poll(async () => (await phoneLines(page)).join("\n"), { timeout: 10_000 }).toContain("\nphone-42");
   await expect.poll(() => desktopScreen(desktop, tile)).toContain("\nphone-42");
 
+  // A program that takes the mouse is clicked where it is tapped, as a desktop terminal clicks it;
+  // with the mouse let go, a tap brings the keyboard again.
+  await page.keyboard.type(`printf '\\e[?1000h\\e[?1006h'; IFS= read -rs -d m c; printf '\\e[?1000l'; echo "clicked:\${c//$'\\e'/E}"`);
+  await page.keyboard.press("Enter");
+  const termView = page.locator('[data-screen="terminal"] .term-view');
+  // Tapped again until the phone has heard the program take the mouse; a tap before that is a keyboard.
+  await expect.poll(async () => {
+    await page.locator("[data-term-input]").blur();
+    await termView.tap({ position: { x: 5, y: 5 } });
+    return (await phoneLines(page)).join("\n");
+  }, { timeout: 10_000 }).toMatch(/\nclicked:E\[<0;1;\d+ME\[<0;1;\d+\n/);
+  await page.locator("[data-term-input]").blur();
+  await termView.tap();
+  await expect(page.locator("[data-term-input]")).toBeFocused();
+
   // Each key's echo, from the key to the frame that shows it.
   const echoes: number[] = [];
   for (const key of "abcdefghij") {

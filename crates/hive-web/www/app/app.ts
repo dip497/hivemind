@@ -3,7 +3,7 @@
 
 import type { ViewSession } from "../pkg/hive_web.js";
 import type { TermSource } from "./terminal.js";
-import type { Agent, Folders, Held, Offered, Photo, Piece, Places, Reply, Screen, Sent, Start, Unfolded, ViewFile } from "./types.js";
+import type { Agent, Folders, Held, Offered, Photo, Piece, Places, Reply, Screen, Sent, SlashCommand, Start, Unfolded, ViewFile } from "./types.js";
 
 export interface App {
   /** Show the agent of `tile`; Back comes back here. `started`: it was just started from here. */
@@ -18,6 +18,8 @@ export interface App {
   conversation(agent: Agent, said: (p: Piece) => void, ended: (why: string) => void): () => void;
   /** The tool use `use` of `agent`, unfolded. */
   tool(agent: Agent, use: string): Promise<Unfolded>;
+  /** The slash commands `agent` takes, by name. */
+  commands(agent: Agent): Promise<SlashCommand[]>;
   /** Watch the terminal of `tile` in `workspace`: `changed` when its screen may have changed,
    *  `ended` why it is shown no more. Null before the phone has started. */
   terminal(workspace: string, tile: string, changed: () => void, ended: (why: string) => void): { source: TermSource; stop: () => void } | null;

@@ -425,6 +425,17 @@ export interface AgentProviderDef {
   /** Whether its screen, up to the cursor, shows its prompt with nothing typed there (see
    *  AgentManifest.emptyPrompt). */
   emptyPrompt?: (upToCursor: string) => boolean;
+  /** The slash commands it takes at its prompt (see AgentManifest.commands). */
+  commands?: AgentCommands;
+}
+
+/** The slash commands an agent takes: its own, and the folders it reads more from, each a path
+ *  under `{home}/` (the person's) or `{folder}/` (the project's), later ones shadowing earlier. */
+export interface AgentCommands {
+  builtIn?: readonly { name: string; description?: string }[];
+  /** `skills`: a folder per command, its `SKILL.md` saying it; else a file per command, `*.md`, a
+   *  subfolder's put before its name with `:`. `prefix` goes before each name. */
+  folders?: readonly { path: string; skills?: boolean; prefix?: string }[];
 }
 
 /** The keys that allow, and the keys that deny, what an agent asks on its screen. */

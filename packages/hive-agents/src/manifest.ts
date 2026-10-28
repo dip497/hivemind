@@ -3,7 +3,7 @@
  *  hooks) it must wire itself (`launch.hcp`, `session.resume`), and claiming a
  *  capability nothing here delivers is refused. */
 import { AGENT_EVENTS, EVENT_HOOK, INPUT_KINDS, TURN_OUTCOMES, isAgentEventName } from "./events.js";
-import type { AgentAsset, AgentCapabilities, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptRule } from "./types.js";
+import type { AgentAsset, AgentCapabilities, AgentCommands, AgentHome, AgentHomeFile, AgentHookEntry, AgentHooks, AgentIcon, AgentInstall, AgentLaunch, AgentOption, AgentProviderDef, AgentSession, AgentTranscript, SessionFind, TileStatus, TranscriptRule } from "./types.js";
 import { compileDetect, validateExpr, validateScope, type DetectRules, type Expr, type Scope, type ScreenReading } from "./detect-rules.js";
 import { RESERVED_AGENTS } from "./reserved.js";
 import { MIN_APP_VERSION_RE } from "./catalog.js";
@@ -85,6 +85,9 @@ export interface AgentManifest {
    *  it waits while the person has words there, and goes once they are sent or deleted. Without
    *  it, the keys the person typed are the only guess. Claim it only from the real binary. */
   emptyPrompt?: { when: Expr; scope?: Scope };
+  /** The slash commands it takes at its prompt: its own, by name, and the folders it reads more
+   *  from. Claim the built-in ones only from the real binary. */
+  commands?: unknown;
   session?: unknown;
   assets?: unknown;
   launch?: unknown;
@@ -692,6 +695,8 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     catch (e) { throw new ManifestError((e as Error).message); }
   }
 
+  const commands = m.commands === undefined ? undefined : validateCommands(m.commands);
+
   const aliases = m.aliases;
   req(aliases === undefined || (Array.isArray(aliases) && aliases.every((a) => typeof a === "string")),
     "aliases must be a string array");
@@ -755,6 +760,7 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
     ...(m.steer ? { steer: true } : {}),
     ...(m.pastedImages ? { pastedImages: true } : {}),
     ...(emptyPrompt ? { emptyPrompt: (upToCursor: string) => emptyPrompt(upToCursor).status === "idle" } : {}),
+    ...(commands ? { commands } : {}),
     enabled: m.enabled ?? false,
     caps: m.caps,
     ...(detect ? { detect } : {}),
@@ -788,12 +794,43 @@ export function defFromManifest(data: unknown, opts: ManifestLoadOptions = {}): 
  * plugin's own directory, or reaches back into Hivemind — so the review prints them, and
  * auto-install refuses an agent that has any.
  */
+/** A command's name as typed after `/`. */
+export const COMMAND_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
+const COMMANDS_MAX = 200;
+
+function validateCommands(value: unknown): AgentCommands {
+  const c = value as Record<string, unknown>;
+  req(c && typeof c === "object" && !Array.isArray(c), "commands must be a map");
+  const builtIn = c.builtIn === undefined ? [] : c.builtIn;
+  req(Array.isArray(builtIn) && builtIn.length <= COMMANDS_MAX, `commands.builtIn must be a list of at most ${COMMANDS_MAX}`);
+  const own = (builtIn as unknown[]).map((b, i) => {
+    const e = b as Record<string, unknown>;
+    req(e && typeof e === "object" && typeof e.name === "string" && COMMAND_NAME_RE.test(e.name), `commands.builtIn[${i}].name must be a command's name, as typed after /`);
+    req(e.description === undefined || (typeof e.description === "string" && e.description.length <= 200), `commands.builtIn[${i}].description must be text of at most 200 characters`);
+    return { name: e.name as string, ...(e.description ? { description: e.description as string } : {}) };
+  });
+  const folders = c.folders === undefined ? [] : c.folders;
+  req(Array.isArray(folders) && folders.length <= 8, "commands.folders must be a list of at most 8");
+  const read = (folders as unknown[]).map((f, i) => {
+    const e = f as Record<string, unknown>;
+    const path = e?.path;
+    req(typeof path === "string" && (path.startsWith("{home}/") || path.startsWith("{folder}/")) && !path.includes(".."),
+      `commands.folders[${i}].path must be a path under {home}/ or {folder}/`);
+    req(e.skills === undefined || typeof e.skills === "boolean", `commands.folders[${i}].skills must be true or false`);
+    req(e.prefix === undefined || (typeof e.prefix === "string" && /^[A-Za-z0-9_.-]{1,32}:$/.test(e.prefix)), `commands.folders[${i}].prefix must be a word and a colon`);
+    return { path: path as string, ...(e.skills ? { skills: true } : {}), ...(e.prefix ? { prefix: e.prefix as string } : {}) };
+  });
+  return { ...(own.length ? { builtIn: own } : {}), ...(read.length ? { folders: read } : {}) };
+}
+
 export function agentDisclosures(def: AgentProviderDef): string[] {
   const out: string[] = [];
   for (const o of def.options ?? []) {
     if (o.list) out.push(`runs \`${def.bin} ${o.list.args.join(" ")}\` to list ${o.label.toLowerCase()} values`);
   }
   if (def.home) out.push(`links your ${def.home.mirror} into a private copy it points ${def.bin} at`);
+  const folders = def.commands?.folders ?? [];
+  if (folders.length) out.push(`reads the names and descriptions of your commands in ${folders.map((f) => f.path).join(", ")}`);
   if (def.session?.resume?.find) out.push(`reads ${def.session.resume.find.root} to find a session to resume`);
   if (def.launch?.hcp && (def.hooks || def.assets?.length)) {
     out.push("reports its status and approval prompts to Hivemind through its own hooks, which can also read and type into your other tiles");

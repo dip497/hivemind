@@ -777,6 +777,12 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
       </nav>
       )}
 
+      {/* Pinned stays in reach while the list scrolls; many pins scroll on their own. */}
+      {pane === "tiles" && view.pinned.length > 0 && (
+      <div className="shrink-0 max-h-[33%] overflow-y-auto overscroll-contain text-row" data-layers-pinned-pane>
+        {section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
+      </div>
+      )}
       {pane === "tiles" && (
       <div className="flex-1 overflow-y-auto overscroll-contain pb-2 text-row" data-layers-pane="tiles">
         {tiles.length > 0 && nothing && (
@@ -785,8 +791,7 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             <button type="button" className="underline hover:text-[var(--color-fg)]" onClick={() => { patchSettings("views.layers", { ...DEFAULT_LAYERS_PREFS, recentsBy: prefs.recentsBy, lines: prefs.lines }); setHideAsleep(false); setQuery(""); }}>Show everything</button>
           </div>
         )}
-        {view.pinned.length > 0 && section("pinned", "Pinned", view.pinned, { "data-layers-pinned": "" })}
-        <div className={`mt-2 flex h-7 items-center pl-5 pr-2 ${LABEL}`}>
+        <div className={`sticky top-0 z-10 bg-[var(--color-bg2)] mt-1 flex h-7 items-center pl-5 pr-2 ${LABEL}`} data-layers-list-heading>
           <span>{view.tree && !groupByMachine ? "Projects" : "Tiles"}</span>
           <span className="ml-auto"><ViewMenu prefs={prefs} setPref={setPref} machines={machineChoices} hideAsleep={hideAsleep} setHideAsleep={setHideAsleep} /></span>
         </div>

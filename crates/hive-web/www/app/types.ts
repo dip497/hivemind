@@ -57,6 +57,13 @@ export interface Entry {
 
 /** A tool use unfolded, as the computer answers `agent.tool`: what it is about and its input whole,
  *  and what it gave back once it has; `truncated` when cut. */
+/** A slash command an agent takes at its prompt: its own, the person's or the project's. */
+export interface SlashCommand {
+  name: string;
+  description?: string;
+  from: "built-in" | "yours" | "project";
+}
+
 export interface Unfolded {
   name: string;
   about?: string;

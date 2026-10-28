@@ -44,7 +44,7 @@ const domain = {
     }),
     "agent.answer": (from: Connection, tile: unknown) => { ran.push({ what: "agent.answer", by: from.actor, args: [tile] }); return { answered: true }; },
     "agent.send": (from: Connection, tile: unknown) => { ran.push({ what: "agent.send", by: from.actor, args: [tile] }); return { sent: true }; },
-    ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
+    ...Object.fromEntries(["agent.startable", "agent.start", "agent.interrupt", "agent.close", "agent.diff", "agent.commands", "agent.conversation", "agent.tool", "agent.places", "agent.folders",
       "agent.rename", "agent.keys", "agent.read", "agent.output", "agent.sessions", "agent.sleep", "agent.wake", "terminal.saved", "tool.open", "link.connect", "link.disconnect", "plugin.call", "host.join", "tools.rescan", "tile.focus", "tile.look", "tile.watchLines", "tile.readLines", "notifications.play", "notifications.recentSounds"].map((what) => [
       what, (from: Connection, at: unknown) => { ran.push({ what, by: from.actor, args: [at] }); return {}; },
     ])),
@@ -98,6 +98,8 @@ test("what may be started in its workspace, what an agent changed and a tool it 
   await viewer.client.call("agent.startable", workspaceUrl(W));
   await viewer.client.call("agent.diff", "in-1");
   expect(await code(viewer.client.call("agent.diff", "out-1"))).toBe("NOT_FOUND");
+  await viewer.client.call("agent.commands", "in-1");
+  expect(await code(viewer.client.call("agent.commands", "out-1"))).toBe("NOT_FOUND");
   await viewer.client.call("agent.conversation", "in-1");
   expect(await code(viewer.client.call("agent.conversation", "out-1"))).toBe("NOT_FOUND");
   await viewer.client.call("agent.tool", "in-1", "u1");
@@ -108,6 +110,7 @@ test("what may be started in its workspace, what an agent changed and a tool it 
   expect(ran).toEqual([
     { what: "agent.startable", by: viewer.actor, args: [REPO] },
     { what: "agent.diff", by: viewer.actor, args: ["in-1"] },
+    { what: "agent.commands", by: viewer.actor, args: ["in-1"] },
     { what: "agent.conversation", by: viewer.actor, args: ["in-1"] },
     { what: "agent.tool", by: viewer.actor, args: ["in-1"] },
   ]);

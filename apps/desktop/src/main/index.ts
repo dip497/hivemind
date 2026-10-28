@@ -1374,7 +1374,8 @@ const workspaceServer: WorkspaceServer = new WorkspaceServer([
     openFrame: (repo, frame) => { workspaceStore().addFrame(repo, frame, { writer: "frames" }); },
     start: (repo, start) => control.start(repo, start),
     status: (bare) => control.status.get(bare),
-    interruptKeys: (bare) => manifestOf(heldBoards(workspaceStore()), bare)?.interrupt,
+    agentOf: (bare) => manifestOf(heldBoards(workspaceStore()), bare),
+    home: os.homedir(),
     // As the person types: an interrupt key ends the turn in the agent's status too.
     type: (bare, data) => control.typed(`hm:${bare}`, data),
     close: (bare) => control.close(bare),

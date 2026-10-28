@@ -325,6 +325,47 @@ async fn a_scroll_goes_to_a_program_that_draws_its_own_screen_as_wheel_reports()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_tap_on_a_program_that_takes_the_mouse_is_typed_as_its_click() {
+    let desk = Desk::start(90).await;
+    *desk.screen.lock().unwrap() = "\x1b[?1049h\x1b[?1000h\x1b[?1006hthe transcript".into();
+    let phone = paired_with(&tmp("click"), &desk);
+    let connections = Connections::new(phone.clone(), || {});
+    connections.foreground();
+    let watching = Watching::start(
+        &connections,
+        &phone.id(),
+        &desk.id,
+        WORKSPACE,
+        TILE,
+        Arc::new(Told::default()),
+    );
+    let drawn = || {
+        watching
+            .newest()
+            .changed(0)
+            .any(|(_, line)| line.text == "the transcript")
+    };
+    assert!(until(Duration::from_secs(10), drawn).await);
+
+    assert!(watching.click(10, 5));
+    let session = format!("hm:{TILE}");
+    let click =
+        json!({ "method": "terminal.write", "params": [session, "\x1b[<0;10;5M\x1b[<0;10;5m"] });
+    let sent = || {
+        desk.told
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(_, notice)| *notice == click)
+    };
+    assert!(
+        until(Duration::from_secs(10), sent).await,
+        "{:?}",
+        desk.told.lock().unwrap()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_shell_scrolled_is_the_views_to_scroll_and_nothing_is_typed() {
     let desk = Desk::start(37).await;
     let phone = paired_with(&tmp("scroll-shell"), &desk);
