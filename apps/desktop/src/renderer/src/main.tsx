@@ -17,6 +17,23 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 import "@fontsource/jetbrains-mono/600.css";
 import "@fontsource/jetbrains-mono/700.css";
+// Code fonts to choose from in Appearance: a face is fetched only once it is drawn.
+import "@fontsource/fira-code/400.css";
+import "@fontsource/fira-code/500.css";
+import "@fontsource/fira-code/600.css";
+import "@fontsource/fira-code/700.css";
+import "@fontsource/cascadia-code/400.css";
+import "@fontsource/cascadia-code/500.css";
+import "@fontsource/cascadia-code/600.css";
+import "@fontsource/cascadia-code/700.css";
+import "@fontsource/geist-mono/400.css";
+import "@fontsource/geist-mono/500.css";
+import "@fontsource/geist-mono/600.css";
+import "@fontsource/geist-mono/700.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
+import "@fontsource/ibm-plex-mono/700.css";
 import "./styles.css";
 
 // A part loaded on first use (a dialog, a panel) that fails to load means the app was rebuilt or

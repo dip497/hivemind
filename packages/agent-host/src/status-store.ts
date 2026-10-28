@@ -52,8 +52,16 @@ export interface ScreenReading {
 const SCREEN_KIND = { permission: "permission", question: "question", blocked: "other" } as const;
 const isWait = (s: ScreenState): s is keyof typeof SCREEN_KIND => s !== "idle" && s !== "working";
 
-/** Bytes that interrupt an agent's turn when typed on their own: Esc, Ctrl+C. */
-const INTERRUPT_KEYS = new Set(["\x1b", "\x03"]);
+/** Whether the bytes are Esc or Ctrl+C typed on their own, which interrupt an agent's turn: as
+ *  plain bytes, or as kitty keys once the program turned that protocol on (`CSI 27 u`,
+ *  `CSI 99 ; 5 u`; Caps Lock and Num Lock aside). A key let go is not a key pressed. */
+function isInterruptKey(data: string): boolean {
+  if (data === "\x1b" || data === "\x03") return true;
+  const m = /^\x1b\[(\d+)(?::\d*)*(?:;(\d+)(?::(\d+))?)?u$/.exec(data);
+  if (!m || (m[3] !== undefined && m[3] !== "1")) return false;
+  const mods = (Number(m[2] ?? 1) - 1) & ~(64 | 128);
+  return (m[1] === "27" && mods === 0) || (m[1] === "99" && mods === 4);
+}
 
 /** Keys that answer an agent's own permission prompt: a numbered choice, or Enter on the one
  *  selected. */
@@ -192,7 +200,7 @@ export class StatusStore {
     if (this.mirrored.has(tileId)) return;
     const cur = this.sessions.get(tileId);
     if (!cur || cur.source !== "hooks") return;
-    if (INTERRUPT_KEYS.has(data)) this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
+    if (isInterruptKey(data)) this.apply(tileId, "hooks", (s) => foldStatus(s, { fact: "interrupt" }));
     else if (cur.state === "waiting" && cur.kind === "permission" && ANSWER_KEY.test(data)) {
       this.screenHeld.delete(tileId);
       this.apply(tileId, "hooks", (s) => foldStatus(s, { event: "input.resolved" }));

@@ -20,7 +20,7 @@ import path from "node:path";
 import { installedMembers } from "./installed-packages.js";
 import { lookExtraOf, THEME_SET_PATHS, type AppearanceExtra, type FaceSet, type FontFaces, type LookExtra, type ThemeRecord, type ThemeSetPath } from "./appearance-extra.js";
 import { holdLock, readSettings, settingsPath, updateSettings } from "./settings.js";
-import { faceStack } from "./font-names.js";
+import { fontStack } from "./font-names.js";
 import type { Appearance, Settings } from "./settings-schema.js";
 import { MOMENTS, themeFiles, themeSwatches, type Theme, type ThemeFace } from "./theme-format.js";
 import { readThemeFolder } from "./theme-folder.js";
@@ -116,8 +116,8 @@ function themedLook(cur: Settings, theme: Theme, urls: Map<string, string>): { a
       accent: typeof theme.accent === "string" ? theme.accent : a.accent,
       terminal: theme.terminal ? { ...theme.terminal, ansi: [...theme.terminal.ansi] } : a.terminal,
       radius: theme.radius ?? a.radius,
-      uiFont: ui ? faceStack("ui", ui.family) : a.uiFont,
-      monoFont: mono ? faceStack("mono", mono.family) : a.monoFont,
+      uiFont: ui ? fontStack("ui", ui.family) : a.uiFont,
+      monoFont: mono ? fontStack("mono", mono.family) : a.monoFont,
       wallpaper,
     },
     extra: {

@@ -82,6 +82,27 @@ test("a preset picked in Settings repaints the shell and every terminal, and lan
   await expect.poll(() => onDisk().appearance.terminal.background).toBe("#282a36");
 });
 
+test("the code font is one the app ships or one on the computer, monospace listed first", async () => {
+  await openSettings("appearance");
+  const select = page.locator('[data-font-select="mono-font"]');
+  // Shipped: listed by name, and its face is in the app, whatever the computer has.
+  await pick(select, "Fira Code");
+  await expect(select).toHaveText("Fira Code");
+  await expect.poll(() => onDisk().appearance.monoFont).toBe('"Fira Code", "JetBrains Mono", monospace');
+  expect(await page.evaluate(() => [...document.fonts].filter((f) => f.family.replace(/"/g, "") === "Fira Code").length)).toBeGreaterThan(0);
+  // On the computer: the monospace fonts listed apart from the rest, each one picked by its name.
+  await select.click();
+  await expect(page.locator('[data-font-group="Monospace on this computer"]').getByRole("option", { name: "DejaVu Sans Mono", exact: true })).toBeVisible();
+  await expect(page.locator('[data-font-group="Other fonts on this computer"]').getByRole("option", { name: "DejaVu Sans", exact: true })).toHaveCount(1);
+  await expect(page.locator('[data-font-group="Monospace on this computer"]').getByRole("option", { name: "DejaVu Sans", exact: true })).toHaveCount(0);
+  await page.getByRole("option", { name: "DejaVu Sans Mono", exact: true }).click();
+  await expect(select).toHaveText("DejaVu Sans Mono");
+  await expect(page.getByRole("textbox", { name: "Code font, custom" })).toHaveCount(0);
+  await expect.poll(() => onDisk().appearance.monoFont).toBe('"DejaVu Sans Mono", "JetBrains Mono", monospace');
+  await pick(select, "JetBrains Mono");
+  await closeSettings();
+});
+
 test("`hive theme use` repaints the running app — no restart, no reopened window", async () => {
   const r = hive("theme", "use", "nord");
   expect(r.rescanned).toBe(true); // the CLI reached the app over HCP
