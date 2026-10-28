@@ -14,6 +14,7 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 - Fixed: in a browser tab the app serves, Ctrl+V in a terminal pastes the tab's own clipboard, not the program's Ctrl+V, which reads the host's.
 - New: a photo pasted into a terminal, in a browser tab or with Ctrl+Shift+V in the app, is kept on the machine the session runs on and its path pasted, which an agent such as Claude Code attaches.
 - Added (workspace API 0.37): `terminal.photo` keeps a photo pasted into a terminal on the machine its session runs on and returns its path.
+- Fixed: in the Layers panel, a project whose one frame has the project's name no longer shows that name twice, as a heading and again as the row under it.
 
 ## [2026.10.7] — 2026-10-28
 

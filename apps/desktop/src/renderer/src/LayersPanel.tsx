@@ -808,10 +808,11 @@ export const LayersPanel = memo(function LayersPanel({ frames, tiles, selectedTi
             : (
               // A project is a folder: frames are groups in the one they run in (their own, or the
               // workspace's). One folder needs no heading to say which.
-              // Several are set apart as machines are: a rule, then the name as a heading, not a row.
+              // Several are set apart as machines are: a rule, then the name as a heading, not a row,
+              // unless its one frame already bears that name.
               projectsOf(topFrames).map((p, i, all) => (
                 <section key={p.folder} aria-label={p.name} data-layers-project={p.name} className={all.length > 1 && i > 0 ? "mt-3 border-t border-[var(--color-line)] pt-1" : ""}>
-                  {all.length > 1 && (
+                  {all.length > 1 && (p.frames.length > 1 || p.frames[0]?.title !== p.name) && (
                     <div className={`flex h-7 items-center pl-5 pr-3 ${i > 0 ? "mt-1" : ""} ${LABEL}`} data-layers-project-name>
                       <span className="truncate">{p.name}</span>
                     </div>
