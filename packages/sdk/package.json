@@ -1,6 +1,6 @@
 {
   "name": "hivemind-api",
-  "version": "2026.10.6",
+  "version": "2026.10.7",
   "description": "Drive a Hivemind workspace from a program: agents, frames and terminals over the drive socket, with a token.",
   "license": "MIT",
   "type": "module",

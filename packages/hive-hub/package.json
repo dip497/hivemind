@@ -1,6 +1,6 @@
 {
   "name": "@hivemind/hub",
-  "version": "2026.10.6",
+  "version": "2026.10.7",
   "description": "The hub kit: the plugin index format every Hivemind hub serves and the app reads, and the checks a plugin folder passes before a hub lists it or the app installs it.",
   "license": "MIT",
   "private": true,

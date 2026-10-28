@@ -9,6 +9,8 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+## [2026.10.7] — 2026-10-28
+
 - Changed: widgets a package's view brings, like Archipelago's, show only over that view, so the canvas and your other views stay clear. A card's pin, **Show on every view** (point at the card or Tab to it), puts it over every view, and **Hide widgets** is kept for each view. While a widget column sits on the canvas's right edge, a tile the canvas flies to is framed to the left of it.
 - Added: view protocol 1.18, `widgetBand`. `hm.onWidgetBand(cb)` tells a view how much room the app's widget cards take along its widget edge, and tells it again when cards come or go, start a second column or the window is resized. A guest's window tells the host's view too.
 - Added (workspace API 0.37): `hive ctl plugin list` lists every widget in the workspace under `widgets` (its id, package, whether it sits on the board, the view it shows over alone, whether its code runs), and `hive ctl plugin open <widget id>` shows that widget over every view, as its card's pin does.
@@ -2162,7 +2164,8 @@ World, and sandboxed community views), and the e2e/perf harnesses gate every cha
 - **install.sh** — single script for both fresh install and in-place upgrade. Downloads prebuilt binaries from GitHub Releases by default; `--dev` flag clones and builds from source.
 - **GitHub Actions** — `release.yml` (tag-driven build + publish on `v*.*.*`), `ci.yml` (typecheck + build + unit tests on every push / PR).
 
-[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.6...HEAD
+[Unreleased]: https://github.com/dip497/hivemind/compare/v2026.10.7...HEAD
+[2026.10.7]: https://github.com/dip497/hivemind/releases/tag/v2026.10.7
 [2026.10.6]: https://github.com/dip497/hivemind/releases/tag/v2026.10.6
 [2026.10.5]: https://github.com/dip497/hivemind/releases/tag/v2026.10.5
 [2026.10.4]: https://github.com/dip497/hivemind/releases/tag/v2026.10.4
