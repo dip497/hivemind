@@ -9,6 +9,12 @@ Each release is published to [GitHub Releases](https://github.com/dip497/hivemin
 
 ## [Unreleased]
 
+- Fixed: a terminal shown on two screens, your window and a browser tab, no longer jumps between their sizes as the mouse moves or a window gets focus over a program that hears them, such as Claude Code. Only typing or pasting takes the size.
+- Fixed: what a program copies, such as Claude Code's mouse selection, goes to the clipboard of the screen that made the selection. A selection made in a browser tab no longer replaces the host's clipboard.
+- Fixed: in a browser tab the app serves, Ctrl+V in a terminal pastes the tab's own clipboard, not the program's Ctrl+V, which reads the host's.
+- New: a photo pasted into a terminal, in a browser tab or with Ctrl+Shift+V in the app, is kept on the machine the session runs on and its path pasted, which an agent such as Claude Code attaches.
+- Added (workspace API 0.37): `terminal.photo` keeps a photo pasted into a terminal on the machine its session runs on and returns its path.
+
 ## [2026.10.7] — 2026-10-28
 
 - Changed: widgets a package's view brings, like Archipelago's, show only over that view, so the canvas and your other views stay clear. A card's pin, **Show on every view** (point at the card or Tab to it), puts it over every view, and **Hide widgets** is kept for each view. While a widget column sits on the canvas's right edge, a tile the canvas flies to is framed to the left of it.

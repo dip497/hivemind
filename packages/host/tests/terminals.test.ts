@@ -128,6 +128,24 @@ test("while several clients show a session only the one that typed last sizes it
   assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 100x30", "resize hm:t1 120x40", "resize hm:t1 90x20", "resize hm:t1 70x10"]);
 });
 
+test("a mouse moved, a click or a window focused over a program that hears them reaches it but keeps the size whose it is; a key typed takes it", async () => {
+  const h = host();
+  const [a, b] = [h.client(), h.client()];
+  await h.open(a, "hm:t1");
+  await h.open(b, "hm:t1");
+  h.notice(a, "terminal.resize", "hm:t1", 120, 40);
+  h.notice(b, "terminal.resize", "hm:t1", 90, 20);
+  h.notice(a, "terminal.write", "hm:t1", "ls\r");
+  for (const report of ["\x1b[I", "\x1b[O", "\x1b[<35;6;2M\x1b[<35;7;2M", "\x1b[<0;3;4M\x1b[<0;3;4m", "\x1b[M #!", "\x1b[12;40R", "\x1b[?62;22c", "\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\"]) {
+    h.notice(b, "terminal.write", "hm:t1", report);
+  }
+  assert.equal(h.calls.filter((c) => c.startsWith("write")).length, 9, "every report reaches the program");
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 120x40"]);
+  h.notice(b, "terminal.write", "hm:t1", "x");
+  h.notice(b, "terminal.write", "hm:t1", "\x1b[Ix");
+  assert.deepEqual(h.calls.filter((c) => c.startsWith("resize")), ["resize hm:t1 120x40", "resize hm:t1 90x20"]);
+});
+
 test("a pause lasts a moment unless it is asked for again; a resume ends it at once", async () => {
   const h = host();
   const a = h.client();

@@ -123,6 +123,12 @@ export const TYPING_EVERY_MS = 1000;
 /** A guest's typing into a session is marked in the audit log again after this long without it. */
 export const TYPED_BURST_MS = 60_000;
 
+/** What a terminal sends a program by itself: where the mouse is and its buttons, focus coming and
+ *  going, and its answers to what the program asked (cursor place, device attributes, colours). */
+const REPORT = /\x1b\[(?:I|O|<\d+;\d+;\d+[Mm]|M[\s\S]{3}|\d+;\d+R|[?>][\d;]*[cn])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+/** Whether `data` is only such reports: a mouse moved or a window focused, nobody typed. */
+export const onlyReports = (data: string): boolean => data.length > 0 && data.replace(REPORT, "") === "";
+
 type TerminalMethod = "terminal.open" | "terminal.saved";
 type TerminalNotice =
   | "terminal.write" | "terminal.show" | "terminal.resize" | "terminal.flow" | "terminal.ack" | "terminal.fit" | "terminal.history"
@@ -356,8 +362,9 @@ export class Terminals {
     if (!this.keyboards.mayType(tile, from)) return;
     this.keyboards.typed(tile, from);
     // Among the host's windows and the person's devices, the last to type sizes the session, at
-    // its first key; a guest does while they hold its keyboard.
-    if (isHost(from)) this.hold(tile, from);
+    // its first key; a guest does while they hold its keyboard. A mouse moved or a window focused
+    // over a program that hears them is not typing: the size stays whose it is.
+    if (isHost(from) && !onlyReports(data)) this.hold(tile, from);
     this.attribute(tile, from);
     if (this.opts.backend.echoes(tile)) this.relay.markInput(tile);
     this.opts.backend.write(tile, data, paste);
