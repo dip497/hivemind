@@ -111,6 +111,51 @@ test("sharks in no hurry swim in long curves and never double back on themselves
   });
 });
 
+test("sharks in no hurry turn before the window's edge and stay in sight", () => {
+  let inside = 0;
+  let nodes = 0;
+  for (const seed of [61, 62, 63, 64, 65, 66, 67, 68]) seeded(seed, () => {
+    const w = new World(0);
+    w.resize(973, 883, 8, 12);
+    w.setRoster([shark("a", "cruise"), { ...shark("b", "cruise"), size: 0.9 }, { ...shark("c", "cruise"), size: 0.84 }]);
+    run(w, 10);
+    for (let i = 0; i < 120; i++) {
+      run(w, 0.25);
+      for (const s of w.sharks) for (let j = 0; j < s.nodes.length; j += 2) {
+        nodes++;
+        if (s.nodes[j]! >= 0 && s.nodes[j]! <= 973 && s.nodes[j + 1]! >= 0 && s.nodes[j + 1]! <= 883) inside++;
+      }
+    }
+  });
+  // Over ten runs of eight seeds, 91% to 96% of their bodies were in the window; turning back only
+  // once the snout is out, 85% to 91%.
+  assert.ok(inside / nodes > 0.9, `${((inside / nodes) * 100).toFixed(1)}% in sight`);
+});
+
+test("a hunting shark does not go after a fish under a tile or at the window's edge", () => {
+  seeded(72, () => {
+    /** The shark's target with it at (x, 450) heading right and the one fish at `fish`. */
+    const targetWith = (x: number, fish: { x: number; y: number }, boxes: Box[] = []) => {
+      const w = new World(1);
+      w.resize(W, H, 12, 17);
+      w.setRoster([shark("a", "hunt")], true);
+      w.setBoxes(boxes);
+      const a = sharkOf(w, "a");
+      const seg = a.length / (a.nodes.length / 2 - 1);
+      for (let k = 0; k < a.nodes.length / 2; k++) { a.nodes[k * 2] = x - k * seg; a.nodes[k * 2 + 1] = 450; }
+      a.heading = 0;
+      a.hunger = 1;
+      a.retargetAt = 0;
+      Object.assign(w.fish[0]!, fish, { vx: 0, vy: 0 });
+      w.step(STEP);
+      return a.target;
+    };
+    assert.ok(targetWith(600, { x: 760, y: 450 }), "a fish in open water ahead");
+    assert.equal(targetWith(600, { x: 760, y: 450 }, [{ x0: 700, y0: 380, x1: 900, y1: 520 }]), null, "the same fish under a tile");
+    assert.equal(targetWith(1150, { x: W - 30, y: 450 }), null, "a fish at the window's edge");
+  });
+});
+
 test("a roaming shark swims on to somewhere ahead of it, not back where it came from", () => {
   let ahead = 0;
   let picks = 0;

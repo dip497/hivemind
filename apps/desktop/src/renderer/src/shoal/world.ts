@@ -779,6 +779,19 @@ export class World {
         }
       }
 
+      // Soft walls: where the shark is headed, most of a length on, is pushed in from each edge it
+      // nears, so a shark that turns wide turns before the edge, not past it. Not one circling its
+      // tile: its ring is kept in the window already, and the walls would push it under the tile.
+      if (!sh.leaving && !tile) {
+        const px = hx + Math.cos(sh.heading) * L * 0.8;
+        const py = hy + Math.sin(sh.heading) * L * 0.8;
+        const m = L * 0.7;
+        if (px < m) dx += (1 - Math.max(px, -m) / m) * 3;
+        if (px > W - m) dx -= (1 - Math.max(W - px, -m) / m) * 3;
+        if (py < m) dy += (1 - Math.max(py, -m) / m) * 3;
+        if (py > H - m) dy -= (1 - Math.max(H - py, -m) / m) * 3;
+      }
+
       // Turn back once the snout leaves the frame, so bodies dip off-screen
       // now and then but the sharks never wander away for good.
       const over = Math.max(-hx, hx - W, -hy, hy - H);
@@ -855,6 +868,7 @@ export class World {
    */
   private findPrey(sh: Shark): Fish | null {
     const range = sh.length * 0.9 + 160;
+    const margin = sh.length * 0.3;
     const hx = sh.nodes[0]!;
     const hy = sh.nodes[1]!;
     const fx = Math.cos(sh.heading);
@@ -869,6 +883,8 @@ export class World {
       const dy = f.y - hy;
       const d = Math.hypot(dx, dy);
       if (d > range || d < 1e-3) continue;
+      // Not a fish at the window's edge, which it would chase out of sight, nor one under a tile.
+      if (f.x < margin || f.x > this.width - margin || f.y < margin || f.y > this.height - margin || this.covered(f.x, f.y, 0)) continue;
       const cos = (dx * fx + dy * fy) / d;
       if (cos < 0.2) continue;
       const crowd = this.bucketCount[this.bucketOf(f.x, f.y)]!;
