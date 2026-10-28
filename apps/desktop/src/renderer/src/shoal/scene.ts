@@ -51,6 +51,8 @@ const world = new World();
 let renderer: AsciiRenderer | null = null;
 /** The agents' sharks as last told, for a still picture made again from scratch. */
 let roster: SharkSpec[] = [];
+/** Whether the scene has had its sharks: the first are already in the water when it starts. */
+let stocked = false;
 let mode: ShoalMode = "hold";
 let raf = 0;
 let last = 0;
@@ -130,9 +132,11 @@ scope.onmessage = ({ data: m }) => {
       break;
     case "roster":
       roster = m.sharks;
-      // In a still picture only what changed moves: a shark comes, goes or comes up to its tile.
-      world.setRoster(m.sharks, mode === "still");
-      if (mode === "still") draw();
+      // The agents there when the scene starts are in the water already; one started later swims
+      // in. In a still picture only what changed moves: a shark comes, goes or comes up to its tile.
+      world.setRoster(m.sharks, mode === "still" || !stocked);
+      stocked = true;
+      if (mode !== "run") draw();
       break;
     case "boxes":
       world.setBoxes(m.boxes);
