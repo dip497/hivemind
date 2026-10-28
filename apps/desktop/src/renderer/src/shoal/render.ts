@@ -8,11 +8,15 @@
  *
  * Ported from stackedlol/ascii-sharks (MIT, see LICENSE here). The scene is drawn in the theme's
  * own two colours, the page and its text, mixed in RAMP steps that are worked out once per theme,
- * so a frame builds no colour strings: graphite on a dark theme, grey on a light one. The
- * original's blue, cyan, red and shimmer colours are gone: colour in Hivemind means something.
+ * so a frame builds no colour strings. Each kind of shark leans a little toward its own cast (the
+ * original's tints); the original's blue, cyan, red and shimmer colours are gone: colour in
+ * Hivemind means something.
+ *
+ * On a dark theme a shark is light on the dark water, as in the original. On a light one it is
+ * ink on paper: mid-grey blocks with darker characters in them, its edges fading to the page.
  */
 import { clamp, hash3, smoothstep } from "./math";
-import { SHARK_NODES, type Shark, type SharkKind, type World } from "./world";
+import { SHARK_NODES, type Box, type Shark, type SharkKind, type World } from "./world";
 
 const ALPHA_LEVELS = 6;
 const FISH_LEVELS = [0.28, 0.42, 0.58, 0.74, 0.9];
@@ -20,6 +24,22 @@ const FISH_LEVELS = [0.28, 0.42, 0.58, 0.74, 0.9];
 const RAMP = 64;
 /** How far toward the text colour the wake's dots go at their brightest. */
 const WAKE_REACH = 0.5;
+/**
+ * How a light theme draws, in steps from the page (0) toward the text (1), matched to the
+ * reference demo's tones. A shark's block goes from `base` at its faintest to `base + span` where
+ * the original is brightest, its character `glyph` darker than its block and a glint `glint`
+ * lighter; an edge is a faint block (`edge` to `edge + edgeSpan`) under a character `edgeGlyph`
+ * darker. Eyes and markings keep the original's levels, so an eye is a grey ring on the page as
+ * it is on black. The water is fainter than on a dark theme, where light on black needs more.
+ */
+const INK = {
+  base: 0.02, span: 0.88, glyph: 0.24, glint: 0.18,
+  edge: 0.05, edgeSpan: 0.12, edgeGlyph: 0.14,
+  fish: 0.36, wake: 0.32, grid: 0.015,
+};
+/** How much of each kind's cast (TINTS) shows: enough to read as grey-blue or grey-brown, not
+ *  as a colour, which in Hivemind says something. */
+const CAST = 0.6;
 
 // Sparse glyphs on bright skin, dense glyphs in shadow, so the texture
 // reinforces the shading instead of fighting it.
@@ -218,6 +238,20 @@ const SHAPES: Record<SharkKind, SharkShape> = {
   },
 };
 
+/** Each kind's cast, from the original: how much of the red, green and blue it carries. */
+const TINTS: Record<SharkKind, [number, number, number]> = {
+  classic: [0.92, 0.97, 1.05],
+  hammerhead: [0.96, 0.98, 0.9],
+  tiger: [1.02, 0.95, 0.84],
+  zebra: [1.08, 0.97, 0.74],
+  greathammer: [0.86, 0.93, 1.02],
+  mako: [0.78, 0.9, 1.2],
+  thresher: [1.0, 0.9, 1.08],
+  nurse: [1.1, 0.96, 0.76],
+};
+const KIND_LIST = Object.keys(TINTS) as SharkKind[];
+const KIND_INDEX = Object.fromEntries(KIND_LIST.map((k, i) => [k, i])) as Record<SharkKind, number>;
+
 function inTriangle(
   px: number, py: number,
   ax: number, ay: number, bx: number, by: number, cx: number, cy: number,
@@ -228,6 +262,21 @@ function inTriangle(
   const neg = d1 < 0 || d2 < 0 || d3 < 0;
   const pos = d1 > 0 || d2 > 0 || d3 > 0;
   return !(neg && pos);
+}
+
+/** Which cells (`cols` by `rows`, each `cw` by `ch`) are under a tile or a panel, or in a gap
+ *  narrower than a cell between two: a cell whose centre is within half a cell of a box. A shark is
+ *  not drawn there, so one passing under a block of tiles does not show through its seams. */
+export function coveredCells(boxes: readonly Box[], cols: number, rows: number, cw: number, ch: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(cols * rows);
+  for (const b of boxes) {
+    const c0 = Math.max(0, Math.ceil(b.x0 / cw - 1));
+    const c1 = Math.min(cols - 1, Math.floor(b.x1 / cw));
+    const r0 = Math.max(0, Math.ceil(b.y0 / ch - 1));
+    const r1 = Math.min(rows - 1, Math.floor(b.y1 / ch));
+    for (let r = r0; r <= r1; r++) out.fill(1, r * cols + c0, r * cols + c1 + 1);
+  }
+  return out;
 }
 
 /** A faint cell grid, snapped to device pixels. */
@@ -270,12 +319,20 @@ export class AsciiRenderer {
   private bucketCounts = new Int32Array(ALPHA_LEVELS + 1);
   /** RAMP + 1 opaque colours, the page colour to the text colour (setColours). */
   private ramp: string[] = [];
+  /** The same for each kind of shark (KIND_LIST), leaning toward its cast. */
+  private kindRamps: string[][] = [];
+  /** The page is lighter than the text. */
+  private light = false;
   private wakeStyles: string[] = [];
 
   private sharkFlag = new Uint8Array(0);
   private sharkShade = new Float32Array(0);
   private sharkKey = new Uint32Array(0);
   private sharkDepth = new Float32Array(0);
+  private sharkKind = new Uint8Array(0);
+  /** The tiles and panels as last told, and the cells they cover (`coveredCells`). */
+  private boxes: readonly Box[] = [];
+  private cover = new Uint8Array(0);
   private spine = new Float32Array(SHARK_NODES * 2);
   private arc = new Float32Array(SHARK_NODES);
   private arcTotal = 1;
@@ -288,15 +345,17 @@ export class AsciiRenderer {
   private hitShade = 0;
   private hitS = 0;
   private hitV = 0;
-  private hitDist = 0;
   /** How far inside the body's outline the last hit was: 0 on a fin or the head. */
   private hitInside = 0;
-  /** How far outside the body's outline the last sample was (negative inside it). */
-  private hitOutside = 0;
+  /** Whether the last sample was within some segment's reach (`segReach`): when not, no point
+   *  within half a cell of it can be on the shark. */
+  private hitNear = false;
   /** The spine's segments, worked out once per shark per frame: each one's run and length². */
   private segDx = new Float64Array(SHARK_NODES);
   private segDy = new Float64Array(SHARK_NODES);
   private segLen2 = new Float64Array(SHARK_NODES);
+  /** How far each segment's part of the shark reaches from it, sideways (`segmentReach`). */
+  private segReach = new Float64Array(SHARK_NODES);
 
   /** Cells holding a fish this frame (frame stamp); dots skip them. */
   private fishStamp = new Uint32Array(0);
@@ -317,20 +376,30 @@ export class AsciiRenderer {
   setColours(page: number, text: number) {
     const ch = (c: number, k: number) => (c >> k) & 255;
     const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
-    this.ramp = [];
-    for (let i = 0; i <= RAMP; i++) {
-      const t = i / RAMP;
-      const mix = (k: number) => Math.round(ch(page, k) + (ch(text, k) - ch(page, k)) * t);
-      this.ramp.push(hex((mix(16) << 16) | (mix(8) << 8) | mix(0)));
-    }
-    this.wakeStyles = Array.from({ length: ALPHA_LEVELS }, (_, l) => this.tone((WAKE_REACH * (l + 1)) / ALPHA_LEVELS));
-    this.fishStyles = FISH_LEVELS.map((a) => this.tone(a * 0.9));
+    const luma = (c: number) => 0.2126 * ch(c, 16) + 0.7152 * ch(c, 8) + 0.0722 * ch(c, 0);
+    this.light = luma(page) > luma(text);
+    // A channel's weight is how fast it goes from the page toward the text: on light water more
+    // red ink leaves a shark bluer, so a light theme takes the inverse of the original's tint.
+    const ramp = ([wr, wg, wb]: readonly number[]) => {
+      const out: string[] = [];
+      for (let i = 0; i <= RAMP; i++) {
+        const t = i / RAMP;
+        const mix = (k: number, w: number) => clamp(Math.round(ch(page, k) + (ch(text, k) - ch(page, k)) * t * w), 0, 255);
+        out.push(hex((mix(16, wr!) << 16) | (mix(8, wg!) << 8) | mix(0, wb!)));
+      }
+      return out;
+    };
+    this.ramp = ramp([1, 1, 1]);
+    this.kindRamps = KIND_LIST.map((k) => ramp(TINTS[k].map((c) => 1 + ((this.light ? 1 / c : c) - 1) * CAST)));
+    const wake = this.light ? INK.wake : WAKE_REACH;
+    this.wakeStyles = Array.from({ length: ALPHA_LEVELS }, (_, l) => this.tone((wake * (l + 1)) / ALPHA_LEVELS));
+    this.fishStyles = FISH_LEVELS.map((a) => this.tone(a * (this.light ? INK.fish : 0.9)));
     if (this.cols) this.paintBackground();
   }
 
-  /** The step `t` (0 page … 1 text) of the ramp. */
-  private tone(t: number) {
-    return this.ramp[clamp(Math.round(t * RAMP), 0, RAMP)]!;
+  /** The step `t` (0 page … 1 text) of a ramp, the plain one by default. */
+  private tone(t: number, ramp = this.ramp) {
+    return ramp[clamp(Math.round(t * RAMP), 0, RAMP)]!;
   }
 
   get cellWidth() {
@@ -351,7 +420,9 @@ export class AsciiRenderer {
     this.width = width;
     this.height = height;
     this.dpr = dpr;
-    this.cw = clamp(Math.round(width / 124), 8, 13);
+    // Cells from the shorter side, as the sharks are: a shark is some 48 cells long, as in the
+    // original's demo, on any shape of window (from the width alone, a wide one drew it coarser).
+    this.cw = clamp(Math.round(Math.min(width, height) / 110), 7, 13);
     this.ch = Math.round(this.cw * 1.45);
     this.cols = Math.ceil(width / this.cw);
     this.rows = Math.ceil(height / this.ch);
@@ -372,9 +443,22 @@ export class AsciiRenderer {
       this.sharkShade = new Float32Array(n);
       this.sharkKey = new Uint32Array(n);
       this.sharkDepth = new Float32Array(n);
+      this.sharkKind = new Uint8Array(n);
       this.fishStamp = new Uint32Array(n);
     }
+    this.cover = coveredCells(this.boxes, this.cols, this.rows, this.cw, this.ch);
     this.paintBackground();
+  }
+
+  /** Where the tiles and panels are on the screen: no shark is drawn under them. Told once a second;
+   *  the cells are worked out again only when one has moved. */
+  setBoxes(boxes: readonly Box[]) {
+    const same = boxes.length === this.boxes.length && boxes.every((b, i) => {
+      const o = this.boxes[i]!;
+      return b.x0 === o.x0 && b.y0 === o.y0 && b.x1 === o.x1 && b.y1 === o.y1;
+    });
+    this.boxes = boxes;
+    if (!same && this.cols) this.cover = coveredCells(boxes, this.cols, this.rows, this.cw, this.ch);
   }
 
   private paintBackground() {
@@ -384,7 +468,7 @@ export class AsciiRenderer {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = this.tone(0);
     g.fillRect(0, 0, W, H);
-    paintGrid(g, W, H, cw, ch, dpr, this.tone(0.055));
+    paintGrid(g, W, H, cw, ch, dpr, this.tone(this.light ? INK.grid : 0.055));
   }
 
   render(world: World, dt: number) {
@@ -503,9 +587,11 @@ export class AsciiRenderer {
     const { spine, arc } = this;
     const N = SHARK_NODES;
     const { segDx, segDy, segLen2 } = this;
+    const { segReach } = this;
     let best = Infinity;
     let bestK = 0;
     let bestU = 0;
+    let near = false;
     for (let k = 0; k < N - 1; k++) {
       const ax = spine[k * 2]!;
       const ay = spine[k * 2 + 1]!;
@@ -515,6 +601,7 @@ export class AsciiRenderer {
       const qx = ax + sx * u;
       const qy = ay + sy * u;
       const d2 = (px - qx) ** 2 + (py - qy) ** 2;
+      if (d2 <= segReach[k]! * segReach[k]!) near = true;
       if (d2 < best) {
         best = d2;
         bestK = k;
@@ -535,11 +622,10 @@ export class AsciiRenderer {
     const u = s * L;
     const shape = this.shape;
     const w = shape.halfWidth(s) * L;
-    this.hitDist = a;
     this.hitS = s;
     this.hitV = a * bestSign;
     this.hitInside = 0;
-    this.hitOutside = a - w;
+    this.hitNear = near;
 
     const head = this.shape.head;
     if (head && u < L * (head.sweep + head.depth + head.notch)) {
@@ -614,15 +700,21 @@ export class AsciiRenderer {
     return false;
   }
 
-  /** Whether body point `s` (0 snout, 1 tail) is within `m` of the head or a fin: the only places
-   *  the shark reaches past its body's outline. */
-  private nearReach(s: number, m: number) {
+  /** How far from the spine the part of the shark between body points `a` and `b` (0 snout, 1
+   *  tail) reaches: its body's half-width, and past it the head or a fin where one is, as a share
+   *  of its length. A fin is a triangle whose leading edge rises from its root to its tip, so it
+   *  reaches far only near the tip. The half-width is taken at the ends and the middle: within one
+   *  segment it changes by less than the margin its caller adds. */
+  private segmentReach(a: number, b: number, L: number) {
     const sh = this.shape;
+    // A fin from `root` to `tip` along the body, `reach` out at its tip: how far out it is by `b`.
+    const fin = (root: number, tip: number, reach: number) => (b > root && a < tip ? reach * Math.min(1, (b - root) / (tip - root)) : 0);
+    let r = Math.max(sh.halfWidth(a), sh.halfWidth((a + b) / 2), sh.halfWidth(b));
     const head = sh.head;
-    return (!!head && s < head.sweep + head.depth + head.notch + m)
-      || (s > sh.pectoral[0] - m && s < sh.pectoral[2] + m)
-      || (s > sh.pelvic[0] - m && s < sh.pelvic[2] + m)
-      || (sh.caudal > 0 && s > 0.86 - m);
+    if (head && a < head.sweep + head.depth + head.notch) r = Math.max(r, head.span);
+    r = Math.max(r, fin(sh.pectoral[0], sh.pectoral[2], Math.max(this.finTipLeft, this.finTipRight) / L), fin(sh.pelvic[0], sh.pelvic[2], sh.pelvic[3]));
+    if (sh.caudal > 0) r = Math.max(r, fin(0.86, 1, sh.caudal));
+    return r;
   }
 
   /** Whether a body point (s along, v across) falls on a dark marking. */
@@ -654,7 +746,7 @@ export class AsciiRenderer {
    * Fully covered cells become solid skin; partial cells become edge glyphs.
    */
   private rasterizeSharks(sharks: Shark[], t: number) {
-    const { sharkFlag, sharkShade, sharkKey, sharkDepth, spine, arc, cw, ch, cols, rows } = this;
+    const { sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind, cover, spine, arc, cw, ch, cols, rows } = this;
     sharkFlag.fill(0);
 
     for (const sh of sharks) {
@@ -719,12 +811,15 @@ export class AsciiRenderer {
       const r1 = Math.min(rows - 1, Math.floor((maxY + reach) / ch));
       if (c0 > c1 || r0 > r1) continue;
 
-      const skipBeyond = reach + Math.hypot(cw, ch);
       // A cell whose centre is this far inside the body is covered whole: no sub-sample can miss.
-      // One a cell clear of it, and not near a fin or the head, is empty: none can hit (the body
-      // widens along its length, so half a cell is not enough; checked against sampling every cell).
       const halfCell = Math.hypot(cw, ch) / 2;
-      const reachMargin = halfCell / L + 0.08;
+      // Each segment's own reach, and half a cell more: a sample is on the shark only within its
+      // part's reach of the segment its nearest spine point is on, and a cell's samples are within
+      // half a cell of its centre. So a row is searched only as far as some segment reaches, and a
+      // cell whose centre is out of every segment's reach is empty (checked against sampling every
+      // cell). The body is narrow along most of its length; only the head and fin tips reach far.
+      const segReach = this.segReach;
+      for (let k = 0; k < N - 1; k++) segReach[k] = this.segmentReach(arc[k]! / this.arcTotal, arc[k + 1]! / this.arcTotal, L) * L + L * 0.02 + halfCell;
 
       for (let r = r0; r <= r1; r++) {
         // Only the cells of this row the shark can reach: a diagonal shark leaves most of its box
@@ -735,18 +830,20 @@ export class AsciiRenderer {
         for (let k = 0; k < N - 1; k++) {
           const ya = spine[k * 2 + 1]!;
           const yb = spine[k * 2 + 3]!;
-          if (yc < Math.min(ya, yb) - skipBeyond || yc > Math.max(ya, yb) + skipBeyond) continue;
-          lo = Math.min(lo, spine[k * 2]!, spine[k * 2 + 2]!);
-          hi = Math.max(hi, spine[k * 2]!, spine[k * 2 + 2]!);
+          const rk = segReach[k]!;
+          if (yc < Math.min(ya, yb) - rk || yc > Math.max(ya, yb) + rk) continue;
+          lo = Math.min(lo, spine[k * 2]! - rk, spine[k * 2 + 2]! - rk);
+          hi = Math.max(hi, spine[k * 2]! + rk, spine[k * 2 + 2]! + rk);
         }
         if (lo > hi) continue;
-        const cLo = Math.max(c0, Math.floor((lo - skipBeyond) / cw));
-        const cHi = Math.min(c1, Math.floor((hi + skipBeyond) / cw));
+        const cLo = Math.max(c0, Math.floor(lo / cw));
+        const cHi = Math.min(c1, Math.floor(hi / cw));
         for (let c = cLo; c <= cHi; c++) {
+          if (cover[r * cols + c]) continue;
           const x = c * cw;
           const y = r * ch;
           const centerHit = this.sampleShark(x + cw / 2, y + ch / 2, L);
-          if (!centerHit && (this.hitDist > skipBeyond || (this.hitOutside > halfCell * 2 && !this.nearReach(this.hitS, reachMargin)))) continue;
+          if (!centerHit && !this.hitNear) continue;
           const flag = this.hitFlag;
           const shade = this.hitShade;
           const s = this.hitS;
@@ -767,6 +864,7 @@ export class AsciiRenderer {
           const key = (hash3(Math.round(s * 52), Math.round(v / (cw * 0.9)), sh.id) * 4294967295) >>> 0;
           sharkKey[i] = key;
           sharkDepth[i] = sh.depth;
+          sharkKind[i] = KIND_INDEX[sh.kind];
 
           if (centerHit && coverage >= 0.6) {
             sharkFlag[i] = flag;
@@ -782,7 +880,7 @@ export class AsciiRenderer {
   }
 
   private drawSharks(t: number) {
-    const { ctx, cols, rows, cw, ch, sharkFlag, sharkShade, sharkKey, sharkDepth } = this;
+    const { ctx, cols, rows, cw, ch, light, sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind } = this;
     const n = cols * rows;
     for (let i = 0; i < n; i++) {
       const flag = sharkFlag[i]!;
@@ -794,16 +892,24 @@ export class AsciiRenderer {
       const key = sharkKey[i]!;
       const shade = sharkShade[i]!;
       const dim = 0.7 + 0.3 * sharkDepth[i]!;
+      const ramp = this.kindRamps[sharkKind[i]!]!;
 
       // Glints re-roll on a staggered clock so the hide shimmers.
       const tick = Math.floor(t * 2.4 + (key % 997) / 97);
       const roll = hash3(key, tick, 7);
 
       if (flag === FLAG_EDGE) {
-        // Soft, anti-aliased silhouette: no block, just a light glyph.
+        // Soft, anti-aliased silhouette: on dark water a light glyph alone, on light water a faint
+        // block under it too, so the edge fades into the page.
         const set = shade >= 0.5 ? EDGE_HEAVY : EDGE_LIGHT;
-        ctx.fillStyle = this.tone(((70 + shade * 80) * dim) / 255);
-        ctx.fillText(set[(key >>> 8) % set.length]!, x + cw / 2, y + ch / 2 + 1);
+        const glyph = set[(key >>> 8) % set.length]!;
+        if (light) {
+          const block = (INK.edge + INK.edgeSpan * shade) * dim;
+          ctx.fillStyle = this.tone(block, ramp);
+          ctx.fillRect(x + 1, y + 1, cw - 1, ch - 1);
+          ctx.fillStyle = this.tone(block + INK.edgeGlyph, ramp);
+        } else ctx.fillStyle = this.tone(((70 + shade * 80) * dim) / 255, ramp);
+        ctx.fillText(glyph, x + cw / 2, y + ch / 2 + 1);
         continue;
       }
 
@@ -826,16 +932,28 @@ export class AsciiRenderer {
         const jitter = ((key >>> 4) % 3) - 1;
         glyph = SKIN_RAMP[clamp(Math.floor((1 - shade) * 8.99) + jitter, 0, SKIN_RAMP.length - 1)]!;
       }
-      // Levels are on the original's 0–255 scale: how far from the page toward the text.
-      ctx.fillStyle = this.tone((level * dim) / 255);
+      // Levels are on the original's 0–255 scale: how much light the skin gives back.
+      const lit = (level * dim) / 255;
+      let block: number;
+      let ink: number;
+      if (light) {
+        // Ink on paper: the more of the shark, the darker its block, and its character darker still.
+        if (flag === FLAG_EYE) { block = lit; ink = 0.62; }
+        else if (flag === FLAG_MARK) { block = lit; ink = 0.27; }
+        else {
+          block = INK.base + INK.span * lit;
+          ink = roll < 0.04 ? Math.max(0, block - INK.glint) : block + INK.glyph;
+        }
+      } else {
+        block = lit;
+        if (flag === FLAG_EYE) ink = 0.62;
+        else if (flag === FLAG_MARK) ink = 0.27;
+        else if (roll < 0.05) ink = 1;
+        else ink = shade > 0.55 ? 0.05 : 0.1;
+      }
+      ctx.fillStyle = this.tone(block, ramp);
       ctx.fillRect(x + 1, y + 1, cw - 1, ch - 1);
-
-      let tone: number;
-      if (flag === FLAG_EYE) tone = 0.62;
-      else if (flag === FLAG_MARK) tone = 0.27;
-      else if (roll < 0.05) tone = 1;
-      else tone = shade > 0.55 ? 0.05 : 0.1;
-      ctx.fillStyle = this.tone(tone);
+      ctx.fillStyle = this.tone(ink, ramp);
       ctx.fillText(glyph, x + cw / 2, y + ch / 2 + 1);
     }
   }

@@ -140,6 +140,7 @@ scope.onmessage = ({ data: m }) => {
       break;
     case "boxes":
       world.setBoxes(m.boxes);
+      renderer?.setBoxes(m.boxes);
       break;
     case "finished":
       if (mode === "run") world.finished(m.key);

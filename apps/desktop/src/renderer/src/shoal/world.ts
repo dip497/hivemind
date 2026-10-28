@@ -167,12 +167,12 @@ export class World {
     }
   }
 
-  /** The biggest shark's length: a share of the window, and less of it when many swim at once.
-   *  Smaller than the original's hero sharks: here they swim in the gaps between tiles. */
+  /** The biggest shark's length: the original's share of the window, and less of it when many
+   *  swim at once. */
   private unit() {
     let n = 0;
     for (const s of this.sharks) if (!s.leaving) n++;
-    return clamp(Math.min(this.width, this.height) * 0.32, 150, 340) * (n > 4 ? Math.sqrt(4 / n) : 1);
+    return clamp(Math.min(this.width, this.height) * 0.44, 170, 430) * (n > 4 ? Math.sqrt(4 / n) : 1);
   }
 
   seedFish() {
@@ -281,14 +281,16 @@ export class World {
 
   /** A point in the open water between `top` and `bottom` (shares of the height), and one the
    *  shark at `from` can swim to without passing under a tile if there is one: of a few tries, the
-   *  first with a clear way there, else the one with the least of its way covered. On a canvas
+   *  one with the least of its way covered and, given the shark's heading, the least turn to it,
+   *  at least `reach` away, so it swims on in long curves instead of doubling back. On a canvas
    *  too full for any try to be clear of the tiles, the try with the most room round it. */
-  private openPoint(top: number, bottom: number, from: { x: number; y: number }) {
+  private openPoint(top: number, bottom: number, from: { x: number; y: number; heading?: number; reach?: number }) {
     const { width: W, height: H } = this;
     let best = { x: W / 2, y: H / 2 };
     let bestCover = Infinity;
     let fallback = best;
     let fallbackRoom = -Infinity;
+    const ahead = from.heading !== undefined;
     for (let i = 0; i < 16; i++) {
       const x = rand(W * 0.08, W * 0.92);
       const y = rand(H * top, H * bottom);
@@ -302,6 +304,8 @@ export class World {
       }
       let cover = 0;
       for (let k = 1; k < 8; k++) if (this.covered(from.x + ((x - from.x) * k) / 8, from.y + ((y - from.y) * k) / 8, 30)) cover++;
+      // A covered step outweighs any turn; a point too near counts as a half turn more.
+      if (ahead) cover = cover * 4 + Math.abs(angleDiff(from.heading!, Math.atan2(y - from.y, x - from.x))) + (Math.hypot(x - from.x, y - from.y) < from.reach! ? Math.PI : 0);
       if (cover < bestCover) {
         best = { x, y };
         bestCover = cover;
@@ -714,7 +718,7 @@ export class World {
         const rest = sh.mood === "rest";
         const g = sh.goal;
         if (!g || time > sh.goalAt || Math.hypot(g.x - hx, g.y - hy) < L * 0.4) {
-          const here = { x: hx, y: hy };
+          const here = { x: hx, y: hy, heading: sh.heading, reach: L };
           sh.goal = rest ? this.openPoint(0.72, 0.92, here) : this.openPoint(0.08, 0.92, here);
           sh.goalAt = time + rand(8, 16);
         }
@@ -788,8 +792,9 @@ export class World {
       }
 
       const desired = Math.atan2(dy, dx);
-      // Sharks can't pivot on the spot: the turning circle grows with speed.
-      const agility = Math.min(hunting ? 1.7 + closing : 0.8, sh.speed / (L * 0.22));
+      // Sharks can't pivot on the spot: the turning circle grows with speed, and one in no hurry
+      // turns in a wide, lazy curve, half its length across, never doubling back on itself.
+      const agility = Math.min(hunting ? 1.7 + closing : 0.8, sh.speed / (L * (hunting || hurry ? 0.22 : 0.5)));
       const maxTurn = agility * dt;
       const turned = clamp(angleDiff(sh.heading, desired), -maxTurn, maxTurn);
       sh.heading += turned;

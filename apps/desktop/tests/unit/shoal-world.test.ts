@@ -47,15 +47,19 @@ test("a shark whose agent needs you circles that agent's tile, and comes up near
     const w = water([shark("a", "surface"), shark("b", "cruise")], [tile, { x0: 60, y0: 600, x1: 360, y1: 860, key: "b" }]);
     run(w, 30);
     let near = 0;
+    let under = 0;
     let samples = 0;
     for (let i = 0; i < 40; i++) {
       run(w, 0.5);
       const a = sharkOf(w, "a");
       samples++;
-      if (outside(tile, a.nodes[0]!, a.nodes[1]!) < a.length * 0.6) near++;
+      const off = outside(tile, a.nodes[0]!, a.nodes[1]!);
+      if (off < a.length * 0.6) near++;
+      if (off === 0) under++;
     }
-    // Over 60 seeds it was near its tile every time.
+    // Over 60 seeds it was near its tile every time, and its snout never under it.
     assert.ok(near / samples >= 0.95, `seed ${seed}: near its tile ${near} of ${samples} times`);
+    assert.ok(under / samples <= 0.05, `seed ${seed}: under its tile ${under} of ${samples} times`);
     // Nearest of the two, so drawn last, over the other.
     assert.equal(w.sharks.at(-1)!.key, "a");
     assert.ok(sharkOf(w, "a").depth > 0.95);
@@ -76,6 +80,60 @@ test("a shark whose agent does not need you roams instead of circling that agent
   });
   // Circling, it would be near it every time; roaming, 36% to 64% of the time over 40 seeds.
   assert.ok(near / 160 < 0.8, `near its tile ${near} of 160 times`);
+});
+
+/** How far a shark's body turns from snout to tail, in radians: π is folded back on itself. */
+function bend(s: { nodes: Float32Array | number[] }) {
+  const nd = s.nodes;
+  let net = 0;
+  let prev = Math.atan2(nd[1]! - nd[3]!, nd[0]! - nd[2]!);
+  for (let j = 1; j < nd.length / 2 - 1; j++) {
+    const a = Math.atan2(nd[j * 2 + 1]! - nd[j * 2 + 3]!, nd[j * 2]! - nd[j * 2 + 2]!);
+    net += Math.atan2(Math.sin(a - prev), Math.cos(a - prev));
+    prev = a;
+  }
+  return Math.abs(net);
+}
+
+test("sharks in no hurry swim in long curves and never double back on themselves", () => {
+  for (const seed of [41, 42, 43]) seeded(seed, () => {
+    const w = new World();
+    w.resize(973, 883, 8, 12);
+    w.setRoster([shark("a", "cruise"), { ...shark("b", "cruise"), size: 0.84 }, { ...shark("c", "cruise"), size: 0.77 }]);
+    run(w, 10);
+    let most = 0;
+    for (let i = 0; i < 120; i++) {
+      run(w, 0.25);
+      for (const s of w.sharks) most = Math.max(most, bend(s));
+    }
+    // Over 40 seeds the most any of three got was 2 radians; folded into a U, it is 2.9.
+    assert.ok(most < 2.4, `seed ${seed}: bent ${most.toFixed(2)} radians`);
+  });
+});
+
+test("a roaming shark swims on to somewhere ahead of it, not back where it came from", () => {
+  let ahead = 0;
+  let picks = 0;
+  for (const seed of [51, 52, 53, 54, 55, 56, 57, 58]) seeded(seed, () => {
+    // No fish: a roaming shark swims past them, and the water is quicker without.
+    const w = new World(0);
+    w.resize(W, H, 12, 17);
+    w.setRoster([shark("a", "cruise")]);
+    const a = sharkOf(w, "a");
+    let goal = a.goal;
+    for (let i = 0; i < 60 / STEP; i++) {
+      const heading = a.heading;
+      w.step(STEP);
+      if (a.goal === goal || !a.goal) continue;
+      goal = a.goal;
+      picks++;
+      const to = Math.atan2(goal.y - a.nodes[1]!, goal.x - a.nodes[0]!);
+      if (Math.cos(to - heading) > 0) ahead++;
+    }
+  });
+  // Picked anywhere, 52% to 70% were ahead of it over 14 runs of eight seeds; picked ahead, 85% or more.
+  assert.ok(picks >= 40, `${picks} goals picked`);
+  assert.ok(ahead / picks > 0.78, `${ahead} of ${picks} goals ahead of it`);
 });
 
 test("fish keep out from under the tiles, and snouts turn away before them", () => {
