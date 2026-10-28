@@ -4,7 +4,7 @@
  * each refusal a `PluginError` whose code reaches the agent's exit status.
  */
 import { PluginError } from "@hivemind/view-host/instances";
-import { PLUGIN_CALL_MS, PLUGIN_OPEN_MS, type PluginInstance, type PluginList } from "@hivemind/workspace-api/plugins";
+import { PLUGIN_CALL_MS, PLUGIN_OPEN_MS, type PluginInstance, type PluginList, type WidgetListed } from "@hivemind/workspace-api/plugins";
 import { pluginInstances } from "./plugin-instances";
 import { FALLBACK_VIEW_ID, getView, listViews } from "./workspace-view";
 
@@ -19,22 +19,34 @@ export interface PluginVerbHost {
   /** Whether the widget package `id` has code: one drawn from its `draw` alone never runs. */
   widgetRuns(id: string): boolean;
   closeTile(id: string): void;
-  /** The widgets on the board, those whose code runs and those drawn from their `draw` alone. */
-  widgetsOnBoard(): { id: string; widget: string }[];
+  /** The widgets on the board, those whose code runs and those drawn from their `draw` alone; a
+   *  brought one with the view it floats over alone. */
+  widgetsOnBoard(): { id: string; widget: string; placement: "board" | "screen"; view?: string }[];
   removeWidget(id: string): void;
+  /** Float the widget `id` over every view, as its card's pin does. */
+  showOnEveryView(id: string): void;
 }
 
-/** What `plugin close` can close: every plugin running, every widget on the board, the view shown. */
-interface Closable { instance: string; plugin: string; kind: PluginInstance["kind"]; running: boolean }
+/** What `plugin close` can close: every plugin running, every widget on the board, the view shown.
+ *  `view`: the view a widget floats over alone. */
+interface Closable { instance: string; plugin: string; kind: PluginInstance["kind"]; running: boolean; view?: string }
 
 function closables(host: PluginVerbHost): Closable[] {
-  const running: Closable[] = pluginInstances.list().map((i) => ({ instance: i.instance, plugin: i.plugin, kind: i.kind, running: true }));
+  const board = host.widgetsOnBoard();
+  const viewOf = (kind: string, instance: string) => (kind === "widget" ? board.find((w) => w.id === instance)?.view : undefined);
+  const running: Closable[] = pluginInstances.list().map((i) => {
+    const view = viewOf(i.kind, i.instance);
+    return { instance: i.instance, plugin: i.plugin, kind: i.kind, running: true, ...(view ? { view } : {}) };
+  });
   const has = (kind: string, instance: string) => running.some((c) => c.kind === kind && c.instance === instance);
-  const widgets = host.widgetsOnBoard().filter((w) => !has("widget", w.id)).map((w): Closable => ({ instance: w.id, plugin: w.widget, kind: "widget", running: false }));
+  const widgets = board.filter((w) => !has("widget", w.id)).map((w): Closable => ({ instance: w.id, plugin: w.widget, kind: "widget", running: false, ...(w.view ? { view: w.view } : {}) }));
   const view = host.activeView();
   const shown: Closable[] = view !== FALLBACK_VIEW_ID && !has("view", view) ? [{ instance: view, plugin: view, kind: "view", running: false }] : [];
   return [...running, ...widgets, ...shown];
 }
+
+/** A copy by its id, and the view it floats over alone when a view brought it. */
+const named = (c: Closable) => (c.view ? `${c.instance} (over ${c.view})` : c.instance);
 
 /** What `plugin close <which>` names: an instance (`plugin list`), or a plugin as `plugin open` takes
  *  it (`tool:@owner/name[/tool]`, `widget:id`, `view:id`), which must name one copy. */
@@ -45,7 +57,7 @@ function closing(which: string, plugin: string | undefined, host: PluginVerbHost
   const record = /^(tool|widget|view):(.+)$/.exec(which);
   const copies = record ? all.filter((c) => c.kind === record[1] && (c.plugin === record[2] || (c.kind === "tool" && record[2]!.startsWith(`${c.plugin}/`)))) : [];
   if (copies.length === 1) return copies[0]!;
-  if (copies.length > 1) throw new PluginError("BAD_REQUEST", `${which} is open ${copies.length} times; close one by its id: ${copies.map((c) => c.instance).join(", ")}`);
+  if (copies.length > 1) throw new PluginError("BAD_REQUEST", `${which} is open ${copies.length} times; close one by its id: ${copies.map(named).join(", ")}`);
   const open = closables(host).map((c) => `${c.instance} (${c.kind}:${c.plugin})`);
   throw new PluginError("NOT_FOUND", `nothing open is ${which}${open.length ? `; open: ${open.join(", ")}` : ""}`);
 }
@@ -67,9 +79,14 @@ export async function pluginVerb(method: string, params: Record<string, unknown>
   switch (method) {
     case "plugin.list": {
       const active = host.activeView();
+      const plugins = pluginInstances.list();
       const answer: PluginList = {
-        plugins: pluginInstances.list(),
+        plugins,
         views: listViews().map((v) => ({ id: v.id, label: v.label, active: v.id === active })),
+        widgets: host.widgetsOnBoard().map((w): WidgetListed => ({
+          instance: w.id, widget: w.widget, placement: w.placement, ...(w.view ? { view: w.view } : {}),
+          running: plugins.some((p) => p.kind === "widget" && p.instance === w.id),
+        })),
       };
       return answer;
     }
@@ -80,10 +97,17 @@ export async function pluginVerb(method: string, params: Record<string, unknown>
           .map(({ plugin, kind, instance, label, commands }) => ({ plugin, kind, instance, label, commands })),
       };
     case "plugin.open": {
-      const { kind: named, id } = params as { kind: "widget" | "view" | "any"; id: string };
+      const { kind: asked, id } = params as { kind: "widget" | "view" | "any"; id: string };
       const deadline = Date.now() + PLUGIN_OPEN_MS;
+      // A widget already in the workspace, by the id `plugin list` names: shown over every view, as
+      // its card's pin does, rather than a copy added beside it.
+      const placed = asked !== "view" ? host.widgetsOnBoard().find((w) => w.id === id) : undefined;
+      if (placed) {
+        host.showOnEveryView(id);
+        return { widget: id, ...(host.widgetRuns(placed.widget) ? opened(await pluginInstances.settle({ instance: id }, deadline)) : {}) };
+      }
       // The id alone: whichever kind has it, or both named when two do.
-      const kind = named !== "any" ? named : (() => {
+      const kind = asked !== "any" ? asked : (() => {
         const kinds = [...(getView(id) ? ["view" as const] : []), ...(host.hasWidget(id) ? ["widget" as const] : [])];
         if (kinds.length > 1) throw new PluginError("BAD_REQUEST", `${id} is ${kinds.map((k) => `${k}:${id}`).join(" and ")}: name one of those`);
         if (!kinds.length) throw new PluginError("NOT_FOUND", `no plugin ${id} here: install it (\`hive plugins install <folder|id>\`) and switch it on (\`hive plugins enable ${id}\`)`);

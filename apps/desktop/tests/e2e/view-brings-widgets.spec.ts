@@ -247,4 +247,12 @@ test("through a relaunch with both closed, only the widget a later version adds 
   await settled();
   expect(await stored()).toEqual(["@e2e/tide"]);
   await shot("4-update");
+  // An agent sees it shows over Isle alone, and shows it over every view by its id.
+  const listed = hive("ctl", "plugin", "list").data.widgets as Array<{ instance: string; widget: string; view?: string }>;
+  const tide = listed.find((w) => w.widget === "@e2e/tide");
+  expect(tide).toMatchObject({ view: "@e2e/isle" });
+  expect(hive("ctl", "plugin", "open", tide!.instance)).toMatchObject({ status: 0, data: { widget: tide!.instance } });
+  await expect.poll(async () => (await storedWidget("tide"))?.view).toBeUndefined();
+  await toView("canvas");
+  await expect(card("tide")).toContainText("tide here");
 });
